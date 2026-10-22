@@ -63,6 +63,7 @@ export interface ReportCaseSummary {
     | 'openai-compatible'
     | 'anthropic-compatible'
     | 'ai-sdk-gateway-v3'
+    | 'ai-sdk-gateway-v4'
     | 'google-gemini'
     | 'openai-responses'
     | 'openai-decisions'
@@ -177,6 +178,7 @@ export function normalizeReportSummary(value: unknown): ReportCaseSummary {
         'openai-compatible',
         'anthropic-compatible',
         'ai-sdk-gateway-v3',
+        'ai-sdk-gateway-v4',
         'google-gemini',
         'openai-responses',
         'openai-decisions',
@@ -307,6 +309,7 @@ export interface ReportTarget {
       | 'openai-compatible'
       | 'anthropic-compatible'
       | 'ai-sdk-gateway-v3'
+      | 'ai-sdk-gateway-v4'
       | 'google-gemini'
       | 'openai-responses'
       | 'openai-decisions'
@@ -399,6 +402,7 @@ export function normalizeReportTarget(value: unknown): ReportTarget {
           'openai-compatible',
           'anthropic-compatible',
           'ai-sdk-gateway-v3',
+          'ai-sdk-gateway-v4',
           'google-gemini',
           'openai-responses',
           'openai-decisions',

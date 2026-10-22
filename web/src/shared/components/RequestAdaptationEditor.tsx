@@ -1,3 +1,4 @@
+import { isAISDKGateway } from '@shared/operations/connectorPolicy';
 import { Button } from '@shared/components/ui/Button';
 import { Fold } from '@shared/components/ui';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
@@ -715,8 +716,7 @@ export function RequestAdaptationEditor({
             section={section as MapDraft}
             editable={editable}
             gatewayCacheDefaults={
-              kind === 'body_defaults' &&
-              (connectorType === 'ai-sdk-gateway-v3' || gatewayCacheDefaults)
+              kind === 'body_defaults' && (isAISDKGateway(connectorType) || gatewayCacheDefaults)
             }
             change={(next) => updateMap(kind, next)}
           />

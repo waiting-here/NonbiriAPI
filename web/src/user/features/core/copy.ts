@@ -87,6 +87,7 @@ const keys = {
 
   'connector.anthropic': 'user.core.connector.anthropic',
   'connector.gateway': 'user.core.connector.gateway',
+  'connector.gatewayV4': 'user.core.connector.gatewayV4',
   'home.title': 'user.core.home.title',
   'home.signedOutTitle': 'user.core.home.signedOutTitle',
   'home.signedOutBody': 'user.core.home.signedOutBody',
@@ -368,6 +369,7 @@ export const CONNECTOR_COPY_KEYS = {
   'openai-compatible': 'connector.openai',
   'anthropic-compatible': 'connector.anthropic',
   'ai-sdk-gateway-v3': 'connector.gateway',
+  'ai-sdk-gateway-v4': 'connector.gatewayV4',
   'google-gemini': 'connector.gemini',
   'openai-responses': 'connector.responses',
   'openai-decisions': 'connector.decisions',

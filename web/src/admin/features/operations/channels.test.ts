@@ -41,14 +41,17 @@ function jsonResponse(value: unknown, status = 200): Response {
 }
 
 describe('administrator mainstream channel wire', () => {
-  it.each(['google-gemini', 'openai-responses', 'openai-decisions'] as const)(
-    'retains the %s connector type',
-    (connector_type) => {
-      expect(normalizeAdminMainstreamChannel({ ...active, connector_type }).connector_type).toBe(
-        connector_type,
-      );
-    },
-  );
+  it.each([
+    'google-gemini',
+    'openai-responses',
+    'openai-decisions',
+    'ai-sdk-gateway-v3',
+    'ai-sdk-gateway-v4',
+  ] as const)('retains the %s connector type', (connector_type) => {
+    expect(normalizeAdminMainstreamChannel({ ...active, connector_type }).connector_type).toBe(
+      connector_type,
+    );
+  });
   it('accepts active and retired authority states', () => {
     expect(normalizeAdminMainstreamChannel(active)).toEqual(active);
     expect(normalizeAdminMainstreamChannel(retired)).toEqual(retired);

@@ -1,3 +1,4 @@
+import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { Link, useLocation } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useQuery } from '@tanstack/react-query';
@@ -197,7 +198,7 @@ export function ReportsPage() {
                           className="ops-cell-wide"
                           data-label={t('admin.reports.table.connectorUrl')}
                         >
-                          {item.connector_type}
+                          <GatewayConnectorLabel value={item.connector_type} />
                           <br />
                           <span className="ops-wrap">{item.canonical_base_url}</span>
                         </td>

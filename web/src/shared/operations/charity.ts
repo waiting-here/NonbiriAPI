@@ -79,6 +79,7 @@ type CharityConnectorType =
   | 'openai-compatible'
   | 'anthropic-compatible'
   | 'ai-sdk-gateway-v3'
+  | 'ai-sdk-gateway-v4'
   | 'google-gemini'
   | 'openai-responses'
   | 'openai-decisions'
@@ -212,6 +213,7 @@ export function normalizeManagedSource(
       'openai-compatible',
       'anthropic-compatible',
       'ai-sdk-gateway-v3',
+      'ai-sdk-gateway-v4',
       'google-gemini',
       'openai-responses',
       'openai-decisions',
@@ -1180,6 +1182,7 @@ function normalizeSource(value: unknown, label: string): CharityBinding['source'
         'openai-compatible',
         'anthropic-compatible',
         'ai-sdk-gateway-v3',
+        'ai-sdk-gateway-v4',
         'google-gemini',
         'openai-responses',
         'openai-decisions',

@@ -1,3 +1,4 @@
+import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { Button } from '@shared/components/ui/Button';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -290,7 +291,9 @@ function SourceSummary({
       >
         <span className="charity-source-browser__source-heading">
           <strong>{sourceLabel(source.safe_source, t)}</strong>
-          <span>{source.safe_source.connector_type}</span>
+          <span>
+            <GatewayConnectorLabel value={source.safe_source.connector_type} />
+          </span>
         </span>
         <span className="charity-source-browser__source-address">
           {source.safe_source.base_url}

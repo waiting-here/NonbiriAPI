@@ -61,6 +61,20 @@ const lineage = {
 };
 
 describe('administrator report wire', () => {
+  it.each(['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)(
+    'retains %s through report and target projections',
+    (connector_type) => {
+      expect(
+        normalizeReportSummary({ ...expired, progress_state: 'complete', connector_type })
+          .connector_type,
+      ).toBe(connector_type);
+      expect(
+        normalizeReportTarget({ ...target, endpoint: { ...target.endpoint, connector_type } })
+          .endpoint.connector_type,
+      ).toBe(connector_type);
+    },
+  );
+
   it('accepts both frozen expired progress terminals', () => {
     expect(
       normalizeReportSummary({ ...expired, progress_state: 'in_progress' }).progress_state,

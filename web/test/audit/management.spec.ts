@@ -656,183 +656,263 @@ test('level 6 can enable maintenance but only the administrator can restore serv
   }
 });
 
-test('administrator saves automatic Gateway cache defaults and level 6 reads the effective binding', async ({
-  browser,
-}) => {
-  const state = fixture(),
-    admin = await session(browser, 'admin'),
-    owner = await session(browser, 1),
-    steward = await session(browser, 6, true);
-  const baseURL = 'https://cache.example.test/ai',
-    upstream = 'anthropic/browser-cache';
-  try {
-    const endpoint = await write(owner, state.user_url, '/api/endpoints', {
-      source: 'custom',
-      connector_type: 'ai-sdk-gateway-v3',
-      base_url: baseURL,
-      note: 'Synthetic Gateway',
-      enabled: true,
-    });
-    const key = await write(owner, state.user_url, '/api/endpoints/' + endpoint.id + '/keys', {
-      secret: 'synthetic-gateway-cache-key',
-      note: 'Synthetic cache credential',
-      enabled: true,
-      force_store_false: false,
-      ownership_confirmed: true,
-    });
-    const donation = await write(owner, state.user_url, '/api/donations', {
-      description: 'Synthetic Gateway cache source',
-      discord_public_thanks: false,
-      ownership_authorized: true,
-      keys: [{ endpoint_key_id: key.id, expires_at: null }],
-    });
-    const donated = await read(admin, state.admin_url, '/admin/api/donations/' + donation.id);
-    const keyID = donated.keys[0].id;
-    if (donated.status === 'pending')
-      await write(admin, state.admin_url, '/admin/api/donations/' + donation.id + '/review', {
-        decision: 'approve',
-        expected_revision: donated.revision,
-        reason: 'Synthetic Gateway cache setup',
-        key_settings: [
-          {
-            donation_key_id: keyID,
-            enabled: true,
-            price_limit: null,
-            calls_limit: null,
-            tokens_limit: null,
-            token_reserve: 0,
-            safe_note: '',
-            expires_at: null,
-          },
-        ],
+for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const) {
+  test(`administrator saves automatic Gateway cache defaults and level 6 reads the effective binding (${connectorType})`, async ({
+    browser,
+  }) => {
+    const state = fixture(),
+      admin = await session(browser, 'admin'),
+      owner = await session(browser, 1),
+      steward = await session(browser, 6, true);
+    const baseURL =
+        connectorType === 'ai-sdk-gateway-v4'
+          ? 'https://cache.example.test/v4/ai'
+          : 'https://cache.example.test/ai',
+      upstream = 'anthropic/browser-cache';
+    try {
+      let endpoint: { id: string };
+      if (connectorType === 'ai-sdk-gateway-v4') {
+        const ownerPage = await owner.newPage();
+        await ownerPage.goto(state.user_url + '/endpoints?quickstart=1');
+        await ownerPage
+          .getByRole('button', { name: 'Need advanced options? Set up manually', exact: true })
+          .click();
+        const wizard = ownerPage.locator('section.core-wizard');
+        await wizard
+          .getByRole('button', { name: en.user.core['endpoints.custom'], exact: true })
+          .click();
+        await wizard.getByRole('button', { name: 'AI SDK Gateway v4', exact: true }).click();
+        await wizard.getByRole('button', { name: 'Next', exact: true }).click();
+        await wizard.getByLabel('Service address', { exact: true }).fill(baseURL);
+        await wizard.getByLabel('Note', { exact: true }).fill('Synthetic Gateway v4');
+        const created = ownerPage.waitForResponse(
+          (response) =>
+            response.request().method() === 'POST' &&
+            new URL(response.url()).pathname === '/api/endpoints',
+        );
+        await wizard.getByRole('button', { name: 'Create service', exact: true }).click();
+        const response = await created;
+        expect(response.status()).toBe(201);
+        expect(response.request().postDataJSON()).toMatchObject({
+          connector_type: connectorType,
+          base_url: baseURL,
+        });
+        endpoint = await response.json();
+        expect(await read(owner, state.user_url, '/api/endpoints/' + endpoint.id)).toMatchObject({
+          connector_type: connectorType,
+          base_url: baseURL,
+        });
+        await ownerPage.goto(state.user_url + '/endpoints/' + endpoint.id);
+        await expect(
+          ownerPage.getByText('AI SDK Gateway v4', { exact: true }).first(),
+        ).toBeVisible();
+        await expect(ownerPage.getByText(baseURL, { exact: true }).first()).toBeVisible();
+      } else {
+        endpoint = await write(owner, state.user_url, '/api/endpoints', {
+          source: 'custom',
+          connector_type: connectorType,
+          base_url: baseURL,
+          note: 'Synthetic Gateway',
+          enabled: true,
+        });
+      }
+      const key = await write(owner, state.user_url, '/api/endpoints/' + endpoint.id + '/keys', {
+        secret: 'synthetic-gateway-cache-key',
+        note: 'Synthetic cache credential',
+        enabled: true,
+        force_store_false: false,
+        ownership_confirmed: true,
       });
-    const candidatesPath = '/admin/api/donations/' + donation.id + '/keys/' + keyID + '/models';
-    const candidates = await read(admin, state.admin_url, candidatesPath);
-    await write(admin, state.admin_url, candidatesPath + '/manual', {
-      expected_manual_catalog_revision: candidates.manual_catalog_revision,
-      entries: [upstream],
-    });
-    const model = await write(admin, state.admin_url, '/admin/api/charity-models', {
-      provider: 'browser',
-      model: 'cache',
-      enabled: true,
-      is_mainstream: false,
-      transport_rule: 'passthrough',
-      flatten_tool_calls: false,
-      pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
-      discount: { enabled: false, percent: 100, start_at: null, end_at: null },
-    });
-    const modelPath = '/admin/api/charity-models/' + model.id;
-    const bindings = await read(admin, state.admin_url, modelPath + '/bindings');
-    const added = await write(admin, state.admin_url, modelPath + '/bindings/batch', {
-      expected_binding_revision: bindings.binding_revision,
-      selections: [{ donation_key_id: keyID, upstream_model_id: upstream }],
-    });
-    const binding = added.bindings[0];
-    const policy = {
-      adapter: 'anthropic_always_adaptive',
-      efforts: ['high'],
-      max_output_tokens: 128000,
-      storage: 'reject',
-      cache: 'anthropic',
-    };
-    await write(admin, state.admin_url, '/admin/api/gateway-model-capabilities', {
-      expected_revision: '0',
-      entry: { base_url: baseURL, model: upstream, ...policy },
-    });
-    expect(
-      (await read(admin, state.admin_url, modelPath + '/bindings')).bindings[0]
-        .gateway_capabilities,
-    ).toEqual(policy);
-    const page = await admin.newPage();
-    await page.goto(state.admin_url + '/charity?charity_section=models&charity_model=' + model.id);
-    const row = page.getByRole('row').filter({ hasText: upstream });
-    await expect(row).toContainText(
-      commonEn.gatewayCapabilities.adapters.anthropic_always_adaptive,
-    );
-    await expect(row).toContainText(commonEn.gatewayCapabilities.cacheOptions.anthropic);
-    await row.getByRole('button', { name: 'Request headers and body', exact: true }).click();
-    await page.getByText('Request adaptation', { exact: true }).last().click();
-    const editor = page.locator('section.core-card').last();
-    const defaults = editor.getByRole('group', {
-      name: 'Body defaults (only when absent)',
-      exact: true,
-    });
-    await defaults.getByLabel('Configuration source').selectOption('replace');
-    await defaults.getByLabel(commonEn.requestAdaptation.cache.label).selectOption('5m');
-    const adaptationPath = modelPath + '/bindings/' + binding.id + '/request-adaptation';
-    const saving = page.waitForResponse(
-      (response) =>
-        response.request().method() === 'PUT' &&
-        new URL(response.url()).pathname === adaptationPath,
-    );
-    await editor.getByRole('button', { name: 'Save request adaptation', exact: true }).click();
-    const saved = await saving;
-    expect(saved.ok()).toBe(true);
-    expect(saved.request().postDataJSON().body_defaults.values['/cache_control']).toEqual({
-      action: 'replace',
-      value: { type: 'ephemeral', ttl: '5m' },
-    });
-    await expect(editor.getByText('Request adaptation saved.', { exact: true })).toBeVisible();
-    expect(await read(admin, state.admin_url, adaptationPath)).toMatchObject({
-      body_defaults: { mode: 'replace', values: { '/cache_control': { has_value: true } } },
-      effective: {
-        body_defaults: { source: 'binding', values: { '/cache_control': { has_value: true } } },
-      },
-    });
+      const donation = await write(owner, state.user_url, '/api/donations', {
+        description: 'Synthetic Gateway cache source',
+        discord_public_thanks: false,
+        ownership_authorized: true,
+        keys: [{ endpoint_key_id: key.id, expires_at: null }],
+      });
+      const donated = await read(admin, state.admin_url, '/admin/api/donations/' + donation.id);
+      const keyID = donated.keys[0].id;
+      if (donated.status === 'pending')
+        await write(admin, state.admin_url, '/admin/api/donations/' + donation.id + '/review', {
+          decision: 'approve',
+          expected_revision: donated.revision,
+          reason: 'Synthetic Gateway cache setup',
+          key_settings: [
+            {
+              donation_key_id: keyID,
+              enabled: true,
+              price_limit: null,
+              calls_limit: null,
+              tokens_limit: null,
+              token_reserve: 0,
+              safe_note: '',
+              expires_at: null,
+            },
+          ],
+        });
+      const candidatesPath = '/admin/api/donations/' + donation.id + '/keys/' + keyID + '/models';
+      const candidates = await read(admin, state.admin_url, candidatesPath);
+      await write(admin, state.admin_url, candidatesPath + '/manual', {
+        expected_manual_catalog_revision: candidates.manual_catalog_revision,
+        entries: [upstream],
+      });
+      const model = await write(admin, state.admin_url, '/admin/api/charity-models', {
+        provider: 'browser',
+        model: connectorType === 'ai-sdk-gateway-v4' ? 'cache-v4' : 'cache',
+        enabled: true,
+        is_mainstream: false,
+        transport_rule: 'passthrough',
+        flatten_tool_calls: false,
+        pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
+        discount: { enabled: false, percent: 100, start_at: null, end_at: null },
+      });
+      const modelPath = '/admin/api/charity-models/' + model.id;
+      const bindings = await read(admin, state.admin_url, modelPath + '/bindings');
+      const added = await write(admin, state.admin_url, modelPath + '/bindings/batch', {
+        expected_binding_revision: bindings.binding_revision,
+        selections: [{ donation_key_id: keyID, upstream_model_id: upstream }],
+      });
+      const binding = added.bindings[0];
+      const policy = {
+        adapter: 'anthropic_always_adaptive',
+        efforts: ['high'],
+        max_output_tokens: 128000,
+        storage: 'reject',
+        cache: 'anthropic',
+      };
+      await write(admin, state.admin_url, '/admin/api/gateway-model-capabilities', {
+        expected_revision: '0',
+        entry: { base_url: baseURL, model: upstream, ...policy },
+      });
+      expect(
+        (await read(admin, state.admin_url, modelPath + '/bindings')).bindings[0]
+          .gateway_capabilities,
+      ).toEqual(policy);
+      const page = await admin.newPage();
+      await page.goto(
+        state.admin_url + '/charity?charity_section=models&charity_model=' + model.id,
+      );
+      if (connectorType === 'ai-sdk-gateway-v4') {
+        for (const label of [
+          'Chat Completions / Responses',
+          'Image generation',
+          'Embeddings',
+          'Rerank',
+        ])
+          await page.getByRole('checkbox', { name: label, exact: true }).check();
+        const savingTypes = page.waitForResponse(
+          (response) =>
+            response.request().method() === 'PATCH' &&
+            new URL(response.url()).pathname === modelPath,
+        );
+        await page.getByRole('button', { name: `Save model #${model.id}`, exact: true }).click();
+        expect((await savingTypes).ok()).toBe(true);
+        expect((await read(admin, state.admin_url, modelPath)).model_types).toEqual(
+          expect.arrayContaining([
+            'chat_completions',
+            'images_generations',
+            'embeddings',
+            'rerank',
+          ]),
+        );
+        await page.reload();
+        for (const label of [
+          'Chat Completions / Responses',
+          'Image generation',
+          'Embeddings',
+          'Rerank',
+        ])
+          await expect(page.getByRole('checkbox', { name: label, exact: true })).toBeChecked();
+      }
+      const row = page.getByRole('row').filter({ hasText: upstream });
+      await expect(row).toContainText(
+        commonEn.gatewayCapabilities.adapters.anthropic_always_adaptive,
+      );
+      await expect(row).toContainText(commonEn.gatewayCapabilities.cacheOptions.anthropic);
+      await row.getByRole('button', { name: 'Request headers and body', exact: true }).click();
+      await page.getByText('Request adaptation', { exact: true }).last().click();
+      const editor = page.locator('section.core-card').last();
+      const defaults = editor.getByRole('group', {
+        name: 'Body defaults (only when absent)',
+        exact: true,
+      });
+      await defaults.getByLabel('Configuration source').selectOption('replace');
+      await defaults.getByLabel(commonEn.requestAdaptation.cache.label).selectOption('5m');
+      const adaptationPath = modelPath + '/bindings/' + binding.id + '/request-adaptation';
+      const saving = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'PUT' &&
+          new URL(response.url()).pathname === adaptationPath,
+      );
+      await editor.getByRole('button', { name: 'Save request adaptation', exact: true }).click();
+      const saved = await saving;
+      expect(saved.ok()).toBe(true);
+      expect(saved.request().postDataJSON().body_defaults.values['/cache_control']).toEqual({
+        action: 'replace',
+        value: { type: 'ephemeral', ttl: '5m' },
+      });
+      await expect(editor.getByText('Request adaptation saved.', { exact: true })).toBeVisible();
+      expect(await read(admin, state.admin_url, adaptationPath)).toMatchObject({
+        body_defaults: { mode: 'replace', values: { '/cache_control': { has_value: true } } },
+        effective: {
+          body_defaults: { source: 'binding', values: { '/cache_control': { has_value: true } } },
+        },
+      });
 
-    const stewardPage = await steward.newPage();
-    await stewardPage.goto(
-      state.user_url + '/steward?tab=charity&charity_section=models&charity_model=' + model.id,
-    );
-    const stewardRow = stewardPage.getByRole('row').filter({ hasText: upstream });
-    await expect(stewardRow).toContainText(
-      commonEn.gatewayCapabilities.adapters.anthropic_always_adaptive,
-    );
-    await expect(stewardRow).toContainText(commonEn.gatewayCapabilities.cacheOptions.anthropic);
-    await stewardRow.getByRole('button', { name: 'Request headers and body', exact: true }).click();
-    await stewardPage.getByText('Request adaptation', { exact: true }).last().click();
-    const readOnly = stewardPage.locator('section.core-card').last();
-    await expect(
-      readOnly.getByText('This setting is read-only for your role.', { exact: true }),
-    ).toBeVisible();
-    await expect(readOnly.getByLabel(commonEn.requestAdaptation.cache.label)).toBeDisabled();
-    await expect(
-      readOnly.getByRole('button', { name: 'Save request adaptation', exact: true }),
-    ).toHaveCount(0);
-    expect(
-      await read(
-        steward,
-        state.user_url,
-        '/api/steward/charity-models/' +
-          model.id +
-          '/bindings/' +
-          binding.id +
-          '/request-adaptation',
-      ),
-    ).toMatchObject({
-      effective: {
-        body_defaults: { source: 'binding', values: { '/cache_control': { has_value: true } } },
-      },
-    });
-    await defaults.getByLabel(commonEn.requestAdaptation.cache.label).selectOption('off');
-    await expect(editor.getByText('Request adaptation saved.', { exact: true })).toHaveCount(0);
-    const clearing = page.waitForResponse(
-      (response) =>
-        response.request().method() === 'PUT' &&
-        new URL(response.url()).pathname === adaptationPath,
-    );
-    await editor.getByRole('button', { name: 'Save request adaptation', exact: true }).click();
-    expect((await clearing).ok()).toBe(true);
-    const cleared = await read(admin, state.admin_url, adaptationPath);
-    expect(cleared.body_defaults.values).toEqual({});
-    expect(cleared.effective.body_defaults.values).toEqual({});
-  } finally {
-    await admin.close();
-    await owner.close();
-    await steward.close();
-  }
-});
+      const stewardPage = await steward.newPage();
+      await stewardPage.goto(
+        state.user_url + '/steward?tab=charity&charity_section=models&charity_model=' + model.id,
+      );
+      const stewardRow = stewardPage.getByRole('row').filter({ hasText: upstream });
+      await expect(stewardRow).toContainText(
+        commonEn.gatewayCapabilities.adapters.anthropic_always_adaptive,
+      );
+      await expect(stewardRow).toContainText(commonEn.gatewayCapabilities.cacheOptions.anthropic);
+      await stewardRow
+        .getByRole('button', { name: 'Request headers and body', exact: true })
+        .click();
+      await stewardPage.getByText('Request adaptation', { exact: true }).last().click();
+      const readOnly = stewardPage.locator('section.core-card').last();
+      await expect(
+        readOnly.getByText('This setting is read-only for your role.', { exact: true }),
+      ).toBeVisible();
+      await expect(readOnly.getByLabel(commonEn.requestAdaptation.cache.label)).toBeDisabled();
+      await expect(
+        readOnly.getByRole('button', { name: 'Save request adaptation', exact: true }),
+      ).toHaveCount(0);
+      expect(
+        await read(
+          steward,
+          state.user_url,
+          '/api/steward/charity-models/' +
+            model.id +
+            '/bindings/' +
+            binding.id +
+            '/request-adaptation',
+        ),
+      ).toMatchObject({
+        effective: {
+          body_defaults: { source: 'binding', values: { '/cache_control': { has_value: true } } },
+        },
+      });
+      await defaults.getByLabel(commonEn.requestAdaptation.cache.label).selectOption('off');
+      await expect(editor.getByText('Request adaptation saved.', { exact: true })).toHaveCount(0);
+      const clearing = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'PUT' &&
+          new URL(response.url()).pathname === adaptationPath,
+      );
+      await editor.getByRole('button', { name: 'Save request adaptation', exact: true }).click();
+      expect((await clearing).ok()).toBe(true);
+      const cleared = await read(admin, state.admin_url, adaptationPath);
+      expect(cleared.body_defaults.values).toEqual({});
+      expect(cleared.effective.body_defaults.values).toEqual({});
+    } finally {
+      await admin.close();
+      await owner.close();
+      await steward.close();
+    }
+  });
+}
 
 test('saved Gateway capabilities keep target actions inside the narrow card', async ({
   browser,

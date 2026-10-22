@@ -172,6 +172,7 @@ interface LogAttemptCommon {
     | 'openai-compatible'
     | 'anthropic-compatible'
     | 'ai-sdk-gateway-v3'
+    | 'ai-sdk-gateway-v4'
     | 'google-gemini'
     | 'openai-responses'
     | 'openai-decisions'
@@ -708,6 +709,7 @@ function commonAttempt(root: WireRecord, redactedDisplay = false): LogAttemptCom
         'openai-compatible',
         'anthropic-compatible',
         'ai-sdk-gateway-v3',
+        'ai-sdk-gateway-v4',
         'google-gemini',
         'openai-responses',
         'openai-decisions',
