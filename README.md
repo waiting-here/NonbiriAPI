@@ -32,10 +32,13 @@ work overlaps. Success still requires a durable commit, and anonymous queue
 metrics distinguish application waiting from database pool waiting.
 
 Level-5 stewards can inspect user accounts, adjust the five inference RPM/concurrency
-overrides for strictly lower-level users, and ban level 1–4 users. They cannot
-change other account settings or credits, lift a ban, or replace an active ban. They
-can approve or reject every pending donation. Administrators and level-6
+overrides or revoke CallerKeys for strictly lower-level users, and ban level 1–4
+users. They cannot change other account settings or credits, lift a ban, or replace
+an active ban. They can approve or reject every pending donation. Administrators and level-6
 stewards can force-reject any approved donation, including manual approvals.
+Administrators can revoke any non-administrator user's CallerKey; level-6
+stewards use the same strictly lower-level rule. Revocation leaves browser
+sessions and upstream credentials usable, and the user may create a replacement.
 
 Administrators manage complete price templates in a dedicated charity workspace,
 with search, pagination, creation, editing and deletion. Administrators and
@@ -67,13 +70,23 @@ AI Gateway mappings remain compatible when no Worker is configured.
 
 [Service connections](docs/service-connections.md) group explicitly authorized entries around shared credentials and an independent model directory. OpenAI-compatible and Gateway entries select their native services; each model selects its applicable targets. Credential rotation preserves approved charity versions until explicit review.
 
+When creating a custom entry, matching mainstream presets show their current
+details. Users may explicitly adopt one entry or continue with the custom draft;
+suggestions grant no credential or donation authorization.
+
 The registry has 13 connector types covering OpenAI-compatible, dedicated Chat and Responses, Anthropic, Gateway v3/v4, Gemini, Decisions, System One and four explicit rerank protocols. Both Gateway versions support native text, image generation, embeddings and rerank with complete base URLs and no version probing. Direct HTTP operations include text, images, audio, embeddings, moderation and rerank, with SSE where supported. Chat and Responses share one model service selection and have bounded conversion paths; other services remain independently selectable. See [direct inference](docs/direct-inference.md) for the operation matrix and excluded persistent/realtime resources, and the [API contract](docs/api-contract.md) for ownership, credentials, SSRF, accounting and cancellation rules.
 
 Charity pricing supports request, token and search-unit billing, with independent input/output modality prices, donor rewards and long-context tiers. Missing standard classifications fall back to aggregate prices per side. [Pricing rules](docs/charity-context-pricing.md) explain exact units, reservation and failed-generation usage. Light and heavy requests have separate concurrency pools shared by personal and charity calls, and separate charity RPM windows; all calls still share global limits.
 
 Personal and charity models share [managed session-header controls](docs/charity-session-headers.md), including five formats and a zero idle lifetime that generates a value per logical request while preserving it for internal retries, without guaranteeing uniqueness. Model settings and request adaptation save separately.
 
+Authorized request-adaptation configuration reads show saved fixed-header and
+body values without response-protection markers. Marked items stay hidden as a
+whole. Mutation receipts and account exports continue to omit those values.
+
 Administrator and level-5/6 log pages show [global concurrency and RPM](docs/api-contract.md#global-pressure), with approximate 24-hour peaks and persistent observed maxima. Narrowly verified original caller-parameter errors leave donated-key failure streaks unchanged; ambiguous errors keep their existing treatment.
+Short charity-request rejections explain the minimum-length requirement in
+English or Chinese, with the existing status, code, counts and penalty rules.
 
 Browser appearance controls offer light/dark/system themes and three glass intensities, with manual choices taking priority over system preferences. Focus mode supports viewing the background and returning to the previous reading surface.
 
