@@ -90,6 +90,12 @@ export interface CreateDonationInput {
   description: string;
   keys: {
     endpointKeyId: string;
+    nativeServices?: import('@shared/nativeServices').NativeService[];
+    credentialId?: string;
+    credentialVersion?: string;
+    grantRevision?: string;
+    discoverySourceId?: string;
+    discoverySourceRevision?: string;
     expiresAt: number | null;
     failureDisableThreshold?: string;
   }[];
@@ -126,6 +132,20 @@ export async function createDonation(input: CreateDonationInput): Promise<Donati
         description: input.description,
         keys: input.keys.map((key) => ({
           endpoint_key_id: key.endpointKeyId,
+          ...(key.nativeServices ? { native_services: key.nativeServices } : {}),
+          ...(key.credentialId
+            ? {
+                credential_id: key.credentialId,
+                credential_version: key.credentialVersion,
+                grant_revision: key.grantRevision,
+              }
+            : {}),
+          ...(key.discoverySourceId
+            ? {
+                discovery_source_id: key.discoverySourceId,
+                discovery_source_revision: key.discoverySourceRevision,
+              }
+            : {}),
           expires_at: key.expiresAt,
           ...(key.failureDisableThreshold === undefined
             ? {}

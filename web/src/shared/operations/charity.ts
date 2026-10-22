@@ -1,3 +1,9 @@
+import {
+  normalizeNativeServices,
+  normalizeServiceProjection,
+  type ServiceProjection,
+} from '@shared/connections';
+import { normalizeUseSummary, type UseSummary } from './donationUses';
 import { normalizeSessionHeaders, type SessionHeader } from '@shared/sessionHeaders';
 export type { SessionHeader } from '@shared/sessionHeaders';
 import { normalizeCloudflareProxyMode, type CloudflareProxyMode } from '@shared/cloudflareProxy';
@@ -107,6 +113,7 @@ export type ManagedSafeSource =
     };
 
 export interface ManagedDonationKey extends SmartBackoffFields {
+  can_manage?: boolean;
   review?: { required: boolean; revision: string | null; material_available: boolean };
   failure_disable_threshold: string;
   binding_count: string;
@@ -154,6 +161,7 @@ export interface ManagedDonationKey extends SmartBackoffFields {
 }
 
 interface DonationCommon {
+  use_summary?: UseSummary;
   first_approval_origin?: 'auto' | 'manual' | 'unknown' | 'none';
   can_force_reject?: boolean;
   force_reject_unavailable_reason?: string | null;
@@ -310,6 +318,7 @@ export function normalizeManagedKey(
       'output_token_reserve',
       'breakdown_started_at',
       'review',
+      'can_manage',
     ],
     label,
     required,
@@ -391,6 +400,9 @@ export function normalizeManagedKey(
     invalidResponse(`${label} expiry authorization`);
   }
   return {
+    ...(root.can_manage === undefined
+      ? {}
+      : { can_manage: boolean(root.can_manage, `${label} management capability`) }),
     ...(root.review === undefined
       ? {}
       : {
@@ -591,6 +603,9 @@ function normalizeDonationCommon(root: ReturnType<typeof record>, label: string)
   if (status === 'rejected' && review?.decision !== 'reject' && review?.decision !== 'force_reject')
     invalidResponse(`${label} rejected review`);
   return {
+    ...(root.use_summary === undefined
+      ? {}
+      : { use_summary: normalizeUseSummary(root.use_summary) }),
     first_approval_origin:
       root.first_approval_origin === undefined
         ? 'unknown'
@@ -640,6 +655,7 @@ export function normalizeAdminDonation(value: unknown): AdminDonation {
     'reviewer',
     'created_at',
     'updated_at',
+    'use_summary',
     'first_approval_origin',
     'can_force_reject',
     'force_reject_unavailable_reason',
@@ -652,6 +668,7 @@ export function normalizeAdminDonation(value: unknown): AdminDonation {
       (field) =>
         ![
           'discord_public_thanks',
+          'use_summary',
           'first_approval_origin',
           'can_force_reject',
           'force_reject_unavailable_reason',
@@ -691,6 +708,7 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
     'reviewer',
     'created_at',
     'updated_at',
+    'use_summary',
     'first_approval_origin',
     'can_force_reject',
     'force_reject_unavailable_reason',
@@ -703,6 +721,7 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
       (field) =>
         ![
           'discord_public_thanks',
+          'use_summary',
           'first_approval_origin',
           'can_force_reject',
           'force_reject_unavailable_reason',
@@ -807,7 +826,8 @@ export interface TokenPrices {
   output: string;
 }
 
-export interface CharityBinding {
+export interface CharityBinding extends Partial<ServiceProjection> {
+  targets?: CharityTarget[];
   gateway_capabilities?: GatewayCapabilityPolicy | null;
   id: string;
   ord: number;
@@ -1215,7 +1235,7 @@ function normalizeCandidateSourceTypes(value: unknown, label: string): ('automat
   return values;
 }
 
-function normalizeBinding(value: unknown, label: string): CharityBinding {
+function normalizeLegacyBinding(value: unknown, label: string): CharityBinding {
   const root = record(
     value,
     [
@@ -1253,7 +1273,7 @@ function normalizeBinding(value: unknown, label: string): CharityBinding {
   };
 }
 
-export function normalizeCharityBindingCandidate(
+function normalizeLegacyCharityBindingCandidate(
   value: unknown,
   label: string,
   requireBindingMarkers = false,
@@ -1581,7 +1601,11 @@ export const addManagedBindings = (
   role: CharityRole,
   id: string,
   revision: string,
-  selections: { donation_key_id: string; upstream_model_id: string }[],
+  selections: {
+    donation_key_id: string;
+    upstream_model_id: string;
+    native_services?: import('@shared/nativeServices').NativeService[];
+  }[],
   key: string,
 ) =>
   decoded(
@@ -1589,7 +1613,12 @@ export const addManagedBindings = (
     (value) => normalizeBindings(value, `${role} charity bindings`),
     idempotentOptions(key, {
       method: 'POST',
-      json: { expected_binding_revision: revision, selections },
+      json: {
+        expected_binding_revision: revision,
+        selections: selections.map(({ native_services, ...flat }) =>
+          native_services === undefined ? flat : { targets: [{ ...flat, native_services }] },
+        ),
+      },
     }),
   );
 export interface BindingBatchReceipt {
@@ -1603,7 +1632,11 @@ export const addManagedBindingsReceipt = (
   role: CharityRole,
   id: string,
   revision: string,
-  selections: { donation_key_id: string; upstream_model_id: string }[],
+  selections: {
+    donation_key_id: string;
+    upstream_model_id: string;
+    native_services?: import('@shared/nativeServices').NativeService[];
+  }[],
   key: string,
 ): Promise<BindingBatchReceipt> =>
   decoded(
@@ -1631,30 +1664,160 @@ export const addManagedBindingsReceipt = (
     },
     idempotentOptions(key, {
       method: 'POST',
-      json: { expected_binding_revision: revision, selections },
+      json: {
+        expected_binding_revision: revision,
+        selections: selections.map(({ native_services, ...flat }) =>
+          native_services === undefined ? flat : { targets: [{ ...flat, native_services }] },
+        ),
+      },
     }),
   );
-export const orderManagedBindings = (
+export const orderManagedBindings = async (
   role: CharityRole,
   id: string,
   revision: string,
   order: string[],
   key: string,
-) =>
-  decoded(
-    `${base(role)}/charity-models/${encodeURIComponent(decimalID(id, `${role} charity model id`))}/bindings/order`,
-    (value) => normalizeBindings(value, `${role} charity bindings`),
-    idempotentOptions(key, { method: 'PUT', json: { expected_binding_revision: revision, order } }),
+) => {
+  await decoded(
+    `${base(role)}/charity-models/${encodeURIComponent(decimalID(id, 'charity model id'))}/bindings/order`,
+    () => undefined,
+    idempotentOptions(key, {
+      method: 'PUT',
+      json: { expected_binding_revision: revision, order, response: 'receipt' },
+    }),
   );
-export const deleteManagedBinding = (
+  return getManagedBindings(role, id);
+};
+export const deleteManagedBinding = async (
   role: CharityRole,
   modelID: string,
   bindingID: string,
   revision: string,
   key: string,
-) =>
-  decoded(
-    `${base(role)}/charity-models/${encodeURIComponent(decimalID(modelID, `${role} charity model id`))}/bindings/${encodeURIComponent(decimalID(bindingID, `${role} charity binding id`))}`,
-    (value) => normalizeBindings(value, `${role} charity bindings`),
-    idempotentOptions(key, { method: 'DELETE', json: { expected_binding_revision: revision } }),
+) => {
+  await decoded(
+    `${base(role)}/charity-models/${encodeURIComponent(decimalID(modelID, 'charity model id'))}/bindings/${encodeURIComponent(decimalID(bindingID, 'charity binding id'))}`,
+    () => undefined,
+    idempotentOptions(key, {
+      method: 'DELETE',
+      json: { expected_binding_revision: revision, response: 'receipt' },
+    }),
   );
+  return getManagedBindings(role, modelID);
+};
+
+export interface CharityTarget extends ServiceProjection {
+  id: string;
+  revision: string;
+  donation_key_id: string;
+  upstream_model_id: string;
+  donation_id: string;
+  endpoint_id: string;
+  connector_type: CharityConnectorType;
+  configuration_type: CharityConnectorType;
+  base_url: string;
+  uses: {
+    use_id: string;
+    native_service: import('@shared/nativeServices').NativeService;
+    credential_id: string;
+    credential_version: string;
+    grant_revision: string;
+    revision: string;
+  }[];
+}
+function normalizeCharityTarget(value: unknown): CharityTarget {
+  const row = record(
+    value,
+    [
+      'id',
+      'revision',
+      'donation_id',
+      'endpoint_id',
+      'donation_key_id',
+      'upstream_model_id',
+      'native_services',
+      'model_types',
+      'service_routes',
+      'capabilities',
+      'uses',
+      'connector_type',
+      'configuration_type',
+      'base_url',
+    ],
+    'charity target',
+  );
+  return {
+    id: decimalID(row.id, 'target'),
+    revision: decimalID(row.revision, 'target revision'),
+    donation_id: decimalID(row.donation_id, 'donation'),
+    endpoint_id: decimalID(row.endpoint_id, 'endpoint'),
+    connector_type: normalizeSource(
+      {
+        connector_type: row.connector_type,
+        canonical_base_url: row.base_url,
+        display_head: '',
+        display_tail: '',
+      },
+      'target source',
+    ).connector_type,
+    configuration_type: normalizeSource(
+      {
+        connector_type: row.configuration_type,
+        canonical_base_url: row.base_url,
+        display_head: '',
+        display_tail: '',
+      },
+      'target configuration',
+    ).connector_type,
+    base_url: string(row.base_url, 'target URL'),
+    donation_key_id: decimalID(row.donation_key_id, 'donation key'),
+    upstream_model_id: string(row.upstream_model_id, 'target model'),
+    ...normalizeServiceProjection(value),
+    uses: array(row.uses, 'approved uses').map((value) => {
+      const use = record(
+        value,
+        [
+          'use_id',
+          'native_service',
+          'credential_id',
+          'credential_version',
+          'grant_revision',
+          'revision',
+        ],
+        'target approved use',
+      );
+      return {
+        use_id: decimalID(use.use_id, 'use'),
+        native_service: normalizeNativeServices([use.native_service])[0]!,
+        credential_id: decimalID(use.credential_id, 'credential'),
+        credential_version: decimalID(use.credential_version, 'version'),
+        grant_revision: decimalID(use.grant_revision, 'grant revision'),
+        revision: decimalID(use.revision, 'use revision'),
+      };
+    }),
+  };
+}
+function normalizeBinding(value: unknown, label: string): CharityBinding {
+  const base = normalizeLegacyBinding(value, label);
+  const row = value as Record<string, unknown>;
+  return {
+    ...base,
+    ...(row.native_services === undefined ? {} : normalizeServiceProjection(value)),
+    ...(row.targets === undefined
+      ? {}
+      : { targets: array(row.targets, 'binding targets').map(normalizeCharityTarget) }),
+  };
+}
+export function normalizeCharityBindingCandidate(
+  value: unknown,
+  label: string,
+  requireBindingMarkers = false,
+): CharityBindingCandidate {
+  const base = normalizeLegacyCharityBindingCandidate(value, label, requireBindingMarkers);
+  const row = value as Record<string, unknown>;
+  return {
+    ...base,
+    ...(row.native_services === undefined ? {} : normalizeServiceProjection(value)),
+  };
+}

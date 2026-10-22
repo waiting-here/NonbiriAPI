@@ -673,24 +673,36 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
       let endpoint: { id: string };
       if (connectorType === 'ai-sdk-gateway-v4') {
         const ownerPage = await owner.newPage();
+        const c = commonEn.common.connections;
         await ownerPage.goto(state.user_url + '/endpoints?quickstart=1');
-        await ownerPage
-          .getByRole('button', { name: 'Need advanced options? Set up manually', exact: true })
-          .click();
-        const wizard = ownerPage.locator('section.core-wizard');
-        await wizard
-          .getByRole('button', { name: en.user.core['endpoints.custom'], exact: true })
-          .click();
-        await wizard.getByRole('button', { name: 'AI SDK Gateway v4', exact: true }).click();
-        await wizard.getByRole('button', { name: 'Next', exact: true }).click();
-        await wizard.getByLabel('Service address', { exact: true }).fill(baseURL);
-        await wizard.getByLabel('Note', { exact: true }).fill('Synthetic Gateway v4');
+        const connectionPanel = ownerPage
+          .locator('.nb-expandable-panel')
+          .filter({ has: ownerPage.getByRole('heading', { name: c.addConnection, exact: true }) });
+        await connectionPanel
+          .getByLabel(c.name, { exact: true })
+          .fill('Synthetic Gateway v4 connection');
+        const connectionSaved = ownerPage.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname === '/api/connections' &&
+            response.request().method() === 'POST',
+        );
+        await connectionPanel.getByRole('button', { name: c.create, exact: true }).click();
+        expect((await connectionSaved).status()).toBe(201);
+        await ownerPage.getByRole('button', { name: c.addEntry, exact: true }).first().click();
+        const entryPanel = ownerPage
+          .locator('.nb-expandable-panel')
+          .filter({ has: ownerPage.getByRole('heading', { name: c.addEntry, exact: true }) });
+        await entryPanel
+          .getByRole('combobox', { name: c.protocol, exact: true })
+          .selectOption(connectorType);
+        await entryPanel.getByLabel(c.entryURL, { exact: true }).fill(baseURL);
+        await entryPanel.getByLabel(c.note, { exact: true }).fill('Synthetic Gateway v4');
         const created = ownerPage.waitForResponse(
           (response) =>
-            response.request().method() === 'POST' &&
-            new URL(response.url()).pathname === '/api/endpoints',
+            new URL(response.url()).pathname === '/api/endpoints' &&
+            response.request().method() === 'POST',
         );
-        await wizard.getByRole('button', { name: 'Create service', exact: true }).click();
+        await entryPanel.getByRole('button', { name: c.saveEntries, exact: true }).click();
         const response = await created;
         expect(response.status()).toBe(201);
         expect(response.request().postDataJSON()).toMatchObject({

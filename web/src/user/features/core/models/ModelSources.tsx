@@ -1,3 +1,6 @@
+import { NativeServicesField } from '@shared/components/NativeServicesField';
+import type { NativeService } from '@shared/nativeServices';
+import { BindingTargets } from '../connections/BindingTargets';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { MoreMenu, Panel, PanelBody, PanelHead, Segmented } from '@shared/components/ui';
 import type { PageMetadata, PageSize } from '@shared/operations/pageNumbers';
@@ -72,6 +75,7 @@ function BindingSelector({
   const [queryDraft, setQueryDraft] = useState('');
   const [selectionDetails, setSelectionDetails] = useState<Record<string, BindingCandidate>>({});
   const [invalidSelection, setInvalidSelection] = useState(false);
+  const [nativeSelections, setNativeSelections] = useState<Record<string, NativeService[]>>({});
   const endpointPager = usePagePager({
     station: 'user',
     listType: 'models-binding-endpoints',
@@ -190,6 +194,7 @@ function BindingSelector({
     setManualSaved(false);
   };
   const toggleCandidate = (candidate: BindingCandidate) => {
+    if (candidate.capabilities?.can_bind === false) return;
     setSelectionDetails((current) => ({ ...current, [candidateIdentity(candidate)]: candidate }));
     dispatch({ type: 'toggle', accountId, modelId: model.id, candidate });
   };
@@ -302,7 +307,15 @@ function BindingSelector({
     }
     if (!draft.selections.length) return;
     await operation
-      .mutateAsync({ revision: draft.bindingRevision, selections: [...draft.selections] })
+      .mutateAsync({
+        revision: draft.bindingRevision,
+        selections: draft.selections.map((candidate) => ({
+          ...candidate,
+          ...(selectionDetails[candidateIdentity(candidate)]?.native_services === undefined
+            ? {}
+            : { native_services: nativeSelections[candidateIdentity(candidate)] ?? [] }),
+        })),
+      })
       .catch(() => undefined);
   };
 
@@ -550,31 +563,7 @@ function BindingSelector({
                   onLock={setManualLocked}
                   onEdit={() => setManualSaved(false)}
                   onCreated={(upstreamModel) => {
-                    if (
-                      !bound.has(
-                        candidateIdentity({
-                          endpoint_key_id: keyId,
-                          upstream_model_id: upstreamModel,
-                        }),
-                      ) &&
-                      !selected.has(
-                        candidateIdentity({
-                          endpoint_key_id: keyId,
-                          upstream_model_id: upstreamModel,
-                        }),
-                      )
-                    )
-                      toggleCandidate({
-                        endpoint_key_id: keyId,
-                        endpoint_base_url: selectedEndpoint.base_url,
-                        connector_type: selectedEndpoint.connector_type,
-                        endpoint_note: selectedEndpoint.note,
-                        endpoint_key_display_head: selectedKey.display_head,
-                        endpoint_key_display_tail: selectedKey.display_tail,
-                        endpoint_key_note: selectedKey.note,
-                        upstream_model_id: upstreamModel,
-                        source_types: ['manual'],
-                      });
+                    setQueryDraft(upstreamModel);
                     setManualSaved(true);
                   }}
                 />
@@ -602,6 +591,19 @@ function BindingSelector({
                     </span>
                   ) : null}
                 </div>
+                {detail?.native_services ? (
+                  <NativeServicesField
+                    options={detail.native_services}
+                    value={nativeSelections[candidateIdentity(candidate)] ?? []}
+                    onChange={(value) =>
+                      setNativeSelections((previous) => ({
+                        ...previous,
+                        [candidateIdentity(candidate)]: value,
+                      }))
+                    }
+                    disabled={operation.isPending || Boolean(replayAttempt)}
+                  />
+                ) : null}
                 <button
                   type="button"
                   className="nb-btn nb-btn--ghost"
@@ -651,7 +653,13 @@ function BindingSelector({
           disabled={
             !bindingsKnown ||
             operation.isPending ||
-            (!replayAttempt && draft.selections.length === 0)
+            (!replayAttempt &&
+              (draft.selections.length === 0 ||
+                draft.selections.some(
+                  (candidate) =>
+                    selectionDetails[candidateIdentity(candidate)]?.native_services !== undefined &&
+                    !nativeSelections[candidateIdentity(candidate)]?.length,
+                )))
           }
           onClick={() => void submit()}
         >
@@ -1048,6 +1056,7 @@ export function ModelSources({
       <PanelBody>
         {strategy === 'cache_balanced' ? <p className="nb-sub">{text('balancedHelp')}</p> : null}
         <BindingOrder accountId={accountId} model={model} />
+        <BindingTargets accountId={accountId} model={model} />
         <BindingSelector
           accountId={accountId}
           model={model}

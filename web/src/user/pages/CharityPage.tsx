@@ -1,3 +1,4 @@
+import { DonationUsesPanel } from '@shared/components/DonationUsesPanel';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useParams } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -71,6 +72,9 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
       ) : (
         <>
           <CharitySafetyNotice />
+          {accountID && donation.data.useSummary ? (
+            <DonationUsesPanel role="owner" accountId={accountID} donationId={donationID} />
+          ) : null}
           <DonationCard
             key={accountID}
             donation={donation.data}

@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import en from '../../src/user/i18n/en.json' with { type: 'json' };
 import zh from '../../src/user/i18n/zh.json' with { type: 'json' };
+import commonEn from '../../src/shared/i18n/common/en.json' with { type: 'json' };
+import commonZh from '../../src/shared/i18n/common/zh.json' with { type: 'json' };
 
 test.skip(process.env.NONBIRI_MANAGEMENT_BROWSER !== '1', 'Requires the management fixture.');
 interface Fixture {
@@ -81,40 +83,25 @@ test('Google discovery explains server-region failures and recovers in setup and
       ).toBe(202);
       await expect.poll(async () => (await catalog()).evidence.safe_class).toBe('region');
       const page = await context.newPage();
-      await page.goto(state.user_url + '/endpoints?quickstart=1');
-      await page.getByText(copy.services.existingService, { exact: true }).click();
-      await page
-        .getByLabel(copy.quickstart.serviceSearch, { exact: true })
-        .fill('Gemini discovery sample');
-      await page.getByRole('button', { name: copy.quickstart.useService, exact: true }).click();
-      await page.getByRole('button', { name: copy.quickstart.existingKey, exact: true }).click();
-      await page
-        .locator('.quickstart-choice-list li')
-        .filter({ hasText: 'Gemini sample key' })
-        .getByRole('button', { name: copy.quickstart.existingKey, exact: true })
-        .click();
+      const c = (language === 'zh' ? commonZh : commonEn).common.connections;
+      const keyResponse = await context.request.get(
+        state.user_url + `/api/endpoints/${endpoint}/keys?page=1&page_size=20`,
+        { headers: { Origin: state.user_url } },
+      );
+      expect(keyResponse.ok()).toBe(true);
+      const keyRows = (await keyResponse.json()).data as {
+        id: string;
+        discovery_source_id: string | null;
+      }[];
+      const sourceId = keyRows.find((row) => row.id === key)?.discovery_source_id;
+      expect(sourceId).toBeTruthy();
+      await page.goto(state.user_url + '/endpoints?discovery_source_id=' + sourceId);
       const reason = copy.core['endpoints.discoveryReasonRegion'];
       const notice = page.locator('.nb-note--bad').filter({ hasText: reason });
       await expect(notice).toBeVisible();
-      // The model-name form remains available even when discovery is rejected.
-      await page
-        .locator('summary')
-        .filter({ hasText: copy.services.manualName })
-        .or(page.locator('summary').filter({ hasText: copy.services.manualModels }))
-        .click();
-      await expect(page.getByLabel(copy.quickstart.upstream, { exact: true })).toBeVisible();
-      if (language === 'en' && width === 1440) {
-        await page.getByLabel(copy.quickstart.upstream, { exact: true }).fill('gemini-known-model');
-        await page.getByRole('button', { name: copy.quickstart.manual, exact: true }).click();
-        await expect
-          .poll(async () =>
-            (await catalog()).manual_entries.some(
-              (item: { upstream_model_id: string }) =>
-                item.upstream_model_id === 'gemini-known-model',
-            ),
-          )
-          .toBe(true);
-      }
+      // Manual planning remains available after the independent directory fails.
+      await page.locator('summary').filter({ hasText: c.manualModel }).click();
+      await expect(page.getByLabel(c.upstreamModel, { exact: true })).toBeEnabled();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
@@ -122,9 +109,7 @@ test('Google discovery explains server-region failures and recovers in setup and
         path: info.outputPath(`discovery-setup-${language}-${width}-${theme}.png`),
       });
       await control('success');
-      await notice
-        .getByRole('button', { name: copy.services.retryDiscovery, exact: true })
-        .press('Enter');
+      await page.getByRole('button', { name: c.refreshSource, exact: true }).press('Enter');
       await expect(notice).toHaveCount(0);
       await expect.poll(async () => (await catalog()).evidence.state).toBe('succeeded');
       expect((await catalog()).automatic_entries).toHaveLength(2);
@@ -134,6 +119,28 @@ test('Google discovery explains server-region failures and recovers in setup and
         .getByRole('button', { name: copy.core['endpoints.refreshDiscovery'], exact: true })
         .click();
       await expect(notice).toBeVisible();
+      if (language === 'en' && width === 1440) {
+        await page.getByRole('button', { name: copy.services.viewModels, exact: true }).click();
+        const modelsPanel = page.locator('.nb-expandable-panel:not([hidden])');
+        await modelsPanel
+          .getByLabel(copy.core['endpoints.manualModel'], { exact: true })
+          .fill('gemini-known-model');
+        await modelsPanel
+          .getByRole('button', { name: copy.core['endpoints.manualAdd'], exact: true })
+          .click();
+        await expect
+          .poll(async () =>
+            (await catalog()).manual_entries.some(
+              (row: { upstream_model_id: string }) =>
+                row.upstream_model_id === 'gemini-known-model',
+            ),
+          )
+          .toBe(true);
+        await modelsPanel
+          .getByRole('button', { name: copy.core['common.close'], exact: true })
+          .first()
+          .click();
+      }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
