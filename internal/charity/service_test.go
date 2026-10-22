@@ -41,7 +41,7 @@ type charityTestEnv struct {
 	tokenModel   int64
 }
 
-func newCharityTestEnv(t *testing.T) *charityTestEnv {
+func newCharityTestEnv(t *testing.T, captureReview ...bool) *charityTestEnv {
 	t.Helper()
 	master := bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes)
 	vault, err := secret.New(master)
@@ -80,9 +80,19 @@ VALUES('charity_token_reserve_milli','5',?) ON CONFLICT(key) DO UPDATE SET value
 		t.Fatalf("charity.New: %v", err)
 	}
 	environment := &charityTestEnv{store: store, service: service, donation: donationService}
+	var review *secret.DonationReview
+	if len(captureReview) > 0 && captureReview[0] {
+		review, err = secret.NewDonationReview(vault)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := review.Initialize(t.Context(), store.DB()); err != nil {
+			t.Fatal(err)
+		}
+	}
 	environment.donorID = environment.seedUser(t, "charity-donor")
 	environment.callerID = environment.seedUser(t, "charity-caller")
-	environment.seedDonationRoute(t)
+	environment.seedDonationRoute(t, review)
 	environment.requestModel = environment.seedModel(t, "request", "per_request")
 	environment.tokenModel = environment.seedModel(t, "token", "per_token")
 	return environment
@@ -103,7 +113,7 @@ revision,created_at,updated_at) VALUES(?,?,0,?,?,?,?,?,?,?,?,?,?)`, discord, dis
 	return id
 }
 
-func (environment *charityTestEnv) seedDonationRoute(t *testing.T) {
+func (environment *charityTestEnv) seedDonationRoute(t *testing.T, review *secret.DonationReview) {
 	t.Helper()
 	baseURL := "https://charity.example.test/v1"
 	tx := beginTestTx(t, environment.store.DB())
@@ -167,6 +177,11 @@ endpoint_key_id,donation_key_id,donation_id,created_at) VALUES(?,?,?,?)`, enviro
 	}
 	if _, err := testseed.SeedDiscoveryCatalogTx(t.Context(), tx, testseed.DiscoveryCatalogInput{EndpointKeyID: environment.endpointKey, ListFormat: "openai", Models: []testseed.DiscoveryModel{{ID: "upstream-model"}}, At: charityTestNow}); err != nil {
 		t.Fatal(err)
+	}
+	if review != nil {
+		if _, err := review.CaptureDonationKey(t.Context(), tx, environment.donationKey, environment.endpointKey, time.Unix(charityTestNow, 0)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, err := testseed.SeedDonationUsesWithDiscoveryTx(t.Context(), tx, environment.donationKey, true, charityTestNow); err != nil {
 		t.Fatal(err)

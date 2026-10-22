@@ -122,7 +122,7 @@ func TestRoutingStrategiesPersistAndControlSnapshots(t *testing.T) {
 		} else if strategy == RouteRandom {
 			environment.useEntropy(t, bytes.NewReader(entropyWords(1)))
 		}
-		snapshot, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow, []connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
+		snapshot, err := environment.service.orderedChatSnapshot(context.Background(), modelID, routingTestNow, []connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
 		if err != nil {
 			t.Fatal(err)
 		}

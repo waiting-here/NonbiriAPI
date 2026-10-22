@@ -52,7 +52,7 @@ func TestRuntimeQuotaReuseRemainsTransactionLocal(t *testing.T) {
 	}
 	check := func(want map[int64]int, wantErr error) {
 		t.Helper()
-		snapshot, err := e.service.Snapshot(t.Context(), modelID, routingTestNow, []connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
+		snapshot, err := e.service.chatSnapshot(t.Context(), modelID, routingTestNow, []connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
 		if !errors.Is(err, wantErr) {
 			t.Fatalf("snapshot error=%v, want %v", err, wantErr)
 		}
