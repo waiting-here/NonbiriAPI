@@ -531,6 +531,8 @@ test('same call names require only an actual collision choice and retain existin
     await row.getByRole('button', { name: connectionCopy('en').search, exact: true }).click();
     await row
       .getByRole('table', { name: connectionCopy('en').existingModel, exact: true })
+      .getByRole('row')
+      .filter({ has: page.getByText(prefix + '/chat', { exact: true }) })
       .getByRole('button', { name: connectionCopy('en').select, exact: true })
       .click();
     await connect(page).click();

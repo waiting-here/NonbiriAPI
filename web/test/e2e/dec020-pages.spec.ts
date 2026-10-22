@@ -251,6 +251,11 @@ function endpointKeySummary(id: string, endpointID: string, displayHead = `key-$
   return {
     id,
     endpoint_id: endpointID,
+    credential_id: id,
+    credential_version: '1',
+    grant_revision: '1',
+    native_services: ['chat_completions', 'responses'],
+    discovery_source_id: null,
     display_head: displayHead,
     display_tail: 'tail',
     note: '',
@@ -846,6 +851,7 @@ test.describe('donation expiry in UTC', () => {
     const keyChoices = resources.locator('.donation-resource-picker__section').nth(1);
     await expect(keyChoices.getByRole('checkbox', { name: /key-11…tail/ })).toBeDisabled();
     await keyChoices.getByRole('checkbox', { name: /key-free…tail/ }).check();
+    await picker.getByRole('checkbox', { name: 'Chat completions', exact: true }).check();
     await picker.getByLabel('Expiry for key-free…tail').fill('2027-01-15T08:00');
     await picker.getByRole('button', { name: 'Done', exact: true }).click();
     await composer
@@ -868,7 +874,16 @@ test.describe('donation expiry in UTC', () => {
       description: 'Per-key expiry fixture',
       ownership_authorized: true,
       discord_public_thanks: false,
-      keys: [{ endpoint_key_id: '14', expires_at: 1_800_000_000 }],
+      keys: [
+        {
+          endpoint_key_id: '14',
+          native_services: ['chat_completions'],
+          credential_id: '14',
+          credential_version: '1',
+          grant_revision: '1',
+          expires_at: 1_800_000_000,
+        },
+      ],
     });
     await assertClean(page, guard);
   });

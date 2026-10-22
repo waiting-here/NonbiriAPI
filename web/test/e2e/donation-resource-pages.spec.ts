@@ -13,6 +13,8 @@ const EXPIRY = Date.parse('2030-01-01T05:00:00Z') / 1000;
 function endpoint(id: number) {
   return {
     id: String(id),
+    connection_id: String(id),
+    native_services: ['chat_completions', 'responses'],
     connector_type: 'openai-compatible',
     base_url: `https://controlled-${id}.example/v1/${'long-source-'.repeat(8)}`,
     origin: { kind: 'custom' },
@@ -28,6 +30,11 @@ function endpointKey(id: number, parent: number, submitted: boolean) {
   return {
     id: String(id),
     endpoint_id: String(parent),
+    credential_id: String(id + 1000),
+    credential_version: '1',
+    grant_revision: '1',
+    native_services: ['chat_completions', 'responses'],
+    discovery_source_id: null,
     display_head: `head${id}`,
     display_tail: 'tail',
     note: `Key ${id}`,
@@ -237,6 +244,13 @@ test.describe('donation resource submission', () => {
       await sources.getByRole('button', { name: common.next, exact: true }).click();
       await sources.getByRole('button', { name: /^Source 21 / }).click();
       await keys.getByRole('checkbox', { name: /^Key 201 / }).check();
+      for (const selected of await picker
+        .locator('.donation-resource-picker__selected-list > li')
+        .all()) {
+        await selected
+          .getByRole('checkbox', { name: common.modelTypes.chat_completions, exact: true })
+          .check();
+      }
       await page
         .getByRole('button', { name: copy.presentation.selectionDone, exact: true })
         .click();
@@ -300,15 +314,31 @@ test.describe('donation resource submission', () => {
           keys: [
             {
               endpoint_key_id: '101',
+              native_services: ['chat_completions'],
+              credential_id: '1101',
+              credential_version: '1',
+              grant_revision: '1',
               expires_at: EXPIRY,
               failure_disable_threshold: '10',
             },
             {
               endpoint_key_id: '121',
+              native_services: ['chat_completions'],
+              credential_id: '1121',
+              credential_version: '1',
+              grant_revision: '1',
               expires_at: null,
               failure_disable_threshold: '10',
             },
-            { endpoint_key_id: '201', expires_at: null, failure_disable_threshold: '10' },
+            {
+              endpoint_key_id: '201',
+              native_services: ['chat_completions'],
+              credential_id: '1201',
+              credential_version: '1',
+              grant_revision: '1',
+              expires_at: null,
+              failure_disable_threshold: '10',
+            },
           ],
         },
       ]);
