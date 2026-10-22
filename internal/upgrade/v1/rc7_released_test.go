@@ -26,7 +26,8 @@ func TestConvertReleasedDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	before := retainedFacts(t, read)
+	columns := legacyConnectionColumns(t, read)
+	before := retainedFacts(t, read, nil)
 	var operations, keys, users int
 	if err := read.QueryRow("SELECT (SELECT count(*) FROM credit_operations),(SELECT count(*) FROM endpoint_key_secrets),(SELECT count(*) FROM users WHERE is_admin=0)").Scan(&operations, &keys, &users); err != nil {
 		t.Fatal(err)
@@ -50,7 +51,7 @@ func TestConvertReleasedDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	after := retainedFacts(t, store.DB())
+	after := retainedFacts(t, store.DB(), columns)
 	for table, digest := range before {
 		if after[table] != digest {
 			t.Errorf("conversion changed retained facts in %s", table)
@@ -104,9 +105,9 @@ func TestConvertReleasedDatabase(t *testing.T) {
 	t.Logf("preserved %d table projections, %d ledger operations and %d encrypted credentials", len(before), operations, keys)
 }
 
-func retainedFacts(t *testing.T, database *sql.DB) map[string][32]byte {
+func retainedFacts(t *testing.T, database *sql.DB, sourceColumns map[string][]string) map[string][32]byte {
 	t.Helper()
-	rows, err := database.Query("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+	rows, err := database.Query("SELECT name FROM sqlite_schema WHERE (type='table' OR (type='view' AND name='model_discovery_evidence')) AND name NOT LIKE 'sqlite_%' ORDER BY name")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +125,7 @@ func retainedFacts(t *testing.T, database *sql.DB) map[string][32]byte {
 	ignored := map[string]bool{"schema_state": true, "user_continuity_identities": true, "gateway_model_capabilities_state": true, "site_usage_totals": true}
 	result := map[string][32]byte{}
 	for _, table := range tables {
-		if table == "dispatch_caller_parameter_errors" || table == "global_pressure_state" || table == "global_pressure_samples" || table == "personal_header_sessions" || table == "personal_header_uses" || table == "endpoint_backoff_policies" || table == "donation_key_backoffs" || table == "dispatch_smart_backoff_facts" || table == "donation_key_cooldowns" || table == "dispatch_retry_after_observations" || table == "request_header_facts" || table == "charity_price_templates" || table == "charity_price_template_audits" || table == "donation_owner_preferences" || table == "channel_charity_binding_presets" || table == "channel_charity_binding_mappings" {
+		if table == "dispatch_service_health" || table == "donation_service_health" || table == "request_attempt_service_facts" || table == "mainstream_channel_discovery_presets" || table == "mainstream_channel_model_mappings" || table == "dispatch_caller_parameter_errors" || table == "global_pressure_state" || table == "global_pressure_samples" || table == "personal_header_sessions" || table == "personal_header_uses" || table == "endpoint_backoff_policies" || table == "donation_key_backoffs" || table == "dispatch_smart_backoff_facts" || table == "donation_key_cooldowns" || table == "dispatch_retry_after_observations" || table == "request_header_facts" || table == "charity_price_templates" || table == "charity_price_template_audits" || table == "donation_owner_preferences" || table == "channel_charity_binding_presets" || table == "channel_charity_binding_mappings" {
 			var count int
 			if err := database.QueryRow("SELECT count(*) FROM " + table).Scan(&count); err != nil || count != 0 {
 				t.Fatalf("new additive table %s is not empty: %d %v", table, count, err)
@@ -134,7 +135,10 @@ func retainedFacts(t *testing.T, database *sql.DB) map[string][32]byte {
 		if ignored[table] || strings.HasPrefix(table, "account_mfa_") {
 			continue
 		}
-		query := "SELECT * FROM " + table
+		query, retained := connectionFactQuery(table, sourceColumns)
+		if !retained {
+			continue
+		}
 		if table == "site_config" {
 			query += " WHERE key NOT IN ('redemption_ban_threshold','redemption_ban_window_seconds','redemption_ban_duration_seconds','game_fishing_milk_crab_chance_bps','request_header_budget_mib') AND key NOT LIKE 'mfa_required_level_%'"
 		}
