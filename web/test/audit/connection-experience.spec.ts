@@ -1511,10 +1511,10 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
     await rejection
       .getByRole('button', { name: common.common.donationReview.forceTitle, exact: true })
       .click();
-    const rejected = await rejectedResponse;
-    expect(rejected.status()).toBe(200);
-    expect(rejected.request().postDataJSON().decision).toBe('force_reject');
-    expect(rejected.request().postDataJSON()).not.toHaveProperty('key_settings');
+    const forcedRejection = await rejectedResponse;
+    expect(forcedRejection.status()).toBe(200);
+    expect(forcedRejection.request().postDataJSON().decision).toBe('force_reject');
+    expect(forcedRejection.request().postDataJSON()).not.toHaveProperty('key_settings');
     expect((await uses(owner, approved.id)).every((row) => !row.approved && !row.pending)).toBe(
       true,
     );

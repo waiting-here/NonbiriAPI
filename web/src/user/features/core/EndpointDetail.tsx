@@ -1711,6 +1711,12 @@ export function EndpointDetail({
     );
   };
 
+  const chooseConnection = () => {
+    setEntryScopeOpen(true);
+    entryScopeRef.current?.scrollIntoView?.({ block: 'start' });
+    entryScopeRef.current?.querySelector('summary')?.focus();
+  };
+
   return (
     <div
       className={`page core-page core-stack services-page services-detail services-detail--${endpoint.data.enabled ? 'enabled' : 'disabled'}`}
@@ -1922,7 +1928,12 @@ export function EndpointDetail({
       </ExpandablePanel>
 
       {focusKeyId ? (
-        <FocusedEndpointKey accountId={accountId} endpoint={endpoint.data} keyId={focusKeyId} />
+        <FocusedEndpointKey
+          accountId={accountId}
+          endpoint={endpoint.data}
+          keyId={focusKeyId}
+          onChooseConnection={chooseConnection}
+        />
       ) : null}
       <section className="core-card" aria-busy={keys.isFetching} hidden={Boolean(focusKeyId)}>
         <div className="core-card__header">
@@ -1992,11 +2003,7 @@ export function EndpointDetail({
                     keyData={keyData}
                     onRefresh={() => void keys.refetch()}
                     suppressRoutePanel={usingModels}
-                    onChooseConnection={() => {
-                      setEntryScopeOpen(true);
-                      entryScopeRef.current?.scrollIntoView?.({ block: 'start' });
-                      entryScopeRef.current?.querySelector('summary')?.focus();
-                    }}
+                    onChooseConnection={chooseConnection}
                   />
                 ))}
               </tbody>
@@ -2079,10 +2086,12 @@ function FocusedEndpointKey({
   accountId,
   endpoint,
   keyId,
+  onChooseConnection,
 }: {
   accountId: string;
   endpoint: Endpoint;
   keyId: string;
+  onChooseConnection: () => void;
 }) {
   const { t } = useCoreCopy();
   const location = useLocation();
@@ -2115,6 +2124,7 @@ function FocusedEndpointKey({
                 endpoint={endpoint}
                 keyData={current.data}
                 onRefresh={() => void current.refetch()}
+                onChooseConnection={onChooseConnection}
               />
             </tbody>
           </table>

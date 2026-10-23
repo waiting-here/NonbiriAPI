@@ -61,7 +61,7 @@ describe('suggested discovery catalogs', () => {
     const calls: string[] = [];
     vi.stubGlobal(
       'fetch',
-      vi.fn<typeof fetch>(async (url, init) => {
+      vi.fn<typeof globalThis.fetch>(async (url, init) => {
         expect(init?.method ?? 'GET').toBe('GET');
         const parsed = new URL(String(url), 'https://app.example');
         calls.push(parsed.pathname);
@@ -89,7 +89,7 @@ describe('suggested discovery catalogs', () => {
     const writes: { body: unknown; key: string | null }[] = [];
     vi.stubGlobal(
       'fetch',
-      vi.fn<typeof fetch>(async (url, init) => {
+      vi.fn<typeof globalThis.fetch>(async (url, init) => {
         if (String(url).startsWith('/api/credentials/')) return json(credential);
         if (init?.method === 'POST') {
           writes.push({
@@ -107,7 +107,9 @@ describe('suggested discovery catalogs', () => {
     expect(writes).toEqual([{ body: input, key: 'ABCDEFGHIJKLMNOPQRSTUV' }]);
   });
   it('rejects a selected credential that rotated before saving without creating a catalog', async () => {
-    const fetch = vi.fn<typeof fetch>(async () => json({ ...credential, credential_version: '3' }));
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      json({ ...credential, credential_version: '3' }),
+    );
     vi.stubGlobal('fetch', fetch);
     await expect(run()).rejects.toMatchObject({ code: 'conflict', status: 409 });
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -115,7 +117,7 @@ describe('suggested discovery catalogs', () => {
   it('does not return a catalog created with a different version during rotation', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn<typeof fetch>(async (url, init) => {
+      vi.fn<typeof globalThis.fetch>(async (url, init) => {
         if (String(url).startsWith('/api/credentials/')) return json(credential);
         if (init?.method === 'POST') return json({ ...source, credential_version: '3' }, 201);
         return page([]);

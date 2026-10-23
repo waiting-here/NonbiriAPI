@@ -72,7 +72,7 @@ async function setup({
   let receiptReads = 0;
   const sourceWrites: string[] = [];
   const keyWrites: Record<string, unknown>[] = [];
-  const fetch = vi.fn<typeof fetch>(async (input, init) => {
+  const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
     const url = new URL(String(input), 'https://app.example');
     if (url.pathname === '/api/credentials/8')
       return json({ ...credential, credential_version: currentVersion });

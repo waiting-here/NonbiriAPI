@@ -397,15 +397,15 @@ function keyPage(key: object) {
     pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
   };
 }
-async function renderKeyFeedback(fetchMock: typeof fetch) {
+async function renderKeyFeedback(fetchMock: typeof fetch, route = '/endpoints/11') {
   vi.stubGlobal('fetch', vi.fn(fetchMock));
   const view = await renderWithProviders(<EndpointDetail accountId="1" endpointId="11" />, {
     station: 'user',
     role: 'user',
-    route: '/endpoints/11',
+    route,
   });
   view.queryClient.setQueryData(['user', 'session'], session);
-  await screen.findByText('key note');
+  await screen.findAllByText('key note');
   return view;
 }
 describe('key model operation feedback', () => {
@@ -521,7 +521,10 @@ const catalogSource = {
 };
 describe('missing catalog recovery', () => {
   it('selects and saves the exact catalog in the real key editor, then reads its available models', async () => {
-    let current = { ...endpointKey, discovery_source_id: null as string | null };
+    let current: Record<string, unknown> & { discovery_source_id: string | null } = {
+      ...endpointKey,
+      discovery_source_id: null,
+    };
     const writes: { path: string; body?: Record<string, unknown> }[] = [];
     const view = await renderKeyFeedback(async (input, init) => {
       const url = new URL(String(input), 'https://app.example');
@@ -614,7 +617,7 @@ describe('missing catalog recovery', () => {
     expect(note).toHaveValue('Keep this note draft');
     await view.user.click(within(scope).getByRole('checkbox', { name: 'Responses' }));
     await view.user.click(await within(scope).findByRole('button', { name: 'Use source' }));
-    await view.user.click(within(scope).getByRole('button', { name: 'Save', exact: true }));
+    await view.user.click(within(scope).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toEqual({
       path: '/api/endpoints/11/keys/21',
@@ -634,8 +637,12 @@ describe('missing catalog recovery', () => {
       '/api/endpoints/11/keys/21/models/refresh',
     ]);
   });
-  it('opens grouping for an ungrouped service and saves a newly created connection only after explicit confirmation', async () => {
-    let currentEndpoint = { ...endpoint, connection_id: null as string | null };
+  it('opens grouping from a focused ungrouped key and saves a new connection only after explicit confirmation', async () => {
+    let currentEndpoint = {
+      ...endpoint,
+      revision: String(endpoint.revision),
+      connection_id: null as string | null,
+    };
     let connection: object | null = null;
     const writes: { path: string; body: Record<string, unknown> }[] = [];
     vi.mocked(coreQueries.useEndpoint).mockReturnValue({
@@ -696,7 +703,7 @@ describe('missing catalog recovery', () => {
       }
       if (url.pathname === '/api/endpoints/11') return jsonResponse(currentEndpoint);
       throw Error('Unexpected ' + url.pathname);
-    });
+    }, '/endpoints/11?focus_key_id=21');
     await view.user.click(screen.getByRole('button', { name: 'Move to another connection' }));
     const scope = screen
       .getByText('Entry services and connection', { selector: 'strong' })
@@ -710,13 +717,11 @@ describe('missing catalog recovery', () => {
       within(create).getByRole('textbox', { name: 'Name' }),
       'Catalog connection',
     );
-    await view.user.click(within(create).getByRole('button', { name: 'Create', exact: true }));
+    await view.user.click(within(create).getByRole('button', { name: 'Create' }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(currentEndpoint.connection_id).toBeNull();
-    await waitFor(() =>
-      expect(within(scope).getByRole('button', { name: 'Save', exact: true })).toBeEnabled(),
-    );
-    await view.user.click(within(scope).getByRole('button', { name: 'Save', exact: true }));
+    await waitFor(() => expect(within(scope).getByRole('button', { name: 'Save' })).toBeEnabled());
+    await view.user.click(within(scope).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(writes).toHaveLength(2));
     expect(writes[1]).toEqual({
       path: '/api/endpoints/11',
