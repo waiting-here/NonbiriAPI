@@ -387,6 +387,10 @@ func (s *Service) adminMode(ctx context.Context, reader *adminRead, dataset, id 
 }
 
 func (s *Service) AdminExport(ctx context.Context, in AdminExportInput) (page AdminExportPage, err error) {
+	return s.adminExport(ctx, in, 100)
+}
+
+func (s *Service) adminExport(ctx context.Context, in AdminExportInput, recordLimit int) (page AdminExportPage, err error) {
 	page = AdminExportPage{Format: "duel-history-v1", Dataset: in.Dataset, Items: []json.RawMessage{}}
 	if err = s.validateSelection(in.Dataset, in.Selection); err != nil {
 		return page, err
@@ -511,7 +515,7 @@ func (s *Service) AdminExport(ctx context.Context, in AdminExportInput) (page Ad
 		if encodeErr != nil {
 			return page, encodeErr
 		}
-		if len(page.Items) == 100 || size+len(raw)+1 > 8<<20 {
+		if len(page.Items) == recordLimit || size+len(raw)+1 > 8<<20 {
 			c = before
 			break
 		}
