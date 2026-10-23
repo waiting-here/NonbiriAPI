@@ -83,9 +83,10 @@ previous version while a replacement awaits review. The owner can pause an old
 use or version immediately. A replacement is never approved merely because the
 old secret or the provider was previously approved.
 
-A donation shares explicitly selected services and, optionally, an exact model
-directory revision using the same credential version. Reviewers approve or
-reject each use. A use may have both an approved version and a pending replacement;
+A donation shares explicitly selected services and permits administrators and
+authorized stewards to fetch their model directories for review and maintenance.
+There is no separate directory-sharing consent. Reviewers approve or reject each
+use. A use may have both an approved version and a pending replacement;
 partial rejection does not withdraw the still-approved version. The parent
 status alone therefore does not describe every service's availability.
 
@@ -94,17 +95,20 @@ stewards then name and bind the charity models. If model discovery is unavailabl
 the donor can include model IDs in the public donation description, without secrets.
 Personal model entries do not automatically become charity models.
 
-New mainstream donation drafts select all of the key's available services and a
-compatible directory by default. The donor can deselect individual services or
-the directory before submitting. Removing and reselecting a key in the same draft
-preserves those choices. Existing donations are not expanded automatically.
+New mainstream donation drafts select all of the key's available services. The
+donor can deselect individual services before submitting. Removing and reselecting
+a key in the same draft preserves those choices. Existing donations do not gain
+additional inference services automatically.
 
-Approving an inference use does not share its model directory. Managed model
-refreshes require a directory explicitly shared by the donor; a personal
-directory is never used as a substitute. A missing or paused sharing grant
-returns `423 discovery_not_shared`. Other availability gates, such as expiry,
-quota or cooldown, retain `423 resource_locked`; neither response alone means
-that the upstream credential is invalid.
+Managed model refreshes work for pending and approved donations, including
+existing donations without a separately shared directory. They use the pending
+credential version when a replacement awaits review, otherwise the approved
+version. A matching configured directory is reused, including a mainstream
+provider's special model-list endpoint; otherwise the entry's standard model-list
+endpoint is used. Directory reads never approve inference access or replace an
+approved credential with a pending one. Expiry, withdrawal, disabled credentials
+and other applicable availability checks still apply. A `423 resource_locked`
+response alone does not mean the upstream credential is invalid.
 
 Administrators and level-6 stewards can force-reject a donation that has approved
 uses, including when its parent retains the pending status. The action requires

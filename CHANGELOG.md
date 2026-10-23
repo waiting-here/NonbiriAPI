@@ -16,16 +16,18 @@ Each version entry describes its source and compatibility boundary; a release ta
   Clarify donation model setup and the separate System One protocol selection.
 - Load key credential and catalog editors only when opened, avoiding unnecessary
   list requests while preserving unfinished edits when the panel is closed.
-- Explain when a donated use has no shared model directory instead of calling
-  the key invalid. Preserve explicit sharing permissions and show missing-resource
-  errors without silently skipping them. Allow approved uses to request discovery
-  even when the parent donation retains its legacy pending status.
+- Restore model-list fetching for pending and approved donations without a
+  separate catalog-sharing permission, including existing unshared donations.
+  Reuse the configured catalog for the exact donated credential version or the
+  entry's standard model-list endpoint. Pending catalog reads do not grant
+  inference access. Preserve missing-resource errors without silently skipping them.
 - Restore whole-donation force rejection after per-service approval, including
   partially approved submissions. Prevent legacy review actions from bypassing
   the existing rejection safeguards or changing already approved uses.
 - Keep donation checkboxes, expiry fields and actions aligned on narrow and wide
-  screens. New mainstream donation drafts select available services and compatible
-  shared directories by default, while retaining the donor's manual exclusions.
+  screens. New mainstream donation drafts select available services by default,
+  while retaining the donor's manual exclusions. Remove the extra catalog-sharing
+  checkbox and pause-sharing action.
 - Apply mainstream catalog suggestions during normal credential authorization,
   reusing an available catalog for the same credential version when possible.
 - Preserve each saved entry and its credential-authorization form when several
@@ -43,10 +45,11 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Storage
 
-- Fresh storage uses schema 34. Exact published schema 33 databases receive the
-  four indexes in one startup transaction with rollback on failure or cancellation.
-  The separate schema 16–26 converter targets the same schema; account export
-  remains 29.
+- Fresh storage uses schema 35. Exact published schema 33/34 databases receive
+  atomic startup upgrades: the four history indexes where needed, followed by
+  the donation catalog authorization trigger and catalog view. No table rebuild or data rewrite
+  is required. The separate schema 16–26 converter targets the same schema;
+  account export remains 29.
 
 ### Security
 
