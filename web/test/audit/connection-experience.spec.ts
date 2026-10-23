@@ -190,6 +190,81 @@ async function baseURL(context: BrowserContext) {
 async function connection(context: BrowserContext, name: string) {
   return userAPI<Identity>(context, '/api/connections', 'POST', { name });
 }
+
+test('connection search exposes entry context and separate System One setup', async ({
+  browser,
+}, info) => {
+  const owner = await session(browser, 'owner');
+  try {
+    const marker = 'search-' + randomUUID();
+    const name = 'Recognizable provider ' + randomUUID();
+    const group = await connection(owner, name);
+    const origin = await baseURL(owner);
+    const primaryURL = origin + '/long-path-' + 'catalog-'.repeat(18);
+    const primaryNote = 'Primary endpoint ' + 'readable provider note '.repeat(12);
+    for (const [base, note] of [
+      [primaryURL, primaryNote],
+      [origin + '/' + marker, 'Secondary ' + marker],
+    ]) {
+      await userAPI<Entry>(owner, '/api/endpoints', 'POST', {
+        connection_id: group.id,
+        source: 'custom',
+        connector_type: 'openai-compatible',
+        base_url: base,
+        note,
+        enabled: true,
+        native_services: ['chat_completions', 'responses'],
+      });
+    }
+    const page = await owner.newPage();
+    await page.goto(fixture().user_url + '/endpoints');
+    await page.getByPlaceholder(c.connectionSearch).fill(marker);
+    await page.getByRole('button', { name: c.search, exact: true }).click();
+    const table = page.getByRole('table', { name: c.yourConnections, exact: true });
+    const row = table.getByRole('row').filter({ hasText: name });
+    await expect(row.getByText(primaryURL, { exact: true })).toBeVisible();
+    await expect(row.getByText(primaryNote, { exact: true })).toHaveAttribute('title', primaryNote);
+    for (const width of [1440, 390]) {
+      for (const theme of ['light', 'dark'] as const) {
+        await screenshot(page, info, 'connection-identification', width, theme, row, {
+          entry_count: 2,
+          matched_secondary_entry: true,
+        });
+      }
+    }
+    await row.getByRole('link', { name, exact: true }).click();
+    await expect(page.getByRole('heading', { name, level: 1, exact: true })).toBeVisible();
+    await page.getByRole('button', { name: c.editConnection, exact: true }).click();
+    await expect(page.getByRole('textbox', { name: c.name, exact: true })).toHaveValue(name);
+    await page
+      .getByRole('region', { name: c.editConnection, exact: true })
+      .getByRole('button', { name: c.close, exact: true })
+      .click();
+    await page
+      .locator('.nb-panel__head')
+      .filter({ has: page.getByRole('heading', { name: c.entries, exact: true }) })
+      .getByRole('button', { name: c.addEntry, exact: true })
+      .click();
+    const form = page.getByRole('region', { name: c.addEntry, exact: true });
+    await form
+      .getByRole('combobox', { name: c.protocol, exact: true })
+      .selectOption('typesafe-systemone');
+    await expect(form.getByRole('checkbox', { name: native.systemone, exact: true })).toBeChecked();
+    await expect(form.getByRole('checkbox', { name: native.decisions, exact: true })).toHaveCount(
+      0,
+    );
+    await screenshot(page, info, 'system-one-entry', 390, 'dark', form, {
+      protocol: 'typesafe-systemone',
+    });
+    await form.getByRole('button', { name: c.close, exact: true }).first().click();
+    await page.getByRole('link', { name: c.backToConnections, exact: true }).click();
+    await expect(page.getByPlaceholder(c.connectionSearch)).toHaveValue(marker);
+    await expect(page.getByRole('link', { name, exact: true })).toBeVisible();
+  } finally {
+    await owner.close();
+  }
+});
+
 async function entry(
   context: BrowserContext,
   group: Identity,

@@ -109,7 +109,7 @@ describe('connection identification', () => {
     fireEvent.change(screen.getByPlaceholderText('Search connection names, entry URLs or notes'), {
       target: { value: 'api.example' },
     });
-    await view.user.click(screen.getByRole('button', { name: 'Search', exact: true }));
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() =>
       expect(requests.some((request) => request.searchParams.get('q') === 'api.example')).toBe(
         true,
@@ -118,7 +118,7 @@ describe('connection identification', () => {
     await view.user.click(await screen.findByRole('link', { name: 'My API provider' }));
     await screen.findByRole('heading', { level: 1, name: 'My API provider' });
     await view.user.click(screen.getByRole('button', { name: 'Edit connection' }));
-    expect(screen.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue(connection.name);
+    expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue(connection.name);
     const back = screen.getByRole('link', { name: 'Back to connections' });
     expect(back.getAttribute('href')).toContain('connections_q=api.example');
   });

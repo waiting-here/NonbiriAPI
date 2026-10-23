@@ -431,22 +431,14 @@ it('shows System One services when the Typesafe System One protocol is selected'
     rerank_formats: [],
   });
   const view = await renderForm(async () => json(supplied));
-  expect(screen.getByRole('checkbox', { name: 'Decisions', exact: true })).toBeVisible();
-  expect(
-    screen.queryByRole('checkbox', { name: 'System One', exact: true }),
-  ).not.toBeInTheDocument();
-  const protocol = screen.getByRole('combobox', { name: 'Protocol', exact: true });
+  expect(screen.getByRole('checkbox', { name: 'Decisions' })).toBeVisible();
+  expect(screen.queryByRole('checkbox', { name: 'System One' })).not.toBeInTheDocument();
+  const protocol = screen.getByRole('combobox', { name: 'Protocol' });
   await view.user.selectOptions(protocol, 'typesafe-systemone');
-  expect(screen.getByRole('checkbox', { name: 'System One', exact: true })).toBeChecked();
-  expect(
-    screen.queryByRole('checkbox', { name: 'Decisions', exact: true }),
-  ).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole('checkbox', { name: 'Chat completions', exact: true }),
-  ).not.toBeInTheDocument();
+  expect(screen.getByRole('checkbox', { name: 'System One' })).toBeChecked();
+  expect(screen.queryByRole('checkbox', { name: 'Decisions' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('checkbox', { name: 'Chat completions' })).not.toBeInTheDocument();
   await view.user.selectOptions(protocol, 'openai-compatible');
-  expect(
-    screen.queryByRole('checkbox', { name: 'System One', exact: true }),
-  ).not.toBeInTheDocument();
-  expect(screen.getByRole('checkbox', { name: 'Decisions', exact: true })).toBeVisible();
+  expect(screen.queryByRole('checkbox', { name: 'System One' })).not.toBeInTheDocument();
+  expect(screen.getByRole('checkbox', { name: 'Decisions' })).toBeVisible();
 });
