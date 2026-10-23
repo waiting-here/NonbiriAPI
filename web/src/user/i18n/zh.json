@@ -3600,6 +3600,9 @@
       "statuses": "至少一项成功返回 200；全部已确认失败返回 422；没有成功且仍有未完成项返回 504。不同内容共用同一 key 返回 409。"
     },
     "services": {
+      "chooseCatalog": "选择模型目录",
+      "catalogRequired": "先为这把密钥选择模型目录，再读取可用模型。你也可以手动添加模型。",
+      "catalogConnectionRequired": "先将此服务移入一个连接，再为密钥选择模型目录。你也可以手动添加模型。",
       "filters": "筛选",
       "removeFilter": "移除{{label}}筛选",
       "more": "更多操作",

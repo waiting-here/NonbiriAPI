@@ -3600,6 +3600,9 @@
       "statuses": "At least one success returns 200; all confirmed failures return 422; no success with unfinished items returns 504. Reusing the same key with different content returns 409."
     },
     "services": {
+      "chooseCatalog": "Choose model catalog",
+      "catalogRequired": "Choose a catalog for this key before reading available models. You can still add models manually.",
+      "catalogConnectionRequired": "Move this service into a connection, then choose a catalog for this key. You can still add models manually.",
       "filters": "Filters",
       "removeFilter": "Remove {{label}} filter",
       "more": "More actions",
