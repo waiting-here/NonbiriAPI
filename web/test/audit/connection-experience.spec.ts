@@ -234,6 +234,7 @@ async function donate(
   key: Key,
   services: NativeService[],
   description: string,
+  source?: Source,
 ) {
   return userAPI<Donation>(context, '/api/donations', 'POST', {
     description,
@@ -247,6 +248,12 @@ async function donate(
         grant_revision: key.grant_revision,
         native_services: services,
         expires_at: null,
+        ...(source
+          ? {
+              discovery_source_id: source.id,
+              discovery_source_revision: source.discovery_source_revision,
+            }
+          : {}),
       },
     ],
   });
@@ -279,6 +286,83 @@ async function approve(context: BrowserContext, owner: BrowserContext, donation:
     200,
   );
   expect(result.results.every((row) => row.ok)).toBe(true);
+}
+
+for (const share of [false, true]) {
+  test(`approved donation ${share ? 'with' : 'without'} catalog sharing handles model discovery`, async ({
+    browser,
+  }, info) => {
+    const owner = await session(browser, 'owner');
+    const admin = await session(browser, 'admin');
+    const tag = 'Catalog sharing ' + randomUUID().slice(0, 8);
+    try {
+      const group = await connection(owner, tag);
+      const saved = await credential(
+        owner,
+        group,
+        tag,
+        share ? 'synthetic-image-credential' : 'synthetic-unshared-' + randomUUID(),
+      );
+      const value = await entry(
+        owner,
+        group,
+        saved,
+        await baseURL(owner),
+        tag,
+        ['chat_completions'],
+        true,
+      );
+      expect(value.key.discovery_source_id).not.toBeNull();
+      const source = share
+        ? await userAPI<Source>(owner, '/api/discovery-sources/' + value.key.discovery_source_id)
+        : undefined;
+      const donation = await donate(owner, value.key, ['chat_completions'], tag, source);
+      await approve(admin, owner, donation);
+      const approved = (await uses(owner, donation.id))[0]!;
+      expect(approved.approved).not.toBeNull();
+      expect(approved.approved!.discovery_source_id).toBe(source?.id ?? null);
+      expect(approved.discovery_enabled).toBe(share);
+      const page = await admin.newPage();
+      await page.goto(fixture().admin_url + '/charity?donation_id=' + donation.id);
+      const use = await openFold(page, native.chat_completions);
+      const sharingNote = use.getByText(common.common.donationDiscovery.status.not_shared, {
+        exact: true,
+      });
+      if (share) await expect(sharingNote).toHaveCount(0);
+      else await expect(sharingNote).toBeVisible();
+      const fetchResult = responseFor(
+        page,
+        'POST',
+        '/admin/api/donations/' + donation.id + '/keys/' + donation.keys[0]!.id + '/models/refresh',
+      );
+      await page
+        .getByRole('button', { name: common.common.donationDiscovery.one, exact: true })
+        .click();
+      const response = await fetchResult;
+      if (share) {
+        expect(response.status()).toBe(202);
+        const results = await openFold(page, common.common.donationDiscovery.results);
+        await expect(results).toContainText(/Fetched \d+ models/);
+        return;
+      }
+      expect(response.status()).toBe(423);
+      expect((await response.json()).error.code).toBe('discovery_not_shared');
+      const results = await openFold(page, common.common.donationDiscovery.results);
+      await expect(results).toContainText(common.common.donationDiscovery.status.not_shared);
+      for (const width of [1440, 390]) {
+        for (const theme of ['light', 'dark'] as const) {
+          await screenshot(page, info, 'donation-catalog-sharing', width, theme, results, {
+            status: 'approved',
+            discovery_enabled: false,
+            result: 'discovery_not_shared',
+          });
+        }
+      }
+    } finally {
+      await owner.close();
+      await admin.close();
+    }
+  });
 }
 
 test('shared versions keep old charity approval and survive deletion of their original connection', async ({

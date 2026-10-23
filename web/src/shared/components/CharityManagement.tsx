@@ -1413,7 +1413,7 @@ function DonationKeyPages({
                   key={`discovery:${role}:${accountId}:${key.id}`}
                   role={role}
                   target={{ donation_id: item.id, key_id: key.id }}
-                  disabled={key.charity_state !== 'available'}
+                  disabled={!(key.can_manage ?? key.charity_state === 'available')}
                   onCapabilityLoss={onCapabilityLoss}
                 />
                 <RecurringLimitsDisclosure
@@ -2455,7 +2455,9 @@ function PickerKeyManager({
           <DonationDiscoveryControl
             role={role}
             target={{ donation_id: donationID, key_id: keyID }}
-            disabled={detail.data.key.charity_state !== 'available'}
+            disabled={
+              !(detail.data.key.can_manage ?? detail.data.key.charity_state === 'available')
+            }
             onCapabilityLoss={onCapabilityLoss}
           />
           <DonationKeyModels

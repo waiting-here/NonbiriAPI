@@ -7,7 +7,8 @@ import type {
   DiscoveryTarget,
 } from './donationDiscovery';
 
-export type DiscoveryStatus = 'succeeded' | 'failed' | 'ineligible' | 'conflict' | 'superseded';
+export type DiscoveryStatus =
+  'succeeded' | 'failed' | 'ineligible' | 'not_shared' | 'conflict' | 'superseded';
 export interface DiscoveryResult extends DiscoveryRef {
   status: DiscoveryStatus;
   count?: string;
@@ -123,10 +124,9 @@ export class DonationDiscoveryRun {
             await this.io.wait();
           }
         } catch (error) {
-          if (
-            error instanceof ApiError &&
-            (error.status === 404 || error.code === 'resource_locked')
-          )
+          if (error instanceof ApiError && error.code === 'discovery_not_shared')
+            this.finish('not_shared');
+          else if (error instanceof ApiError && error.code === 'resource_locked')
             this.finish('ineligible');
           else if (error instanceof ApiError && error.status === 409) this.finish('conflict');
           else if (error instanceof ApiError && error.status === 400) this.finish('failed');

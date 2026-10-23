@@ -435,6 +435,9 @@ function UseRow({
       {role !== 'owner' && row.approved?.discovery_source_id ? (
         <UseDiscovery role={role} accountId={accountId} row={row} />
       ) : null}
+      {row.approved && (!row.approved.discovery_source_id || !row.discovery_enabled) ? (
+        <Note>{t('common.donationDiscovery.status.not_shared')}</Note>
+      ) : null}
       {row.health ? (
         <Note>
           <p>{t('common.connections.serviceHealth')}</p>

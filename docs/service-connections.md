@@ -67,6 +67,13 @@ reject each use. A use may have both an approved version and a pending replaceme
 partial rejection does not withdraw the still-approved version. The parent
 status alone therefore does not describe every service's availability.
 
+Approving an inference use does not share its model directory. Managed model
+refreshes require a directory explicitly shared by the donor; a personal
+directory is never used as a substitute. A missing or paused sharing grant
+returns `423 discovery_not_shared`. Other availability gates, such as expiry,
+quota or cooldown, retain `423 resource_locked`; neither response alone means
+that the upstream credential is invalid.
+
 Owners can add another service to the same donated key or explicitly resubmit
 a rejected or withdrawn use. These actions create pending review material and
 preserve the original key, budget, consumed amounts and reservations. They do

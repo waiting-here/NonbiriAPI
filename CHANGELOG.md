@@ -8,6 +8,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Explain when a donated use has no shared model directory instead of calling
+  the key invalid. Preserve explicit sharing permissions and show missing-resource
+  errors without silently skipping them. Allow approved uses to request discovery
+  even when the parent donation retains its legacy pending status.
 - Index endpoint-key references in request logs, dispatch claims, report targets
   and donation keys so deleting a key avoids scanning unrelated history and
   holding up session loading and other writes. Existing deletion and retention
