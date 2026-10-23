@@ -115,13 +115,16 @@ function options(matching = false) {
   };
 }
 
-async function renderForm(fetchMock: typeof fetch) {
+async function renderForm(fetchMock: typeof fetch, onChanged?: () => void) {
   vi.stubGlobal('fetch', vi.fn(fetchMock));
-  const view = await renderWithProviders(<EntryForm accountId="1" connectionId="9" />, {
-    station: 'user',
-    role: 'user',
-    locale: 'en',
-  });
+  const view = await renderWithProviders(
+    <EntryForm accountId="1" connectionId="9" onChanged={onChanged} />,
+    {
+      station: 'user',
+      role: 'user',
+      locale: 'en',
+    },
+  );
   view.queryClient.setQueryData(['user', 'session'], {
     user: { id: '1', username: 'reader', effective_level: 1 },
   });
@@ -417,6 +420,68 @@ describe('mainstream entry suggestions', () => {
     await view.user.click(screen.getByRole('button', { name: 'Save selected entries' }));
     await waitFor(() => expect(revisions).toEqual(['7', '8']));
   });
+});
+
+it('keeps every saved entry associated with its own selection during batched rendering', async () => {
+  const supplied = options();
+  const channel = supplied.mainstream_channels[0]!;
+  channel.entries.push({ ...channel.entries[0]!, id: '3', name: 'Third entry' });
+  channel.model_mappings = [];
+  const writes: string[] = [];
+  let changed = 0;
+  let finishBatch!: () => void;
+  const batchFinished = new Promise<void>((resolve) => {
+    finishBatch = resolve;
+  });
+  const view = await renderForm(
+    async (input, init) => {
+      const url = new URL(String(input), 'https://app.example');
+      if (url.pathname === '/api/endpoint-create-options') return json(supplied);
+      if (url.pathname === '/api/endpoints' && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        writes.push(body.channel_entry_id);
+        return json(
+          {
+            ...endpointWire,
+            id: '20' + body.channel_entry_id,
+            note: body.note,
+            native_services: body.native_services,
+            origin: { kind: 'mainstream', channel_id: firstChannel, name: channel.name },
+          },
+          201,
+        );
+      }
+      throw Error('Unexpected ' + url.pathname);
+    },
+    () => {
+      changed += 1;
+      if (changed === channel.entries.length) finishBatch();
+    },
+  );
+  await view.user.click(screen.getByRole('radio', { name: 'Mainstream preset' }));
+  await view.user.selectOptions(
+    screen.getByRole('combobox', { name: 'Mainstream preset' }),
+    firstChannel,
+  );
+  for (const entry of channel.entries) {
+    await view.user.click(screen.getByRole('checkbox', { name: entry.name }));
+  }
+  // Hold React's render until all successful callbacks have queued their updates.
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Save selected entries' }));
+    await batchFinished;
+  });
+  expect(writes).toEqual(['1', '2', '3']);
+  expect(
+    screen.getAllByText('Entry saved. Choose a credential and authorize it next.', {
+      exact: false,
+    }),
+  ).toHaveLength(3);
+  for (const entry of channel.entries) {
+    expect(screen.getByRole('heading', { name: entry.name })).toBeVisible();
+    expect(screen.getByRole('checkbox', { name: entry.name })).toBeDisabled();
+  }
+  expect(screen.getByRole('button', { name: 'Save selected entries' })).toBeDisabled();
 });
 
 it('shows System One services when the Typesafe System One protocol is selected', async () => {

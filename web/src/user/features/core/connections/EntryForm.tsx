@@ -57,7 +57,8 @@ export function EntryForm({
   );
   const operation = useConnectionOperation(accountId, (result) => {
     if (result.kind === 'endpoint') {
-      setSaved((current) => ({ ...current, [active.current]: result.endpoint }));
+      const row = active.current;
+      setSaved((current) => ({ ...current, [row]: result.endpoint }));
       if (activeDiscoveryPreset.current) {
         const preset = activeDiscoveryPreset.current;
         setDiscoveryPresets((current) => ({ ...current, [result.endpoint.id]: preset }));
