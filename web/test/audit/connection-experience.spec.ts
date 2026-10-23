@@ -1707,6 +1707,37 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
           discovery_source_id: granted[0]!.discovery_source_id,
           submitted: false,
         });
+    await draft.route('**/api/appearance', (route) =>
+      route.fulfill({
+        json: {
+          selected: 'celestial',
+          moment: 'cover:h',
+          moments: ['cover:h'],
+          unlocked: ['default', 'celestial'],
+          visible: ['default', 'celestial'],
+          updated_at: 1800000000,
+        },
+      }),
+    );
+    await draft.reload();
+    await expect(draft.locator('html')).toHaveAttribute('data-appearance', 'celestial');
+    await draft
+      .getByRole('button', { name: userEn.user.charity.presentation.openPicker, exact: true })
+      .click();
+    await picker.locator('.donation-resource-picker__key-list').getByRole('checkbox').check();
+    for (const width of [1440, 390])
+      await screenshot(
+        draft,
+        info,
+        'suggested-catalog-donation-appearance',
+        width,
+        'dark',
+        selected,
+        {
+          appearance: 'celestial',
+          submitted: false,
+        },
+      );
   } finally {
     try {
       if (group) {
@@ -1735,6 +1766,108 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
     } finally {
       await owner.close();
       await admin.close();
+    }
+  }
+});
+
+test('a key without a catalog can recover, show a readable failure and load models', async ({
+  browser,
+}, info) => {
+  const owner = await session(browser, 'owner');
+  const tag = 'Catalog recovery ' + randomUUID().slice(0, 8);
+  let group: Identity | undefined;
+  try {
+    group = await connection(owner, tag);
+    const saved = await credential(owner, group, tag, 'synthetic-image-credential');
+    const base = await baseURL(owner);
+    const value = await entry(owner, group, saved, base, tag, ['chat_completions']);
+    const source = await userAPI<Source>(
+      owner,
+      '/api/connections/' + group.id + '/discovery-sources',
+      'POST',
+      { name: tag, base_url: base, list_format: 'openai', credential_id: saved.id, enabled: true },
+    );
+    const page = await owner.newPage();
+    const keyPath = '/api/endpoints/' + value.endpoint.id + '/keys/' + value.key.id;
+    const refreshPath = keyPath + '/models/refresh';
+    const core = userEn.user.core;
+    await page.goto(fixture().user_url + '/endpoints/' + value.endpoint.id);
+    await expect(
+      page.getByRole('button', { name: core['endpoints.refreshDiscovery'], exact: true }),
+    ).toHaveCount(0);
+    await page
+      .getByRole('button', { name: userEn.user.services.chooseCatalog, exact: true })
+      .click();
+    const grant = await openFold(page, c.credentialAndServices);
+    await grant.getByRole('button', { name: c.useSource, exact: true }).click();
+    const patched = responseFor(page, 'PATCH', keyPath);
+    await grant.getByRole('button', { name: c.save, exact: true }).click();
+    const patchResponse = await patched;
+    expect(patchResponse.status()).toBe(200);
+    expect(((await patchResponse.json()) as Key).discovery_source_id).toBe(source.id);
+    await page
+      .getByRole('region', { name: userEn.user.services.editKey, exact: true })
+      .getByRole('button', { name: core['common.close'], exact: true })
+      .click();
+
+    const failure = 'The selected model catalog changed. Choose the current catalog and try again.';
+    await page.route('**' + refreshPath, (route) =>
+      route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'invalid_request', message: failure } }),
+      }),
+    );
+    await page
+      .getByRole('button', { name: core['endpoints.refreshDiscovery'], exact: true })
+      .click();
+    const feedback = page.locator('.core-key-feedback');
+    await expect(feedback).toContainText(failure);
+    await expect(feedback.locator('td')).toHaveAttribute('colspan', '6');
+    for (const width of [1440, 390])
+      for (const theme of ['light', 'dark'] as const)
+        await screenshot(page, info, 'key-operation-error', width, theme, feedback, {
+          error: 'invalid_request',
+          catalog_linked: true,
+        });
+    await page.unroute('**' + refreshPath);
+    const refreshed = responseFor(page, 'POST', refreshPath);
+    await page
+      .getByRole('button', { name: core['endpoints.refreshDiscovery'], exact: true })
+      .click();
+    expect((await refreshed).status()).toBe(202);
+    await expect
+      .poll(
+        async () =>
+          (await userAPI<{ evidence: { state: string } }>(owner, keyPath + '/models')).evidence
+            .state,
+      )
+      .toBe('succeeded');
+    const catalog = await userAPI<{ automatic_entries: { upstream_model_id: string }[] }>(
+      owner,
+      keyPath + '/models',
+    );
+    expect(catalog.automatic_entries.length).toBeGreaterThan(0);
+    await expect(
+      page.getByText(catalog.automatic_entries[0]!.upstream_model_id, { exact: true }),
+    ).toBeVisible();
+    await page.getByLabel(core['endpoints.manualModel'], { exact: true }).fill('vendor/recovered');
+    await page.getByRole('button', { name: core['endpoints.manualAdd'], exact: true }).click();
+    await expect(page.getByText('vendor/recovered', { exact: true })).toBeVisible();
+  } finally {
+    try {
+      if (group) {
+        const current = await userAPI<Identity>(owner, '/api/connections/' + group.id);
+        await userAPI(
+          owner,
+          '/api/connections/' + group.id,
+          'DELETE',
+          { expected_revision: current.revision },
+          204,
+        );
+      }
+    } finally {
+      await owner.close();
     }
   }
 });

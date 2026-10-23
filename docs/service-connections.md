@@ -43,6 +43,19 @@ Existing entry IDs are retained when editing; save new entries before assigning
 model mappings to them. Updating a preset does not change existing destinations,
 expand grants or approve donations.
 
+When authorizing a credential for a newly created mainstream entry, its suggested
+directory is selected by default. Saving reuses a compatible directory or creates
+one for that credential and associates it with the entry's key. Clear the option
+to authorize without it, or select an existing compatible directory. Custom
+entries and previously saved authorizations keep their existing behavior.
+
+If a key has no directory, its model controls offer a catalog selection action.
+Move an ungrouped entry into a connection first, then select a directory for the
+same credential version. The directory management link can add one if needed.
+Manual model entries remain available without a directory. Importing or connecting
+a model reuses an existing manual entry with the same upstream model ID under
+the selected key; its existing metadata is preserved.
+
 While creating a custom entry, entering an address can show every matching
 available mainstream entry, including its protocol, native services, discovery
 suggestion and model mappings. Matching uses the complete normalized URL,
@@ -67,12 +80,24 @@ reject each use. A use may have both an approved version and a pending replaceme
 partial rejection does not withdraw the still-approved version. The parent
 status alone therefore does not describe every service's availability.
 
+New mainstream donation drafts select all of the key's available services and a
+compatible directory by default. The donor can deselect individual services or
+the directory before submitting. Removing and reselecting a key in the same draft
+preserves those choices. Existing donations are not expanded automatically.
+
 Approving an inference use does not share its model directory. Managed model
 refreshes require a directory explicitly shared by the donor; a personal
 directory is never used as a substitute. A missing or paused sharing grant
 returns `423 discovery_not_shared`. Other availability gates, such as expiry,
 quota or cooldown, retain `423 resource_locked`; neither response alone means
 that the upstream credential is invalid.
+
+Administrators and level-6 stewards can force-reject a donation that has approved
+uses, including when its parent retains the pending status. The action requires
+a reason and complete review material, stops new charity dispatches and preserves
+normal settlement for requests already sent. Legacy whole-donation approval or
+rejection cannot override per-service approvals; review pending uses individually
+or use the authorized force-rejection action for the whole donation.
 
 Owners can add another service to the same donated key or explicitly resubmit
 a rejected or withdrawn use. These actions create pending review material and

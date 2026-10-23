@@ -12,6 +12,20 @@ Each version entry describes its source and compatibility boundary; a release ta
   the key invalid. Preserve explicit sharing permissions and show missing-resource
   errors without silently skipping them. Allow approved uses to request discovery
   even when the parent donation retains its legacy pending status.
+- Restore whole-donation force rejection after per-service approval, including
+  partially approved submissions. Prevent legacy review actions from bypassing
+  the existing rejection safeguards or changing already approved uses.
+- Keep donation checkboxes, expiry fields and actions aligned on narrow and wide
+  screens. New mainstream donation drafts select available services and compatible
+  shared directories by default, while retaining the donor's manual exclusions.
+- Apply mainstream catalog suggestions during normal credential authorization,
+  reusing an available catalog for the same credential version when possible.
+- Guide keys without a catalog to its configuration before attempting discovery.
+  Keep specific operation errors and recovery actions readable across the full
+  key table instead of squeezing them into the actions column.
+- Reuse existing manual model entries when importing or connecting models, so
+  reopening the workflow or retrying after a partial failure can complete the
+  model binding without a duplicate-entry conflict.
 - Index endpoint-key references in request logs, dispatch claims, report targets
   and donation keys so deleting a key avoids scanning unrelated history and
   holding up session loading and other writes. Existing deletion and retention
