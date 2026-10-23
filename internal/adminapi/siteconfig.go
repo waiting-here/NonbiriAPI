@@ -10,6 +10,7 @@ package adminapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"strconv"
@@ -929,10 +930,15 @@ func buildPublicConfig(values map[string]string) PublicConfig {
 // helper as the admin read path, so a manually corrupted or unknown row can
 // never leak. A missing store yields the inherited effective fallbacks.
 func ReadPublicConfig(store *db.Store) (PublicConfig, error) {
+	return ReadPublicConfigContext(context.Background(), store)
+}
+
+// ReadPublicConfigContext stops waiting for the read pool when the caller leaves.
+func ReadPublicConfigContext(ctx context.Context, store *db.Store) (PublicConfig, error) {
 	if store == nil {
 		return buildPublicConfig(nil), nil
 	}
-	values, err := store.GetAllSiteConfigValues()
+	values, err := store.GetAllSiteConfigValuesContext(ctx)
 	if err != nil {
 		return PublicConfig{}, err
 	}

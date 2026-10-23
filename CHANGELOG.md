@@ -4,6 +4,16 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## Unreleased
+
+### Fixed
+
+- Scope charity model availability checks to each model's bindings before checking
+  donation keys, preventing unrelated keys from slowing model lists and blocking
+  other read-only APIs through the shared database pool.
+- Cancel public configuration and branding database reads when their HTTP request
+  is canceled, so abandoned page loads stop waiting for a connection.
+
 ## 1.1.0 — 2026-10-22
 
 ### Added
