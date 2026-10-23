@@ -1287,6 +1287,7 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
 }, info) => {
   const owner = await session(browser, 'owner');
   const admin = await session(browser, 'admin');
+  const createdDonationIDs: string[] = [];
   const tag = 'Bulk uses ' + randomUUID().slice(0, 8);
   const services: NativeService[] = [
     'chat_completions',
@@ -1319,6 +1320,7 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
         expires_at: null,
       })),
     });
+    createdDonationIDs.push(donation.id);
     const page = await admin.newPage();
     await page.goto(
       fixture().admin_url +
@@ -1377,6 +1379,7 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
     );
     const value = await entry(owner, group, saved, base, tag + ' approve', services.slice(0, 2));
     const approved = await donate(owner, value.key, services.slice(0, 2), tag + ' approve');
+    createdDonationIDs.push(approved.id);
     await page.goto(
       fixture().admin_url + '/charity?charity_section=donations&donation_id=' + approved.id,
     );
@@ -1391,7 +1394,20 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
     expect(rows).toHaveLength(2);
     expect(rows.every((row) => row.approved?.status === 'approved' && !row.pending)).toBe(true);
   } finally {
-    await Promise.all([owner.close(), admin.close()]);
+    try {
+      for (const id of createdDonationIDs) {
+        const live = await userAPI<Donation>(owner, '/api/donations/' + id);
+        await userAPI<Donation>(
+          owner,
+          '/api/donations/' + id + '/withdraw',
+          'POST',
+          { expected_revision: live.revision },
+          200,
+        );
+      }
+    } finally {
+      await Promise.all([owner.close(), admin.close()]);
+    }
   }
 });
 

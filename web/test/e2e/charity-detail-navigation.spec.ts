@@ -364,7 +364,7 @@ async function installManagementRoutes(
     if (path === config.root + '/donations') {
       state.listReads.push(url.search);
       await state.listGate?.promise;
-      const status = url.searchParams.get('status');
+      const status = url.searchParams.get('review_status') ?? url.searchParams.get('status');
       await fulfillJSON(
         route,
         numberedPage(status ? rows.filter((row) => row.status === status) : rows, url.searchParams),
@@ -1299,7 +1299,11 @@ for (const station of ['admin', 'user'] as const) {
       await expect(donationListRow(page, '1')).toBeVisible();
       await expect(donationListRow(page, '2')).toBeVisible();
       await expect(donationListRow(page, '4')).toHaveCount(0);
-      expect(state.listReads.some((search) => search.includes('status=expired'))).toBe(true);
+      expect(
+        state.listReads.some(
+          (search) => new URLSearchParams(search).get('review_status') === 'expired',
+        ),
+      ).toBe(true);
       await assertStationClean(page, setup);
     },
   );
