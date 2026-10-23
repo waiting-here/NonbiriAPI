@@ -283,6 +283,13 @@ for (const kind of ['personal', 'admin', 'steward'] as const) {
           { name: 'X-Session-0', idle_seconds: 0, format: 'opencode_part' },
           { name: 'X-Session-1', idle_seconds: 300, format: 'opencode_session' },
         ]);
+        if (!personal)
+          expect(f.state.writes[0].discount).toEqual({
+            enabled: false,
+            percent: 0,
+            start_at: null,
+            end_at: null,
+          });
         if (personal)
           await expect(
             page.getByRole('button', { name: core['models.editModel'], exact: true }),
