@@ -2315,8 +2315,6 @@
       },
       "useSummary": "Uses {{total}} · Approved {{approved}} · Pending {{pending}} · Latest rejected {{rejected}} · Latest withdrawn {{withdrawn}}",
       "refreshSharedCatalog": "Refresh shared catalog",
-      "adoptDiscoverySuggestion": "Use preset discovery suggestion",
-      "manageSource": "Manage discovery source",
       "adoptModelSuggestions": "Adopt model suggestions",
       "suggestionsNeedSelection": "Mappings are created only for explicitly selected entries and services. Save entries and authorize credentials first.",
       "mappingSaved": "Model mapping saved.",
@@ -2367,7 +2365,10 @@
         "deleted": "Deleted",
         "expired": "Expired"
       },
-      "finishUseReview": "Finish this operation and keep processed results"
+      "finishUseReview": "Finish this operation and keep processed results",
+      "useSuggestedCatalog": "Use the channel’s suggested model catalog",
+      "suggestedCatalogHelp": "Saving the authorization creates or reuses a catalog for this credential version and links it to the entry.",
+      "credentialChangedForCatalog": "This credential changed. Select it again before saving."
     }
   },
   "logs": {

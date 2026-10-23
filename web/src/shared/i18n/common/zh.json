@@ -2315,8 +2315,6 @@
       },
       "useSummary": "用途 {{total}} · 已批准 {{approved}} · 待审 {{pending}} · 最近拒绝 {{rejected}} · 最近撤回 {{withdrawn}}",
       "refreshSharedCatalog": "刷新已分享目录",
-      "adoptDiscoverySuggestion": "使用预置目录建议",
-      "manageSource": "管理发现来源",
       "adoptModelSuggestions": "采纳型号建议",
       "suggestionsNeedSelection": "只会为明确选择的入口和服务建立型号映射，先保存入口并完成凭据授权。",
       "mappingSaved": "型号映射已保存。",
@@ -2367,7 +2365,10 @@
         "deleted": "已删除",
         "expired": "已到期"
       },
-      "finishUseReview": "结束本次操作，保留已处理结果"
+      "finishUseReview": "结束本次操作，保留已处理结果",
+      "useSuggestedCatalog": "使用渠道建议的模型目录",
+      "suggestedCatalogHelp": "保存授权时创建或复用此凭据版本的目录，并关联到入口。",
+      "credentialChangedForCatalog": "凭据已变化，请重新选择后保存。"
     }
   },
   "logs": {
