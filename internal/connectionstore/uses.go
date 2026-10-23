@@ -30,18 +30,35 @@ func LoadApprovedUsesTx(ctx context.Context, tx *sql.Tx, donationKeyIDs []int64)
 	return loadApprovedUsesTx(ctx, tx, donationKeyIDs, nil, false)
 }
 
+func approvedUsesQuery(placeholders, filter string) string {
+	// Bound materialized grant facts to these members' approved revisions;
+	// their approved versions may differ from the keys' current self grants.
+	return "SELECT dk.id,u.id,u.revision,COALESCE(u.current_approved_revision_id,0),COALESCE(ur.id,0),COALESCE(ur.use_revision,0),u.native_service_bit,u.enabled,u.discovery_enabled,COALESCE(ur.discovery_source_revision_id,0),COALESCE(ur.review_state,''),COALESCE(d.user_id,0),COALESCE(dk.endpoint_key_id,0),EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id AND m.donation_id=d.id AND m.endpoint_key_id=dk.endpoint_key_id),(dk.ended_at IS NULL AND d.status IN ('pending','approved') AND d.terminal_at IS NULL),EXISTS(SELECT 1 FROM donation_key_review_requirements rr WHERE rr.hmac=ur.key_body_review_hmac AND rr.required=1)," +
+		grantReadColumns + ` FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donations d ON d.id=dk.donation_id
+LEFT JOIN donation_use_revisions ur ON ur.id=u.current_approved_revision_id AND ur.use_id=u.id
+LEFT JOIN (SELECT * FROM endpoint_grant_authorizations WHERE grant_revision_id IN (
+ SELECT approved.grant_revision_id FROM donation_uses selected
+ JOIN donation_use_revisions approved ON approved.id=selected.current_approved_revision_id AND approved.use_id=selected.id
+ WHERE selected.donation_key_id IN (` + placeholders + `)
+)) a ON a.grant_revision_id=ur.grant_revision_id
+WHERE dk.id IN (` + placeholders + ")" + filter + " ORDER BY dk.id,u.native_service_bit"
+}
+
 func loadApprovedUsesTx(ctx context.Context, tx *sql.Tx, ids []int64, service *connectorcontract.NativeService, strict bool) (map[int64][]UseAuthorization, error) {
 	if tx == nil {
 		return nil, ErrInvariant
 	}
-	placeholders, args, err := boundedIDs(ids)
+	placeholders, keyArgs, err := boundedIDs(ids)
 	if err != nil {
 		return nil, err
 	}
 	result := make(map[int64][]UseAuthorization)
-	if len(args) == 0 {
+	if len(keyArgs) == 0 {
 		return result, nil
 	}
+	args := make([]any, 0, 2*len(keyArgs)+1)
+	args = append(args, keyArgs...)
+	args = append(args, keyArgs...)
 	filter := ""
 	if service != nil {
 		services, err := connectorcontract.ParseNativeServices([]connectorcontract.NativeService{*service})
@@ -51,9 +68,7 @@ func loadApprovedUsesTx(ctx context.Context, tx *sql.Tx, ids []int64, service *c
 		filter = " AND u.native_service_bit=?"
 		args = append(args, services.Mask())
 	}
-	query := "SELECT dk.id,u.id,u.revision,COALESCE(u.current_approved_revision_id,0),COALESCE(ur.id,0),COALESCE(ur.use_revision,0),u.native_service_bit,u.enabled,u.discovery_enabled,COALESCE(ur.discovery_source_revision_id,0),COALESCE(ur.review_state,''),COALESCE(d.user_id,0),COALESCE(dk.endpoint_key_id,0),EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id AND m.donation_id=d.id AND m.endpoint_key_id=dk.endpoint_key_id),(dk.ended_at IS NULL AND d.status IN ('pending','approved') AND d.terminal_at IS NULL),EXISTS(SELECT 1 FROM donation_key_review_requirements rr WHERE rr.hmac=ur.key_body_review_hmac AND rr.required=1)," +
-		grantReadColumns + " FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donations d ON d.id=dk.donation_id LEFT JOIN donation_use_revisions ur ON ur.id=u.current_approved_revision_id AND ur.use_id=u.id LEFT JOIN endpoint_grant_authorizations a ON a.grant_revision_id=ur.grant_revision_id WHERE dk.id IN (" + placeholders + ")" + filter + " ORDER BY dk.id,u.native_service_bit"
-	rows, err := tx.QueryContext(ctx, query, args...)
+	rows, err := tx.QueryContext(ctx, approvedUsesQuery(placeholders, filter), args...)
 	if err != nil {
 		return nil, fmt.Errorf("connectionstore: read approved uses: %w", err)
 	}

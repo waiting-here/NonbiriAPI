@@ -90,20 +90,33 @@ func LoadSelfGrantsTx(ctx context.Context, tx *sql.Tx, ownerUserID int64, endpoi
 	return loadSelfGrantsTx(ctx, tx, ownerUserID, endpointKeyIDs, false)
 }
 
+func selfGrantsQuery(placeholders string) string {
+	// Bound the view before SQLite materializes the right side of the left join.
+	// Keep missing grants in the result so relationship validation still fails.
+	return "SELECT k.id," + grantReadColumns + ` FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id
+LEFT JOIN (SELECT * FROM endpoint_grant_authorizations WHERE grant_revision_id IN (
+ SELECT current_grant_revision_id FROM endpoint_keys WHERE id IN (` + placeholders + `)
+)) a ON a.grant_revision_id=k.current_grant_revision_id
+WHERE e.user_id=? AND k.id IN (` + placeholders + `) ORDER BY k.id`
+}
+
 func loadSelfGrantsTx(ctx context.Context, tx *sql.Tx, ownerUserID int64, ids []int64, strict bool) (map[int64]GrantAuthorization, error) {
 	if tx == nil || ownerUserID <= 0 {
 		return nil, ErrInvariant
 	}
-	placeholders, args, err := boundedIDs(ids)
+	placeholders, keyArgs, err := boundedIDs(ids)
 	if err != nil {
 		return nil, err
 	}
 	result := make(map[int64]GrantAuthorization)
-	if len(args) == 0 {
+	if len(keyArgs) == 0 {
 		return result, nil
 	}
-	args = append([]any{ownerUserID}, args...)
-	rows, err := tx.QueryContext(ctx, "SELECT k.id,"+grantReadColumns+" FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id LEFT JOIN endpoint_grant_authorizations a ON a.grant_revision_id=k.current_grant_revision_id WHERE e.user_id=? AND k.id IN ("+placeholders+") ORDER BY k.id", args...)
+	args := make([]any, 0, 2*len(keyArgs)+1)
+	args = append(args, keyArgs...)
+	args = append(args, ownerUserID)
+	args = append(args, keyArgs...)
+	rows, err := tx.QueryContext(ctx, selfGrantsQuery(placeholders), args...)
 	if err != nil {
 		return nil, fmt.Errorf("connectionstore: read self grants: %w", err)
 	}
