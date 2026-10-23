@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { tomorrowAssets, refinedTomorrowAssets } from './assets';
+import { tomorrowAssets, refinedTomorrowAssets, walkingTomorrowAssets } from './assets';
 import { tomorrowLayout, type Box, type TomorrowVariant } from './layout';
 import { renderTomorrow } from './renderer';
 import './artwork.css';
 
 type Props = {
+  walking?: boolean;
   refined?: boolean;
   variant: TomorrowVariant;
   dark?: boolean;
@@ -21,6 +22,7 @@ const boxStyle = (box: Box): CSSProperties => ({
 });
 
 export function TomorrowArtwork({
+  walking = false,
   refined = false,
   variant,
   dark = false,
@@ -29,8 +31,12 @@ export function TomorrowArtwork({
   className = '',
   highResolution = false,
 }: Props) {
-  const portraitStudy = refined && variant === 'card';
-  const assets = portraitStudy ? refinedTomorrowAssets : tomorrowAssets;
+  const portraitStudy = !walking && refined && variant === 'card';
+  const assets = walking
+    ? walkingTomorrowAssets
+    : portraitStudy
+      ? refinedTomorrowAssets
+      : tomorrowAssets;
   const sceneDark = portraitStudy ? false : dark;
   const root = useRef<HTMLDivElement>(null),
     canvas = useRef<HTMLCanvasElement>(null),
@@ -69,6 +75,7 @@ export function TomorrowArtwork({
     const controller = new AbortController();
     let stop: (() => void) | undefined;
     renderTomorrow(canvas.current, {
+      walking,
       refined: portraitStudy,
       variant,
       dark: sceneDark,
@@ -93,8 +100,8 @@ export function TomorrowArtwork({
       stop?.();
       setReady(false);
     };
-  }, [variant, sceneDark, animated, reduced, effectiveHigh, portraitStudy]);
-  const layout = tomorrowLayout(size.width, size.height, variant, portraitStudy);
+  }, [variant, sceneDark, animated, reduced, effectiveHigh, portraitStudy, walking]);
+  const layout = tomorrowLayout(size.width, size.height, variant, portraitStudy, walking);
   const background: Box = [
     -layout.view[0] / layout.view[2],
     -layout.view[1] / layout.view[3],
@@ -113,14 +120,20 @@ export function TomorrowArtwork({
       {variant === 'appearance' || (dark && !portraitStudy) ? (
         <div className="tomorrow-art__still">
           <img
-            src={dark ? tomorrowAssets.backgroundDark : tomorrowAssets.backgroundLight}
+            src={dark ? assets.backgroundDark : assets.backgroundLight}
             style={boxStyle(background)}
             alt=""
           />
-          {[
-            [0.528, 0.976, 0.39, 0.042],
-            [0.463, 0.887, 0.288, 0.036],
-          ].map(([x, y, w, h], index) => (
+          {(walking
+            ? [
+                [0.414, 0.893, 0.306, 0.048],
+                [0.651, 0.989, 0.402, 0.084],
+              ]
+            : [
+                [0.528, 0.976, 0.39, 0.042],
+                [0.463, 0.887, 0.288, 0.036],
+              ]
+          ).map(([x, y, w, h], index) => (
             <i
               key={index}
               className="tomorrow-art__shadow"
@@ -133,7 +146,7 @@ export function TomorrowArtwork({
             />
           ))}
           <img
-            src={tomorrowAssets.cloud}
+            src={assets.cloud}
             style={{
               ...boxStyle(layout.cloud),
               filter: dark ? 'brightness(.87)' : undefined,
@@ -141,11 +154,7 @@ export function TomorrowArtwork({
             }}
             alt=""
           />
-          <img
-            src={dark ? tomorrowAssets.heroDark : tomorrowAssets.hero}
-            style={boxStyle(layout.hero)}
-            alt=""
-          />
+          <img src={dark ? assets.heroDark : assets.hero} style={boxStyle(layout.hero)} alt="" />
         </div>
       ) : (
         <img

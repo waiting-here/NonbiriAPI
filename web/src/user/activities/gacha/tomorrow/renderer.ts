@@ -1,5 +1,5 @@
 import { blinkAt, eyelidProfileWidth, PaintCadence } from '@shared/animation/illustration';
-import { tomorrowAssets, refinedTomorrowAssets } from './assets';
+import { tomorrowAssets, refinedTomorrowAssets, walkingTomorrowAssets } from './assets';
 import { tomorrowEyelids } from './eyelids';
 import { tomorrowLayout, type TomorrowVariant } from './layout';
 import { tomorrowShader } from './shader';
@@ -7,8 +7,12 @@ import { motionMasks } from './motion';
 import { refinedEyelids } from './refined-eyelids';
 import { refinedMotionMasks } from './refined-motion';
 import { refinedShader } from './refined-shader';
+import { walkingEyelids } from './walking-eyelids';
+import { createWalkingRig } from './walking-rig';
+import { walkingShader } from './walking-shader';
 
 export type TomorrowOptions = {
+  walking?: boolean;
   refined?: boolean;
   variant?: TomorrowVariant;
   dark?: boolean;
@@ -54,17 +58,20 @@ function loadImage(src: string, signal?: AbortSignal) {
 
 export async function renderTomorrow(canvas: HTMLCanvasElement, options: TomorrowOptions = {}) {
   if (options.signal?.aborted) return () => {};
-  const refined = options.refined && (options.variant ?? 'card') === 'card';
-  const assets = refined ? refinedTomorrowAssets : tomorrowAssets;
-  const eyelids = refined ? refinedEyelids : tomorrowEyelids;
-  const [background, hero, closed, cloud] = await Promise.all([
+  const walking = !!options.walking;
+  const refined = !walking && options.refined && (options.variant ?? 'card') === 'card';
+  const assets = walking ? walkingTomorrowAssets : refined ? refinedTomorrowAssets : tomorrowAssets;
+  const eyelids = walking ? walkingEyelids : refined ? refinedEyelids : tomorrowEyelids;
+  const walkingRig = walking ? createWalkingRig() : undefined;
+  const [background, hero, closed, cloud, pendant] = await Promise.all([
     loadImage(
       options.dark && !refined ? assets.backgroundDark : assets.backgroundLight,
       options.signal,
     ),
-    loadImage(assets.hero, options.signal),
+    loadImage(walking ? walkingTomorrowAssets.body : assets.hero, options.signal),
     loadImage(assets.closed, options.signal),
     loadImage(assets.cloud, options.signal),
+    walking ? loadImage(walkingTomorrowAssets.pendant, options.signal) : Promise.resolve(null),
   ]);
   if (options.signal?.aborted) return () => {};
   const context = canvas.getContext('2d');
@@ -79,6 +86,7 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
     textures: WebGLTexture[] = [];
   let program: WebGLProgram | null = null,
     buffer: WebGLBuffer | null = null;
+  let walkingTexture: WebGLTexture | null = null;
   let request = 0,
     elapsed = options.frozenTime ?? 0,
     previous = 0,
@@ -114,7 +122,7 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
         gl.VERTEX_SHADER,
         'attribute vec2 a;varying vec2 uv;void main(){uv=a;gl_Position=vec4(a.x*2.-1.,1.-a.y*2.,0.,1.);}',
       ],
-      [gl.FRAGMENT_SHADER, refined ? refinedShader : tomorrowShader],
+      [gl.FRAGMENT_SHADER, walking ? walkingShader : refined ? refinedShader : tomorrowShader],
     ] as const) {
       const shader = gl.createShader(type);
       if (!shader) throw new Error('renderer-unavailable');
@@ -163,7 +171,11 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
         );
       gl.uniform1i(uniform(['scenery', 'art', 'closed', 'lids', 'companion'][index]), index);
     }
-    const masks = refined ? refinedMotionMasks() : motionMasks();
+    const masks = walking
+      ? { hero: walkingRig!.update(0), environment: refinedMotionMasks().environment }
+      : refined
+        ? refinedMotionMasks()
+        : motionMasks();
     const bindings: [string, typeof masks.hero][] = [
       ['rig', masks.hero],
       ['environment', masks.environment],
@@ -173,6 +185,7 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
       const texture = gl.createTexture();
       if (!texture) throw new Error('renderer-unavailable');
       textures.push(texture);
+      if (walking && name === 'rig') walkingTexture = texture;
       gl.activeTexture(gl.TEXTURE5 + index);
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -191,6 +204,19 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
         mask.pixels,
       );
       gl.uniform1i(uniform(String(name)), 5 + index);
+    }
+    if (walking && pendant) {
+      const texture = gl.createTexture();
+      if (!texture) throw new Error('renderer-unavailable');
+      textures.push(texture);
+      gl.activeTexture(gl.TEXTURE7);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, pendant);
+      gl.uniform1i(uniform('pendant'), 7);
     }
     gl.uniform4fv(uniform('leftEye'), eyelids[0].bounds);
     gl.uniform1f(uniform('cloudFront'), (options.variant ?? 'card') === 'card' ? 1 : 0);
@@ -222,7 +248,7 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
     gl!.viewport(0, 0, layer.width, layer.height);
     const layout = options.characterPlate
       ? { view: [0, 0, 1, 1], hero: [0, 0, 1, 1], cloud: [0, 0, 0, 0] }
-      : tomorrowLayout(canvas.width, canvas.height, options.variant ?? 'card', refined);
+      : tomorrowLayout(canvas.width, canvas.height, options.variant ?? 'card', refined, walking);
     gl!.uniform4fv(uniform('view'), layout.view);
     gl!.uniform4fv(uniform('heroBox'), layout.hero);
     gl!.uniform4fv(uniform('cloudBox'), layout.cloud);
@@ -230,6 +256,23 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
   }
   function paint() {
     if (stopped) return;
+    if (walkingRig && walkingTexture) {
+      const frame = walkingRig.update(elapsed);
+      gl!.activeTexture(gl!.TEXTURE5);
+      gl!.bindTexture(gl!.TEXTURE_2D, walkingTexture);
+      gl!.texSubImage2D(
+        gl!.TEXTURE_2D,
+        0,
+        0,
+        0,
+        frame.width,
+        frame.height,
+        gl!.RGBA,
+        gl!.UNSIGNED_BYTE,
+        frame.pixels,
+      );
+      gl!.uniform1f(uniform('pendantAngle'), frame.angle);
+    }
     const blink = options.blink ?? blinkAt(elapsed);
     gl!.uniform1f(uniform('time'), elapsed);
     gl!.uniform1f(uniform('blink'), blink);

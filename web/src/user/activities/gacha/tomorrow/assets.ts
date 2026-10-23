@@ -27,3 +27,19 @@ export const turnBackTomorrowAssets = {
   thumb: base + 'turn-back/thumb.webp',
   hero: base + 'turn-back/hero.webp',
 };
+
+export const walkingTomorrowAssets = {
+  ...tomorrowAssets,
+  card: base + 'walking/card.webp',
+  cover: base + 'walking/cover.webp',
+  illustration: base + 'walking/illustration.webp',
+  light: base + 'walking/appearance-light.webp',
+  dark: base + 'walking/appearance-dark.webp',
+  thumb: base + 'walking/thumb.webp',
+  hero: base + 'walking/hero.webp',
+  heroDark: base + 'walking/hero-dark.webp',
+  closed: base + 'walking/closed.webp',
+  body: base + 'walking/body.webp',
+  pendant: base + 'walking/pendant.webp',
+  backgroundLight: refinedTomorrowAssets.backgroundLight,
+};
