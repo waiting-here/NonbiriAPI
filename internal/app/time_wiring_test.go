@@ -80,7 +80,7 @@ func TestTimeRoutesThroughProductionStationAndSessionBoundary(t *testing.T) {
 	if err := timeapi.RegisterRoutes(runtime, resourceAdminRouteRegistrar{runtime: runtime}); err != nil {
 		t.Fatal(err)
 	}
-	mux, err := generationTwoMux(cfg, store, runtime, http.NotFoundHandler())
+	mux, err := generationTwoMux(cfg, store, runtime, http.NotFoundHandler(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -64,6 +64,7 @@ var (
 // site-config key. Runtime alert_prefs_* rows use a separate bounded generic
 // descriptor because their suffixes are data, not new configuration types.
 var catalogMetadataByKey = map[string]catalogMetadata{
+	KeyArtworkR18Disabled:            {"activities", catalogText("禁用 R-18 内置美术素材", "Disable R-18 built-in artwork"), catalogText("默认开启。开启后，R-18 卡牌、封面、插画和装扮显示替代图，不能新选为背景或封面；收藏、抽卡结果和已保存偏好保留。", "On by default. R-18 cards, covers, illustrations and appearances use a safe substitute and cannot be newly selected as a background or cover. Collections, draw results and saved preferences are preserved."), unitNone, nil},
 	KeyGatewayUserAttributionEnabled: {"connector", catalogText("发送 Gateway 费用归因标签", "Send Gateway cost attribution"), catalogText("默认不发送。开启后，Gateway 聊天和向量请求携带可关联同一用户的伪名，仅供网关费用归因。", "Off by default. When enabled, Gateway chat and embedding requests carry a pseudonym that links requests from the same user for gateway cost attribution."), unitNone, nil},
 	KeySiteName:                      {"identity", catalogText("站点名称", "Site name"), catalogText("显示在双站标题中。未设置时使用默认名称；自定义名称必须填写，不能保存为空。", "Shown in both station titles. The default name is used until configured; enter a name to customize it. An empty name cannot be saved."), unitNone, nil},
 	KeySiteLogoURL:                   {"identity", catalogText("站点标志地址", "Site logo URL"), catalogText("可选的公开站点标志地址；留空不显示远端标志。", "Optional public logo URL; leave empty to show no remote logo."), unitNone, nil},

@@ -64,6 +64,7 @@ const publicConfig = {
   legal_authoritative_locale: '',
   maintenance_mode: false,
   registration_open: true,
+  artwork_r18_disabled: true,
   announcement_epoch: 'b1e_AAAAAAAAAAAAAAAAAAAAAA',
 };
 

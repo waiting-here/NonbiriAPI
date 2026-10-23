@@ -265,9 +265,14 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		return nil, fmt.Errorf("create audit runtime: %w", err)
 	}
 	audits.outbound = outbound
+	artworkPolicy, err := loadArtworkPolicy(startupContext, store)
+	if err != nil {
+		return nil, fmt.Errorf("load artwork policy: %w", err)
+	}
 	adminConfigRepository, err := adminapi.NewSiteConfigRepository(adminapi.SiteConfigRepositoryOptions{
 		Store: store, FinalAuthorizer: roleAuthorizer,
 		Committed: func(change adminapi.SiteConfigCommit) {
+			artworkPolicy.committed(change)
 			audits.configurationChanged(change)
 			for _, key := range change.Keys {
 				if strings.HasPrefix(key, "mfa_required_level_") {
@@ -619,7 +624,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, err
 	}
-	mux, err := generationTwoMux(cfg, store, authRuntime, forwardRuntime.handler, automationHandler)
+	mux, err := generationTwoMux(cfg, store, authRuntime, forwardRuntime.handler, artworkPolicy.disabled, automationHandler)
 	if err != nil {
 		return nil, err
 	}

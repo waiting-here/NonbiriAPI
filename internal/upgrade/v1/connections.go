@@ -162,7 +162,7 @@ func extendConnections(ctx context.Context, tx *sql.Tx) error {
 	if err := populateConnectionTargets(ctx, tx); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, "INSERT INTO site_config(key,value,updated_at) VALUES('default_light_rpm_per_user','30',0) ON CONFLICT(key) DO NOTHING"); err != nil {
+	if _, err := tx.ExecContext(ctx, "INSERT INTO site_config(key,value,updated_at) VALUES('default_light_rpm_per_user','30',0),('artwork_r18_disabled','1',0) ON CONFLICT(key) DO NOTHING"); err != nil {
 		return err
 	}
 	for _, table := range definition.Tables {

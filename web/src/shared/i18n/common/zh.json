@@ -2879,5 +2879,8 @@
     "resetDescription": "重置 {{user}} 的验证器并退出其全部浏览器会话。用户需要重新登录，CallerKey 保持不变。",
     "resetConfirm": "重置并退出会话",
     "resetDone": "验证器已重置，全部浏览器会话已退出。用户需要重新登录。"
+  },
+  "artwork": {
+    "unavailable": "站点已停用这张图片。"
   }
 }

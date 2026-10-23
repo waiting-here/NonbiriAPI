@@ -1,4 +1,5 @@
 import { StrictMode, useEffect, useState } from 'react';
+import { ArtworkPolicyProvider } from '@shared/artwork/policy';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
@@ -150,9 +151,11 @@ const amberExport = new URLSearchParams(location.search).get('view') === 'amber-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={client}>
-      <ThemeProvider>
-        {amberExport ? <AmberExport /> : amberPreview ? <AmberPreview /> : <Preview />}
-      </ThemeProvider>
+      <ArtworkPolicyProvider disabled>
+        <ThemeProvider>
+          {amberExport ? <AmberExport /> : amberPreview ? <AmberPreview /> : <Preview />}
+        </ThemeProvider>
+      </ArtworkPolicyProvider>
     </QueryClientProvider>
   </StrictMode>,
 );
