@@ -8,8 +8,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
-- Keep browser and steward time contexts in separate caches so refreshing a
-  session cannot disable otherwise valid charity model forms.
+- Keep browser and steward time contexts in separate caches and preserve date
+  initialization when other fields change, so valid charity model forms remain
+  submittable.
 - Identify upgraded connections by their original endpoint note or hostname,
   show endpoint context in lists and search all owned entry URLs and notes.
   Clarify donation model setup and the separate System One protocol selection.
@@ -27,6 +28,8 @@ Each version entry describes its source and compatibility boundary; a release ta
   shared directories by default, while retaining the donor's manual exclusions.
 - Apply mainstream catalog suggestions during normal credential authorization,
   reusing an available catalog for the same credential version when possible.
+- Preserve each saved entry and its credential-authorization form when several
+  mainstream entries are created together.
 - Guide keys without a catalog to its configuration before attempting discovery.
   Keep specific operation errors and recovery actions readable across the full
   key table instead of squeezing them into the actions column.
