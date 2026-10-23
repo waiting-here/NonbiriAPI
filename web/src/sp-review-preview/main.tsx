@@ -17,7 +17,9 @@ const language = query.get('lang');
 if (language === 'zh' || language === 'en') void i18n.changeLanguage(language);
 const requestedScene = entryById[query.get('scene') ?? ''];
 const scene =
-  requestedScene?.kind === 'tomorrow' && requestedScene.refined ? undefined : requestedScene;
+  requestedScene?.kind === 'tomorrow' && requestedScene.refined && !requestedScene.walking
+    ? undefined
+    : requestedScene;
 if (scene)
   document.documentElement.dataset.theme = query.get('theme') === 'dark' ? 'dark' : 'light';
 document.documentElement.lang = query.get('lang') === 'en' ? 'en' : 'zh-CN';
