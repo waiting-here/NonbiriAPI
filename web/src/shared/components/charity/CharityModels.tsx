@@ -355,21 +355,30 @@ function ModelForm({
               <span>{t(charityCopyKey(role, 'provider'))}</span>
               <input
                 value={draft.provider}
-                onChange={(event) => setDraft({ ...draft, provider: event.target.value })}
+                onChange={(event) => {
+                  const provider = event.target.value;
+                  setDraft((current) => ({ ...current, provider }));
+                }}
               />
             </label>
             <label>
               <span>{t(charityCopyKey(role, 'model'))}</span>
               <input
                 value={draft.model}
-                onChange={(event) => setDraft({ ...draft, model: event.target.value })}
+                onChange={(event) => {
+                  const model = event.target.value;
+                  setDraft((current) => ({ ...current, model }));
+                }}
               />
             </label>
             <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={draft.enabled}
-                onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })}
+                onChange={(event) => {
+                  const enabled = event.target.checked;
+                  setDraft((current) => ({ ...current, enabled }));
+                }}
               />
               <span>{t('common.operations.charity.enableCharityModel')}</span>
             </label>
@@ -377,7 +386,7 @@ function ModelForm({
         </fieldset>
         <ModelTypesField
           value={draft.modelTypes}
-          onChange={(modelTypes) => setDraft({ ...draft, modelTypes })}
+          onChange={(modelTypes) => setDraft((current) => ({ ...current, modelTypes }))}
           disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
           showError
         />
@@ -385,7 +394,7 @@ function ModelForm({
           enabled={draft.cloudflareProxy}
           mode={model?.cloudflare_proxy_mode}
           disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
-          onChange={(cloudflareProxy) => setDraft({ ...draft, cloudflareProxy })}
+          onChange={(cloudflareProxy) => setDraft((current) => ({ ...current, cloudflareProxy }))}
         />
         <SessionHeaderFields
           value={draft.sessionHeaders}
@@ -405,12 +414,10 @@ function ModelForm({
               <span>{t('common.operations.charity.routeStrategy')}</span>
               <select
                 value={draft.routeStrategy}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    routeStrategy: event.target.value as ModelDraft['routeStrategy'],
-                  })
-                }
+                onChange={(event) => {
+                  const routeStrategy = event.target.value as ModelDraft['routeStrategy'];
+                  setDraft((current) => ({ ...current, routeStrategy }));
+                }}
               >
                 <option value="ordered">{t('common.operations.charity.routeOrdered')}</option>
                 <option value="random">{t('common.operations.charity.routeRandom')}</option>
@@ -442,9 +449,10 @@ function ModelForm({
                   max={86_400}
                   step={1}
                   value={draft.affinityTTLSeconds}
-                  onChange={(event) =>
-                    setDraft({ ...draft, affinityTTLSeconds: Number(event.target.value) })
-                  }
+                  onChange={(event) => {
+                    const affinityTTLSeconds = Number(event.target.value);
+                    setDraft((current) => ({ ...current, affinityTTLSeconds }));
+                  }}
                 />
                 <small>{t('common.operations.charity.routeAffinityTTLHelp')}</small>
               </label>
@@ -454,13 +462,18 @@ function ModelForm({
               <>
                 <TransportRuleField
                   value={draft.transportRule}
-                  onChange={(transportRule) => setDraft({ ...draft, transportRule })}
+                  onChange={(transportRule) =>
+                    setDraft((current) => ({ ...current, transportRule }))
+                  }
                 />
                 <label className="checkbox-label">
                   <input
                     type="checkbox"
                     checked={draft.flatten}
-                    onChange={(event) => setDraft({ ...draft, flatten: event.target.checked })}
+                    onChange={(event) => {
+                      const flatten = event.target.checked;
+                      setDraft((current) => ({ ...current, flatten }));
+                    }}
                   />
                   <span>{t(charityCopyKey(role, 'flattenExperimental'))}</span>
                 </label>
@@ -520,7 +533,10 @@ function ModelForm({
               <input
                 type="checkbox"
                 checked={draft.isMainstream}
-                onChange={(event) => setDraft({ ...draft, isMainstream: event.target.checked })}
+                onChange={(event) => {
+                  const isMainstream = event.target.checked;
+                  setDraft((current) => ({ ...current, isMainstream }));
+                }}
               />
               <span>{copy.mainstream}</span>
             </label>
@@ -528,7 +544,10 @@ function ModelForm({
               <span>{copy.excluded}</span>
               <textarea
                 value={draft.excluded}
-                onChange={(event) => setDraft({ ...draft, excluded: event.target.value })}
+                onChange={(event) => {
+                  const excluded = event.target.value;
+                  setDraft((current) => ({ ...current, excluded }));
+                }}
               />
               <small>{copy.excludedHint}</small>
             </label>
