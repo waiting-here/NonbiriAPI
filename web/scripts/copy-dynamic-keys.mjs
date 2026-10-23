@@ -68,6 +68,35 @@ function anchorFor(key, defaultAnchor) {
 }
 
 const dynamicCopyKeys = [
+  ...[
+    'pending',
+    'approved_pending',
+    'approved',
+    'partially_approved',
+    'rejected',
+    'withdrawn',
+    'mixed',
+    'deleted',
+    'expired',
+  ].map((state) =>
+    entry(
+      'common',
+      `common.connections.donationStates.${state}`,
+      'src/shared/components/UseSummary.tsx',
+      't(`common.connections.donationStates.${display}`)',
+      'Donation display status is normalized to this closed review and terminal status union.',
+    ),
+  ),
+  ...['subtype', 'marker_issued_at', 'source_request_id', 'returned_request_id'].map((fact) =>
+    entry(
+      'admin',
+      `admin.alerts.returnDetectedFacts.${fact}`,
+      'src/admin/pages/AlertsPage.tsx',
+      'admin.alerts.returnDetectedFacts.${fact.key}',
+      'Returned-request alerts translate these known fact names; unknown facts keep their server label.',
+    ),
+  ),
+
   ...['unknown', 'checking', 'succeeded', 'failed'].map((state) =>
     entry(
       'common',
@@ -340,7 +369,7 @@ const dynamicCopyKeys = [
       'admin',
       key,
       charityManagement,
-      't(charityStatusKey(role, item.status))',
+      "t(charityStatusKey(role, review.data?.status ?? 'pending'))",
       'charityStatusKey receives the finite pending/approved/rejected/deleted/expired status union.',
     ),
   ),
@@ -355,7 +384,7 @@ const dynamicCopyKeys = [
       'user',
       key,
       charityManagement,
-      't(charityStatusKey(role, item.status))',
+      "t(charityStatusKey(role, review.data?.status ?? 'pending'))",
       'charityStatusKey receives the finite pending/approved/rejected/deleted/expired status union.',
     ),
   ),
@@ -456,8 +485,8 @@ const dynamicCopyKeys = [
     entry(
       'user',
       key,
-      charityPanels,
-      't(`user.charity.status.${donationStatus}`)',
+      'src/user/features/economy/DonationHistoryControls.tsx',
+      't(`user.charity.status.${progress.status}`)',
       'Donation status is normalized to the five-value pending/approved/rejected/deleted/expired union.',
     ),
   ),

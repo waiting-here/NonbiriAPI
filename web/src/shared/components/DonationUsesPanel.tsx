@@ -1,3 +1,5 @@
+import { DonationUsesReviewAll, DonationUseReviewResults } from './DonationUsesPanelReview';
+export { DonationUseReviewResults } from './DonationUsesPanelReview';
 import { ConnectionUnavailable } from './ConnectionUnavailable';
 import { useSearchParams } from 'react-router';
 import { UseDiscovery } from './UseDiscovery';
@@ -55,6 +57,7 @@ export function DonationUsesPanel({
     });
   const [selected, setSelected] = useState<Record<string, DonationUse>>({});
   const [note, setNote] = useState('');
+  const [bulkLocked, setBulkLocked] = useState(false);
   const [results, setResults] = useState<UseReviewResult[]>([]);
   const result = useRef<UseReviewResult[]>([]);
   const pager = useUrlPagePager({
@@ -128,10 +131,10 @@ export function DonationUsesPanel({
     root,
   );
   useEffect(() => {
-    onPendingChange?.(review.isPending);
+    onPendingChange?.(review.isPending || bulkLocked);
     return () => onPendingChange?.(false);
-  }, [onPendingChange, review.isPending]);
-  const locked = review.isPending || review.outcome === 'unknown';
+  }, [onPendingChange, review.isPending, bulkLocked]);
+  const locked = review.isPending || review.outcome === 'unknown' || bulkLocked;
   const submit = (decision: 'approve' | 'reject') => {
     result.current = [];
     review.reset();
@@ -154,9 +157,35 @@ export function DonationUsesPanel({
       <PanelHead title={t('common.connections.donationUses')} />
       <PanelBody>
         <Note>{t('common.connections.useVersionNote')}</Note>
+        {role !== 'owner' ? (
+          <DonationUsesReviewAll
+            role={role}
+            donationId={donationId}
+            donationKeyId={donationKeyId}
+            disabled={review.isPending || review.outcome === 'unknown'}
+            onLockedChange={setBulkLocked}
+            onReviewed={(value) => {
+              setResults(value);
+              onReviewed?.(value);
+              setSelected((previous) =>
+                Object.fromEntries(
+                  Object.entries(previous).filter(
+                    ([id]) => !value.some((entry) => entry.use_id === id && entry.ok),
+                  ),
+                ),
+              );
+            }}
+            refresh={refresh}
+          />
+        ) : null}
         <Field label={t('common.connections.status')}>
           {(props) => (
-            <select {...props} value={state} onChange={(event) => setState(event.target.value)}>
+            <select
+              {...props}
+              value={state}
+              disabled={locked}
+              onChange={(event) => setState(event.target.value)}
+            >
               <option value="">{t('common.connections.all')}</option>
               {['pending', 'approved', 'rejected', 'withdrawn'].map((value) => (
                 <option key={value} value={value}>
@@ -271,22 +300,6 @@ export function DonationUsesPanel({
       </PanelBody>
     </Panel>
   );
-}
-export function DonationUseReviewResults({ results }: { results: UseReviewResult[] }) {
-  const { t } = useTranslation();
-  return results.length ? (
-    <ul className="nb-list" role="status">
-      {results.map((result) => (
-        <li key={result.use_id}>
-          {t(
-            result.ok ? 'common.connections.useReviewSaved' : 'common.connections.useReviewFailed',
-            { id: result.use_id },
-          )}
-          {result.error ? ' · ' + result.error.message : ''}
-        </li>
-      ))}
-    </ul>
-  ) : null;
 }
 function UseRow({
   role,

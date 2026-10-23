@@ -283,7 +283,14 @@ test('approve a fixed key, page 240 targets and bind 144 cross-page selections w
       '/admin/api/donations/' + data.pending_donation_id,
     );
     expect(partial.status).toBe('pending');
-    expect(partial.use_summary).toEqual({ total: '3', pending: '2', approved: '1' });
+    expect(partial.use_summary).toEqual({
+      total: '3',
+      pending: '2',
+      approved: '1',
+      rejected: '0',
+      withdrawn: '0',
+      review_status: 'approved_pending',
+    });
     expect(
       partial.keys.find((key: { id: string }) => key.id === data.pending_key_id).can_manage,
     ).toBe(true);
@@ -1435,6 +1442,9 @@ test('level 5 reviews independent pending sources, retains receipts after refres
         total: '1',
         pending: '0',
         approved: decision === 'approve' ? '1' : '0',
+        rejected: decision === 'reject' ? '1' : '0',
+        withdrawn: '0',
+        review_status: decision === 'approve' ? 'approved' : 'rejected',
       });
       const finalUses = (
         await read(

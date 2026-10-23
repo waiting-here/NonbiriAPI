@@ -623,3 +623,28 @@ describe('owner donation numbered-page requests', () => {
     });
   });
 });
+
+it('accepts a rejected use summary on a live pending donation and sends the separate display filter', async () => {
+  const payload = page([
+    summary({
+      use_summary: {
+        total: '2',
+        approved: '0',
+        pending: '0',
+        rejected: '2',
+        withdrawn: '0',
+        review_status: 'rejected',
+      },
+    }),
+  ]);
+  const fetchMock = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(
+      new Response(JSON.stringify(payload), { headers: { 'content-type': 'application/json' } }),
+    );
+  vi.stubGlobal('fetch', fetchMock);
+  const result = await getOwnerDonationsPage({ review_status: 'rejected' }, '1', 20);
+  expect(String(fetchMock.mock.calls[0]![0])).toContain('review_status=rejected');
+  expect(result.data[0]!.status).toBe('pending');
+  expect(result.data[0]!.useSummary?.review_status).toBe('rejected');
+});

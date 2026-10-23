@@ -4,6 +4,29 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.1.1 — 2026-10-23
+
+### Added
+
+- Short-lived authenticated outbound markers and unresolved administrator alerts
+  when a valid marker returns on an authenticated request. Forwarding continues;
+  bounded asynchronous recording is deduplicated and never changes account,
+  key or reward state. Gateways that discard the marker remain undetectable.
+- Approve-all and reject-all controls for pending donation uses, with an explicit
+  donation or key scope, bounded batches and recovery of uncertain results.
+
+### Fixed
+
+- Scope charity model availability checks to each model's bindings before checking
+  donation keys, preventing unrelated keys from slowing model lists and blocking
+  other read-only APIs through the shared database pool.
+- Cancel public configuration and branding database reads when their HTTP request
+  is canceled, so abandoned page loads stop waiting for a connection.
+- Restrict authorization view materialization to the requested current or approved
+  grant versions while retaining ownership checks and missing-grant errors.
+- Summarize per-service donation decisions correctly, including all-rejected
+  submissions and pending replacements whose previous approval remains valid.
+
 ## 1.1.0 — 2026-10-22
 
 ### Added

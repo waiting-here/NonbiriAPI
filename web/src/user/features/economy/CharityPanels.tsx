@@ -1,3 +1,4 @@
+import { DonationStatusBadge } from '@shared/components/UseSummary';
 import { OwnerUseAddition } from './OwnerUseAddition';
 import { DonationShareFields, type DonationShare } from './DonationShareFields';
 import { contextPriceProps, contextRows } from './contextPrices';
@@ -86,10 +87,6 @@ function validDonationDescription(value: string): boolean {
     if (codePoint < 0x20 || (codePoint >= 0x7f && codePoint <= 0x9f)) return false;
   }
   return true;
-}
-
-function statusDanger(status: Donation['status']): boolean {
-  return status === 'rejected' || status === 'deleted' || status === 'expired';
 }
 
 function MutationNotice({ error, successKey }: { error: unknown; successKey?: string }) {
@@ -710,6 +707,7 @@ export function DonationKeyPanel({
   accountID,
   donationId,
   donationStatus,
+  donationSummary,
   donationRevision,
   compact = false,
   returnTo,
@@ -719,6 +717,7 @@ export function DonationKeyPanel({
   accountID?: string;
   donationId?: string;
   donationStatus?: Donation['status'];
+  donationSummary?: Donation['useSummary'];
   donationRevision?: string;
   compact?: boolean;
   returnTo?: string;
@@ -769,11 +768,7 @@ export function DonationKeyPanel({
         </div>
         <div className="economy-status-stack">
           {donationStatus ? (
-            <StatusBadge
-              active={donationStatus === 'approved'}
-              danger={statusDanger(donationStatus)}
-              label={t(`user.charity.status.${donationStatus}`)}
-            />
+            <DonationStatusBadge status={donationStatus} summary={donationSummary} />
           ) : null}
           <StatusBadge
             active={donationKey.physicalEnabled}
@@ -1093,11 +1088,7 @@ export function DonationCard({
           <h3>{t('user.charity.donationNumber', { id: donation.id })}</h3>
           <p className="item-meta">{formatDateTime(donation.createdAt)}</p>
         </div>
-        <StatusBadge
-          active={donation.status === 'approved'}
-          danger={statusDanger(donation.status)}
-          label={t(`user.charity.status.${donation.status}`)}
-        />
+        <DonationStatusBadge status={donation.status} summary={donation.useSummary} />
       </div>
 
       {showEditor ? (
@@ -1170,6 +1161,7 @@ export function DonationCard({
               donationId={donation.id}
               donationRevision={donation.revision}
               donationStatus={donation.status}
+              donationSummary={donation.useSummary}
               accountID={accountID}
               compact
             />
@@ -1192,6 +1184,7 @@ export function DonationCard({
                   donationId={donation.id}
                   donationRevision={donation.revision}
                   donationStatus={donation.status}
+                  donationSummary={donation.useSummary}
                   accountID={accountID}
                 />
               ))}

@@ -19,7 +19,7 @@ func servePublicBranding(store *db.Store, w http.ResponseWriter, r *http.Request
 		httperr.WriteError(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
 		return
 	}
-	config, err := adminapi.ReadPublicConfig(store)
+	config, err := adminapi.ReadPublicConfigContext(r.Context(), store)
 	if err != nil {
 		httperr.WriteError(w, httperr.New(httperr.CodeInternal, "service unavailable"))
 		return

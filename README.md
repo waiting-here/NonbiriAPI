@@ -70,6 +70,16 @@ AI Gateway mappings remain compatible when no Worker is configured.
 
 [Service connections](docs/service-connections.md) group explicitly authorized entries around shared credentials and an independent model directory. OpenAI-compatible and Gateway entries select their native services; each model selects its applicable targets. Credential rotation preserves approved charity versions until explicit review.
 
+Donation lists summarize decisions across their service uses. Reviewers can
+approve or reject all pending uses in one donation or key, confirm the exact
+selection and recover partial or uncertain results without expanding it.
+
+Outbound requests include a short-lived, authenticated opaque origin header.
+A valid returned marker creates an unresolved administrator alert while the
+request continues. Recording uses a bounded queue and deduplication; it does
+not change rewards, keys or account status. A gateway can remove the header,
+so this is a review signal rather than proof of resource ownership.
+
 When creating a custom entry, matching mainstream presets show their current
 details. Users may explicitly adopt one entry or continue with the custom draft;
 suggestions grant no credential or donation authorization.

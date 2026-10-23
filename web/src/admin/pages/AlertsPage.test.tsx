@@ -75,6 +75,35 @@ function deferred<T>() {
 }
 
 describe('administrator alerts page', () => {
+  it('shows a returned request as a review notice while keeping its resolution controls', async () => {
+    const returned = alert('4', false, {
+      kind: 'forward_error',
+      subtype: 'return_detected',
+      ref: 'return-detected:source',
+    });
+    installJsonFetchFixtures([
+      { method: 'GET', path: '/admin/api/session', body: session() },
+      {
+        method: 'GET',
+        path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+        body: page([returned]),
+      },
+    ]);
+    const rendered = await renderWithProviders(<AlertsPage />, {
+      station: 'admin',
+      role: 'admin',
+      locale: 'en',
+      route: '/alerts?resolved=false&page=1&page_size=20',
+    });
+    expect(await screen.findByText('Request returned')).toBeVisible();
+    expect(screen.getByText(/processing continued without an automatic penalty/)).toBeVisible();
+    expect(
+      screen.queryByText('Upstream call did not complete. Open details for failure information.'),
+    ).toBeNull();
+    await rendered.user.click(screen.getByRole('button', { name: 'Alert actions' }));
+    expect(screen.getByRole('menuitem', { name: 'Resolve' })).toBeEnabled();
+  });
+
   it('rejects off-site and ambiguous return destinations', () => {
     expect(validAlertReturnTo('https://evil.invalid')).toBeNull();
     expect(validAlertReturnTo('//evil.invalid')).toBeNull();

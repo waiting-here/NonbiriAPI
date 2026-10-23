@@ -93,7 +93,7 @@ func TestAddedHeadersFixedWinsAndSensitiveValuesReject(t *testing.T) {
 	if _, err := AddedHeaders(inbound, d); err == nil {
 		t.Fatal("accepted hop-by-hop nominated header")
 	}
-	for _, name := range []string{"Authorization", "Cookie", "Proxy-Token", "X-Forwarded-For", "x-api-key", "anthropic-version", "Content-Type", "X-Csrf-Token"} {
+	for _, name := range []string{"Authorization", "Cookie", "Proxy-Token", "X-Forwarded-For", "x-api-key", "anthropic-version", "Content-Type", "X-Csrf-Token", "Nonbiri-Request-Origin", "nonbiri-request-origin"} {
 		if ValidHeaderName(name) {
 			t.Errorf("accepted protected header %s", name)
 		}

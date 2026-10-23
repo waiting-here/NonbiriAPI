@@ -15,6 +15,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
+	"github.com/waiting-here/NonbiriAPI/internal/returnmarker"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -60,10 +61,11 @@ type StackOptions struct {
 // every connector. Keeping these resources behind one object prevents a
 // per-caller gate from silently weakening process-wide limits.
 type Stack struct {
-	policy *EgressPolicy
-	gate   *Gate
-	routes map[string]*cloudflareRoute
-	worker *cloudflareWorker
+	policy       *EgressPolicy
+	gate         *Gate
+	routes       map[string]*cloudflareRoute
+	worker       *cloudflareWorker
+	returnMarker *returnmarker.Marker
 
 	requestTimeout         time.Duration
 	responseHeaderTimeout  time.Duration
@@ -167,6 +169,9 @@ func (d *netDialer) DialContext(ctx context.Context, network, address string) (n
 func (s *Stack) AddSelfOrigins(ctx context.Context, cfg *config.Config) error {
 	return s.policy.AddSelfOrigins(ctx, cfg)
 }
+
+// SetReturnMarker installs startup-only provenance before clients are used.
+func (s *Stack) SetReturnMarker(marker *returnmarker.Marker) { s.returnMarker = marker }
 
 // ValidateBaseURL validates and canonicalizes an endpoint for persistence.
 func (s *Stack) ValidateBaseURL(raw string) (string, error) {
@@ -388,6 +393,7 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 	outbound.URL.Scheme = c.originScheme
 	outbound.URL.Host = c.originHost
 	outbound.Host = c.originHost
+	c.stack.returnMarker.Stamp(outbound, c.baseURL)
 	var secrets *routeSecrets
 	if c.route != nil || c.worker != nil {
 		_, err = c.policy.validateTarget(ctx, "tcp", outbound.URL.Scheme, outbound.URL.Hostname(), outbound.URL.Port())
@@ -425,6 +431,8 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 	if resp != nil {
 		removeWorkerHeaders(resp.Header)
 		removeWorkerHeaders(resp.Trailer)
+		returnmarker.Strip(resp.Header)
+		returnmarker.Strip(resp.Trailer)
 	}
 	if proxyFailed {
 		ctxErr := ctx.Err()
@@ -486,6 +494,7 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 			limit = min(limit, upstreamerror.MaxRawBodyBytes)
 		}
 	}
+	resp.Body = returnMarkerBody{ReadCloser: resp.Body, trailer: resp.Trailer}
 	managed := newManagedResponseBody(resp.Body, limit, ctx, cancel, permit.Release)
 	managed.worker = c.worker != nil
 	resp.Body = managed

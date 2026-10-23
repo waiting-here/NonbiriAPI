@@ -43,6 +43,7 @@ import (
 )
 
 type publicForwardRuntime struct {
+	callerKey   *forward.CallerKeyMiddleware
 	service     *forward.Service
 	flow        *flowcontrol.Controller
 	abuse       *antiabuse.Service
@@ -221,7 +222,7 @@ func newPublicForwardRuntime(
 		closed.ServeHTTP(w, r)
 		return true
 	}))
-	return &publicForwardRuntime{service: service, flow: flow, abuse: abuse, clientGuard: clientGuard, adaptations: adaptations, lifecycle: lifecycle, handler: handler}, nil
+	return &publicForwardRuntime{callerKey: callerKey, service: service, flow: flow, abuse: abuse, clientGuard: clientGuard, adaptations: adaptations, lifecycle: lifecycle, handler: handler}, nil
 }
 
 type charityPolicyRouter struct {

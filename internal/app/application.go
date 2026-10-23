@@ -32,6 +32,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/resourcebridge"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/returnmarker"
 	"github.com/waiting-here/NonbiriAPI/internal/stewardautomation"
 )
 
@@ -57,6 +58,7 @@ type application struct {
 	activityEvents  *accountstream.Hub
 	adminConfig     *adminapi.SiteConfigRuntime
 	adminAlerts     *adminalerts.Repository
+	returnAlerts    *returnmarker.Recorder
 	adminUsers      *adminusers.Service
 	lifecycle       *lifecycle.Coordinator
 	lifecycleCancel context.CancelFunc

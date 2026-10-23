@@ -42,6 +42,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/resourcebridge"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/returnmarker"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"github.com/waiting-here/NonbiriAPI/internal/stewardautomation"
 )
@@ -196,6 +197,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	var forwardRuntime *publicForwardRuntime
 	var gameRuntimes *gameRuntimeBundle
 	var audits *auditRuntime
+	var returnAlerts *returnmarker.Recorder
 	var claimService *claim.Service
 	performance := observability.NewPerformance()
 	store.SetConnectionObserver(performance)
@@ -207,6 +209,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 			activityRuntime: activityEngines, accountEvents: accountConnections,
 			debug: debugHub, reports: reportRepository, lifecycle: lifecycleCoordinator,
 			games: gameRuntimes, forward: forwardRuntime, audits: audits,
+			returnAlerts:   returnAlerts,
 			activityEvents: activityEvents, authRuntime: authRuntime, elevation: elevationManager,
 			discoveryWorker: discoveryWorker, bridge: bridgeRuntime, egress: outbound,
 			workerCancel: workerCancel, automation: automationService, claims: claimService,
@@ -300,6 +303,12 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create administrator alert repository: %w", err)
 	}
+	marker, err := returnmarker.New(vault)
+	if err != nil {
+		return nil, fmt.Errorf("create outbound return marker: %w", err)
+	}
+	outbound.SetReturnMarker(marker)
+	returnAlerts = returnmarker.NewRecorder(workerContext, marker, adminAlertRepository.RecordReturnDetected)
 	donationReview, err := initializeDonationReview(startupContext, store.DB(), vault)
 	if err != nil {
 		return nil, fmt.Errorf("initialize donation review identities: %w", err)
@@ -525,6 +534,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err := activityEngines.rewards.AttachAbuse(forwardRuntime.abuse); err != nil {
 		return nil, fmt.Errorf("attach redemption abuse protection: %w", err)
 	}
+	forwardRuntime.callerKey.SetReturnObserver(returnAlerts.Observe)
 	if err := authRuntime.AttachUserLifecycleGate(forwardRuntime.lifecycle); err != nil {
 		return nil, fmt.Errorf("attach shared user lifecycle gate: %w", err)
 	}
@@ -587,6 +597,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		activityEvents:  activityEvents,
 		adminConfig:     adminConfigRuntime,
 		adminAlerts:     adminAlertRepository,
+		returnAlerts:    returnAlerts,
 		adminUsers:      adminUserService,
 		lifecycle:       lifecycleCoordinator,
 		debug:           debugHub,

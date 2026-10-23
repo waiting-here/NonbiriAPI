@@ -67,6 +67,7 @@ export function PrivacyPage() {
               <h2>{t('user.legal.privacy.auditTitle')}</h2>
               <p>{t('user.legal.privacy.auditBody')}</p>
               <p>{t('user.legal.privacy.scanBody')}</p>
+              <p>{t('user.legal.privacy.returnAlertBody')}</p>
             </section>
             <section>
               <h2>{t('user.legal.privacy.imageTitle')}</h2>

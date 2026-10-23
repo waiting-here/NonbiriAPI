@@ -319,7 +319,7 @@ describe('Generation 2 charity management policy', () => {
     );
     await view.user.click(screen.getByRole('button', { name: 'Approve donation' }));
 
-    await waitFor(() => expect(screen.getAllByText('Approved').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText('All approved').length).toBeGreaterThan(0));
     expect(reviewRequests).toHaveLength(1);
     const body = JSON.parse(String(reviewRequests[0].body)) as Record<string, unknown>;
     expect(body).not.toHaveProperty('expires_at');

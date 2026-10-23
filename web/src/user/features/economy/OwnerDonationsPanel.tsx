@@ -1,4 +1,9 @@
-import { UseSummary } from '@shared/components/UseSummary';
+import {
+  DONATION_DISPLAY_STATUSES,
+  type DonationDisplayStatus,
+  type UseSummary as DonationUseSummary,
+} from '@shared/operations/donationUses';
+import { DonationStatusBadge, UseSummary } from '@shared/components/UseSummary';
 import { DonationUsesPanel } from '@shared/components/DonationUsesPanel';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { useEffect, useState } from 'react';
@@ -6,7 +11,7 @@ import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { Link, useLocation } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
-import { EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
+import { EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { formatDateTime } from '@shared/utils/datetime';
@@ -53,7 +58,7 @@ const keyViewLabel = {
   ended: 'user.charity.ownerHistory.keys.ended',
   all: 'user.charity.ownerHistory.keys.all',
 } as const;
-const STATUSES = ['', 'pending', 'approved', 'rejected', 'deleted', 'expired'] as const;
+const STATUSES = ['', ...DONATION_DISPLAY_STATUSES] as const;
 const terminal = (status?: DonationStatus) =>
   status !== undefined && ['rejected', 'deleted', 'expired'].includes(status);
 const single = (params: URLSearchParams, name: string) =>
@@ -138,13 +143,22 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
     : 'current';
   const statuses =
     view === 'current'
-      ? (['', 'pending', 'approved'] as const)
+      ? ([
+          '',
+          'pending',
+          'approved_pending',
+          'approved',
+          'partially_approved',
+          'rejected',
+          'withdrawn',
+          'mixed',
+        ] as const)
       : view === 'all'
         ? STATUSES
         : (['', 'rejected', 'deleted', 'expired'] as const);
   const rawStatus = single(params, 'donation_status');
   const status = (statuses as readonly string[]).includes(rawStatus)
-    ? (rawStatus as DonationStatus | '')
+    ? (rawStatus as DonationDisplayStatus | '')
     : '';
   const expanded = donationID(single(params, 'donation_expanded'));
   const [draft, setDraft] = useState({ source: q, value: q, invalid: false });
@@ -177,7 +191,13 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
     queryFn: ({ signal }) =>
       economySessionRequest(
         client,
-        () => getOwnerDonationsPage({ view, status, q }, pager.page, pager.pageSize, signal),
+        () =>
+          getOwnerDonationsPage(
+            { view, review_status: status, q },
+            pager.page,
+            pager.pageSize,
+            signal,
+          ),
         accountID,
       ),
     enabled,
@@ -280,7 +300,7 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
               >
                 {statuses.map((value) => (
                   <option key={value} value={value}>
-                    {value ? t(`user.charity.status.${value}`) : t('common.all')}
+                    {value ? t(`common.connections.donationStates.${value}`) : t('common.all')}
                   </option>
                 ))}
               </select>
@@ -353,6 +373,7 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
               accountID={accountID}
               donationID={expanded}
               enabled={enabled && !query.isPending}
+              summary={query.data?.data.find((item) => item.id === expanded)?.useSummary}
               status={
                 query.data?.data.find((item) => item.id === expanded)?.status ??
                 (view === 'history' || view === 'hidden' ? 'deleted' : undefined)
@@ -382,11 +403,7 @@ function DonationSummary({
       <div className="nb-row__main">
         <div className="nb-row__title">
           <h3>{t('user.charity.donationNumber', { id: item.id })}</h3>
-          <StatusBadge
-            active={item.status === 'approved'}
-            danger={['rejected', 'deleted', 'expired'].includes(item.status)}
-            label={t(`user.charity.status.${item.status}`)}
-          />
+          <DonationStatusBadge status={item.status} summary={item.useSummary} />
         </div>
         <p className="nb-row__sub" title={item.description}>
           {item.description}
@@ -470,11 +487,13 @@ export function OwnerDonationKeys({
   accountID,
   donationID,
   status,
+  summary,
   enabled = true,
 }: {
   accountID: string;
   donationID: string;
   status?: DonationStatus;
+  summary?: DonationUseSummary;
   enabled?: boolean;
 }) {
   const { t, i18n } = useTranslation();
@@ -563,6 +582,7 @@ export function OwnerDonationKeys({
                 donationKey={key}
                 donationId={donationID}
                 donationStatus={status}
+                donationSummary={summary}
                 donationRevision={key.donationRevision}
                 accountID={accountID}
                 returnTo={returnTo}

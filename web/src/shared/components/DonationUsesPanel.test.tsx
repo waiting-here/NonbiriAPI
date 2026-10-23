@@ -1,3 +1,4 @@
+import { ApiError } from '@shared/query/http';
 import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
@@ -195,10 +196,139 @@ it('keeps a successful review receipt and retries only reads after a failed refr
   await view.user.click(retry);
   await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(3));
   await waitFor(() =>
-    expect(
-      screen.queryByRole('button', { name: 'Check again' }),
-    ).not.toBeInTheDocument(),
+    expect(screen.queryByRole('button', { name: 'Check again' })).not.toBeInTheDocument(),
   );
   expect(screen.getByText('Use 6 saved')).toBeVisible();
   expect(mocks.review).toHaveBeenCalledTimes(1);
 });
+
+it('confirms the complete key scope across pages and reports blocked uses before rejecting the frozen versions', async () => {
+  const pending = Array.from({ length: 102 }, (_, index) => ({
+    ...row(String(index + 1), '9'),
+    capabilities: { ...row('6', '9').capabilities, can_review: index !== 101 },
+  }));
+  mocks.get.mockImplementation(async (_role, _donation, pageNumber, size, state, _signal, key) => {
+    expect(key).toBe('4');
+    return {
+      data:
+        state === 'pending'
+          ? pending.slice((Number(pageNumber) - 1) * 100, Number(pageNumber) * 100)
+          : pending.slice(0, 1),
+      pagination: {
+        page: String(pageNumber),
+        page_size: size,
+        total_items: state === 'pending' ? '102' : '1',
+        total_pages: state === 'pending' ? '2' : '1',
+      },
+    };
+  });
+  mocks.review.mockImplementation(async (_role, _donation, items) =>
+    items.map((item: { use_id: string }) => ({ use_id: item.use_id, ok: true })),
+  );
+  const view = await renderWithProviders(
+    <DonationUsesPanel role="steward" accountId="5" donationId="3" donationKeyId="4" />,
+    { station: 'user', role: 'level5', route: '/charity' },
+  );
+  view.queryClient.setQueryData(['user', 'session'], {
+    user: { id: '5', username: 'reviewer', effective_level: 5 },
+  });
+  await view.user.click(await screen.findByRole('button', { name: 'Reject all pending uses' }));
+  const dialog = screen.getByRole('alertdialog');
+  await within(dialog).findByText(
+    '102 pending uses: 101 will be processed; 1 cannot be processed.',
+  );
+  expect(
+    within(dialog).getByText('All pending uses for key #4 in donation #3, across all pages.'),
+  ).toBeInTheDocument();
+  expect(mocks.review).not.toHaveBeenCalled();
+  pending[0]!.revision = '10';
+  pending.push(row('103', '1'));
+  await view.user.click(within(dialog).getByRole('button', { name: 'Reject all pending uses' }));
+  await waitFor(() => expect(mocks.review).toHaveBeenCalledTimes(2));
+  expect(mocks.review.mock.calls.map((call) => call[2].length)).toEqual([100, 1]);
+  expect(mocks.review.mock.calls[0]![2][0]).toMatchObject({
+    use_id: '1',
+    expected_revision: '9',
+    decision: 'reject',
+    expected_review_revision: 'body-2',
+  });
+  expect(mocks.review.mock.calls[1]![2][0].use_id).toBe('101');
+  await within(dialog).findByText('Processed 101 of 101 uses: 101 succeeded, 0 failed.');
+  expect(
+    within(dialog).getByText('102 pending uses: 101 will be processed; 1 cannot be processed.'),
+  ).toBeInTheDocument();
+});
+
+it('does not dispatch a whole-scope review when its confirmation is canceled', async () => {
+  mocks.get.mockImplementation(async (_role, _donation, _page, size) => ({
+    data: [row('6', '9')],
+    pagination: { page: '1', page_size: size, total_items: '1', total_pages: '1' },
+  }));
+  const view = await renderWithProviders(
+    <DonationUsesPanel role="admin" accountId="1" donationId="3" />,
+    { station: 'admin' },
+  );
+  view.queryClient.setQueryData(['admin', 'session'], { admin: { id: '1', username: 'admin' } });
+  await view.user.click(await screen.findByRole('button', { name: 'Approve all pending uses' }));
+  const dialog = screen.getByRole('alertdialog');
+  await within(dialog).findByText('1 pending uses: 1 will be processed; 0 cannot be processed.');
+  await view.user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  expect(mocks.review).not.toHaveBeenCalled();
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+});
+
+it.each([403, 0])(
+  'only lets a known batch failure finish the operation (status %s)',
+  async (status) => {
+    const rows = Array.from({ length: 101 }, (_, index) => row(String(index + 1), '9'));
+    mocks.get.mockImplementation(async (_role, _donation, number, size, state) => ({
+      data:
+        state === 'pending'
+          ? rows.slice((Number(number) - 1) * 100, Number(number) * 100)
+          : rows.slice(0, 1),
+      pagination: {
+        page: String(number),
+        page_size: size,
+        total_items: state === 'pending' ? '101' : '1',
+        total_pages: state === 'pending' ? '2' : '1',
+      },
+    }));
+    mocks.review
+      .mockImplementationOnce(async (_role, _donation, items) =>
+        items.map((item: { use_id: string }) => ({ use_id: item.use_id, ok: true })),
+      )
+      .mockRejectedValue(
+        new ApiError(status === 403 ? 'forbidden' : 'result_unknown', 'Review interrupted', status),
+      );
+    const view = await renderWithProviders(
+      <DonationUsesPanel role="admin" accountId="1" donationId="3" />,
+      { station: 'admin' },
+    );
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { id: '1', username: 'admin' } });
+    await view.user.click(await screen.findByRole('button', { name: 'Approve all pending uses' }));
+    const dialog = screen.getByRole('alertdialog');
+    await within(dialog).findByText(
+      '101 pending uses: 101 will be processed; 0 cannot be processed.',
+    );
+    await view.user.click(within(dialog).getByRole('button', { name: 'Approve all pending uses' }));
+    await within(dialog).findByText('Processed 100 of 101 uses: 100 succeeded, 0 failed.');
+    if (status === 403) {
+      await view.user.click(
+        await within(dialog).findByRole('button', {
+          name: 'Finish this operation and keep processed results',
+        }),
+      );
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Approve all pending uses' })).toBeEnabled();
+    } else {
+      await waitFor(() => expect(mocks.review).toHaveBeenCalledTimes(3));
+      expect(
+        within(dialog).queryByRole('button', {
+          name: 'Finish this operation and keep processed results',
+        }),
+      ).not.toBeInTheDocument();
+      expect(within(dialog).getByRole('button', { name: 'Check saved result' })).toBeEnabled();
+      expect(mocks.review.mock.calls[2]![3]).toBe(mocks.review.mock.calls[1]![3]);
+    }
+  },
+);

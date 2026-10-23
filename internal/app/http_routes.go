@@ -49,7 +49,7 @@ func servePublicConfig(store *db.Store, w http.ResponseWriter, r *http.Request) 
 		httperr.WriteError(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
 		return
 	}
-	out, err := adminapi.ReadPublicConfig(store)
+	out, err := adminapi.ReadPublicConfigContext(r.Context(), store)
 	if err != nil {
 		httperr.WriteError(w, httperr.New(httperr.CodeInternal, "service unavailable"))
 		return

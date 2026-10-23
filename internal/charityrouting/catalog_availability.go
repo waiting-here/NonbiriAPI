@@ -45,10 +45,12 @@ func availableCandidateCountSQL(bindingID string, callerScoped bool, memberID ..
 	quota := `(CASE WHEN dk.input_token_limit_mag IS NULL AND dk.output_token_limit_mag IS NULL
  AND NOT EXISTS(SELECT 1 FROM donation_quota_rules qr WHERE qr.donation_key_id=dk.id AND qr.current_epoch IS NOT NULL)
  THEN 1 ELSE ` + donationquota.AvailabilityPredicate("dk.id", "cx.decision_now", price, "dk.token_reserve") + ` END)`
+	// Start with this model's bindings. Reordering these joins around the
+	// authorization views otherwise revisits every live donation key per model.
 	return `(CASE WHEN cx.charity_enabled=1 AND cm.enabled=1 AND (cm.pricing_mode='per_request' OR ` + price + `>0) THEN (SELECT COUNT(*) FROM (
  SELECT DISTINCT b.id FROM charity_model_bindings b
- JOIN charity_binding_targets target ON target.binding_id=b.id
- JOIN donation_keys dk ON dk.id=target.donation_key_id
+ CROSS JOIN charity_binding_targets target ON target.binding_id=b.id
+ CROSS JOIN donation_keys dk ON dk.id=target.donation_key_id
  JOIN donations d ON d.id=dk.donation_id
  JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
  JOIN endpoint_keys k ON k.id=m.endpoint_key_id

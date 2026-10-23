@@ -275,6 +275,7 @@ function normalizeAccountDeletion(value: unknown): AccountDeletion {
 }
 export interface AdminAlert {
   account_deletion?: AccountDeletion;
+  subtype?: 'return_detected';
   id: string;
   kind: (typeof ALERT_KINDS)[number];
   message: string;
@@ -296,13 +297,21 @@ export function normalizeAdminAlert(value: unknown): AdminAlert {
     'resolved',
     'resolved_at',
   ];
-  const root = record(value, [...fields, 'account_deletion'], 'administrator alert', fields);
+  const root = record(
+    value,
+    [...fields, 'account_deletion', 'subtype'],
+    'administrator alert',
+    fields,
+  );
   if ((root.kind === 'account_deleted') !== Object.hasOwn(root, 'account_deletion'))
     invalidResponse('account deletion snapshot');
   const resolved = boolean(root.resolved, 'alert resolution');
   const resolvedAt = nullableUnixSecond(root.resolved_at, 'alert resolution time');
   if (resolved !== (resolvedAt !== null)) invalidResponse('alert resolution state');
   return {
+    ...(root.subtype === undefined
+      ? {}
+      : { subtype: oneOf(root.subtype, ['return_detected'] as const, 'alert subtype') }),
     ...(root.kind === 'account_deleted'
       ? { account_deletion: normalizeAccountDeletion(root.account_deletion) }
       : {}),

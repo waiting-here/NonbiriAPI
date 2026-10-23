@@ -23,6 +23,7 @@ interface Fixture {
   user_url: string;
   admin_url: string;
   admin_cookie: Cookie;
+  return_alert_id: string;
   users: { id: string; level: number; cookie: Cookie }[];
   management: { endpoint_id: string };
 }
@@ -205,6 +206,7 @@ async function entry(
     note: name,
     enabled: true,
     native_services: services,
+    ...(services.includes('rerank') ? { rerank_format: 'generic' } : {}),
   });
   const key = await userAPI<Key>(context, '/api/endpoints/' + endpoint.id + '/keys', 'POST', {
     credential_id: credential.id,
@@ -651,7 +653,14 @@ test('additional services stay pending with their old budget and use-only traine
     );
     expect(ended.id).toBe(donation.id);
     expect(ended.status).toBe('deleted');
-    expect(ended.use_summary).toEqual({ total: '3', pending: '0', approved: '0' });
+    expect(ended.use_summary).toEqual({
+      total: '3',
+      pending: '0',
+      approved: '0',
+      rejected: '1',
+      withdrawn: '0',
+      review_status: 'mixed',
+    });
     expect(ended.keys).toHaveLength(1);
     const endedMember = ended.keys.find((row) => row.id === member.id)!;
     expect(endedMember.ended_reason).toBe('withdrawn');
@@ -1269,6 +1278,176 @@ test('connection lists return to the requested page and mainstream mappings use 
     );
   } finally {
     await owner.close();
+    await admin.close();
+  }
+});
+
+test('bulk use review covers hidden pages and updates rejected and approved summaries', async ({
+  browser,
+}, info) => {
+  const owner = await session(browser, 'owner');
+  const admin = await session(browser, 'admin');
+  const createdDonationIDs: string[] = [];
+  const tag = 'Bulk uses ' + randomUUID().slice(0, 8);
+  const services: NativeService[] = [
+    'chat_completions',
+    'responses',
+    'embeddings',
+    'images_generations',
+    'audio_speech',
+    'audio_transcriptions',
+    'rerank',
+    'moderations',
+  ];
+  try {
+    const group = await connection(owner, tag);
+    const base = await baseURL(owner);
+    const keys: Key[] = [];
+    for (let index = 0; index < 3; index++) {
+      const saved = await credential(owner, group, tag + index, 'synthetic-bulk-' + randomUUID());
+      keys.push((await entry(owner, group, saved, base, tag + index, services)).key);
+    }
+    const donation = await userAPI<Donation>(owner, '/api/donations', 'POST', {
+      description: tag,
+      ownership_authorized: true,
+      discord_public_thanks: false,
+      keys: keys.map((key) => ({
+        endpoint_key_id: key.id,
+        credential_id: key.credential_id,
+        credential_version: key.credential_version,
+        grant_revision: key.grant_revision,
+        native_services: services,
+        expires_at: null,
+      })),
+    });
+    createdDonationIDs.push(donation.id);
+    const page = await admin.newPage();
+    await page.goto(
+      fixture().admin_url +
+        '/charity?charity_section=donations&donation_id=' +
+        donation.id +
+        '&uses_page_size=10',
+    );
+    await page.getByRole('button', { name: c.rejectAllUses, exact: true }).first().click();
+    const dialog = page.getByRole('alertdialog', { name: c.rejectAllUses, exact: true });
+    await expect(
+      dialog.getByText('24 pending uses: 24 will be processed; 0 cannot be processed.'),
+    ).toBeVisible();
+    await dialog.getByLabel(c.reviewReason, { exact: true }).fill('Synthetic complete rejection');
+    for (const [width, theme] of [
+      [1440, 'light'],
+      [1440, 'dark'],
+      [390, 'light'],
+      [390, 'dark'],
+    ] as const) {
+      await screenshot(page, info, 'bulk-use-review', width, theme, dialog, {
+        pending: 24,
+        visiblePageSize: 10,
+        scope: 'entire donation',
+      });
+    }
+    const reviewed = responseFor(
+      page,
+      'POST',
+      '/admin/api/donations/' + donation.id + '/uses/review',
+    );
+    await dialog.getByRole('button', { name: c.rejectAllUses, exact: true }).click();
+    const receipt = await reviewed;
+    expect(receipt.status()).toBe(200);
+    expect((receipt.request().postDataJSON() as { items: unknown[] }).items).toHaveLength(24);
+    await expect(
+      dialog.getByText('Processed 24 of 24 uses: 24 succeeded, 0 failed.'),
+    ).toBeVisible();
+    await dialog.getByRole('button', { name: common.common.close, exact: true }).click();
+    const rejected = await adminAPI<
+      Numbered<{ id: string; use_summary: { review_status: string } }>
+    >(admin, '/admin/api/donations?page=1&page_size=100&review_status=rejected');
+    expect(rejected.data.find((row) => row.id === donation.id)?.use_summary.review_status).toBe(
+      'rejected',
+    );
+    const ownerPage = await owner.newPage();
+    await ownerPage.goto(fixture().user_url + '/charity/donations/' + donation.id);
+    await expect(
+      ownerPage.locator('.status-badge').filter({ hasText: c.donationStates.rejected }).first(),
+    ).toBeVisible();
+
+    const saved = await credential(
+      owner,
+      group,
+      tag + ' approve',
+      'synthetic-approve-' + randomUUID(),
+    );
+    const value = await entry(owner, group, saved, base, tag + ' approve', services.slice(0, 2));
+    const approved = await donate(owner, value.key, services.slice(0, 2), tag + ' approve');
+    createdDonationIDs.push(approved.id);
+    await page.goto(
+      fixture().admin_url + '/charity?charity_section=donations&donation_id=' + approved.id,
+    );
+    await page.getByRole('button', { name: c.approveAllUses, exact: true }).first().click();
+    const approval = page.getByRole('alertdialog', { name: c.approveAllUses, exact: true });
+    await expect(
+      approval.getByText('2 pending uses: 2 will be processed; 0 cannot be processed.'),
+    ).toBeVisible();
+    await approval.getByRole('button', { name: c.approveAllUses, exact: true }).click();
+    await expect(approval.getByText('Processed 2 of 2 uses: 2 succeeded, 0 failed.')).toBeVisible();
+    const rows = await uses(owner, approved.id);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.approved?.status === 'approved' && !row.pending)).toBe(true);
+  } finally {
+    try {
+      for (const id of createdDonationIDs) {
+        const live = await userAPI<Donation>(owner, '/api/donations/' + id);
+        await userAPI<Donation>(
+          owner,
+          '/api/donations/' + id + '/withdraw',
+          'POST',
+          { expected_revision: live.revision },
+          200,
+        );
+      }
+    } finally {
+      await Promise.all([owner.close(), admin.close()]);
+    }
+  }
+});
+
+test('returned request alerts show source details and unresolved review state', async ({
+  browser,
+}, info) => {
+  const admin = await session(browser, 'admin');
+  try {
+    const page = await admin.newPage();
+    const state = fixture();
+    await page.goto(state.admin_url + '/alerts?resolved=false&alert_id=' + state.return_alert_id);
+    await expect(
+      page.getByText(adminEn.admin.alerts.kindDescription.returnDetected).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByText(adminEn.admin.alerts.returnDetectedFacts.source_request_id, { exact: true }),
+    ).toBeVisible();
+    const detail = await adminAPI<{ alert: { subtype: string; resolved: boolean } }>(
+      admin,
+      '/admin/api/alerts/' + state.return_alert_id,
+    );
+    expect(detail.alert.subtype).toBe('return_detected');
+    expect(detail.alert.resolved).toBe(false);
+    for (const [width, theme] of [
+      [1440, 'light'],
+      [1440, 'dark'],
+      [390, 'light'],
+      [390, 'dark'],
+    ] as const) {
+      await screenshot(
+        page,
+        info,
+        'returned-request-alert',
+        width,
+        theme,
+        page.getByText(adminEn.admin.alerts.returnDetectedFacts.source_request_id, { exact: true }),
+        { subtype: detail.alert.subtype, resolved: false },
+      );
+    }
+  } finally {
     await admin.close();
   }
 });

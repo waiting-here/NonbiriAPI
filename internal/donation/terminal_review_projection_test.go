@@ -64,7 +64,7 @@ func TestTerminalDonationReviewHistoryAcrossReaders(t *testing.T) {
 				}
 				checkPages := func() {
 					t.Helper()
-					for _, filter := range []ManagementFilter{{}, {Status: terminal}} {
+					for _, filter := range []ManagementFilter{{}, {Status: terminal}, {ReviewStatus: terminal}} {
 						admin, err := e.service.DonationsAdminPage(ctx, filter, pagination.Default())
 						if err != nil || len(admin.Data) != 1 || admin.Data[0].Status != terminal {
 							t.Fatalf("admin page: %+v %v", admin, err)
