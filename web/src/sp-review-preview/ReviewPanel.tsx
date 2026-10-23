@@ -228,12 +228,7 @@ export function ReviewPanel({
               <strong>{t('源图层', 'Source layers')}</strong>
               {[
                 [t('人物', 'Character'), assets.hero],
-                [
-                  portraitStudy
-                    ? t('闭眼与微笑差分', 'Blink and smile details')
-                    : t('闭眼校准图', 'Closed-eye registration'),
-                  assets.closed,
-                ],
+                [t('闭眼校准图', 'Closed-eye registration'), assets.closed],
                 [t('晨光背景', 'Morning scenery'), assets.backgroundLight],
                 ...(!portraitStudy
                   ? [[t('蓝调背景', 'Evening scenery'), assets.backgroundDark]]

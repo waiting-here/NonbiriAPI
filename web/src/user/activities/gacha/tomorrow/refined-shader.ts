@@ -57,12 +57,6 @@ vec4 heroColor(vec2 q){
   vec4 color=texture2D(art,q);
   color=eyelid(q,leftEye,.125,color);
   color=eyelid(q,rightEye,.625,color);
-  // A brief smile after the first gust, followed by a long resting pose.
-  float t=mod(time,24.);
-  float smile=smoothstep(7.5,8.8,t)*(1.-smoothstep(10.8,12.6,t));
-  vec2 mouth=(q*vec2(1024.,1536.)-vec2(478.,225.))/vec2(23.,14.);
-  float mouthMask=1.-smoothstep(.67,1.,length(mouth));
-  color=mix(color,texture2D(closed,q),smile*mouthMask);
   // Leaf shade stays on the lower hair and cloth, away from the face and hands.
   vec4 material=texture2D(rig,q);
   float shade=smoothstep(.3,.85,sin(q.x*24.+q.y*7.+breeze(time)*.25));
