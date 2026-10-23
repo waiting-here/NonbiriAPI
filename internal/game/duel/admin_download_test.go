@@ -66,7 +66,21 @@ func TestHistoryZIPCombinesArchivesAndAnonymizedRecentPages(t *testing.T) {
 		}
 		return records, summary
 	}
+	var pages []duel.AdminAudit
+	f.audit = func(page duel.AdminAudit) { pages = append(pages, page) }
 	body, summary := read("?dataset=anonymous")
+	f.audit = nil
+	if len(pages) < 6 || pages[0].Dataset != "anonymous" || pages[1].Dataset != "recent" {
+		t.Fatalf("archive and recent download pages=%+v", pages)
+	}
+	for _, page := range pages {
+		if page.Result != "ok" || page.Records > 25 {
+			t.Fatalf("download page exceeded its projection bound: %+v", page)
+		}
+	}
+	if pages[1].Records != 25 {
+		t.Fatalf("first recent page did not split a match from its round: %+v", pages[1])
+	}
 	if !summary.Complete || summary.Records != 104 || !summary.IncludesUndated {
 		t.Fatalf("summary=%+v", summary)
 	}
