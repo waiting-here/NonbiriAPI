@@ -6,6 +6,11 @@ services. Grouping entries does not authorize a credential at another destinatio
 The same credential can be attached to several entries without re-entering its
 secret. Users must select each destination explicitly.
 
+Connection lists show the primary entry's address and note. Search includes the
+name and note of the connection and the addresses and notes of all its entries.
+Untouched names generated during an upgrade use the original entry's note or
+hostname for display. Custom names and stored metadata remain unchanged.
+
 ## Configure entries and models
 
 An OpenAI-compatible entry can select Chat Completions, Responses, embeddings,
@@ -14,6 +19,10 @@ requires its actual format: generic, Cohere, Jina, Voyage or SiliconFlow. Sharin
 a `/rerank` path does not make these payload formats interchangeable. Gateway
 v3 and v4 each offer text, image generation, embeddings and rerank. Select the
 upstream's actual version; there is no automatic probing or version fallback.
+
+System One is a separate **Typesafe System One** protocol in **Add entry**.
+Its service is `/v1/systemone`; the **Decisions** choice under OpenAI-compatible
+entries represents `/v1/decisions`. These services are not converted into each other.
 
 For an upstream serving both Chat and Responses at one base URL, select both
 services on one entry. A model may use a smaller subset. For a provider whose
@@ -80,6 +89,11 @@ reject each use. A use may have both an approved version and a pending replaceme
 partial rejection does not withdraw the still-approved version. The parent
 status alone therefore does not describe every service's availability.
 
+Donors submit the keys and services they want to share. Administrators or authorized
+stewards then name and bind the charity models. If model discovery is unavailable,
+the donor can include model IDs in the public donation description, without secrets.
+Personal model entries do not automatically become charity models.
+
 New mainstream donation drafts select all of the key's available services and a
 compatible directory by default. The donor can deselect individual services or
 the directory before submitting. Removing and reselecting a key in the same draft
@@ -125,6 +139,13 @@ existing ownership checks, revision checks and `Idempotency-Key` behavior.
 Collections support bounded numbered pagination; connection collections also
 retain signed cursor pagination. Keep the same request and idempotency key when
 a mutation result is unknown, then refresh the current resource.
+
+Connection responses include `display_name` and `primary_entry` in addition to
+the stored `name`. The primary entry is `null` or `{id, base_url, note}` for the
+first entry in the connection. Use `name` when editing and `display_name` when
+presenting the connection. Previously stored idempotent responses may omit the
+new fields; clients can fall back to `name` and no primary entry. Collection `q`
+matches connection names/notes and any owned entry's URL/note before pagination.
 
 | Resource | Routes and behavior |
 |---|---|

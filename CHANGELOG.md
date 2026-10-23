@@ -8,6 +8,13 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Keep browser and steward time contexts in separate caches so refreshing a
+  session cannot disable otherwise valid charity model forms.
+- Identify upgraded connections by their original endpoint note or hostname,
+  show endpoint context in lists and search all owned entry URLs and notes.
+  Clarify donation model setup and the separate System One protocol selection.
+- Load key credential and catalog editors only when opened, avoiding unnecessary
+  list requests while preserving unfinished edits when the panel is closed.
 - Explain when a donated use has no shared model directory instead of calling
   the key invalid. Preserve explicit sharing permissions and show missing-resource
   errors without silently skipping them. Allow approved uses to request discovery
