@@ -47,7 +47,6 @@ const (
 	CodeServiceUnavailable      = "service_unavailable"
 	CodeResourceLimitExceeded   = "resource_limit_exceeded"
 	CodeResourceLocked          = "resource_locked"
-	CodeDiscoveryNotShared      = "discovery_not_shared"
 	CodeDebugDryRunIntercepted  = "debug_dry_run_intercepted"
 	CodeDebugLiveResultCaptured = "debug_live_result_captured"
 	CodeDebugLiveCancelled      = "debug_live_cancelled"
@@ -125,7 +124,7 @@ func IsStableCode(code string) bool {
 		CodeNotFound, CodeConflict, CodeRefreshRequired, CodeMethodNotAllowed, CodeRateLimited,
 		CodePayloadTooLarge, CodeElevationRequired, CodeMFARequired, CodeMFAInvalidCode, CodeMFASetupExpired, CodeUnboundModel,
 		CodeUpstream, CodeMaintenance, CodeServiceUnavailable,
-		CodeResourceLimitExceeded, CodeResourceLocked, CodeDiscoveryNotShared, CodeInsufficientCredits,
+		CodeResourceLimitExceeded, CodeResourceLocked, CodeInsufficientCredits,
 		CodeFeatureDisabled, CodeCharitySuspended, CodeContentTooShort,
 		CodeAlreadyCheckedIn, CodeCheckinCapReached,
 		CodeDebugDryRunIntercepted, CodeDebugLiveResultCaptured,
@@ -163,7 +162,7 @@ func statusOf(code string) int {
 		return http.StatusServiceUnavailable
 	case CodeResourceLimitExceeded, CodeDebugDryRunIntercepted, CodeDebugLiveResultCaptured:
 		return http.StatusUnprocessableEntity
-	case CodeResourceLocked, CodeDiscoveryNotShared:
+	case CodeResourceLocked:
 		return http.StatusLocked
 	case CodeDebugLiveCancelled:
 		return http.StatusConflict

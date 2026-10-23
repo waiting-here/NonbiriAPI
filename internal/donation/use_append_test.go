@@ -544,10 +544,13 @@ func TestAppendUsesSharingRevisionOverflowRollsBackBatch(t *testing.T) {
 	if got := appendBudgetSnapshot(t, f); got != beforeBudget {
 		t.Fatal("overflow changed member/budget")
 	}
-	// With sharing unchanged, one remaining increment is sufficient.
+	// An omitted selection now pins the configured catalog too. Its legacy
+	// metadata update and pending pointer must both fit the remaining CAS space.
 	in.DiscoverySourceID, in.DiscoverySourceRevision = nil, nil
-	retried, err := f.append(t, 'Q', in)
-	if err != nil || len(retried.Value.Uses) != 2 || retried.Value.Uses[1].Revision != strconv.FormatInt(math.MaxInt64, 10) {
-		t.Fatalf("unchanged sharing at the last CAS: %+v %v", retried, err)
+	if _, err := f.append(t, 'Q', in); !errors.Is(err, ErrConflict) {
+		t.Fatalf("automatic catalog pin exceeded the last CAS: %v", err)
+	}
+	if got := appendRows(t, f.e, "SELECT * FROM donation_uses WHERE donation_key_id=? ORDER BY id", f.member); got != beforeUses {
+		t.Fatal("automatic pin overflow changed uses")
 	}
 }

@@ -62,7 +62,7 @@ func (r *Repository) completeDiscoveryGuarded(ctx context.Context, _ int64, oper
 	}
 	valid := run.currentRunID.Valid && run.currentRunID.Int64 == run.id && run.sourceRevisionID.Valid && run.sourceID.Valid && run.ownerID.Valid && run.versionID.Valid
 	if valid {
-		ref := connectionstore.SourceAuthorizationRef{OwnerUserID: run.ownerID.Int64, SourceID: run.sourceID.Int64, Purpose: connectionstore.SourcePurpose(run.purpose), DonationUseID: run.useID.Int64}
+		ref := connectionstore.SourceAuthorizationRef{OwnerUserID: run.ownerID.Int64, SourceID: run.sourceID.Int64, Purpose: connectionstore.SourcePurpose(run.purpose), DonationUseID: run.useID.Int64, UseRevisionID: run.approvedRevision}
 		source, authErr := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, ref)
 		valid = authErr == nil && source.SourceRevisionID == run.sourceRevisionID.Int64 && source.SourceRevision == run.sourceRevision && source.CredentialVersionID == run.versionID.Int64 && source.UseApprovedRevisionID == run.approvedRevision
 	}

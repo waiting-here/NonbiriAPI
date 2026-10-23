@@ -12,9 +12,10 @@ import (
 )
 
 type ownedDiscovery struct {
-	identity  charityrouting.OwnBindingDiscovery
-	selection resources.ManagedDiscoverySelection
-	sourceID  int64
+	identity      charityrouting.OwnBindingDiscovery
+	selection     resources.ManagedDiscoverySelection
+	sourceID      int64
+	createdSource bool
 }
 
 func ownDiscoveryTx(ctx context.Context, tx *sql.Tx, userID, keyID, now int64) (ownedDiscovery, error) {
@@ -27,7 +28,17 @@ func ownDiscoveryTx(ctx context.Context, tx *sql.Tx, userID, keyID, now int64) (
 	if use.Grant.OwnerUserID != userID {
 		return selected, resources.ErrNotFound
 	}
-	selected.identity = charityrouting.OwnBindingDiscovery{UseID: use.UseID, ApprovedRevisionID: use.ApprovedRevisionID, SourceRevisionID: use.DiscoverySourceRevisionID, CredentialVersionID: use.Grant.CredentialVersionID, NativeService: use.NativeService}
+	if use.DiscoverySourceRevisionID == 0 {
+		selected.createdSource = true
+		use.DiscoverySourceRevisionID, err = connectionstore.EnsureDiscoverySourceTx(ctx, tx, use, now)
+		if err != nil {
+			return selected, err
+		}
+		if err := tx.QueryRowContext(ctx, "SELECT source_id FROM discovery_source_revisions WHERE id=?", use.DiscoverySourceRevisionID).Scan(&choice.SourceID); err != nil {
+			return selected, err
+		}
+	}
+	selected.identity = charityrouting.OwnBindingDiscovery{UseID: use.UseID, ApprovedRevisionID: use.RevisionID, SourceRevisionID: use.DiscoverySourceRevisionID, CredentialVersionID: use.Grant.CredentialVersionID, NativeService: use.NativeService}
 	selected.selection = resources.ManagedDiscoverySelection{UseID: use.UseID, ExpectedRevision: use.UseRevision}
 	selected.sourceID = choice.SourceID
 	if err := revalidateOwnDiscoveryTx(ctx, tx, userID, keyID, selected); err != nil {
@@ -45,10 +56,10 @@ func revalidateOwnDiscoveryTx(ctx context.Context, tx *sql.Tx, userID, keyID int
 		return err
 	}
 	want := selected.identity
-	if !use.DiscoveryEnabled || use.Grant.OwnerUserID != userID || use.UseID != want.UseID || use.ApprovedRevisionID != want.ApprovedRevisionID || use.DiscoverySourceRevisionID != want.SourceRevisionID || use.Grant.CredentialVersionID != want.CredentialVersionID {
+	if use.Grant.OwnerUserID != userID || use.UseID != want.UseID || use.ApprovedRevisionID != want.ApprovedRevisionID || use.Grant.CredentialVersionID != want.CredentialVersionID {
 		return resources.ErrConflict
 	}
-	source, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: userID, SourceID: selected.sourceID, Purpose: connectionstore.SourceCharity, DonationUseID: use.UseID})
+	source, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: userID, SourceID: selected.sourceID, Purpose: connectionstore.SourceCharity, DonationUseID: use.UseID, UseRevisionID: use.ApprovedRevisionID})
 	if err != nil {
 		return err
 	}
