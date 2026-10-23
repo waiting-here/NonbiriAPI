@@ -193,11 +193,15 @@ func inferenceDefaultColumn(t *testing.T, table, column string, value any) bool 
 
 func inferenceDefaultRow(t *testing.T, table string, values []any) bool {
 	t.Helper()
-	if table != "site_config" || values[0] != "default_light_rpm_per_user" {
+	if table != "site_config" || values[0] != "default_light_rpm_per_user" && values[0] != "artwork_r18_disabled" {
 		return false
 	}
-	if len(values) != 3 || values[1] != "30" || values[2] != int64(0) {
-		t.Fatalf("unexpected default light RPM setting: %v", values)
+	want := "30"
+	if values[0] == "artwork_r18_disabled" {
+		want = "1"
+	}
+	if len(values) != 3 || values[1] != want || values[2] != int64(0) {
+		t.Fatalf("unexpected new setting default: %v", values)
 	}
 	return true
 }

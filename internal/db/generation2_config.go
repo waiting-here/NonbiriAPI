@@ -118,6 +118,7 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 	}
 
 	catalog := map[string]generationTwoConfigSpec{
+		"artwork_r18_disabled":                boolSpec("1"),
 		"discord_registered_user_gate_exempt": boolSpec("0"),
 		"mfa_required_level_1":                boolSpec("0"),
 		"mfa_required_level_2":                boolSpec("0"),

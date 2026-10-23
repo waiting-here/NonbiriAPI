@@ -13,6 +13,7 @@ const VALID_CONFIG = {
   legal_authoritative_locale: '',
   maintenance_mode: false,
   registration_open: true,
+  artwork_r18_disabled: true,
   announcement_epoch: 'b1e_AAAAAAAAAAAAAAAAAAAAAA',
 } as const;
 
@@ -30,6 +31,7 @@ describe('public bootstrap contract', () => {
       legalAuthoritativeLocale: '',
       maintenanceMode: false,
       registrationOpen: true,
+      artworkR18Disabled: true,
       announcementEpoch: 'b1e_AAAAAAAAAAAAAAAAAAAAAA',
     });
   });
@@ -45,6 +47,8 @@ describe('public bootstrap contract', () => {
     ['null', null],
     ['array', []],
     ['missing field', { ...VALID_CONFIG, registration_open: undefined }],
+    ['missing artwork policy', { ...VALID_CONFIG, artwork_r18_disabled: undefined }],
+    ['invalid artwork policy', { ...VALID_CONFIG, artwork_r18_disabled: 0 }],
     ['wrong boolean type', { ...VALID_CONFIG, maintenance_mode: 'false' }],
     ['invalid authoritative locale', { ...VALID_CONFIG, legal_authoritative_locale: 'fr' }],
     [

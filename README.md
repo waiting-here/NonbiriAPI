@@ -98,6 +98,10 @@ guide before comparing completed latency with current occupancy.
 The optional Gacha Simulator includes layered SP artwork. Amber Vow keeps its
 character beside desktop content, with matching static fallback and enhanced
 artwork; composition and source details are in the [art guide](docs/gacha-art.md).
+Administrators can disable R-18 built-in artwork across the site; this is on by
+default. Candidate lists label rated artwork, while permitted individual viewing
+stays unobstructed. Current assets are general. Collections and saved choices
+remain intact when artwork is disabled; see [artwork availability](docs/gacha.md#artwork-availability).
 
 The mystery shop offers daily bundles of ten standard or limited tickets for
 10,000 credits each, using game credits first. Each bundle has its own daily limit.

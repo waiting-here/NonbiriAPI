@@ -469,7 +469,7 @@ function PoolEditor({
                 <ArtworkImage
                   artworkKey={'cover:' + id}
                   src={'/assets/gacha/covers/' + id + '.webp'}
-                  alt={t(zh, en)}
+                  alt=""
                 />
                 <ArtworkBadge artworkKey={'cover:' + id} />
                 <ArtworkUnavailable artworkKey={'cover:' + id} />
@@ -551,11 +551,7 @@ function PoolEditor({
                       .filter((card) => card.theme === theme.id)
                       .map((card) => (
                         <label key={card.id}>
-                          <ArtworkImage
-                            artworkKey={'card:' + card.id}
-                            src={card.thumb}
-                            alt={t(card.name, card.name_en)}
-                          />
+                          <ArtworkImage artworkKey={'card:' + card.id} src={card.thumb} alt="" />
                           <ArtworkBadge artworkKey={'card:' + card.id} />
                           <ArtworkUnavailable artworkKey={'card:' + card.id} />
                           <span>

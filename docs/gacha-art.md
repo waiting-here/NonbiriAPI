@@ -2,6 +2,22 @@
 
 This standard applies to every existing and future Gacha Simulator card. Rarity determines presentation requirements, not the quality of the underlying illustration. The [activity rules](gacha.md) define acquisition and collection behavior.
 
+## Content classification
+
+`internal/artwork/catalog.json` is the shared Go and browser classification
+registry. Every card, illustration, cover and appearance has an explicit
+`general` or `r18` rating; all current entries are `general`. Asset ownership
+rules cover the corresponding previews, full-size images, layers and variants.
+Shared textures have one owner, and artwork that reuses them declares `uses`
+dependencies so its effective rating includes those sources. Card `scene`
+references additionally govern heartfelt-moment backgrounds.
+
+New artwork must register its files or literal path prefixes and pass catalog
+coverage validation. Keep default appearance and fallback cover general. The
+administrator's R-18 switch controls both rendering and direct asset delivery;
+candidate labels are separate from the artwork, so allowed detail views and
+applied appearances remain unobstructed.
+
 ## Artwork and identity
 
 - Use the established character references. Preserve identifying hair, eyes, anatomy, accessories and signature motifs across outfits; create an original scene for each card.

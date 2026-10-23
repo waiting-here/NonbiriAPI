@@ -179,7 +179,7 @@ func assertPublishedConnectionRows(t *testing.T, database *sql.DB, columns map[s
 			if err != nil {
 				t.Fatal(err)
 			}
-			if table == "site_config" && string(encoded) == `["default_light_rpm_per_user","30",0]` {
+			if table == "site_config" && (string(encoded) == `["default_light_rpm_per_user","30",0]` || string(encoded) == `["artwork_r18_disabled","1",0]`) {
 				found := false
 				for _, old := range want[table] {
 					if old == string(encoded) {

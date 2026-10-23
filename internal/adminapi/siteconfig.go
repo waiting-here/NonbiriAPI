@@ -66,6 +66,7 @@ const (
 	KeyOAuthStartRatePenaltySecs = "oauth_start_rate_penalty_seconds"
 	KeyMaintenanceMode           = "maintenance_mode"
 	KeyRegistrationOpen          = "registration_open"
+	KeyArtworkR18Disabled        = "artwork_r18_disabled"
 	// KeySiteTimezoneOffsetMinutes is nullable: unset (JSON null) means the
 	// site timezone has never been configured and must never be mistaken for
 	// an explicit UTC (0). It is frozen once any checkin/activity data exists.
@@ -272,6 +273,7 @@ func mustDefaultFishingMultiplier(species string) int {
 var knownSiteConfig = func() map[string]keySpec {
 	known := map[string]keySpec{
 		KeyDiscordRegisteredUserGateExempt: {kind: kindBool, def: 0},
+		KeyArtworkR18Disabled:              {kind: kindBool, def: 1},
 
 		KeySiteName:                  {kind: kindText, allowEmpty: false, max: maxSiteNameBytes},
 		KeySiteLogoURL:               {kind: kindText, allowEmpty: true, max: maxSiteLogoURLBytes},
@@ -873,7 +875,7 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 // PublicConfig is the closed, display-safe bootstrap DTO shared by the public
 // and administrator stations. A concrete struct, rather than a generic map,
 // makes adding an operational site-config key to the public wire an explicit
-// contract change. It intentionally has exactly twelve JSON fields.
+// contract change.
 type PublicConfig struct {
 	SiteName                 string `json:"site_name"`
 	SiteLogoURL              string `json:"site_logo_url"`
@@ -886,6 +888,7 @@ type PublicConfig struct {
 	LegalAuthoritativeLocale string `json:"legal_authoritative_locale"`
 	MaintenanceMode          bool   `json:"maintenance_mode"`
 	RegistrationOpen         bool   `json:"registration_open"`
+	ArtworkR18Disabled       bool   `json:"artwork_r18_disabled"`
 	AnnouncementEpoch        string `json:"announcement_epoch"`
 }
 
@@ -915,6 +918,7 @@ func buildPublicConfig(values map[string]string) PublicConfig {
 		LegalAuthoritativeLocale: publicConfigString(values, KeyLegalAuthoritativeLocale),
 		MaintenanceMode:          publicConfigBool(values, KeyMaintenanceMode),
 		RegistrationOpen:         publicConfigBool(values, KeyRegistrationOpen),
+		ArtworkR18Disabled:       publicConfigBool(values, KeyArtworkR18Disabled),
 		AnnouncementEpoch:        publicConfigString(values, KeyAnnouncementEpoch),
 	}
 }

@@ -8,6 +8,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
+- R-18 built-in artwork is disabled by default through an administrator control, with
+  shared classification for cards, covers, illustrations, appearances and their
+  derived assets. Candidate lists label rated artwork while allowed individual
+  views remain unobstructed. Disabling preserves collection and saved choices.
 - Service connections with shared versioned credentials, independent model
   directories and multi-service entries. OpenAI-compatible and Gateway entries
   explicitly select native services; model bindings retain ordered alternative

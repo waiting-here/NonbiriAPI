@@ -47,6 +47,62 @@ const channels = admin.admin.mainstreamChannels;
 
 test.skip(process.env.NONBIRI_MANAGEMENT_BROWSER !== '1', 'Requires the management fixture.');
 
+test('administrator artwork control persists and updates both public configurations', async ({
+  browser,
+}, info) => {
+  const state = fixture();
+  const manager = await session(browser, 'admin');
+  const owner = await session(browser, 'owner');
+  const key = 'artwork_r18_disabled';
+  const publicValue = async (origin: string, path: string) =>
+    (await api<Record<string, unknown>>(manager, origin, path))[key];
+  const original = await publicValue(state.user_url, '/api/config');
+  expect(original).toBe(true);
+  try {
+    const page = await manager.newPage();
+    await page.goto(state.admin_url + '/settings?group=activities');
+    const control = page.getByRole('switch', {
+      name: 'Disable R-18 built-in artwork',
+      exact: true,
+    });
+    await expect(control).toBeChecked();
+    await capture(page, info, 'artwork-settings', control);
+    for (const disabled of [false, true]) {
+      await control.setChecked(disabled);
+      const saved = responseFor(page, 'PATCH', '/admin/api/site-config');
+      await page.getByRole('button', { name: admin.admin.settings.saveAll, exact: true }).click();
+      expect((await saved).status()).toBe(200);
+      expect(await publicValue(state.user_url, '/api/config')).toBe(disabled);
+      expect(await publicValue(state.admin_url, '/admin/api/config')).toBe(disabled);
+      await page.reload();
+      await expect(control).toBeChecked({ checked: disabled });
+    }
+    const revision = (
+      await api<{ revision: string }>(manager, state.admin_url, '/admin/api/site-config')
+    ).revision;
+    const denied = await owner.request.patch(state.admin_url + '/admin/api/site-config', {
+      headers: { Origin: state.admin_url, 'Idempotency-Key': randomUUID() },
+      data: { expected_revision: revision, values: { [key]: false } },
+    });
+    expect([401, 403]).toContain(denied.status());
+    expect(await publicValue(state.user_url, '/api/config')).toBe(true);
+  } finally {
+    if ((await publicValue(state.user_url, '/api/config')) !== original) {
+      const current = await api<{ revision: string }>(
+        manager,
+        state.admin_url,
+        '/admin/api/site-config',
+      );
+      await api(manager, state.admin_url, '/admin/api/site-config', 'PATCH', {
+        expected_revision: current.revision,
+        values: { [key]: original },
+      });
+    }
+    await owner.close();
+    await manager.close();
+  }
+});
+
 function fixture(): Fixture {
   return JSON.parse(readFileSync(process.env.NONBIRI_AUDIT_BROWSER_STATE!, 'utf8')) as Fixture;
 }

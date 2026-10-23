@@ -84,7 +84,7 @@ func freshSafeMux(cfg *config.Config, store *db.Store) *http.ServeMux {
 	return mux
 }
 
-func generationTwoMux(cfg *config.Config, store *db.Store, authRuntime *auth.Runtime, callerHandler http.Handler, automationHandlers ...http.Handler) (*http.ServeMux, error) {
+func generationTwoMux(cfg *config.Config, store *db.Store, authRuntime *auth.Runtime, callerHandler http.Handler, artworkDisabled func() bool, automationHandlers ...http.Handler) (*http.ServeMux, error) {
 	if cfg == nil || store == nil || authRuntime == nil || callerHandler == nil {
 		return nil, errors.New("Generation 2 HTTP dependencies are required")
 	}
@@ -123,7 +123,7 @@ func generationTwoMux(cfg *config.Config, store *db.Store, authRuntime *auth.Run
 	mux.Handle("/admin/api", adminAuth)
 	mux.Handle("/admin/api/", adminAuth)
 
-	mux.Handle("/", web.NewMultiHandler(cfg.UserHost, cfg.AdminHost))
+	mux.Handle("/", web.NewMultiHandlerWithArtworkPolicy(artworkDisabled, cfg.UserHost, cfg.AdminHost))
 	return mux, nil
 }
 

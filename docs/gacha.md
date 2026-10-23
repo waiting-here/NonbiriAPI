@@ -14,6 +14,20 @@ edits, does not open pools and does not reset collection, eligibility, pity or
 claim records. Published theme membership and accepted pool rules remain fixed.
 The rules and configuration contracts below are authoritative for both API and UI.
 
+## Artwork availability
+
+Administrators can use **Disable R-18 built-in artwork** in site settings. It is
+on by default. All currently bundled artwork is general; the shared artwork
+catalog supports separately classified cards, covers, illustrations and site
+appearances, including their thumbnails and animation layers.
+
+R-18 candidate tiles carry a visible label. When disabled, their artwork uses a
+safe substitute and cannot be newly selected as a background or cover. Card
+ownership, draw results, rewards and saved preferences remain intact. Enabling
+the artwork again restores saved choices. Allowed individual viewing and applied
+appearances have no persistent label or overlay. Direct artwork requests also
+obey the switch; already downloaded content cannot be recalled.
+
 ## Entry and admission
 
 Activity entrances are hidden by default. Administrators can show them from the activity settings. This display switch does not stop scheduled pools or disable the activity URL. The permanent pool, catalogue and mystery shop stay open. Limited pools have individual schedules. When entrances are enabled, the main banner appears below Cyber Loan under permanent activities. Each open limited pool also appears under limited activities, with its cover, featured cards and opening dates, and links directly to that pool. Draft, paused, future and ended pools have no entrance. Open **Activities → The Gacha Simulator**; administrators configure it from **Activity management**. Site login, account restrictions and maintenance still apply.

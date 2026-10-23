@@ -34,9 +34,9 @@ const generationTwoManifestFixture = `{"sha256":"bf3821c938fba16a863df866b801621
 // generated per database and is canonicalized to a fixed marker before this
 // digest is calculated; every other key, value, and updated_at is covered
 // byte-for-byte by the ordered row digest.
-const PinnedGenerationTwoFreshConfigSeedHash = "dff7446543cc8c6e047b8ec0ea5ab45fc85381d0dee57a7d3325d3f36fc4c24d"
+const PinnedGenerationTwoFreshConfigSeedHash = "a9a83a0f0aa9002cc8db5ba9488237f6420579ef95bee6193310a64fe04585c6"
 
-const generationTwoFreshConfigSeedFixture = `{"sha256":"dff7446543cc8c6e047b8ec0ea5ab45fc85381d0dee57a7d3325d3f36fc4c24d"}`
+const generationTwoFreshConfigSeedFixture = `{"sha256":"a9a83a0f0aa9002cc8db5ba9488237f6420579ef95bee6193310a64fe04585c6"}`
 
 const generationTwoFreshConfigEpochMarker = "<generated:b1e_>"
 

@@ -147,10 +147,12 @@ it('gates a card moment by its scenery and keeps the unavailable current preview
     view.container.querySelectorAll('img[src*="a-chatgpt"], img[src*="backgrounds/a"]'),
   ).toHaveLength(0);
   expect(screen.getAllByText('R-18').length).toBeGreaterThan(0);
+  expect(screen.getByText(/^1 available\./)).toBeVisible();
   fireEvent.click(option!);
   expect(select).not.toHaveBeenCalled();
   view.rerender(tree(false));
   expect(view.container.querySelector('input[value="' + preferred + '"]')).toBeEnabled();
+  expect(screen.getByText(/^2 available\./)).toBeVisible();
   expect(view.container.querySelector('.nb-moment-backdrop__scene')).toHaveAttribute(
     'src',
     '/assets/gacha/backgrounds/a.webp',

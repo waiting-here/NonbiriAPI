@@ -189,7 +189,7 @@ func newAutomationFixture(t *testing.T) *automationFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mux, err := generationTwoMux(auditConfig(), f.store, f.app.authRuntime, f.app.forward.handler, automation)
+	mux, err := generationTwoMux(auditConfig(), f.store, f.app.authRuntime, f.app.forward.handler, nil, automation)
 	if err != nil {
 		t.Fatal(err)
 	}

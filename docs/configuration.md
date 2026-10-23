@@ -105,6 +105,7 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `game_{game}_{mode}_rake_{platform,welfare,thursday}_bp` | integer `[0,9999]` | each `0`; the three rates must sum below 10000 and apply only to the losing entry |
 | `site_name` | non-empty text, ≤256 bytes | display name; frontend falls back when unset |
 | `site_logo_url` | text, ≤2048 bytes, blank allowed | display image URL; blank uses the default mark |
+| `artwork_r18_disabled` | boolean | `true`; disables R-18 built-in artwork, preserving collections and saved preferences. Administrator-only writes; the same boolean is included in both public configuration projections |
 | `announcement_epoch` | read-only opaque ID | generated for each fresh database and used to isolate announcement caches |
 | `legal_privacy_override_zh`, `legal_privacy_override_en` | multiline text, ≤65536 bytes each | blank uses the embedded privacy template |
 | `legal_terms_override_zh`, `legal_terms_override_en` | multiline text, ≤65536 bytes each | blank uses the embedded terms template |

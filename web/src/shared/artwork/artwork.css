@@ -38,7 +38,7 @@
 }
 .gacha-card > .nb-artwork-badge {
   position: absolute;
-  top: var(--nb-space-2);
+  top: var(--nb-space-10);
   right: var(--nb-space-2);
   z-index: 2;
 }
@@ -79,6 +79,9 @@
 }
 .gacha-character-picker button {
   position: relative;
+}
+.gacha-draw-front > .nb-artwork-badge {
+  top: var(--nb-space-8);
 }
 .nb-moment-option > .nb-artwork-placeholder {
   height: 9rem;

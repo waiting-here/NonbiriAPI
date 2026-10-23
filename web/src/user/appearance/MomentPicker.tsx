@@ -8,7 +8,7 @@ import { Tabs } from '@shared/components/ui/Tabs';
 import { Note } from '@shared/components/ui/Note';
 import { ErrorState, LoadingState, EmptyState } from '@shared/components/States';
 import { formatCount } from '@shared/utils/formatNumber';
-import { useOptionalAppearance } from './context';
+import { appearances, useOptionalAppearance } from './context';
 import { defaultMoment, momentArtworks, momentByKey, momentArtworkKeys } from './moments';
 import { ArtworkImage, ArtworkBadge, ArtworkUnavailable } from '@shared/artwork/ArtworkImage';
 import { useArtworkPolicy } from '@shared/artwork/context';
@@ -40,6 +40,9 @@ export function MomentPicker() {
     (appearance.state.moments ?? [defaultMoment.key]).includes(item.key),
   );
   const current = momentByKey.get(choice) ?? defaultMoment;
+  const matchingAppearance = appearances.find(
+    (item) => 'card' in item && item.card === current.card?.id,
+  );
   const available =
     options.some((item) => item.key === choice) && policy.allowed(momentArtworkKeys(current));
   const selected =
@@ -76,9 +79,11 @@ export function MomentPicker() {
             <ArtworkBadge artworkKey={momentArtworkKeys(current)} />
             <ArtworkUnavailable artworkKey={momentArtworkKeys(current)} />
             <span>{t(kindKeys[current.kind])}</span>
-            {current.card?.rarity === 'SP' && (
-              <small>{t('user.appearance.moments.spHint', { name: name(current) })}</small>
-            )}
+            {current.card?.rarity === 'SP' &&
+              matchingAppearance &&
+              policy.allowed('appearance:' + matchingAppearance.id) && (
+                <small>{t('user.appearance.moments.spHint', { name: name(current) })}</small>
+              )}
             <Button
               variant="primary"
               disabled={
@@ -150,7 +155,7 @@ export function MomentPicker() {
               <ArtworkImage
                 artworkKey={momentArtworkKeys(item)}
                 src={item.thumb}
-                alt={name(item)}
+                alt=""
                 loading="lazy"
               />
               <ArtworkBadge artworkKey={momentArtworkKeys(item)} />
@@ -170,7 +175,9 @@ export function MomentPicker() {
       <PanelFoot>
         <Note>
           {t('user.appearance.moments.availableCount', {
-            countText: formatCount(options.length).display,
+            countText: formatCount(
+              options.filter((item) => policy.allowed(momentArtworkKeys(item))).length,
+            ).display,
           })}
         </Note>
       </PanelFoot>
