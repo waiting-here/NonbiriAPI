@@ -1738,3 +1738,154 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
     }
   }
 });
+
+test('model imports reuse manual support after reopening and resume after a model conflict', async ({
+  browser,
+}) => {
+  const owner = await session(browser, 'owner');
+  const tag = 'Import reuse ' + randomUUID().slice(0, 8);
+  const provider = 'import-reuse-' + randomUUID().slice(0, 8);
+  const models: string[] = [];
+  let group: Identity | undefined;
+  try {
+    group = await connection(owner, tag);
+    const saved = await credential(owner, group, tag, 'synthetic-import-' + randomUUID());
+    const base = await baseURL(owner);
+    const target = await entry(owner, group, saved, base, tag, ['chat_completions']);
+    const source = await userAPI<Source>(
+      owner,
+      '/api/connections/' + group.id + '/discovery-sources',
+      'POST',
+      {
+        name: tag,
+        base_url: base,
+        list_format: 'openai',
+        credential_id: saved.id,
+        enabled: true,
+      },
+    );
+    const catalogPath =
+      '/api/endpoints/' + target.endpoint.id + '/keys/' + target.key.id + '/models';
+    const upstream = 'existing-' + randomUUID().slice(0, 8);
+    const original = await userAPI<{
+      entries: { id: string; provider: string; source_revision: string; pair_revision: string }[];
+    }>(owner, catalogPath + '/manual', 'POST', {
+      entries: [{ upstream_model_id: upstream, provider: 'Original provider' }],
+    });
+    const page = await owner.newPage();
+    const manualWrites: string[] = [];
+    page.on('request', (request) => {
+      if (
+        request.method() === 'POST' &&
+        new URL(request.url()).pathname === catalogPath + '/manual'
+      )
+        manualWrites.push(request.postData() ?? '');
+    });
+    const destination =
+      fixture().user_url +
+      '/endpoints?connection_id=' +
+      group.id +
+      '&connection_view=discovery&discovery_source_id=' +
+      source.id;
+    const prepare = async (upstreamName: string, modelName: string) => {
+      await page.goto(destination);
+      const manual = await openFold(page, c.manualModel);
+      await manual.getByLabel(c.upstreamModel, { exact: true }).fill(upstreamName);
+      await manual.getByRole('button', { name: c.configureModel, exact: true }).click();
+      const chooser = await openFold(page, c.chooseEntry);
+      await chooser.getByPlaceholder(c.entrySearch, { exact: true }).fill(tag);
+      await chooser.getByRole('button', { name: c.search, exact: true }).click();
+      await chooser
+        .getByRole('row')
+        .filter({ hasText: tag })
+        .getByRole('button', { name: c.select, exact: true })
+        .click();
+      await chooser
+        .getByRole('row')
+        .filter({ hasText: tag })
+        .getByRole('button', { name: c.select, exact: true })
+        .click();
+      const row = await openFold(page.locator('.connection-model-batch'), upstreamName);
+      await row.getByRole('checkbox', { name: tag + ' · ' + upstreamName, exact: true }).check();
+      await row.getByRole('checkbox', { name: native.chat_completions, exact: true }).check();
+      await row.getByLabel(c.provider, { exact: true }).fill(provider);
+      await row.getByLabel(c.model, { exact: true }).fill(modelName);
+      await row.getByRole('checkbox', { name: native.chat_responses, exact: true }).check();
+      return row;
+    };
+    const save = async (row: Locator, upstreamName: string) => {
+      const written = responseFor(page, 'POST', '/api/models');
+      await row.getByRole('button', { name: c.saveMapping, exact: true }).click();
+      const response = await written;
+      expect(response.status()).toBe(201);
+      const model = (await response.json()) as Identity;
+      models.push(model.id);
+      await expect(row.getByText(c.mappingSaved, { exact: true })).toBeVisible();
+      const bindings = await userAPI<Bindings>(owner, '/api/models/' + model.id + '/bindings');
+      expect(bindings.bindings).toHaveLength(1);
+      expect(bindings.bindings[0]!.targets).toMatchObject([
+        {
+          endpoint_key_id: target.key.id,
+          upstream_model_id: upstreamName,
+          native_services: ['chat_completions'],
+        },
+      ]);
+    };
+    const firstName = 'first-' + randomUUID().slice(0, 8);
+    await save(await prepare(upstream, firstName), upstream);
+    await save(await prepare(upstream, 'reopened-' + randomUUID().slice(0, 8)), upstream);
+    expect(manualWrites).toHaveLength(0);
+    const reused = await userAPI<{ manual_entries: unknown[] }>(
+      owner,
+      catalogPath + '?page=1&page_size=100&source=manual',
+    );
+    expect(reused.manual_entries).toEqual(original.entries);
+
+    const fresh = 'fresh-' + randomUUID().slice(0, 8);
+    const row = await prepare(fresh, firstName);
+    const failed = responseFor(page, 'POST', '/api/models');
+    await row.getByRole('button', { name: c.saveMapping, exact: true }).click();
+    expect((await failed).status()).toBe(409);
+    await expect(row.getByText(c.mappingSaved, { exact: true })).toHaveCount(0);
+    expect(manualWrites).toHaveLength(1);
+    await expect(row.getByLabel(c.model, { exact: true })).toBeEnabled();
+    await row.getByLabel(c.model, { exact: true }).fill('recovered-' + randomUUID().slice(0, 8));
+    await save(row, fresh);
+    expect(manualWrites).toHaveLength(1);
+    const final = await userAPI<{ manual_entries: { upstream_model_id: string }[] }>(
+      owner,
+      catalogPath + '?page=1&page_size=100&source=manual',
+    );
+    expect(final.manual_entries.map((item) => item.upstream_model_id).sort()).toEqual(
+      [upstream, fresh].sort(),
+    );
+  } finally {
+    try {
+      try {
+        for (const id of models) {
+          const current = await userAPI<Identity>(owner, '/api/models/' + id);
+          await userAPI(
+            owner,
+            '/api/models/' + id,
+            'DELETE',
+            { expected_revision: current.revision },
+            204,
+          );
+        }
+      } finally {
+        if (group) {
+          const current = await userAPI<Identity>(owner, '/api/connections/' + group.id);
+          await userAPI(
+            owner,
+            '/api/connections/' + group.id,
+            'DELETE',
+            { expected_revision: current.revision },
+            204,
+          );
+        }
+      }
+    } finally {
+      await owner.close();
+    }
+  }
+});
