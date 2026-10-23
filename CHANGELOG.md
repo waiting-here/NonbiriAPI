@@ -48,6 +48,11 @@ Each version entry describes its source and compatibility boundary; a release ta
   The separate schema 16–26 converter targets the same schema; account export
   remains 29.
 
+### Security
+
+- Update DOMPurify to 3.4.17 and Vitest to 4.1.12, including its matching mocker
+  packages, to address the upstream sanitization and development-server advisories.
+
 ## 1.1.1 — 2026-10-23
 
 ### Added
