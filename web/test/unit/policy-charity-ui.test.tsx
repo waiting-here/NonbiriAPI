@@ -3639,8 +3639,10 @@ describe('experimental policy and charity controls', () => {
       within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete service' }),
     );
 
-    await waitFor(() => expect(screen.getByText('Nothing here yet')).toBeVisible());
-    expect(listReads).toBe(1);
+    await waitFor(() => {
+      expect(listReads).toBe(1);
+      expect(screen.getByText('Nothing here yet')).toBeVisible();
+    });
     expect(lastBody(fetchMock, 'DELETE', '/api/endpoints/1')).toEqual({
       expected_revision: '1',
     });
