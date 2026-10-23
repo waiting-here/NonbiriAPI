@@ -948,6 +948,8 @@ function EndpointKeyCard({
   const evidence = keyData.browse?.discovery;
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [editorVisited, setEditorVisited] = useState(false);
+  if (editing && !editorVisited) setEditorVisited(true);
   const [note, setNote] = useState(keyData.note);
   const [editRevision, setEditRevision] = useState(keyData.revision);
   const [maxConcurrency, setMaxConcurrency] = useState(String(keyData.max_concurrency));
@@ -1444,13 +1446,15 @@ function EndpointKeyCard({
             closeLabel={t('common.close')}
             busy={busy || Boolean(replayAttempt)}
           >
-            <KeyCredentialScope
-              accountId={accountId}
-              endpoint={endpoint}
-              entryKey={keyData}
-              defaultOpen={!hasCatalog}
-              revealCatalog={catalogReveal}
-            />
+            {editorVisited ? (
+              <KeyCredentialScope
+                accountId={accountId}
+                endpoint={endpoint}
+                entryKey={keyData}
+                defaultOpen={!hasCatalog}
+                revealCatalog={catalogReveal}
+              />
+            ) : null}
             <p className="nb-muted">{t('browse.personalLimits')}</p>
             <dl className="nb-facts">
               <div>

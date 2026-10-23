@@ -526,11 +526,14 @@ describe('missing catalog recovery', () => {
       discovery_source_id: null,
     };
     const writes: { path: string; body?: Record<string, unknown> }[] = [];
+    let catalogReads = 0;
     const view = await renderKeyFeedback(async (input, init) => {
       const url = new URL(String(input), 'https://app.example');
       if (url.pathname === '/api/endpoints/11/keys') return jsonResponse(keyPage(current));
-      if (url.pathname === '/api/connections/9/discovery-sources')
+      if (url.pathname === '/api/connections/9/discovery-sources') {
+        catalogReads++;
         return jsonResponse({ ...keyPage(catalogSource) });
+      }
       if (url.pathname === '/api/endpoints/11/keys/21' && init?.method === 'PATCH') {
         const body = JSON.parse(String(init.body));
         writes.push({ path: url.pathname, body });
@@ -586,6 +589,7 @@ describe('missing catalog recovery', () => {
       throw Error('Unexpected ' + url.pathname);
     });
     expect(screen.queryByRole('button', { name: 'Load available models' })).toBeNull();
+    expect(catalogReads).toBe(0);
     await view.user.click(screen.getByRole('button', { name: 'Choose model catalog' }));
     expect(writes).toHaveLength(0);
     const scope = screen
@@ -601,6 +605,11 @@ describe('missing catalog recovery', () => {
       '/endpoints?connection_id=9&connection_view=discovery',
     );
     await view.user.click(within(scope).getByRole('checkbox', { name: 'Responses' }));
+    const keyEditor = screen.getByRole('region', { name: 'Edit note and limits' });
+    await view.user.click(within(keyEditor).getByRole('button', { name: 'Close' }));
+    await view.user.click(screen.getByRole('button', { name: 'Choose model catalog' }));
+    expect(within(scope).getByRole('checkbox', { name: 'Responses' })).not.toBeChecked();
+    expect(catalogReads).toBe(1);
     const note = screen.getByRole('textbox', { name: 'Key note' });
     await view.user.clear(note);
     await view.user.type(note, 'Keep this note draft');
