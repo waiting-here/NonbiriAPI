@@ -37,7 +37,7 @@ func TestSchemaInfoNeedsNoDatabaseOrSecretEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	var descriptor db.StorageSchemaDescriptor
-	if err := json.Unmarshal(output.Bytes(), &descriptor); err != nil || descriptor.SchemaVersion != 34 || len(descriptor.OfflineConversions) != 11 {
+	if err := json.Unmarshal(output.Bytes(), &descriptor); err != nil || descriptor.SchemaVersion != db.CurrentSchemaVersion || len(descriptor.OfflineConversions) != 11 {
 		t.Fatal(descriptor, err)
 	}
 	if strings.Contains(output.String(), "private-") {
