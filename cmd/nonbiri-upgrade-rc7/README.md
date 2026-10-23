@@ -3,9 +3,9 @@
 `nonbiri-upgrade-rc7` is the narrow wrapper around the
 [v1 offline converter](../nonbiri-upgrade-v1/README.md). It accepts only the
 exact rc.7 schema 16 source from `82f1711b674425745a768f781e0e0c34dcb37ac3`, or
-the current schema 33 database for a no-change `current` result. Published schema 17–26
-sources require `nonbiri-upgrade-v1`; normal server startup accepts only fresh
-storage or schema 33.
+the current schema 34 database for a no-change `current` result. Published schema 17–26
+sources require `nonbiri-upgrade-v1`; normal server startup accepts fresh storage
+and schema 34, with an atomic index upgrade for exact published schema 33.
 
 ```sh
 CGO_ENABLED=0 go build -trimpath -o nonbiri-upgrade-rc7 ./cmd/nonbiri-upgrade-rc7

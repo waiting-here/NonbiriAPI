@@ -85,11 +85,11 @@ func assertExactPublishedSource(t *testing.T, database *sql.DB, version int, man
 		t.Fatal("rollback changed original rows or identity high-water marks")
 	}
 	plan, err := storageSchema.plan(t.Context(), database)
-	if err != nil || len(plan.steps) == 0 || plan.steps[0].from != version || plan.target.version != 33 {
+	if err != nil || len(plan.steps) == 0 || plan.steps[0].from != version || plan.target.version != db.CurrentSchemaVersion {
 		t.Fatalf("restored source has no published conversion path: %+v, %v", plan, err)
 	}
 	for _, step := range plan.steps {
-		if step.from > 26 || step.version > 26 && step.version != 33 {
+		if step.from > 26 && step.from != 33 || step.version > 26 && step.version != 33 && step.version != 34 {
 			t.Fatalf("unreleased intermediate schema became a supported source: %+v", step)
 		}
 	}

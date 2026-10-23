@@ -23,8 +23,8 @@ func TestStorageContractsCompatibilityRegistryIsDetachedAndClosed(t *testing.T) 
 		}
 		seen[hash] = true
 	}
-	if len(seen) != 0 || descriptor.MinimumSchemaVersion != 33 || descriptor.SchemaVersion != 33 || len(descriptor.SourceSchemaVersions) != 0 || len(SchemaDescriptor().OfflineConversions) != 0 {
-		t.Fatal("runtime descriptor accepts historical storage", descriptor)
+	if len(seen) != 1 || !seen[Schema33ManifestHash] || descriptor.MinimumSchemaVersion != 33 || descriptor.SchemaVersion != 34 || !reflect.DeepEqual(descriptor.SourceSchemaVersions, []int{33}) || len(SchemaDescriptor().OfflineConversions) != 0 {
+		t.Fatal("runtime descriptor source registry drift", descriptor)
 	}
 	descriptor.SourceManifestHashes = append(descriptor.SourceManifestHashes, "unknown")
 	descriptor.SourceSchemaVersions = append(descriptor.SourceSchemaVersions, 999)

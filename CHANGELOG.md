@@ -4,6 +4,22 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## Unreleased
+
+### Fixed
+
+- Index endpoint-key references in request logs, dispatch claims, report targets
+  and donation keys so deleting a key avoids scanning unrelated history and
+  holding up session loading and other writes. Existing deletion and retention
+  behavior is preserved.
+
+### Storage
+
+- Fresh storage uses schema 34. Exact published schema 33 databases receive the
+  four indexes in one startup transaction with rollback on failure or cancellation.
+  The separate schema 16–26 converter targets the same schema; account export
+  remains 29.
+
 ## 1.1.1 — 2026-10-23
 
 ### Added

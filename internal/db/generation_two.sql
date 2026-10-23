@@ -6491,7 +6491,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,33);
+INSERT INTO schema_state(id,version) VALUES(1,34);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -7782,3 +7782,8 @@ CREATE INDEX idx_resource_operation_status_user ON resource_operation_status(use
 CREATE INDEX idx_lake_notes_cast_user ON lake_notes_casts(user_id);
 CREATE INDEX idx_rps_summary_seats_user ON game_rps_summary_seats(user_id) WHERE user_id IS NOT NULL;
 CREATE INDEX idx_rps_pending_results_session ON game_rps_pending_results(session_id_text);
+
+CREATE INDEX idx_request_logs_endpoint_key ON request_logs(endpoint_key_id);
+CREATE INDEX idx_dispatch_claims_endpoint_key ON dispatch_claims(endpoint_key_id);
+CREATE INDEX idx_report_targets_endpoint_key ON report_targets(endpoint_key_id);
+CREATE INDEX idx_donation_keys_endpoint_key ON donation_keys(endpoint_key_id);

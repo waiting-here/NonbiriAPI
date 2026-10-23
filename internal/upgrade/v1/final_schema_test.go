@@ -307,11 +307,11 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 
 func TestOfflineDescriptorContainsOnlyExactSupportedSources(t *testing.T) {
 	descriptor := SchemaDescriptor()
-	if descriptor.SchemaVersion != 33 || descriptor.MinimumSchemaVersion != 33 || len(descriptor.SourceSchemaVersions) != 0 || len(descriptor.OfflineConversions) != 11 {
+	if descriptor.SchemaVersion != 34 || descriptor.MinimumSchemaVersion != 33 || len(descriptor.SourceSchemaVersions) != 1 || descriptor.SourceSchemaVersions[0] != 33 || len(descriptor.OfflineConversions) != 11 {
 		t.Fatal(descriptor)
 	}
 	for index, source := range descriptor.OfflineConversions {
-		if source.SourceSchemaVersion != 16+index || source.TargetSchemaVersion != 33 || len(source.SourceCommit) != 40 || len(source.SourceManifestHash) != 64 || source.Tool != "nonbiri-upgrade-v1" {
+		if source.SourceSchemaVersion != 16+index || source.TargetSchemaVersion != 34 || len(source.SourceCommit) != 40 || len(source.SourceManifestHash) != 64 || source.Tool != "nonbiri-upgrade-v1" {
 			t.Fatal(source)
 		}
 	}

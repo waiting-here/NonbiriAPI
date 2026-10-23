@@ -57,7 +57,9 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 		addedTables:   []string{"channel_charity_binding_presets", "channel_charity_binding_mappings"},
 		controlTables: []string{"charity_models", "charity_price_templates"},
 		rebuiltTables: []string{"donation_key_backoffs", "dispatch_smart_backoff_facts"}, credentials: credentialsUnchanged}},
-	{from: 26, version: 33, manifest: db.PinnedGenerationTwoManifestHash, apply: extendConnections, impact: connectionsMigrationImpact},
+	{from: 26, version: 33, manifest: db.Schema33ManifestHash, apply: extendConnections, impact: connectionsMigrationImpact},
+	{from: 33, version: 34, manifest: db.PinnedGenerationTwoManifestHash, sql: db.EndpointKeyHistoryIndexesSQL, impact: &migrationImpact{
+		indexedTables: []string{"request_logs", "dispatch_claims", "report_targets", "donation_keys"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {
