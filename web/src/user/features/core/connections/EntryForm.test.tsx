@@ -5,7 +5,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../../test/unit/support';
 import { EntryForm } from './EntryForm';
 
-vi.mock('./CredentialGrantForm', () => ({ CredentialGrantForm: () => null }));
+vi.mock('./CredentialGrantForm', () => ({
+  CredentialGrantForm: ({ discoveryPreset }: { discoveryPreset?: { base_url: string } }) => (
+    <p data-testid="grant-preset">{discoveryPreset?.base_url ?? 'none'}</p>
+  ),
+}));
 
 const firstChannel = `mch_${'A'.repeat(22)}`;
 const secondChannel = `mch_${'B'.repeat(21)}A`;
@@ -180,6 +184,12 @@ describe('mainstream entry suggestions', () => {
     });
     expect(writes).toHaveLength(1);
     expect(writes[0]?.key).toBeTruthy();
+    expect(screen.getByTestId('grant-preset')).toHaveTextContent('https://example.com/models');
+    await view.user.selectOptions(
+      screen.getByRole('combobox', { name: 'Mainstream preset' }),
+      secondChannel,
+    );
+    expect(screen.getByTestId('grant-preset')).toHaveTextContent('https://example.com/models');
     expect(writes[0]?.body).toEqual({
       source: 'mainstream',
       channel_id: firstChannel,

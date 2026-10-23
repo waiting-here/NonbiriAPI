@@ -12,6 +12,7 @@ import {
 } from '@playwright/test';
 import common from '../../src/shared/i18n/common/en.json' with { type: 'json' };
 import adminEn from '../../src/admin/i18n/en.json' with { type: 'json' };
+import userEn from '../../src/user/i18n/en.json' with { type: 'json' };
 import type { NativeService } from '../../src/shared/nativeServices';
 import type { DonationUse } from '../../src/shared/operations/donationUses';
 
@@ -1533,5 +1534,166 @@ test('returned request alerts show source details and unresolved review state', 
     }
   } finally {
     await admin.close();
+  }
+});
+
+test('mainstream entry authorization applies, reuses and lets users decline the suggested catalog', async ({
+  browser,
+}, info) => {
+  const owner = await session(browser, 'owner');
+  const admin = await session(browser, 'admin');
+  const tag = 'Catalog default ' + randomUUID().slice(0, 8);
+  let group: Identity | undefined;
+  let channel: (Identity & { entries: { id: string; name: string }[] }) | undefined;
+  try {
+    group = await connection(owner, tag);
+    const saved = await credential(owner, group, tag, 'synthetic-catalog-' + randomUUID());
+    const base = await baseURL(owner);
+    channel = await adminAPI<Identity & { entries: { id: string; name: string }[] }>(
+      admin,
+      '/admin/api/mainstream-channels',
+      'POST',
+      {
+        name: tag,
+        category: 'api_platform',
+        enabled: true,
+        entries: [1, 2, 3].map((index) => ({
+          name: tag + ' ' + index,
+          connector_type: 'openai-compatible',
+          base_url: base,
+          native_services: ['chat_completions', 'responses'],
+          rerank_format: '',
+          enabled: true,
+        })),
+        discovery_source: { base_url: base, list_format: 'openai' },
+        model_mappings: [],
+      },
+    );
+    const page = await owner.newPage();
+    await page.goto(fixture().user_url + '/endpoints?connection_id=' + group.id);
+    await page.getByRole('button', { name: c.addEntry, exact: true }).click();
+    await page.getByRole('radio', { name: c.mainstream, exact: true }).check();
+    await page.getByRole('combobox', { name: c.mainstream, exact: true }).selectOption(channel.id);
+    for (const item of channel.entries)
+      await page.getByRole('checkbox', { name: item.name, exact: true }).check();
+    await page.getByRole('button', { name: c.saveEntries, exact: true }).click();
+    await expect(page.getByText(c.entrySaved, { exact: false })).toHaveCount(3);
+    const entries = (
+      await userAPI<Numbered<Entry & { note: string }>>(
+        owner,
+        '/api/connections/' + group.id + '/entries?page=1&page_size=20',
+      )
+    ).data;
+    const granted: Key[] = [];
+    for (const [index, item] of channel.entries.entries()) {
+      const form = page
+        .locator('section')
+        .filter({ has: page.getByRole('heading', { name: item.name, exact: true }) })
+        .last();
+      await form.getByRole('button', { name: c.select, exact: true }).click();
+      const defaultCatalog = form.getByLabel(c.useSuggestedCatalog, { exact: true });
+      await expect(defaultCatalog).toBeChecked();
+      if (index === 2) await defaultCatalog.uncheck();
+      if (index === 0) {
+        for (const width of [1440, 390])
+          for (const theme of ['light', 'dark'] as const)
+            await screenshot(
+              page,
+              info,
+              'suggested-catalog-authorization',
+              width,
+              theme,
+              defaultCatalog,
+              { credential_version: saved.credential_version, default_selected: true },
+            );
+      }
+      const target = entries.find((row) => row.note === item.name)!;
+      const written = responseFor(page, 'POST', '/api/endpoints/' + target.id + '/keys');
+      await form.getByRole('button', { name: c.authorizeEntry, exact: true }).click();
+      const response = await written;
+      expect(response.status()).toBe(201);
+      const grant = (await response.json()) as Key;
+      expect(grant.credential_id).toBe(saved.id);
+      expect(grant.credential_version).toBe(saved.credential_version);
+      expect(grant.native_services).toEqual(['chat_completions', 'responses']);
+      if (index === 0) expect(grant.discovery_source_id).not.toBeNull();
+      else
+        expect(grant.discovery_source_id).toBe(
+          index === 1 ? granted[0]!.discovery_source_id : null,
+        );
+      granted.push(grant);
+      await expect(form.getByText(c.grantSaved, { exact: true })).toBeVisible();
+    }
+    const sources = (
+      await userAPI<
+        Numbered<Source & { credential_id: string; base_url: string; list_format: string }>
+      >(owner, '/api/connections/' + group.id + '/discovery-sources?page=1&page_size=20')
+    ).data;
+    expect(sources).toHaveLength(1);
+    expect(sources[0]).toMatchObject({
+      id: granted[0]!.discovery_source_id,
+      credential_id: saved.id,
+      credential_version: saved.credential_version,
+      base_url: base,
+      list_format: 'openai',
+    });
+
+    const draft = await owner.newPage();
+    const first = entries.find((row) => row.note === channel!.entries[0]!.name)!;
+    await draft.goto(
+      fixture().user_url +
+        '/charity?tab=donate&endpoint_id=' +
+        first.id +
+        '&endpoint_q=' +
+        encodeURIComponent(first.note),
+    );
+    await draft
+      .getByRole('button', { name: userEn.user.charity.presentation.openPicker, exact: true })
+      .click();
+    const picker = draft.locator('.donation-resource-picker');
+    await picker.locator('.donation-resource-picker__key-list').getByRole('checkbox').check();
+    const selected = picker.getByRole('region', {
+      name: userEn.user.charity.resourcePicker.selectedTitle,
+      exact: true,
+    });
+    await expect(selected.getByLabel(native.chat_completions, { exact: true })).toBeChecked();
+    await expect(selected.getByLabel(native.responses, { exact: true })).toBeChecked();
+    await expect(selected.getByLabel(c.shareDiscovery, { exact: true })).toBeChecked();
+    for (const width of [1440, 390])
+      for (const theme of ['light', 'dark'] as const)
+        await screenshot(draft, info, 'suggested-catalog-donation-draft', width, theme, selected, {
+          services: granted[0]!.native_services,
+          discovery_source_id: granted[0]!.discovery_source_id,
+          submitted: false,
+        });
+  } finally {
+    try {
+      if (group) {
+        const current = await userAPI<Identity>(owner, '/api/connections/' + group.id);
+        await userAPI(
+          owner,
+          '/api/connections/' + group.id,
+          'DELETE',
+          { expected_revision: current.revision },
+          204,
+        );
+      }
+      if (channel) {
+        const current = await adminAPI<Identity>(
+          admin,
+          '/admin/api/mainstream-channels/' + channel.id,
+        );
+        await adminAPI(
+          admin,
+          '/admin/api/mainstream-channels/' + channel.id,
+          'DELETE',
+          { expected_revision: current.revision, confirmation: 'retire' },
+          204,
+        );
+      }
+    } finally {
+      await owner.close();
+      await admin.close();
+    }
   }
 });

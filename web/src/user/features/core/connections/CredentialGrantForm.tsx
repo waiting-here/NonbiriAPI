@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Field, Fold, Note, Segmented } from '@shared/components/ui';
+import type { DiscoveryPreset } from '@shared/connections';
 import { NativeServicesField } from '@shared/components/NativeServicesField';
 import { KeyLimitFields, KeyLimitSummary } from '@shared/components/KeyRoutingLimits';
 import type { NativeService } from '@shared/nativeServices';
@@ -20,11 +21,13 @@ export function CredentialGrantForm({
   accountId,
   connectionId,
   endpoint,
+  discoveryPreset,
   onSaved,
 }: {
   accountId: string;
   connectionId: string;
   endpoint: Endpoint;
+  discoveryPreset?: DiscoveryPreset;
   onSaved?: (key: EndpointKey) => void;
 }) {
   const { t } = useTranslation();
@@ -33,6 +36,9 @@ export function CredentialGrantForm({
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [credential, setCredential] = useState<Credential | null>(null);
   const [source, setSource] = useState<DiscoverySource | null>(null);
+  const [useSuggestion, setUseSuggestion] = useState(Boolean(discoveryPreset));
+  const [saving, setSaving] = useState(false);
+  const sourceOperation = useConnectionOperation(accountId, () => undefined);
   const [services, setServices] = useState<NativeService[]>(
     endpoint.native_services?.slice() ?? [],
   );
@@ -46,7 +52,53 @@ export function CredentialGrantForm({
       onSaved?.(result.key);
     }
   });
-  const locked = operation.isPending || operation.outcome === 'unknown';
+  const locked =
+    saving ||
+    operation.isPending ||
+    operation.outcome === 'unknown' ||
+    operation.outcome === 'refresh-failed' ||
+    sourceOperation.isPending ||
+    sourceOperation.outcome === 'unknown' ||
+    sourceOperation.outcome === 'refresh-failed';
+  const save = async () => {
+    if (!credential) return;
+    setSaving(true);
+    try {
+      let selectedSource = source;
+      if (useSuggestion && discoveryPreset) {
+        const result = await sourceOperation
+          .run({
+            kind: 'discovery_source',
+            connectionId,
+            suggestedCredentialVersion: credential.credential_version,
+            input: { ...discoveryPreset, credential_id: credential.id, enabled: true },
+          })
+          .catch(() => null);
+        if (!result || result.kind !== 'discovery_source') return;
+        selectedSource = result.source;
+      }
+      await operation
+        .run({
+          kind: 'key',
+          endpointId: endpoint.id,
+          input: {
+            credential_id: credential.id,
+            native_services: services,
+            discovery_source_id: selectedSource?.id ?? null,
+            note: note.trim(),
+            enabled: true,
+            force_store_false:
+              supportsChatStoragePolicy(endpoint.connector_type) && forceStoreFalse,
+            ownership_confirmed: true,
+            max_concurrency: Number(concurrency),
+            max_rpm: Number(rpm),
+          },
+        })
+        .catch(() => undefined);
+    } finally {
+      setSaving(false);
+    }
+  };
   const pick = (value: Credential) => {
     setCredential(value);
     setSource(null);
@@ -105,24 +157,7 @@ export function CredentialGrantForm({
           className="nb-form"
           onSubmit={(event) => {
             event.preventDefault();
-            void operation
-              .run({
-                kind: 'key',
-                endpointId: endpoint.id,
-                input: {
-                  credential_id: credential.id,
-                  native_services: services,
-                  discovery_source_id: source?.id ?? null,
-                  note: note.trim(),
-                  enabled: true,
-                  force_store_false:
-                    supportsChatStoragePolicy(endpoint.connector_type) && forceStoreFalse,
-                  ownership_confirmed: true,
-                  max_concurrency: Number(concurrency),
-                  max_rpm: Number(rpm),
-                },
-              })
-              .catch(() => undefined);
+            void save();
           }}
         >
           <NativeServicesField
@@ -161,6 +196,28 @@ export function CredentialGrantForm({
             disabled={locked}
           />
           <Note>{t('common.connections.separateLimits')}</Note>
+          {discoveryPreset ? (
+            <Field
+              label={t('common.connections.useSuggestedCatalog')}
+              help={t('common.connections.suggestedCatalogHelp')}
+            >
+              {(props) => (
+                <input
+                  {...props}
+                  type="checkbox"
+                  checked={useSuggestion}
+                  disabled={locked}
+                  onChange={(event) => {
+                    setUseSuggestion(event.target.checked);
+                    if (event.target.checked) setSource(null);
+                  }}
+                />
+              )}
+            </Field>
+          ) : null}
+          {discoveryPreset && useSuggestion ? (
+            <p className="nb-small nb-muted nb-mono">{discoveryPreset.base_url}</p>
+          ) : null}
           <Fold title={t('common.connections.discoveryOptional')}>
             {source ? (
               <Note>
@@ -170,7 +227,10 @@ export function CredentialGrantForm({
                   type="button"
                   className="nb-btn nb-btn--secondary"
                   disabled={locked}
-                  onClick={() => setSource(null)}
+                  onClick={() => {
+                    setSource(null);
+                    setUseSuggestion(false);
+                  }}
                 >
                   {t('common.connections.noDiscovery')}
                 </button>
@@ -216,7 +276,10 @@ export function CredentialGrantForm({
                         type="button"
                         className="nb-btn nb-btn--secondary"
                         disabled={locked || !compatible}
-                        onClick={() => setSource(row)}
+                        onClick={() => {
+                          setSource(row);
+                          setUseSuggestion(false);
+                        }}
                       >
                         {compatible
                           ? t('common.connections.useSource')
@@ -228,6 +291,11 @@ export function CredentialGrantForm({
               ]}
             />
           </Fold>
+          {sourceOperation.outcome === 'conflict' ? (
+            <Note tone="warn">{t('common.connections.credentialChangedForCatalog')}</Note>
+          ) : (
+            <ConnectionOperationNotice operation={sourceOperation} />
+          )}
           <ConnectionOperationNotice operation={operation} />
           <div className="nb-actions">
             <button
