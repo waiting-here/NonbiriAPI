@@ -103,6 +103,7 @@
       "emptyBody": "管理员 API 没有返回告警记录。",
       "action": "操作",
       "kindValue": {
+        "returnDetected": "请求回流",
         "fetchFailed": "拉取失败",
         "forwardError": "转发错误",
         "registrationRejected": "注册被拒绝",
@@ -136,6 +137,7 @@
         "deletionSnapshot": "删除前余额"
       },
       "kindDescription": {
+        "returnDetected": "发现带有本站出站标记的请求。请核查来源；请求照常处理，未自动处罚。",
         "fetchFailed": "模型列表获取失败，请检查服务地址和密钥。",
         "forwardError": "上游调用未完成，可在详情中查看失败信息。",
         "registrationRejected": "一次注册请求未通过站点准入条件。",
@@ -148,6 +150,12 @@
         "workerCheckpointFailed": "后台任务未能保存进度，请查看详情。",
         "invariantViolation": "系统数据检查发现异常，需要检查。",
         "accountDeleted": "用户已删除账号，可查看删号时的资料快照。"
+      },
+      "returnDetectedFacts": {
+        "subtype": "提示类型",
+        "marker_issued_at": "原请求发出时间",
+        "source_request_id": "原请求记录",
+        "returned_request_id": "回流请求记录"
       },
       "subjectUser": "用户 #{{id}}"
     },

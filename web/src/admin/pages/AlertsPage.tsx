@@ -414,7 +414,9 @@ export function AlertsPage() {
           ) : detail.data ? (
             <div className="ops-stack">
               <p>
-                {kindLabels[detail.data.alert.kind]} · {kindDescriptions[detail.data.alert.kind]}
+                {detail.data.alert.subtype === 'return_detected'
+                  ? `${t('admin.alerts.kindValue.returnDetected')} · ${t('admin.alerts.kindDescription.returnDetected')}`
+                  : `${kindLabels[detail.data.alert.kind]} · ${kindDescriptions[detail.data.alert.kind]}`}
               </p>
               <p className="alert-original-message">{detail.data.alert.message}</p>
               <dl className="ops-kv">
@@ -438,8 +440,18 @@ export function AlertsPage() {
                 <dl className="ops-kv">
                   {detail.data.occurred_facts.map((fact, index) => (
                     <div key={`${fact.key}:${index}`}>
-                      <dt>{copy.factNames[fact.key as keyof typeof copy.factNames] ?? fact.key}</dt>
-                      <dd>{fact.value}</dd>
+                      <dt>
+                        {detail.data.alert.subtype === 'return_detected'
+                          ? t(`admin.alerts.returnDetectedFacts.${fact.key}`, { defaultValue: fact.key })
+                          : (copy.factNames[fact.key as keyof typeof copy.factNames] ?? fact.key)}
+                      </dt>
+                      <dd>
+                        {detail.data.alert.subtype === 'return_detected' && fact.key === 'subtype'
+                          ? t('admin.alerts.kindValue.returnDetected')
+                          : detail.data.alert.subtype === 'return_detected' && fact.key === 'marker_issued_at'
+                            ? formatDateTime(Number(fact.value))
+                            : fact.value}
+                      </dd>
                     </div>
                   ))}
                 </dl>
@@ -684,7 +696,9 @@ export function AlertsPage() {
                     key: 'kind',
                     header: t('admin.alerts.kind'),
                     cell: 'title',
-                    render: (alert) => kindLabels[alert.kind],
+                    render: (alert) => alert.subtype === 'return_detected'
+                      ? t('admin.alerts.kindValue.returnDetected')
+                      : kindLabels[alert.kind],
                   },
                   {
                     key: 'message',
@@ -693,7 +707,11 @@ export function AlertsPage() {
                     cell: 'meta',
                     render: (alert) => (
                       <div>
-                        <p className="alert-description">{kindDescriptions[alert.kind]}</p>
+                        <p className="alert-description">
+                          {alert.subtype === 'return_detected'
+                            ? t('admin.alerts.kindDescription.returnDetected')
+                            : kindDescriptions[alert.kind]}
+                        </p>
                         {alert.account_deletion ? (
                           <Fold plain title={t('admin.alerts.presentation.deletionSnapshot')}>
                             <p>{t('admin.alerts.deletionSnapshot')}</p>

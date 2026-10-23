@@ -236,6 +236,9 @@ func projectAlert(row rawAlert) (AdminAlert, error) {
 		ref := row.ref
 		value.Ref = &ref
 	}
+	if value.Kind == KindForwardError && strings.HasPrefix(row.ref, returnDetectedPrefix) {
+		value.Subtype = "return_detected"
+	}
 	if row.subjectUserID.Valid {
 		subject := strconv.FormatInt(row.subjectUserID.Int64, 10)
 		value.SubjectUserID = &subject

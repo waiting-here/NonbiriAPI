@@ -36,6 +36,7 @@ type AdminAlert struct {
 	AccountDeletion *AccountDeletion `json:"account_deletion,omitempty"`
 	ID              string           `json:"id"`
 	Kind            Kind             `json:"kind"`
+	Subtype         string           `json:"subtype,omitempty"`
 	Message         string           `json:"message"`
 	Ref             *string          `json:"ref"`
 	SubjectUserID   *string          `json:"subject_user_id"`

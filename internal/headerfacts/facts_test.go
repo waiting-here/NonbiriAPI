@@ -71,6 +71,14 @@ func TestHeaderIPv4OnNamesAndNonUTF8Values(t *testing.T) {
 		t.Fatal("stored fact changed")
 	}
 }
+
+func TestOutboundOriginMarkerIsRedactedBeforePersistence(t *testing.T) {
+	fact := Capture(http.Header{"NoNbIrI-ReQuEsT-OrIgIn": {"valid-opaque-marker"}}, "", 0, time.Now())
+	view := decodeFact(t, fact, false)
+	if len(view.Headers) != 1 || view.Headers[0].Value != "[redacted]" {
+		t.Fatal("origin marker leaked through saved headers")
+	}
+}
 func TestEmptyOverflowAndAttemptIsolation(t *testing.T) {
 	if fact := Capture(nil, "", 0, time.Now()); fact.State() != "saved" || len(decodeFact(t, fact, false).Headers) != 0 {
 		t.Fatal("empty capture missing")

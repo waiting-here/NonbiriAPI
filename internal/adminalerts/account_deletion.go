@@ -61,6 +61,9 @@ func RecordAccountDeletionTx(ctx context.Context, tx *sql.Tx, before *DeletionBe
 		return ErrInvalidRequest
 	}
 	userID, at := before.UserID, before.DecisionNow
+	if err := anonymizeReturnAlertsTx(ctx, tx, userID); err != nil {
+		return err
+	}
 	snapshot := AccountDeletion{UserID: strconv.FormatInt(userID, 10), SketchPaper: "0", SketchBrush: "0"}
 	snapshot.SnapshotVersion = 2
 	snapshot.RegisteredAt = &before.RegisteredAt

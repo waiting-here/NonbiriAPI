@@ -62,6 +62,7 @@ func CredentialName(name string) bool {
 	n := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
 	switch n {
 	case "authorization", "proxy-authorization", "cookie", "set-cookie",
+		"nonbiri-request-origin",
 		"authentication-info", "proxy-authentication-info", "api-key", "apikey",
 		"x-api-key", "x-apikey", "x-goog-api-key", "x-auth", "x-authorization":
 		return true

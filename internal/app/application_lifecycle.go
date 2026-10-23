@@ -200,6 +200,9 @@ func (a *application) CloseContext(ctx context.Context) error {
 			if a.forward != nil {
 				closeResource(a.forward.Close)
 			}
+			if a.returnAlerts != nil {
+				closeResource(a.returnAlerts.Close)
+			}
 			if a.audits != nil {
 				closeResource(a.audits.Close)
 			}
