@@ -1,11 +1,15 @@
 import { screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../../test/unit/support';
 import common from '@shared/i18n/common/en.json';
 import { ApiError } from '@shared/query/http';
 import type { ConnectionIntent, ConnectionResult } from './resourceOperation';
 import { DirectoryBatch } from './DirectoryBatch';
-const mocks = vi.hoisted(() => ({ run: vi.fn() }));
+import type { OperationOutcome } from '@shared/operations/useRetainedOperation';
+const mocks = vi.hoisted(() => ({ run: vi.fn(), outcome: 'idle' as OperationOutcome }));
+afterEach(() => {
+  mocks.outcome = 'idle';
+});
 vi.mock('./ManualCatalog', () => ({
   ManualCatalog: ({ onPick }: { onPick: (entry: object, key: object) => void }) => (
     <button
@@ -28,7 +32,7 @@ vi.mock('./useConnectionOperation', () => ({
       onSaved(result);
       return result;
     },
-    outcome: 'idle',
+    outcome: mocks.outcome,
     isPending: false,
     error: null,
     refreshError: null,
@@ -37,6 +41,72 @@ vi.mock('./useConnectionOperation', () => ({
   }),
 }));
 describe('directory model batch', () => {
+  it('uses the same readiness for individual and batch saves when the upstream name is empty', async () => {
+    mocks.run.mockClear();
+    const c = common.common.connections;
+    const view = await renderWithProviders(
+      <DirectoryBatch
+        accountId="1"
+        rows={[
+          {
+            id: '1',
+            upstream_model_id: 'model-a',
+            provider: 'demo',
+            native_services: [],
+            service_evidence: 'unknown',
+            needs_service_selection: true,
+          },
+        ]}
+      />,
+      { station: 'user', role: 'user' },
+    );
+    await view.user.click(screen.getByText(c.chooseEntry, { selector: 'strong' }));
+    await view.user.click(screen.getByRole('button', { name: 'Choose shared grant' }));
+    const row = screen.getByText('model-a', { selector: 'strong' }).closest('details')!;
+    await view.user.click(within(row).getByRole('checkbox', { name: 'Shared entry · model-a' }));
+    await view.user.click(
+      within(row).getByRole('checkbox', { name: common.common.modelTypes.responses }),
+    );
+    await view.user.click(
+      within(row).getByRole('checkbox', { name: common.common.modelTypes.chat_responses }),
+    );
+    const single = within(row).getByRole('button', { name: c.saveMapping });
+    const batch = screen.getByRole('button', {
+      name: c.saveSelectedModels.replace('{{count}}', '1'),
+    });
+    expect(single).toBeEnabled();
+    expect(batch).toBeEnabled();
+    const upstream = within(row).getByLabelText(c.upstreamModel + ' · Shared entry');
+    await view.user.clear(upstream);
+    expect(single).toBeDisabled();
+    expect(batch).toBeDisabled();
+    await view.user.type(upstream, '  ');
+    expect(single).toBeDisabled();
+    expect(batch).toBeDisabled();
+    await view.user.clear(upstream);
+    await view.user.type(upstream, 'model-a');
+    expect(single).toBeEnabled();
+    mocks.outcome = 'refresh-failed';
+    view.rerender(
+      <DirectoryBatch
+        accountId="1"
+        rows={[
+          {
+            id: '1',
+            upstream_model_id: 'model-a',
+            provider: 'demo',
+            native_services: [],
+            service_evidence: 'unknown',
+            needs_service_selection: true,
+          },
+        ]}
+      />,
+    );
+    expect(single).toBeDisabled();
+    expect(batch).toBeDisabled();
+    await view.user.click(single);
+    expect(mocks.run).not.toHaveBeenCalled();
+  });
   it('requires explicit services and retries only unfinished stages after one model fails', async () => {
     const c = common.common.connections;
     let failed = false;
@@ -99,6 +169,9 @@ describe('directory model batch', () => {
     await waitFor(() => expect(screen.getAllByText(c.mappingSaved)).toHaveLength(2));
     const intents = mocks.run.mock.calls.map(([intent]) => intent as ConnectionIntent);
     expect(intents.filter((intent) => intent.kind === 'manual')).toHaveLength(2);
+    expect(
+      intents.filter((intent) => intent.kind === 'manual').every((intent) => intent.reuseExisting),
+    ).toBe(true);
     expect(
       intents.filter((intent) => intent.kind === 'model' && intent.input.model === 'model-a'),
     ).toHaveLength(1);
