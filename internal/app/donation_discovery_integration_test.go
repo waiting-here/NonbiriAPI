@@ -14,13 +14,15 @@ import (
 
 func TestManagedDonationDiscoveryRegisteredSessionRoutes(t *testing.T) {
 	for _, share := range []bool{true, false} {
-		t.Run(fmt.Sprintf("shared=%t", share), func(t *testing.T) {
-			testManagedDonationDiscoveryRegisteredSessionRoutes(t, share)
-		})
+		for _, approved := range []bool{false, true} {
+			t.Run(fmt.Sprintf("explicit-source=%t/approved=%t", share, approved), func(t *testing.T) {
+				testManagedDonationDiscoveryRegisteredSessionRoutes(t, share, approved)
+			})
+		}
 	}
 }
 
-func testManagedDonationDiscoveryRegisteredSessionRoutes(t *testing.T, share bool) {
+func testManagedDonationDiscoveryRegisteredSessionRoutes(t *testing.T, share, approve bool) {
 	t.Helper()
 	f := newGameWireFixture(t)
 	exec := func(query string, args ...any) int64 {
@@ -58,10 +60,12 @@ func testManagedDonationDiscoveryRegisteredSessionRoutes(t *testing.T, share boo
 		t.Fatalf("create: %d %s", created.Code, created.Body)
 	}
 	key := d.Keys[0].ID
-	approved := testApplicationRequest(t, f.app.handler, "POST", auditAdminHost, "/admin/api/donations/"+d.ID+"/review",
-		fmt.Sprintf(`{"decision":"approve","expected_revision":%q,"reason":"Approved","key_settings":[{"donation_key_id":%q,"enabled":true,"price_limit":null,"calls_limit":null,"tokens_limit":null,"token_reserve":0,"safe_note":"","expires_at":null}]}`, d.Revision, key), f.adminCookies, headers(auditAdminHost, "A"))
-	if approved.Code != 200 {
-		t.Fatalf("approve: %d %s", approved.Code, approved.Body)
+	if approve {
+		approved := testApplicationRequest(t, f.app.handler, "POST", auditAdminHost, "/admin/api/donations/"+d.ID+"/review",
+			fmt.Sprintf(`{"decision":"approve","expected_revision":%q,"reason":"Approved","key_settings":[{"donation_key_id":%q,"enabled":true,"price_limit":null,"calls_limit":null,"tokens_limit":null,"token_reserve":0,"safe_note":"","expires_at":null}]}`, d.Revision, key), f.adminCookies, headers(auditAdminHost, "A"))
+		if approved.Code != 200 {
+			t.Fatalf("approve: %d %s", approved.Code, approved.Body)
+		}
 	}
 	path := "/api/steward/donations/" + d.ID + "/keys/" + key + "/models"
 	for _, suffix := range []string{"/refresh", "/discovery"} {
@@ -76,33 +80,10 @@ func testManagedDonationDiscoveryRegisteredSessionRoutes(t *testing.T, share boo
 	}
 	exec(`UPDATE users SET level=6 WHERE id=?`, f.userID)
 	selected := testApplicationRequest(t, f.app.handler, "POST", auditUserHost, "/api/steward/donation-keys/models/refresh/selection", `{"donation_id":null,"cursor":null}`, f.cookies, headers(auditUserHost, "S"))
-	if selected.Code != 200 || strings.Contains(selected.Body.String(), `"key_id":"`+key+`"`) != share {
+	if selected.Code != 200 || !strings.Contains(selected.Body.String(), `"key_id":"`+key+`"`) {
 		t.Fatalf("select: %d %s", selected.Code, selected.Body)
 	}
-	if !share {
-		for _, admin := range []bool{false, true} {
-			host, cookies, prefix := auditUserHost, f.cookies, "/api/steward"
-			if admin {
-				host, cookies, prefix = auditAdminHost, f.adminCookies, "/admin/api"
-			}
-			for _, suffix := range []string{"/refresh", "/discovery"} {
-				method := "POST"
-				if suffix == "/discovery" {
-					method = "GET"
-				}
-				response := testApplicationRequest(t, f.app.handler, method, host,
-					prefix+"/donations/"+d.ID+"/keys/"+key+"/models"+suffix, "", cookies, headers(host, "N"))
-				if response.Code != http.StatusLocked || !strings.Contains(response.Body.String(), `"code":"discovery_not_shared"`) || !strings.Contains(response.Body.String(), `"source":"platform"`) {
-					t.Fatalf("unshared %s %s: %d %s", host, suffix, response.Code, response.Body)
-				}
-			}
-		}
-		var count int
-		if err := f.store.DB().QueryRow(`SELECT count(*) FROM accepted_operations WHERE kind='model_discovery'`).Scan(&count); err != nil || count != 0 {
-			t.Fatalf("unshared catalog accepted an operation: %d %v", count, err)
-		}
-		return
-	}
+
 	for _, testcase := range []struct{ body, origin, query string }{{"{}", "http://" + auditUserHost, ""}, {"", "https://foreign.example.test", ""}, {"", "http://" + auditUserHost, "?q=x"}} {
 		h := headers(auditUserHost, "R")
 		h["Origin"] = testcase.origin
@@ -124,6 +105,12 @@ func testManagedDonationDiscoveryRegisteredSessionRoutes(t *testing.T, share boo
 	read := testApplicationRequest(t, f.app.handler, "GET", auditAdminHost, adminPath+"/discovery", "", f.adminCookies, nil)
 	if read.Code != 200 || read.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("admin read: %d %s", read.Code, read.Body)
+	}
+	if !approve {
+		var uses int
+		if err := f.store.DB().QueryRow("SELECT COUNT(*) FROM charity_use_availability WHERE donation_key_id=?", key).Scan(&uses); err != nil || uses != 0 {
+			t.Fatalf("pending discovery granted inference: %d %v", uses, err)
+		}
 	}
 	exec(`UPDATE users SET level=4 WHERE id=?`, f.userID)
 	revoked := testApplicationRequest(t, f.app.handler, "POST", auditUserHost, path+"/refresh", "", f.cookies, headers(auditUserHost, "R"))

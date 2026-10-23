@@ -273,7 +273,7 @@ func TestManagedDiscoveryReleased26SharedSource(t *testing.T) {
 		}
 	}
 	source, err := connectionstore.LoadDiscoveryAuthorizationTx(t.Context(), tx, connectionstore.SourceAuthorizationRef{OwnerUserID: e.donorID, SourceID: selected.SourceID, Purpose: connectionstore.SourceCharity, DonationUseID: selected.Use.UseID})
-	if err != nil || source.UseApprovedRevisionID != selected.Use.ApprovedRevisionID || source.CredentialVersionID != selected.Use.Grant.CredentialVersionID {
+	if err != nil || source.UseApprovedRevisionID != selected.Use.RevisionID || source.CredentialVersionID != selected.Use.Grant.CredentialVersionID {
 		t.Fatalf("released selection lost its exact approved authorization: %+v %v", source, err)
 	}
 }

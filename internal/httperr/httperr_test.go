@@ -85,7 +85,6 @@ func TestStatusMapping(t *testing.T) {
 		CodeDebugDryRunIntercepted:  http.StatusUnprocessableEntity,
 		CodeDebugLiveResultCaptured: http.StatusUnprocessableEntity,
 		CodeResourceLocked:          http.StatusLocked,
-		CodeDiscoveryNotShared:      http.StatusLocked,
 		CodeInternal:                http.StatusInternalServerError,
 	}
 	for code, wantStatus := range cases {
@@ -170,7 +169,7 @@ func TestStableCodeClosedSet(t *testing.T) {
 		CodeElevationRequired, CodeFeatureDisabled, CodeInsufficientCredits,
 		CodeCharitySuspended, CodeCheckinCapReached, CodeNotFound,
 		CodeMethodNotAllowed, CodeConflict, CodeAlreadyCheckedIn,
-		CodePayloadTooLarge, CodeResourceLimitExceeded, CodeResourceLocked, CodeDiscoveryNotShared,
+		CodePayloadTooLarge, CodeResourceLimitExceeded, CodeResourceLocked,
 		CodeRateLimited, CodeUpstream, CodeMaintenance, CodeServiceUnavailable,
 		CodeUnboundModel, CodeInternal, CodeDebugDryRunIntercepted,
 		CodeDebugLiveResultCaptured, CodeDebugLiveCancelled,
@@ -390,7 +389,7 @@ func TestSourceAttributionDerivedAtWireSink(t *testing.T) {
 		CodeServiceUnavailable, CodeResourceLimitExceeded,
 		CodeInsufficientCredits, CodeFeatureDisabled, CodeCharitySuspended,
 		CodeContentTooShort, CodeAlreadyCheckedIn, CodeCheckinCapReached,
-		CodeResourceLocked, CodeDiscoveryNotShared, CodeDebugDryRunIntercepted,
+		CodeResourceLocked, CodeDebugDryRunIntercepted,
 		CodeDebugLiveResultCaptured, CodeDebugLiveCancelled,
 	}
 	for _, code := range upstream {

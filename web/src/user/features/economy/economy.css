@@ -218,29 +218,6 @@
   min-width: 0;
 }
 
-.donation-share-fields__source > .nb-field {
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  column-gap: var(--nb-space-2);
-}
-
-.donation-share-fields__source .nb-field__label {
-  grid-column: 2;
-  min-height: var(--nb-space-10);
-  align-items: center;
-  cursor: pointer;
-}
-
-.donation-share-fields__source input[type='checkbox'] {
-  grid-column: 1;
-  grid-row: 1;
-}
-
-.donation-share-fields__source .nb-field__help {
-  grid-column: 1 / -1;
-  overflow-wrap: anywhere;
-}
-
 .economy-disclosure,
 .economy-review-result,
 .economy-thursday-result {

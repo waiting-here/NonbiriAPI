@@ -5,24 +5,12 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
 func defaultDiscoveryFormat(kind contract.Type) string {
-	switch kind.ConfigurationType() {
-	case contract.TypeOpenAICompatible:
-		return "openai"
-	case contract.TypeAnthropicCompatible:
-		return "anthropic"
-	case contract.TypeGoogleGemini:
-		return "gemini"
-	case contract.TypeAISDKGatewayV3:
-		return "ai-sdk-gateway-v3"
-	case contract.TypeAISDKGatewayV4:
-		return "ai-sdk-gateway-v4"
-	default:
-		return ""
-	}
+	return connectionstore.DefaultDiscoveryFormat(kind)
 }
 
 func createDiscoverySourceTx(ctx context.Context, tx *sql.Tx, userID, connectionID, credentialID, versionID int64, name, baseURL, listFormat string, enabled bool, now int64) (int64, int64, error) {

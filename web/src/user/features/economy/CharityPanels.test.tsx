@@ -823,16 +823,12 @@ describe('donation composer recovery', () => {
     await rendered.user.click(screen.getByLabelText('Select resource key 62'));
     expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
-    await waitFor(() =>
-      expect(screen.getByRole('checkbox', { name: 'Share this catalog' })).toBeChecked(),
-    );
+    expect(screen.queryByRole('checkbox', { name: 'Share this catalog' })).toBeNull();
     await rendered.user.click(screen.getByRole('checkbox', { name: 'Responses' }));
-    await rendered.user.click(screen.getByRole('checkbox', { name: 'Share this catalog' }));
     await rendered.user.click(screen.getByLabelText('Select resource key 62'));
     await rendered.user.click(screen.getByLabelText('Select resource key 62'));
     await rendered.queryClient.invalidateQueries({ queryKey: ['user'] });
     expect(screen.getByRole('checkbox', { name: 'Responses' })).not.toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Share this catalog' })).not.toBeChecked();
     await rendered.user.type(
       screen.getByRole('textbox', { name: /donation description/i }),
       'Share selected services',

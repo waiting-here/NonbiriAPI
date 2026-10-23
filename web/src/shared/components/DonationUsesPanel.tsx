@@ -424,19 +424,29 @@ function UseRow({
         </button>
       ) : null}
       {row.approved ? (
-        <VersionMaterial label={t('common.connections.approvedVersion')} value={row.approved} />
+        <VersionMaterial
+          label={t('common.connections.approvedVersion')}
+          value={row.approved}
+          showDiscovery={role === 'owner' || Boolean(row.pending)}
+        />
       ) : null}
       {row.pending ? (
-        <VersionMaterial label={t('common.connections.pendingVersion')} value={row.pending} />
+        <VersionMaterial
+          label={t('common.connections.pendingVersion')}
+          value={row.pending}
+          showDiscovery={role === 'owner'}
+        />
       ) : null}
       {!row.pending && row.latest && row.latest.status !== 'approved' ? (
         <VersionMaterial label={t('common.connections.latestDecision')} value={row.latest} />
       ) : null}
-      {role !== 'owner' && row.approved?.discovery_source_id ? (
-        <UseDiscovery role={role} accountId={accountId} row={row} />
-      ) : null}
-      {row.approved && (!row.approved.discovery_source_id || !row.discovery_enabled) ? (
-        <Note>{t('common.donationDiscovery.status.not_shared')}</Note>
+      {role !== 'owner' && (row.approved || row.pending) ? (
+        <UseDiscovery
+          key={`${row.id}:${row.revision}`}
+          role={role}
+          accountId={accountId}
+          row={row}
+        />
       ) : null}
       {row.health ? (
         <Note>
@@ -477,18 +487,6 @@ function UseRow({
                 }}
               >
                 {t('common.connections.withdrawPending')}
-              </button>
-            ) : null}
-            {row.approved?.discovery_source_id || row.pending?.discovery_source_id ? (
-              <button
-                type="button"
-                className="nb-btn nb-btn--secondary"
-                disabled={locked}
-                onClick={() => run('patch', { discovery_enabled: !row.discovery_enabled })}
-              >
-                {row.discovery_enabled
-                  ? t('common.connections.stopDiscoverySharing')
-                  : t('common.connections.resumeDiscoverySharing')}
               </button>
             ) : null}
           </>
@@ -540,7 +538,15 @@ function UseRow({
     </Fold>
   );
 }
-function VersionMaterial({ label, value }: { label: string; value: UseVersion }) {
+function VersionMaterial({
+  label,
+  value,
+  showDiscovery = true,
+}: {
+  label: string;
+  value: UseVersion;
+  showDiscovery?: boolean;
+}) {
   const { t } = useTranslation();
   return (
     <div className="nb-stack nb-stack--sm">
@@ -560,7 +566,7 @@ function VersionMaterial({ label, value }: { label: string; value: UseVersion })
           ? t('common.connections.reviewMaterialAvailable')
           : t('common.connections.reviewMaterialUnavailable')}
       </p>
-      {value.discovery ? (
+      {showDiscovery && value.discovery ? (
         <p className="nb-sub">
           {t('common.connections.sharedDiscoveryState', {
             state: t(`common.connections.sourceStates.${value.discovery.state}`),

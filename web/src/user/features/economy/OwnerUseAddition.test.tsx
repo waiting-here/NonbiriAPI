@@ -177,17 +177,13 @@ describe('owner explicit service additions', () => {
     expect(await screen.findByRole('checkbox', { name: 'Responses' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Embeddings' })).toBeChecked();
     expect(screen.queryByRole('checkbox', { name: 'Chat completions' })).toBeNull();
-    await waitFor(() =>
-      expect(screen.getByRole('checkbox', { name: 'Share this catalog' })).toBeChecked(),
-    );
+    expect(screen.queryByRole('checkbox', { name: 'Share this catalog' })).toBeNull();
     await view.user.click(screen.getByRole('checkbox', { name: 'Embeddings' }));
-    await view.user.click(screen.getByRole('checkbox', { name: 'Share this catalog' }));
     await view.queryClient.invalidateQueries({ queryKey: ['user'] });
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Submit services for review' })).toBeEnabled(),
     );
     expect(screen.getByRole('checkbox', { name: 'Embeddings' })).not.toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Share this catalog' })).not.toBeChecked();
     await view.user.click(screen.getByRole('button', { name: 'Submit services for review' }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toMatchObject({
@@ -249,7 +245,6 @@ describe('owner explicit service additions', () => {
     expect(screen.getByRole('button', { name: 'Submit services for review' })).toBeDisabled();
     await view.user.click(responses);
     await view.user.click(screen.getByRole('checkbox', { name: 'Embeddings' }));
-    await view.user.click(screen.getByRole('checkbox', { name: 'Share this catalog' }));
     await view.user.click(screen.getByRole('button', { name: 'Submit services for review' }));
     await screen.findByText('Services submitted for review.');
     expect(writes).toHaveLength(2);
@@ -265,8 +260,8 @@ describe('owner explicit service additions', () => {
         { native_service: 'responses', expected_revision: '9' },
         { native_service: 'embeddings', expected_revision: null },
       ],
-      discovery_source_id: '51',
-      discovery_source_revision: '7',
+      discovery_source_id: null,
+      discovery_source_revision: null,
     });
     expect(mocks.read).toHaveBeenCalledWith('11', '5', expect.any(AbortSignal));
     await screen.findByRole('heading', { name: 'Donation uses by service' });
@@ -319,14 +314,12 @@ describe('owner explicit service additions', () => {
       user: { id: '1', username: 'owner', effective_level: 1 },
     });
     await view.user.click(await screen.findByRole('checkbox', { name: 'Responses' }));
-    await view.user.click(screen.getByRole('checkbox', { name: 'Share this catalog' }));
     await view.user.click(screen.getByRole('button', { name: 'Submit services for review' }));
     await screen.findByText(/Credential changed/);
     await waitFor(() => expect(mocks.read).toHaveBeenCalledTimes(2));
     expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
     expect(screen.getByRole('button', { name: 'Submit services for review' })).toBeDisabled();
     await view.user.click(screen.getByRole('button', { name: 'Continue with current revision' }));
-    expect(screen.getByRole('checkbox', { name: 'Share this catalog' })).not.toBeChecked();
     await view.user.click(screen.getByRole('button', { name: 'Submit services for review' }));
     await screen.findByText('Services submitted for review.');
     expect(writes[1]?.key).not.toBe(writes[0]?.key);

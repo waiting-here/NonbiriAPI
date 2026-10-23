@@ -64,7 +64,14 @@ AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?)`, donatio
 		if err != nil {
 			return targetConnectionError(err)
 		}
-		if !use.DiscoveryEnabled || use.UseID != selected.UseID || use.ApprovedRevisionID != selected.ApprovedRevisionID || use.DiscoverySourceRevisionID != selected.SourceRevisionID || use.Grant.CredentialVersionID != selected.CredentialVersionID {
+		if use.UseID != selected.UseID || use.ApprovedRevisionID != selected.ApprovedRevisionID || use.Grant.CredentialVersionID != selected.CredentialVersionID {
+			return ErrConflict
+		}
+		catalog, err := connectionstore.LoadDiscoveryUseTx(ctx, tx, use.UseID, use.ApprovedRevisionID)
+		if err != nil {
+			return targetConnectionError(err)
+		}
+		if catalog.DiscoverySourceRevisionID != selected.SourceRevisionID {
 			return ErrConflict
 		}
 		var present bool

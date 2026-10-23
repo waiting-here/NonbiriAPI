@@ -106,7 +106,6 @@ function AdditionDraft({
   const [expected, setExpected] = useState(donationRevision);
   const [share, setShare] = useState<DonationShare>(() => ({
     services: mainstream ? available.slice() : [],
-    initializeSource: mainstream && Boolean(current.discovery_source_id),
   }));
   const [versions, setVersions] = useState<Partial<Record<NativeService, string | null>>>(() =>
     Object.fromEntries(
@@ -152,7 +151,6 @@ function AdditionDraft({
   const ready =
     operation.outcome !== 'conflict' &&
     share.services.length > 0 &&
-    !share.initializeSource &&
     !snapshotChanged &&
     !unavailable &&
     !readBlocked &&
@@ -189,7 +187,6 @@ function AdditionDraft({
               setDone(false);
               setShare({
                 services: mainstream ? available.slice() : [],
-                initializeSource: mainstream && Boolean(current.discovery_source_id),
               });
               setVersions(
                 Object.fromEntries(
@@ -223,8 +220,8 @@ function AdditionDraft({
               native_service,
               expected_revision: versions[native_service] ?? null,
             })),
-            discovery_source_id: share.sourceId ?? null,
-            discovery_source_revision: share.sourceRevision ?? null,
+            discovery_source_id: null,
+            discovery_source_revision: null,
           })
           .catch(() => undefined);
       }}
@@ -239,14 +236,10 @@ function AdditionDraft({
       ) : null}
       {!available.length ? <Note>{t('common.connections.noServicesToAdd')}</Note> : null}
       <DonationShareFields
-        accountId={accountId}
         choice={{
           key: {
             nativeServices: available,
-            credentialId: snapshot.credential_id,
             credentialVersion: snapshot.credential_version,
-            grantRevision: snapshot.grant_revision,
-            discoverySourceId: snapshot.discovery_source_id,
           },
         }}
         value={share}

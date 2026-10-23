@@ -20,11 +20,13 @@ type GenerationTwoCompatibility struct {
 	SourceSchemaVersions []int    `json:"source_schema_versions"`
 }
 
-const CurrentSchemaVersion = 34
+const CurrentSchemaVersion = 35
 const MinimumSchemaVersion = 33
 
 // Schema33ManifestHash pins the published source accepted for an index-only upgrade.
 const Schema33ManifestHash = "bf3821c938fba16a863df866b801621068722c97c57acb67191075cb3c89f550"
+
+const Schema34ManifestHash = "6f5e1dc12a53ccd7dc8cd07a98d09c0f6d9b411aa31caddd97aeb58fc6321571"
 
 // EndpointKeyHistoryIndexesSQL is shared by startup and the offline upgrade chain.
 const EndpointKeyHistoryIndexesSQL = `CREATE INDEX idx_request_logs_endpoint_key ON request_logs(endpoint_key_id);
@@ -35,12 +37,13 @@ CREATE INDEX idx_donation_keys_endpoint_key ON donation_keys(endpoint_key_id);
 
 // Tests inject DDL failures without changing the accepted source manifest.
 var startupSchemaUpgradeSQL = EndpointKeyHistoryIndexesSQL
+var startupDiscoveryUpgradeSQL = DonationDiscoveryAuthorizationSQL
 
 func GenerationTwoCompatibilityDescriptor() GenerationTwoCompatibility {
 	return GenerationTwoCompatibility{
 		SchemaHash: PinnedGenerationTwoSchemaHash, ManifestHash: PinnedGenerationTwoManifestHash,
 		SchemaVersion: CurrentSchemaVersion, MinimumSchemaVersion: MinimumSchemaVersion,
-		SourceManifestHashes: []string{Schema33ManifestHash}, SourceSchemaVersions: []int{33},
+		SourceManifestHashes: []string{Schema33ManifestHash, Schema34ManifestHash}, SourceSchemaVersions: []int{33, 34},
 	}
 }
 
@@ -49,7 +52,7 @@ func upgradeStartupSchema(ctx context.Context, database *sql.DB, codec secret.Ge
 	if err != nil || version == CurrentSchemaVersion {
 		return err
 	}
-	if version != 33 {
+	if version != 33 && version != 34 {
 		return errors.New("unsupported startup schema version")
 	}
 	RecordStartupStage(ctx, StageSchemaUpgrade)
@@ -94,10 +97,15 @@ func upgradeStartupSchema(ctx context.Context, database *sql.DB, codec secret.Ge
 	if err := validateDatabaseMaterial(ctx, conn, codec); err != nil {
 		return err
 	}
-	if _, err := conn.ExecContext(ctx, startupSchemaUpgradeSQL); err != nil {
+	if version == 33 {
+		if _, err := conn.ExecContext(ctx, startupSchemaUpgradeSQL); err != nil {
+			return err
+		}
+	}
+	if _, err := conn.ExecContext(ctx, startupDiscoveryUpgradeSQL); err != nil {
 		return err
 	}
-	changed, err := conn.ExecContext(ctx, "UPDATE schema_state SET version=? WHERE id=1 AND version=33", CurrentSchemaVersion)
+	changed, err := conn.ExecContext(ctx, "UPDATE schema_state SET version=? WHERE id=1 AND version=?", CurrentSchemaVersion, version)
 	if err != nil {
 		return err
 	}

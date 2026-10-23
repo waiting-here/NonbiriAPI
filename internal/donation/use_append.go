@@ -129,7 +129,10 @@ WHERE d.id=? AND d.user_id=? AND dk.id=?`, now, donationID, userID, input.Donati
 		!services.IsSubsetOf(grant.EffectiveServices) {
 		return empty, ErrConflict
 	}
-	var sourceRevisionID *int64
+	sourceRevisionID, err := connectionstore.ConfiguredDiscoverySourceRevisionTx(ctx, tx, grant)
+	if err != nil {
+		return empty, connectionError(err)
+	}
 	if input.DiscoverySourceID != nil {
 		source, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{
 			OwnerUserID: userID, SourceID: *input.DiscoverySourceID, Purpose: connectionstore.SourceSelf,

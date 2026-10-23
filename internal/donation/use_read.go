@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
@@ -197,6 +198,7 @@ WHERE d.id=? AND du.id IN (` + strings.TrimRight(strings.Repeat("?,", len(ids)),
 	}
 	states := []rowState{}
 	revisionIDs := []int64{}
+	keyIDs := []int64{}
 	for rows.Next() {
 		var value Use
 		var state rowState
@@ -235,6 +237,7 @@ WHERE d.id=? AND du.id IN (` + strings.TrimRight(strings.Repeat("?,", len(ids)),
 		}
 		out = append(out, value)
 		states = append(states, state)
+		keyIDs = append(keyIDs, keyID)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -246,6 +249,16 @@ WHERE d.id=? AND du.id IN (` + strings.TrimRight(strings.Repeat("?,", len(ids)),
 	revisions, err := readUseRevisionsTx(ctx, tx, revisionIDs)
 	if err != nil {
 		return nil, err
+	}
+	choices, err := readDiscoveryChoicesTx(ctx, tx, keyIDs, now)
+	if err != nil {
+		return nil, err
+	}
+	discoverable := make(map[int64]bool)
+	for _, values := range choices {
+		for _, choice := range values {
+			discoverable[choice.Use.UseID] = choice.healthy
+		}
 	}
 	for index := range out {
 		value, state := &out[index], states[index]
@@ -259,7 +272,8 @@ WHERE d.id=? AND du.id IN (` + strings.TrimRight(strings.Repeat("?,", len(ids)),
 		value.Capabilities.CanResetFailures = canMaintain && state.active && value.Approved != nil
 		usable := state.active && state.eligible && state.available && state.healthy && value.Approved != nil && !value.Approved.Review.Required
 		value.Capabilities.CanBind = canMaintain && usable
-		value.Capabilities.CanDiscover = canMaintain && usable && value.DiscoveryEnabled && value.Approved.discoveryAvailable
+		useID, _ := strconv.ParseInt(value.ID, 10, 64)
+		value.Capabilities.CanDiscover = canMaintain && state.active && state.eligible && discoverable[useID]
 		if !usable {
 			reason := "unavailable"
 			switch {
@@ -291,13 +305,16 @@ func readUseRevisionsTx(ctx context.Context, tx *sql.Tx, ids []int64) (map[int64
 	for i, id := range ids {
 		args[i] = id
 	}
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
+	args = append(append([]any{}, args...), args...)
 	rows, err := tx.QueryContext(ctx, `SELECT ur.id,ur.credential_id_snapshot,ur.credential_version,ur.grant_revision,ur.review_state,ur.review_reason,ur.reviewed_at,rr.revision,
 sr.source_id,sr.source_revision,ur.display_head,ur.display_tail,COALESCE(rr.required,0),length(ur.key_body_review_hmac)=32,
-COALESCE(a.available=1 AND a.relationship_valid=1 AND (a.effective_native_service_mask&du.native_service_bit)=du.native_service_bit,0),COALESCE(sa.available=1 AND sa.relationship_valid=1 AND sa.credential_version_id=a.credential_version_id AND sa.owner_user_id=a.owner_user_id,0),
+COALESCE(a.available=1 AND a.relationship_valid=1 AND (a.effective_native_service_mask&du.native_service_bit)=du.native_service_bit,0),
 COALESCE(r.state,'unknown'),MAX(COALESCE(st.result_generation,0),1),COALESCE(r.safe_class,'none'),r.started_at,r.completed_at,COALESCE(r.model_count,0)
-FROM donation_use_revisions ur JOIN donation_uses du ON du.id=ur.use_id LEFT JOIN donation_key_review_requirements rr ON rr.hmac=ur.key_body_review_hmac
-LEFT JOIN endpoint_grant_authorizations a ON a.grant_revision_id=ur.grant_revision_id LEFT JOIN discovery_source_revisions sr ON sr.id=ur.discovery_source_revision_id
-LEFT JOIN discovery_source_authorizations sa ON sa.source_revision_id=sr.id
+FROM donation_use_revisions ur JOIN donation_uses du ON du.id=ur.use_id JOIN donation_keys dk ON dk.id=du.donation_key_id LEFT JOIN donation_key_review_requirements rr ON rr.hmac=ur.key_body_review_hmac
+LEFT JOIN (SELECT * FROM endpoint_grant_authorizations WHERE grant_revision_id IN (
+ SELECT grant_revision_id FROM donation_use_revisions WHERE id IN (`+placeholders+`)
+)) a ON a.grant_revision_id=ur.grant_revision_id LEFT JOIN discovery_source_revisions sr ON sr.id=`+connectionstore.DiscoverySourceRevisionSQL+`
 LEFT JOIN discovery_source_states st ON st.source_revision_id=sr.id LEFT JOIN discovery_runs r ON r.id=st.current_run_id AND r.source_revision_id=sr.id
 WHERE ur.id IN (`+strings.TrimRight(strings.Repeat("?,", len(ids)), ",")+`)`, args...)
 	if err != nil {
@@ -310,7 +327,7 @@ WHERE ur.id IN (`+strings.TrimRight(strings.Repeat("?,", len(ids)), ",")+`)`, ar
 		var reviewed, requirement, source, sourceRevision, started, completed sql.NullInt64
 		var material sql.NullBool
 		var state, safe string
-		if err := rows.Scan(&id, &credential, &version, &grant, &v.Status, &v.ReviewNote, &reviewed, &requirement, &source, &sourceRevision, &v.DisplayHead, &v.DisplayTail, &v.Review.Required, &material, &v.available, &v.discoveryAvailable, &state, &generation, &safe, &started, &completed, &count); err != nil {
+		if err := rows.Scan(&id, &credential, &version, &grant, &v.Status, &v.ReviewNote, &reviewed, &requirement, &source, &sourceRevision, &v.DisplayHead, &v.DisplayTail, &v.Review.Required, &material, &v.available, &state, &generation, &safe, &started, &completed, &count); err != nil {
 			return nil, err
 		}
 		v.CredentialID, v.CredentialVersion, v.GrantRevision = strconv.FormatInt(credential, 10), strconv.FormatInt(version, 10), strconv.FormatInt(grant, 10)
