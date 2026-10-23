@@ -2,10 +2,16 @@
 
 ## Supported databases
 
-The v1.1.0 application accepts a new database or the current schema **33**.
+The application accepts a new database, current schema **34**, or the exact
+published schema **33** manifest. Schema 33 receives an atomic index upgrade
+during startup, before request handling and unfinished-work recovery. Index
+creation can take longer on large histories; allow the startup stage to finish.
+Cancellation or failure rolls the upgrade back. No table rebuild or external
+database conversion is needed for this step.
+
 Existing exact schema 16–26 databases require the separate one-time converter.
-The normal service contains only current DDL and validation; it does not import
-or embed historical schemas or conversion code. Later v1.x releases must provide
+The normal service contains current DDL, validation and the schema 33 index step;
+it does not import the historical conversion chain. Later v1.x releases must provide
 a complete upgrade path from every earlier stable v1.x database. An older binary
 is not required to read a newer database.
 
@@ -20,11 +26,21 @@ identity, version or structural manifest is rejected before writes.
 
 These commands load no application configuration or database. Each machine-readable descriptor
 contains the current identity and accepted versions. The application descriptor
-accepts only schema 33 and has empty migration and conversion lists. The converter
-descriptor lists its exact offline sources and target. Deployment tools use both
+reports schema 34, minimum schema 33 and the exact accepted source version and
+manifest hash, with no offline conversions. The converter descriptor lists its
+exact offline sources and target. Deployment tools use both
 descriptors instead of parsing Go source or deriving versions from array lengths.
 
 ## Schema changes
+
+Schema 34 adds complete `endpoint_key_id` indexes on `request_logs`,
+`dispatch_claims`, `report_targets` and `donation_keys`. These avoid unrelated
+history scans during endpoint-key deletion, shortening the write transaction
+that can otherwise delay session reads and other writes. Foreign-key actions,
+retained rows, credentials, accounting and account export 29 are unchanged.
+Startup validates the exact schema 33 source and encryption root, builds all four
+indexes and validates the target within one transaction. Modified source
+structures and partial upgrades are rejected.
 
 Schema 33 introduces service connections, independently versioned credentials,
 explicit endpoint grants, independent discovery sources and ordered model targets.
@@ -98,7 +114,8 @@ existing keys at that version, with no supplemental rules or active episode. Acc
 configuration and current state. Existing retry-header cooldowns, failure counts,
 credentials and accounting retain their meanings.
 
-`internal/db/generation_two.sql` is the complete fresh schema. Historical source
+`internal/db/generation_two.sql` is the complete fresh schema. The schema 33
+source manifest and index-only startup step live in `internal/db`; older source
 manifests and transformations live under `internal/upgrade/`, outside the normal
 application dependency graph. Released source definitions are immutable.
 
@@ -175,7 +192,7 @@ needed. Ordinary `--apply` validates the exact source, encryption-root identity,
 required configuration and migration-affected relationships, without scanning
 unrelated historical tables. Run it with the service stopped and its existing
 master key available. The converter acquires exclusive
-database access and converts the source to schema 33 in one transaction. A matching
+database access and converts the source to schema 34 in one transaction. A matching
 current schema is a no-op; structural drift, an unknown source or a wrong key is
 rejected. Failure or cancellation rolls back.
 

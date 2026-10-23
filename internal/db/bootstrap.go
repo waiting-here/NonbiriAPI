@@ -771,6 +771,9 @@ func openValidatedSource(ctx context.Context, path string, expected *sourceSnaps
 	if err := inspectActiveDBFiles(path); err != nil {
 		return failError(startupError(StartupUnsafePath))
 	}
+	if err := upgradeStartupSchema(ctx, d, secrets); err != nil {
+		return nil, appendStartupError(startupSQLFailure(ctx, err, StartupSchemaMismatch), opened.Close())
+	}
 	RecordStartupStage(ctx, StageDomainRecovery)
 	if err := checkpointAndRecoverBeforeListener(ctx, d, secrets); err != nil {
 		return failError(err)

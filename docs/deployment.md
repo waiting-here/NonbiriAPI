@@ -307,8 +307,11 @@ This fallback also covers proxy timeouts or invalid upstream responses before re
 
 ## Database compatibility and version changes
 
-The v1.1.0 application starts from an empty database or current schema **33**.
-Exact registered schema **16–26** structures use the standalone
+The application creates fresh schema **34** databases and opens current schema 34.
+Exact published schema **33** receives an atomic index upgrade during startup,
+before requests are served. This builds four history indexes without rebuilding
+tables; allow for index creation time on large databases. Exact registered
+schema **16–26** structures use the standalone
 [v1 converter](../cmd/nonbiri-upgrade-v1/README.md). Other prereleases and unknown
 structures are rejected. SQLite identity remains Generation 2; exports use
 format **29**. See [database upgrades](database-upgrades.md) for manifests, stable
@@ -317,8 +320,8 @@ migration guarantees and content versions.
 Run `./nonbiriapi maintenance schema-info --json` without a production environment
 or database to inspect the target's compatibility descriptor. Deployment helpers
 must consume this output and the matching converter's `--schema-info --json`
-instead of parsing Go files. The service descriptor has no historical sources;
-the converter declares its exact offline sources. Use
+instead of parsing Go files. The service descriptor declares the exact schema 33
+startup source and manifest; the converter declares its exact offline sources. Use
 `./nonbiriapi maintenance verify` on a stopped current database or consistent copy
 for a full offline audit; normal startup performs the current checks and recovers
 unfinished work. Historical cleanup commands are retired from the running binary.

@@ -20,8 +20,10 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh schema 33, exact supported schema 16–26 conversions, target equality,
-  rollback/cancellation, re-entry and zero-write unsupported-source rejection.
+- Validate fresh schema 34, the exact schema 33 startup index upgrade and supported
+  schema 16–26 offline conversions: target equality, rollback/cancellation, re-entry
+  and zero-write unsupported-source rejection. Check that endpoint-key deletion
+  uses indexes for its referencing history tables and preserves cascading behavior.
   Preserve credentials, operator settings, legal overrides, balances, game saves,
   activities and receipts. Exercise successive stable migrations; see
   [database upgrades](database-upgrades.md).

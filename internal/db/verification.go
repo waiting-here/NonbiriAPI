@@ -132,7 +132,7 @@ func validateCurrentSource(ctx context.Context, path string, source *sourceSnaps
 		return generationError(userVersion)
 	}
 	RecordStartupStage(ctx, StageSchemaValidation)
-	if err := validateGenerationTwoManifest(ctx, d); err != nil {
+	if err := validateGenerationTwoManifestSource(ctx, d, true); err != nil {
 		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
 	if err := validateStartupSeed(ctx, d); err != nil {
