@@ -404,6 +404,7 @@ export function DonationComposer({
           <div>
             <h3 id={formID + '-keys'}>{t('user.charity.presentation.chooseKeys')}</h3>
             <p>{t('user.charity.presentation.chooseKeysHelp')}</p>
+            <p className="muted">{t('user.charity.presentation.modelSetupHelp')}</p>
             <button
               type="button"
               className="nb-btn nb-btn--secondary"
@@ -1112,6 +1113,8 @@ export function DonationCard({
         </div>
         <DonationStatusBadge status={donation.status} summary={donation.useSummary} />
       </div>
+
+      {!showDetailLink ? <Note>{t('user.charity.presentation.modelSetupHelp')}</Note> : null}
 
       {showEditor ? (
         <>

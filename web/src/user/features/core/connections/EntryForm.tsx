@@ -151,7 +151,10 @@ export function EntryForm({
       >
         {mode === 'custom' ? (
           <>
-            <Field label={t('common.connections.protocol')}>
+            <Field
+              label={t('common.connections.protocol')}
+              help={t('common.connections.protocolHelp')}
+            >
               {(props) => (
                 <select
                   {...props}
