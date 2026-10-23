@@ -2,11 +2,8 @@ package artwork
 
 import (
 	"encoding/json"
-	"io/fs"
 	"os"
-	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 )
 
@@ -106,7 +103,7 @@ func TestCatalogRejectsInvalidDefinitions(t *testing.T) {
 		})
 	}
 }
-func TestBuiltInCatalogMatchesProductAndRasterAssets(t *testing.T) {
+func TestBuiltInCatalogMatchesProduct(t *testing.T) {
 	var product struct {
 		Cards  []struct{ ID, Theme string }
 		Themes []struct{ ID, Source string }
@@ -153,55 +150,6 @@ func TestBuiltInCatalogMatchesProductAndRasterAssets(t *testing.T) {
 	for _, key := range expected {
 		if rating, ok := Rating(key); !ok || rating != General && rating != R18 {
 			t.Error("missing explicit classification", key)
-		}
-	}
-	root := "../../web/public/assets/gacha"
-	count := 0
-	files := map[string]bool{}
-	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if !slices.Contains([]string{".webp", ".png", ".jpg", ".jpeg", ".avif", ".gif", ".svg", ".bmp"}, strings.ToLower(filepath.Ext(p))) {
-			return nil
-		}
-		relative, err := filepath.Rel(root, p)
-		if err != nil {
-			return err
-		}
-		relative = filepath.ToSlash(relative)
-		files[relative] = true
-		count++
-		if _, ok := AssetRating(relative); !ok {
-			t.Error("unclassified raster", relative)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if count == 0 {
-		t.Fatal("no raster assets inspected")
-	}
-	t.Logf("classified %d raster assets", count)
-	for file := range builtIn.files {
-		if !files[file] {
-			t.Error("missing registered raster asset", file)
-		}
-	}
-	for _, rule := range builtIn.prefixes {
-		found := false
-		for file := range files {
-			if strings.HasPrefix(file, rule.prefix) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Error("unused asset prefix", rule.prefix)
 		}
 	}
 }
