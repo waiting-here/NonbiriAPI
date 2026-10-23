@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -42,12 +43,18 @@ const connectionCredentialMembership = `(cr.connection_id=sc.id OR EXISTS(
 const connectionSelect = `SELECT sc.id,sc.name,sc.note,sc.revision,
 (SELECT count(*) FROM endpoints e WHERE e.connection_id=sc.id AND e.user_id=sc.user_id),
 (SELECT count(*) FROM credentials cr WHERE cr.user_id=sc.user_id AND cr.deleted_at IS NULL AND ` + connectionCredentialMembership + `),
-sc.created_at,sc.updated_at FROM service_connections sc WHERE sc.user_id=?`
+sc.created_at,sc.updated_at,pe.id,pe.base_url,pe.note,pe.created_at
+FROM service_connections sc LEFT JOIN endpoints pe ON pe.id=(
+ SELECT e.id FROM endpoints e WHERE e.connection_id=sc.id AND e.user_id=sc.user_id ORDER BY e.id LIMIT 1)
+WHERE sc.user_id=?`
 
 func scanConnection(scanner pageScanner) (Connection, error) {
 	var item Connection
 	var id, revision, entryCount, credentialCount int64
-	if err := scanner.Scan(&id, &item.Name, &item.Note, &revision, &entryCount, &credentialCount, &item.CreatedAt, &item.UpdatedAt); err != nil {
+	var entryID, entryCreatedAt sql.NullInt64
+	var entryBaseURL, entryNote sql.NullString
+	if err := scanner.Scan(&id, &item.Name, &item.Note, &revision, &entryCount, &credentialCount, &item.CreatedAt, &item.UpdatedAt,
+		&entryID, &entryBaseURL, &entryNote, &entryCreatedAt); err != nil {
 		return Connection{}, err
 	}
 	if id <= 0 || revision <= 0 || entryCount < 0 || credentialCount < 0 ||
@@ -56,6 +63,21 @@ func scanConnection(scanner pageScanner) (Connection, error) {
 	}
 	item.ID, item.Revision = strconv.FormatInt(id, 10), strconv.FormatInt(revision, 10)
 	item.EntryCount, item.CredentialCount = strconv.FormatInt(entryCount, 10), strconv.FormatInt(credentialCount, 10)
+	item.DisplayName = item.Name
+	if entryID.Valid {
+		primaryID, err := decimalID(entryID.Int64)
+		if err != nil {
+			return Connection{}, ErrUnavailable
+		}
+		item.PrimaryEntry = &ConnectionPrimaryEntry{ID: primaryID, BaseURL: entryBaseURL.String, Note: entryNote.String}
+		if revision == 1 && item.Note == "" && item.Name == "Connection "+item.ID && entryID.Int64 == id && entryCreatedAt.Int64 == item.CreatedAt {
+			if note := strings.TrimSpace(entryNote.String); note != "" {
+				item.DisplayName = note
+			} else if parsed, err := url.Parse(entryBaseURL.String); err == nil && parsed.Hostname() != "" {
+				item.DisplayName = parsed.Hostname()
+			}
+		}
+	}
 	return item, nil
 }
 
@@ -81,13 +103,20 @@ func (r *Repository) listConnections(ctx context.Context, userID int64, search s
 		return Page[Connection]{}, ErrInvalidRequest
 	}
 	return userPageRead(ctx, r, userID, pagination.Default(), func(ctx context.Context, tx *sql.Tx) (Page[Connection], error) {
-		query, args := connectionSelect, []any{userID}
-		if search = strings.TrimSpace(search); search != "" {
-			query += ` AND (instr(lower(sc.name),lower(?))>0 OR instr(lower(sc.note),lower(?))>0)`
-			args = append(args, search, search)
-		}
+		query, args := connectionListQuery(userID, search)
 		return readConnectionList(ctx, tx, r, window, "user-connections", query, "sc.id", args, scanConnection, func(item Connection) string { return item.ID })
 	})
+}
+
+func connectionListQuery(userID int64, search string) (string, []any) {
+	query, args := connectionSelect, []any{userID}
+	if search = strings.TrimSpace(search); search != "" {
+		query += ` AND (instr(lower(sc.name),lower(?))>0 OR instr(lower(sc.note),lower(?))>0
+ OR EXISTS(SELECT 1 FROM endpoints e WHERE e.connection_id=sc.id AND e.user_id=sc.user_id
+ AND (instr(lower(e.base_url),lower(?))>0 OR instr(lower(e.note),lower(?))>0)))`
+		args = append(args, search, search, search, search)
+	}
+	return query, args
 }
 
 func (r *Repository) listConnectionEntries(ctx context.Context, userID, connectionID int64, filters EndpointPageFilters, window connectionListWindow) (Page[Endpoint], error) {
@@ -201,6 +230,7 @@ func (r *Repository) PatchConnection(ctx context.Context, userID, connectionID i
 			return Connection{}, ResourceOperationResult{}, ErrConflict
 		}
 		item.Revision, item.UpdatedAt = strconv.FormatInt(input.ExpectedRevision+1, 10), now
+		item.DisplayName = item.Name
 		return item, ResourceOperationResult{}, nil
 	})
 }
