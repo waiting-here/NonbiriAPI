@@ -1437,7 +1437,8 @@ test('level 5 reviews independent pending sources, retains receipts after refres
       expect(denied.status()).toBe(403);
       const current = await read(admin, state.admin_url, `/admin/api/donations/${donation.id}`);
       expect(current.status).toBe('pending');
-      expect(current.first_approval_origin).toBe('none');
+      // Per-use approval does not establish the legacy first-approval origin.
+      expect(current.first_approval_origin).toBe(decision === 'approve' ? 'unknown' : 'none');
       expect(current.use_summary).toEqual({
         total: '1',
         pending: '0',
