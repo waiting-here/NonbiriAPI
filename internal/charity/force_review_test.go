@@ -76,74 +76,88 @@ func prepareForceReview(t *testing.T, e *charityTestEnv) func() error {
 }
 
 func TestForceRejectDispatchLinearizationAndSentSettlement(t *testing.T) {
-	e := newCharityTestEnv(t, true)
-	force := prepareForceReview(t, e)
-	request := e.accept(t, e.requestModel, 2400, 1)
-	claimed := e.claim(t, request, 1, false)
-	if _, err := e.store.DB().Exec(`INSERT INTO request_logs(logical_request_id,user_id,endpoint_key_id,upstream_model_id,route_kind,started_at) VALUES(?,?,?,'upstream-model','charity_chat_completions',?)`, request, e.callerID, e.endpointKey, charityTestNow); err != nil {
-		t.Fatal(err)
-	}
-	start := make(chan struct{})
-	reviewResult := make(chan error, 1)
-	dispatchResult := make(chan error, 1)
-	go func() { <-start; reviewResult <- force() }()
-	go func() {
-		<-start
-		ctx := context.Background()
-		tx, err := e.store.DB().BeginTx(ctx, nil)
-		if err != nil {
-			dispatchResult <- err
-			return
-		}
-		defer tx.Rollback()
-		err = e.service.PrepareDispatch(ctx, tx, claim.CharityDispatch{RequestID: request, ClaimID: claimed.id, ActorUserID: e.callerID, DispatchedAt: charityTestNow + 2})
-		if err == nil {
-			_, err = tx.Exec(`UPDATE dispatch_claims SET state='dispatched',dispatched_at=? WHERE id=? AND state='claimed'`, charityTestNow+2, claimed.id)
-		}
-		if err == nil {
-			err = tx.Commit()
-		}
-		dispatchResult <- err
-	}()
-	close(start)
-	if err := <-reviewResult; err != nil {
-		t.Fatal(err)
-	}
-	dispatchErr := <-dispatchResult
-	if dispatchErr != nil && !errors.Is(dispatchErr, claim.ErrNotFound) {
-		t.Fatalf("dispatch result: %v", dispatchErr)
-	}
-	var state string
-	if err := e.store.DB().QueryRow(`SELECT state FROM dispatch_claims WHERE id=?`, claimed.id).Scan(&state); err != nil {
-		t.Fatal(err)
-	}
-	if dispatchErr == nil {
-		if state != "dispatched" {
-			t.Fatal("successful dispatch was not committed")
-		}
-		e.completeAttempt(t, request, claimed, claim.CharityAttemptInput{ReceiverUserID: &e.donorID, Usage: connectorcontract.Usage{Present: true}, ProtocolSuccess: true, ResponseStarted: true, CompletedAt: charityTestNow + 10}, claim.RewardPosted, claim.CharityActual{PriceMilli: 3000, RewardMilli: 1250})
-	} else if state != "claimed" {
-		t.Fatal("rejected dispatch changed claim state")
-	}
-	tx := beginTestTx(t, e.store.DB())
-	err := e.service.PrepareDispatch(context.Background(), tx, claim.CharityDispatch{RequestID: request, ClaimID: claimed.id, ActorUserID: e.callerID, DispatchedAt: charityTestNow + 11})
-	tx.Rollback()
-	if !errors.Is(err, claim.ErrNotFound) {
-		t.Fatalf("dispatch after rejection: %v", err)
+	for _, status := range []string{"approved", "pending"} {
+		t.Run(status, func(t *testing.T) {
+			e := newCharityTestEnv(t, true)
+			if _, err := e.store.DB().Exec(`UPDATE donations SET status=? WHERE id=?`, status, e.donationID); err != nil {
+				t.Fatal(err)
+			}
+			force := prepareForceReview(t, e)
+			request := e.accept(t, e.requestModel, 2400, 1)
+			claimed := e.claim(t, request, 1, false)
+			if _, err := e.store.DB().Exec(`INSERT INTO request_logs(logical_request_id,user_id,endpoint_key_id,upstream_model_id,route_kind,started_at) VALUES(?,?,?,'upstream-model','charity_chat_completions',?)`, request, e.callerID, e.endpointKey, charityTestNow); err != nil {
+				t.Fatal(err)
+			}
+			start := make(chan struct{})
+			reviewResult := make(chan error, 1)
+			dispatchResult := make(chan error, 1)
+			go func() { <-start; reviewResult <- force() }()
+			go func() {
+				<-start
+				ctx := context.Background()
+				tx, err := e.store.DB().BeginTx(ctx, nil)
+				if err != nil {
+					dispatchResult <- err
+					return
+				}
+				defer tx.Rollback()
+				err = e.service.PrepareDispatch(ctx, tx, claim.CharityDispatch{RequestID: request, ClaimID: claimed.id, ActorUserID: e.callerID, DispatchedAt: charityTestNow + 2})
+				if err == nil {
+					_, err = tx.Exec(`UPDATE dispatch_claims SET state='dispatched',dispatched_at=? WHERE id=? AND state='claimed'`, charityTestNow+2, claimed.id)
+				}
+				if err == nil {
+					err = tx.Commit()
+				}
+				dispatchResult <- err
+			}()
+			close(start)
+			if err := <-reviewResult; err != nil {
+				t.Fatal(err)
+			}
+			dispatchErr := <-dispatchResult
+			if dispatchErr != nil && !errors.Is(dispatchErr, claim.ErrNotFound) {
+				t.Fatalf("dispatch result: %v", dispatchErr)
+			}
+			var state string
+			if err := e.store.DB().QueryRow(`SELECT state FROM dispatch_claims WHERE id=?`, claimed.id).Scan(&state); err != nil {
+				t.Fatal(err)
+			}
+			if dispatchErr == nil {
+				if state != "dispatched" {
+					t.Fatal("successful dispatch was not committed")
+				}
+				e.completeAttempt(t, request, claimed, claim.CharityAttemptInput{ReceiverUserID: &e.donorID, Usage: connectorcontract.Usage{Present: true}, ProtocolSuccess: true, ResponseStarted: true, CompletedAt: charityTestNow + 10}, claim.RewardPosted, claim.CharityActual{PriceMilli: 3000, RewardMilli: 1250})
+			} else if state != "claimed" {
+				t.Fatal("rejected dispatch changed claim state")
+			}
+			tx := beginTestTx(t, e.store.DB())
+			err := e.service.PrepareDispatch(context.Background(), tx, claim.CharityDispatch{RequestID: request, ClaimID: claimed.id, ActorUserID: e.callerID, DispatchedAt: charityTestNow + 11})
+			tx.Rollback()
+			if !errors.Is(err, claim.ErrNotFound) {
+				t.Fatalf("dispatch after rejection: %v", err)
+			}
+		})
 	}
 }
 
 func TestForceRejectAlreadyDispatchedSettlesNormally(t *testing.T) {
-	e := newCharityTestEnv(t, true)
-	force := prepareForceReview(t, e)
-	request := e.accept(t, e.requestModel, 2400, 1)
-	claimed := e.claim(t, request, 1, true)
-	if err := force(); err != nil {
-		t.Fatal(err)
-	}
-	e.completeAttempt(t, request, claimed, claim.CharityAttemptInput{ReceiverUserID: &e.donorID, Usage: connectorcontract.Usage{Present: true}, ProtocolSuccess: true, ResponseStarted: true, CompletedAt: charityTestNow + 10}, claim.RewardPosted, claim.CharityActual{PriceMilli: 3000, RewardMilli: 1250})
-	charge, err := e.service.CalculateRequestCharge(context.Background(), request, claim.AccountingCommit)
-	if err != nil || charge != 2400 {
-		t.Fatalf("sent charge %d %v", charge, err)
+	for _, status := range []string{"approved", "pending"} {
+		t.Run(status, func(t *testing.T) {
+			e := newCharityTestEnv(t, true)
+			if _, err := e.store.DB().Exec(`UPDATE donations SET status=? WHERE id=?`, status, e.donationID); err != nil {
+				t.Fatal(err)
+			}
+			force := prepareForceReview(t, e)
+			request := e.accept(t, e.requestModel, 2400, 1)
+			claimed := e.claim(t, request, 1, true)
+			if err := force(); err != nil {
+				t.Fatal(err)
+			}
+			e.completeAttempt(t, request, claimed, claim.CharityAttemptInput{ReceiverUserID: &e.donorID, Usage: connectorcontract.Usage{Present: true}, ProtocolSuccess: true, ResponseStarted: true, CompletedAt: charityTestNow + 10}, claim.RewardPosted, claim.CharityActual{PriceMilli: 3000, RewardMilli: 1250})
+			charge, err := e.service.CalculateRequestCharge(context.Background(), request, claim.AccountingCommit)
+			if err != nil || charge != 2400 {
+				t.Fatalf("sent charge %d %v", charge, err)
+			}
+		})
 	}
 }

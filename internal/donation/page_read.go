@@ -83,7 +83,7 @@ func browseIDs(ctx context.Context, tx *sql.Tx, query string, args []any, page p
 // no recorded timestamp yet, so it must not invent one or advance a revision.
 // The eventual mutation/worker records the actual event using the normal path.
 func logicalHeaderTx(ctx context.Context, tx *sql.Tx, donationID, now int64) (AdminDonation, error) {
-	out, err := getDonationHeaderTx(ctx, tx, donationID)
+	out, err := getDonationHeaderTx(ctx, tx, donationID, now)
 	if err != nil {
 		return out, err
 	}
