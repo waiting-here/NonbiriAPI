@@ -1612,7 +1612,11 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
     );
     const page = await owner.newPage();
     await page.goto(fixture().user_url + '/endpoints?connection_id=' + group.id);
-    await page.getByRole('button', { name: c.addEntry, exact: true }).click();
+    await page
+      .locator('.nb-panel__head')
+      .filter({ has: page.getByRole('heading', { name: c.entries, exact: true }) })
+      .getByRole('button', { name: c.addEntry, exact: true })
+      .click();
     await page.getByText(c.mainstream, { exact: true }).click();
     await expect(page.getByRole('radio', { name: c.mainstream, exact: true })).toBeChecked();
     await page.getByRole('combobox', { name: c.mainstream, exact: true }).selectOption(channel.id);
@@ -1796,6 +1800,18 @@ test('a key without a catalog can recover, show a readable failure and load mode
     await expect(
       page.getByRole('button', { name: core['endpoints.refreshDiscovery'], exact: true }),
     ).toHaveCount(0);
+    await page.getByRole('button', { name: userEn.user.services.viewModels, exact: true }).click();
+    await page
+      .getByLabel(core['endpoints.manualModel'], { exact: true })
+      .fill('vendor/manual-before-discovery');
+    const manualCreated = responseFor(page, 'POST', keyPath + '/models/manual');
+    await page.getByRole('button', { name: core['endpoints.manualAdd'], exact: true }).click();
+    expect((await manualCreated).status()).toBe(201);
+    await expect(page.getByText('vendor/manual-before-discovery', { exact: true })).toBeVisible();
+    await page
+      .getByRole('region', { name: userEn.user.services.viewModels + ' · ' + tag, exact: true })
+      .getByRole('button', { name: core['common.close'], exact: true })
+      .click();
     await page
       .getByRole('button', { name: userEn.user.services.chooseCatalog, exact: true })
       .click();
