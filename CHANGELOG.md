@@ -77,6 +77,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
+- Align Decisions with its generally available request format: up to 400 questions,
+  text/image/JSON question content, structured JSON evidence in user messages and
+  2–10 score levels. Preserve native JSON types, cache usage and configured pricing.
 - Reduce CI transfer and setup work with compact station artifacts, shared browser
   fixtures and a dedicated race build cache. Schedule slower Go packages and
   balance race tests using measured durations while preserving complete coverage.
