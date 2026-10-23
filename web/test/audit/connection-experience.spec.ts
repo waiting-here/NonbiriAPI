@@ -219,8 +219,20 @@ test('connection search exposes entry context and separate System One setup', as
     const page = await owner.newPage();
     await page.goto(fixture().user_url + '/endpoints');
     await page.getByPlaceholder(c.connectionSearch).fill(marker);
+    const searchResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        response.request().method() === 'GET' &&
+        url.pathname === '/api/connections' &&
+        url.searchParams.get('q') === marker
+      );
+    });
     await page.getByRole('button', { name: c.search, exact: true }).click();
+    const result = await searchResponse;
+    expect(result.status()).toBe(200);
+    await result.finished();
     const table = page.getByRole('table', { name: c.yourConnections, exact: true });
+    await expect(table.getByRole('row')).toHaveCount(2);
     const row = table.getByRole('row').filter({ hasText: name });
     await expect(row.getByText(primaryURL, { exact: true })).toBeVisible();
     await expect(row.getByText(primaryNote, { exact: true })).toHaveAttribute('title', primaryNote);
