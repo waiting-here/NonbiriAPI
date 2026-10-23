@@ -300,7 +300,7 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
               >
                 {statuses.map((value) => (
                   <option key={value} value={value}>
-                    {value ? t('common.connections.donationStates.' + value) : t('common.all')}
+                    {value ? t(`common.connections.donationStates.${value}`) : t('common.all')}
                   </option>
                 ))}
               </select>

@@ -2346,6 +2346,7 @@
       "reviewKeyScope": "捐赠 #{{donation}} 中密钥 #{{key}} 的全部待审用途，包含所有分页。",
       "reviewSnapshotCount": "共 {{total}} 项待审，将处理 {{eligible}} 项，另有 {{blocked}} 项暂不可处理。",
       "reviewSnapshotFixed": "仅审核本次列出的版本。之后新增或修改的用途需重新确认；失败项可刷新后单独重审。",
+      "rejectKeepsApproved": "拒绝待审版本；已有的有效批准仍保留。",
       "blockedUses": "查看不可处理的用途",
       "reviewUseLabel": "密钥 #{{key}} · {{service}}",
       "useReviewUnavailable": "当前无法审核，请检查用途状态和审核权限。",

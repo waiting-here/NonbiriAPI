@@ -1667,7 +1667,7 @@ function DonationsPanel({
                       <option value="">{t(charityCopyKey(role, 'allStatuses'))}</option>
                       {DONATION_DISPLAY_STATUSES.map((value) => (
                         <option key={value} value={value}>
-                          {t('common.connections.donationStates.' + value)}
+                          {t(`common.connections.donationStates.${value}`)}
                         </option>
                       ))}
                     </select>
@@ -1693,7 +1693,7 @@ function DonationsPanel({
                   ? [
                       {
                         key: 'status',
-                        label: t('common.connections.donationStates.' + status),
+                        label: t(`common.connections.donationStates.${status}`),
                         onRemove: () => updateFilters(handling, query, ''),
                         removeLabel: t('common.resetFilter'),
                       },

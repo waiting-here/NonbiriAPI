@@ -2346,6 +2346,7 @@
       "reviewKeyScope": "All pending uses for key #{{key}} in donation #{{donation}}, across all pages.",
       "reviewSnapshotCount": "{{total}} pending uses: {{eligible}} will be processed; {{blocked}} cannot be processed.",
       "reviewSnapshotFixed": "Only the versions listed here will be reviewed. New or changed uses need a new confirmation. Refresh failed items before reviewing them again.",
+      "rejectKeepsApproved": "Reject the pending versions. Existing approved versions stay available.",
       "blockedUses": "View blocked uses",
       "reviewUseLabel": "Key #{{key}} · {{service}}",
       "useReviewUnavailable": "Review is unavailable. Check the use state and your review access.",

@@ -442,13 +442,16 @@ export function AlertsPage() {
                     <div key={`${fact.key}:${index}`}>
                       <dt>
                         {detail.data.alert.subtype === 'return_detected'
-                          ? t(`admin.alerts.returnDetectedFacts.${fact.key}`, { defaultValue: fact.key })
+                          ? t(`admin.alerts.returnDetectedFacts.${fact.key}`, {
+                              defaultValue: fact.key,
+                            })
                           : (copy.factNames[fact.key as keyof typeof copy.factNames] ?? fact.key)}
                       </dt>
                       <dd>
                         {detail.data.alert.subtype === 'return_detected' && fact.key === 'subtype'
                           ? t('admin.alerts.kindValue.returnDetected')
-                          : detail.data.alert.subtype === 'return_detected' && fact.key === 'marker_issued_at'
+                          : detail.data.alert.subtype === 'return_detected' &&
+                              fact.key === 'marker_issued_at'
                             ? formatDateTime(Number(fact.value))
                             : fact.value}
                       </dd>
@@ -696,9 +699,10 @@ export function AlertsPage() {
                     key: 'kind',
                     header: t('admin.alerts.kind'),
                     cell: 'title',
-                    render: (alert) => alert.subtype === 'return_detected'
-                      ? t('admin.alerts.kindValue.returnDetected')
-                      : kindLabels[alert.kind],
+                    render: (alert) =>
+                      alert.subtype === 'return_detected'
+                        ? t('admin.alerts.kindValue.returnDetected')
+                        : kindLabels[alert.kind],
                   },
                   {
                     key: 'message',

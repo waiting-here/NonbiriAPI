@@ -229,9 +229,7 @@ export function DonationUsesReviewAll({
                 })}
               </p>
               <p>{t('common.connections.reviewSnapshotFixed')}</p>
-              {decision === 'reject' ? (
-                <p>{t('common.connections.withdrawKeepsApproved')}</p>
-              ) : null}
+              {decision === 'reject' ? <p>{t('common.connections.rejectKeepsApproved')}</p> : null}
             </Note>
             {plan.blocked.length ? (
               <Fold title={t('common.connections.blockedUses')}>

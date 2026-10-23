@@ -297,7 +297,12 @@ export function normalizeAdminAlert(value: unknown): AdminAlert {
     'resolved',
     'resolved_at',
   ];
-  const root = record(value, [...fields, 'account_deletion', 'subtype'], 'administrator alert', fields);
+  const root = record(
+    value,
+    [...fields, 'account_deletion', 'subtype'],
+    'administrator alert',
+    fields,
+  );
   if ((root.kind === 'account_deleted') !== Object.hasOwn(root, 'account_deletion'))
     invalidResponse('account deletion snapshot');
   const resolved = boolean(root.resolved, 'alert resolution');

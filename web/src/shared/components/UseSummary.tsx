@@ -30,7 +30,7 @@ export function DonationStatusBadge({
     <StatusBadge
       active={display === 'approved' || display === 'partially_approved'}
       danger={display === 'rejected' || display === 'deleted' || display === 'expired'}
-      label={t('common.connections.donationStates.' + display)}
+      label={t(`common.connections.donationStates.${display}`)}
     />
   );
 }
