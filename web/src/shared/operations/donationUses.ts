@@ -76,18 +76,62 @@ export interface UseReviewResult {
   use?: DonationUse;
   error?: { code: string; message: string };
 }
+export const DONATION_REVIEW_STATUSES = [
+  'pending',
+  'approved_pending',
+  'approved',
+  'partially_approved',
+  'rejected',
+  'withdrawn',
+  'mixed',
+  'none',
+] as const;
+export type DonationReviewStatus = (typeof DONATION_REVIEW_STATUSES)[number];
+export const DONATION_DISPLAY_STATUSES = [
+  'pending',
+  'approved_pending',
+  'approved',
+  'partially_approved',
+  'rejected',
+  'withdrawn',
+  'mixed',
+  'deleted',
+  'expired',
+] as const;
+export type DonationDisplayStatus = (typeof DONATION_DISPLAY_STATUSES)[number];
 export interface UseSummary {
   total: string;
   pending: string;
   approved: string;
+  rejected?: string;
+  withdrawn?: string;
+  review_status?: DonationReviewStatus;
 }
 export function normalizeUseSummary(value: unknown): UseSummary {
-  const row = record(value, ['total', 'pending', 'approved'], 'use summary');
+  const row = record(
+    value,
+    ['total', 'pending', 'approved', 'rejected', 'withdrawn', 'review_status'],
+    'use summary',
+    ['total', 'pending', 'approved'],
+  );
   return {
     total: decimal(row.total, 'total uses'),
     pending: decimal(row.pending, 'pending uses'),
     approved: decimal(row.approved, 'approved uses'),
+    ...(row.rejected === undefined ? {} : { rejected: decimal(row.rejected, 'rejected uses') }),
+    ...(row.withdrawn === undefined ? {} : { withdrawn: decimal(row.withdrawn, 'withdrawn uses') }),
+    ...(row.review_status === undefined
+      ? {}
+      : { review_status: oneOf(row.review_status, DONATION_REVIEW_STATUSES, 'use review status') }),
   };
+}
+export function donationDisplayStatus(
+  status: 'pending' | 'approved' | 'rejected' | 'deleted' | 'expired',
+  summary?: UseSummary,
+): DonationDisplayStatus {
+  if (status !== 'pending' && status !== 'approved') return status;
+  if (summary?.review_status && summary.review_status !== 'none') return summary.review_status;
+  return status;
 }
 function version(value: unknown): UseVersion | null {
   if (value === null) return null;

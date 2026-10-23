@@ -54,7 +54,7 @@ func (api *httpAPI) listNumbered(writer http.ResponseWriter, request *http.Reque
 	if !numbered {
 		return false
 	}
-	allowed := []string{"status", "q"}
+	allowed := []string{"status", "review_status", "q"}
 	if role != recurringOwner {
 		allowed = append(allowed, "handling")
 	} else {
@@ -65,7 +65,7 @@ func (api *httpAPI) listNumbered(writer http.ResponseWriter, request *http.Reque
 		writeDonationError(writer, err)
 		return true
 	}
-	filter := ManagementFilter{Status: values.Get("status"), Query: values.Get("q"), Handling: values.Get("handling"), OwnerView: values.Get("view")}
+	filter := ManagementFilter{Status: values.Get("status"), ReviewStatus: values.Get("review_status"), Query: values.Get("q"), Handling: values.Get("handling"), OwnerView: values.Get("view")}
 	switch role {
 	case recurringOwner:
 		out, err := api.service.DonationsOwnerPage(request.Context(), principal.UserID, filter, page)

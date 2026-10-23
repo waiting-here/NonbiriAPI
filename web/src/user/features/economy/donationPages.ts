@@ -1,4 +1,10 @@
-import { normalizeUseSummary, type UseSummary } from '@shared/operations/donationUses';
+import {
+  DONATION_DISPLAY_STATUSES,
+  donationDisplayStatus,
+  normalizeUseSummary,
+  type DonationDisplayStatus,
+  type UseSummary,
+} from '@shared/operations/donationUses';
 import { ApiError, apiFetch } from '@shared/query/http';
 import {
   array,
@@ -30,6 +36,7 @@ export type OwnerDonationKeyView = 'current' | 'ended' | 'all';
 export interface OwnerDonationPageFilters {
   view?: OwnerDonationView;
   status?: DonationStatus | '';
+  review_status?: DonationDisplayStatus | '';
   q?: string;
 }
 
@@ -183,7 +190,11 @@ function normalizeOwnerFilters(value: unknown): Required<OwnerDonationPageFilter
     invalidInput('donation page filters');
   }
   const root = value as Record<string, unknown>;
-  if (Object.keys(root).some((key) => key !== 'status' && key !== 'q' && key !== 'view')) {
+  if (
+    Object.keys(root).some(
+      (key) => key !== 'status' && key !== 'review_status' && key !== 'q' && key !== 'view',
+    )
+  ) {
     invalidInput('donation page filters');
   }
   let status: DonationStatus | '' = '';
@@ -202,7 +213,15 @@ function normalizeOwnerFilters(value: unknown): Required<OwnerDonationPageFilter
   const view = root.view ?? 'all';
   if (!['current', 'history', 'hidden', 'all'].includes(view as string))
     invalidInput('donation view');
-  return { status, q, view: view as OwnerDonationView };
+  const review_status =
+    root.review_status === undefined
+      ? ''
+      : oneOf(
+          root.review_status,
+          ['', ...DONATION_DISPLAY_STATUSES],
+          'donation review status filter',
+        );
+  return { status, review_status, q, view: view as OwnerDonationView };
 }
 
 function pageResponse<T>(
@@ -335,6 +354,10 @@ function normalizeOwnerDonation(
   );
   const status = oneOf(root.status, OWNER_DONATION_STATUSES, `${label} status`);
   if (filters.status !== '' && filters.status !== status) invalidResponse(`${label} status filter`);
+  const summary =
+    root.use_summary === undefined ? undefined : normalizeUseSummary(root.use_summary);
+  if (filters.review_status && donationDisplayStatus(status, summary) !== filters.review_status)
+    invalidResponse(label + ' review status filter');
   const reviewResult = normalizeReviewResult(root.review_result, `${label} review`);
   const createdAt = unixSecond(root.created_at, `${label} creation time`);
   const updatedAt = unixSecond(root.updated_at, `${label} update time`);
@@ -520,6 +543,7 @@ export async function getOwnerDonationsPage(
     queryPath('/api/donations', {
       view: filters.view === undefined ? undefined : normalizedFilters.view,
       status: normalizedFilters.status || undefined,
+      review_status: normalizedFilters.review_status || undefined,
       q: normalizedFilters.q || undefined,
       page: window.page,
       page_size: window.pageSize,

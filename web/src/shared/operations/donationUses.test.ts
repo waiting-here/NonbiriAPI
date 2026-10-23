@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   normalizeDonationUse,
+  normalizeUseSummary,
+  donationDisplayStatus,
   reviewDonationUses,
   addDonationUses,
   getDonationUses,
@@ -159,4 +161,34 @@ describe('versioned donation uses', () => {
       '/api/steward/donations/3/keys/4/models/discovery?use_id=6&expected_revision=9&charity_model_id=20',
     );
   });
+});
+
+it('keeps review summaries separate from actual terminal status and retains an approved version after replacement rejection', () => {
+  const rejected = normalizeUseSummary({
+    total: '2',
+    pending: '0',
+    approved: '0',
+    rejected: '2',
+    withdrawn: '0',
+    review_status: 'rejected',
+  });
+  expect(donationDisplayStatus('pending', rejected)).toBe('rejected');
+  expect(donationDisplayStatus('expired', rejected)).toBe('expired');
+  const retained = normalizeUseSummary({
+    total: '2',
+    pending: '0',
+    approved: '2',
+    rejected: '1',
+    withdrawn: '0',
+    review_status: 'approved',
+  });
+  expect(donationDisplayStatus('pending', retained)).toBe('approved');
+  expect(donationDisplayStatus('deleted', retained)).toBe('deleted');
+  expect(
+    donationDisplayStatus('approved', {
+      ...retained,
+      pending: '1',
+      review_status: 'approved_pending',
+    }),
+  ).toBe('approved_pending');
 });

@@ -65,7 +65,7 @@ func (s *Service) beginReviewTx(ctx context.Context, role reviewerRole, userID i
 }
 
 func pendingReviewFilter(filter ManagementFilter) (ManagementFilter, error) {
-	if filter.Status != "" && filter.Status != "pending" || filter.Handling != "" && filter.Handling != "pending" {
+	if filter.Status != "" && filter.Status != "pending" || filter.ReviewStatus != "" && filter.ReviewStatus != "pending" && filter.ReviewStatus != "approved_pending" || filter.Handling != "" && filter.Handling != "pending" {
 		return filter, ErrForbidden
 	}
 	filter.Status = ""

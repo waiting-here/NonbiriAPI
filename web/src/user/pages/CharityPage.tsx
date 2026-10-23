@@ -88,6 +88,7 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
                   accountID={accountID}
                   donationID={donationID}
                   status={donation.data.status}
+                  summary={donation.data.useSummary}
                 />
               ) : (
                 <LoadingState />
