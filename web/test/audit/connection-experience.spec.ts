@@ -1613,7 +1613,8 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
     const page = await owner.newPage();
     await page.goto(fixture().user_url + '/endpoints?connection_id=' + group.id);
     await page.getByRole('button', { name: c.addEntry, exact: true }).click();
-    await page.getByRole('radio', { name: c.mainstream, exact: true }).check();
+    await page.getByText(c.mainstream, { exact: true }).click();
+    await expect(page.getByRole('radio', { name: c.mainstream, exact: true })).toBeChecked();
     await page.getByRole('combobox', { name: c.mainstream, exact: true }).selectOption(channel.id);
     for (const item of channel.entries)
       await page.getByRole('checkbox', { name: item.name, exact: true }).check();
