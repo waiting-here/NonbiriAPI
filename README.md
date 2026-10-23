@@ -76,6 +76,10 @@ suggestions grant no credential or donation authorization.
 
 The registry has 13 connector types covering OpenAI-compatible, dedicated Chat and Responses, Anthropic, Gateway v3/v4, Gemini, Decisions, System One and four explicit rerank protocols. Both Gateway versions support native text, image generation, embeddings and rerank with complete base URLs and no version probing. Direct HTTP operations include text, images, audio, embeddings, moderation and rerank, with SSE where supported. Chat and Responses share one model service selection and have bounded conversion paths; other services remain independently selectable. See [direct inference](docs/direct-inference.md) for the operation matrix and excluded persistent/realtime resources, and the [API contract](docs/api-contract.md) for ownership, credentials, SSRF, accounting and cancellation rules.
 
+[Decisions](docs/content-protocols.md#decisions) supports up to 400 questions,
+text/image/JSON question content and structured JSON evidence in user messages.
+Native JSON values and numbers are preserved within bounded requests.
+
 Charity pricing supports request, token and search-unit billing, with independent input/output modality prices, donor rewards and long-context tiers. Missing standard classifications fall back to aggregate prices per side. [Pricing rules](docs/charity-context-pricing.md) explain exact units, reservation and failed-generation usage. Light and heavy requests have separate concurrency pools shared by personal and charity calls, and separate charity RPM windows; all calls still share global limits.
 
 Personal and charity models share [managed session-header controls](docs/charity-session-headers.md), including five formats and a zero idle lifetime that generates a value per logical request while preserving it for internal retries, without guaranteeing uniqueness. Model settings and request adaptation save separately.

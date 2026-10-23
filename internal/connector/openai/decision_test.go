@@ -29,7 +29,7 @@ func decodeDecision(t *testing.T, body string) *DecisionRequest {
 
 func TestDecisionRequestBoundariesAndToolHistory(t *testing.T) {
 	question := `{"type":"predicate","instructions":""}`
-	for _, count := range []int{1, 200} {
+	for _, count := range []int{1, 200, 201, 400} {
 		body := `{"model":"m","input":"","questions":[` + strings.TrimSuffix(strings.Repeat(question+",", count), ",") + `]}`
 		decodeDecision(t, body)
 	}
@@ -48,7 +48,7 @@ func TestDecisionRequestBoundariesAndToolHistory(t *testing.T) {
 		strings.Replace(decisionBody, `"questions":[`, `"stream":null,"questions":[`, 1),
 		strings.Replace(decisionBody, `"questions":[`, `"metadata":{},"questions":[`, 1),
 		`{"model":"m","input":"x","questions":[]}`,
-		`{"model":"m","input":"x","questions":[` + strings.TrimSuffix(strings.Repeat(question+",", 201), ",") + `]}`,
+		`{"model":"m","input":"x","questions":[` + strings.TrimSuffix(strings.Repeat(question+",", 401), ",") + `]}`,
 		`{"model":"m","input":"x","questions":[{"type":"choice","instructions":"x","choices":[{"value":"yes"},{"value":"\u0079es"}]}]}`,
 		`{"model":"m","input":[{"type":"function_call_output","call_id":"missing","output":"x"}],"questions":[` + question + `]}`,
 		`{"model":"m","input":[{"role":"system","content":[{"type":"input_image","image_url":"https://example.com/a.png"}]}],"questions":[` + question + `]}`,

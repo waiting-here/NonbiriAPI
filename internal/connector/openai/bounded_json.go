@@ -15,6 +15,7 @@ type boundedJSON struct {
 	data     []byte
 	pos      int
 	keyBytes int
+	dataKeys bool
 }
 
 func validateEmbeddingJSON(data []byte) bool {
@@ -58,7 +59,7 @@ func (p *boundedJSON) value(depth int) bool {
 		for p.data[p.pos] != '}' {
 			end := jsonStringEnd(p.data, p.pos)
 			var key string
-			if json.Unmarshal(p.data[p.pos:end], &key) != nil || !validFieldName(key) {
+			if json.Unmarshal(p.data[p.pos:end], &key) != nil || !p.dataKeys && !validFieldName(key) {
 				return false
 			}
 			if _, found := seen[key]; found || depth == 1 && len(seen) >= maxTopLevelFields {
