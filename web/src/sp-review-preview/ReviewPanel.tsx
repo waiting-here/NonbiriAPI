@@ -3,7 +3,11 @@ import { Button } from '@shared/components/ui/Button';
 import { Field } from '@shared/components/ui/Field';
 import { Segmented } from '@shared/components/ui/Segmented';
 import { highResolutionArt } from '../user/activities/gacha/art-resolution';
-import { tomorrowAssets, refinedTomorrowAssets } from '../user/activities/gacha/tomorrow/assets';
+import {
+  tomorrowAssets,
+  refinedTomorrowAssets,
+  turnBackTomorrowAssets,
+} from '../user/activities/gacha/tomorrow/assets';
 import { previewControlMessage, previewReadyMessage } from './controls';
 import {
   appearanceArt,
@@ -11,6 +15,7 @@ import {
   entries,
   entryName,
   introduction,
+  turnBackIntroduction,
   type Entry,
   type View,
 } from './fixture';
@@ -43,8 +48,13 @@ export function ReviewPanel({
   const [line, setLine] = useState('0');
   const t = (zh: string, en: string) => (english ? en : zh);
   const name = entryName(entry, english);
-  const portraitStudy = entry.kind === 'tomorrow' && entry.refined;
-  const assets = portraitStudy ? refinedTomorrowAssets : tomorrowAssets;
+  const poseStudy = entry.kind === 'tomorrow' && entry.poseStudy;
+  const portraitStudy = entry.kind === 'tomorrow' && (entry.refined || poseStudy);
+  const assets = poseStudy
+    ? { ...refinedTomorrowAssets, ...turnBackTomorrowAssets }
+    : portraitStudy
+      ? refinedTomorrowAssets
+      : tomorrowAssets;
   const scene =
     '?scene=' +
     encodeURIComponent(entry.id) +
@@ -100,9 +110,11 @@ export function ReviewPanel({
                 <option key={item.id} value={item.id}>
                   {entryName(item, english)}
                   {item.kind === 'tomorrow'
-                    ? item.refined
-                      ? t(' · 精修试作', ' · Refined study')
-                      : t(' · 初版', ' · First version')
+                    ? item.poseStudy
+                      ? t(' · 回头等你（静态）', ' · Looking back (still)')
+                      : item.refined
+                        ? t(' · 精修试作', ' · Refined study')
+                        : t(' · 初版', ' · First version')
                     : ''}
                 </option>
               ))}
@@ -112,9 +124,11 @@ export function ReviewPanel({
         <p>
           <span className={'sp-review__badge' + (entry.kind === 'tomorrow' ? ' is-candidate' : '')}>
             {entry.kind === 'tomorrow'
-              ? portraitStudy
-                ? t('精修试作', 'Refined study')
-                : t('初版', 'First version')
+              ? poseStudy
+                ? t('新姿态 · 静态候选', 'New pose · Still study')
+                : portraitStudy
+                  ? t('精修试作', 'Refined study')
+                  : t('初版', 'First version')
               : t('已发布', 'Published')}
           </span>
           <span>{english ? entry.noteEN : entry.note}</span>
@@ -123,10 +137,15 @@ export function ReviewPanel({
       {portraitStudy && view !== 'card' && view !== 'materials' ? (
         <div className="sp-review__materials">
           <p>
-            {t(
-              '本轮先精修晨光竖卡。封面、插画与明暗装扮仍可在初版中查看。',
-              'This study refines the daylight portrait. The cover, illustration and appearances remain available in the first version.',
-            )}
+            {poseStudy
+              ? t(
+                  '新姿态目前只有静态竖卡，用于确认构图。封面、插画与明暗装扮可在初版中查看。',
+                  'The new pose is a still portrait for composition review. The cover, illustration and appearances remain available in the first version.',
+                )
+              : t(
+                  '本轮先精修晨光竖卡。封面、插画与明暗装扮仍可在初版中查看。',
+                  'This study refines the daylight portrait. The cover, illustration and appearances remain available in the first version.',
+                )}
           </p>
           <Button onClick={() => setEntry('tomorrow')}>
             {t('查看初版的这项素材', 'View this material in the first version')}
@@ -157,15 +176,20 @@ export function ReviewPanel({
           </div>
           {portraitStudy && (
             <p className="sp-review__note">
-              {t(
-                '晨光竖卡试作 · 切换明暗只改变预览界面；其他成品尚未同步精修。',
-                'Daylight portrait study · The theme switch changes the review interface; other formats have not been refined yet.',
-              )}
+              {poseStudy
+                ? t(
+                    '回头等你 · 先审阅静态姿态，尚未制作新动作。明暗切换只改变预览界面。',
+                    'Looking back for you · A still pose for review; new motion has not been made. The theme switch changes the review interface.',
+                  )
+                : t(
+                    '晨光竖卡试作 · 切换明暗只改变预览界面；其他成品尚未同步精修。',
+                    'Daylight portrait study · The theme switch changes the review interface; other formats have not been refined yet.',
+                  )}
             </p>
           )}
           {entry.kind === 'tomorrow' && (
             <div className="sp-review__dialogue">
-              <p>{introduction[english ? 1 : 0]}</p>
+              <p>{(poseStudy ? turnBackIntroduction : introduction)[english ? 1 : 0]}</p>
               <Segmented
                 label={t('台词', 'Dialogue')}
                 value={line}
@@ -228,7 +252,9 @@ export function ReviewPanel({
               <strong>{t('源图层', 'Source layers')}</strong>
               {[
                 [t('人物', 'Character'), assets.hero],
-                [t('闭眼校准图', 'Closed-eye registration'), assets.closed],
+                ...(!poseStudy
+                  ? [[t('闭眼校准图', 'Closed-eye registration'), assets.closed]]
+                  : []),
                 [t('晨光背景', 'Morning scenery'), assets.backgroundLight],
                 ...(!portraitStudy
                   ? [[t('蓝调背景', 'Evening scenery'), assets.backgroundDark]]

@@ -21,3 +21,9 @@ export const refinedTomorrowAssets = {
   closed: base + 'refined/closed.webp',
   backgroundLight: base + 'refined/background-light.webp',
 };
+
+export const turnBackTomorrowAssets = {
+  card: base + 'turn-back/card.webp',
+  thumb: base + 'turn-back/thumb.webp',
+  hero: base + 'turn-back/hero.webp',
+};

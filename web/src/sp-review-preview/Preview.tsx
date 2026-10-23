@@ -33,16 +33,17 @@ export function Preview() {
   const dark = useDarkMode();
   const reduced = useReducedMotion();
   const english = i18n.language.startsWith('en');
-  const [left, setLeft] = useState(() => selected('left', 'tomorrow-refined'));
-  const [right, setRight] = useState(() => selected('right', 'tomorrow'));
+  const [left, setLeft] = useState(() => selected('left', 'tomorrow-turn-back'));
+  const [right, setRight] = useState(() => selected('right', 'tomorrow-refined'));
   const [view, setView] = useState<View>(initialView);
   const [mode, setMode] = useState<Mode>(() =>
-    new URLSearchParams(location.search).get('motion') === '0' ? 'still' : 'motion',
+    new URLSearchParams(location.search).get('motion') === '1' ? 'motion' : 'still',
   );
   const [paused, setPaused] = useState(false);
   const [inspect, setInspect] = useState<Inspection | null>(null);
   const [initialTheme] = useState(() => new URLSearchParams(location.search).get('theme'));
   const animated = mode === 'motion' && !reduced;
+  const inspectingPose = inspect?.entry.kind === 'tomorrow' && inspect.entry.poseStudy;
   const t = (zh: string, en: string) => (english ? en : zh);
   useEffect(() => {
     if (initialTheme === 'light' || initialTheme === 'dark') setTheme(initialTheme);
@@ -71,8 +72,8 @@ export function Preview() {
         <PageHeader
           title={t('SP 成品对照', 'SP artwork review')}
           description={t(
-            '未命名的明天：精修竖卡、初版与已发布 SP 对照。',
-            'Tomorrow, Still Unwritten: compare the refined portrait, first version and published SP cards.',
+            '未命名的明天：新姿态、伸手版与已发布 SP 对照。',
+            'Tomorrow, Still Unwritten: compare the new pose, reaching pose and published SP cards.',
           )}
           actions={
             <>
@@ -87,6 +88,18 @@ export function Preview() {
       <main className="sp-review__main">
         <div className="sp-review__toolbar">
           <div className="sp-review__actions" aria-label={t('快速对照', 'Comparison presets')}>
+            <Button
+              size="sm"
+              onClick={() => {
+                setLeft('tomorrow-turn-back');
+                setRight('tomorrow-refined');
+                setView('card');
+                setMode('still');
+                setTheme('light');
+              }}
+            >
+              {t('新姿态 / 伸手版', 'New pose / Reaching pose')}
+            </Button>
             <Button
               size="sm"
               onClick={() => {
@@ -236,17 +249,20 @@ export function Preview() {
             />
           </div>
           <div className="sp-review__actions">
-            <Button
-              disabled={reduced}
-              onClick={() => setMode(mode === 'motion' ? 'still' : 'motion')}
-            >
-              {animated ? t('查看静态', 'View static') : t('播放动作', 'Play motion')}
-            </Button>
-            {animated && (
+            {!inspectingPose && (
+              <Button
+                disabled={reduced}
+                onClick={() => setMode(mode === 'motion' ? 'still' : 'motion')}
+              >
+                {animated ? t('查看静态', 'View static') : t('播放动作', 'Play motion')}
+              </Button>
+            )}
+            {animated && !inspectingPose && (
               <Button aria-pressed={paused} onClick={() => setPaused(!paused)}>
                 {paused ? t('继续动作', 'Resume motion') : t('暂停动作', 'Pause motion')}
               </Button>
             )}
+            {inspectingPose && <span>{t('新姿态 · 静态候选', 'New pose · Still study')}</span>}
             <a
               href={highResolutionArt(
                 inspect.variant === 'card' ? inspect.entry.art : inspect.entry[inspect.variant],

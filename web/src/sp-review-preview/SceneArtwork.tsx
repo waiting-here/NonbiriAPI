@@ -22,6 +22,16 @@ export function SceneArtwork({
   className?: string;
   highResolution?: boolean;
 }) {
+  if (entry.kind === 'tomorrow' && entry.poseStudy)
+    return (
+      <img
+        className={className}
+        src={entry.art}
+        srcSet={artSourceSet(entry.art, 1280, 2560)}
+        sizes={highResolution ? '94vw' : '(width < 64rem) 94vw, 46vw'}
+        alt={entryName(entry, english)}
+      />
+    );
   if (entry.kind === 'tomorrow')
     return (
       <TomorrowArtwork

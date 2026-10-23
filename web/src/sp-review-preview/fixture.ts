@@ -1,7 +1,11 @@
 import { cardById, themeById } from '../user/activities/gacha/catalog';
 import type { Card } from '../user/activities/gacha/types';
 import type { SpecialTheme } from '../user/activities/gacha/special-scenes';
-import { tomorrowAssets, refinedTomorrowAssets } from '../user/activities/gacha/tomorrow/assets';
+import {
+  tomorrowAssets,
+  refinedTomorrowAssets,
+  turnBackTomorrowAssets,
+} from '../user/activities/gacha/tomorrow/assets';
 
 export type PreviewVariant = 'card' | 'cover' | 'illustration' | 'appearance';
 export type View = PreviewVariant | 'materials';
@@ -20,7 +24,7 @@ type EntryDetails = {
 };
 export type Entry = EntryDetails &
   (
-    | { kind: 'tomorrow'; refined?: boolean }
+    | { kind: 'tomorrow'; refined?: boolean; poseStudy?: boolean }
     | { kind: 'published'; card: Card; appearance: PublishedAppearance }
   );
 
@@ -44,6 +48,14 @@ export const refinedTomorrow: Entry = {
   art: refinedTomorrowAssets.card,
   thumb: '/assets/gacha/tomorrow/refined/thumb.webp',
 };
+export const turnBackTomorrow: Entry = {
+  ...tomorrow,
+  id: 'tomorrow-turn-back',
+  kind: 'tomorrow',
+  poseStudy: true,
+  art: turnBackTomorrowAssets.card,
+  thumb: turnBackTomorrowAssets.thumb,
+};
 const published = (id: string): Entry => {
   const card = cardById[id];
   const theme = themeById[card.theme];
@@ -63,6 +75,7 @@ const published = (id: string): Entry => {
   };
 };
 export const entries: Entry[] = [
+  turnBackTomorrow,
   refinedTomorrow,
   tomorrow,
   ...['l-chatgpt', 'm-deepseek', 'n-gemini', 'o-claude', 'p-claude', 'q-glm'].map(published),
@@ -98,4 +111,8 @@ export const dialogue = [
 export const introduction = [
   '昨天已经走得很远，明天还没有名字。她把旧日的小小珍藏带在身边，回过头来，笑着向你招手：“有点紧张，也有点期待。你呢？”',
   'Yesterday is already far behind; tomorrow has yet to find its name. With a small keepsake at her side, she turns and waves to you. “A little nervous, a little excited. What about you?”',
+] as const;
+export const turnBackIntroduction = [
+  '昨天已经走得很远，明天还没有名字。她把旧日的小小珍藏带在身边，停下脚步，回头等你跟上：“有点紧张，也有点期待。你呢？”',
+  'Yesterday is already far behind; tomorrow has yet to find its name. With a small keepsake at her side, she pauses and looks back, waiting for you to catch up. “A little nervous, a little excited. What about you?”',
 ] as const;

@@ -148,6 +148,21 @@ export function AppearanceScene({
       window.parent.postMessage({ type: previewReadyMessage }, location.origin);
     return () => window.removeEventListener('message', receive);
   }, []);
+  if (entry.kind === 'tomorrow' && entry.poseStudy)
+    return (
+      <main className="sp-review__main">
+        <h1>{entryName(entry, english)}</h1>
+        <p>
+          {t(
+            '新姿态目前只有静态竖卡，尚未制作主题装扮。',
+            'The new pose is a still portrait; its appearance has not been made yet.',
+          )}
+        </p>
+        <a className="nb-btn nb-btn--secondary" href="/">
+          {t('返回对照页', 'Back to comparison')}
+        </a>
+      </main>
+    );
   return (
     <div
       className={
