@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
+	"github.com/waiting-here/NonbiriAPI/internal/returnmarker"
 	"github.com/waiting-here/NonbiriAPI/internal/riskaudit"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
@@ -234,6 +236,20 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 		writeImageFixtureJSON(w, map[string]bool{"ok": true})
 	}))
 	defer control.Close()
+	var returnAlertID string
+	if management != nil {
+		ref := "return-detected:" + strings.Repeat("a", 64)
+		event := returnmarker.Event{
+			UserID: userID, RequestID: requestIDs[1], ObservedAt: now, Ref: ref,
+			Evidence: returnmarker.Evidence{Source: returnmarker.Source{RequestID: requestIDs[0]}, IssuedAt: now - 10},
+		}
+		if err := f.app.Load().adminAlerts.RecordReturnDetected(t.Context(), event); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.store.DB().QueryRow("SELECT CAST(id AS TEXT) FROM admin_alerts WHERE ref=?", ref).Scan(&returnAlertID); err != nil {
+			t.Fatal(err)
+		}
+	}
 	state := map[string]any{
 		"user_url": users.URL, "admin_url": admins.URL, "control_url": control.URL,
 		"control_token": controlToken, "users": f.users, "admin_cookie": f.adminCookie,
@@ -246,6 +262,7 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 	}
 	if management != nil {
 		state["management"] = management
+		state["return_alert_id"] = returnAlertID
 		state["mfa_user"] = mfaUser
 	}
 	raw, err := json.Marshal(state)

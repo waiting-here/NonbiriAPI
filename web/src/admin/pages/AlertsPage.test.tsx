@@ -90,14 +90,18 @@ describe('administrator alerts page', () => {
       },
     ]);
     const rendered = await renderWithProviders(<AlertsPage />, {
-      station: 'admin', role: 'admin', locale: 'en',
+      station: 'admin',
+      role: 'admin',
+      locale: 'en',
       route: '/alerts?resolved=false&page=1&page_size=20',
     });
     expect(await screen.findByText('Request returned')).toBeVisible();
     expect(screen.getByText(/processing continued without an automatic penalty/)).toBeVisible();
-    expect(screen.queryByText('Upstream call did not complete. Open details for failure information.')).toBeNull();
+    expect(
+      screen.queryByText('Upstream call did not complete. Open details for failure information.'),
+    ).toBeNull();
     await rendered.user.click(screen.getByRole('button', { name: 'Alert actions' }));
-    expect(screen.getByRole('menuitem', { name: 'Resolve', exact: true })).toBeEnabled();
+    expect(screen.getByRole('menuitem', { name: 'Resolve' })).toBeEnabled();
   });
 
   it('rejects off-site and ambiguous return destinations', () => {
