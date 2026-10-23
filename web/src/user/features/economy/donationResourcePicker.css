@@ -116,7 +116,7 @@
 
 .donation-resource-picker__endpoint > span:first-child,
 .donation-resource-picker__key > span,
-.donation-resource-picker__selected-list li > div {
+.donation-resource-picker__selected-summary > div {
   display: grid;
   min-width: 0;
   gap: var(--nb-space-1);
@@ -153,16 +153,22 @@
   margin-top: 0.25rem;
 }
 
-.donation-resource-picker__selected-list li {
-  display: flex;
+.donation-resource-picker__selected-list > li {
+  display: grid;
   min-width: 0;
-  align-items: center;
-  justify-content: space-between;
   gap: var(--nb-space-3);
   padding: var(--nb-space-3);
 }
 
-.donation-resource-picker__selected-list :is(.btn, .nb-btn) {
+.donation-resource-picker__selected-summary {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--nb-space-3);
+}
+
+.donation-resource-picker__selected-list .nb-btn {
   flex: 0 0 auto;
 }
 
@@ -172,10 +178,9 @@
   gap: var(--nb-space-1);
 }
 
-@media (width <= 40rem) {
+@media (width < 40rem) {
   .donation-resource-picker__header,
-  .donation-resource-picker__section-heading,
-  .donation-resource-picker__selected-list li {
+  .donation-resource-picker__section-heading {
     align-items: stretch;
     flex-direction: column;
   }
