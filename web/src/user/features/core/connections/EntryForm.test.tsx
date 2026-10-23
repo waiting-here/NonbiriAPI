@@ -418,3 +418,35 @@ describe('mainstream entry suggestions', () => {
     await waitFor(() => expect(revisions).toEqual(['7', '8']));
   });
 });
+
+it('shows System One services when the Typesafe System One protocol is selected', async () => {
+  const supplied = options();
+  supplied.base_connector_types.push('typesafe-systemone');
+  supplied.native_service_options[0]!.native_services.push('decisions');
+  supplied.native_service_options.push({
+    connector_type: 'typesafe-systemone',
+    configuration_type: 'typesafe-systemone',
+    native_services: ['systemone'],
+    default_native_services: ['systemone'],
+    rerank_formats: [],
+  });
+  const view = await renderForm(async () => json(supplied));
+  expect(screen.getByRole('checkbox', { name: 'Decisions', exact: true })).toBeVisible();
+  expect(
+    screen.queryByRole('checkbox', { name: 'System One', exact: true }),
+  ).not.toBeInTheDocument();
+  const protocol = screen.getByRole('combobox', { name: 'Protocol', exact: true });
+  await view.user.selectOptions(protocol, 'typesafe-systemone');
+  expect(screen.getByRole('checkbox', { name: 'System One', exact: true })).toBeChecked();
+  expect(
+    screen.queryByRole('checkbox', { name: 'Decisions', exact: true }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole('checkbox', { name: 'Chat completions', exact: true }),
+  ).not.toBeInTheDocument();
+  await view.user.selectOptions(protocol, 'openai-compatible');
+  expect(
+    screen.queryByRole('checkbox', { name: 'System One', exact: true }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole('checkbox', { name: 'Decisions', exact: true })).toBeVisible();
+});

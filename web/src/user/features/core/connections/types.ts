@@ -6,6 +6,8 @@ import type { DiscoverySafeClass, DiscoveryState } from '../types';
 export interface Connection {
   id: string;
   name: string;
+  display_name: string;
+  primary_entry: { id: string; base_url: string; note: string } | null;
   note: string;
   revision: string;
   entry_count: string;

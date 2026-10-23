@@ -16,6 +16,7 @@ import { ConnectionOperationNotice } from './OperationNotice';
 import { ConnectionCreateForm } from './ConnectionForm';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import { ConnectionResourceList } from './ResourceList';
+import { ConnectionSummary } from './ConnectionSummary';
 import type { Credential, DiscoverySource } from './types';
 
 export function EntryScope(props: {
@@ -122,7 +123,7 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
                 key: 'name',
                 header: t('common.connections.name'),
                 cell: 'title',
-                render: (row) => row.name,
+                render: (row) => <ConnectionSummary connection={row} />,
               },
               {
                 key: 'select',

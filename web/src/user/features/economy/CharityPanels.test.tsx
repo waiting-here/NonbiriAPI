@@ -440,6 +440,10 @@ describe('donation composer recovery', () => {
       ),
       { station: 'user', role: 'user' },
     );
+    expect(screen.getByText(charityCopy.presentation.modelSetupHelp)).toBeVisible();
+    expect(
+      screen.getByRole('textbox', { name: charityCopy.donationDescription }),
+    ).toHaveAccessibleDescription(charityCopy.presentation.descriptionHelp);
     await rendered.user.click(screen.getByText(charityCopy.disclosureTitle));
     expect(screen.getByRole('heading', { name: charityCopy.donationNoticeTitle })).toBeVisible();
     expect(screen.getByText(/Operator guidance/)).toHaveTextContent(
@@ -1155,6 +1159,9 @@ describe('donation composer recovery', () => {
         <DonationCard donation={donation} showDetailLink={showDetailLink} />,
         { station: 'user', role: 'user' },
       );
+      if (!showDetailLink) {
+        expect(screen.getByText(charityCopy.presentation.modelSetupHelp)).toBeVisible();
+      }
       await rendered.user.click(screen.getByRole('button', { name: /edit/i }));
       const description = screen.getByRole('textbox');
       await rendered.user.clear(description);

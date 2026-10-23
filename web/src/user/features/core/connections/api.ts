@@ -10,6 +10,7 @@ import {
   nullableDecimalID,
   nullableUnixSecond,
   oneOf,
+  optionalField,
   record,
   string,
   unixSecond,
@@ -39,23 +40,39 @@ const id = (source: WireRecord, name: string) => decimalID(source[name], name);
 const revision = (source: WireRecord) => decimal(source.revision, 'revision', { positive: true });
 
 export function normalizeConnection(value: unknown): Connection {
+  const required = [
+    'id',
+    'name',
+    'note',
+    'revision',
+    'entry_count',
+    'credential_count',
+    'created_at',
+    'updated_at',
+  ];
   const source = record(
     value,
-    [
-      'id',
-      'name',
-      'note',
-      'revision',
-      'entry_count',
-      'credential_count',
-      'created_at',
-      'updated_at',
-    ],
+    [...required, 'display_name', 'primary_entry'],
     'connection',
+    required,
   );
+  const name = string(source.name, 'connection name');
   return {
     id: id(source, 'id'),
-    name: string(source.name, 'connection name'),
+    name,
+    display_name:
+      optionalField(source, 'display_name', (value) => string(value, 'connection display name')) ??
+      name,
+    primary_entry:
+      optionalField(source, 'primary_entry', (value) => {
+        if (value === null) return null;
+        const entry = record(value, ['id', 'base_url', 'note'], 'primary entry');
+        return {
+          id: id(entry, 'id'),
+          base_url: string(entry.base_url, 'primary entry URL'),
+          note: string(entry.note, 'primary entry note'),
+        };
+      }) ?? null,
     note: string(source.note, 'connection note'),
     revision: revision(source),
     entry_count: decimal(source.entry_count, 'entry count'),
