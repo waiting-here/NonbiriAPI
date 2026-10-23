@@ -168,6 +168,14 @@ for (const kind of ['personal', 'admin', 'steward'] as const) {
         );
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.name));
+        const timeRequests: Array<{ path: string; status: number }> = [];
+        page.on('response', (response) => {
+          if (response.url().includes('time-context'))
+            timeRequests.push({
+              path: new URL(response.url()).pathname,
+              status: response.status(),
+            });
+        });
         const f = await fixture(page, kind);
         const destination = personal
           ? '/models'
@@ -233,6 +241,18 @@ for (const kind of ['personal', 'admin', 'steward'] as const) {
             contentType: 'application/json',
             body: JSON.stringify({
               errors: await page.locator('.field-error').allTextContents(),
+              timeRequests,
+              timeNotice: await page.locator('.time-context-notice').allTextContents(),
+              dates: await page.locator('input[type="datetime-local"]').evaluateAll((inputs) =>
+                inputs.map((element) => {
+                  const input = element as HTMLInputElement;
+                  return {
+                    value: input.value,
+                    disabled: input.disabled,
+                    ariaInvalid: input.getAttribute('aria-invalid'),
+                  };
+                }),
+              ),
               provider: await nameEditor
                 .getByLabel(user.user.steward.provider, { exact: true })
                 .inputValue(),
@@ -263,6 +283,13 @@ for (const kind of ['personal', 'admin', 'steward'] as const) {
           { name: 'X-Session-0', idle_seconds: 0, format: 'opencode_part' },
           { name: 'X-Session-1', idle_seconds: 300, format: 'opencode_session' },
         ]);
+        if (!personal)
+          expect(f.state.writes[0].discount).toEqual({
+            enabled: false,
+            percent: 0,
+            start_at: null,
+            end_at: null,
+          });
         if (personal)
           await expect(
             page.getByRole('button', { name: core['models.editModel'], exact: true }),

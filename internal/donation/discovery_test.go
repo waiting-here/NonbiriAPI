@@ -78,6 +78,11 @@ func approveDiscoveryDonation(t *testing.T, env *donationTestEnv, donation Donat
 
 func newDiscoveryFixture(t *testing.T, blocked bool, services ...contract.NativeService) *discoveryFixture {
 	t.Helper()
+	return newDiscoverySharingFixture(t, blocked, true, services...)
+}
+
+func newDiscoverySharingFixture(t *testing.T, blocked, share bool, services ...contract.NativeService) *discoveryFixture {
+	t.Helper()
 	env := newDonationTestEnv(t)
 	level := int64(6)
 	f := &discoveryFixture{donationTestEnv: env, owner: env.seedUser(t, "discovery-donor", nil, false), admin: env.seedUser(t, "", nil, true), steward: env.seedUser(t, "discovery-steward", &level, false)}
@@ -102,9 +107,13 @@ func newDiscoveryFixture(t *testing.T, blocked bool, services ...contract.Native
 	if len(services) == 0 {
 		services = []contract.NativeService{contract.NativeServiceChatCompletions}
 	}
+	keyInput := CreateKeyInput{EndpointKeyID: f.key, ExpiresAt: &expires, NativeServices: services}
+	if share {
+		keyInput.DiscoverySourceID, keyInput.DiscoverySourceRevision = &source.SourceID, &shared.SourceRevision
+	}
 	created, err := env.service.Create(context.Background(), f.owner,
 		donationMutation(t, 'A', http.MethodPost, routeDonations, nil, map[string]any{"fixture": "discovery"}),
-		CreateInput{Description: "discovery donation", OwnershipAuthorized: true, Keys: []CreateKeyInput{{EndpointKeyID: f.key, ExpiresAt: &expires, NativeServices: services, DiscoverySourceID: &source.SourceID, DiscoverySourceRevision: &shared.SourceRevision}}})
+		CreateInput{Description: "discovery donation", OwnershipAuthorized: true, Keys: []CreateKeyInput{keyInput}})
 	if err != nil {
 		t.Fatal(err)
 	}

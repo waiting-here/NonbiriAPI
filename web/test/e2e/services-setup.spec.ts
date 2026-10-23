@@ -219,6 +219,7 @@ for (const locale of ['en', 'zh'] as const) {
       failedModel = false;
     let discoveryRefreshes = 0;
     const bound = new Set<string>();
+    const manualEntries: (typeof entries)[number][] = [];
     const c = (locale === 'zh' ? zhCommon : enCommon).common.connections;
     const chatLabel = (locale === 'zh' ? zhCommon : enCommon).common.modelTypes.chat_responses;
     const nativeResponse = (locale === 'zh' ? zhCommon : enCommon).common.modelTypes.responses;
@@ -304,21 +305,16 @@ for (const locale of ['en', 'zh'] as const) {
             url.searchParams,
           ),
         );
-      if (/\/keys\/\d+\/models\/manual$/.test(path))
-        return fulfill(
-          {
-            entries: [
-              {
-                ...entries[0],
-                id: '91',
-                source_type: 'manual',
-                upstream_model_id: (input?.entries as { upstream_model_id: string }[])[0]
-                  ?.upstream_model_id,
-              },
-            ],
-          },
-          201,
-        );
+      if (/\/keys\/\d+\/models\/manual$/.test(path)) {
+        const created = (input?.entries as { upstream_model_id: string }[]).map((entry, index) => ({
+          ...entries[0],
+          id: String(91 + manualEntries.length + index),
+          source_type: 'manual',
+          upstream_model_id: entry.upstream_model_id,
+        }));
+        manualEntries.push(...created);
+        return fulfill({ entries: created }, 201);
+      }
       if (path === '/api/endpoints')
         return request.method() === 'POST'
           ? fulfill({ ...endpoint, ...input }, 201)
@@ -360,26 +356,20 @@ for (const locale of ['en', 'zh'] as const) {
         const current = failedRead
           ? { ...evidence, state: 'failed', result: null, count: null, safe_class: 'transport' }
           : evidence;
-        const catalog = {
+        const source = url.searchParams.get('source');
+        const rows = [
+          ...(failedRead || source === 'manual' ? [] : entries),
+          ...(source === 'automatic' ? [] : manualEntries),
+        ];
+        const window = url.searchParams.has('limit') ? null : numberedPage(rows, url.searchParams);
+        const visible = window?.data ?? rows;
+        return fulfill({
           evidence: current,
-          automatic_entries:
-            failedRead || url.searchParams.get('source') === 'manual' ? [] : entries,
-          manual_entries: [],
+          automatic_entries: visible.filter((entry) => entry.source_type === 'automatic'),
+          manual_entries: visible.filter((entry) => entry.source_type === 'manual'),
           next_cursor: null,
-        };
-        return fulfill(
-          url.searchParams.has('limit')
-            ? catalog
-            : {
-                ...catalog,
-                pagination: {
-                  page: '1',
-                  page_size: 20,
-                  total_items: catalog.automatic_entries.length.toString(),
-                  total_pages: '1',
-                },
-              },
-        );
+          ...(window ? { pagination: window.pagination } : {}),
+        });
       }
       if (path === '/api/models' && input) {
         if (input.model === 'model-a')

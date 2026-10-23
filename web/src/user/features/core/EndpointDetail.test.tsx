@@ -389,3 +389,357 @@ describe('endpoint detail numbered resource panels', () => {
     expect(JSON.parse(deletion?.body ?? '{}')).toMatchObject({ expected_revision: '3' });
   });
 });
+
+function keyPage(key: object) {
+  return {
+    data: [key],
+    next_cursor: null,
+    pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+  };
+}
+async function renderKeyFeedback(fetchMock: typeof fetch, route = '/endpoints/11') {
+  vi.stubGlobal('fetch', vi.fn(fetchMock));
+  const view = await renderWithProviders(<EndpointDetail accountId="1" endpointId="11" />, {
+    station: 'user',
+    role: 'user',
+    route,
+  });
+  view.queryClient.setQueryData(['user', 'session'], session);
+  await screen.findAllByText('key note');
+  return view;
+}
+describe('key model operation feedback', () => {
+  it.each([400, 429])(
+    'preserves a concrete HTTP %s failure in a full-width row',
+    async (status) => {
+      const message = 'Choose the catalog for the same credential version before continuing.';
+      const view = await renderKeyFeedback(async (input, init) => {
+        const url = new URL(String(input), 'https://app.example');
+        if (url.pathname === '/api/endpoints/11/keys') return jsonResponse(keyPage(endpointKey));
+        if (url.pathname.endsWith('/models/refresh') && init?.method === 'POST')
+          return jsonResponse(
+            { error: { code: status === 429 ? 'rate_limited' : 'invalid_request', message } },
+            status,
+          );
+        throw Error('Unexpected ' + url.pathname);
+      });
+      await view.user.click(screen.getByRole('button', { name: 'Load available models' }));
+      const failure = await screen.findByRole('alert');
+      expect(failure).toHaveTextContent(message);
+      expect(failure.closest('td')).toHaveAttribute('colspan', '6');
+      expect(failure.closest('tr')).toHaveClass('core-key-feedback');
+      expect(failure.closest('td')).not.toHaveAttribute('data-cell', 'action');
+    },
+  );
+  it('keeps an uncertain refresh and its recovery controls outside the action cell without resending', async () => {
+    let writes = 0;
+    const view = await renderKeyFeedback(async (input, init) => {
+      const url = new URL(String(input), 'https://app.example');
+      if (url.pathname === '/api/endpoints/11/keys') return jsonResponse(keyPage(endpointKey));
+      if (url.pathname.endsWith('/models/refresh') && init?.method === 'POST') {
+        writes += 1;
+        throw new TypeError('Response lost');
+      }
+      if (url.pathname === '/api/resource-operation-status')
+        return jsonResponse({ status: 'not_recorded' });
+      throw Error('Unexpected ' + url.pathname);
+    });
+    await view.user.click(screen.getByRole('button', { name: 'Load available models' }));
+    const unknown = await screen.findByText("Couldn't confirm the save");
+    const feedback = unknown.closest('tr')!;
+    expect(feedback).toHaveClass('core-key-feedback');
+    expect(feedback.querySelector('td')).toHaveAttribute('colspan', '6');
+    await waitFor(() =>
+      expect(
+        within(feedback).getAllByRole('button', { name: 'Check again' }).length,
+      ).toBeGreaterThan(0),
+    );
+    expect(writes).toBe(1);
+  });
+  it('preserves a manual import draft and shows the actual rejection before a corrected save', async () => {
+    let imported = false;
+    let writes = 0;
+    const view = await renderKeyFeedback(async (input, init) => {
+      const url = new URL(String(input), 'https://app.example');
+      if (url.pathname === '/api/endpoints/11/keys') return jsonResponse(keyPage(endpointKey));
+      if (url.pathname === '/api/endpoints/11/keys/21/models/manual' && init?.method === 'POST') {
+        writes += 1;
+        if (writes === 1)
+          return jsonResponse(
+            {
+              error: {
+                code: 'invalid_request',
+                message: 'The model identifier is unavailable. Choose another identifier.',
+              },
+            },
+            400,
+          );
+        imported = true;
+        return jsonResponse({ entries: [manualEntry] }, 201);
+      }
+      if (url.pathname === '/api/endpoints/11/keys/21/models')
+        return jsonResponse(
+          catalogPage(imported && url.searchParams.get('source') === 'manual' ? [manualEntry] : []),
+        );
+      throw Error('Unexpected ' + url.pathname);
+    });
+    await view.user.click(screen.getByRole('button', { name: 'View models' }));
+    const input = await screen.findByRole('textbox', { name: 'Provider model name' });
+    await view.user.type(input, 'Vendor/Manual');
+    await view.user.type(screen.getByRole('textbox', { name: 'Note (optional)' }), 'Vendor');
+    await view.user.click(screen.getByRole('button', { name: 'Add manual entry' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The model identifier is unavailable. Choose another identifier.',
+    );
+    expect(input).toHaveValue('Vendor/Manual');
+    await view.user.click(screen.getByRole('button', { name: 'Add manual entry' }));
+    await waitFor(() => expect(input).toHaveValue(''));
+    expect(await screen.findByText('Vendor/Manual')).toBeVisible();
+    expect(writes).toBe(2);
+  });
+});
+
+const catalogSource = {
+  id: '17',
+  connection_id: '9',
+  name: 'Exact catalog',
+  base_url: 'https://catalog.example',
+  models_url: 'https://catalog.example/models',
+  list_format: 'openai',
+  credential_id: '7',
+  credential_version: '2',
+  revision: '1',
+  discovery_source_revision: '1',
+  enabled: true,
+  credential_available: true,
+  state: 'succeeded',
+  checked_at: 1,
+  safe_class: 'none',
+  safe_diag: '',
+  created_at: 1,
+  updated_at: 1,
+};
+describe('missing catalog recovery', () => {
+  it('selects and saves the exact catalog in the real key editor, then reads its available models', async () => {
+    let current: Record<string, unknown> & { discovery_source_id: string | null } = {
+      ...endpointKey,
+      discovery_source_id: null,
+    };
+    const writes: { path: string; body?: Record<string, unknown> }[] = [];
+    let catalogReads = 0;
+    const view = await renderKeyFeedback(async (input, init) => {
+      const url = new URL(String(input), 'https://app.example');
+      if (url.pathname === '/api/endpoints/11/keys') return jsonResponse(keyPage(current));
+      if (url.pathname === '/api/connections/9/discovery-sources') {
+        catalogReads++;
+        return jsonResponse({ ...keyPage(catalogSource) });
+      }
+      if (url.pathname === '/api/endpoints/11/keys/21' && init?.method === 'PATCH') {
+        const body = JSON.parse(String(init.body));
+        writes.push({ path: url.pathname, body });
+        current = {
+          ...current,
+          discovery_source_id: body.discovery_source_id,
+          revision: '5',
+          grant_revision: '4',
+        };
+        return jsonResponse(current);
+      }
+      if (url.pathname.endsWith('/models/refresh') && init?.method === 'POST') {
+        writes.push({ path: url.pathname });
+        expect(current.discovery_source_id).toBe('17');
+        return jsonResponse(
+          {
+            operation_id: 'op_AAAAAAAAAAAAAAAAAAAAAA',
+            evidence: catalogPage([], '1', 20, 0, 'checking').evidence,
+          },
+          202,
+        );
+      }
+      if (url.pathname === '/api/endpoints/11/keys/21/models') {
+        const automatic = url.searchParams.get('source') === 'automatic';
+        return jsonResponse({
+          ...catalogPage([]),
+          evidence: {
+            state: 'succeeded',
+            revision: '2',
+            result: automatic ? 'nonempty' : 'empty',
+            safe_class: 'none',
+            observed_at: 1700000020,
+            count: automatic ? '1' : '0',
+          },
+          automatic_entries: automatic
+            ? [
+                {
+                  ...manualEntry,
+                  id: '31',
+                  source_type: 'automatic',
+                  upstream_model_id: 'Vendor/Found',
+                },
+              ]
+            : [],
+          pagination: {
+            page: '1',
+            page_size: 20,
+            total_items: automatic ? '1' : '0',
+            total_pages: '1',
+          },
+        });
+      }
+      throw Error('Unexpected ' + url.pathname);
+    });
+    expect(screen.queryByRole('button', { name: 'Load available models' })).toBeNull();
+    expect(catalogReads).toBe(0);
+    await view.user.click(screen.getByRole('button', { name: 'Choose model catalog' }));
+    expect(writes).toHaveLength(0);
+    const scope = screen
+      .getByText('Credential and service authorization', { selector: 'strong' })
+      .closest('details')!;
+    expect(scope).toHaveAttribute('open');
+    const catalog = within(scope)
+      .getByText('Catalog association (optional)', { selector: 'strong' })
+      .closest('details')!;
+    expect(catalog).toHaveAttribute('open');
+    expect(within(catalog).getByRole('link', { name: 'Discovery sources' })).toHaveAttribute(
+      'href',
+      '/endpoints?connection_id=9&connection_view=discovery',
+    );
+    await view.user.click(within(scope).getByRole('checkbox', { name: 'Responses' }));
+    const keyEditor = screen.getByRole('region', { name: 'Edit note and limits' });
+    await view.user.click(within(keyEditor).getByRole('button', { name: 'Close' }));
+    await view.user.click(screen.getByRole('button', { name: 'Choose model catalog' }));
+    expect(within(scope).getByRole('checkbox', { name: 'Responses' })).not.toBeChecked();
+    expect(catalogReads).toBe(1);
+    const note = screen.getByRole('textbox', { name: 'Key note' });
+    await view.user.clear(note);
+    await view.user.type(note, 'Keep this note draft');
+    await view.user.click(
+      within(catalog).getByText('Catalog association (optional)', { selector: 'strong' }),
+    );
+    await view.user.click(
+      within(scope).getByText('Credential and service authorization', { selector: 'strong' }),
+    );
+    await view.user.click(screen.getByRole('button', { name: 'Choose model catalog' }));
+    expect(scope).toHaveAttribute('open');
+    expect(catalog).toHaveAttribute('open');
+    expect(within(scope).getByRole('checkbox', { name: 'Responses' })).not.toBeChecked();
+    expect(note).toHaveValue('Keep this note draft');
+    await view.user.click(within(scope).getByRole('checkbox', { name: 'Responses' }));
+    await view.user.click(await within(scope).findByRole('button', { name: 'Use source' }));
+    await view.user.click(within(scope).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toEqual({
+      path: '/api/endpoints/11/keys/21',
+      body: {
+        native_services: ['chat_completions', 'responses'],
+        discovery_source_id: '17',
+        expected_revision: '4',
+      },
+    });
+    const editor = screen.getByRole('region', { name: 'Edit note and limits' });
+    await view.user.click(within(editor).getByRole('button', { name: 'Close' }));
+    await view.user.click(await screen.findByRole('button', { name: 'Load available models' }));
+    expect(await screen.findByText('Vendor/Found')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Add manual entry' })).toBeVisible();
+    expect(writes.map((item) => item.path)).toEqual([
+      '/api/endpoints/11/keys/21',
+      '/api/endpoints/11/keys/21/models/refresh',
+    ]);
+  });
+  it('opens grouping from a focused ungrouped key and saves a new connection only after explicit confirmation', async () => {
+    let currentEndpoint = {
+      ...endpoint,
+      revision: String(endpoint.revision),
+      connection_id: null as string | null,
+    };
+    let connection: object | null = null;
+    const writes: { path: string; body: Record<string, unknown> }[] = [];
+    vi.mocked(coreQueries.useEndpoint).mockReturnValue({
+      data: currentEndpoint,
+      isPending: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof coreQueries.useEndpoint>);
+    const view = await renderKeyFeedback(async (input, init) => {
+      const url = new URL(String(input), 'https://app.example');
+      if (url.pathname === '/api/endpoints/11/keys')
+        return jsonResponse(keyPage({ ...endpointKey, discovery_source_id: null }));
+      if (url.pathname === '/api/endpoint-create-options')
+        return jsonResponse({
+          base_connector_types: ['openai-compatible'],
+          mainstream_channels: [],
+          native_service_options: [
+            {
+              connector_type: 'openai-compatible',
+              configuration_type: 'openai-compatible',
+              native_services: ['chat_completions', 'responses'],
+              default_native_services: ['chat_completions'],
+              rerank_formats: [],
+            },
+          ],
+        });
+      if (url.pathname === '/api/connections' && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        writes.push({ path: url.pathname, body });
+        connection = {
+          id: '9',
+          name: body.name,
+          note: body.note,
+          revision: '1',
+          entry_count: '0',
+          credential_count: '0',
+          created_at: 1,
+          updated_at: 1,
+        };
+        return jsonResponse(connection, 201);
+      }
+      if (url.pathname === '/api/connections')
+        return jsonResponse({
+          data: connection ? [connection] : [],
+          next_cursor: null,
+          pagination: {
+            page: '1',
+            page_size: 20,
+            total_items: connection ? '1' : '0',
+            total_pages: '1',
+          },
+        });
+      if (url.pathname === '/api/endpoints/11' && init?.method === 'PATCH') {
+        const body = JSON.parse(String(init.body));
+        writes.push({ path: url.pathname, body });
+        currentEndpoint = { ...currentEndpoint, connection_id: body.connection_id, revision: '4' };
+        return jsonResponse(currentEndpoint);
+      }
+      if (url.pathname === '/api/endpoints/11') return jsonResponse(currentEndpoint);
+      throw Error('Unexpected ' + url.pathname);
+    }, '/endpoints/11?focus_key_id=21');
+    await view.user.click(screen.getByRole('button', { name: 'Move to another connection' }));
+    const scope = screen
+      .getByText('Entry services and connection', { selector: 'strong' })
+      .closest('details')!;
+    expect(scope).toHaveAttribute('open');
+    expect(scope.querySelector('summary')).toHaveFocus();
+    expect(writes).toHaveLength(0);
+    await view.user.click(within(scope).getByRole('button', { name: 'Add connection' }));
+    const create = screen.getByRole('region', { name: 'Add connection' });
+    await view.user.type(
+      within(create).getByRole('textbox', { name: 'Name' }),
+      'Catalog connection',
+    );
+    await view.user.click(within(create).getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(currentEndpoint.connection_id).toBeNull();
+    await waitFor(() => expect(within(scope).getByRole('button', { name: 'Save' })).toBeEnabled());
+    await view.user.click(within(scope).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes[1]).toEqual({
+      path: '/api/endpoints/11',
+      body: {
+        native_services: ['chat_completions', 'responses'],
+        rerank_format: '',
+        connection_id: '9',
+        expected_revision: '3',
+      },
+    });
+  });
+});

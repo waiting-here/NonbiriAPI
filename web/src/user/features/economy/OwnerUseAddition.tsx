@@ -97,15 +97,26 @@ function AdditionDraft({
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const [snapshot, setSnapshot] = useState(current);
-  const [expected, setExpected] = useState(donationRevision);
-  const [share, setShare] = useState<DonationShare>({ services: [] });
-  const [versions, setVersions] = useState<Partial<Record<NativeService, string | null>>>({});
-  const [done, setDone] = useState(false);
   const byService = new Map(uses.map((row) => [row.native_service, row]));
   const available = (current.native_services ?? []).filter(
     (service) => !byService.get(service)?.pending && !byService.get(service)?.approved,
   );
+  const mainstream = donationKey.source.kind === 'mainstream';
+  const [snapshot, setSnapshot] = useState(current);
+  const [expected, setExpected] = useState(donationRevision);
+  const [share, setShare] = useState<DonationShare>(() => ({
+    services: mainstream ? available.slice() : [],
+    initializeSource: mainstream && Boolean(current.discovery_source_id),
+  }));
+  const [versions, setVersions] = useState<Partial<Record<NativeService, string | null>>>(() =>
+    Object.fromEntries(
+      (mainstream ? available : []).map((service) => [
+        service,
+        byService.get(service)?.revision ?? null,
+      ]),
+    ),
+  );
+  const [done, setDone] = useState(false);
   const snapshotChanged =
     snapshot.credential_id !== current.credential_id ||
     snapshot.credential_version !== current.credential_version ||
@@ -141,6 +152,7 @@ function AdditionDraft({
   const ready =
     operation.outcome !== 'conflict' &&
     share.services.length > 0 &&
+    !share.initializeSource &&
     !snapshotChanged &&
     !unavailable &&
     !readBlocked &&
@@ -175,8 +187,18 @@ function AdditionDraft({
             onClick={() => {
               adopt();
               setDone(false);
-              setShare({ services: [] });
-              setVersions({});
+              setShare({
+                services: mainstream ? available.slice() : [],
+                initializeSource: mainstream && Boolean(current.discovery_source_id),
+              });
+              setVersions(
+                Object.fromEntries(
+                  (mainstream ? available : []).map((service) => [
+                    service,
+                    byService.get(service)?.revision ?? null,
+                  ]),
+                ),
+              );
             }}
           >
             {t('common.connections.addServices')}

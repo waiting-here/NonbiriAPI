@@ -2,7 +2,7 @@ import { EntryScope, KeyCredentialScope } from './connections/EntryScope';
 import { CredentialGrantForm } from './connections/CredentialGrantForm';
 import { supportsChatStoragePolicy } from '@shared/operations/connectorPolicy';
 import { EndpointTransportNotice } from '@shared/components/EndpointTransportNotice';
-import { Fold, MoreMenu, OutcomeNote } from '@shared/components/ui';
+import { Fold, MoreMenu, Note, OutcomeNote } from '@shared/components/ui';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { useResourceFilters, useResourceListScroll } from './useResourceFilters';
@@ -71,6 +71,10 @@ import type {
 
 const pageCopyKeys = {
   'common.connections.credentialUnavailable': 'common.connections.credentialUnavailable',
+  'common.connections.moveConnection': 'common.connections.moveConnection',
+  'user.services.chooseCatalog': 'user.services.chooseCatalog',
+  'user.services.catalogRequired': 'user.services.catalogRequired',
+  'user.services.catalogConnectionRequired': 'user.services.catalogConnectionRequired',
   'common.keyLimits.unlimited': 'common.keyLimits.unlimited',
   'user.services.adaptation': 'user.services.adaptation',
   'user.services.adaptationCount': 'user.services.adaptationCount',
@@ -106,14 +110,18 @@ function OutcomeNotice({
   onCheck,
   busy,
   savedRefreshFailed,
+  error,
 }: {
   outcome: ActionOutcome;
+  error?: unknown;
   onCheck: () => void;
   busy?: boolean;
   savedRefreshFailed?: boolean;
 }) {
   return savedRefreshFailed ? (
     <OutcomeNote outcome={{ kind: 'savedRefreshFailed', recheck: onCheck }} busy={busy} />
+  ) : error && outcome !== 'unknown' && outcome !== 'conflict' ? (
+    <CoreErrorPanel compact error={error} />
   ) : (
     <MutationNotice outcome={outcome} onCheck={onCheck} busy={busy} />
   );
@@ -313,6 +321,7 @@ function AddEndpointKeyForm({
       {draft.message && !outcome ? <p className="core-inline-error">{draft.message}</p> : null}
       <OutcomeNotice
         outcome={outcome}
+        error={operation.error}
         savedRefreshFailed={operation.outcome === 'refresh-failed'}
         onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
         busy={busy}
@@ -641,6 +650,7 @@ function ManualEntryRow({
           ) : null}
           <OutcomeNotice
             outcome={outcome}
+            error={operation.error}
             savedRefreshFailed={operation.outcome === 'refresh-failed'}
             onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
             busy={busy}
@@ -853,6 +863,7 @@ function ManualCatalog({
         </div>
         <OutcomeNotice
           outcome={outcome}
+          error={operation.error}
           savedRefreshFailed={operation.outcome === 'refresh-failed'}
           onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
           busy={busy}
@@ -920,8 +931,10 @@ function EndpointKeyCard({
   keyData,
   onRefresh,
   suppressRoutePanel = false,
+  onChooseConnection,
 }: {
   accountId: string;
+  onChooseConnection: () => void;
   endpoint: Endpoint;
   suppressRoutePanel?: boolean;
   keyData: EndpointKey;
@@ -935,12 +948,15 @@ function EndpointKeyCard({
   const evidence = keyData.browse?.discovery;
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [editorVisited, setEditorVisited] = useState(false);
+  if (editing && !editorVisited) setEditorVisited(true);
   const [note, setNote] = useState(keyData.note);
   const [editRevision, setEditRevision] = useState(keyData.revision);
   const [maxConcurrency, setMaxConcurrency] = useState(String(keyData.max_concurrency));
   const [maxRPM, setMaxRPM] = useState(String(keyData.max_rpm));
   const [modelsOpen, setModelsOpen] = useState(false);
   const [modelsVisited, setModelsVisited] = useState(false);
+  const [catalogReveal, setCatalogReveal] = useState(0);
   const routesOpen = new URLSearchParams(location.search).has(`routes_${keyData.id}_page`);
   const showModels = modelsOpen || (routesOpen && !suppressRoutePanel);
   const modelPager = usePagePager({
@@ -1112,6 +1128,25 @@ function EndpointKeyCard({
     busy || reconciliationRequired || Boolean(replayAttempt) || keyData.suspension_state !== 'none';
   const blockTitle =
     keyData.suspension_state !== 'none' ? ui('user.services.blockedAction') : undefined;
+  const hasCatalog = Boolean(keyData.discovery_source_id);
+  const chooseCatalog = () => {
+    if (!endpoint.connection_id) {
+      onChooseConnection();
+      return;
+    }
+    closeModels();
+    setCatalogReveal((current) => current + 1);
+    if (!editing) {
+      setNote(keyData.note);
+      setEditRevision(keyData.revision);
+      setMaxConcurrency(String(keyData.max_concurrency));
+      setMaxRPM(String(keyData.max_rpm));
+    }
+    setEditing(true);
+  };
+  const catalogAction = endpoint.connection_id
+    ? ui('user.services.chooseCatalog')
+    : ui('common.connections.moveConnection');
   return (
     <>
       <tr className="core-key-card">
@@ -1156,21 +1191,23 @@ function EndpointKeyCard({
           <button
             type="button"
             className="nb-btn nb-btn--ghost nb-btn--sm"
-            aria-label={t('endpoints.refreshDiscovery')}
-            title={t('endpoints.refreshDiscovery')}
+            aria-label={hasCatalog ? t('endpoints.refreshDiscovery') : catalogAction}
+            title={hasCatalog ? t('endpoints.refreshDiscovery') : catalogAction}
             disabled={
-              busy ||
-              !evidence ||
-              evidence.state === 'checking' ||
-              reconciliationRequired ||
-              !physicalAvailable ||
-              Boolean(replayAttempt)
+              actionBlocked ||
+              (hasCatalog && (!evidence || evidence.state === 'checking' || !physicalAvailable))
             }
             onClick={() =>
-              void run({ kind: 'refresh', evidenceRevision: evidence?.revision ?? '0' })
+              hasCatalog
+                ? void run({ kind: 'refresh', evidenceRevision: evidence?.revision ?? '0' })
+                : chooseCatalog()
             }
           >
-            {evidence?.count != null ? '↻' : t('endpoints.refreshDiscovery')}
+            {!hasCatalog
+              ? catalogAction
+              : evidence?.count != null
+                ? '↻'
+                : t('endpoints.refreshDiscovery')}
           </button>
         </td>
         <td data-cell="meta" data-label={ui('user.services.keyLimits')}>
@@ -1263,32 +1300,6 @@ function EndpointKeyCard({
               ]}
             />
           </div>
-          <OutcomeNotice
-            outcome={outcome}
-            savedRefreshFailed={reconciliationRequired}
-            onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
-            busy={busy}
-          />
-          {reconciliationRequired ? (
-            <button
-              type="button"
-              className="nb-btn nb-btn--secondary"
-              disabled={busy}
-              onClick={() => void reconcile()}
-            >
-              {t('common.reconcile')}
-            </button>
-          ) : null}
-          {replayAttempt && (replayAttempt.kind !== 'delete' || !deleteOpen) ? (
-            <button
-              type="button"
-              className="nb-btn nb-btn--secondary"
-              disabled={busy || reconciliationRequired}
-              onClick={() => void run(replayAttempt)}
-            >
-              {t('common.reconcile')}
-            </button>
-          ) : null}
           <ConfirmDialog
             open={deleteOpen}
             title={t('endpoints.deleteKeyTitle')}
@@ -1314,6 +1325,41 @@ function EndpointKeyCard({
           />
         </td>
       </tr>
+      {outcome || operation.error || reconciliationRequired || replayAttempt ? (
+        <tr className="core-key-panels core-key-feedback">
+          <td colSpan={6}>
+            <div className="nb-stack nb-stack--sm">
+              <OutcomeNotice
+                outcome={outcome}
+                error={operation.error}
+                savedRefreshFailed={reconciliationRequired}
+                onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
+                busy={busy}
+              />
+              {reconciliationRequired ? (
+                <button
+                  type="button"
+                  className="nb-btn nb-btn--secondary"
+                  disabled={busy}
+                  onClick={() => void reconcile()}
+                >
+                  {t('common.reconcile')}
+                </button>
+              ) : null}
+              {replayAttempt && (replayAttempt.kind !== 'delete' || !deleteOpen) ? (
+                <button
+                  type="button"
+                  className="nb-btn nb-btn--secondary"
+                  disabled={busy || reconciliationRequired}
+                  onClick={() => void run(replayAttempt)}
+                >
+                  {t('common.reconcile')}
+                </button>
+              ) : null}
+            </div>
+          </td>
+        </tr>
+      ) : null}
       <tr className="core-key-panels" hidden={!showModels && !editing}>
         <td colSpan={6}>
           <ExpandablePanel
@@ -1324,6 +1370,27 @@ function EndpointKeyCard({
           >
             {modelsVisited || routesOpen ? (
               <>
+                {!hasCatalog ? (
+                  <Note
+                    tone="warn"
+                    action={
+                      <button
+                        type="button"
+                        className="nb-btn nb-btn--secondary"
+                        disabled={actionBlocked}
+                        onClick={chooseCatalog}
+                      >
+                        {catalogAction}
+                      </button>
+                    }
+                  >
+                    {ui(
+                      endpoint.connection_id
+                        ? 'user.services.catalogRequired'
+                        : 'user.services.catalogConnectionRequired',
+                    )}
+                  </Note>
+                ) : null}
                 {automatic.isPending ? (
                   <CoreLoading compact />
                 ) : automatic.error ? (
@@ -1379,7 +1446,15 @@ function EndpointKeyCard({
             closeLabel={t('common.close')}
             busy={busy || Boolean(replayAttempt)}
           >
-            <KeyCredentialScope accountId={accountId} endpoint={endpoint} entryKey={keyData} />
+            {editorVisited ? (
+              <KeyCredentialScope
+                accountId={accountId}
+                endpoint={endpoint}
+                entryKey={keyData}
+                defaultOpen={!hasCatalog}
+                revealCatalog={catalogReveal}
+              />
+            ) : null}
             <p className="nb-muted">{t('browse.personalLimits')}</p>
             <dl className="nb-facts">
               <div>
@@ -1472,6 +1547,8 @@ export function EndpointDetail({
   const { t: ui } = useRegisteredCopy(pageCopyKeys);
   const [adaptationCount, setAdaptationCount] = useState<number | null>(null);
   const [usingModels, setUsingModels] = useState(false);
+  const [entryScopeOpen, setEntryScopeOpen] = useState(false);
+  const entryScopeRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const focusKeyId = new URLSearchParams(location.search).get('focus_key_id');
   const navigate = useNavigate();
@@ -1638,6 +1715,12 @@ export function EndpointDetail({
     );
   };
 
+  const chooseConnection = () => {
+    setEntryScopeOpen(true);
+    entryScopeRef.current?.scrollIntoView?.({ block: 'start' });
+    entryScopeRef.current?.querySelector('summary')?.focus();
+  };
+
   return (
     <div
       className={`page core-page core-stack services-page services-detail services-detail--${endpoint.data.enabled ? 'enabled' : 'disabled'}`}
@@ -1733,9 +1816,17 @@ export function EndpointDetail({
             </div>
           </dl>
           <p className="nb-small nb-muted">{t('endpoints.detailsDescription')}</p>
-          <EntryScope accountId={accountId} endpoint={endpoint.data} />
+          <div ref={entryScopeRef}>
+            <EntryScope
+              accountId={accountId}
+              endpoint={endpoint.data}
+              open={entryScopeOpen}
+              onOpenChange={setEntryScopeOpen}
+            />
+          </div>
           <OutcomeNotice
             outcome={outcome}
+            error={operation.error}
             savedRefreshFailed={operation.outcome === 'refresh-failed'}
             onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
             busy={busy}
@@ -1841,7 +1932,12 @@ export function EndpointDetail({
       </ExpandablePanel>
 
       {focusKeyId ? (
-        <FocusedEndpointKey accountId={accountId} endpoint={endpoint.data} keyId={focusKeyId} />
+        <FocusedEndpointKey
+          accountId={accountId}
+          endpoint={endpoint.data}
+          keyId={focusKeyId}
+          onChooseConnection={chooseConnection}
+        />
       ) : null}
       <section className="core-card" aria-busy={keys.isFetching} hidden={Boolean(focusKeyId)}>
         <div className="core-card__header">
@@ -1911,6 +2007,7 @@ export function EndpointDetail({
                     keyData={keyData}
                     onRefresh={() => void keys.refetch()}
                     suppressRoutePanel={usingModels}
+                    onChooseConnection={chooseConnection}
                   />
                 ))}
               </tbody>
@@ -1993,10 +2090,12 @@ function FocusedEndpointKey({
   accountId,
   endpoint,
   keyId,
+  onChooseConnection,
 }: {
   accountId: string;
   endpoint: Endpoint;
   keyId: string;
+  onChooseConnection: () => void;
 }) {
   const { t } = useCoreCopy();
   const location = useLocation();
@@ -2029,6 +2128,7 @@ function FocusedEndpointKey({
                 endpoint={endpoint}
                 keyData={current.data}
                 onRefresh={() => void current.refetch()}
+                onChooseConnection={onChooseConnection}
               />
             </tbody>
           </table>

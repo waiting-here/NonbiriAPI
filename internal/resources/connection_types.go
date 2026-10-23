@@ -2,15 +2,23 @@ package resources
 
 import contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 
+type ConnectionPrimaryEntry struct {
+	ID      string `json:"id"`
+	BaseURL string `json:"base_url"`
+	Note    string `json:"note"`
+}
+
 type Connection struct {
-	ID              string `json:"id"`
-	Name            string `json:"name"`
-	Note            string `json:"note"`
-	Revision        string `json:"revision"`
-	EntryCount      string `json:"entry_count"`
-	CredentialCount string `json:"credential_count"`
-	CreatedAt       int64  `json:"created_at"`
-	UpdatedAt       int64  `json:"updated_at"`
+	ID              string                  `json:"id"`
+	Name            string                  `json:"name"`
+	DisplayName     string                  `json:"display_name"`
+	PrimaryEntry    *ConnectionPrimaryEntry `json:"primary_entry"`
+	Note            string                  `json:"note"`
+	Revision        string                  `json:"revision"`
+	EntryCount      string                  `json:"entry_count"`
+	CredentialCount string                  `json:"credential_count"`
+	CreatedAt       int64                   `json:"created_at"`
+	UpdatedAt       int64                   `json:"updated_at"`
 }
 
 type Credential struct {

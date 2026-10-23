@@ -112,6 +112,7 @@ var chineseCodes = map[string]string{
 	CodeServiceUnavailable:      "服务暂时不可用，请稍后重试。",
 	CodeResourceLimitExceeded:   "已达到资源使用上限。",
 	CodeResourceLocked:          "该资源正在使用中，请稍后重试。",
+	CodeDiscoveryNotShared:      "此捐赠用途当前未共享模型目录，需由捐赠者授权分享后才能拉取。",
 	CodeInsufficientCredits:     "积分不足。",
 	CodeFeatureDisabled:         "此功能暂未开放。",
 	CodeCharitySuspended:        "当前账号的公益调用已暂停。",

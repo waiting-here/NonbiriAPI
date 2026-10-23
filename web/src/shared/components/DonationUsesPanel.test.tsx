@@ -77,6 +77,11 @@ describe('per-use review recovery', () => {
       await view.user.click(checkbox);
     expect(screen.getAllByText('head-1…tail · Version 1')).toHaveLength(2);
     expect(screen.getAllByText('head-2…tail · Version 2')).toHaveLength(2);
+    expect(
+      screen.getAllByText(
+        'No model catalog is shared; the donor must authorize catalog sharing before fetching',
+      ),
+    ).toHaveLength(2);
     await view.user.click(screen.getByRole('button', { name: 'Approve selected uses' }));
     await waitFor(() => expect(mocks.review).toHaveBeenCalledTimes(1));
     await screen.findByText(/Version changed/);

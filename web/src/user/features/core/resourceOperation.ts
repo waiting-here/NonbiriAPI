@@ -1,5 +1,6 @@
 import { ApiError } from '@shared/query/http';
 import { coreRequest } from './request';
+import { createOrReuseManualEntries } from './manualCatalogReuse';
 import { validateIdempotencyKey } from './normalizers';
 import {
   addBindings,
@@ -33,6 +34,7 @@ export type ResourceIntent =
   | { kind: 'refresh'; endpointId: string; keyId: string }
   | {
       kind: 'manual';
+      reuseExisting?: true;
       endpointId: string;
       keyId: string;
       entries: { upstream_model_id: string; provider: string }[];
@@ -129,7 +131,8 @@ export async function executeResource(
       };
     }
     case 'manual': {
-      await createManualEntries(intent.endpointId, intent.keyId, intent.entries, identity, signal);
+      const create = intent.reuseExisting ? createOrReuseManualEntries : createManualEntries;
+      await create(intent.endpointId, intent.keyId, intent.entries, identity, signal);
       return {
         kind: 'manual',
         catalog: await getCatalog(intent.endpointId, intent.keyId, undefined, signal),

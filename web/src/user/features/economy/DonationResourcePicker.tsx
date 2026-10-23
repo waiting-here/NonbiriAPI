@@ -1024,24 +1024,26 @@ export function DonationResourcePicker({
             <ul className="donation-resource-picker__selected-list">
               {selectedRows.map((choice) => (
                 <li key={choice.key.id}>
-                  <div>
-                    <strong>{choice.key.note || choiceDisplayKey(choice)}</strong>
-                    <small>{endpointDisplayName(choice.endpoint, choice.endpoint.id)}</small>
-                    <code>{choiceDisplayKey(choice)}</code>
-                    {renderSelected ? (
-                      <div className="donation-resource-picker__selected-slot">
-                        {renderSelected(choice)}
-                      </div>
-                    ) : null}
+                  <div className="donation-resource-picker__selected-summary">
+                    <div>
+                      <strong>{choice.key.note || choiceDisplayKey(choice)}</strong>
+                      <small>{endpointDisplayName(choice.endpoint, choice.endpoint.id)}</small>
+                      <code>{choiceDisplayKey(choice)}</code>
+                    </div>
+                    <button
+                      type="button"
+                      className="nb-btn nb-btn--ghost"
+                      disabled={!enabled || disabled || !sessionMatches}
+                      onClick={() => removeSelected(choice.key.id)}
+                    >
+                      {t('common.operations.charity.remove')}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    className="nb-btn nb-btn--ghost"
-                    disabled={!enabled || disabled || !sessionMatches}
-                    onClick={() => removeSelected(choice.key.id)}
-                  >
-                    {t('common.operations.charity.remove')}
-                  </button>
+                  {renderSelected ? (
+                    <div className="donation-resource-picker__selected-slot">
+                      {renderSelected(choice)}
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>

@@ -98,7 +98,10 @@ export function PresetModelRow({
       setCatalogs((previous) => ({ ...previous, [active.current]: true }));
     if (result.kind === 'binding') setComplete(true);
   });
-  const locked = operation.isPending || operation.outcome === 'unknown';
+  const locked =
+    operation.isPending ||
+    operation.outcome === 'unknown' ||
+    operation.outcome === 'refresh-failed';
   const targets = mapping.entries.flatMap((entry) => {
     const endpoint = entries[entry.entry_id];
     const key = endpoint ? grants[grantsByEntry ? entry.entry_id : endpoint.id] : undefined;
@@ -118,6 +121,7 @@ export function PresetModelRow({
           active.current = identity;
           await operation.run({
             kind: 'manual',
+            reuseExisting: true,
             endpointId: target.endpoint.id,
             keyId: target.key.id,
             entries: [
@@ -361,11 +365,7 @@ export function PresetModelRow({
       <button
         type="button"
         className="nb-btn nb-btn--primary"
-        disabled={
-          locked ||
-          !targets.length ||
-          (!model && (!provider.trim() || !name.trim() || !types.length))
-        }
+        disabled={locked || !ready}
         onClick={() => void save()}
       >
         {t('common.connections.saveMapping')}

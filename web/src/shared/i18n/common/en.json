@@ -132,7 +132,7 @@
       "all": "Fetch models for all available donation keys",
       "donationHelp": "Fetch models for every available key in this donation, including keys on other pages.",
       "allHelp": "Fetch models for available keys across all donations. Current filters and pagination do not limit this action.",
-      "eligibility": "Only approved, unexpired, enabled and unsuspended keys with remaining quota are included. Automatic model lists are updated; manual entries and model bindings are preserved. Keep this page open to complete the batch.",
+      "eligibility": "Only approved uses with a shared catalog and unexpired, enabled, unsuspended keys with remaining quota are included. Automatic model lists are updated; manual entries and model bindings are preserved. Keep this page open to complete the batch.",
       "confirm": "Start fetching",
       "running": "Fetching models · {{processed}} of {{selected}} selected keys processed",
       "paused": "Fetching paused · {{processed}} of {{selected}} selected keys processed",
@@ -146,7 +146,8 @@
       "status": {
         "succeeded": "Fetched {{count}} models",
         "failed": "Fetch failed",
-        "ineligible": "Key is no longer available",
+        "ineligible": "Cannot fetch now; check the use status, expiry, quota and cooldown",
+        "not_shared": "No model catalog is shared; the donor must authorize catalog sharing before fetching",
         "conflict": "Conflicting check; retry this key later",
         "superseded": "Replaced by a newer check"
       },
@@ -2118,7 +2119,7 @@
       "configureModel": "Configure model",
       "confirm": "Confirm",
       "conflictDraft": "The configuration changed. Your input is preserved. Review the current version before saving.",
-      "connectionSearch": "Search connection names or notes",
+      "connectionSearch": "Search connection names, entry URLs or notes",
       "convertedRoute": "Limited conversion",
       "create": "Create",
       "created": "Created",
@@ -2215,6 +2216,7 @@
       "presetEntry": "Entry {{number}}",
       "presetNoAutoGrant": "Presets provide suggestions without changing existing user entries or grants.",
       "protocol": "Protocol",
+      "protocolHelp": "Service options depend on the protocol. For System One, select Typesafe System One.",
       "provider": "Provider name",
       "refreshSource": "Refresh catalog",
       "rejectSelected": "Reject selected uses",
@@ -2314,8 +2316,6 @@
       },
       "useSummary": "Uses {{total}} · Approved {{approved}} · Pending {{pending}} · Latest rejected {{rejected}} · Latest withdrawn {{withdrawn}}",
       "refreshSharedCatalog": "Refresh shared catalog",
-      "adoptDiscoverySuggestion": "Use preset discovery suggestion",
-      "manageSource": "Manage discovery source",
       "adoptModelSuggestions": "Adopt model suggestions",
       "suggestionsNeedSelection": "Mappings are created only for explicitly selected entries and services. Save entries and authorize credentials first.",
       "mappingSaved": "Model mapping saved.",
@@ -2366,7 +2366,10 @@
         "deleted": "Deleted",
         "expired": "Expired"
       },
-      "finishUseReview": "Finish this operation and keep processed results"
+      "finishUseReview": "Finish this operation and keep processed results",
+      "useSuggestedCatalog": "Use the channel’s suggested model catalog",
+      "suggestedCatalogHelp": "Saving the authorization creates or reuses a catalog for this credential version and links it to the entry.",
+      "credentialChangedForCatalog": "This credential changed. Select it again before saving."
     }
   },
   "logs": {

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { addBindings, createEndpointKey, patchEndpointKey } from '../api';
-import { normalizeDiscoveryModel, normalizeDiscoverySource } from './api';
+import { normalizeConnection, normalizeDiscoveryModel, normalizeDiscoverySource } from './api';
 import { executeConnection, readConnectionResult } from './resourceOperation';
 import { normalizeRerankFormat } from '@shared/connections';
 const identity = { idempotencyKey: 'ABCDEFGHIJKLMNOPQRSTUV', actionId: 'connection-test' };
@@ -48,6 +48,46 @@ function keyFixture() {
   ) as Record<string, unknown>;
 }
 describe('connection API boundaries', () => {
+  const connection = {
+    id: '2',
+    name: 'Connection 2',
+    note: 'Account note',
+    revision: '1',
+    entry_count: '2',
+    credential_count: '1',
+    created_at: 1700000000,
+    updated_at: 1700000001,
+  };
+  const primary = { id: '11', base_url: 'https://api.example/v1', note: 'Service note' };
+
+  it('keeps readable identification separate from the stored edit name', () => {
+    expect(
+      normalizeConnection({ ...connection, display_name: 'Service note', primary_entry: primary }),
+    ).toMatchObject({
+      name: 'Connection 2',
+      display_name: 'Service note',
+      primary_entry: primary,
+    });
+    expect(normalizeConnection(connection)).toMatchObject({
+      display_name: 'Connection 2',
+      primary_entry: null,
+    });
+    expect(normalizeConnection({ ...connection, primary_entry: null }).primary_entry).toBeNull();
+  });
+
+  it.each([
+    { display_name: null },
+    { display_name: 2 },
+    { display_name: undefined },
+    { primary_entry: [] },
+    { primary_entry: undefined },
+    { primary_entry: { ...primary, id: 11 } },
+    { primary_entry: { ...primary, base_url: null } },
+    { primary_entry: { id: '11', base_url: primary.base_url } },
+  ])('rejects invalid provided identification fields: %o', (projection) => {
+    expect(() => normalizeConnection({ ...connection, ...projection })).toThrow();
+  });
+
   it('wraps an explicit one-target service choice and reads the full projection after a compact receipt', async () => {
     const bindings = JSON.parse(
       readFileSync(resolve(process.cwd(), '../internal/resources/testdata/bindings.json'), 'utf8'),

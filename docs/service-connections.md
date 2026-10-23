@@ -6,6 +6,11 @@ services. Grouping entries does not authorize a credential at another destinatio
 The same credential can be attached to several entries without re-entering its
 secret. Users must select each destination explicitly.
 
+Connection lists show the primary entry's address and note. Search includes the
+name and note of the connection and the addresses and notes of all its entries.
+Untouched names generated during an upgrade use the original entry's note or
+hostname for display. Custom names and stored metadata remain unchanged.
+
 ## Configure entries and models
 
 An OpenAI-compatible entry can select Chat Completions, Responses, embeddings,
@@ -14,6 +19,10 @@ requires its actual format: generic, Cohere, Jina, Voyage or SiliconFlow. Sharin
 a `/rerank` path does not make these payload formats interchangeable. Gateway
 v3 and v4 each offer text, image generation, embeddings and rerank. Select the
 upstream's actual version; there is no automatic probing or version fallback.
+
+System One is a separate **Typesafe System One** protocol in **Add entry**.
+Its service is `/v1/systemone`; the **Decisions** choice under OpenAI-compatible
+entries represents `/v1/decisions`. These services are not converted into each other.
 
 For an upstream serving both Chat and Responses at one base URL, select both
 services on one entry. A model may use a smaller subset. For a provider whose
@@ -43,6 +52,19 @@ Existing entry IDs are retained when editing; save new entries before assigning
 model mappings to them. Updating a preset does not change existing destinations,
 expand grants or approve donations.
 
+When authorizing a credential for a newly created mainstream entry, its suggested
+directory is selected by default. Saving reuses a compatible directory or creates
+one for that credential and associates it with the entry's key. Clear the option
+to authorize without it, or select an existing compatible directory. Custom
+entries and previously saved authorizations keep their existing behavior.
+
+If a key has no directory, its model controls offer a catalog selection action.
+Move an ungrouped entry into a connection first, then select a directory for the
+same credential version. The directory management link can add one if needed.
+Manual model entries remain available without a directory. Importing or connecting
+a model reuses an existing manual entry with the same upstream model ID under
+the selected key; its existing metadata is preserved.
+
 While creating a custom entry, entering an address can show every matching
 available mainstream entry, including its protocol, native services, discovery
 suggestion and model mappings. Matching uses the complete normalized URL,
@@ -66,6 +88,30 @@ directory revision using the same credential version. Reviewers approve or
 reject each use. A use may have both an approved version and a pending replacement;
 partial rejection does not withdraw the still-approved version. The parent
 status alone therefore does not describe every service's availability.
+
+Donors submit the keys and services they want to share. Administrators or authorized
+stewards then name and bind the charity models. If model discovery is unavailable,
+the donor can include model IDs in the public donation description, without secrets.
+Personal model entries do not automatically become charity models.
+
+New mainstream donation drafts select all of the key's available services and a
+compatible directory by default. The donor can deselect individual services or
+the directory before submitting. Removing and reselecting a key in the same draft
+preserves those choices. Existing donations are not expanded automatically.
+
+Approving an inference use does not share its model directory. Managed model
+refreshes require a directory explicitly shared by the donor; a personal
+directory is never used as a substitute. A missing or paused sharing grant
+returns `423 discovery_not_shared`. Other availability gates, such as expiry,
+quota or cooldown, retain `423 resource_locked`; neither response alone means
+that the upstream credential is invalid.
+
+Administrators and level-6 stewards can force-reject a donation that has approved
+uses, including when its parent retains the pending status. The action requires
+a reason and complete review material, stops new charity dispatches and preserves
+normal settlement for requests already sent. Legacy whole-donation approval or
+rejection cannot override per-service approvals; review pending uses individually
+or use the authorized force-rejection action for the whole donation.
 
 Owners can add another service to the same donated key or explicitly resubmit
 a rejected or withdrawn use. These actions create pending review material and
@@ -93,6 +139,13 @@ existing ownership checks, revision checks and `Idempotency-Key` behavior.
 Collections support bounded numbered pagination; connection collections also
 retain signed cursor pagination. Keep the same request and idempotency key when
 a mutation result is unknown, then refresh the current resource.
+
+Connection responses include `display_name` and `primary_entry` in addition to
+the stored `name`. The primary entry is `null` or `{id, base_url, note}` for the
+first entry in the connection. Use `name` when editing and `display_name` when
+presenting the connection. Previously stored idempotent responses may omit the
+new fields; clients can fall back to `name` and no primary entry. Collection `q`
+matches connection names/notes and any owned entry's URL/note before pagination.
 
 | Resource | Routes and behavior |
 |---|---|

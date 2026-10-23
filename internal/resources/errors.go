@@ -12,6 +12,7 @@ var (
 	ErrNotFound                   = errors.New("resources: not found")
 	ErrConflict                   = errors.New("resources: conflict")
 	ErrResourceLocked             = errors.New("resources: resource locked")
+	ErrDiscoveryNotShared         = errors.New("resources: model catalog is not shared")
 	ErrResourceLimit              = errors.New("resources: resource limit exceeded")
 	ErrUnavailable                = errors.New("resources: unavailable")
 	errDiscoveryWorkerUnavailable = errors.New("resources: discovery worker unavailable")

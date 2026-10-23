@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Fold } from '@shared/components/ui';
 import { connectionAPI } from './api';
 import { ConnectionResourceList } from './ResourceList';
+import { ConnectionSummary } from './ConnectionSummary';
 import type { Credential } from './types';
 
 export function credentialLabel(value: Credential) {
@@ -87,7 +88,7 @@ export function CredentialPicker({
               key: 'name',
               header: t('common.connections.name'),
               cell: 'title',
-              render: (row) => <span>{row.name}</span>,
+              render: (row) => <ConnectionSummary connection={row} />,
             },
             {
               key: 'choose',

@@ -69,6 +69,9 @@ func (s *Service) AuthorizeManagedDiscovery(ctx context.Context, tx *sql.Tx, rol
 		return target, resources.ErrResourceLocked
 	}
 	selected, err := chooseDiscoveryUse(choices[donationKeyID], selection, requireEligible || selection.UseID == 0)
+	if errors.Is(err, resources.ErrResourceLocked) {
+		return target, unavailableDiscoveryReasonTx(ctx, tx, donationKeyID, selection)
+	}
 	if err != nil {
 		return target, err
 	}
@@ -82,6 +85,32 @@ func (s *Service) AuthorizeManagedDiscovery(ctx context.Context, tx *sql.Tx, rol
 	}
 	target.UseID, target.UseRevision, target.SourceID, target.SourceRevisionID, target.CredentialVersionID, target.ApprovedRevisionID = use.UseID, use.UseRevision, source.SourceID, source.SourceRevisionID, source.CredentialVersionID, use.ApprovedRevisionID
 	return target, nil
+}
+
+// Classify only after the ordinary management and availability checks. An
+// unshared catalog never borrows the donor's current personal authorization.
+func unavailableDiscoveryReasonTx(ctx context.Context, tx *sql.Tx, keyID int64, selection resources.ManagedDiscoverySelection) error {
+	approved, err := connectionstore.LoadApprovedUsesTx(ctx, tx, []int64{keyID})
+	if err != nil {
+		return resources.ErrUnavailable
+	}
+	found := false
+	for _, use := range approved[keyID] {
+		if selection.UseID > 0 && use.UseID != selection.UseID {
+			continue
+		}
+		if selection.ExpectedRevision > 0 && use.UseRevision != selection.ExpectedRevision {
+			return resources.ErrConflict
+		}
+		found = true
+		if use.DiscoveryEnabled && use.DiscoverySourceRevisionID > 0 {
+			return resources.ErrResourceLocked
+		}
+	}
+	if found {
+		return resources.ErrDiscoveryNotShared
+	}
+	return resources.ErrResourceLocked
 }
 
 func discoveryResourceError(err error) error {

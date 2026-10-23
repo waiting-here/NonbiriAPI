@@ -3,10 +3,11 @@ import { OwnerUseAddition } from './OwnerUseAddition';
 import { DonationShareFields, type DonationShare } from './DonationShareFields';
 import { contextPriceProps, contextRows } from './contextPrices';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
+import { NativeServicesSummary } from '@shared/components/ServiceRoutesSummary';
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Fold, Note, PanelFoot, Segmented } from '@shared/components/ui';
+import { Field, Fold, Note, PanelFoot, Segmented } from '@shared/components/ui';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import { DonationConnectorLabel } from './DonationConnectorLabel';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -281,6 +282,7 @@ export function DonationComposer({
         choice.eligibility !== 'eligible' ||
         choice.snapshotStale ||
         !shares[choice.key.id]?.services.length ||
+        shares[choice.key.id]?.initializeSource ||
         !choice.key.credentialId ||
         !choice.key.credentialVersion ||
         !choice.key.grantRevision,
@@ -369,6 +371,7 @@ export function DonationComposer({
       await mutation.mutateAsync(input);
       setDescription('');
       setSelectedChoices([]);
+      setShares({});
       setExpiryByKey({});
       setThresholdByKey({});
       setAuthorized(false);
@@ -401,6 +404,7 @@ export function DonationComposer({
           <div>
             <h3 id={formID + '-keys'}>{t('user.charity.presentation.chooseKeys')}</h3>
             <p>{t('user.charity.presentation.chooseKeysHelp')}</p>
+            <p className="muted">{t('user.charity.presentation.modelSetupHelp')}</p>
             <button
               type="button"
               className="nb-btn nb-btn--secondary"
@@ -412,9 +416,20 @@ export function DonationComposer({
             {selectedChoices.length > 0 ? (
               <div className="nb-chips donation-selected-chips">
                 {selectedChoices.map((choice) => (
-                  <span className="nb-chip" key={choice.key.id}>
-                    {choice.endpoint.note || choice.endpoint.baseUrl} ·{' '}
-                    {choice.key.note || maskedKey(choice.key.displayHead, choice.key.displayTail)}
+                  <span className="nb-chip donation-selected-chip" key={choice.key.id}>
+                    <span className="nb-stack nb-stack--sm">
+                      <span>
+                        {choice.endpoint.note || choice.endpoint.baseUrl} ·{' '}
+                        {choice.key.note ||
+                          maskedKey(choice.key.displayHead, choice.key.displayTail)}
+                      </span>
+                      <NativeServicesSummary value={shares[choice.key.id]?.services ?? []} />
+                      <span className="nb-small nb-muted">
+                        {shares[choice.key.id]?.sourceId
+                          ? t('user.charity.catalogIncluded')
+                          : t('common.connections.noDiscoveryShared')}
+                      </span>
+                    </span>
                     <button
                       type="button"
                       disabled={locked || readBlocked}
@@ -468,13 +483,18 @@ export function DonationComposer({
             selected={selectedChoices}
             onChange={(choices) => {
               setSelectedChoices(choices);
-              setShares((previous) =>
-                Object.fromEntries(
-                  Object.entries(previous).filter(([id]) =>
-                    choices.some((choice) => choice.key.id === id),
-                  ),
-                ),
-              );
+              setShares((previous) => {
+                const next = { ...previous };
+                for (const choice of choices) {
+                  if (next[choice.key.id]) continue;
+                  const mainstream = choice.endpoint.origin.kind === 'mainstream';
+                  next[choice.key.id] = {
+                    services: mainstream ? (choice.key.nativeServices?.slice() ?? []) : [],
+                    initializeSource: mainstream && Boolean(choice.key.discoverySourceId),
+                  };
+                }
+                return next;
+              });
             }}
             disabled={locked}
             enabled={enabled}
@@ -490,23 +510,26 @@ export function DonationComposer({
                     setShares((current) => ({ ...current, [choice.key.id]: value }))
                   }
                 />
-                <span>{t('user.charity.keyExpiry')}</span>
-                <TimeInput
-                  station="user"
-                  disabled={locked}
-                  draft={expiryByKey[choice.key.id] ?? createTimeDraft()}
-                  onChange={(update) =>
-                    setExpiryByKey((current) => ({
-                      ...current,
-                      [choice.key.id]: update(current[choice.key.id] ?? createTimeDraft()),
-                    }))
-                  }
-                  onClick={(event) => event.stopPropagation()}
-                  aria-label={t('user.charity.keyExpiryFor', {
-                    key: maskedKey(choice.key.displayHead, choice.key.displayTail),
-                  })}
-                />
-                <small className="muted">{t('user.charity.expiryHint')}</small>
+                <Field label={t('user.charity.keyExpiry')} help={t('user.charity.expiryHint')}>
+                  {(props) => (
+                    <TimeInput
+                      {...props}
+                      station="user"
+                      disabled={locked}
+                      draft={expiryByKey[choice.key.id] ?? createTimeDraft()}
+                      onChange={(update) =>
+                        setExpiryByKey((current) => ({
+                          ...current,
+                          [choice.key.id]: update(current[choice.key.id] ?? createTimeDraft()),
+                        }))
+                      }
+                      onClick={(event) => event.stopPropagation()}
+                      aria-label={t('user.charity.keyExpiryFor', {
+                        key: maskedKey(choice.key.displayHead, choice.key.displayTail),
+                      })}
+                    />
+                  )}
+                </Field>
                 <FailureThresholdInput
                   value={thresholdByKey[choice.key.id] ?? '10'}
                   disabled={locked}
@@ -1090,6 +1113,8 @@ export function DonationCard({
         </div>
         <DonationStatusBadge status={donation.status} summary={donation.useSummary} />
       </div>
+
+      {!showDetailLink ? <Note>{t('user.charity.presentation.modelSetupHelp')}</Note> : null}
 
       {showEditor ? (
         <>
