@@ -71,7 +71,7 @@ test.skip(
   process.env.NONBIRI_MANAGEMENT_BROWSER !== '1',
   'Requires the isolated management fixture.',
 );
-async function session(browser: Browser, role: 'owner' | 'admin' | 5) {
+async function session(browser: Browser, role: 'owner' | 'admin' | 5 | 6) {
   const state = fixture();
   const origin = role === 'admin' ? state.admin_url : state.user_url;
   const cookie =
@@ -376,22 +376,18 @@ async function approve(context: BrowserContext, owner: BrowserContext, donation:
   expect(result.results.every((row) => row.ok)).toBe(true);
 }
 
-for (const share of [false, true]) {
-  test(`approved donation ${share ? 'with' : 'without'} catalog sharing handles model discovery`, async ({
+for (const configuredCatalog of [false, true]) {
+  test(`donation catalog ${configuredCatalog ? 'configured' : 'standard'} works before and after approval without sharing consent`, async ({
     browser,
   }, info) => {
     const owner = await session(browser, 'owner');
     const admin = await session(browser, 'admin');
-    const tag = 'Catalog sharing ' + randomUUID().slice(0, 8);
+    const manager = configuredCatalog ? admin : await session(browser, 6);
+    const tag = 'Catalog access ' + randomUUID().slice(0, 8);
     let donationId: string | undefined;
     try {
       const group = await connection(owner, tag);
-      const saved = await credential(
-        owner,
-        group,
-        tag,
-        share ? 'synthetic-image-credential' : 'synthetic-unshared-' + randomUUID(),
-      );
+      const saved = await credential(owner, group, tag, 'synthetic-image-credential');
       const value = await entry(
         owner,
         group,
@@ -399,54 +395,49 @@ for (const share of [false, true]) {
         await baseURL(owner),
         tag,
         ['chat_completions'],
-        true,
+        configuredCatalog,
       );
-      expect(value.key.discovery_source_id).not.toBeNull();
-      const source = share
-        ? await userAPI<Source>(owner, '/api/discovery-sources/' + value.key.discovery_source_id)
-        : undefined;
-      const donation = await donate(owner, value.key, ['chat_completions'], tag, source);
+      expect(Boolean(value.key.discovery_source_id)).toBe(configuredCatalog);
+      const donation = await donate(owner, value.key, ['chat_completions'], tag);
       donationId = donation.id;
-      await approve(admin, owner, donation);
-      const approved = (await uses(owner, donation.id))[0]!;
-      expect(approved.approved).not.toBeNull();
-      expect(approved.approved!.discovery_source_id).toBe(source?.id ?? null);
-      expect(approved.discovery_enabled).toBe(share);
-      const page = await admin.newPage();
-      await page.goto(fixture().admin_url + '/charity?donation_id=' + donation.id);
-      const use = await openFold(page, native.chat_completions);
-      const sharingNote = use.getByText(common.common.donationDiscovery.status.not_shared, {
-        exact: true,
-      });
-      if (share) await expect(sharingNote).toHaveCount(0);
-      else await expect(sharingNote).toBeVisible();
-      const fetchResult = responseFor(
-        page,
-        'POST',
-        '/admin/api/donations/' + donation.id + '/keys/' + donation.keys[0]!.id + '/models/refresh',
-      );
-      await page
-        .getByRole('button', { name: common.common.donationDiscovery.one, exact: true })
-        .click();
-      const response = await fetchResult;
-      if (share) {
-        expect(response.status()).toBe(202);
-        const results = await openFold(page, common.common.donationDiscovery.results);
-        await expect(results).toContainText(/Fetched \d+ models/);
-        return;
-      }
-      expect(response.status()).toBe(423);
-      expect((await response.json()).error.code).toBe('discovery_not_shared');
-      const results = await openFold(page, common.common.donationDiscovery.results);
-      await expect(results).toContainText(common.common.donationDiscovery.status.not_shared);
-      for (const width of [1440, 390]) {
-        for (const theme of ['light', 'dark'] as const) {
-          await screenshot(page, info, 'donation-catalog-sharing', width, theme, results, {
-            status: 'approved',
-            discovery_enabled: false,
-            result: 'discovery_not_shared',
-          });
-        }
+      const page = await manager.newPage();
+      const origin = configuredCatalog ? fixture().admin_url : fixture().user_url;
+      const path = configuredCatalog
+        ? '/charity?charity_section=donations&donation_id='
+        : '/steward?tab=charity&charity_section=donations&donation_id=';
+      const prefix = configuredCatalog ? '/admin/api' : '/api/steward';
+      for (const status of ['pending', 'approved']) {
+        if (status === 'approved') await approve(admin, owner, donation);
+        await page.goto(origin + path + donation.id);
+        const use = await openFold(page, native.chat_completions);
+        const fetchButton = use.getByRole('button', { name: c.refreshSharedCatalog, exact: true });
+        await expect(fetchButton).toBeEnabled();
+        const result = responseFor(
+          page,
+          'POST',
+          prefix +
+            '/donations/' +
+            donation.id +
+            '/keys/' +
+            donation.keys[0]!.id +
+            '/models/refresh',
+        );
+        await fetchButton.click();
+        expect((await result).status()).toBe(202);
+        await expect(use).toContainText('Catalog: Succeeded');
+        if (status === 'pending')
+          for (const width of [1440, 390])
+            for (const theme of ['light', 'dark'] as const) {
+              await screenshot(
+                page,
+                info,
+                'donation-catalog-' + (configuredCatalog ? 'configured' : 'standard'),
+                width,
+                theme,
+                use,
+                { status, configuredCatalog },
+              );
+            }
       }
     } finally {
       try {
@@ -461,7 +452,7 @@ for (const share of [false, true]) {
           );
         }
       } finally {
-        await Promise.all([owner.close(), admin.close()]);
+        await Promise.all([...new Set([owner, admin, manager])].map((context) => context.close()));
       }
     }
   });
@@ -705,8 +696,6 @@ test('additional services stay pending with their old budget and use-only traine
     await expect(form.getByRole('button', { name: c.submitServices, exact: true })).toBeDisabled();
     await form.getByLabel(native.embeddings, { exact: true }).check();
     await form.getByLabel(native.responses, { exact: true }).check();
-    await expect(form.getByLabel(c.shareDiscovery, { exact: true })).not.toBeChecked();
-    await form.getByLabel(c.shareDiscovery, { exact: true }).check();
     const submitted = responseFor(page, 'POST', '/api/donations/' + donation.id + '/uses');
     await form.getByRole('button', { name: c.submitServices, exact: true }).click();
     const response = await submitted;
@@ -722,8 +711,13 @@ test('additional services stay pending with their old budget and use-only traine
       'responses',
     ]);
     expect(input.items.every((row) => row.expected_revision === null)).toBe(true);
-    expect(input.discovery_source_id).toBe(sharedSource.id);
-    expect(input.discovery_source_revision).toBe(sharedSource.discovery_source_revision);
+    expect(input.discovery_source_id).toBeNull();
+    expect(input.discovery_source_revision).toBeNull();
+    const addedUses = await uses(owner, donation.id);
+    for (const use of addedUses.filter((row) => row.native_service !== 'chat_completions')) {
+      expect(use.pending?.discovery_source_id).toBe(sharedSource.id);
+      expect(use.pending?.discovery_source_revision).toBe(sharedSource.discovery_source_revision);
+    }
     expect(input.credential_version).toBe('1');
     expect(
       budget((await adminAPI<Donation>(admin, '/admin/api/donations/' + donation.id)).keys[0]!),
@@ -1791,7 +1785,6 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
     });
     await expect(selected.getByLabel(native.chat_completions, { exact: true })).toBeChecked();
     await expect(selected.getByLabel(native.responses, { exact: true })).toBeChecked();
-    await expect(selected.getByLabel(c.shareDiscovery, { exact: true })).toBeChecked();
     for (const width of [1440, 390])
       for (const theme of ['light', 'dark'] as const)
         await screenshot(draft, info, 'suggested-catalog-donation-draft', width, theme, selected, {

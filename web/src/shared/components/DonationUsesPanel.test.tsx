@@ -3,7 +3,12 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { DonationUsesPanel } from './DonationUsesPanel';
-const mocks = vi.hoisted(() => ({ get: vi.fn(), review: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), review: vi.fn(), start: vi.fn(), read: vi.fn() }));
+vi.mock('@shared/operations/donationDiscovery', async (original) => ({
+  ...(await original<typeof import('@shared/operations/donationDiscovery')>()),
+  startDonationDiscovery: mocks.start,
+  readDonationDiscovery: mocks.read,
+}));
 vi.mock('@shared/operations/donationUses', async (original) => ({
   ...(await original<typeof import('@shared/operations/donationUses')>()),
   getDonationUses: mocks.get,
@@ -77,11 +82,7 @@ describe('per-use review recovery', () => {
       await view.user.click(checkbox);
     expect(screen.getAllByText('head-1…tail · Version 1')).toHaveLength(2);
     expect(screen.getAllByText('head-2…tail · Version 2')).toHaveLength(2);
-    expect(
-      screen.getAllByText(
-        'No model catalog is shared; the donor must authorize catalog sharing before fetching',
-      ),
-    ).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Fetch model list' })).toHaveLength(2);
     await view.user.click(screen.getByRole('button', { name: 'Approve selected uses' }));
     await waitFor(() => expect(mocks.review).toHaveBeenCalledTimes(1));
     await screen.findByText(/Version changed/);
@@ -335,5 +336,55 @@ it.each([403, 0])(
       expect(within(dialog).getByRole('button', { name: 'Check saved result' })).toBeEnabled();
       expect(mocks.review.mock.calls[2]![3]).toBe(mocks.review.mock.calls[1]![3]);
     }
+  },
+);
+
+it.each(['pending', 'approved'] as const)(
+  'fetches an unshared %s donation catalog directly',
+  async (status) => {
+    const use = row('6', '9');
+    mocks.get.mockResolvedValue({
+      data: [
+        {
+          ...use,
+          approved: status === 'approved' ? use.approved : null,
+          pending: status === 'pending' ? use.pending : null,
+          capabilities: { ...use.capabilities, can_discover: true },
+        },
+      ],
+      pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+    });
+    const evidence = {
+      state: 'succeeded',
+      revision: '1',
+      result: 'populated',
+      safe_class: 'none',
+      observed_at: 1,
+      count: '3',
+    };
+    mocks.start.mockResolvedValue(evidence);
+    mocks.read.mockResolvedValue(evidence);
+    const view = await renderWithProviders(
+      <DonationUsesPanel role="admin" accountId="1" donationId="3" />,
+      { station: 'admin', role: 'admin' },
+    );
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'admin' } });
+    await view.user.click(await screen.findByText('Chat completions', { exact: true }));
+    const button = screen.getByRole('button', { name: 'Fetch model list' });
+    expect(button).toBeEnabled();
+    await view.user.click(button);
+    await waitFor(() =>
+      expect(mocks.start).toHaveBeenCalledWith(
+        'admin',
+        {
+          donation_id: '3',
+          key_id: '4',
+          use_id: '6',
+          expected_revision: '9',
+        },
+        expect.any(String),
+      ),
+    );
+    await waitFor(() => expect(mocks.read).toHaveBeenCalled());
   },
 );

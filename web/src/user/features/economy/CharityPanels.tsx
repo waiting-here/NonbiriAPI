@@ -282,7 +282,6 @@ export function DonationComposer({
         choice.eligibility !== 'eligible' ||
         choice.snapshotStale ||
         !shares[choice.key.id]?.services.length ||
-        shares[choice.key.id]?.initializeSource ||
         !choice.key.credentialId ||
         !choice.key.credentialVersion ||
         !choice.key.grantRevision,
@@ -346,12 +345,6 @@ export function DonationComposer({
             credentialId: choice.key.credentialId,
             credentialVersion: choice.key.credentialVersion,
             grantRevision: choice.key.grantRevision,
-            ...(shares[choice.key.id]!.sourceId
-              ? {
-                  discoverySourceId: shares[choice.key.id]!.sourceId,
-                  discoverySourceRevision: shares[choice.key.id]!.sourceRevision,
-                }
-              : {}),
             expiresAt,
             failureDisableThreshold,
           };
@@ -424,11 +417,6 @@ export function DonationComposer({
                           maskedKey(choice.key.displayHead, choice.key.displayTail)}
                       </span>
                       <NativeServicesSummary value={shares[choice.key.id]?.services ?? []} />
-                      <span className="nb-small nb-muted">
-                        {shares[choice.key.id]?.sourceId
-                          ? t('user.charity.catalogIncluded')
-                          : t('common.connections.noDiscoveryShared')}
-                      </span>
                     </span>
                     <button
                       type="button"
@@ -490,7 +478,6 @@ export function DonationComposer({
                   const mainstream = choice.endpoint.origin.kind === 'mainstream';
                   next[choice.key.id] = {
                     services: mainstream ? (choice.key.nativeServices?.slice() ?? []) : [],
-                    initializeSource: mainstream && Boolean(choice.key.discoverySourceId),
                   };
                 }
                 return next;
@@ -502,7 +489,6 @@ export function DonationComposer({
             renderSelected={(choice) => (
               <div className="economy-key-expiry">
                 <DonationShareFields
-                  accountId={draftNamespace}
                   choice={choice}
                   value={shares[choice.key.id] ?? { services: [] }}
                   disabled={locked}

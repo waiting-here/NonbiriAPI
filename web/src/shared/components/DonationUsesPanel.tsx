@@ -432,11 +432,13 @@ function UseRow({
       {!row.pending && row.latest && row.latest.status !== 'approved' ? (
         <VersionMaterial label={t('common.connections.latestDecision')} value={row.latest} />
       ) : null}
-      {role !== 'owner' && row.approved?.discovery_source_id ? (
-        <UseDiscovery role={role} accountId={accountId} row={row} />
-      ) : null}
-      {row.approved && (!row.approved.discovery_source_id || !row.discovery_enabled) ? (
-        <Note>{t('common.donationDiscovery.status.not_shared')}</Note>
+      {role !== 'owner' && (row.approved || row.pending) ? (
+        <UseDiscovery
+          key={`${row.id}:${row.revision}`}
+          role={role}
+          accountId={accountId}
+          row={row}
+        />
       ) : null}
       {row.health ? (
         <Note>
@@ -477,18 +479,6 @@ function UseRow({
                 }}
               >
                 {t('common.connections.withdrawPending')}
-              </button>
-            ) : null}
-            {row.approved?.discovery_source_id || row.pending?.discovery_source_id ? (
-              <button
-                type="button"
-                className="nb-btn nb-btn--secondary"
-                disabled={locked}
-                onClick={() => run('patch', { discovery_enabled: !row.discovery_enabled })}
-              >
-                {row.discovery_enabled
-                  ? t('common.connections.stopDiscoverySharing')
-                  : t('common.connections.resumeDiscoverySharing')}
               </button>
             ) : null}
           </>

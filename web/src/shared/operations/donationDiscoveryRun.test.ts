@@ -82,15 +82,14 @@ describe('managed donation discovery', () => {
     expect(io.start.mock.calls.map((call) => call[0])).toEqual([item, next]);
     expect(run.counts.succeeded).toBe(2);
   });
-  it('distinguishes unavailable, unshared, concurrent, superseded, and failed results', async () => {
+  it('distinguishes unavailable, concurrent, superseded, and failed results', async () => {
     const io = transport();
     io.select.mockResolvedValue({
-      items: [1, 2, 3, 4, 5].map((id) => ({ donation_id: '2', key_id: String(id) })),
+      items: [1, 2, 3, 4].map((id) => ({ donation_id: '2', key_id: String(id) })),
       next_cursor: null,
     });
     io.start
       .mockRejectedValueOnce(new ApiError('resource_locked', 'Unavailable', 423))
-      .mockRejectedValueOnce(new ApiError('discovery_not_shared', 'Not shared', 423))
       .mockRejectedValueOnce(new ApiError('conflict', 'Checking', 409));
     io.read
       .mockResolvedValueOnce({ ...empty, revision: '3' })
@@ -99,12 +98,11 @@ describe('managed donation discovery', () => {
     await run.resume();
     expect(run.results.map((row) => row.status)).toEqual([
       'ineligible',
-      'not_shared',
       'conflict',
       'superseded',
       'failed',
     ]);
-    expect(run.counts).toEqual({ selected: 5, processed: 5, succeeded: 0, failed: 1, skipped: 4 });
+    expect(run.counts).toEqual({ selected: 4, processed: 4, succeeded: 0, failed: 1, skipped: 3 });
   });
   it.each(['', JSON.stringify({ error: { code: 'not_found', message: 'Not found' } })])(
     'pauses on a missing resource or proxy route without treating a 404 as an invalid key (%s)',
