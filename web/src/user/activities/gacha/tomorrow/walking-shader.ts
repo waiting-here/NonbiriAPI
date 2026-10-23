@@ -13,19 +13,19 @@ vec4 over(vec4 base,vec4 top){
 }
 float wind(float seconds){
  float t=mod(seconds+48.,24.);
- return .1*sin(t*3.14159265/4.)+smoothstep(4.,6.5,t)*(1.-smoothstep(9.,13.,t))
-   -.42*smoothstep(16.,18.,t)*(1.-smoothstep(20.,24.,t));
+ return .12*sin(t*3.14159265/4.)+smoothstep(1.5,4.5,t)*(1.-smoothstep(7.5,12.,t))
+   -.5*smoothstep(14.,17.,t)*(1.-smoothstep(19.5,24.,t));
 }
 float breath(){float t=mod(time,5.8);return smoothstep(0.,2.1,t)*(1.-smoothstep(2.1,5.8,t));}
 vec2 displacement(vec2 q){
  vec4 binding=texture2D(rig,q);
- return ((binding.rg*255.-128.)/8.+vec2(-.8,-1.9)*binding.b*breath())/vec2(1024.,1536.);
+ return ((binding.rg*255.-128.)/3.+vec2(-.8,-1.9)*binding.b*breath())/vec2(1024.,1536.);
 }
 vec4 heroColor(vec2 q){
  if(q.x<0.||q.x>1.||q.y<0.||q.y>1.)return vec4(0.);
  vec2 source=q;
- // Invert the small forward mesh displacement without changing the source RGB.
- for(int i=0;i<3;i++)source=q-displacement(source);
+ // Relax the inverse lookup to keep curled free edges stable at gust extremes.
+ for(int i=0;i<8;i++)source=mix(source,q-displacement(source),.75);
  vec4 color=texture2D(art,source);
  color=eyelid(source,leftEye,.125,color);
  color=eyelid(source,rightEye,.625,color);

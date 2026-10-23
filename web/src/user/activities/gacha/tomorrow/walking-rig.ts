@@ -11,27 +11,39 @@ type Node = {
   ox: number;
   oy: number;
   mass: number;
+  force: number;
+  response: number;
+  damping: number;
+  delay: number;
+  projection: Point;
 };
 type Edge = { a: number; b: number; length: number; stiffness: number };
 type Triangle = readonly [number, number, number];
-type Sample = { offset: number; nodes: Triangle; weights: [number, number, number]; gain: number };
+type Sample = {
+  offset: number;
+  nodes: Triangle;
+  weights: [number, number, number];
+  gain: number;
+  projection: Point;
+};
 
 const smooth = (v: number) => {
   const t = Math.max(0, Math.min(1, v));
   return t * t * (3 - 2 * t);
 };
+// Variation around the steady breeze already depicted in the painting.
 export function walkingWind(seconds: number) {
   const t = ((seconds % 24) + 24) % 24;
   return (
-    0.1 * Math.sin((t * Math.PI) / 4) +
-    smooth((t - 4) / 2.5) * (1 - smooth((t - 9) / 4)) -
-    0.42 * smooth((t - 16) / 2) * (1 - smooth((t - 20) / 4))
+    0.12 * Math.sin((t * Math.PI) / 4) +
+    smooth((t - 1.5) / 3) * (1 - smooth((t - 7.5) / 4.5)) -
+    0.5 * smooth((t - 14) / 3) * (1 - smooth((t - 19.5) / 4.5))
   );
 }
 
 // Each strip follows an authored hair bundle or cloth panel. Across-strip and
 // diagonal constraints preserve its width; the root row is fixed to its seam.
-const strips: { rows: readonly (readonly Point[])[]; strength: number }[] = [
+const strips: { rows: readonly (readonly Point[])[] }[] = [
   {
     rows: [
       [
@@ -55,7 +67,6 @@ const strips: { rows: readonly (readonly Point[])[]; strength: number }[] = [
         [185, 718],
       ],
     ],
-    strength: 32,
   },
   {
     rows: [
@@ -80,7 +91,6 @@ const strips: { rows: readonly (readonly Point[])[]; strength: number }[] = [
         [1020, 779],
       ],
     ],
-    strength: 39,
   },
   {
     rows: [
@@ -101,7 +111,6 @@ const strips: { rows: readonly (readonly Point[])[]; strength: number }[] = [
         [306, 874],
       ],
     ],
-    strength: 24,
   },
   {
     rows: [
@@ -122,10 +131,34 @@ const strips: { rows: readonly (readonly Point[])[]; strength: number }[] = [
         [926, 1042],
       ],
     ],
-    strength: 29,
   },
 ];
+const responses: readonly {
+  force: number;
+  response: number;
+  damping: number;
+  delay: number;
+  projection: Point;
+}[] = [
+  { force: 46, response: 16, damping: 4.4, delay: 0.28, projection: [0.48, -0.5] },
+  { force: 58, response: 16, damping: 4.4, delay: 0.36, projection: [0.42, -0.56] },
+  { force: 38, response: 4.4, damping: 3.2, delay: 0.7, projection: [0.48, -0.46] },
+  { force: 48, response: 4.4, damping: 3.2, delay: 0.8, projection: [0.48, -0.44] },
+];
 const protectedRegions: readonly (readonly Point[])[] = [
+  [
+    [340, 805],
+    [470, 817],
+    [551, 853],
+    [634, 897],
+    [688, 1060],
+    [785, 1535],
+    [315, 1535],
+    [310, 1250],
+    [420, 1170],
+    [401, 1030],
+    [354, 928],
+  ],
   [
     [292, 305],
     [383, 302],
@@ -169,22 +202,83 @@ function barycentric(p: Point, a: Node, b: Node, c: Node) {
   return [u, v, 1 - u - v] as [number, number, number];
 }
 
+function closestWeights(p: Point, a: Node, b: Node, c: Node) {
+  const inside = barycentric(p, a, b, c);
+  if (inside.every((w) => w >= 0 && w <= 1)) return { weights: inside, distance: 0 };
+  const vertices = [a, b, c];
+  let distance = Infinity;
+  let weights: [number, number, number] = [0, 0, 0];
+  for (let i = 0; i < 3; i++) {
+    const j = (i + 1) % 3,
+      from = vertices[i],
+      to = vertices[j];
+    const dx = to.ox - from.ox,
+      dy = to.oy - from.oy;
+    const t = Math.max(
+      0,
+      Math.min(1, ((p[0] - from.ox) * dx + (p[1] - from.oy) * dy) / (dx * dx + dy * dy)),
+    );
+    const d = Math.hypot(p[0] - from.ox - dx * t, p[1] - from.oy - dy * t);
+    if (d < distance) {
+      distance = d;
+      weights = [0, 0, 0];
+      weights[i] = 1 - t;
+      weights[j] = t;
+    }
+  }
+  return { weights, distance };
+}
+
+function outsideDistance(p: Point, polygon: readonly Point[]) {
+  let inside = false,
+    distance = Infinity;
+  let a = polygon[polygon.length - 1];
+  for (const b of polygon) {
+    if (
+      a[1] > p[1] !== b[1] > p[1] &&
+      p[0] < ((a[0] - b[0]) * (p[1] - b[1])) / (a[1] - b[1]) + b[0]
+    )
+      inside = !inside;
+    const dx = b[0] - a[0],
+      dy = b[1] - a[1];
+    const t = Math.max(
+      0,
+      Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy)),
+    );
+    distance = Math.min(distance, Math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t));
+    a = b;
+  }
+  return inside ? 0 : distance;
+}
+
 export function createWalkingRig() {
   const nodes: Node[] = [],
     edges: Edge[] = [],
     triangles: Triangle[] = [],
-    boundaries: Point[][] = [],
-    forces: number[] = [];
-  for (const strip of strips) {
-    const start = nodes.length;
-    const boundary = [
-      ...strip.rows.map((row) => row[0]),
-      ...strip.rows.map((row) => row[1]).reverse(),
-    ];
+    groups: { first: number; last: number; projection: Point }[] = [];
+  for (const [index, strip] of strips.entries()) {
+    const start = nodes.length,
+      first = triangles.length,
+      profile = responses[index];
     strip.rows.forEach((row, y) =>
       row.forEach(([x, py]) => {
-        nodes.push({ x, y: py, z: 0, px: x, py, pz: 0, ox: x, oy: py, mass: y === 0 ? 0 : 1 });
-        forces.push((strip.strength * y) / (strip.rows.length - 1));
+        const progress = y / (strip.rows.length - 1);
+        nodes.push({
+          x,
+          y: py,
+          z: 0,
+          px: x,
+          py,
+          pz: 0,
+          ox: x,
+          oy: py,
+          mass: y === 0 ? 0 : 1,
+          force: profile.force * progress,
+          response: profile.response,
+          damping: profile.damping,
+          delay: profile.delay * progress,
+          projection: profile.projection,
+        });
       }),
     );
     const edge = (a: number, b: number, stiffness = 0.9) =>
@@ -204,18 +298,21 @@ export function createWalkingRig() {
         edge(a - 2, b);
         edge(b - 2, a);
         triangles.push([a - 2, b - 2, a], [b - 2, b, a]);
-        boundaries.push(boundary, boundary);
       }
       if (y > 1) {
         edge(a - 4, a, 0.12);
         edge(b - 4, b, 0.12);
       }
     }
+    groups.push({ first, last: triangles.length, projection: profile.projection });
   }
   const width = 256,
     height = 384,
     pixels = new Uint8Array(width * height * 4),
-    samples: Sample[] = [];
+    samples: Sample[] = [],
+    active: number[] = [],
+    offsetsX = new Float32Array(width * height),
+    offsetsY = new Float32Array(width * height);
   const torso: Point[] = [
     [353, 305],
     [429, 305],
@@ -246,38 +343,60 @@ export function createWalkingRig() {
           break;
         }
       }
-      for (let i = 0; i < triangles.length; i++) {
-        const tri = triangles[i];
-        const weights = barycentric(p, nodes[tri[0]], nodes[tri[1]], nodes[tri[2]]);
-        if (weights.every((w) => w >= 0 && w <= 1)) {
-          // Blend into the stationary painting where a panel ends inside a fold.
-          samples.push({
-            offset,
-            nodes: tri,
-            weights,
-            gain: (1 - pin) * regionWeight(p[0], p[1], boundaries[i], 24),
-          });
-          break;
+      const windPin = Math.max(
+        ...protectedRegions.map((poly) => 1 - smooth(outsideDistance(p, poly) / 64)),
+      );
+      if (windPin > 0.999) continue;
+      const candidates: Sample[] = [];
+      for (const group of groups) {
+        let nearest:
+          { nodes: Triangle; weights: [number, number, number]; distance: number } | undefined;
+        for (let i = group.first; i < group.last; i++) {
+          const tri = triangles[i];
+          const hit = closestWeights(p, nodes[tri[0]], nodes[tri[1]], nodes[tri[2]]);
+          if (!nearest || hit.distance < nearest.distance) nearest = { nodes: tri, ...hit };
+          if (hit.distance === 0) break;
         }
+        if (!nearest) continue;
+        // Carry the displacement across the painted silhouette and into transparent
+        // space so inverse texture lookup can find the moving free edge.
+        const gain = 1 - smooth((nearest.distance - 32) / 80);
+        if (gain > 0.001)
+          candidates.push({
+            offset,
+            nodes: nearest.nodes,
+            weights: nearest.weights,
+            gain,
+            projection: group.projection,
+          });
+      }
+      const total = candidates.reduce((sum, sample) => sum + sample.gain, 0);
+      if (total) {
+        active.push(offset);
+        for (const sample of candidates)
+          samples.push({ ...sample, gain: (sample.gain * (1 - windPin)) / Math.max(1, total) });
       }
     }
   let simulated = 0,
     angle = 0,
-    velocity = 0;
+    velocity = 0,
+    maxVisibleDisplacement = 0,
+    clampedSamples = 0;
   function step(t: number) {
     const dt = 1 / 120,
       wind = walkingWind(t);
-    nodes.forEach((n, i) => {
+    nodes.forEach((n) => {
       if (!n.mass) return;
-      const vx = (n.x - n.px) * 0.97,
-        vy = (n.y - n.py) * 0.97,
-        vz = (n.z - n.pz) * 0.975;
+      const damping = Math.exp(-n.damping * dt);
+      const vx = (n.x - n.px) * damping,
+        vy = (n.y - n.py) * damping,
+        vz = (n.z - n.pz) * damping;
       n.px = n.x;
       n.py = n.y;
       n.pz = n.z;
       n.x += vx - (n.x - n.ox) * 3 * dt * dt;
       n.y += vy - (n.y - n.oy) * 3 * dt * dt;
-      n.z += vz + (wind * forces[i] * 2.7 - n.z * 2.2) * dt * dt;
+      n.z += vz + (walkingWind(t - n.delay) * n.force - n.z) * n.response * dt * dt;
     });
     for (let pass = 0; pass < 7; pass++)
       for (const e of edges) {
@@ -316,16 +435,27 @@ export function createWalkingRig() {
       simulated += 1 / 120;
       step(simulated);
     }
+    offsetsX.fill(0);
+    offsetsY.fill(0);
     for (const s of samples) {
       let dx = 0,
         dy = 0;
       for (let i = 0; i < 3; i++) {
         const n = nodes[s.nodes[i]];
-        dx += (n.x - n.ox + n.z * 0.3) * s.weights[i];
-        dy += (n.y - n.oy - n.z * 0.075) * s.weights[i];
+        dx += (n.x - n.ox + n.z * s.projection[0]) * s.weights[i];
+        dy += (n.y - n.oy + n.z * s.projection[1]) * s.weights[i];
       }
-      pixels[s.offset] = Math.round(128 + Math.max(-15.5, Math.min(15.5, dx * s.gain)) * 8);
-      pixels[s.offset + 1] = Math.round(128 + Math.max(-15.5, Math.min(15.5, dy * s.gain)) * 8);
+      offsetsX[s.offset / 4] += dx * s.gain;
+      offsetsY[s.offset / 4] += dy * s.gain;
+    }
+    maxVisibleDisplacement = clampedSamples = 0;
+    for (const offset of active) {
+      const dx = offsetsX[offset / 4],
+        dy = offsetsY[offset / 4];
+      maxVisibleDisplacement = Math.max(maxVisibleDisplacement, Math.hypot(dx, dy));
+      if (Math.abs(dx) > 42 || Math.abs(dy) > 42) clampedSamples++;
+      pixels[offset] = Math.round(128 + Math.max(-42, Math.min(42, dx)) * 3);
+      pixels[offset + 1] = Math.round(128 + Math.max(-42, Math.min(42, dy)) * 3);
     }
     return { width, height, pixels, angle };
   }
@@ -345,8 +475,12 @@ export function createWalkingRig() {
           ),
       ),
       maxDisplacement: Math.max(
-        ...nodes.map((n) => Math.hypot(n.x - n.ox + n.z * 0.3, n.y - n.oy - n.z * 0.075)),
+        ...nodes.map((n) =>
+          Math.hypot(n.x - n.ox + n.z * n.projection[0], n.y - n.oy + n.z * n.projection[1]),
+        ),
       ),
+      maxVisibleDisplacement,
+      clampedSamples,
       angle,
     };
   }
