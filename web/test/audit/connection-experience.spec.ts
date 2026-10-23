@@ -425,6 +425,7 @@ for (const configuredCatalog of [false, true]) {
         await fetchButton.click();
         expect((await result).status()).toBe(202);
         await expect(use).toContainText('Catalog: Succeeded');
+        await expect(use.getByText(/^Catalog:/)).toHaveCount(1);
         if (status === 'pending')
           for (const width of [1440, 390])
             for (const theme of ['light', 'dark'] as const) {

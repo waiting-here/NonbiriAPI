@@ -343,12 +343,20 @@ it.each(['pending', 'approved'] as const)(
   'fetches an unshared %s donation catalog directly',
   async (status) => {
     const use = row('6', '9');
+    const previous = {
+      state: 'unknown',
+      revision: '1',
+      result: null,
+      safe_class: 'none',
+      observed_at: null,
+      count: null,
+    };
     mocks.get.mockResolvedValue({
       data: [
         {
           ...use,
-          approved: status === 'approved' ? use.approved : null,
-          pending: status === 'pending' ? use.pending : null,
+          approved: status === 'approved' ? { ...use.approved, discovery: previous } : null,
+          pending: status === 'pending' ? { ...use.pending, discovery: previous } : null,
           capabilities: { ...use.capabilities, can_discover: true },
         },
       ],
@@ -386,5 +394,7 @@ it.each(['pending', 'approved'] as const)(
       ),
     );
     await waitFor(() => expect(mocks.read).toHaveBeenCalled());
+    await screen.findByText('Catalog: Succeeded · Models 3');
+    expect(screen.getAllByText(/^Catalog:/)).toHaveLength(1);
   },
 );
