@@ -13,13 +13,25 @@ import { CredentialPicker, credentialLabel } from './CredentialPicker';
 import { connectionAPI, resourcePath } from './api';
 import { useMetadataOperation } from './useMetadataOperation';
 import { ConnectionOperationNotice } from './OperationNotice';
+import { ConnectionCreateForm } from './ConnectionForm';
+import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import { ConnectionResourceList } from './ResourceList';
 import type { Credential, DiscoverySource } from './types';
 
-export function EntryScope(props: { accountId: string; endpoint: Endpoint }) {
+export function EntryScope(props: {
+  accountId: string;
+  endpoint: Endpoint;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
   const { t } = useTranslation();
   return (
-    <Fold lazy title={t('common.connections.entryScope')}>
+    <Fold
+      lazy
+      title={t('common.connections.entryScope')}
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+    >
       <EntryScopeEditor {...props} />
     </Fold>
   );
@@ -33,6 +45,7 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
   const [services, setServices] = useState<NativeService[]>(endpoint.native_services ?? []);
   const [format, setFormat] = useState<RerankFormat | null>(endpoint.rerank_format || null);
   const [group, setGroup] = useState<string | null>(null);
+  const [creatingConnection, setCreatingConnection] = useState(false);
   const [expectedRevision, setExpectedRevision] = useState(endpoint.revision);
   const operation = useMetadataOperation(
     accountId,
@@ -82,7 +95,19 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
           onRerankFormatChange={setFormat}
           disabled={locked}
         />
-        <Fold lazy title={t('common.connections.moveConnection')}>
+        <Fold
+          lazy
+          title={t('common.connections.moveConnection')}
+          defaultOpen={!endpoint.connection_id}
+        >
+          <button
+            type="button"
+            className="nb-btn nb-btn--secondary"
+            disabled={locked}
+            onClick={() => setCreatingConnection(true)}
+          >
+            {t('common.connections.addConnection')}
+          </button>
           <ConnectionResourceList
             embedded
             accountId={accountId}
@@ -140,6 +165,22 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
           {t('common.connections.save')}
         </button>
       </form>
+      <ExpandablePanel
+        open={creatingConnection}
+        onClose={() => setCreatingConnection(false)}
+        title={t('common.connections.addConnection')}
+        closeLabel={t('common.connections.close')}
+      >
+        {creatingConnection ? (
+          <ConnectionCreateForm
+            accountId={accountId}
+            onSaved={(value) => {
+              setGroup(value.id);
+              setCreatingConnection(false);
+            }}
+          />
+        ) : null}
+      </ExpandablePanel>
     </div>
   );
 }
@@ -147,12 +188,24 @@ export function KeyCredentialScope({
   accountId,
   endpoint,
   entryKey,
+  defaultOpen = false,
+  revealCatalog = 0,
 }: {
   accountId: string;
   endpoint: Endpoint;
   entryKey: EndpointKey;
+  defaultOpen?: boolean;
+  revealCatalog?: number;
 }) {
   const { t } = useTranslation();
+  const [expanded, setExpanded] = useState({
+    request: revealCatalog,
+    scope: defaultOpen,
+    catalog: defaultOpen,
+  });
+  if (expanded.request !== revealCatalog) {
+    setExpanded({ request: revealCatalog, scope: true, catalog: true });
+  }
   const [credential, setCredential] = useState<Credential | null>(null);
   const [services, setServices] = useState(entryKey.native_services ?? []);
   const [source, setSource] = useState<DiscoverySource | null>(null);
@@ -179,7 +232,12 @@ export function KeyCredentialScope({
   const credentialId = credential?.id ?? entryKey.credential_id;
   const version = credential?.credential_version ?? entryKey.credential_version;
   return (
-    <Fold lazy title={t('common.connections.credentialAndServices')}>
+    <Fold
+      lazy
+      title={t('common.connections.credentialAndServices')}
+      open={expanded.scope}
+      onOpenChange={(scope) => setExpanded((current) => ({ ...current, scope }))}
+    >
       <form
         className="nb-form"
         onSubmit={(event) => {
@@ -227,7 +285,24 @@ export function KeyCredentialScope({
             />
           </Fold>
         ) : null}
-        <Fold lazy title={t('common.connections.discoveryOptional')}>
+        <Fold
+          lazy
+          title={t('common.connections.discoveryOptional')}
+          open={expanded.catalog}
+          onOpenChange={(catalog) => setExpanded((current) => ({ ...current, catalog }))}
+        >
+          {endpoint.connection_id ? (
+            <Link
+              className="nb-btn nb-btn--secondary"
+              to={
+                '/endpoints?connection_id=' +
+                encodeURIComponent(endpoint.connection_id) +
+                '&connection_view=discovery'
+              }
+            >
+              {t('common.connections.discoverySources')}
+            </Link>
+          ) : null}
           <p>
             {sourceChanged
               ? source?.name || source?.models_url || t('common.connections.noDiscovery')
