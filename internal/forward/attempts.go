@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/returnmarker"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
@@ -261,6 +262,10 @@ func (service *Service) runAttempts(
 			break
 		}
 		attemptContext := egress.WithCloudflareProxy(executionContext, plan.cloudflareProxyEnabled)
+		attemptContext = returnmarker.WithSource(attemptContext, returnmarker.Source{
+			RequestID: accepted.ID, EndpointID: candidate.EndpointID,
+			EndpointKeyID: handle.EndpointKeyID(), DonationKeyID: handle.DonationKeyID(),
+		})
 		attemptContext = smartbackoff.WithCharityCall(attemptContext, plan.charity)
 		var backoffRules []smartbackoff.Rule
 		if info, ok := dispatch.(interface{ BackoffRules() []smartbackoff.Rule }); ok {

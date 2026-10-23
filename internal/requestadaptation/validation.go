@@ -336,6 +336,7 @@ func validHeaderName(name string, managed bool) bool {
 	}
 	switch lower {
 	case "host", "content-length", "transfer-encoding", "connection", "keep-alive", "te", "trailer", "upgrade",
+		"nonbiri-request-origin",
 		"authorization", "proxy-authorization", "cookie", "set-cookie", "content-type", "accept", "x-api-key", "x-goog-api-key", "forwarded":
 		return false
 	}

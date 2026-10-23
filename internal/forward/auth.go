@@ -25,6 +25,12 @@ type CallerKeyMiddleware struct {
 	resolver   CallerKeyResolver
 	lifecycle  *lifecyclegate.Gate
 	rejections requestattempt.Recorder
+	returned   func(*http.Request, int64, string)
+}
+
+// SetReturnObserver installs a startup-only, nonblocking provenance observer.
+func (middleware *CallerKeyMiddleware) SetReturnObserver(observe func(*http.Request, int64, string)) {
+	middleware.returned = observe
 }
 
 func NewCallerKeyMiddleware(resolver CallerKeyResolver, lifecycle *lifecyclegate.Gate, record ...requestattempt.Recorder) (*CallerKeyMiddleware, error) {
@@ -179,6 +185,9 @@ func (middleware *CallerKeyMiddleware) wrap(next http.Handler, checkRoute func(s
 		}
 		defer release()
 		ctx := context.WithValue(leaseContext, callerIdentityContextKey{}, identity)
+		if middleware.returned != nil {
+			middleware.returned(request.WithContext(ctx), identity.UserID, requestattempt.CurrentID(ctx))
+		}
 		next.ServeHTTP(writer, request.WithContext(ctx))
 	})
 }

@@ -103,6 +103,7 @@
       "emptyBody": "The administrator API returned no alert records.",
       "action": "Action",
       "kindValue": {
+        "returnDetected": "Request returned",
         "fetchFailed": "Fetch failed",
         "forwardError": "Forward error",
         "registrationRejected": "Registration rejected",
@@ -136,6 +137,7 @@
         "deletionSnapshot": "Balances before deletion"
       },
       "kindDescription": {
+        "returnDetected": "A request carried a valid site outbound marker. Review its source; processing continued without an automatic penalty.",
         "fetchFailed": "Could not fetch the model list. Check the service address and key.",
         "forwardError": "An upstream request did not complete. Open the details for failure information.",
         "registrationRejected": "A registration request did not meet the site access requirements.",
@@ -148,6 +150,12 @@
         "workerCheckpointFailed": "A background task could not save its progress. Open the details.",
         "invariantViolation": "A system data check found an inconsistency that needs review.",
         "accountDeleted": "An account was deleted. Its deletion snapshot is available in the details."
+      },
+      "returnDetectedFacts": {
+        "subtype": "Notice type",
+        "marker_issued_at": "Original request sent",
+        "source_request_id": "Original request record",
+        "returned_request_id": "Returned request record"
       },
       "subjectUser": "User #{{id}}"
     },
