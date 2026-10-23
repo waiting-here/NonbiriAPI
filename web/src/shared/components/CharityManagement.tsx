@@ -770,9 +770,10 @@ function DonationReview({
     scopeKey: `${accountId}:${item.id}`,
   });
   const reviewPage = snapshotPage(item.keys, reviewPager.page, reviewPager.pageSize);
-  const [decision, setDecision] = useState<DonationReviewInput['decision']>(
-    item.status === 'approved' ? 'force_reject' : 'approve',
-  );
+  const legacyPendingReview =
+    !item.use_summary && item.status === 'pending' && !item.can_force_reject;
+  const [pendingDecision, setPendingDecision] = useState<'approve' | 'reject'>('approve');
+  const decision = legacyPendingReview ? pendingDecision : 'force_reject';
   const [reason, setReason] = useState('');
   const [useReviewPending, setUseReviewPending] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -927,8 +928,8 @@ function DonationReview({
           </dd>
         </dl>
       </Card>
-      {item.status === 'approved' &&
-      !item.can_force_reject &&
+      {!item.can_force_reject &&
+      item.force_reject_unavailable_reason !== 'not_approved' &&
       item.force_reject_unavailable_reason ? (
         <p role="note">
           {t(
@@ -937,18 +938,18 @@ function DonationReview({
           )}
         </p>
       ) : null}
-      {(!item.use_summary && item.status === 'pending') || item.can_force_reject ? (
+      {legacyPendingReview || item.can_force_reject ? (
         <Card>
           <h3>
             {t(
-              item.status === 'pending'
+              legacyPendingReview
                 ? 'common.operations.charity.pendingReviewTitle'
                 : 'common.donationReview.forceTitle',
             )}
           </h3>
           <p>
             {t(
-              item.status === 'pending'
+              legacyPendingReview
                 ? 'common.operations.charity.pendingReviewBody'
                 : 'common.donationReview.forceHelp',
             )}
@@ -959,11 +960,11 @@ function DonationReview({
               <select
                 value={decision}
                 onChange={(event) => {
-                  setDecision(event.target.value as typeof decision);
+                  setPendingDecision(event.target.value as typeof pendingDecision);
                   setConfirmed(false);
                 }}
               >
-                {item.status === 'pending' ? (
+                {legacyPendingReview ? (
                   <>
                     <option value="approve">
                       {t('common.operations.charity.decision.approve')}

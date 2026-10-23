@@ -976,40 +976,45 @@ describe('CharityManagement corrective controls', () => {
     expect(requests.idempotencyKeys).toEqual([expect.stringMatching(operationKeyPattern)]);
   });
 
-  it('confirms an automatic donation rejection once and submits its mandatory reason without key settings', async () => {
-    const requests = installDonationFetch({
-      ...approvedDonation(),
-      first_approval_origin: 'auto',
-      can_force_reject: true,
-      force_reject_unavailable_reason: null,
-    });
-    const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
-      station: 'admin',
-      role: 'admin',
-    });
-    await view.user.click(await screen.findByRole('button', { name: 'Review' }));
-    const action = await screen.findByRole('button', {
-      name: 'Force reject donation',
-    });
-    expect(action).toBeDisabled();
-    await view.user.type(
-      screen.getByLabelText('Reason'),
-      'Review this source before future donations',
-    );
-    await view.user.click(action);
-    expect(requests.reviewBodies).toHaveLength(0);
-    const dialog = await screen.findByRole('alertdialog');
-    expect(within(dialog).getByText(/Dispatched calls settle normally/)).toBeVisible();
-    expect(within(dialog).queryByRole('checkbox')).not.toBeInTheDocument();
-    await view.user.click(within(dialog).getByRole('button', { name: 'Force reject donation' }));
-    await waitFor(() => expect(requests.reviewBodies).toHaveLength(1));
-    expect(requests.reviewBodies[0]).toEqual({
-      decision: 'force_reject',
-      expected_revision: '1',
-      reason: 'Review this source before future donations',
-    });
-    expect(requests.idempotencyKeys).toEqual([expect.stringMatching(operationKeyPattern)]);
-  });
+  it.each(['approved', 'pending'] as const)(
+    'confirms force rejection once for a %s parent with approved uses',
+    async (status) => {
+      const requests = installDonationFetch({
+        ...(status === 'pending' ? pendingDonation() : approvedDonation()),
+        status,
+        first_approval_origin: 'auto',
+        can_force_reject: true,
+        force_reject_unavailable_reason: null,
+      });
+      const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
+        station: 'admin',
+        role: 'admin',
+      });
+      await view.user.click(await screen.findByRole('button', { name: 'Review' }));
+      const action = await screen.findByRole('button', {
+        name: 'Force reject donation',
+      });
+      expect(screen.queryByRole('option', { name: 'Approve donation' })).not.toBeInTheDocument();
+      expect(action).toBeDisabled();
+      await view.user.type(
+        screen.getByLabelText('Reason'),
+        'Review this source before future donations',
+      );
+      await view.user.click(action);
+      expect(requests.reviewBodies).toHaveLength(0);
+      const dialog = await screen.findByRole('alertdialog');
+      expect(within(dialog).getByText(/Dispatched calls settle normally/)).toBeVisible();
+      expect(within(dialog).queryByRole('checkbox')).not.toBeInTheDocument();
+      await view.user.click(within(dialog).getByRole('button', { name: 'Force reject donation' }));
+      await waitFor(() => expect(requests.reviewBodies).toHaveLength(1));
+      expect(requests.reviewBodies[0]).toEqual({
+        decision: 'force_reject',
+        expected_revision: '1',
+        reason: 'Review this source before future donations',
+      });
+      expect(requests.idempotencyKeys).toEqual([expect.stringMatching(operationKeyPattern)]);
+    },
+  );
 
   it('includes the current member review revision only when that member is explicitly enabled', async () => {
     const donation = pendingDonation();

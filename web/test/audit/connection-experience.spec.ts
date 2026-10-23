@@ -295,6 +295,7 @@ for (const share of [false, true]) {
     const owner = await session(browser, 'owner');
     const admin = await session(browser, 'admin');
     const tag = 'Catalog sharing ' + randomUUID().slice(0, 8);
+    let donationId: string | undefined;
     try {
       const group = await connection(owner, tag);
       const saved = await credential(
@@ -317,6 +318,7 @@ for (const share of [false, true]) {
         ? await userAPI<Source>(owner, '/api/discovery-sources/' + value.key.discovery_source_id)
         : undefined;
       const donation = await donate(owner, value.key, ['chat_completions'], tag, source);
+      donationId = donation.id;
       await approve(admin, owner, donation);
       const approved = (await uses(owner, donation.id))[0]!;
       expect(approved.approved).not.toBeNull();
@@ -359,8 +361,20 @@ for (const share of [false, true]) {
         }
       }
     } finally {
-      await owner.close();
-      await admin.close();
+      try {
+        if (donationId) {
+          const live = await userAPI<Donation>(owner, '/api/donations/' + donationId);
+          await userAPI<Donation>(
+            owner,
+            '/api/donations/' + donationId + '/withdraw',
+            'POST',
+            { expected_revision: live.revision },
+            200,
+          );
+        }
+      } finally {
+        await Promise.all([owner.close(), admin.close()]);
+      }
     }
   });
 }
@@ -1477,6 +1491,33 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
     const rows = await uses(owner, approved.id);
     expect(rows).toHaveLength(2);
     expect(rows.every((row) => row.approved?.status === 'approved' && !row.pending)).toBe(true);
+    await approval.getByRole('button', { name: common.common.close, exact: true }).click();
+    await page
+      .getByLabel(common.common.operations.charity.reason, { exact: true })
+      .fill('Synthetic review of the approved services');
+    await page
+      .getByRole('button', { name: common.common.donationReview.forceTitle, exact: true })
+      .click();
+    const rejection = page.getByRole('alertdialog', {
+      name: common.common.donationReview.forceTitle,
+      exact: true,
+    });
+    const rejectedResponse = responseFor(
+      page,
+      'POST',
+      '/admin/api/donations/' + approved.id + '/review',
+    );
+    await rejection
+      .getByRole('button', { name: common.common.donationReview.forceTitle, exact: true })
+      .click();
+    const rejected = await rejectedResponse;
+    expect(rejected.status()).toBe(200);
+    expect(rejected.request().postDataJSON().decision).toBe('force_reject');
+    expect(rejected.request().postDataJSON()).not.toHaveProperty('key_settings');
+    expect((await uses(owner, approved.id)).every((row) => !row.approved && !row.pending)).toBe(
+      true,
+    );
+    createdDonationIDs.splice(createdDonationIDs.indexOf(approved.id), 1);
   } finally {
     try {
       for (const id of createdDonationIDs) {
