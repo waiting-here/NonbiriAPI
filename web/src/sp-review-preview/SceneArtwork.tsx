@@ -22,7 +22,7 @@ export function SceneArtwork({
   className?: string;
   highResolution?: boolean;
 }) {
-  if (entry.kind === 'tomorrow' && entry.poseStudy)
+  if (entry.kind === 'tomorrow' && !entry.walking && entry.poseStudy)
     return (
       <img
         className={className}
@@ -35,6 +35,7 @@ export function SceneArtwork({
   if (entry.kind === 'tomorrow')
     return (
       <TomorrowArtwork
+        walking={entry.walking}
         refined={entry.refined}
         variant={variant}
         dark={dark}

@@ -33,17 +33,18 @@ export function Preview() {
   const dark = useDarkMode();
   const reduced = useReducedMotion();
   const english = i18n.language.startsWith('en');
-  const [left, setLeft] = useState(() => selected('left', 'tomorrow-turn-back'));
+  const [left, setLeft] = useState(() => selected('left', 'tomorrow-walking'));
   const [right, setRight] = useState(() => selected('right', 'tomorrow-refined'));
   const [view, setView] = useState<View>(initialView);
   const [mode, setMode] = useState<Mode>(() =>
-    new URLSearchParams(location.search).get('motion') === '1' ? 'motion' : 'still',
+    new URLSearchParams(location.search).get('motion') === '0' ? 'still' : 'motion',
   );
   const [paused, setPaused] = useState(false);
   const [inspect, setInspect] = useState<Inspection | null>(null);
   const [initialTheme] = useState(() => new URLSearchParams(location.search).get('theme'));
   const animated = mode === 'motion' && !reduced;
-  const inspectingPose = inspect?.entry.kind === 'tomorrow' && inspect.entry.poseStudy;
+  const inspectingPose =
+    inspect?.entry.kind === 'tomorrow' && !inspect.entry.walking && inspect.entry.poseStudy;
   const t = (zh: string, en: string) => (english ? en : zh);
   useEffect(() => {
     if (initialTheme === 'light' || initialTheme === 'dark') setTheme(initialTheme);
@@ -72,8 +73,8 @@ export function Preview() {
         <PageHeader
           title={t('SP 成品对照', 'SP artwork review')}
           description={t(
-            '未命名的明天：新姿态、伸手版与已发布 SP 对照。',
-            'Tomorrow, Still Unwritten: compare the new pose, reaching pose and published SP cards.',
+            '未命名的明天：迈步版、站定参考、伸手版与已发布 SP 对照。',
+            'Tomorrow, Still Unwritten: compare the walking pose, standing reference, reaching pose and published SP cards.',
           )}
           actions={
             <>
@@ -91,14 +92,41 @@ export function Preview() {
             <Button
               size="sm"
               onClick={() => {
-                setLeft('tomorrow-turn-back');
+                setLeft('tomorrow-walking');
                 setRight('tomorrow-refined');
                 setView('card');
-                setMode('still');
+                setMode('motion');
+                setPaused(false);
                 setTheme('light');
               }}
             >
-              {t('新姿态 / 伸手版', 'New pose / Reaching pose')}
+              {t('迈步 / 伸手精修', 'Walking / Refined reaching')}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setLeft('tomorrow-walking');
+                setRight('tomorrow-turn-back');
+                setView('card');
+                setMode('motion');
+                setPaused(false);
+                setTheme('light');
+              }}
+            >
+              {t('迈步 / 站定', 'Walking / Standing')}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setLeft('tomorrow-walking');
+                setRight('l-chatgpt');
+                setView('card');
+                setMode('motion');
+                setPaused(false);
+                setTheme('light');
+              }}
+            >
+              {t('迈步 / 星月', 'Walking / Moon & Stars')}
             </Button>
             <Button
               size="sm"
@@ -262,7 +290,9 @@ export function Preview() {
                 {paused ? t('继续动作', 'Resume motion') : t('暂停动作', 'Pause motion')}
               </Button>
             )}
-            {inspectingPose && <span>{t('新姿态 · 静态候选', 'New pose · Still study')}</span>}
+            {inspectingPose && (
+              <span>{t('站定版 · 静态对照', 'Standing pose · Still reference')}</span>
+            )}
             <a
               href={highResolutionArt(
                 inspect.variant === 'card' ? inspect.entry.art : inspect.entry[inspect.variant],

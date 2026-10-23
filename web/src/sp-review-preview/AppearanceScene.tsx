@@ -148,14 +148,14 @@ export function AppearanceScene({
       window.parent.postMessage({ type: previewReadyMessage }, location.origin);
     return () => window.removeEventListener('message', receive);
   }, []);
-  if (entry.kind === 'tomorrow' && entry.poseStudy)
+  if (entry.kind === 'tomorrow' && !entry.walking && entry.poseStudy)
     return (
       <main className="sp-review__main">
         <h1>{entryName(entry, english)}</h1>
         <p>
           {t(
-            '新姿态目前只有静态竖卡，尚未制作主题装扮。',
-            'The new pose is a still portrait; its appearance has not been made yet.',
+            '站定版只保留静态竖卡对照。可返回对照页查看迈步版装扮。',
+            'The standing pose remains as a still portrait reference. Return to the comparison for the walking pose appearance.',
           )}
         </p>
         <a className="nb-btn nb-btn--secondary" href="/">
@@ -175,6 +175,7 @@ export function AppearanceScene({
       <div className="sp-scene__art" aria-hidden="true">
         {entry.kind === 'tomorrow' ? (
           <TomorrowArtwork
+            walking={entry.walking}
             variant="appearance"
             dark={dark}
             animated={animated}

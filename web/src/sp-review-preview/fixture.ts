@@ -5,6 +5,7 @@ import {
   tomorrowAssets,
   refinedTomorrowAssets,
   turnBackTomorrowAssets,
+  walkingTomorrowAssets,
 } from '../user/activities/gacha/tomorrow/assets';
 
 export type PreviewVariant = 'card' | 'cover' | 'illustration' | 'appearance';
@@ -24,7 +25,7 @@ type EntryDetails = {
 };
 export type Entry = EntryDetails &
   (
-    | { kind: 'tomorrow'; refined?: boolean; poseStudy?: boolean }
+    | { kind: 'tomorrow'; walking?: boolean; refined?: boolean; poseStudy?: boolean }
     | { kind: 'published'; card: Card; appearance: PublishedAppearance }
   );
 
@@ -56,6 +57,16 @@ export const turnBackTomorrow: Entry = {
   art: turnBackTomorrowAssets.card,
   thumb: turnBackTomorrowAssets.thumb,
 };
+export const walkingTomorrow: Entry = {
+  ...tomorrow,
+  id: 'tomorrow-walking',
+  kind: 'tomorrow',
+  walking: true,
+  art: walkingTomorrowAssets.card,
+  thumb: walkingTomorrowAssets.thumb,
+  cover: walkingTomorrowAssets.cover,
+  illustration: walkingTomorrowAssets.illustration,
+};
 const published = (id: string): Entry => {
   const card = cardById[id];
   const theme = themeById[card.theme];
@@ -75,6 +86,7 @@ const published = (id: string): Entry => {
   };
 };
 export const entries: Entry[] = [
+  walkingTomorrow,
   turnBackTomorrow,
   refinedTomorrow,
   tomorrow,
@@ -82,12 +94,15 @@ export const entries: Entry[] = [
 ];
 export const entryById = Object.fromEntries(entries.map((entry) => [entry.id, entry]));
 export const entryName = (entry: Entry, english: boolean) => (english ? entry.nameEN : entry.name);
-export const appearanceArt = (entry: Entry, dark: boolean) =>
-  entry.kind === 'tomorrow'
-    ? dark
-      ? tomorrowAssets.dark
-      : tomorrowAssets.light
-    : '/assets/gacha/appearances/' + entry.appearance + '-' + (dark ? 'dark' : 'light') + '.webp';
+export const appearanceArt = (entry: Entry, dark: boolean) => {
+  if (entry.kind === 'tomorrow') {
+    const assets = entry.walking ? walkingTomorrowAssets : tomorrowAssets;
+    return dark ? assets.dark : assets.light;
+  }
+  return (
+    '/assets/gacha/appearances/' + entry.appearance + '-' + (dark ? 'dark' : 'light') + '.webp'
+  );
+};
 export const dialogue = [
   {
     label: ['初见', 'First meeting'],
