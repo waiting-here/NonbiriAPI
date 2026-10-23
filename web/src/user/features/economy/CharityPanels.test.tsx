@@ -781,6 +781,102 @@ describe('donation composer recovery', () => {
     expect(rendered.container.querySelector('input[type="password"]')).toBeNull();
   });
 
+  it('defaults mainstream donations to their available services and exact catalog, preserving cancellations across reselection', async () => {
+    const mutation = successfulMutation();
+    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
+    const source = {
+      id: '51',
+      connection_id: '2',
+      name: 'Catalog',
+      base_url: 'https://catalog.example',
+      models_url: 'https://catalog.example/models',
+      list_format: 'openai',
+      credential_id: '81',
+      credential_version: '1',
+      revision: '3',
+      discovery_source_revision: '7',
+      enabled: true,
+      credential_available: true,
+      state: 'succeeded',
+      checked_at: 1,
+      safe_class: 'none',
+      safe_diag: '',
+      created_at: 1,
+      updated_at: 2,
+    };
+    installJsonFetchFixtures([{ method: 'GET', path: '/api/discovery-sources/51', body: source }]);
+    const choice = {
+      ...mainstreamChoice,
+      key: { ...mainstreamChoice.key, discoverySourceId: '51' },
+    };
+    const rendered = await renderWithProviders(
+      withPickerChoices(<DonationComposer draftNamespace="mainstream-defaults" />, [choice]),
+      { station: 'user', role: 'user' },
+    );
+    await rendered.user.click(
+      screen.getByRole('button', { name: charityCopy.presentation.openPicker }),
+    );
+    await rendered.user.click(screen.getByLabelText('Select resource key 62'));
+    expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'Share this catalog' })).toBeChecked(),
+    );
+    await rendered.user.click(screen.getByRole('checkbox', { name: 'Responses' }));
+    await rendered.user.click(screen.getByRole('checkbox', { name: 'Share this catalog' }));
+    await rendered.user.click(screen.getByLabelText('Select resource key 62'));
+    await rendered.user.click(screen.getByLabelText('Select resource key 62'));
+    await rendered.queryClient.invalidateQueries({ queryKey: ['user'] });
+    expect(screen.getByRole('checkbox', { name: 'Responses' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Share this catalog' })).not.toBeChecked();
+    await rendered.user.type(
+      screen.getByRole('textbox', { name: /donation description/i }),
+      'Share selected services',
+    );
+    await declinePublicThanks(rendered.user);
+    await rendered.user.click(screen.getByLabelText(charityCopy.ownershipAuthorization));
+    await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
+    await waitFor(() =>
+      expect(mutation.mutateAsync).toHaveBeenCalledWith({
+        description: 'Share selected services',
+        ownershipAuthorized: true,
+        discordPublicThanks: false,
+        keys: [
+          {
+            endpointKeyId: '62',
+            nativeServices: ['chat_completions'],
+            credentialId: '81',
+            credentialVersion: '1',
+            grantRevision: '1',
+            expiresAt: null,
+            failureDisableThreshold: '10',
+          },
+        ],
+      }),
+    );
+  });
+
+  it('defaults mainstream donations without a catalog to available services only and leaves custom sharing explicit', async () => {
+    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(successfulMutation() as never);
+    const rendered = await renderWithProviders(
+      withPickerChoices(<DonationComposer draftNamespace="defaults-without-catalog" />, [
+        mainstreamChoice,
+        choices[0],
+      ]),
+      { station: 'user', role: 'user' },
+    );
+    await rendered.user.click(
+      screen.getByRole('button', { name: charityCopy.presentation.openPicker }),
+    );
+    await rendered.user.click(screen.getByLabelText('Select resource key 62'));
+    expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: 'Share this catalog' })).toBeNull();
+    await rendered.user.click(screen.getByLabelText('Select resource key 62'));
+    await rendered.user.click(screen.getByLabelText('Select resource key 61'));
+    expect(screen.getByRole('checkbox', { name: 'Chat completions' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Responses' })).not.toBeChecked();
+  });
+
   it('requires a pure mainstream channel or a custom-only selection', async () => {
     const mutation = successfulMutation();
     vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);

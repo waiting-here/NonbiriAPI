@@ -2153,6 +2153,7 @@
       "disclosureDeletion": "Withdrawal, termination, or account deletion can stop future charity use. Requests already in progress will still be settled, and required records follow the retention policy.",
       "ownershipAuthorization": "I own every selected resource or have authorization to contribute its capacity.",
       "expiryInvalid": "Enter a valid expiry in your browser time zone, or leave it blank for permanent authorization.",
+      "catalogIncluded": "Catalog included",
       "keyExpiry": "Authorized expiry",
       "keyExpiryFor": "Expiry for {{key}}",
       "expiryHint": "Leave blank for permanent authorization.",

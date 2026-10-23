@@ -196,23 +196,49 @@
   margin-top: 0.1rem;
 }
 
+.donation-selected-chip {
+  align-items: flex-start;
+}
+
+.donation-selected-chip > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .economy-key-expiry {
   display: grid;
-  grid-template-columns: minmax(8rem, auto) minmax(0, 1fr);
-  gap: var(--nb-space-1) var(--nb-space-3);
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--nb-space-4);
   margin-top: var(--nb-space-2);
   border-left: 0.2rem solid var(--nb-color-border-strong);
   padding-left: var(--nb-space-3);
 }
 
-.economy-key-expiry input {
+.economy-key-expiry .time-input-field {
   min-width: 0;
-  width: 100%;
 }
 
-.economy-key-expiry small {
+.donation-share-fields__source > .nb-field {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--nb-space-2);
+}
+
+.donation-share-fields__source .nb-field__label {
   grid-column: 2;
+  min-height: var(--nb-space-10);
+  align-items: center;
+  cursor: pointer;
+}
+
+.donation-share-fields__source input[type='checkbox'] {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.donation-share-fields__source .nb-field__help {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
 }
 
 .economy-disclosure,
@@ -396,14 +422,6 @@
 
   .economy-status-stack {
     justify-content: flex-start;
-  }
-
-  .economy-key-expiry {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .economy-key-expiry small {
-    grid-column: auto;
   }
 
   .economy-countdown {

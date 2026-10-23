@@ -2153,6 +2153,7 @@
       "disclosureDeletion": "撤回、终止或删除账号可停止后续公益使用；进行中的请求仍需完成扣费，必要记录会按政策保留。",
       "ownershipAuthorization": "我对所有已选资源拥有所有权，或已获准贡献这些资源的容量。",
       "expiryInvalid": "请输入浏览器时区下的有效过期时间；留空表示永久授权。",
+      "catalogIncluded": "同时分享目录",
       "keyExpiry": "授权有效期",
       "keyExpiryFor": "{{key}} 的有效期",
       "expiryHint": "留空表示永久授权。",
