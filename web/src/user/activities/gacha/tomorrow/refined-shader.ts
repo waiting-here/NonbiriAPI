@@ -21,6 +21,10 @@ float breath(float seconds){
   float t=mod(seconds,5.8);
   return smoothstep(0.,2.1,t)*(1.-smoothstep(2.1,5.8,t));
 }
+float clothSway(float seconds){
+  // Distributed delay lets cloth gather the gust and settle after it passes.
+  return .52*breeze(seconds)+.33*breeze(seconds-.3)+.15*breeze(seconds-.65);
+}
 vec2 flex(vec2 q){
   vec2 p=q*vec2(1024.,1536.);
   vec4 weights=texture2D(rig,q);
@@ -29,8 +33,20 @@ vec2 flex(vec2 q){
   float left=breeze(time-.35), right=breeze(time-.85);
   delta+=vec2(10.5*left,3.1*breeze(time-.65))*weights.r*smoothstep(220.,610.,p.y);
   delta+=vec2(12.*right,3.8*breeze(time-1.15))*weights.g*smoothstep(180.,670.,p.y);
-  delta+=vec2(7.5*breeze(time-1.05),2.6*breeze(time-1.4))*weights.b*smoothstep(540.,850.,p.y);
-  delta+=vec2(8.5*breeze(time-1.45),2.8*breeze(time-1.8))*weights.a*smoothstep(725.,1040.,p.y);
+  float leftHem=smoothstep(540.,870.,p.y), rightHem=smoothstep(675.,1080.,p.y);
+  float leftTime=time-.65-leftHem*.65, rightTime=time-1.05-rightHem*.8;
+  float leftSway=clothSway(leftTime), rightSway=clothSway(rightTime);
+  float leftFold=leftSway-clothSway(leftTime-.75);
+  float rightFold=rightSway-clothSway(rightTime-.9);
+  delta+=(vec2(10.5*leftSway,3.1*clothSway(leftTime-.3))*leftHem
+    +vec2(2.2,-2.8)*leftFold*leftHem*leftHem)*weights.b;
+  delta+=(vec2(12.5*rightSway,3.4*clothSway(rightTime-.4))*rightHem
+    +vec2(3.8,-3.4)*rightFold*rightHem*rightHem)*weights.a;
+  float skirt=smoothstep(630.,660.,p.y);
+  float clothDelay=mix(.55,.95,skirt);
+  vec2 clothDelta=mix(vec2(1.6,-1.6),vec2(2.8,-1.1),skirt)*clothSway(time-clothDelay);
+  clothDelta+=vec2(.25,-.6)*breath(time-.12)*(1.-skirt);
+  delta+=clothDelta*binding.a;
   float tail=binding.b*smoothstep(804.,858.,p.x);
   delta+=vec2(1.5,5.)*breeze(time-1.5)*tail;
   return q-delta/vec2(1024.,1536.);

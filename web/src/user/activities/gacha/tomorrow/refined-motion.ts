@@ -35,23 +35,33 @@ const hairAndCoat = [
   ],
   [
     [350, 541],
-    [390, 567],
-    [337, 657],
-    [263, 739],
-    [202, 840],
-    [154, 864],
-    [145, 748],
-    [251, 615],
+    [404, 556],
+    [387, 611],
+    [330, 655],
+    [278, 723],
+    [220, 809],
+    [196, 869],
+    [155, 911],
+    [129, 881],
+    [135, 792],
+    [145, 738],
+    [195, 679],
+    [259, 607],
   ],
   [
-    [681, 725],
-    [772, 786],
-    [853, 861],
-    [910, 984],
-    [878, 1075],
-    [792, 932],
-    [724, 889],
-    [724, 815],
+    [648, 657],
+    [713, 712],
+    [786, 778],
+    [862, 842],
+    [912, 912],
+    [939, 1011],
+    [901, 1115],
+    [873, 1090],
+    [852, 1024],
+    [798, 995],
+    [738, 958],
+    [690, 899],
+    [675, 823],
   ],
 ] as const;
 const environment = [
@@ -145,6 +155,48 @@ const offeredHand = [
   [639, 646],
   [614, 592],
 ] as const;
+// Small cloth regions share the spare pose channel. Cuffs stop at the hands;
+// the loose left skirt pleat excludes the thigh and leaves the waistband fixed.
+const secondaryCloth = [
+  [
+    [283, 486],
+    [302, 501],
+    [327, 522],
+    [347, 520],
+    [374, 501],
+    [396, 529],
+    [387, 560],
+    [358, 597],
+    [326, 607],
+    [302, 585],
+    [280, 551],
+  ],
+  [
+    [580, 467],
+    [622, 479],
+    [673, 482],
+    [722, 492],
+    [759, 506],
+    [757, 524],
+    [710, 520],
+    [666, 550],
+    [644, 589],
+    [618, 595],
+    [600, 565],
+    [582, 523],
+  ],
+  [
+    [307, 665],
+    [355, 658],
+    [383, 694],
+    [387, 746],
+    [364, 797],
+    [330, 820],
+    [288, 799],
+    [280, 765],
+    [286, 723],
+  ],
+] as const;
 function poseMask() {
   const width = 256,
     height = 384;
@@ -159,7 +211,11 @@ function poseMask() {
       pixels[offset] = Math.round(128 + delta[0] * 16 * (1 - pinned));
       pixels[offset + 1] = Math.round(128 + delta[1] * 16 * (1 - pinned));
       pixels[offset + 2] = Math.round(255 * regionWeight(px, py, tail, 3));
-      pixels[offset + 3] = 255;
+      pixels[offset + 3] = Math.round(
+        255 *
+          (1 - pinned) *
+          Math.max(...secondaryCloth.map((region) => regionWeight(px, py, region, 12))),
+      );
     }
   return { width, height, pixels };
 }
