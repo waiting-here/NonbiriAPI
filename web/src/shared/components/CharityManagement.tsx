@@ -1,4 +1,5 @@
-import { UseSummary } from './UseSummary';
+import { DONATION_DISPLAY_STATUSES } from '@shared/operations/donationUses';
+import { DonationStatusBadge, UseSummary } from './UseSummary';
 import { DonationUseReviewResults, DonationUsesPanel } from './DonationUsesPanel';
 import type { UseReviewResult } from '@shared/operations/donationUses';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
@@ -32,7 +33,6 @@ import {
   type AdminDonation,
   type CharityRole,
   type DonationEndedReason,
-  type DonationStatus,
   type ManagedDonationKey,
   type ManagedSafeSource,
   type StewardDonation,
@@ -886,13 +886,7 @@ function DonationReview({
           />
         ) : null}
         <div className="ops-toolbar">
-          <StatusBadge
-            active={item.status === 'approved'}
-            danger={
-              item.status === 'rejected' || item.status === 'deleted' || item.status === 'expired'
-            }
-            label={t(charityStatusKey(role, item.status))}
-          />
+          <DonationStatusBadge status={item.status} summary={item.use_summary} />
           {item.status !== 'pending' ? (
             <span>{t(approvalOriginCopy[item.first_approval_origin ?? 'unknown'])}</span>
           ) : null}
@@ -1475,7 +1469,7 @@ function DonationsPanel({
   const rawQuery = oneParam(searchParams, 'q');
   const query = validManagementSearch(rawQuery) ? rawQuery : '';
   const rawStatus = oneParam(searchParams, 'donation_status');
-  const status = ['pending', 'approved', 'rejected', 'deleted', 'expired'].includes(rawStatus)
+  const status = (DONATION_DISPLAY_STATUSES as readonly string[]).includes(rawStatus)
     ? rawStatus
     : '';
   const selected = selectedID(searchParams, 'donation_id');
@@ -1563,7 +1557,7 @@ function DonationsPanel({
     queryFn: ({ signal }) =>
       getManagedDonationsPage(
         role,
-        { status, handling, q: query } as ManagedDonationPageFilters,
+        { review_status: status, handling, q: query } as ManagedDonationPageFilters,
         pager.page,
         pager.pageSize,
         signal,
@@ -1671,9 +1665,9 @@ function DonationsPanel({
                       }}
                     >
                       <option value="">{t(charityCopyKey(role, 'allStatuses'))}</option>
-                      {['pending', 'approved', 'rejected', 'deleted', 'expired'].map((value) => (
+                      {DONATION_DISPLAY_STATUSES.map((value) => (
                         <option key={value} value={value}>
-                          {t(charityStatusKey(role, value as DonationStatus))}
+                          {t('common.connections.donationStates.' + value)}
                         </option>
                       ))}
                     </select>
@@ -1699,7 +1693,7 @@ function DonationsPanel({
                   ? [
                       {
                         key: 'status',
-                        label: t(charityStatusKey(role, status as DonationStatus)),
+                        label: t('common.connections.donationStates.' + status),
                         onRemove: () => updateFilters(handling, query, ''),
                         removeLabel: t('common.resetFilter'),
                       },
@@ -1767,7 +1761,7 @@ function DonationsPanel({
                 role={role}
                 selection={{
                   view: 'donations',
-                  ...({ status, handling, q: query } as ManagedDonationPageFilters),
+                  ...({ review_status: status, handling, q: query } as ManagedDonationPageFilters),
                 }}
                 disabled={list.isFetching || Boolean(list.error)}
                 onCapabilityLoss={onCapabilityLoss}
@@ -1847,10 +1841,7 @@ function DonationsPanel({
                     cell: 'status',
                     render: (item) => (
                       <div>
-                        <StatusBadge
-                          active={item.status === 'approved'}
-                          label={t(charityStatusKey(role, item.status))}
-                        />
+                        <DonationStatusBadge status={item.status} summary={item.use_summary} />
                         <UseSummary value={item.use_summary} />
                       </div>
                     ),

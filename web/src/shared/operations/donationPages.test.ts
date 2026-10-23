@@ -684,3 +684,24 @@ describe('donation page operations', () => {
     });
   });
 });
+
+it('filters the display review summary without changing the real donation lifecycle status', async () => {
+  const use_summary = {
+    total: '2',
+    approved: '0',
+    pending: '0',
+    rejected: '2',
+    withdrawn: '0',
+    review_status: 'rejected',
+  };
+  const payload = page([donation({ use_summary })]);
+  const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(payload));
+  vi.stubGlobal('fetch', fetchMock);
+  const result = await getManagedDonationsPage('admin', { review_status: 'rejected' }, '1', 20);
+  expect(String(fetchMock.mock.calls[0]![0])).toContain('review_status=rejected');
+  expect(result.data[0]!.status).toBe('pending');
+  expect(result.data[0]!.use_summary?.review_status).toBe('rejected');
+  expect(() =>
+    normalizeManagedDonationsPage(payload, 'admin', { review_status: 'approved' }, '1', 20),
+  ).toThrow();
+});

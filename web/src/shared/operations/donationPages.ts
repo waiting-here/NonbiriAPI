@@ -1,4 +1,10 @@
-import { normalizeUseSummary, type UseSummary } from './donationUses';
+import {
+  DONATION_DISPLAY_STATUSES,
+  donationDisplayStatus,
+  normalizeUseSummary,
+  type DonationDisplayStatus,
+  type UseSummary,
+} from './donationUses';
 import { exactRecord } from '@shared/operations/wire';
 import { KEY_STATES, type KeyStateFilter } from './keyState';
 import { ApiError } from '@shared/query/http';
@@ -40,6 +46,7 @@ export type DonationHandlingState = DonationHandling['state'];
 
 export interface ManagedDonationPageFilters {
   status?: DonationStatus | '';
+  review_status?: DonationDisplayStatus | '';
   handling?: DonationHandlingState | '';
   q?: string;
 }
@@ -299,7 +306,12 @@ function queryText(value: unknown, label: string): string {
 }
 
 function donationFilters(value: unknown): Required<ManagedDonationPageFilters> {
-  const root = exactRecord(value, ['status', 'handling', 'q'], 'donation page filters', []);
+  const root = exactRecord(
+    value,
+    ['status', 'review_status', 'handling', 'q'],
+    'donation page filters',
+    [],
+  );
   const status =
     root.status === undefined
       ? ''
@@ -317,7 +329,15 @@ function donationFilters(value: unknown): Required<ManagedDonationPageFilters> {
           'donation handling filter',
         );
   const q = root.q === undefined ? '' : queryText(root.q, 'donation search');
-  return { status, handling, q };
+  const review_status =
+    root.review_status === undefined
+      ? ''
+      : oneOf(
+          root.review_status,
+          ['', ...DONATION_DISPLAY_STATUSES],
+          'donation review status filter',
+        );
+  return { status, review_status, handling, q };
 }
 
 interface NormalizedSourceFilters {
@@ -452,6 +472,8 @@ function donationCommon(
     !(filters.status === 'pending' && useSummary && BigInt(useSummary.pending) > 0n)
   )
     invalidResponse(`${label} status filter`);
+  if (filters.review_status && donationDisplayStatus(status, useSummary) !== filters.review_status)
+    invalidResponse(label + ' review status filter');
   const review = pageReview(root.review_result, `${label} review`);
   const reviewer = pageReviewer(root.reviewer, `${label} reviewer`);
   if (reviewer !== null && review === null) invalidResponse(`${label} attributed review`);
@@ -885,6 +907,7 @@ export function getManagedDonationsPage(
   return decoded(
     queryPath(`${root}/donations`, {
       status: normalizedFilters.status || undefined,
+      review_status: normalizedFilters.review_status || undefined,
       handling: normalizedFilters.handling || undefined,
       q: normalizedFilters.q || undefined,
       page,

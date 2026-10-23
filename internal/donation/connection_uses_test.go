@@ -134,6 +134,10 @@ func TestConnectionUsesRejectPendingKeepsApprovedAuthorization(t *testing.T) {
 	if err != nil || len(result.Value.Results) != 1 || !result.Value.Results[0].OK {
 		t.Fatalf("reject pending: %+v, %v", result, err)
 	}
+	view, err := e.service.GetOwner(context.Background(), owner, id)
+	if err != nil || view.Status != "approved" || view.UseSummary.ReviewStatus != "approved" || view.UseSummary.Pending != "0" || view.UseSummary.Rejected != "1" {
+		t.Fatalf("rejected replacement lost approved summary: %+v %v", view, err)
+	}
 	current := ownerUsesForTest(t, e, owner, id)[0]
 	if current.Approved == nil || current.Pending != nil || current.Latest == nil || current.Latest.Status != "rejected" || current.Approved.CredentialVersion != selected.Approved.CredentialVersion {
 		t.Fatalf("pending decision replaced approved material: %+v", current)

@@ -29,10 +29,13 @@ const logicallyActiveDonationSQL = `(d.status IN ('pending','approved') AND EXIS
 SELECT 1 FROM donation_keys live WHERE live.donation_id=d.id AND live.ended_at IS NULL
  AND (live.expires_at IS NULL OR live.expires_at>?)))`
 
-type ManagementFilter struct{ Status, Handling, Query, OwnerView string }
+type ManagementFilter struct {
+	Status, Handling, Query, OwnerView string
+	ReviewStatus                       string `json:",omitempty"`
+}
 
 func validManagementFilter(filter ManagementFilter) bool {
-	return validStatusFilter(filter.Status) && validHandlingFilter(filter.Handling) &&
+	return validStatusFilter(filter.Status) && validReviewStatusFilter(filter.ReviewStatus) && validHandlingFilter(filter.Handling) &&
 		utf8.ValidString(filter.Query) && utf8.RuneCountInString(filter.Query) <= 128 &&
 		len(filter.Query) <= 512 && !strings.ContainsRune(filter.Query, 0)
 }
@@ -49,6 +52,10 @@ func appendManagementFilter(query string, args []any, filter ManagementFilter, n
 	if filter.Status != "" {
 		query += ` AND (CASE WHEN d.status IN ('pending','approved') AND NOT ` + logicallyActiveDonationSQL + ` THEN 'expired' ELSE d.status END)=?`
 		args = append(args, now, filter.Status)
+	}
+	if filter.ReviewStatus != "" {
+		query += ` AND (` + displayedDonationStatusSQL() + `)=?`
+		args = append(args, now, filter.ReviewStatus)
 	}
 	if filter.Handling != "" {
 		query += ` AND (CASE WHEN h.state='pending' AND NOT ` + logicallyActiveDonationSQL + ` THEN 'closed' ELSE h.state END)=?`

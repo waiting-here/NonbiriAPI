@@ -2312,7 +2312,7 @@
         "ai-sdk-gateway-v3": "Gateway v3 Models",
         "ai-sdk-gateway-v4": "Gateway v4 Models"
       },
-      "useSummary": "用途 {{total}} · 批准 {{approved}} · 待审 {{pending}}",
+      "useSummary": "用途 {{total}} · 已批准 {{approved}} · 待审 {{pending}} · 最近拒绝 {{rejected}} · 最近撤回 {{withdrawn}}",
       "refreshSharedCatalog": "刷新已分享目录",
       "adoptDiscoverySuggestion": "使用预置目录建议",
       "manageSource": "管理发现来源",
@@ -2338,7 +2338,34 @@
       "useAdditionEffect": "选择要追加分享的服务，提交后等待审核。这把捐赠密钥的额度、用量和暂停状态保持不变。",
       "useAdditionSaved": "服务已提交，等待审核。",
       "useAdditionUnavailable": "原入口或凭据不可用，请先管理入口后再追加分享。",
-      "noServicesToAdd": "当前入口允许的服务都已批准或正在等待审核。"
+      "noServicesToAdd": "当前入口允许的服务都已批准或正在等待审核。",
+      "approveAllUses": "全部批准",
+      "rejectAllUses": "整体驳回",
+      "resumeUseReview": "继续本次审核",
+      "reviewDonationScope": "捐赠 #{{donation}} 的全部待审用途，包含所有分页。",
+      "reviewKeyScope": "捐赠 #{{donation}} 中密钥 #{{key}} 的全部待审用途，包含所有分页。",
+      "reviewSnapshotCount": "共 {{total}} 项待审，将处理 {{eligible}} 项，另有 {{blocked}} 项暂不可处理。",
+      "reviewSnapshotFixed": "仅审核本次列出的版本。之后新增或修改的用途需重新确认；失败项可刷新后单独重审。",
+      "blockedUses": "查看不可处理的用途",
+      "reviewUseLabel": "密钥 #{{key}} · {{service}}",
+      "useReviewUnavailable": "当前无法审核，请检查用途状态和审核权限。",
+      "reviewProgress": "已处理 {{completed}} / {{total}} 项，成功 {{succeeded}} 项，失败 {{failed}} 项。",
+      "stopUseReview": "处理完本批后暂停",
+      "stoppingUseReview": "正在暂停…",
+      "cancelUseReviewLoading": "取消读取",
+      "reviewResults": "逐项审核结果",
+      "donationStates": {
+        "pending": "待审核",
+        "approved_pending": "有新版本待审 · 已有批准",
+        "approved": "全部已批准",
+        "partially_approved": "部分已批准",
+        "rejected": "已拒绝",
+        "withdrawn": "已撤回待审用途",
+        "mixed": "审核已完成 · 混合结果",
+        "deleted": "已删除",
+        "expired": "已到期"
+      },
+      "finishUseReview": "结束本次操作，保留已处理结果"
     }
   },
   "logs": {

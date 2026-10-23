@@ -2312,7 +2312,7 @@
         "ai-sdk-gateway-v3": "Gateway v3 Models",
         "ai-sdk-gateway-v4": "Gateway v4 Models"
       },
-      "useSummary": "Uses {{total}} · Approved {{approved}} · Pending {{pending}}",
+      "useSummary": "Uses {{total}} · Approved {{approved}} · Pending {{pending}} · Latest rejected {{rejected}} · Latest withdrawn {{withdrawn}}",
       "refreshSharedCatalog": "Refresh shared catalog",
       "adoptDiscoverySuggestion": "Use preset discovery suggestion",
       "manageSource": "Manage discovery source",
@@ -2338,7 +2338,34 @@
       "useAdditionEffect": "Choose services to share on this donated key. They will wait for review. Its limits, usage and paused state stay the same.",
       "useAdditionSaved": "Services submitted for review.",
       "useAdditionUnavailable": "The original entry or credential is unavailable. Manage it before sharing more services.",
-      "noServicesToAdd": "All services allowed by the current entry are already approved or waiting for review."
+      "noServicesToAdd": "All services allowed by the current entry are already approved or waiting for review.",
+      "approveAllUses": "Approve all pending uses",
+      "rejectAllUses": "Reject all pending uses",
+      "resumeUseReview": "Continue this review",
+      "reviewDonationScope": "All pending uses in donation #{{donation}}, across all pages.",
+      "reviewKeyScope": "All pending uses for key #{{key}} in donation #{{donation}}, across all pages.",
+      "reviewSnapshotCount": "{{total}} pending uses: {{eligible}} will be processed; {{blocked}} cannot be processed.",
+      "reviewSnapshotFixed": "Only the versions listed here will be reviewed. New or changed uses need a new confirmation. Refresh failed items before reviewing them again.",
+      "blockedUses": "View blocked uses",
+      "reviewUseLabel": "Key #{{key}} · {{service}}",
+      "useReviewUnavailable": "Review is unavailable. Check the use state and your review access.",
+      "reviewProgress": "Processed {{completed}} of {{total}} uses: {{succeeded}} succeeded, {{failed}} failed.",
+      "stopUseReview": "Pause after this batch",
+      "stoppingUseReview": "Pausing…",
+      "cancelUseReviewLoading": "Cancel loading",
+      "reviewResults": "Review results by use",
+      "donationStates": {
+        "pending": "Pending review",
+        "approved_pending": "Pending updates · Approval retained",
+        "approved": "All approved",
+        "partially_approved": "Partially approved",
+        "rejected": "Rejected",
+        "withdrawn": "Pending uses withdrawn",
+        "mixed": "Review complete · Mixed results",
+        "deleted": "Deleted",
+        "expired": "Expired"
+      },
+      "finishUseReview": "Finish this operation and keep processed results"
     }
   },
   "logs": {
