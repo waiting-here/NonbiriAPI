@@ -60,6 +60,7 @@ export function TermsPage() {
             <section>
               <h2>{t('user.legal.terms.donationTitle')}</h2>
               <p>{t('user.legal.terms.donationBody')}</p>
+              <p>{t('user.legal.terms.donationReviewBody')}</p>
             </section>
             <section>
               <h2>{t('user.legal.terms.imageTitle')}</h2>

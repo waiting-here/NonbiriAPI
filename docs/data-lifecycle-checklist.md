@@ -335,6 +335,31 @@ Any new table, column, route, or retention value requires an explicit export
 whitelist/exclusion, synchronous deletion and late-write behavior, an exact retention
 sweep or cap, bilingual privacy review, and fixed-clock/cascade tests before release.
 
+### Returned outbound request alerts
+
+The server overwrites the reserved Nonbiri-Request-Origin request header after
+adaptation and removes it from response headers and trailers. Its authenticated
+encrypted value expires after 30 minutes and contains only issuance time, an
+origin digest and optional source request/resource references. It carries no
+request body or readable account identifier. An upstream that copies arbitrary
+request data into its response body is still subject to the existing bounded
+response and restricted-error rules; successful response bodies are not scanned.
+
+A valid marker on an authenticated incoming request may enqueue an administrator
+alert. Its subject is the returning account; context contains bounded source and
+returned request/resource references and issuance time. The marker itself is not
+stored. Ordinary requests make no extra database query. A queue of 32 events,
+256 deduplication entries, a 30-minute suppression window, at most one write
+every five seconds and a 200-millisecond write budget bound the overhead.
+Queue saturation, shutdown and write failure may drop alerts. No request is
+rejected and no account, donation or reward is changed.
+
+These records use the existing forward_error alert kind with return_detected
+context, retain the existing administrator-only access/retention policy, and are
+excluded from ordinary account exports. Account deletion clears the subject in
+its transaction; late inserts require the account still to exist. Existing
+reference availability rules apply to retained source links.
+
 ### Account deletion alerts and Discord blacklist
 
 When a user deletes their account, a separate read-only security projection retains only known former site and Discord IDs, registration/deletion times, effective level, restriction and charity-pause state, source, pre-zero four-wallet amounts, donation credit and blacklist result. Older missing values remain null or `unknown`; they are never derived from another account using the same Discord ID. Administrators and current level-5/6 stewards can read authorized projections, but only administrators see deletion-alert references and minimal self-deletion duel-abort events. The latter are removed after 90 days; the deleted-account projection has no automatic expiry. Neither is in a personal export. The existing administrator-only economic deletion alert remains a separate record: negative general or game credit keeps it unresolved unless automatic blacklisting succeeds, which resolves it in the same transaction; other deletion alerts start resolved. Resolution does not erase its retained audit facts.
