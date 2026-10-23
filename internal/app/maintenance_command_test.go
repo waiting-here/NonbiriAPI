@@ -22,7 +22,7 @@ func TestSchemaInfoDoesNotLoadEnvironmentOrOpenDatabase(t *testing.T) {
 	if descriptor.FormatVersion != 1 || descriptor.SchemaVersion != db.CurrentSchemaVersion || descriptor.MinimumSchemaVersion != db.MinimumSchemaVersion || descriptor.ManifestHash == "" {
 		t.Fatal(descriptor)
 	}
-	if len(descriptor.OfflineConversions) != 0 || len(descriptor.SourceSchemaVersions) != 1 || descriptor.SourceSchemaVersions[0] != 33 || len(descriptor.SourceManifestHashes) != 1 || descriptor.SourceManifestHashes[0] != db.Schema33ManifestHash {
+	if len(descriptor.OfflineConversions) != 0 || len(descriptor.SourceSchemaVersions) != 2 || descriptor.SourceSchemaVersions[0] != 33 || descriptor.SourceSchemaVersions[1] != 34 || len(descriptor.SourceManifestHashes) != 2 || descriptor.SourceManifestHashes[0] != db.Schema33ManifestHash || descriptor.SourceManifestHashes[1] != db.Schema34ManifestHash {
 		t.Fatal("offline conversion metadata", descriptor.OfflineConversions)
 	}
 }

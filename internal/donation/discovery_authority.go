@@ -69,48 +69,23 @@ func (s *Service) AuthorizeManagedDiscovery(ctx context.Context, tx *sql.Tx, rol
 		return target, resources.ErrResourceLocked
 	}
 	selected, err := chooseDiscoveryUse(choices[donationKeyID], selection, requireEligible || selection.UseID == 0)
-	if errors.Is(err, resources.ErrResourceLocked) {
-		return target, unavailableDiscoveryReasonTx(ctx, tx, donationKeyID, selection)
-	}
 	if err != nil {
 		return target, err
 	}
 	use := selected.Use
-	source, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: target.OwnerUserID, SourceID: selected.SourceID, Purpose: connectionstore.SourceCharity, DonationUseID: use.UseID})
+	if use.DiscoverySourceRevisionID == 0 {
+		target.UseID, target.UseRevision, target.CredentialVersionID, target.ApprovedRevisionID = use.UseID, use.UseRevision, use.Grant.CredentialVersionID, use.RevisionID
+		return target, nil
+	}
+	source, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: target.OwnerUserID, SourceID: selected.SourceID, Purpose: connectionstore.SourceCharity, DonationUseID: use.UseID, UseRevisionID: use.RevisionID})
 	if errors.Is(err, connectionstore.ErrNotFound) || errors.Is(err, connectionstore.ErrUnavailable) {
 		return target, resources.ErrResourceLocked
 	}
 	if err != nil {
 		return target, resources.ErrUnavailable
 	}
-	target.UseID, target.UseRevision, target.SourceID, target.SourceRevisionID, target.CredentialVersionID, target.ApprovedRevisionID = use.UseID, use.UseRevision, source.SourceID, source.SourceRevisionID, source.CredentialVersionID, use.ApprovedRevisionID
+	target.UseID, target.UseRevision, target.SourceID, target.SourceRevisionID, target.CredentialVersionID, target.ApprovedRevisionID = use.UseID, use.UseRevision, source.SourceID, source.SourceRevisionID, source.CredentialVersionID, use.RevisionID
 	return target, nil
-}
-
-// Classify only after the ordinary management and availability checks. An
-// unshared catalog never borrows the donor's current personal authorization.
-func unavailableDiscoveryReasonTx(ctx context.Context, tx *sql.Tx, keyID int64, selection resources.ManagedDiscoverySelection) error {
-	approved, err := connectionstore.LoadApprovedUsesTx(ctx, tx, []int64{keyID})
-	if err != nil {
-		return resources.ErrUnavailable
-	}
-	found := false
-	for _, use := range approved[keyID] {
-		if selection.UseID > 0 && use.UseID != selection.UseID {
-			continue
-		}
-		if selection.ExpectedRevision > 0 && use.UseRevision != selection.ExpectedRevision {
-			return resources.ErrConflict
-		}
-		found = true
-		if use.DiscoveryEnabled && use.DiscoverySourceRevisionID > 0 {
-			return resources.ErrResourceLocked
-		}
-	}
-	if found {
-		return resources.ErrDiscoveryNotShared
-	}
-	return resources.ErrResourceLocked
 }
 
 func discoveryResourceError(err error) error {

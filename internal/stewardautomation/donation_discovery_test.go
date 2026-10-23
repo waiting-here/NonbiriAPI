@@ -17,7 +17,6 @@ import (
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
-	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
 func TestAutomationDiscoverySkipsUnhealthySharedUse(t *testing.T) {
@@ -74,8 +73,8 @@ WHERE u.donation_key_id=? AND u.native_service_bit=1`, f.clock.Load()+60, f.cloc
 	if _, err := tx.ExecContext(t.Context(), `UPDATE donation_uses SET discovery_enabled=0,revision=revision+1 WHERE id=?`, selected.identity.UseID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ownDiscoveryTx(t.Context(), tx, f.userID, member, f.clock.Load()); !errors.Is(err, resources.ErrResourceLocked) {
-		t.Fatalf("disabled or cooling use remained selectable: %v", err)
+	if current, err := ownDiscoveryTx(t.Context(), tx, f.userID, member, f.clock.Load()); err != nil || current.identity.UseID != selected.identity.UseID {
+		t.Fatalf("legacy sharing flag blocked catalog: %+v %v", current, err)
 	}
 	selected, err = ownDiscoveryTx(t.Context(), tx, f.userID, member, f.clock.Load()+61)
 	if err != nil || selected.identity.NativeService != contract.NativeServiceChatCompletions {
@@ -96,6 +95,13 @@ func (r discoveryReviewRegistrar) RegisterUserRoute(method, pattern string, next
 }
 
 func TestAutomationDiscoveryBindsApprovedUseOnPendingDonation(t *testing.T) {
+	for _, fallback := range []bool{false, true} {
+		t.Run(map[bool]string{false: "configured", true: "standard fallback"}[fallback], func(t *testing.T) {
+			testAutomationDiscoveryBindsApprovedUseOnPendingDonation(t, fallback)
+		})
+	}
+}
+func testAutomationDiscoveryBindsApprovedUseOnPendingDonation(t *testing.T, fallback bool) {
 	f := newPersonalFixture(t)
 	key, err := strconv.ParseInt(f.key(t, "p"), 10, 64)
 	if err != nil {
@@ -173,6 +179,15 @@ func TestAutomationDiscoveryBindsApprovedUseOnPendingDonation(t *testing.T) {
 	if err != nil || before.Status != "pending" || before.UseSummary.Approved != "1" || before.UseSummary.Pending != "1" {
 		t.Fatalf("partial approval changed the donation header: %+v %v", before, err)
 	}
+	if fallback {
+		f.exec(t, "DELETE FROM discovery_sources WHERE user_id=?", f.userID)
+		f.exec(t, "UPDATE donation_uses SET discovery_enabled=0,revision=revision+1 WHERE donation_key_id=?", member)
+		// The unrelated pending use's resource revision is intentionally retained
+		// below as part of the assertion that automatic binding cannot approve it.
+		if err := f.store.DB().QueryRow("SELECT CAST(revision AS TEXT) FROM donation_uses WHERE id=?", embeddings.ID).Scan(&embeddings.Revision); err != nil {
+			t.Fatal(err)
+		}
+	}
 	tx, err = f.store.DB().BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -199,6 +214,18 @@ func TestAutomationDiscoveryBindsApprovedUseOnPendingDonation(t *testing.T) {
 	}
 	if f.calls.Load() != 1 {
 		t.Fatalf("expected one real source worker request, got %d", f.calls.Load())
+	}
+	if fallback {
+		tx, err := f.store.DB().BeginTx(t.Context(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		catalog, err := connectionstore.LoadDiscoveryUseTx(t.Context(), tx, approved.UseID, approved.ApprovedRevisionID)
+		tx.Rollback()
+		if err != nil || catalog.DiscoverySourceRevisionID <= 0 {
+			t.Fatalf("standard catalog was not persisted: %+v %v", catalog, err)
+		}
+		approved.DiscoverySourceRevisionID = catalog.DiscoverySourceRevisionID
 	}
 	var runState, operationState, authorizationKind string
 	var runUse, runApproval, runSource, runVersion, generation int64
@@ -237,8 +264,9 @@ FROM discovery_source_states st JOIN discovery_runs r ON r.id=st.last_successful
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := connectionstore.LoadDiscoveryAuthorizationTx(t.Context(), tx, connectionstore.SourceAuthorizationRef{OwnerUserID: f.userID, SourceID: sourceID, Purpose: connectionstore.SourceCharity, DonationUseID: embeddingsID}); !errors.Is(err, connectionstore.ErrUnavailable) && !errors.Is(err, connectionstore.ErrNotFound) {
-		t.Fatalf("unapproved embeddings gained discovery authorization: %v", err)
+	pendingCatalog, err := connectionstore.LoadDiscoveryUseTx(t.Context(), tx, embeddingsID, 0)
+	if err != nil || pendingCatalog.RevisionID != embeddingsPendingID || pendingCatalog.Grant.CredentialVersionID != approved.Grant.CredentialVersionID {
+		t.Fatalf("pending catalog selection: %+v %v", pendingCatalog, err)
 	}
 	_ = tx.Rollback()
 	if err := f.service.bindOne(steward, f.userID, modelID, member, "exact/model", true); err != nil {

@@ -20,7 +20,6 @@ type UseRevision struct {
 	Review                  ReviewState                  `json:"review"`
 	Discovery               *resources.DiscoveryEvidence `json:"discovery"`
 	available               bool
-	discoveryAvailable      bool
 }
 
 type UseHealth struct {

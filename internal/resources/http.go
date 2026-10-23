@@ -266,7 +266,6 @@ func writeResourceError(writer http.ResponseWriter, err error) {
 		httperr.Mapping{Err: ErrNotFound, Code: httperr.CodeNotFound, Message: "not found"},
 		httperr.Mapping{Err: ErrConflict, Code: httperr.CodeConflict, Message: "request conflicts with current state"},
 		httperr.Mapping{Err: ErrResourceLocked, Code: httperr.CodeResourceLocked, Message: "resource is locked"},
-		httperr.Mapping{Err: ErrDiscoveryNotShared, Code: httperr.CodeDiscoveryNotShared, Message: "the donor has not shared a model catalog for this approved use"},
 		httperr.Mapping{Err: ErrResourceLimit, Code: httperr.CodeResourceLimitExceeded, Message: "resource limit exceeded"},
 		httperr.Mapping{Err: errDiscoveryWorkerUnavailable, Code: httperr.CodeServiceUnavailable, Message: "service unavailable"},
 	)

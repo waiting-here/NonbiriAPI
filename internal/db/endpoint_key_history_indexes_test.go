@@ -85,6 +85,10 @@ func schema33Fixture(t *testing.T) (string, *secret.Vault, *Store) {
 	for _, index := range endpointKeyHistoryIndexes {
 		hostileMustExec(t, store.DB(), "DROP INDEX "+index)
 	}
+	hostileMustExec(t, store.DB(), "DROP TRIGGER discovery_run_version_guard")
+	hostileMustExec(t, store.DB(), previousDiscoveryRunGuardSQL)
+	hostileMustExec(t, store.DB(), "DROP VIEW charity_model_catalog")
+	hostileMustExec(t, store.DB(), previousCharityCatalogSQL)
 	hostileMustExec(t, store.DB(), "UPDATE schema_state SET version=33 WHERE id=1")
 	if hash, err := SchemaManifestHash(t.Context(), store.DB()); err != nil || hash != Schema33ManifestHash {
 		t.Fatalf("fixture does not match the published schema33: %s, %v", hash, err)
@@ -164,7 +168,7 @@ func TestSchema33StartupUpgradePreservesHistoryAndDeletion(t *testing.T) {
 		if after := endpointKeyHistoryDigests(t, store.DB()); !reflect.DeepEqual(before, after) {
 			t.Fatal("index upgrade or reopen changed preserved rows")
 		}
-		if version, err := readSchemaVersion(t.Context(), store.DB()); err != nil || version != 34 {
+		if version, err := readSchemaVersion(t.Context(), store.DB()); err != nil || version != CurrentSchemaVersion {
 			t.Fatalf("schema version=%d, err=%v", version, err)
 		}
 		if err := store.Close(); err != nil {
@@ -305,7 +309,7 @@ func testSchema33StartupUpgradeRollback(t *testing.T, failure string) {
 
 func TestSchema33StartupUpgradeRejectsUnknownOrModifiedSources(t *testing.T) {
 	for _, change := range []string{
-		"UPDATE schema_state SET version=35", "UPDATE schema_state SET version=32",
+		"UPDATE schema_state SET version=36", "UPDATE schema_state SET version=32",
 		"DROP INDEX idx_users_created", "CREATE INDEX unexpected_index ON users(username)",
 	} {
 		t.Run(change, func(t *testing.T) {

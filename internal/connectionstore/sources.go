@@ -5,15 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-
-	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
 // LoadDiscoveryAuthorizationTx resolves the specified purpose without borrowing
 // the current self authorization for an approved charity use.
 func LoadDiscoveryAuthorizationTx(ctx context.Context, tx *sql.Tx, ref SourceAuthorizationRef) (SourceAuthorization, error) {
 	if tx == nil || ref.OwnerUserID <= 0 || ref.SourceID <= 0 || (ref.Purpose != SourceSelf && ref.Purpose != SourceCharity) ||
-		(ref.Purpose == SourceSelf && ref.DonationUseID != 0) || (ref.Purpose == SourceCharity && ref.DonationUseID <= 0) {
+		(ref.UseRevisionID < 0) || (ref.Purpose == SourceSelf && (ref.DonationUseID != 0 || ref.UseRevisionID != 0)) || (ref.Purpose == SourceCharity && ref.DonationUseID <= 0) {
 		return SourceAuthorization{}, ErrInvariant
 	}
 	var result SourceAuthorization
@@ -25,31 +23,16 @@ func LoadDiscoveryAuthorizationTx(ctx context.Context, tx *sql.Tx, ref SourceAut
 	if err != nil {
 		return SourceAuthorization{}, fmt.Errorf("connectionstore: read source: %w", err)
 	}
-	var use UseAuthorization
+	var use DiscoveryUseAuthorization
 	if ref.Purpose == SourceCharity {
-		var donationKeyID, bit int64
-		err := tx.QueryRowContext(ctx, "SELECT donation_key_id,native_service_bit FROM donation_uses WHERE id=?", ref.DonationUseID).Scan(&donationKeyID, &bit)
-		if errors.Is(err, sql.ErrNoRows) {
-			return SourceAuthorization{}, ErrNotFound
-		}
+		use, err = LoadDiscoveryUseTx(ctx, tx, ref.DonationUseID, ref.UseRevisionID)
 		if err != nil {
 			return SourceAuthorization{}, err
-		}
-		services, err := connectorcontract.NativeServicesFromMask(bit)
-		if err != nil || len(services.Services()) != 1 {
-			return SourceAuthorization{}, ErrInvariant
-		}
-		use, err = LoadApprovedUseTx(ctx, tx, donationKeyID, services.Services()[0])
-		if err != nil {
-			return SourceAuthorization{}, err
-		}
-		if use.UseID != ref.DonationUseID {
-			return SourceAuthorization{}, ErrInvariant
 		}
 		if use.Grant.OwnerUserID != ref.OwnerUserID {
 			return SourceAuthorization{}, ErrNotFound
 		}
-		if !use.DiscoveryEnabled || use.DiscoverySourceRevisionID == 0 {
+		if use.DiscoverySourceRevisionID <= 0 {
 			return SourceAuthorization{}, ErrUnavailable
 		}
 		sourceRevisionID = use.DiscoverySourceRevisionID
@@ -81,7 +64,7 @@ func LoadDiscoveryAuthorizationTx(ctx context.Context, tx *sql.Tx, ref SourceAut
 			return SourceAuthorization{}, ErrInvariant
 		}
 		result.DonationUseID = use.UseID
-		result.UseApprovedRevisionID = use.ApprovedRevisionID
+		result.UseApprovedRevisionID = use.RevisionID
 	}
 	return result, nil
 }

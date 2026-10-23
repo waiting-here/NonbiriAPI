@@ -19,7 +19,7 @@ type DonationDiscoveryFailure struct {
 
 func (*DonationDiscoveryFailure) Error() string { return "donation discovery failed" }
 
-// RefreshDonationDiscoveryAndWait uses an owner's explicitly shared, approved
+// RefreshDonationDiscoveryAndWait uses an owner's approved
 // discovery authorization with the same caller context as other automation.
 func (r *Repository) RefreshDonationDiscoveryAndWait(ctx context.Context, userID, donationID, donationKeyID int64, selection ManagedDiscoverySelection) (int64, error) {
 	if r == nil || userID <= 0 || donationID <= 0 || donationKeyID <= 0 || selection.UseID <= 0 || selection.ExpectedRevision <= 0 {
@@ -32,14 +32,14 @@ func (r *Repository) RefreshDonationDiscoveryAndWait(ctx context.Context, userID
 		if err := r.finalAuth.AuthorizeUserMutation(ctx, tx, userID); err != nil {
 			return connectionstore.SourceAuthorization{}, err
 		}
-		var sourceID, revision, currentEndpoint, currentKey int64
-		err := tx.QueryRowContext(ctx, `SELECT sr.source_id,u.revision,k.endpoint_id,dk.endpoint_key_id
+		var revision, currentEndpoint, currentKey, approvedID int64
+		err := tx.QueryRowContext(ctx, `SELECT u.revision,k.endpoint_id,dk.endpoint_key_id,ur.id
  FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donations d ON d.id=dk.donation_id
  JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
  JOIN donation_key_memberships dm ON dm.donation_key_id=dk.id AND dm.donation_id=d.id AND dm.endpoint_key_id=dk.endpoint_key_id
- JOIN donation_use_revisions ur ON ur.id=u.current_approved_revision_id AND ur.use_id=u.id
- JOIN discovery_source_revisions sr ON sr.id=ur.discovery_source_revision_id
- WHERE u.id=? AND dk.id=? AND d.id=? AND d.user_id=? AND d.status IN ('pending','approved') AND d.terminal_at IS NULL AND dk.ended_at IS NULL`, selection.UseID, donationKeyID, donationID, userID).Scan(&sourceID, &revision, &currentEndpoint, &currentKey)
+ JOIN donation_use_revisions ur ON ur.id=u.current_approved_revision_id AND ur.use_id=u.id AND ur.review_state='approved'
+ WHERE u.id=? AND dk.id=? AND d.id=? AND d.user_id=? AND d.status IN ('pending','approved') AND d.terminal_at IS NULL AND dk.ended_at IS NULL
+ AND NOT EXISTS(SELECT 1 FROM donation_key_review_requirements rr WHERE rr.hmac=ur.key_body_review_hmac AND rr.required=1)`, selection.UseID, donationKeyID, donationID, userID).Scan(&revision, &currentEndpoint, &currentKey, &approvedID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return connectionstore.SourceAuthorization{}, ErrNotFound
 		}
@@ -49,7 +49,18 @@ func (r *Repository) RefreshDonationDiscoveryAndWait(ctx context.Context, userID
 		if requireRevision && revision != selection.ExpectedRevision {
 			return connectionstore.SourceAuthorization{}, ErrConflict
 		}
-		source, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: userID, SourceID: sourceID, Purpose: connectionstore.SourceCharity, DonationUseID: selection.UseID})
+		use, err := connectionstore.LoadDiscoveryUseTx(ctx, tx, selection.UseID, approvedID)
+		if err != nil {
+			return connectionstore.SourceAuthorization{}, mapConnectionStoreError(err)
+		}
+		var sourceID int64
+		if err := tx.QueryRowContext(ctx, "SELECT source_id FROM discovery_source_revisions WHERE id=?", use.DiscoverySourceRevisionID).Scan(&sourceID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return connectionstore.SourceAuthorization{}, ErrNotFound
+			}
+			return connectionstore.SourceAuthorization{}, err
+		}
+		source, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: userID, SourceID: sourceID, Purpose: connectionstore.SourceCharity, DonationUseID: selection.UseID, UseRevisionID: approvedID})
 		if err != nil {
 			return source, mapConnectionStoreError(err)
 		}
@@ -71,7 +82,7 @@ func (r *Repository) RefreshDonationDiscoveryAndWait(ctx context.Context, userID
 		return err
 	}
 	resolve := func(context.Context, *sql.Tx) (discoverySelection, error) {
-		return discoverySelection{source: pinned, ref: connectionstore.SourceAuthorizationRef{OwnerUserID: userID, SourceID: pinned.SourceID, Purpose: connectionstore.SourceCharity, DonationUseID: selection.UseID}, endpointID: endpointID, keyID: keyID, authorize: authorize}, nil
+		return discoverySelection{source: pinned, ref: connectionstore.SourceAuthorizationRef{OwnerUserID: userID, SourceID: pinned.SourceID, Purpose: connectionstore.SourceCharity, DonationUseID: selection.UseID, UseRevisionID: pinned.UseApprovedRevisionID}, endpointID: endpointID, keyID: keyID, authorize: authorize}, nil
 	}
 	project := func(_ context.Context, _ *sql.Tx, _ discoverySelection, operationID string, evidence DiscoveryEvidence) (DiscoveryAccepted, ResourceOperationResult, error) {
 		return DiscoveryAccepted{OperationID: operationID, Evidence: evidence}, ResourceOperationResult{}, nil

@@ -58,7 +58,7 @@ func TestOwnBindingDiscoveryMissingModelPreservesAuthorizationErrors(t *testing.
 		{"old generation", owner, oldGeneration, "", ErrNotFound},
 		{"foreign owner", other, currentGeneration, "", ErrNotFound},
 		{"disabled use", owner, currentGeneration, `UPDATE donation_uses SET enabled=0,revision=revision+1 WHERE id=?`, ErrNotFound},
-		{"sharing withdrawn", owner, currentGeneration, `UPDATE donation_uses SET discovery_enabled=0,revision=revision+1 WHERE id=?`, ErrConflict},
+		{"legacy sharing disabled", owner, currentGeneration, `UPDATE donation_uses SET discovery_enabled=0,revision=revision+1 WHERE id=?`, ErrDiscoveryModelMissing},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			tx, err := e.store.DB().BeginTx(t.Context(), nil)

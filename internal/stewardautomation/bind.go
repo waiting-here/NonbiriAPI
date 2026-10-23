@@ -108,7 +108,11 @@ func (s *Service) bindOne(ctx context.Context, userID, modelID, donationKeyID in
 	if err == nil && !manual {
 		discovery, err = ownDiscoveryTx(ctx, tx, userID, donationKeyID, now)
 	}
-	_ = tx.Rollback()
+	if err == nil && discovery.createdSource {
+		err = tx.Commit()
+	} else {
+		_ = tx.Rollback()
+	}
 	if err != nil {
 		return err
 	}

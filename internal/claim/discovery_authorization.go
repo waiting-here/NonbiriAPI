@@ -136,6 +136,7 @@ JOIN discovery_source_revisions s ON s.id=t.source_revision_id_snapshot WHERE t.
 	ref.Purpose = connectionstore.SourceSelf
 	if ref.DonationUseID > 0 {
 		ref.Purpose = connectionstore.SourceCharity
+		ref.UseRevisionID = approvedID
 	}
 	source, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, ref)
 	if err != nil {
