@@ -48,7 +48,10 @@ check_go_started=$SECONDS
 "$GO" vet $pkgs
 printf 'Go vet completed in %s seconds\n' "$((SECONDS - check_go_started))"
 
+# Timing hints only reorder the complete live package list.
+ordered_pkgs="$(printf '%s\n' "$pkgs" | "$GO" run ./internal/citools/testorder)"
+
 printf 'Go tests started at %s\n' "$(date -u +%FT%TZ)"
 check_go_started=$SECONDS
-"$GO" test -timeout="$GO_TEST_TIMEOUT" $pkgs
+"$GO" test -timeout="$GO_TEST_TIMEOUT" $ordered_pkgs
 printf 'Go tests completed in %s seconds\n' "$((SECONDS - check_go_started))"

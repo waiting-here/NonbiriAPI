@@ -69,8 +69,9 @@ func userPageRead[T any](ctx context.Context, r *Repository, userID int64, page 
 }
 
 const endpointPageSelect = `SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
-(SELECT COUNT(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id),e.created_at,e.updated_at,
-e.mainstream_channel_id,e.mainstream_channel_revision,e.mainstream_channel_name,e.mainstream_channel_category
+(SELECT COUNT(*) FROM endpoint_key_current_credentials k WHERE k.endpoint_id=e.id),e.created_at,e.updated_at,
+e.mainstream_channel_id,e.mainstream_channel_revision,e.mainstream_channel_name,e.mainstream_channel_category,
+e.connection_id,e.native_service_mask,e.rerank_format
 FROM endpoints e WHERE e.user_id=?`
 
 func (r *Repository) ListEndpointsPage(ctx context.Context, userID int64, page pagination.Request) (Page[Endpoint], error) {
@@ -154,6 +155,7 @@ func (r *Repository) FilterModelsPage(ctx context.Context, userID int64, filters
 		if err != nil {
 			return result, err
 		}
+		r.attachModelCloudflareMode(result.Data)
 		if err = attachModelBrowseTx(ctx, tx, userID, result.Data); err != nil {
 			return Page[Model]{}, err
 		}
@@ -163,8 +165,9 @@ func (r *Repository) FilterModelsPage(ctx context.Context, userID int64, filters
 
 const candidatePageSelect = `SELECT e.id,k.id,p.rowid,e.base_url,e.connector_type,e.note,k.display_head,k.display_tail,k.note,p.normalized_model_id,
 CASE WHEN p.automatic_supports>0 AND d.state='succeeded' AND d.revision=p.automatic_revision THEN 1 ELSE 0 END,
-CASE WHEN p.manual_supports>0 THEN 1 ELSE 0 END
-FROM model_pair_catalog p JOIN endpoint_keys k ON k.id=p.endpoint_key_id
+CASE WHEN p.manual_supports>0 THEN 1 ELSE 0 END,a.effective_native_service_mask,a.rerank_format
+FROM model_pair_catalog p JOIN endpoint_key_current_credentials k ON k.id=p.endpoint_key_id
+JOIN endpoint_grant_authorizations a ON a.grant_revision_id=k.current_grant_revision_id AND a.available=1 AND a.relationship_valid=1 AND a.effective_native_service_mask>0
 JOIN endpoints e ON e.id=k.endpoint_id JOIN model_discovery_evidence d ON d.endpoint_key_id=k.id
 WHERE e.user_id=? AND e.enabled=1 AND k.enabled=1
 AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)
@@ -179,7 +182,7 @@ func (r *Repository) BindingCandidatesPage(ctx context.Context, userID, modelID 
 		return Page[BindingCandidate]{}, ErrInvalidRequest
 	}
 	return userPageRead(ctx, r, userID, page, func(ctx context.Context, tx *sql.Tx) (Page[BindingCandidate], error) {
-		if _, err := getModelTx(ctx, tx, userID, modelID); err != nil {
+		if _, err := r.getModelTx(ctx, tx, userID, modelID); err != nil {
 			return Page[BindingCandidate]{}, err
 		}
 		if query.EndpointID != 0 || query.KeyID != 0 {
@@ -187,7 +190,7 @@ func (r *Repository) BindingCandidatesPage(ctx context.Context, userID, modelID 
 			q := `SELECT EXISTS(SELECT 1 FROM endpoints e WHERE e.user_id=? AND e.id=?)`
 			args := []any{userID, query.EndpointID}
 			if query.KeyID != 0 {
-				q = `SELECT EXISTS(SELECT 1 FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id WHERE e.user_id=? AND k.id=? AND (?=0 OR e.id=?))`
+				q = `SELECT EXISTS(SELECT 1 FROM endpoint_key_current_credentials k JOIN endpoints e ON e.id=k.endpoint_id WHERE e.user_id=? AND k.id=? AND (?=0 OR e.id=?))`
 				args = []any{userID, query.KeyID, query.EndpointID, query.EndpointID}
 			}
 			if err := tx.QueryRowContext(ctx, q, args...).Scan(&exists); err != nil {
@@ -202,7 +205,9 @@ func (r *Repository) BindingCandidatesPage(ctx context.Context, userID, modelID 
 			var c BindingCandidate
 			var endpointID, keyID, pairID int64
 			var automatic, manual int
-			err := s.Scan(&endpointID, &keyID, &pairID, &c.EndpointBaseURL, &c.ConnectorType, &c.EndpointNote, &c.EndpointKeyDisplayHead, &c.EndpointKeyDisplayTail, &c.EndpointKeyNote, &c.UpstreamModelID, &automatic, &manual)
+			var services int64
+			var format string
+			err := s.Scan(&endpointID, &keyID, &pairID, &c.EndpointBaseURL, &c.ConnectorType, &c.EndpointNote, &c.EndpointKeyDisplayHead, &c.EndpointKeyDisplayTail, &c.EndpointKeyNote, &c.UpstreamModelID, &automatic, &manual, &services, &format)
 			if err != nil {
 				return c, err
 			}
@@ -217,7 +222,7 @@ func (r *Repository) BindingCandidatesPage(ctx context.Context, userID, modelID 
 			if manual == 1 {
 				c.SourceTypes = append(c.SourceTypes, "manual")
 			}
-			return c, nil
+			return c, applyCandidateServiceProjection(&c, services, format)
 		})
 	})
 }
@@ -236,7 +241,7 @@ func (r *Repository) GetCatalogPage(ctx context.Context, userID, endpointID, key
 			return CatalogView{}, err
 		}
 		query := `SELECT c.id,c.source_type,c.normalized_model_id,c.provider,c.source_revision,p.pair_revision,c.created_at,c.updated_at
-FROM model_catalog_entries c JOIN model_pair_catalog p ON p.endpoint_key_id=c.endpoint_key_id AND p.normalized_model_id=c.normalized_model_id
+FROM endpoint_key_catalog_entries c JOIN model_pair_catalog p ON p.endpoint_key_id=c.endpoint_key_id AND p.normalized_model_id=c.normalized_model_id
 WHERE c.endpoint_key_id=? AND (?='' OR c.source_type=?)`
 		entries, err := readNumberedPage(ctx, tx, page, query, "c.id", []any{keyID, source, source}, func(s pageScanner) (CatalogEntry, error) { return scanCatalogEntry(s) })
 		if err != nil {
@@ -285,6 +290,9 @@ func (r *Repository) ListMainstreamChannelsPage(ctx context.Context, adminID int
 		return channel, r.validateMainstreamChannelDTO(channel)
 	})
 	if err != nil {
+		return Page[MainstreamChannel]{}, err
+	}
+	if err := attachMainstreamPresetsTx(ctx, tx, result.Data); err != nil {
 		return Page[MainstreamChannel]{}, err
 	}
 	if err = tx.Commit(); err != nil {

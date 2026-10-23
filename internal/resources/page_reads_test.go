@@ -22,7 +22,7 @@ func TestEndpointPagesCountAuthorizedTenThousandRowsAndClampWithoutCursorWalk(t 
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	stmt, err := tx.Prepare(`INSERT INTO endpoints(user_id,connector_type,base_url,created_at,updated_at) VALUES(?,'openai-compatible',?,?,?)`)
+	stmt, err := tx.Prepare(`INSERT INTO endpoints(user_id,connector_type,base_url,native_service_mask,capability_origin,created_at,updated_at) VALUES(?,'openai-compatible',?,1,'legacy',?,?)`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,11 +208,15 @@ func TestMainstreamChannelPagesCountFilteredSetsAndRecheckAdmin(t *testing.T) {
 		if i > 13 {
 			state, retired = "retired", resourceTestNow
 		}
-		_, err := env.store.DB().Exec(`INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at,retired_at)
-VALUES(?,?,'api_platform','openai-compatible','https://example.com/v1',0,?,1,?,?,?)`, fmt.Sprintf("mch_%021dA", i), fmt.Sprintf("Channel %d", i), state, resourceTestNow, resourceTestNow, retired)
+		channelID := fmt.Sprintf("mch_%021dA", i)
+		_, err := env.store.DB().Exec(`INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at,retired_at) VALUES(?,?,'api_platform',0,?,1,?,?,?)`, channelID, fmt.Sprintf("Channel %d", i), state, resourceTestNow, resourceTestNow, retired)
 		if err != nil {
 			t.Fatal(err)
 		}
+		if _, err := env.store.DB().Exec(`INSERT INTO mainstream_channel_entries(channel_id,ord,connector_type,canonical_base_url,native_service_mask) VALUES(?,0,'openai-compatible','https://example.com/v1',1)`, channelID); err != nil {
+			t.Fatal(err)
+		}
+
 	}
 	api := &httpAPI{repository: env.repository}
 	for _, test := range []struct {

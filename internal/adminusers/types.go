@@ -31,35 +31,41 @@ type AdminUserLevel struct {
 }
 
 type AdminUser struct {
-	ID                        string                         `json:"id"`
-	DiscordID                 *string                        `json:"discord_id"`
-	Username                  string                         `json:"username"`
-	AvatarURL                 *string                        `json:"avatar_url"`
-	GuildNick                 *string                        `json:"guild_nick"`
-	GuildAvatarURL            *string                        `json:"guild_avatar_url"`
-	DiscordGatePolicy         string                         `json:"discord_gate_policy"`
-	IsAdmin                   bool                           `json:"is_admin"`
-	IsBanned                  bool                           `json:"is_banned"`
-	BannedReason              string                         `json:"banned_reason"`
-	AutomaticReason           *observability.AutomaticReason `json:"automatic_reason,omitempty"`
-	BannedUntil               *int64                         `json:"banned_until"`
-	CharitySuspendedUntil     *int64                         `json:"charity_suspended_until"`
-	EndpointLimit             *string                        `json:"endpoint_limit"`
-	EffectiveEndpointLimit    string                         `json:"effective_endpoint_limit"`
-	RPMLimit                  *string                        `json:"rpm_limit"`
-	EffectiveRPMLimit         string                         `json:"effective_rpm_limit"`
-	ConcurrencyLimit          *string                        `json:"concurrency_limit"`
-	EffectiveConcurrencyLimit string                         `json:"effective_concurrency_limit"`
-	Lang                      string                         `json:"lang"`
-	GameBalance               string                         `json:"game_balance"`
-	Balance                   string                         `json:"balance"`
-	DonationCredit            string                         `json:"donation_credit"`
-	Level                     AdminUserLevel                 `json:"level"`
-	GameProfilePublic         bool                           `json:"game_profile_public"`
-	Revision                  string                         `json:"revision"`
-	Usage                     UsageSummary                   `json:"usage"`
-	CreatedAt                 int64                          `json:"created_at"`
-	UpdatedAt                 int64                          `json:"updated_at"`
+	ID                             string                         `json:"id"`
+	DiscordID                      *string                        `json:"discord_id"`
+	Username                       string                         `json:"username"`
+	AvatarURL                      *string                        `json:"avatar_url"`
+	GuildNick                      *string                        `json:"guild_nick"`
+	GuildAvatarURL                 *string                        `json:"guild_avatar_url"`
+	DiscordGatePolicy              string                         `json:"discord_gate_policy"`
+	IsAdmin                        bool                           `json:"is_admin"`
+	IsBanned                       bool                           `json:"is_banned"`
+	BannedReason                   string                         `json:"banned_reason"`
+	AutomaticReason                *observability.AutomaticReason `json:"automatic_reason,omitempty"`
+	BannedUntil                    *int64                         `json:"banned_until"`
+	CharitySuspendedUntil          *int64                         `json:"charity_suspended_until"`
+	EndpointLimit                  *string                        `json:"endpoint_limit"`
+	EffectiveEndpointLimit         string                         `json:"effective_endpoint_limit"`
+	RPMLimit                       *string                        `json:"rpm_limit"`
+	EffectiveRPMLimit              string                         `json:"effective_rpm_limit"`
+	ConcurrencyLimit               *string                        `json:"concurrency_limit"`
+	EffectiveConcurrencyLimit      string                         `json:"effective_concurrency_limit"`
+	LightRPMLimit                  *string                        `json:"light_rpm_limit"`
+	EffectiveLightRPMLimit         string                         `json:"effective_light_rpm_limit"`
+	LightConcurrencyLimit          *string                        `json:"light_concurrency_limit"`
+	EffectiveLightConcurrencyLimit string                         `json:"effective_light_concurrency_limit"`
+	GlobalRPMLimit                 *string                        `json:"global_rpm_limit"`
+	EffectiveGlobalRPMLimit        string                         `json:"effective_global_rpm_limit"`
+	Lang                           string                         `json:"lang"`
+	GameBalance                    string                         `json:"game_balance"`
+	Balance                        string                         `json:"balance"`
+	DonationCredit                 string                         `json:"donation_credit"`
+	Level                          AdminUserLevel                 `json:"level"`
+	GameProfilePublic              bool                           `json:"game_profile_public"`
+	Revision                       string                         `json:"revision"`
+	Usage                          UsageSummary                   `json:"usage"`
+	CreatedAt                      int64                          `json:"created_at"`
+	UpdatedAt                      int64                          `json:"updated_at"`
 }
 
 type AdminUserUsage struct {
@@ -134,17 +140,23 @@ type EndpointOverviewQuery struct {
 }
 
 type ProfileMutation struct {
-	ExpectedRevision db.U128
-	EndpointLimitSet bool
-	EndpointLimit    *int64
-	RPMLimitSet      bool
-	RPMLimit         *int64
-	ConcurrencySet   bool
-	Concurrency      *int64
-	LangSet          bool
-	Lang             string
-	LevelSet         bool
-	Level            *int
+	LightRPMLimitSet    bool
+	LightRPMLimit       *int64
+	LightConcurrencySet bool
+	LightConcurrency    *int64
+	GlobalRPMLimitSet   bool
+	GlobalRPMLimit      *int64
+	ExpectedRevision    db.U128
+	EndpointLimitSet    bool
+	EndpointLimit       *int64
+	RPMLimitSet         bool
+	RPMLimit            *int64
+	ConcurrencySet      bool
+	Concurrency         *int64
+	LangSet             bool
+	Lang                string
+	LevelSet            bool
+	Level               *int
 
 	DiscordGatePolicySet bool
 	DiscordGatePolicy    string
@@ -177,4 +189,8 @@ type MutationResult[T any] struct {
 	Status   int
 	Body     []byte
 	Replayed bool
+}
+
+func (p ProfileMutation) limitsOnly() bool {
+	return (p.RPMLimitSet || p.ConcurrencySet || p.LightRPMLimitSet || p.LightConcurrencySet || p.GlobalRPMLimitSet) && !p.EndpointLimitSet && !p.LangSet && !p.LevelSet && !p.DiscordGatePolicySet
 }

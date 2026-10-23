@@ -3,6 +3,7 @@ package reports
 import (
 	"context"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	"time"
 )
 
@@ -81,12 +82,42 @@ WHERE o.kind IN ('report_indexing','report_approved_processing')
 ORDER BY c.created_at,c.id,o.id LIMIT ?)`, caseRetentionSeconds, now); err != nil {
 		return 0, err
 	}
-	if err := deleteBatch("clear expired report fingerprints", `UPDATE donation_keys SET report_fingerprint=NULL,updated_at=?
-WHERE id IN (SELECT id FROM donation_keys
-WHERE report_fingerprint IS NOT NULL AND report_match_until IS NOT NULL AND report_match_until<=?
-ORDER BY report_match_until,id LIMIT ?)`, now, now); err != nil {
-		return 0, err
+	if processed < limit {
+		rows, err := tx.QueryContext(ctx, `SELECT dk.id FROM donation_keys dk JOIN (
+ SELECT id FROM donation_keys WHERE report_fingerprint IS NOT NULL AND ended_at IS NOT NULL AND report_match_until<=?
+ UNION SELECT u.donation_key_id FROM donation_use_revisions ur JOIN donation_uses u ON u.id=ur.use_id JOIN donation_keys d ON d.id=u.donation_key_id
+ WHERE ur.report_fingerprint IS NOT NULL AND d.ended_at IS NOT NULL AND d.report_match_until<=?
+ ) expired ON expired.id=dk.id ORDER BY dk.report_match_until,dk.id LIMIT ?`, now, now, limit-processed)
+		if err != nil {
+			return 0, err
+		}
+		var ids []int64
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return 0, err
+			}
+			ids = append(ids, id)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		if err := rows.Close(); err != nil {
+			return 0, err
+		}
+		for _, id := range ids {
+			if _, err := tx.ExecContext(ctx, "UPDATE donation_keys SET report_fingerprint=NULL,updated_at=max(updated_at,?) WHERE id=?", now, id); err != nil {
+				return 0, err
+			}
+			if _, err := connectionstore.ClearExpiredUseFingerprintsTx(ctx, tx, id, now); err != nil {
+				return 0, err
+			}
+			processed++
+		}
 	}
+
 	if err := deleteBatch("clean retained report cases", `DELETE FROM report_cases WHERE id IN (
 SELECT c.id FROM report_cases c
 WHERE c.status IN ('approved','rejected','expired') AND c.created_at+?<=?

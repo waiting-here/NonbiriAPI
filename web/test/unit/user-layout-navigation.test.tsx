@@ -23,6 +23,12 @@ const levelFiveSession = {
     effective_rpm_limit: '60',
     concurrency_limit: null,
     effective_concurrency_limit: '5',
+    global_rpm_limit: null,
+    effective_global_rpm_limit: '60',
+    light_rpm_limit: null,
+    effective_light_rpm_limit: '30',
+    light_concurrency_limit: null,
+    effective_light_concurrency_limit: '15',
     balance: '0',
     game_balance: '0',
     donation_credit: '0',
@@ -58,6 +64,7 @@ const publicConfig = {
   legal_authoritative_locale: '',
   maintenance_mode: false,
   registration_open: true,
+  artwork_r18_disabled: true,
   announcement_epoch: 'b1e_AAAAAAAAAAAAAAAAAAAAAA',
 };
 

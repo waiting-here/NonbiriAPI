@@ -96,7 +96,7 @@ describe('independent price-template management', () => {
     });
     await view.user.click(screen.getByRole('switch', { name: 'Enable this price template' }));
     await view.user.click(screen.getByText('Quota and reserve', { selector: 'strong' }));
-    fireEvent.change(screen.getByLabelText('Call reservation (credits)'), {
+    fireEvent.change(screen.getByLabelText('Usage reserve (credits)'), {
       target: { value: '' },
     });
     await view.user.click(

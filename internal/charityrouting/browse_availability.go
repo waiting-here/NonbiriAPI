@@ -48,9 +48,13 @@ WHERE cm.id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")+`)`, a
 		if _, err := rolepolicy.Decode(policy); err != nil {
 			return nil, ErrInvariant
 		}
-		if pricing == "per_token" {
+		if pricing == "per_token" || pricing == "per_search_unit" {
+			if !reserve.Valid {
+				available[id] = false
+				continue
+			}
 			value, err := strconv.ParseInt(reserve.String, 10, 64)
-			if !reserve.Valid || err != nil || value < 1 || value > db.MaxMoneyMilli {
+			if err != nil || value < 1 || value > db.MaxMoneyMilli {
 				return nil, ErrInvariant
 			}
 		} else if pricing != "per_request" {

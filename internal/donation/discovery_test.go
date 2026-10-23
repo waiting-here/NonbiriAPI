@@ -12,6 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -72,25 +76,41 @@ func approveDiscoveryDonation(t *testing.T, env *donationTestEnv, donation Donat
 	}
 }
 
-func newDiscoveryFixture(t *testing.T, blocked bool) *discoveryFixture {
+func newDiscoveryFixture(t *testing.T, blocked bool, services ...contract.NativeService) *discoveryFixture {
 	t.Helper()
 	env := newDonationTestEnv(t)
 	level := int64(6)
 	f := &discoveryFixture{donationTestEnv: env, owner: env.seedUser(t, "discovery-donor", nil, false), admin: env.seedUser(t, "", nil, true), steward: env.seedUser(t, "discovery-steward", &level, false)}
 	f.endpoint, f.key = env.seedEndpointKey(t, f.owner, 'q')
+	tx, err := env.store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	source, err := testseed.SeedDiscoverySourceTx(context.Background(), tx, testseed.DiscoverySourceInput{EndpointKeyID: f.key, ListFormat: "openai", At: donationTestNow})
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared, err := connectionstore.LoadDiscoveryAuthorizationTx(context.Background(), tx, connectionstore.SourceAuthorizationRef{OwnerUserID: f.owner, SourceID: source.SourceID, Purpose: connectionstore.SourceSelf})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
 	expires := donationTestNow + 3600
+	if len(services) == 0 {
+		services = []contract.NativeService{contract.NativeServiceChatCompletions}
+	}
 	created, err := env.service.Create(context.Background(), f.owner,
 		donationMutation(t, 'A', http.MethodPost, routeDonations, nil, map[string]any{"fixture": "discovery"}),
-		CreateInput{Description: "discovery donation", OwnershipAuthorized: true, Keys: []CreateKeyInput{{EndpointKeyID: f.key, ExpiresAt: &expires}}})
+		CreateInput{Description: "discovery donation", OwnershipAuthorized: true, Keys: []CreateKeyInput{{EndpointKeyID: f.key, ExpiresAt: &expires, NativeServices: services, DiscoverySourceID: &source.SourceID, DiscoverySourceRevision: &shared.SourceRevision}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	donation := created.Value
 	f.donation, f.donationKey = parseTestID(t, donation.ID), parseTestID(t, donation.Keys[0].ID)
 	approveDiscoveryDonation(t, env, donation, 'B')
-	if _, err := env.store.DB().Exec(`INSERT INTO model_discovery_evidence(endpoint_key_id,state,revision) VALUES(?,'unknown',1)`, f.key); err != nil {
-		t.Fatal(err)
-	}
 	f.rail = &donationDiscoveryRail{result: resources.DiscoveryClaimResult{Succeeded: true, Models: []resources.DiscoveredModel{{UpstreamModelID: "fresh-model", Provider: "fixture"}}}}
 	if blocked {
 		f.rail.started = make(chan struct{}, 1)
@@ -218,7 +238,7 @@ func TestManagedDiscoveryRejectsIneligibleKeysAndWrongParent(t *testing.T) {
 		"membership removed":    `DELETE FROM donation_key_memberships`,
 		"quota exhausted":       `UPDATE donation_keys SET call_limit_mag=nbi_u128(0)`,
 		"donor banned":          `UPDATE users SET is_banned=1 WHERE is_admin=0 AND level IS NULL`,
-		"pending donation":      `UPDATE donations SET status='pending'`,
+		"approved use disabled": `UPDATE donation_uses SET enabled=0,revision=revision+1`,
 		"terminated key":        `UPDATE donation_keys SET ended_reason='terminated',ended_at=updated_at,report_match_until=updated_at+7776000,enabled=0`,
 	}
 	for name, query := range cases {
@@ -303,7 +323,31 @@ func TestDiscoverySelectionScansAllPagesWithBoundScope(t *testing.T) {
 		created := env.createDonationWithSeed(t, owner, byte('M'+i), keys[i*25:(i+1)*25]...)
 		approveDiscoveryDonation(t, env, created, byte('Q'+i))
 	}
-	second := env.createDonationWithSeed(t, owner, 'K', keys[100:]...)
+	tx, err := env.store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	input := CreateInput{Description: "explicit discovery members", OwnershipAuthorized: true}
+	for _, keyID := range keys[100:] {
+		source, err := testseed.SeedDiscoverySourceTx(context.Background(), tx, testseed.DiscoverySourceInput{EndpointKeyID: keyID, ListFormat: "openai", At: donationTestNow})
+		if err != nil {
+			t.Fatal(err)
+		}
+		auth, err := connectionstore.LoadDiscoveryAuthorizationTx(context.Background(), tx, connectionstore.SourceAuthorizationRef{OwnerUserID: owner, SourceID: source.SourceID, Purpose: connectionstore.SourceSelf})
+		if err != nil {
+			t.Fatal(err)
+		}
+		input.Keys = append(input.Keys, CreateKeyInput{EndpointKeyID: keyID, NativeServices: []contract.NativeService{contract.NativeServiceChatCompletions}, DiscoverySourceID: &source.SourceID, DiscoverySourceRevision: &auth.SourceRevision})
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	created, err := env.service.Create(context.Background(), owner, donationCreateMutation(t, 'K', input), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := created.Value
 	approveDiscoveryDonation(t, env, second, 'L')
 	if _, err := env.store.DB().Exec(`UPDATE donation_keys SET enabled=0 WHERE donation_id<>?`, second.ID); err != nil {
 		t.Fatal(err)

@@ -10,16 +10,20 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
-func donationSummaryTx(ctx context.Context, tx *sql.Tx, header AdminDonation, now int64) (DonationSummary, error) {
-	out := DonationSummary{DiscordPublicThanks: header.DiscordPublicThanks, ID: header.ID, Status: header.Status, Revision: header.Revision, Description: header.Description,
+func donationSummaryTx(ctx context.Context, tx *sql.Tx, header AdminDonation, now int64, pendingOnly bool) (DonationSummary, error) {
+	out := DonationSummary{UseSummary: header.UseSummary, DiscordPublicThanks: header.DiscordPublicThanks, ID: header.ID, Status: header.Status, Revision: header.Revision, Description: header.Description,
 		ReviewResult: header.ReviewResult, CreatedAt: header.CreatedAt, UpdatedAt: header.UpdatedAt,
 		StateCounts: map[string]string{}, Sources: []SafeSource{}}
 	for _, state := range []string{"available", "rate_limited", "pending", "disabled", "suspended", "exhausted", "expired", "ended"} {
 		out.StateCounts[state] = "0"
 	}
+	keyFilter := ""
+	if pendingOnly {
+		keyFilter = ` AND EXISTS(SELECT 1 FROM donation_uses pending_use WHERE pending_use.donation_key_id=dk.id AND pending_use.current_pending_revision_id IS NOT NULL)`
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT `+donationstate.SQL()+` AS state,COUNT(*)
 FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id `+donationstate.PhysicalJoins+`
-WHERE dk.donation_id=? GROUP BY state`, now, now, now, now, header.ID)
+WHERE dk.donation_id=?`+keyFilter+` GROUP BY state`, now, now, now, now, header.ID)
 	if err != nil {
 		return out, err
 	}
@@ -44,7 +48,7 @@ WHERE dk.donation_id=? GROUP BY state`, now, now, now, now, header.ID)
 		return out, err
 	}
 	out.KeyCount = strconv.FormatInt(count, 10)
-	grouped := `SELECT ` + sourceIdentitySQL + ` AS source_key,MAX(dk.id) AS preview FROM donation_keys dk WHERE dk.donation_id=? GROUP BY source_key`
+	grouped := `SELECT ` + sourceIdentitySQL + ` AS source_key,MAX(dk.id) AS preview FROM donation_keys dk WHERE dk.donation_id=?` + keyFilter + ` GROUP BY source_key`
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+grouped+`)`, header.ID).Scan(&count); err != nil {
 		return out, err
 	}
@@ -99,6 +103,10 @@ func (s *Service) donationsPage(ctx context.Context, role reviewerRole, userID i
 	query := `SELECT d.id AS id FROM donations d JOIN donation_handling h ON h.donation_id=d.id
 WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 	args := []any{now - terminalRetention}
+	if reviewRole == reviewerTrainee {
+		query += ` AND ` + pendingUseReviewSQL
+		args = append(args, now)
+	}
 	if role == recurringOwner {
 		query += ` AND d.user_id=?`
 		args = append(args, userID)
@@ -110,6 +118,10 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 		return empty, err
 	}
 	result := Page[AdminDonationSummary]{Data: make([]AdminDonationSummary, 0, len(ids)), Pagination: &metadata}
+	summaries, err := readUseSummariesTx(ctx, tx, ids)
+	if err != nil {
+		return empty, err
+	}
 	var hidden map[int64]*int64
 	if role == recurringOwner {
 		hidden, err = ownerHiddenPageTx(ctx, tx, userID, ids)
@@ -122,10 +134,11 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 		if err != nil {
 			return empty, err
 		}
+		header.UseSummary = summaries[id]
 		if reviewRole == reviewerTrainee {
 			header = traineeReviewProjection(header)
 		}
-		summary, err := donationSummaryTx(ctx, tx, header, now)
+		summary, err := donationSummaryTx(ctx, tx, header, now, reviewRole == reviewerTrainee)
 		if err != nil {
 			return empty, err
 		}

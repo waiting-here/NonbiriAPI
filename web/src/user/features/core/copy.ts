@@ -78,8 +78,16 @@ const keys = {
   'connector.gemini': 'user.core.connector.gemini',
   'connector.responses': 'user.core.connector.responses',
   'connector.decisions': 'user.core.connector.decisions',
+  'connector.cohere': 'user.core.connector.cohere',
+  'connector.jina': 'user.core.connector.jina',
+  'connector.siliconflow': 'user.core.connector.siliconflow',
+  'connector.voyage': 'user.core.connector.voyage',
+  'connector.systemone': 'user.core.connector.systemone',
+  'connector.chatCompletions': 'user.core.connector.chatCompletions',
+
   'connector.anthropic': 'user.core.connector.anthropic',
   'connector.gateway': 'user.core.connector.gateway',
+  'connector.gatewayV4': 'user.core.connector.gatewayV4',
   'home.title': 'user.core.home.title',
   'home.signedOutTitle': 'user.core.home.signedOutTitle',
   'home.signedOutBody': 'user.core.home.signedOutBody',
@@ -361,9 +369,16 @@ export const CONNECTOR_COPY_KEYS = {
   'openai-compatible': 'connector.openai',
   'anthropic-compatible': 'connector.anthropic',
   'ai-sdk-gateway-v3': 'connector.gateway',
+  'ai-sdk-gateway-v4': 'connector.gatewayV4',
   'google-gemini': 'connector.gemini',
   'openai-responses': 'connector.responses',
   'openai-decisions': 'connector.decisions',
+  'cohere-rerank': 'connector.cohere',
+  'jina-rerank': 'connector.jina',
+  'siliconflow-rerank': 'connector.siliconflow',
+  'voyage-rerank': 'connector.voyage',
+  'typesafe-systemone': 'connector.systemone',
+  'openai-chat-completions': 'connector.chatCompletions',
 } as const satisfies Record<ConnectorType, CoreCopyKey>;
 
 export const CORE_COPY_KEYS = Object.keys(keys) as CoreCopyKey[];

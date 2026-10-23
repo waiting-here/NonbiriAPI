@@ -88,6 +88,12 @@ export interface AdminUser {
   charity_suspended_until: number | null;
   endpoint_limit: string | null;
   effective_endpoint_limit: string;
+  global_rpm_limit: string | null;
+  effective_global_rpm_limit: string;
+  light_rpm_limit: string | null;
+  effective_light_rpm_limit: string;
+  light_concurrency_limit: string | null;
+  effective_light_concurrency_limit: string;
   rpm_limit: string | null;
   effective_rpm_limit: string;
   concurrency_limit: string | null;
@@ -250,6 +256,12 @@ export function normalizeAdminUser(value: unknown): AdminUser {
     'charity_suspended_until',
     'endpoint_limit',
     'effective_endpoint_limit',
+    'global_rpm_limit',
+    'effective_global_rpm_limit',
+    'light_rpm_limit',
+    'effective_light_rpm_limit',
+    'light_concurrency_limit',
+    'effective_light_concurrency_limit',
     'rpm_limit',
     'effective_rpm_limit',
     'concurrency_limit',
@@ -306,6 +318,21 @@ export function normalizeAdminUser(value: unknown): AdminUser {
     ),
     endpoint_limit: nullableDecimal(root.endpoint_limit, 'endpoint limit'),
     effective_endpoint_limit: decimal(root.effective_endpoint_limit, 'effective endpoint limit'),
+    global_rpm_limit: nullableDecimal(root.global_rpm_limit, 'global_rpm_limit'),
+    effective_global_rpm_limit: decimal(
+      root.effective_global_rpm_limit,
+      'effective global_rpm_limit',
+    ),
+    light_rpm_limit: nullableDecimal(root.light_rpm_limit, 'light_rpm_limit'),
+    effective_light_rpm_limit: decimal(root.effective_light_rpm_limit, 'effective light_rpm_limit'),
+    light_concurrency_limit: nullableDecimal(
+      root.light_concurrency_limit,
+      'light_concurrency_limit',
+    ),
+    effective_light_concurrency_limit: decimal(
+      root.effective_light_concurrency_limit,
+      'effective light_concurrency_limit',
+    ),
     rpm_limit: nullableDecimal(root.rpm_limit, 'RPM limit'),
     effective_rpm_limit: decimal(root.effective_rpm_limit, 'effective RPM limit'),
     concurrency_limit: nullableDecimal(root.concurrency_limit, 'concurrency limit'),
@@ -357,6 +384,8 @@ export const managedUserKeys = {
       state,
       discordID,
     ] as const,
+  callerKey: (role: ManagementRole, account: string, id: string) =>
+    [...managementRoot(role), 'caller-key', account, id] as const,
   detail: (role: ManagementRole, account: string, id: string) =>
     [...managementRoot(role), 'user', account, id] as const,
 };
@@ -579,5 +608,69 @@ export async function unbanManagedUser(
   await apiFetch<void>(
     `${userPath(role, id)}/unban`,
     idempotentOptions(key, { method: 'POST', json: { expected_revision: revision } }),
+  );
+}
+
+export interface ManagedCallerKey {
+  user_id: string;
+  generation: string;
+  active: boolean;
+  created_at: number | null;
+  updated_at: number;
+}
+
+export interface ManagedCallerKeyRevocation {
+  generation: string;
+  revoked: boolean;
+}
+
+export function getManagedCallerKey(
+  role: ManagementRole,
+  id: string,
+  signal?: AbortSignal,
+): Promise<ManagedCallerKey> {
+  return decoded(
+    `${userPath(role, id)}/caller-key`,
+    (value) => {
+      const root = record(
+        value,
+        ['user_id', 'generation', 'active', 'created_at', 'updated_at'],
+        'managed caller key',
+      );
+      const userID = decimalID(root.user_id, 'caller key user id');
+      if (userID !== id) invalidResponse('caller key user identity');
+      return {
+        user_id: userID,
+        generation: decimal(root.generation, 'caller key generation'),
+        active: boolean(root.active, 'caller key active'),
+        created_at: nullableUnixSecond(root.created_at, 'caller key creation time'),
+        updated_at: unixSecond(root.updated_at, 'caller key update time'),
+      };
+    },
+    { signal },
+  );
+}
+
+export function revokeManagedCallerKey(
+  role: ManagementRole,
+  id: string,
+  expectedGeneration: string,
+  key: string,
+  signal?: AbortSignal,
+): Promise<ManagedCallerKeyRevocation> {
+  return decoded(
+    `${userPath(role, id)}/caller-key/revoke`,
+    (value) => {
+      const root = record(value, ['generation', 'revoked'], 'caller key revocation');
+      return {
+        generation: decimal(root.generation, 'caller key generation'),
+        revoked: boolean(root.revoked, 'caller key revoked'),
+      };
+    },
+    idempotentOptions(key, {
+      method: 'POST',
+      json: { expected_generation: expectedGeneration },
+      signal,
+    }),
   );
 }

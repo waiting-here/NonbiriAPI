@@ -24,6 +24,7 @@ export interface PublicConfig {
   legalAuthoritativeLocale: 'zh' | 'en' | '';
   maintenanceMode: boolean;
   registrationOpen: boolean;
+  artworkR18Disabled: boolean;
   announcementEpoch: string;
 }
 
@@ -43,6 +44,7 @@ const PUBLIC_CONFIG_KEYS = new Set([
   'legal_authoritative_locale',
   'maintenance_mode',
   'registration_open',
+  'artwork_r18_disabled',
   'announcement_epoch',
 ]);
 
@@ -124,7 +126,8 @@ export function normalizePublicConfig(payload: unknown): PublicConfig {
   }
   if (
     typeof record.maintenance_mode !== 'boolean' ||
-    typeof record.registration_open !== 'boolean'
+    typeof record.registration_open !== 'boolean' ||
+    typeof record.artwork_r18_disabled !== 'boolean'
   ) {
     invalidPublicConfig();
   }
@@ -166,6 +169,7 @@ export function normalizePublicConfig(payload: unknown): PublicConfig {
     legalAuthoritativeLocale: legalAuthoritativeLocale as 'zh' | 'en' | '',
     maintenanceMode: record.maintenance_mode,
     registrationOpen: record.registration_open,
+    artworkR18Disabled: record.artwork_r18_disabled,
     announcementEpoch: record.announcement_epoch,
   };
 }

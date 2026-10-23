@@ -47,22 +47,24 @@ func (c Config) Valid() bool {
 }
 
 type Minute struct {
-	Epoch             string `json:"epoch"`
-	UserID            int64  `json:"user_id,string"`
-	Minute            int64  `json:"minute"`
-	Kind              string `json:"call_kind"`
-	RPMCommitted      int64  `json:"rpm_committed"`
-	RPMReleased       int64  `json:"rpm_released"`
-	RPMPending        int64  `json:"rpm_pending"`
-	RPMDenied         int64  `json:"rpm_denied"`
-	ConcurrencyDenied int64  `json:"concurrency_denied"`
-	OccupancyMillis   int64  `json:"occupancy_millis"`
-	Peak              int    `json:"peak"`
-	RPMLimit          int    `json:"rpm_limit"`
-	ConcurrencyLimit  int    `json:"concurrency_limit"`
-	Coverage          int    `json:"coverage"`
-	ConfigRevision    int64  `json:"config_revision"`
-	UpdatedAt         int64  `json:"updated_at"`
+	// Nil preserves historical occupancy/limit interpretation.
+	SaturationMicrosMillis *int64 `json:"saturation_micros_millis"`
+	Epoch                  string `json:"epoch"`
+	UserID                 int64  `json:"user_id,string"`
+	Minute                 int64  `json:"minute"`
+	Kind                   string `json:"call_kind"`
+	RPMCommitted           int64  `json:"rpm_committed"`
+	RPMReleased            int64  `json:"rpm_released"`
+	RPMPending             int64  `json:"rpm_pending"`
+	RPMDenied              int64  `json:"rpm_denied"`
+	ConcurrencyDenied      int64  `json:"concurrency_denied"`
+	OccupancyMillis        int64  `json:"occupancy_millis"`
+	Peak                   int    `json:"peak"`
+	RPMLimit               int    `json:"rpm_limit"`
+	ConcurrencyLimit       int    `json:"concurrency_limit"`
+	Coverage               int    `json:"coverage"`
+	ConfigRevision         int64  `json:"config_revision"`
+	UpdatedAt              int64  `json:"updated_at"`
 }
 type Gap struct {
 	Epoch     string `json:"epoch"`

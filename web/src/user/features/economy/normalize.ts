@@ -1,3 +1,4 @@
+import { normalizeUseSummary } from '@shared/operations/donationUses';
 import {
   normalizeRecurringDiscount,
   normalizeEffectiveDiscount,
@@ -205,9 +206,16 @@ function connectorType(value: unknown, field: string): string {
     candidate !== 'openai-compatible' &&
     candidate !== 'anthropic-compatible' &&
     candidate !== 'ai-sdk-gateway-v3' &&
+    candidate !== 'ai-sdk-gateway-v4' &&
     candidate !== 'google-gemini' &&
     candidate !== 'openai-responses' &&
-    candidate !== 'openai-decisions'
+    candidate !== 'openai-decisions' &&
+    candidate !== 'cohere-rerank' &&
+    candidate !== 'jina-rerank' &&
+    candidate !== 'siliconflow-rerank' &&
+    candidate !== 'voyage-rerank' &&
+    candidate !== 'typesafe-systemone' &&
+    candidate !== 'openai-chat-completions'
   )
     invalid(field);
   return candidate;
@@ -395,22 +403,37 @@ export function normalizeCharityCapabilityModel(value: unknown): CharityCapabili
       'current_user_price_milli',
       'current_user_prices_milli',
     ],
-    ['long_context', 'context_penalty'],
+    [
+      'long_context',
+      'context_penalty',
+      'user_modalities_milli',
+      'discounted_user_modalities_milli',
+      'current_user_modalities_milli',
+    ],
   );
   const normalizedPricing: CharityCapabilityModel['pricing'] = normalizeBasePricing(
     pricing,
     discountPercent,
   );
   if (pricing.long_context != null) {
-    const long = record(pricing.long_context, 'long context pricing', [
-      'input_threshold',
-      'user_price_milli',
-      'discounted_user_price_milli',
-      'user_prices_milli',
-      'discounted_user_prices_milli',
-      'current_user_price_milli',
-      'current_user_prices_milli',
-    ]);
+    const long = record(
+      pricing.long_context,
+      'long context pricing',
+      [
+        'input_threshold',
+        'user_price_milli',
+        'discounted_user_price_milli',
+        'user_prices_milli',
+        'discounted_user_prices_milli',
+        'current_user_price_milli',
+        'current_user_prices_milli',
+      ],
+      [
+        'user_modalities_milli',
+        'discounted_user_modalities_milli',
+        'current_user_modalities_milli',
+      ],
+    );
     normalizedPricing.longContext = {
       ...normalizeBasePricing({ ...long, mode: pricing.mode }, discountPercent),
       inputThreshold: positiveContextThreshold(long.input_threshold),
@@ -566,6 +589,7 @@ export function normalizeDonationKey(value: unknown): DonationKey {
       'ended_reason',
     ],
     [
+      'endpoint_id',
       'review',
       'input_token_reserve',
       'output_token_reserve',
@@ -610,6 +634,12 @@ export function normalizeDonationKey(value: unknown): DonationKey {
       : enumValue(item.ended_reason, 'donation key ended reason', ENDED_REASONS);
   const smartBackoff = normalizeSmartBackoffFields(item);
   const result: DonationKey = {
+    ...(item.endpoint_id === undefined
+      ? {}
+      : {
+          endpointId:
+            item.endpoint_id === null ? null : decimalID(item.endpoint_id, 'owner endpoint id'),
+        }),
     smartBackoff: smartBackoff.smart_backoff,
     failureDisableThreshold: decimal(item.failure_disable_threshold, 'failure threshold'),
     id: decimalID(item.id, 'donation key id'),
@@ -702,15 +732,12 @@ export function normalizeDonation(value: unknown): Donation {
       'created_at',
       'updated_at',
     ],
-    ['discord_public_thanks', 'owner_hidden_at'],
+    ['discord_public_thanks', 'owner_hidden_at', 'use_summary'],
   );
   const status = enumValue(item.status, 'donation status', DONATION_STATUSES);
   const reviewResult = normalizeReviewResult(item.review_result);
-  if (status === 'pending' && reviewResult !== null) invalid('pending donation review result');
-  if (status === 'approved' && reviewResult?.decision !== 'approve')
-    invalid('approved donation review result');
-  if (status === 'rejected' && reviewResult?.decision !== 'reject')
-    invalid('rejected donation review result');
+  const useSummary =
+    item.use_summary === undefined ? undefined : normalizeUseSummary(item.use_summary);
   const keys = array(item.keys, 'donation keys', 100).map(normalizeDonationKey);
   if (keys.length === 0) invalid('donation keys');
   requireUnique(keys, (key) => key.id, 'donation key identities');
@@ -723,59 +750,68 @@ export function normalizeDonation(value: unknown): Donation {
   ) {
     invalid('donation review timestamp');
   }
-  if (status === 'pending') {
+  // Use-level review preserves the submission header and its budget history.
+  if (useSummary === undefined) {
+    if (status === 'pending' && reviewResult !== null) invalid('pending donation review result');
+    if (status === 'approved' && reviewResult?.decision !== 'approve')
+      invalid('approved donation review result');
+    if (status === 'rejected' && reviewResult?.decision !== 'reject')
+      invalid('rejected donation review result');
+    if (status === 'pending') {
+      if (
+        keys.some(
+          (key) =>
+            key.charityState !== 'pending' ||
+            key.limits.price !== null ||
+            key.limits.calls !== null ||
+            key.limits.tokens !== null ||
+            key.usage.priceUsed !== '0' ||
+            key.usage.priceInflight !== '0' ||
+            key.usage.callsUsed !== '0' ||
+            key.usage.callsInflight !== '0' ||
+            key.usage.tokensUsed !== '0' ||
+            key.usage.tokensInflight !== '0' ||
+            key.tokenReserve !== 0 ||
+            key.streak.generation !== '1' ||
+            key.streak.count !== '0' ||
+            key.streak.failureDisabled ||
+            key.endedReason !== null,
+        )
+      ) {
+        invalid('pending donation state');
+      }
+    } else if (keys.some((key) => key.charityState === 'pending')) {
+      invalid('terminal donation key state');
+    }
     if (
-      keys.some(
-        (key) =>
-          key.charityState !== 'pending' ||
-          key.limits.price !== null ||
-          key.limits.calls !== null ||
-          key.limits.tokens !== null ||
-          key.usage.priceUsed !== '0' ||
-          key.usage.priceInflight !== '0' ||
-          key.usage.callsUsed !== '0' ||
-          key.usage.callsInflight !== '0' ||
-          key.usage.tokensUsed !== '0' ||
-          key.usage.tokensInflight !== '0' ||
-          key.tokenReserve !== 0 ||
-          key.streak.generation !== '1' ||
-          key.streak.count !== '0' ||
-          key.streak.failureDisabled ||
-          key.endedReason !== null,
-      )
+      status === 'approved' &&
+      keys.every((key) => key.charityState === 'ended' || key.charityState === 'expired')
     ) {
-      invalid('pending donation state');
+      invalid('approved donation keys');
     }
-  } else if (keys.some((key) => key.charityState === 'pending')) {
-    invalid('terminal donation key state');
-  }
-  if (
-    status === 'approved' &&
-    keys.every((key) => key.charityState === 'ended' || key.charityState === 'expired')
-  ) {
-    invalid('approved donation keys');
-  }
-  if (status === 'rejected') {
-    if (keys.some((key) => key.charityState !== 'ended')) {
-      invalid('rejected donation state');
+    if (status === 'rejected') {
+      if (keys.some((key) => key.charityState !== 'ended')) {
+        invalid('rejected donation state');
+      }
     }
-  }
-  if (
-    status === 'deleted' &&
-    (reviewResult?.decision === 'reject' ||
-      keys.some((key) => key.charityState !== 'ended' && key.charityState !== 'expired'))
-  ) {
-    invalid('deleted donation state');
-  }
-  if (
-    status === 'expired' &&
-    (reviewResult?.decision !== 'approve' ||
-      keys.some((key) => key.charityState !== 'ended' && key.charityState !== 'expired') ||
-      !keys.some((key) => key.charityState === 'expired'))
-  ) {
-    invalid('expired donation state');
+    if (
+      status === 'deleted' &&
+      (reviewResult?.decision === 'reject' ||
+        keys.some((key) => key.charityState !== 'ended' && key.charityState !== 'expired'))
+    ) {
+      invalid('deleted donation state');
+    }
+    if (
+      status === 'expired' &&
+      (reviewResult?.decision !== 'approve' ||
+        keys.some((key) => key.charityState !== 'ended' && key.charityState !== 'expired') ||
+        !keys.some((key) => key.charityState === 'expired'))
+    ) {
+      invalid('expired donation state');
+    }
   }
   return {
+    ...(useSummary === undefined ? {} : { useSummary }),
     id: decimalID(item.id, 'donation id'),
     ownerHiddenAt:
       item.owner_hidden_at == null ? null : timestamp(item.owner_hidden_at, 'hidden timestamp'),
@@ -1198,7 +1234,7 @@ function normalizeBasePricing(
   discountPercent: number,
 ): import('./types').CharityBasePricing {
   let normalizedPricing: import('./types').CharityBasePricing;
-  if (pricing.mode === 'per_request') {
+  if (pricing.mode === 'per_request' || pricing.mode === 'per_search_unit') {
     if (
       pricing.user_prices_milli !== null ||
       pricing.discounted_user_prices_milli !== null ||
@@ -1218,7 +1254,7 @@ function normalizeBasePricing(
       'charity model discounted request price',
     );
     normalizedPricing = {
-      mode: 'per_request',
+      mode: pricing.mode,
       userPriceMilli,
       discountedUserPriceMilli,
       currentUserPriceMilli: capabilityMilli(
@@ -1263,7 +1299,32 @@ function normalizeBasePricing(
     invalid('charity model pricing mode');
   }
 
+  for (const [wire, key] of [
+    ['user_modalities_milli', 'userModalitiesMilli'],
+    ['discounted_user_modalities_milli', 'discountedUserModalitiesMilli'],
+    ['current_user_modalities_milli', 'currentUserModalitiesMilli'],
+  ] as const)
+    if (pricing[wire] != null)
+      normalizedPricing[key] = normalizeCapabilityModalityPricing(pricing[wire]);
   return normalizedPricing;
+}
+
+function normalizeCapabilityModalityPricing(
+  value: unknown,
+): import('./types').CharityModalityPricing {
+  const root = record(
+    value,
+    'modality pricing',
+    ['input_enabled', 'output_enabled'],
+    ['text', 'image', 'audio', 'video'],
+  );
+  const out: import('./types').CharityModalityPricing = {
+    inputEnabled: bool(root.input_enabled, 'modality input'),
+    outputEnabled: bool(root.output_enabled, 'modality output'),
+  };
+  for (const m of ['text', 'image', 'audio', 'video'] as const)
+    if (root[m] != null) out[m] = normalizeCapabilityTokenPrices(root[m], 'modality ' + m);
+  return out;
 }
 
 function positiveContextThreshold(value: unknown): string {

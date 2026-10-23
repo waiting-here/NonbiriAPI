@@ -63,9 +63,16 @@ export interface ReportCaseSummary {
     | 'openai-compatible'
     | 'anthropic-compatible'
     | 'ai-sdk-gateway-v3'
+    | 'ai-sdk-gateway-v4'
     | 'google-gemini'
     | 'openai-responses'
-    | 'openai-decisions';
+    | 'openai-decisions'
+    | 'cohere-rerank'
+    | 'jina-rerank'
+    | 'siliconflow-rerank'
+    | 'voyage-rerank'
+    | 'typesafe-systemone'
+    | 'openai-chat-completions';
   canonical_base_url: string;
   material_version: string;
   target_version: string;
@@ -171,9 +178,16 @@ export function normalizeReportSummary(value: unknown): ReportCaseSummary {
         'openai-compatible',
         'anthropic-compatible',
         'ai-sdk-gateway-v3',
+        'ai-sdk-gateway-v4',
         'google-gemini',
         'openai-responses',
         'openai-decisions',
+        'cohere-rerank',
+        'jina-rerank',
+        'siliconflow-rerank',
+        'voyage-rerank',
+        'typesafe-systemone',
+        'openai-chat-completions',
       ] as const,
       'reported connector',
     ),
@@ -295,9 +309,16 @@ export interface ReportTarget {
       | 'openai-compatible'
       | 'anthropic-compatible'
       | 'ai-sdk-gateway-v3'
+      | 'ai-sdk-gateway-v4'
       | 'google-gemini'
       | 'openai-responses'
-      | 'openai-decisions';
+      | 'openai-decisions'
+      | 'cohere-rerank'
+      | 'jina-rerank'
+      | 'siliconflow-rerank'
+      | 'voyage-rerank'
+      | 'typesafe-systemone'
+      | 'openai-chat-completions';
     canonical_base_url: string;
     display_head: string;
     display_tail: string;
@@ -381,9 +402,16 @@ export function normalizeReportTarget(value: unknown): ReportTarget {
           'openai-compatible',
           'anthropic-compatible',
           'ai-sdk-gateway-v3',
+          'ai-sdk-gateway-v4',
           'google-gemini',
           'openai-responses',
           'openai-decisions',
+          'cohere-rerank',
+          'jina-rerank',
+          'siliconflow-rerank',
+          'voyage-rerank',
+          'typesafe-systemone',
+          'openai-chat-completions',
         ] as const,
         'target connector',
       ),

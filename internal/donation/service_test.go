@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -165,13 +167,15 @@ func (environment *donationTestEnv) seedEndpointKeyAt(t *testing.T, userID int64
 		kind = connectors[0]
 	}
 	now := environment.clock.Load()
-	result, err := environment.store.DB().Exec(`INSERT INTO endpoints(
-user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?, ?,?,'private endpoint note',1,1,?,?)`, userID, kind, baseURL, now, now)
+	tx, err := environment.store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	endpointID, err := testseed.InsertEndpointTx(context.Background(), tx, testseed.EndpointInput{OwnerUserID: userID, Type: contract.Type(kind), BaseURL: baseURL, Note: "private endpoint note", At: now})
 	if err != nil {
 		t.Fatalf("seed endpoint: %v", err)
 	}
-	endpointID, _ := result.LastInsertId()
 	contextID, fingerprint := make([]byte, 16), make([]byte, 32)
 	contextID[15], fingerprint[31] = suffix, suffix
 	credentialContext, err := secret.NewGenerationTwoEndpointKeyContext(contextID)
@@ -182,21 +186,21 @@ VALUES(?, ?,?,'private endpoint note',1,1,?,?)`, userID, kind, baseURL, now, now
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err = environment.store.DB().Exec(`INSERT INTO endpoint_key_secrets(
+	result, err := tx.Exec(`INSERT INTO endpoint_key_secrets(
 context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
 VALUES(?,?,?,?,?)`, contextID, baseURL, kind, encoded, now)
 	if err != nil {
 		t.Fatalf("seed secret: %v", err)
 	}
 	secretID, _ := result.LastInsertId()
-	result, err = environment.store.DB().Exec(`INSERT INTO endpoint_keys(
-endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at)
-VALUES(?,?,?,'head','tail','private key note',1,0,1,?,?)`, endpointID, secretID, fingerprint, now, now)
+	key, err := testseed.InsertEndpointKeyTx(context.Background(), tx, testseed.KeyInput{EndpointID: endpointID, SecretRefID: secretID, Fingerprint: fingerprint, DisplayHead: "head", DisplayTail: "tail", Note: "private key note", At: now})
 	if err != nil {
 		t.Fatalf("seed endpoint key: %v", err)
 	}
-	keyID, _ := result.LastInsertId()
-	return endpointID, keyID
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	return endpointID, key.KeyID
 }
 
 func donationMutation(t *testing.T, seed byte, method, route string, ids []int64, body any) resources.ControlMutation {
@@ -211,6 +215,62 @@ func donationMutation(t *testing.T, seed byte, method, route string, ids []int64
 	}
 	return resources.ControlMutation{IdempotencyKey: strings.Repeat(string(seed), 22), Method: method,
 		Route: route, PathIDs: pathIDs, CanonicalBody: canonical}
+}
+
+func (environment *donationTestEnv) seedBinding(t *testing.T, modelID, keyID int64, upstream string, order int) {
+	t.Helper()
+	tx, err := environment.store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, err := testseed.InsertCharityBindingTx(context.Background(), tx, testseed.BindingInput{ModelID: modelID, KeyID: keyID, UpstreamModelID: upstream, Order: order, At: environment.clock.Load()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (environment *donationTestEnv) approveFixtureUses(t *testing.T, donationID int64) {
+	t.Helper()
+	tx, err := environment.store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	var reviewerID int64
+	if err := tx.QueryRow(`SELECT id FROM users WHERE is_admin=1 ORDER BY id LIMIT 1`).Scan(&reviewerID); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := tx.Query(`SELECT d.id,dk.id FROM donations d JOIN donation_keys dk ON dk.donation_id=d.id WHERE (?=0 OR d.id=?) ORDER BY d.id,dk.id`, donationID, donationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings := map[int64][]KeySetting{}
+	for rows.Next() {
+		var id, key int64
+		if err := rows.Scan(&id, &key); err != nil {
+			_ = rows.Close()
+			t.Fatal(err)
+		}
+		settings[id] = append(settings[id], KeySetting{DonationKeyID: key, Enabled: true})
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	_ = rows.Close()
+	for id, keys := range settings {
+		if err := environment.service.approveInitialUsesTx(context.Background(), tx, id, reviewerID, "admin", keys, "", environment.clock.Load()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.Exec(`UPDATE donations SET status='approved' WHERE id=?`, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (environment *donationTestEnv) createDonation(t *testing.T, userID int64, keyIDs ...int64) Donation {
@@ -410,8 +470,9 @@ func TestPerKeyExpiryAuthorizationTraceAndIndependentTerminalization(t *testing.
 	keyA := parseTestID(t, created.Value.Keys[0].ID)
 	keyB := parseTestID(t, created.Value.Keys[1].ID)
 	rows, err := environment.store.DB().Query(`SELECT dk.endpoint_key_id,dk.authorized_expires_at,dk.expires_at,
-dk.source_endpoint_key_id,dk.report_fingerprint,k.secret_fingerprint
+dk.source_endpoint_key_id,dk.report_fingerprint,g.report_fingerprint
 FROM donation_keys dk JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
+JOIN endpoint_key_grant_revisions g ON g.id=k.current_grant_revision_id
 WHERE dk.donation_id=? ORDER BY dk.id`, donationID)
 	if err != nil {
 		t.Fatal(err)

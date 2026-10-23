@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -57,6 +58,7 @@ func (s *Service) create(ctx context.Context, userID int64, key string, canonica
 	}
 	ep, err := s.resources.CreateEndpointInTransaction(ctx, tx, userID, resources.CreateEndpointInput{
 		Source: "custom", ConnectorType: input.Endpoint.ConnectorType, BaseURL: input.Endpoint.BaseURL, Note: input.Endpoint.Note, Enabled: enabled(input.Endpoint.Enabled),
+		NativeServices: input.Endpoint.NativeServices.pointer(), RerankFormat: contract.RerankFormat(input.Endpoint.RerankFormat),
 	})
 	if err != nil {
 		return nil, atStep("endpoint", err)
@@ -71,6 +73,7 @@ func (s *Service) create(ctx context.Context, userID int64, key string, canonica
 		secret := []byte(item.Secret)
 		physical, createErr := s.resources.CreateEndpointKeyInTransaction(ctx, tx, userID, endpointID, resources.CreateEndpointKeyInput{
 			Secret: secret, Note: item.Note, Enabled: enabled(item.Enabled), ForceStoreFalse: item.ForceStoreFalse, OwnershipConfirmed: true, MaxConcurrency: item.MaxConcurrency, MaxRPM: item.MaxRPM,
+			NativeServices: item.NativeServices.pointer(),
 		})
 		clear(secret)
 		if createErr != nil {
@@ -81,6 +84,14 @@ func (s *Service) create(ctx context.Context, userID int64, key string, canonica
 			return nil, err
 		}
 		donationKeys[index] = donation.CreateKeyInput{EndpointKeyID: physicalID, ExpiresAt: item.AuthorizedExpiresAt, FailureDisableThreshold: item.FailureDisableThreshold}
+		if item.NativeServices != nil {
+			donationKeys[index].NativeServices = []contract.NativeService(item.NativeServices)
+		}
+		if item.ShareDiscovery {
+			if err := attachCreatedDonationSourceTx(ctx, tx, userID, physicalID, &donationKeys[index]); err != nil {
+				return nil, atStep(fmt.Sprintf("keys[%d].share_discovery", index), err)
+			}
+		}
 		result.Keys[index].EndpointKeyID = physical.ID
 	}
 	submission, err := s.donations.CreateInTransaction(ctx, tx, userID, donation.CreateInput{Description: input.Description, Keys: donationKeys, OwnershipAuthorized: true, DiscordPublicThanks: *input.DiscordPublicThanks})

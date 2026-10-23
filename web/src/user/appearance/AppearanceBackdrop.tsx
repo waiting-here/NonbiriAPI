@@ -3,6 +3,7 @@ import { MomentBackdrop } from './MomentBackdrop';
 import { SpecialBackdrop } from './SpecialBackdrop';
 import { isSpecialTheme } from '../activities/gacha/special-scenes';
 import type { WallpaperQuality, WallpaperTheme } from './wallpaper-motion';
+import { useArtworkPolicy } from '@shared/artwork/context';
 
 const colorMode = (): WallpaperTheme =>
   document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
@@ -12,6 +13,11 @@ const qualityLevel = (): WallpaperQuality =>
     : 'standard';
 
 export function AppearanceBackdrop({ selected, moment }: { selected: string; moment?: string }) {
+  const policy = useArtworkPolicy();
+  const effective = policy.allowed('appearance:' + selected) ? selected : 'default';
+  return <PermittedAppearanceBackdrop selected={effective} moment={moment} />;
+}
+function PermittedAppearanceBackdrop({ selected, moment }: { selected: string; moment?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [theme, setTheme] = useState(colorMode);
   const [quality, setQuality] = useState(qualityLevel);

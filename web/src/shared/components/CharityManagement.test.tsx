@@ -68,6 +68,12 @@ const stewardSession = {
     effective_rpm_limit: '60',
     concurrency_limit: null,
     effective_concurrency_limit: '5',
+    global_rpm_limit: null,
+    effective_global_rpm_limit: '60',
+    light_rpm_limit: null,
+    effective_light_rpm_limit: '30',
+    light_concurrency_limit: null,
+    effective_light_concurrency_limit: '15',
     balance: '0',
     game_balance: '0',
     donation_credit: '0',
@@ -353,6 +359,8 @@ const charityModel = (start: number, end: number): CharityModel => ({
   pricing: { mode: 'per_request', user_price: '1', donor_reward: '0' },
   discount: { enabled: true, percent: 10, start_at: start, end_at: end },
   transport_rule: 'passthrough',
+  cloudflare_proxy_enabled: false,
+  cloudflare_proxy_mode: 'direct',
   flatten_tool_calls: false,
   revision: '1',
   binding_revision: '0',
@@ -365,180 +373,193 @@ const charityModel = (start: number, end: number): CharityModel => ({
 const siteDateTime = (epoch: number) => `${new Date(epoch * 1_000).toISOString().slice(0, 19)}.000`;
 
 describe('CharityManagement corrective controls', () => {
-  it('fills and undoes complete prices inside the fixed editor and saves explicit request reserve clearing', async () => {
-    const token = {
-      recurring_discount: {
-        enabled: true,
-        time_zone: 'Asia/Tokyo',
-        default_percent: 50,
-        periods: [{ weekdays: [1], start_time: '22:00', end_time: '02:00', percent: 0 }],
-      },
-      pricing: {
-        mode: 'per_token' as const,
-        user_prices: {
-          uncached_input: '20',
-          cache_write_input: '24',
-          cache_read_input: '2',
-          output: '60',
+  it.each(['template undo', 'model reference'] as const)(
+    'fills complete prices with %s and saves explicit request reserve clearing',
+    async (flow) => {
+      const token = {
+        recurring_discount: {
+          enabled: true,
+          time_zone: 'Asia/Tokyo',
+          default_percent: 50,
+          periods: [{ weekdays: [1], start_time: '22:00', end_time: '02:00', percent: 0 }],
         },
-        donor_rewards: {
-          uncached_input: '10',
-          cache_write_input: '12',
-          cache_read_input: '1',
-          output: '30',
-        },
-        long_context: {
-          input_threshold: '100000',
+        pricing: {
+          mode: 'per_token' as const,
           user_prices: {
-            uncached_input: '40',
-            cache_write_input: '48',
-            cache_read_input: '4',
-            output: '120',
+            uncached_input: '20',
+            cache_write_input: '24',
+            cache_read_input: '2',
+            output: '60',
           },
+          donor_rewards: {
+            uncached_input: '10',
+            cache_write_input: '12',
+            cache_read_input: '1',
+            output: '30',
+          },
+          long_context: {
+            input_threshold: '100000',
+            user_prices: {
+              uncached_input: '40',
+              cache_write_input: '48',
+              cache_read_input: '4',
+              output: '120',
+            },
+          },
+          context_penalty: { input_threshold: '200000', fine: '500' },
         },
-        context_penalty: { input_threshold: '200000', fine: '500' },
-      },
-      token_reserve_credits: '25.125',
-      discount: { enabled: true, percent: 80, start_at: null, end_at: null },
-    };
-    const request = {
-      recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 0, periods: [] },
-      pricing: { mode: 'per_request' as const, user_price: '3.5', donor_reward: '1.75' },
-      token_reserve_credits: null,
-      discount: { enabled: false, percent: 0, start_at: null, end_at: null },
-    };
-    const templates = [
-      {
+        token_reserve_credits: '25.125',
+        discount: { enabled: true, percent: 80, start_at: null, end_at: null },
+      };
+      const request = {
+        recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 0, periods: [] },
+        pricing: { mode: 'per_request' as const, user_price: '3.5', donor_reward: '1.75' },
+        token_reserve_credits: null,
+        discount: { enabled: false, percent: 0, start_at: null, end_at: null },
+      };
+      const templates = [
+        {
+          ...token,
+          id: '1',
+          name: 'Token template',
+          description: '',
+          enabled: true,
+          revision: '1',
+          created_at: 1,
+          updated_at: 1,
+        },
+        {
+          ...request,
+          id: '2',
+          name: 'Request template',
+          description: '',
+          enabled: true,
+          revision: '1',
+          created_at: 1,
+          updated_at: 1,
+        },
+      ];
+      let current = {
+        ...charityModel(10, 20),
+        enabled: false,
+        route_strategy: 'ordered' as const,
+        token_reserve_credits: '7' as string | null,
+      };
+      const reference = {
+        ...charityModel(10, 20),
         ...token,
-        id: '1',
-        name: 'Token template',
-        description: '',
-        enabled: true,
-        revision: '1',
-        created_at: 1,
-        updated_at: 1,
-      },
-      {
-        ...request,
         id: '2',
-        name: 'Request template',
-        description: '',
+        provider: 'Other',
+        model: 'reference',
+        full_name: '[公益]Other/reference',
         enabled: true,
-        revision: '1',
-        created_at: 1,
-        updated_at: 1,
-      },
-    ];
-    let current = {
-      ...charityModel(10, 20),
-      enabled: false,
-      route_strategy: 'ordered' as const,
-      token_reserve_credits: '7' as string | null,
-    };
-    const reference = {
-      ...charityModel(10, 20),
-      ...token,
-      id: '2',
-      provider: 'Other',
-      model: 'reference',
-      full_name: '[公益]Other/reference',
-      enabled: true,
-    };
-    const writes: { path: string; body: Record<string, unknown> }[] = [];
-    vi.stubGlobal(
-      'fetch',
-      vi.fn<typeof fetch>(async (input, init) => {
-        const url = new URL(String(input), 'https://example.test');
-        const method = init?.method ?? 'GET';
-        if (url.pathname === '/admin/api/session') return jsonResponse(adminSession);
-        if (url.pathname.endsWith('/time-context')) return jsonResponse(siteTimeContext);
-        if (url.pathname.endsWith('/time-zones'))
-          return jsonResponse({ version: 'go1.26.6-zoneinfo', zones: ['UTC'] });
-        if (url.pathname === '/admin/api/charity-price-templates')
-          return jsonResponse(numberedPage(templates, url));
-        if (url.pathname === '/admin/api/charity-models')
-          return jsonResponse(numberedPage([current, reference], url));
-        if (url.pathname === '/admin/api/charity-models/1') {
-          if (method === 'PATCH') {
-            const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-            writes.push({ path: url.pathname, body });
-            current = { ...current, ...body, revision: String(Number(current.revision) + 1) };
+      };
+      const writes: { path: string; body: Record<string, unknown> }[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn<typeof fetch>(async (input, init) => {
+          const url = new URL(String(input), 'https://example.test');
+          const method = init?.method ?? 'GET';
+          if (url.pathname === '/admin/api/session') return jsonResponse(adminSession);
+          if (url.pathname.endsWith('/time-context')) return jsonResponse(siteTimeContext);
+          if (url.pathname.endsWith('/time-zones'))
+            return jsonResponse({ version: 'go1.26.6-zoneinfo', zones: ['UTC'] });
+          if (url.pathname === '/admin/api/charity-price-templates')
+            return jsonResponse(numberedPage(templates, url));
+          if (url.pathname === '/admin/api/charity-models')
+            return jsonResponse(numberedPage([current, reference], url));
+          if (url.pathname === '/admin/api/charity-models/1') {
+            if (method === 'PATCH') {
+              const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+              writes.push({ path: url.pathname, body });
+              current = { ...current, ...body, revision: String(Number(current.revision) + 1) };
+            }
+            return jsonResponse(current);
           }
-          return jsonResponse(current);
-        }
-        if (url.pathname.endsWith('/bindings'))
-          return jsonResponse({ bindings: [], binding_revision: '0' });
-        if (url.pathname.endsWith('/donation-sources')) return jsonResponse(numberedPage([], url));
-        throw new Error(`Unexpected price workspace request: ${method} ${url.pathname}`);
-      }),
-    );
-    const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
-      station: 'admin',
-      route: '/charity?charity_section=models&charity_model=1',
-    });
-    const heading = await screen.findByRole('heading', { name: '[公益]provider/model' });
-    const editor = within(heading.closest('.card') as HTMLElement);
-    await view.user.click(editor.getByRole('button', { name: 'Choose a template or reference' }));
-    await view.user.click(editor.getByText('Price templates', { selector: 'strong' }));
-    const tokenRow = await editor.findByRole('row', { name: /Token template/ });
-    await view.user.click(within(tokenRow).getByRole('button', { name: 'View full prices' }));
-    await view.user.click(editor.getByRole('button', { name: 'Fill all prices' }));
-    expect(editor.getByRole('combobox', { name: 'Pricing mode' })).toHaveValue('per_token');
-    expect(editor.getByLabelText('Output user price')).toHaveValue('60');
-    expect(editor.getByLabelText('Output donor reward')).toHaveValue('30');
-    expect(editor.getByLabelText('Call reservation (credits)')).toHaveValue('25.125');
-    expect(editor.getByLabelText('Provider')).toHaveValue('provider');
-    expect(editor.getByRole('checkbox', { name: 'Enable charity model' })).not.toBeChecked();
-    expect(writes).toHaveLength(0);
-    await view.user.click(editor.getByRole('button', { name: 'Return to current price draft' }));
-    expect(editor.getByRole('button', { name: 'Choose a template or reference' })).toHaveFocus();
-    expect(editor.getByLabelText('Output user price')).toHaveValue('60');
-    await view.user.click(editor.getByRole('button', { name: 'Choose a template or reference' }));
-    expect(editor.getByRole('heading', { name: /Token template · Revision 1/ })).toBeVisible();
-    await view.user.click(editor.getByRole('button', { name: 'Undo the last price fill' }));
-    expect(editor.getByRole('combobox', { name: 'Pricing mode' })).toHaveFocus();
-    expect(editor.getByLabelText('Request user price')).toHaveValue('1');
-    expect(editor.getByLabelText('Call reservation (credits)')).toHaveValue('7');
-    await view.user.click(editor.getByRole('button', { name: 'Fill all prices' }));
-    await view.user.click(
-      within(editor.getByRole('row', { name: /Request template/ })).getByRole('button', {
-        name: 'View full prices',
-      }),
-    );
-    await view.user.click(editor.getByRole('button', { name: 'Fill all prices' }));
-    await view.user.click(editor.getByRole('button', { name: /^Save model / }));
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0]).toMatchObject({
-      path: '/admin/api/charity-models/1',
-      body: {
-        ...request,
-        provider: 'provider',
-        model: 'model',
-        enabled: false,
-        route_strategy: 'ordered',
-        expected_revision: '1',
-      },
-    });
-    await view.user.click(
-      editor.getByText("Reference an existing model's prices", { selector: 'strong' }),
-    );
-    const referenceRow = await editor.findByRole('row', { name: /\[公益\]Other\/reference/ });
-    await view.user.click(within(referenceRow).getByRole('button', { name: 'View full prices' }));
-    await view.user.click(editor.getByRole('button', { name: 'Fill these prices' }));
-    await view.user.click(editor.getByRole('button', { name: /^Save model / }));
-    await waitFor(() => expect(writes).toHaveLength(2));
-    expect(writes[1]).toMatchObject({
-      path: '/admin/api/charity-models/1',
-      body: {
-        ...token,
-        provider: 'provider',
-        model: 'model',
-        enabled: false,
-        route_strategy: 'ordered',
-        expected_revision: '2',
-      },
-    });
-  });
+          if (url.pathname.endsWith('/bindings'))
+            return jsonResponse({ bindings: [], binding_revision: '0' });
+          if (url.pathname.endsWith('/donation-sources'))
+            return jsonResponse(numberedPage([], url));
+          throw new Error(`Unexpected price workspace request: ${method} ${url.pathname}`);
+        }),
+      );
+      const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
+        station: 'admin',
+        route: '/charity?charity_section=models&charity_model=1',
+      });
+      const heading = await screen.findByRole('heading', { name: '[公益]provider/model' });
+      const editor = within(heading.closest('.card') as HTMLElement);
+      await view.user.click(editor.getByRole('button', { name: 'Choose a template or reference' }));
+      await view.user.click(editor.getByText('Price templates', { selector: 'strong' }));
+      if (flow === 'template undo') {
+        const tokenRow = await editor.findByRole('row', { name: /Token template/ });
+        await view.user.click(within(tokenRow).getByRole('button', { name: 'View full prices' }));
+        await view.user.click(editor.getByRole('button', { name: 'Fill all prices' }));
+        expect(editor.getByRole('combobox', { name: 'Pricing mode' })).toHaveValue('per_token');
+        expect(editor.getByLabelText('Output user price')).toHaveValue('60');
+        expect(editor.getByLabelText('Output donor reward')).toHaveValue('30');
+        expect(editor.getByLabelText('Usage reserve (credits)')).toHaveValue('25.125');
+        expect(editor.getByLabelText('Provider')).toHaveValue('provider');
+        expect(editor.getByRole('checkbox', { name: 'Enable charity model' })).not.toBeChecked();
+        expect(writes).toHaveLength(0);
+        await view.user.click(
+          editor.getByRole('button', { name: 'Return to current price draft' }),
+        );
+        expect(
+          editor.getByRole('button', { name: 'Choose a template or reference' }),
+        ).toHaveFocus();
+        expect(editor.getByLabelText('Output user price')).toHaveValue('60');
+        await view.user.click(
+          editor.getByRole('button', { name: 'Choose a template or reference' }),
+        );
+        expect(editor.getByRole('heading', { name: /Token template · Revision 1/ })).toBeVisible();
+        await view.user.click(editor.getByRole('button', { name: 'Undo the last price fill' }));
+        expect(editor.getByRole('combobox', { name: 'Pricing mode' })).toHaveFocus();
+        expect(editor.getByLabelText('Request user price')).toHaveValue('1');
+        expect(editor.getByLabelText('Usage reserve (credits)')).toHaveValue('7');
+        await view.user.click(editor.getByRole('button', { name: 'Fill all prices' }));
+      }
+      await view.user.click(
+        within(await editor.findByRole('row', { name: /Request template/ })).getByRole('button', {
+          name: 'View full prices',
+        }),
+      );
+      await view.user.click(editor.getByRole('button', { name: 'Fill all prices' }));
+      await view.user.click(editor.getByRole('button', { name: /^Save model / }));
+      await waitFor(() => expect(writes).toHaveLength(1));
+      expect(writes[0]).toMatchObject({
+        path: '/admin/api/charity-models/1',
+        body: {
+          ...request,
+          provider: 'provider',
+          model: 'model',
+          enabled: false,
+          route_strategy: 'ordered',
+          expected_revision: '1',
+        },
+      });
+      if (flow === 'template undo') return;
+      await view.user.click(
+        editor.getByText("Reference an existing model's prices", { selector: 'strong' }),
+      );
+      const referenceRow = await editor.findByRole('row', { name: /\[公益\]Other\/reference/ });
+      await view.user.click(within(referenceRow).getByRole('button', { name: 'View full prices' }));
+      await view.user.click(editor.getByRole('button', { name: 'Fill these prices' }));
+      await view.user.click(editor.getByRole('button', { name: /^Save model / }));
+      await waitFor(() => expect(writes).toHaveLength(2));
+      expect(writes[1]).toMatchObject({
+        path: '/admin/api/charity-models/1',
+        body: {
+          ...token,
+          provider: 'provider',
+          model: 'model',
+          enabled: false,
+          route_strategy: 'ordered',
+          expected_revision: '2',
+        },
+      });
+    },
+  );
 
   it.each(['admin', 'steward'] as const)(
     'keeps a separate new model draft and defaults balanced routing for %s',
@@ -608,9 +629,14 @@ describe('CharityManagement corrective controls', () => {
     },
   );
 
-  it.each([false, true])(
-    'offers model cache defaults only for an entirely Gateway binding set (mixed=%s)',
-    async (mixed) => {
+  it.each([
+    [false, 'ai-sdk-gateway-v3', 'ai-sdk-gateway-v3'],
+    [false, 'ai-sdk-gateway-v4', 'ai-sdk-gateway-v4'],
+    [false, 'ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'],
+    [true, 'ai-sdk-gateway-v4', 'openai-compatible'],
+  ] as const)(
+    'offers cache defaults only for an entirely Gateway family (mixed=%s, %s / %s)',
+    async (mixed, firstConnector, secondConnector) => {
       const model = { ...charityModel(10, 20), binding_count: '2' };
       const binding = (id: string, connector: string) => ({
         id,
@@ -639,10 +665,7 @@ describe('CharityManagement corrective controls', () => {
           if (url.pathname === '/admin/api/charity-models/1') return jsonResponse(model);
           if (url.pathname === '/admin/api/charity-models/1/bindings')
             return jsonResponse({
-              bindings: [
-                binding('1', 'ai-sdk-gateway-v3'),
-                binding('2', mixed ? 'openai-compatible' : 'ai-sdk-gateway-v3'),
-              ],
+              bindings: [binding('1', firstConnector), binding('2', secondConnector)],
               binding_revision: '0',
             });
           if (url.pathname.endsWith('/request-adaptation'))
@@ -1196,6 +1219,7 @@ describe('CharityManagement corrective controls', () => {
 
     await waitFor(() => expect(patchBodies).toHaveLength(1));
     expect(patchBodies[0]).toEqual({
+      cloudflare_proxy_enabled: false,
       session_headers: [{ name: 'X-Session-ID', idle_seconds: 300, format: 'hex_32' }],
       model_types: ['chat_completions', 'embeddings'],
       role_policy: { default_action: 'native', rules: {} },
@@ -1236,8 +1260,9 @@ describe('CharityManagement corrective controls', () => {
       sessionPath: '/admin/api/session',
       session: adminSession,
       modelsTab: 'Charity models and bindings',
-      reserveLabel: 'Call reservation (credits)',
-      reserveHelp: 'Leave blank to inherit the global configuration.',
+      reserveLabel: 'Usage reserve (credits)',
+      reserveHelp:
+        'Used before usage-based requests. Leave blank to use the caller key or site reserve.',
       pricingLabel: 'Pricing mode',
       perRequest: 'Per request',
       perToken: 'Per token',
@@ -1252,8 +1277,8 @@ describe('CharityManagement corrective controls', () => {
       sessionPath: '/api/session',
       session: stewardSession,
       modelsTab: '公益模型与来源',
-      reserveLabel: '调用前预留积分',
-      reserveHelp: '留空继承全局配置。',
+      reserveLabel: '用量预留（积分）',
+      reserveHelp: '用于按用量计费请求的预留。留空沿用调用密钥或站点设置。',
       pricingLabel: '计价模式',
       perRequest: '按次',
       perToken: '按 token',
@@ -1439,7 +1464,7 @@ describe('CharityManagement corrective controls', () => {
 
     await view.user.click(await screen.findByRole('tab', { name: 'Charity models and bindings' }));
     await view.user.click(screen.getByRole('button', { name: 'Create charity model' }));
-    expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Chat Completions / Responses' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Embeddings' })).not.toBeChecked();
     await view.user.click(screen.getByRole('checkbox', { name: 'Image generation' }));
     expect(screen.getByRole('checkbox', { name: 'L1' })).toBeChecked();
@@ -1472,18 +1497,18 @@ describe('CharityManagement corrective controls', () => {
 
     const pricing = screen.getByRole('combobox', { name: 'Pricing mode' });
     await view.user.selectOptions(pricing, 'per_token');
-    const hiddenReserve = screen.getByLabelText('Call reservation (credits)');
+    const hiddenReserve = screen.getByLabelText('Usage reserve (credits)');
     fireEvent.change(hiddenReserve, { target: { value: '0' } });
     expect(screen.getByRole('button', { name: 'Add charity model' })).toBeDisabled();
     await view.user.selectOptions(pricing, 'per_request');
-    expect(screen.getByLabelText('Call reservation (credits)')).toHaveValue('0');
+    expect(screen.getByLabelText('Usage reserve (credits)')).toHaveValue('0');
     expect(screen.getByRole('button', { name: 'Add charity model' })).toBeDisabled();
     fireEvent.change(hiddenReserve, { target: { value: '' } });
     expect(screen.getByRole('button', { name: 'Add charity model' })).toBeEnabled();
     await view.user.click(screen.getByRole('button', { name: 'Add charity model' }));
     await waitFor(() => expect(createBodies).toHaveLength(1));
     expect(createBodies[0]).toMatchObject({
-      model_types: ['chat_completions', 'images_generations'],
+      model_types: ['chat_completions', 'images_generations', 'responses'],
       allowed_levels: [2, 5],
       public_description: 'First line\n<b>literal</b>\t😀',
     });
@@ -1979,3 +2004,144 @@ it('keeps level-5 access when a pending target was concurrently reviewed', async
   await view.user.click(screen.getByRole('button', { name: 'Return to list' }));
   await screen.findByRole('heading', { name: 'No pending donations' });
 });
+
+it.each(['approve', 'reject'] as const)(
+  'keeps the confirmed use %s receipt when the last pending detail loses access and the queue refresh fails',
+  async (decision) => {
+    const current: AdminDonation = {
+      ...pendingDonation(),
+      owner: null,
+      reviewer: null,
+      can_force_reject: false,
+      use_summary: { total: '1', pending: '1', approved: '0' },
+    };
+    const pending = {
+      credential_id: '8',
+      credential_version: '1',
+      grant_revision: '1',
+      status: 'pending',
+      review_note: '',
+      reviewed_at: null,
+      expected_review_revision: null,
+      discovery_source_id: null,
+      discovery_source_revision: null,
+      display_head: 'head',
+      display_tail: 'tail',
+      review: { required: false, revision: null, material_available: false },
+      discovery: null,
+    };
+    const use = {
+      id: '6',
+      donation_id: '1',
+      donation_key_id: '11',
+      endpoint_key_id: null,
+      native_service: 'chat_completions',
+      enabled: true,
+      discovery_enabled: false,
+      revision: '9',
+      approved: null,
+      pending,
+      latest: pending,
+      health: null,
+      capabilities: {
+        can_review: true,
+        can_manage: false,
+        can_reset_failures: false,
+        can_discover: false,
+        can_bind: false,
+        unavailable_reason: 'not_approved',
+      },
+    };
+    const capabilityLost = vi.fn();
+    let completed = false;
+    let failQueue = true;
+    let writes = 0;
+    let finishWrite!: () => void;
+    const writeGate = new Promise<void>((resolve) => {
+      finishWrite = resolve;
+    });
+    const error = (status: number, code: string) =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code,
+            message: code === 'forbidden' ? 'No longer pending' : 'Refresh temporarily unavailable',
+          },
+        }),
+        { status, headers: { 'content-type': 'application/json' } },
+      );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input, init) => {
+        const url = new URL(String(input), 'https://example.test');
+        if (url.pathname.endsWith('/time-context')) return jsonResponse(siteTimeContext);
+        if (url.pathname === '/api/steward/donations') {
+          expect(url.searchParams.get('status')).toBe('pending');
+          return completed && failQueue
+            ? error(503, 'unavailable')
+            : jsonResponse(numberedPage(completed ? [] : [donationSummary(current)], url));
+        }
+        if (url.pathname === '/api/steward/donations/1')
+          return completed ? error(403, 'forbidden') : jsonResponse(current);
+        if (url.pathname === '/api/steward/donations/1/uses')
+          return completed ? error(403, 'forbidden') : jsonResponse(numberedPage([use], url));
+        if (url.pathname === '/api/steward/donations/1/uses/review') {
+          expect(init?.method).toBe('POST');
+          writes++;
+          expect(JSON.parse(String(init?.body))).toEqual({
+            items: [
+              {
+                use_id: '6',
+                expected_revision: '9',
+                expected_review_revision: null,
+                decision,
+                review_note: '',
+              },
+            ],
+          });
+          expect(new Headers(init?.headers).get('Idempotency-Key')).toBeTruthy();
+          await writeGate;
+          completed = true;
+          return jsonResponse({ results: [{ use_id: '6', ok: true }] });
+        }
+        throw new Error('Unexpected request: ' + url.pathname);
+      }),
+    );
+    const view = await renderWithProviders(
+      <CharityManagement frame="steward" accountId="1" trainee onCapabilityLoss={capabilityLost} />,
+      {
+        station: 'user',
+        route: '/steward?charity_section=donations&donation_id=1',
+        role: 'level5',
+      },
+    );
+    view.queryClient.setQueryData(['user', 'session'], {
+      ...stewardSession,
+      user: { ...stewardSession.user, effective_level: 5 },
+    });
+    await view.user.click(await screen.findByText('Chat completions', { exact: true }));
+    await view.user.click(screen.getByRole('checkbox', { name: 'Select use for review' }));
+    await view.user.click(
+      screen.getByRole('button', {
+        name: decision === 'approve' ? 'Approve selected uses' : 'Reject selected uses',
+      }),
+    );
+    await waitFor(() => expect(writes).toBe(1));
+    expect(screen.getByRole('button', { name: 'Return to list' })).toBeDisabled();
+    finishWrite();
+    await screen.findByText('Use 6 saved');
+    await screen.findByText('Refresh temporarily unavailable');
+    expect(screen.queryByRole('heading', { name: 'Donation uses' })).not.toBeInTheDocument();
+    failQueue = false;
+    await view.user.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByText(
+      'This donation has already been reviewed. Return to the pending queue.',
+    );
+    expect(screen.getByText('Use 6 saved')).toBeVisible();
+    await view.user.click(screen.getByRole('button', { name: 'Return to list' }));
+    await screen.findByRole('heading', { name: 'No pending donations' });
+    expect(screen.getByText('Use 6 saved')).toBeVisible();
+    expect(writes).toBe(1);
+    expect(capabilityLost).not.toHaveBeenCalled();
+  },
+);

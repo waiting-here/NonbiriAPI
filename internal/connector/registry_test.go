@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -169,12 +170,19 @@ func TestRegistryNormalizesTypedNilDiscovererToUnsupported(t *testing.T) {
 func TestDefaultRegistryDescriptorDrivesExecutionAndDiscovery(t *testing.T) {
 	registry := NewDefaultRegistry()
 	types := registry.Types()
-	if len(types) != 6 || types[0] != connectorcontract.TypeAISDKGatewayV3 || types[1] != connectorcontract.TypeAnthropicCompatible || types[2] != connectorcontract.TypeGoogleGemini || types[3] != connectorcontract.TypeOpenAICompatible || types[4] != connectorcontract.TypeOpenAIDecisions || types[5] != connectorcontract.TypeOpenAIResponses {
+	wantTypes := []connectorcontract.Type{connectorcontract.TypeAISDKGatewayV3, connectorcontract.TypeAISDKGatewayV4, connectorcontract.TypeAnthropicCompatible, connectorcontract.TypeCohereRerank, connectorcontract.TypeGoogleGemini, connectorcontract.TypeJinaRerank, connectorcontract.TypeOpenAIChatCompletions, connectorcontract.TypeOpenAICompatible, connectorcontract.TypeOpenAIDecisions, connectorcontract.TypeOpenAIResponses, connectorcontract.TypeSiliconFlowRerank, connectorcontract.TypeTypeSafeSystemOne, connectorcontract.TypeVoyageRerank}
+	if !slices.Equal(types, wantTypes) {
 		t.Fatalf("default registry types=%v", types)
 	}
 	for _, connectorType := range types {
 		descriptor, ok := registry.Descriptor(connectorType)
-		if !ok || descriptor.New == nil || descriptor.Discoverer == nil || connectorType != connectorcontract.TypeOpenAIDecisions && descriptor.Supports == nil || !descriptor.Capabilities.Has(connectorcontract.CapabilityModelDiscovery) {
+		if connectorType == connectorcontract.TypeCohereRerank || connectorType == connectorcontract.TypeJinaRerank || connectorType == connectorcontract.TypeSiliconFlowRerank || connectorType == connectorcontract.TypeVoyageRerank {
+			if !ok || descriptor.New == nil || descriptor.Discoverer != nil || descriptor.Capabilities != connectorcontract.CapabilitySet(connectorcontract.CapabilityRerank) {
+				t.Fatalf("rerank descriptor %q invalid", connectorType)
+			}
+			continue
+		}
+		if !ok || descriptor.New == nil || descriptor.Discoverer == nil || connectorType != connectorcontract.TypeOpenAIDecisions && connectorType != connectorcontract.TypeTypeSafeSystemOne && descriptor.Supports == nil || !descriptor.Capabilities.Has(connectorcontract.CapabilityModelDiscovery) {
 			t.Fatalf("default descriptor %q incomplete: %+v ok=%v", connectorType, descriptor, ok)
 		}
 	}

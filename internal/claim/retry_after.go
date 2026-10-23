@@ -62,12 +62,7 @@ VALUES(?,?,?,?) ON CONFLICT(claim_id) DO NOTHING`, record.claimID, observation.S
 		return err
 	}
 	if changed == 1 && record.donationKeyID.Valid && observation.RateLimitedUntil > observation.ObservedAt {
-		_, err = tx.ExecContext(ctx, `INSERT INTO donation_key_cooldowns(donation_key_id,rate_limited_until,updated_at)
-SELECT id,?,? FROM donation_keys WHERE id=? AND ended_at IS NULL
-ON CONFLICT(donation_key_id) DO UPDATE SET
-rate_limited_until=max(donation_key_cooldowns.rate_limited_until,excluded.rate_limited_until),
-updated_at=max(donation_key_cooldowns.updated_at,excluded.updated_at)`,
-			observation.RateLimitedUntil, observation.ObservedAt, record.donationKeyID.Int64)
+		err = smartbackoff.ObserveRetryAfter(ctx, tx, record.claimID, observation.RateLimitedUntil, observation.ObservedAt)
 		if err != nil {
 			return err
 		}
@@ -109,6 +104,15 @@ func retryAfterOutcomeTx(ctx context.Context, tx *sql.Tx, record claimRecord, ou
 				outcome.StreakDisposition = connectorcontract.StreakNeutral
 				return outcome, nil
 			}
+		}
+		if outcome.Kind == ResultResponse && !outcome.ProtocolSuccess && !outcome.ResponseStarted &&
+			outcome.FailureOrigin == connectorcontract.OriginUpstreamResponse &&
+			outcome.CallerFault.Matches(outcome.UpstreamStatus, outcome.UpstreamCode) {
+			if err := recordCallerFaultTx(ctx, tx, record, outcome); err != nil {
+				return outcome, err
+			}
+			outcome.StreakDisposition = connectorcontract.StreakNeutral
+			return outcome, nil
 		}
 		if outcome.StreakDisposition == connectorcontract.StreakNeutral && retryOrigin(outcome.FailureOrigin) {
 			return outcome, ErrInvalidInput

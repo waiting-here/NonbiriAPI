@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { registeredCopyReferences, validateJSONSource, visibleValueChecks } from './check-copy.mjs';
+import {
+  registeredCopyReferences,
+  translationCopyReferences,
+  validateJSONSource,
+  visibleValueChecks,
+} from './check-copy.mjs';
 
 test('JSON authority rejects duplicate nested keys and CRLF', () => {
   assert.throws(
@@ -125,4 +130,27 @@ test('user terminology gate allows ordinary wording and scoped technical explana
     () => visibleValueChecks('user', 'zh', new Map([['user.core.storePolicy', 'store=false']])),
     /technical terminology/,
   );
+});
+
+test('global copy references remain visible beside scoped local registries', () => {
+  const code = `
+    function Local() { const { t } = useCoreCopy(); return t('local.save'); }
+    function Mixed() {
+      const { t: coreText } = useCoreCopy();
+      const { t } = useTranslation();
+      coreText('local.save');
+      t('common.save');
+      t(active ? 'common.enabled' : 'common.disabled');
+      { const { t } = useCoreCopy(); t('local.nested'); }
+      return t('common.missing');
+    }
+    function Alias() { const { t: text } = useTranslation(); return text('common.close'); }
+  `;
+  assert.deepEqual(translationCopyReferences('mixed.tsx', code), [
+    'common.save',
+    'common.enabled',
+    'common.disabled',
+    'common.missing',
+    'common.close',
+  ]);
 });

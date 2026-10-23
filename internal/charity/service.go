@@ -18,8 +18,8 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/charitydiscount"
 	"github.com/waiting-here/NonbiriAPI/internal/charityreserve"
-	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -28,6 +28,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
+	"github.com/waiting-here/NonbiriAPI/internal/usageinfo"
 )
 
 const (
@@ -115,8 +116,12 @@ func (s *Service) AcceptRequest(ctx context.Context, tx *sql.Tx, input claim.Cha
 		if err != nil {
 			return claim.ErrInvariant
 		}
-	} else if input.OutputTokenFloor > 0 {
-		expectedReserve, err = charityreserve.WithOutputFloor(pricing.tokenReserve, pricing.outputUser, input.OutputTokenFloor)
+	} else if pricing.mode == "per_token" && input.OutputTokenFloor > 0 {
+		outputPrice, priceErr := charityreserve.OutputUnitPrice(pricing.outputUser, pricing.contextPricing)
+		if priceErr != nil {
+			return claim.ErrInvariant
+		}
+		expectedReserve, err = charityreserve.WithOutputFloor(pricing.tokenReserve, outputPrice, input.OutputTokenFloor)
 		if err != nil {
 			return claim.ErrInvariant
 		}
@@ -176,7 +181,7 @@ FROM charity_models WHERE id=?`, modelID).Scan(
 	if err != nil {
 		return frozenPricing{}, fmt.Errorf("charity: read model pricing: %w", err)
 	}
-	if enabled != 1 || (p.mode != "per_request" && p.mode != "per_token") || p.discount < 0 || p.discount > 100 {
+	if enabled != 1 || (p.mode != "per_request" && p.mode != "per_token" && p.mode != "per_search_unit") || p.discount < 0 || p.discount > 100 {
 		return frozenPricing{}, claim.ErrNotFound
 	}
 	if _, err := credits.DecodeContextPricing(p.contextPricing); err != nil {
@@ -202,7 +207,12 @@ FROM charity_models WHERE id=?`, modelID).Scan(
 		p.uncachedReward, p.writeReward, p.readReward, p.outputReward = 0, 0, 0, 0
 		return p, nil
 	}
-	p.requestUser, p.requestReward = 0, 0
+	if p.mode == "per_token" {
+		p.requestUser, p.requestReward = 0, 0
+	} else {
+		p.uncachedUser, p.writeUser, p.readUser, p.outputUser = 0, 0, 0, 0
+		p.uncachedReward, p.writeReward, p.readReward, p.outputReward = 0, 0, 0, 0
+	}
 	value, err := charityreserve.Resolve(ctx, tx, modelID)
 	if err != nil {
 		return frozenPricing{}, claim.ErrInvariant
@@ -212,6 +222,7 @@ FROM charity_models WHERE id=?`, modelID).Scan(
 }
 
 type keyReservation struct {
+	approvedUse                                                          bool
 	donationID, donationKeyID, endpointKeyID, endpointID, receiverUserID int64
 	modelID, modelEnabled, keyEnabled, failureDisabled                   int64
 	endpointEnabled, physicalKeyEnabled                                  int64
@@ -264,7 +275,7 @@ func (s *Service) Claim(ctx context.Context, tx *sql.Tx, input claim.CharityClai
 	if err := requireModelAccess(ctx, tx, input.ActorUserID, row.modelID); err != nil {
 		return claim.CharityReservation{}, err
 	}
-	if row.status != "approved" || row.endedReason != "" || row.keyEnabled != 1 || row.failureDisabled != 0 ||
+	if !row.approvedUse || row.endedReason != "" || row.keyEnabled != 1 || row.failureDisabled != 0 ||
 		row.modelEnabled != 1 || row.endpointEnabled != 1 || row.physicalKeyEnabled != 1 ||
 		row.expiresAt.Valid && input.ClaimedAt >= row.expiresAt.Int64 {
 		return claim.CharityReservation{}, claim.ErrNotFound
@@ -399,11 +410,31 @@ func raiseOutputTokenBudget(budget *donationquota.TokenBudget, floor int64) erro
 
 func readClaimKey(ctx context.Context, tx *sql.Tx, input claim.CharityClaimInput) (keyReservation, error) {
 	var row keyReservation
+	a := input.Authorization
+	use, err := connectionstore.LoadApprovedUseTx(ctx, tx, input.DonationKeyID, a.NativeService)
+	if errors.Is(err, connectionstore.ErrNotFound) || errors.Is(err, connectionstore.ErrUnavailable) {
+		return row, claim.ErrNotFound
+	}
+	if err != nil {
+		return row, err
+	}
+	g := use.Grant
+	if a.BindingID <= 0 || a.TargetID <= 0 || a.TargetRevision <= 0 ||
+		a.UseID != use.UseID || a.UseRevisionID != use.ApprovedRevisionID || a.UseRevision != use.ApprovedRevision ||
+		a.CredentialID != g.CredentialID || a.CredentialVersionID != g.CredentialVersionID || a.CredentialVersion != g.CredentialVersion ||
+		a.GrantRevisionID != g.GrantRevisionID || a.GrantRevision != g.GrantRevision || a.ConfiguredType != g.ConfiguredType ||
+		a.RerankFormat != g.RerankFormat || g.EndpointID != input.EndpointID || g.EndpointKeyID != input.EndpointKeyID {
+		return row, claim.ErrNotFound
+	}
+	serviceSet, err := connectorcontract.ParseNativeServices([]connectorcontract.NativeService{a.NativeService})
+	if err != nil {
+		return row, claim.ErrInvariant
+	}
 	var reservationState, requestState, requestRoute string
 	var suspended int
-	err := tx.QueryRowContext(ctx, `SELECT
+	err = tx.QueryRowContext(ctx, `SELECT
 d.id,d.status,dk.expires_at,COALESCE(d.user_id,0),dk.id,COALESCE(dk.endpoint_key_id,0),e.id,
-dk.enabled,dk.failure_disabled,COALESCE(dk.ended_reason,''),dk.price_limit_mag,dk.call_limit_mag,dk.token_limit_mag,
+dk.enabled,(dk.failure_disabled OR COALESCE(h.failure_disabled,0)),COALESCE(dk.ended_reason,''),dk.price_limit_mag,dk.call_limit_mag,dk.token_limit_mag,
 dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.tokens_used,dk.tokens_reserved,
 dk.streak_generation,dk.next_claim_seq,dk.token_reserve,e.enabled,k.enabled,
 cr.charity_model_id,cm.enabled,cr.state,lr.state,lr.route_kind,
@@ -412,7 +443,7 @@ cr.uncached_user_price_milli,cr.cache_write_user_price_milli,cr.cache_read_user_
 cr.uncached_donor_reward_milli,cr.cache_write_donor_reward_milli,cr.cache_read_donor_reward_milli,cr.output_donor_reward_milli,
 cr.token_reserve_milli,
 EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id),
-`+smartbackoff.EffectiveUntilSQL("dk.id")+`
+max(`+smartbackoff.EffectiveUntilSQL("dk.id")+`,`+smartbackoff.ServiceUntilSQL("h")+`)
 FROM charity_reservations cr
 JOIN logical_requests lr ON lr.id=cr.logical_request_id
 JOIN donation_keys dk ON dk.id=?
@@ -421,12 +452,14 @@ JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id
 JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
 JOIN endpoints e ON e.id=k.endpoint_id
 JOIN charity_models cm ON cm.id=cr.charity_model_id
-JOIN charity_model_bindings b ON b.charity_model_id=cm.id AND b.donation_key_id=dk.id
- AND b.endpoint_key_id=k.id AND b.upstream_model_id=?
-AND b.upstream_model_id=?
+JOIN charity_model_bindings b ON b.charity_model_id=cm.id AND b.id=?
+JOIN charity_binding_targets t ON t.binding_id=b.id AND t.id=? AND t.revision=? AND t.donation_key_id=dk.id
+ AND t.upstream_model_id=? AND (t.native_service_mask & ?)<>0
+LEFT JOIN donation_service_health h ON h.use_id=? AND h.endpoint_key_id=k.id AND h.native_service_bit=? AND h.credential_version_id=?
 WHERE cr.logical_request_id=? AND cr.user_id=? AND lr.user_id=? AND e.id=? AND k.id=?
-  AND `+charityscope.SupportSQL("dk.id", "b.endpoint_key_id", "b.upstream_model_id")+`
-LIMIT 1`, input.DonationKeyID, input.UpstreamModelID, input.UpstreamModelID,
+AND d.status IN ('pending','approved') AND d.terminal_at IS NULL
+LIMIT 1`, input.DonationKeyID, a.BindingID, a.TargetID, a.TargetRevision, input.UpstreamModelID, serviceSet.Mask(),
+		a.UseID, serviceSet.Mask(), a.CredentialVersionID,
 		input.RequestID, input.ActorUserID, input.ActorUserID,
 		input.EndpointID, input.EndpointKeyID).Scan(
 		&row.donationID, &row.status, &row.expiresAt, &row.receiverUserID, &row.donationKeyID,
@@ -454,6 +487,9 @@ LIMIT 1`, input.DonationKeyID, input.UpstreamModelID, input.UpstreamModelID,
 	if err := requireDonationCallerTx(ctx, tx, input.ActorUserID, row.receiverUserID, input.ClaimedAt); err != nil {
 		return keyReservation{}, err
 	}
+	// The nonterminal header is retained above; this approval comes only from
+	// the exact current approved use and immutable grant validated earlier.
+	row.approvedUse = true
 	return row, nil
 }
 
@@ -554,6 +590,9 @@ SET state='released',finalized_at=?,streak_disposition='neutral',failure_origin=
 		return err
 	}
 	if row.keyID != nil {
+		if err := foldServiceStreak(ctx, tx, input.ClaimID, input.ReleasedAt); err != nil {
+			return err
+		}
 		return foldStreak(ctx, tx, *row.keyID, row.generation, input.ReleasedAt)
 	}
 	return nil
@@ -689,50 +728,52 @@ WHERE u.claim_id=? AND c.logical_request_id=?`, input.ClaimID, input.RequestID).
 		return claim.CharityActual{}, nil
 	}
 
-	usage := credits.TokenUsage{
-		UncachedInput: input.Usage.UncachedInputTokens, CacheWriteInput: input.Usage.CacheWriteInputTokens,
-		CacheReadInput: input.Usage.CacheReadInputTokens, Output: input.Usage.OutputTokens,
-	}
 	policy, err := credits.DecodeContextPricing(contextPricing)
 	if err != nil {
 		return claim.CharityActual{}, claim.ErrInvariant
 	}
+	usage := tokenUsage(input.Usage)
 	prices := credits.TokenPrices{UncachedInput: uncachedUser, CacheWriteInput: writeUser, CacheReadInput: readUser, Output: outputUser}
+	rewards := credits.TokenPrices{UncachedInput: uncachedReward, CacheWriteInput: writeReward, CacheReadInput: readReward, Output: outputReward}
 	if input.Usage.Present {
 		requestUser, prices = policy.SelectPrices(usage, requestUser, prices)
+		requestReward, rewards = policy.SelectRewards(usage, requestReward, rewards)
 	}
-	if mode == "per_request" {
-		reward := requestReward
-		if input.SuppressReward || input.UsageUnknown {
-			reward = 0
-		}
-		return claim.CharityActual{PriceMilli: requestUser, RewardMilli: reward}, nil
-	}
-	if mode != "per_token" {
+	known := input.Usage.Present
+	switch mode {
+	case "per_request":
+		// Per-request charges remain fixed even without token usage.
+	case "per_token":
+	case "per_search_unit":
+		known = input.Usage.SearchUnitsPresent
+	default:
 		return claim.CharityActual{}, claim.ErrInvariant
 	}
-	if input.UsageUnknown || !input.Usage.Present {
-		var reserve int64
-		if err := tx.QueryRowContext(ctx, `SELECT cr.token_reserve_milli
-FROM charity_reservations cr WHERE cr.logical_request_id=?`, input.RequestID).Scan(&reserve); err != nil {
-			return claim.CharityActual{}, fmt.Errorf("charity: read conservative token charge: %w", err)
+	price, _, err := priceUsage(mode, input.Usage, requestUser, prices, policy.SelectModalityPricing(usage, false))
+	if err != nil {
+		return claim.CharityActual{}, err
+	}
+	if mode != "per_request" && !known {
+		if err := tx.QueryRowContext(ctx, `SELECT token_reserve_milli
+FROM charity_reservations WHERE logical_request_id=?`, input.RequestID).Scan(&price); err != nil {
+			return claim.CharityActual{}, fmt.Errorf("charity: read conservative usage charge: %w", err)
 		}
-		return claim.CharityActual{PriceMilli: reserve, RewardMilli: 0}, nil
 	}
-	price, err := credits.PriceTokenUsage(usage, prices)
-	if err != nil || !validMoney(price) {
-		return claim.CharityActual{}, claim.ErrInvariant
+	reward, decision, err := priceUsage(mode, input.Usage, requestReward, rewards, policy.SelectModalityPricing(usage, true))
+	if err != nil && !input.SuppressReward && known {
+		return claim.CharityActual{}, err
 	}
-	reward := int64(0)
-	if !input.SuppressReward {
-		reward, err = credits.PriceTokenUsage(usage, credits.TokenPrices{
-			UncachedInput: uncachedReward, CacheWriteInput: writeReward, CacheReadInput: readReward, Output: outputReward,
-		})
-		if err != nil || !validMoney(reward) {
+	if input.SuppressReward || !known {
+		reward = 0
+	}
+	actual := claim.CharityActual{PriceMilli: price, RewardMilli: reward}
+	if recordsPricing(mode, policy, true) {
+		actual.PricingDetails, err = usageinfo.EncodePricing(decision)
+		if err != nil {
 			return claim.CharityActual{}, claim.ErrInvariant
 		}
 	}
-	return claim.CharityActual{PriceMilli: price, RewardMilli: reward}, nil
+	return actual, nil
 }
 
 func (s *Service) CompleteAttempt(ctx context.Context, tx *sql.Tx, completion claim.CharityAttemptCompletion) error {
@@ -740,6 +781,14 @@ func (s *Service) CompleteAttempt(ctx context.Context, tx *sql.Tx, completion cl
 	input := completion.Attempt
 	if s == nil || ctx == nil || tx == nil || !validAttemptInput(input) ||
 		!validMoney(completion.Actual.PriceMilli) || !validMoney(completion.Actual.RewardMilli) {
+		return claim.ErrInvalidInput
+	}
+	pricing, err := usageinfo.DecodePricing(completion.Actual.PricingDetails)
+	if err != nil {
+		return claim.ErrInvalidInput
+	}
+	pricingDetails, err := usageinfo.EncodePricing(pricing)
+	if err != nil {
 		return claim.ErrInvalidInput
 	}
 	if !validRewardState(completion.RewardState, input, completion.Actual) {
@@ -753,7 +802,7 @@ func (s *Service) CompleteAttempt(ctx context.Context, tx *sql.Tx, completion cl
 		}
 		return verifyCompletedAttempt(ctx, tx, completion)
 	}
-	if want != completion.Actual {
+	if !equalActual(want, completion.Actual) {
 		return claim.ErrConflict
 	}
 
@@ -796,9 +845,9 @@ func (s *Service) CompleteAttempt(ctx context.Context, tx *sql.Tx, completion cl
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE donation_usage_reservations SET
 price_actual_milli=?,reward_actual_milli=?,calls_actual=?,tokens_actual=?,protocol_success=?,usage_unknown=?,input_tokens_actual=?,output_tokens_actual=?,
-state='committed',finalized_at=?,streak_disposition=?,failure_origin=? WHERE claim_id=? AND state='reserved'`,
+state='committed',finalized_at=?,streak_disposition=?,failure_origin=?,pricing_details=? WHERE claim_id=? AND state='reserved'`,
 		completion.Actual.PriceMilli, completion.Actual.RewardMilli, callsActual, tokensActual,
-		boolInt(input.ProtocolSuccess), boolInt(input.UsageUnknown), tokenActual.Input, tokenActual.Output, input.CompletedAt, input.StreakDisposition, input.FailureOrigin, input.ClaimID)
+		boolInt(input.ProtocolSuccess), boolInt(input.UsageUnknown), tokenActual.Input, tokenActual.Output, input.CompletedAt, input.StreakDisposition, input.FailureOrigin, pricingDetails, input.ClaimID)
 	if err != nil {
 		return fmt.Errorf("charity: commit attempt usage: %w", err)
 	}
@@ -813,6 +862,9 @@ state='committed',finalized_at=?,streak_disposition=?,failure_origin=? WHERE cla
 			return err
 		}
 	}
+	if err := foldServiceStreak(ctx, tx, input.ClaimID, input.CompletedAt); err != nil {
+		return err
+	}
 	return foldStreak(ctx, tx, *row.keyID, row.generation, input.CompletedAt)
 }
 
@@ -822,16 +874,16 @@ func verifyCompletedAttempt(ctx context.Context, tx *sql.Tx, completion claim.Ch
 		return err
 	}
 	expected, countErr := actualTokenVector(completion.Attempt, reservation.tokenVector())
-	var state string
+	var state, pricingDetails string
 	var disposition connectorcontract.StreakDisposition
 	var origin connectorcontract.FailureOrigin
 	var price, reward, calls, tokens sql.NullInt64
 	var success, unknown sql.NullInt64
 	var input, output *int64
 	err = tx.QueryRowContext(ctx, `SELECT state,price_actual_milli,reward_actual_milli,calls_actual,tokens_actual,
-protocol_success,usage_unknown,input_tokens_actual,output_tokens_actual,streak_disposition,failure_origin
+protocol_success,usage_unknown,input_tokens_actual,output_tokens_actual,streak_disposition,failure_origin,pricing_details
 FROM donation_usage_reservations WHERE claim_id=?`, completion.Attempt.ClaimID).Scan(
-		&state, &price, &reward, &calls, &tokens, &success, &unknown, &input, &output, &disposition, &origin)
+		&state, &price, &reward, &calls, &tokens, &success, &unknown, &input, &output, &disposition, &origin, &pricingDetails)
 	if errors.Is(err, sql.ErrNoRows) {
 		return claim.ErrNotFound
 	}
@@ -843,7 +895,7 @@ FROM donation_usage_reservations WHERE claim_id=?`, completion.Attempt.ClaimID).
 		callCount = 1
 	}
 	if countErr == nil && state == "committed" && price.Valid && reward.Valid && calls.Valid && tokens.Valid && success.Valid && unknown.Valid &&
-		price.Int64 == completion.Actual.PriceMilli && reward.Int64 == completion.Actual.RewardMilli &&
+		equalActual(claim.CharityActual{PriceMilli: price.Int64, RewardMilli: reward.Int64, PricingDetails: pricingDetails}, completion.Actual) &&
 		calls.Int64 == callCount && tokens.Int64 == expected.Total && equalTokenValue(input, expected.Input) && equalTokenValue(output, expected.Output) &&
 		success.Int64 == int64(boolInt(completion.Attempt.ProtocolSuccess)) &&
 		unknown.Int64 == int64(boolInt(completion.Attempt.UsageUnknown)) && disposition == completion.Attempt.StreakDisposition && origin == completion.Attempt.FailureOrigin {
@@ -951,9 +1003,13 @@ func updateRequestAttemptAggregate(ctx context.Context, tx *sql.Tx, input claim.
 	var totalBlob []byte
 	var u0, u1, u2, u3 int64
 	var unknown int
+	var details string
+	var priorResponse bool
 	if err := tx.QueryRowContext(ctx, `SELECT donor_reward_total_mag,usage_uncached_input_tokens,
-cache_write_input_tokens,cache_read_input_tokens,usage_output_tokens,usage_unknown
-FROM charity_reservations WHERE logical_request_id=?`, input.RequestID).Scan(&totalBlob, &u0, &u1, &u2, &u3, &unknown); err != nil {
+cache_write_input_tokens,cache_read_input_tokens,usage_output_tokens,usage_unknown,usage_details,
+EXISTS(SELECT 1 FROM donation_usage_reservations u JOIN dispatch_claims c ON c.id=u.claim_id
+WHERE c.logical_request_id=cr.logical_request_id AND u.state='committed' AND u.calls_actual=1 AND u.claim_id<>?)
+FROM charity_reservations cr WHERE logical_request_id=?`, input.ClaimID, input.RequestID).Scan(&totalBlob, &u0, &u1, &u2, &u3, &unknown, &details, &priorResponse); err != nil {
 		return fmt.Errorf("charity: read request usage aggregate: %w", err)
 	}
 	total, err := decodeU128(totalBlob)
@@ -968,26 +1024,28 @@ FROM charity_reservations WHERE logical_request_id=?`, input.RequestID).Scan(&to
 	if err != nil {
 		return err
 	}
-	values := []int64{input.Usage.UncachedInputTokens, input.Usage.CacheWriteInputTokens,
-		input.Usage.CacheReadInputTokens, input.Usage.OutputTokens}
-	stored := []*int64{&u0, &u1, &u2, &u3}
-	if input.ResponseStarted && input.Usage.Present {
-		for index, value := range values {
-			if value < 0 || *stored[index] > math.MaxInt64-value {
-				return claim.ErrInvariant
-			}
-			*stored[index] += value
+	if input.ResponseStarted {
+		previous, err := usageinfo.Apply(connectorcontract.Usage{Present: unknown == 0,
+			UncachedInputTokens: u0, CacheWriteInputTokens: u1, CacheReadInputTokens: u2, OutputTokens: u3}, details)
+		if err != nil {
+			return claim.ErrInvariant
 		}
-	}
-	if input.ResponseStarted && input.UsageUnknown {
-		unknown = 1
+		if !priorResponse && unknown == 0 && u0 == 0 && u1 == 0 && u2 == 0 && u3 == 0 && details == "{}" {
+			previous = usageinfo.Zero()
+		}
+		combined, err := usageinfo.AddUsage(previous, input.Usage)
+		if err != nil && !errors.Is(err, usageinfo.ErrOverflow) {
+			return claim.ErrInvariant
+		}
+		u0, u1, u2, u3 = combined.UncachedInputTokens, combined.CacheWriteInputTokens, combined.CacheReadInputTokens, combined.OutputTokens
+		unknown, details = boolInt(!combined.Present), usageinfo.Encode(combined)
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE charity_reservations SET
 state='dispatched',dispatched_at=COALESCE(dispatched_at,(SELECT dispatched_at FROM dispatch_claims WHERE id=?)),
 donor_reward_total_mag=?,usage_uncached_input_tokens=?,cache_write_input_tokens=?,
-cache_read_input_tokens=?,usage_output_tokens=?,usage_unknown=?,updated_at=?
+cache_read_input_tokens=?,usage_output_tokens=?,usage_unknown=?,usage_details=?,updated_at=?
 WHERE logical_request_id=? AND state IN ('reserved','dispatched') AND donor_reward_total_mag=?`,
-		input.ClaimID, db.EncodeU128(total), u0, u1, u2, u3, unknown, at, input.RequestID, totalBlob)
+		input.ClaimID, db.EncodeU128(total), u0, u1, u2, u3, unknown, details, at, input.RequestID, totalBlob)
 	if err != nil {
 		return fmt.Errorf("charity: aggregate request usage: %w", err)
 	}
@@ -1029,42 +1087,24 @@ FROM donation_keys WHERE id=?`, keyID).Scan(&currentGenerationBlob, &nextFoldBlo
 		var state string
 		var success sql.NullInt64
 		var disposition, origin sql.NullString
-		err := tx.QueryRowContext(ctx, `SELECT state,protocol_success,streak_disposition,failure_origin FROM donation_usage_reservations
+		var serviceEvent bool
+		err := tx.QueryRowContext(ctx, `SELECT state,protocol_success,streak_disposition,failure_origin,
+EXISTS(SELECT 1 FROM dispatch_service_health h WHERE h.claim_id=donation_usage_reservations.claim_id) FROM donation_usage_reservations
 WHERE donation_key_id=? AND streak_generation=? AND claim_seq=?`,
-			keyID, db.EncodeU128(generation), db.EncodeU128(next)).Scan(&state, &success, &disposition, &origin)
+			keyID, db.EncodeU128(generation), db.EncodeU128(next)).Scan(&state, &success, &disposition, &origin, &serviceEvent)
 		if errors.Is(err, sql.ErrNoRows) || state == "reserved" {
 			break
 		}
 		if err != nil {
 			return fmt.Errorf("charity: read streak result: %w", err)
 		}
-		if !disposition.Valid || !origin.Valid || !connectorcontract.ValidOutcome(connectorcontract.StreakDisposition(disposition.String), connectorcontract.FailureOrigin(origin.String)) {
-			return claim.ErrInvariant
+		var justDisabled bool
+		streak, failureDisabled, justDisabled, err = foldFailureOutcome(streak, failureDisabled, threshold, state, success, disposition, origin, !serviceEvent)
+		if err != nil {
+			return err
 		}
-		if state != "committed" && state != "released" {
-			return claim.ErrInvariant
-		}
-		if disposition.String == "success" || disposition.String == "upstream_failure" {
-			if state != "committed" || !success.Valid {
-				return claim.ErrInvariant
-			}
-			if disposition.String == "success" {
-				streak = db.U128{}
-			} else {
-				if success.Int64 != 0 {
-					return claim.ErrInvariant
-				}
-				streak, err = addU128(streak, big.NewInt(1))
-				if err != nil {
-					return err
-				}
-				if failureDisabled == 0 && threshold != (db.U128{}) && streak.Big().Cmp(threshold.Big()) >= 0 {
-					failureDisabled = 1
-					disabledNow = true
-					disablingStreak = streak
-					disablingFold = next
-				}
-			}
+		if justDisabled {
+			disabledNow, disablingStreak, disablingFold = true, streak, next
 		}
 		next, err = addU128(next, big.NewInt(1))
 		if err != nil {
@@ -1157,17 +1197,20 @@ WHERE c.logical_request_id=? AND u.state='reserved'`, input.RequestID).Scan(&non
 		return claim.ErrConflict
 	}
 
-	original, userCharge, _, err := calculateRequestChargeTx(ctx, tx, input.RequestID, input.Disposition)
+	charge, err := calculateRequestPricingTx(ctx, tx, input.RequestID, input.Disposition)
 	if err != nil {
 		return err
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE charity_reservations SET state=?,original_charge_milli=?,
 user_charge_milli=?,finalized_at=?,updated_at=? WHERE logical_request_id=? AND state=?`,
-		wantState, original, userCharge, input.CompletedAt, input.CompletedAt, input.RequestID, state)
+		wantState, charge.original, charge.charge, input.CompletedAt, input.CompletedAt, input.RequestID, state)
 	if err != nil {
 		return fmt.Errorf("charity: finalize request reservation: %w", err)
 	}
 	if err := requireOne(result); err != nil {
+		return err
+	}
+	if err := persistCallerPricing(ctx, tx, input.RequestID, charge.pricing); err != nil {
 		return err
 	}
 	if err := sessionheader.Finish(ctx, tx, input.RequestID, input.CompletedAt); err != nil {
@@ -1209,75 +1252,6 @@ func (s *Service) CalculateRequestCharge(ctx context.Context, requestID string, 
 		return 0, err
 	}
 	return charge, nil
-}
-
-func calculateRequestChargeTx(ctx context.Context, tx *sql.Tx, requestID string, disposition claim.AccountingDisposition) (int64, int64, int64, error) {
-	if disposition == claim.AccountingRelease {
-		return 0, 0, 0, nil
-	}
-	var started bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donation_usage_reservations u
-JOIN dispatch_claims c ON c.id=u.claim_id
-WHERE c.logical_request_id=? AND u.state='committed' AND u.calls_actual=1)`, requestID).Scan(&started); err != nil {
-		return 0, 0, 0, fmt.Errorf("charity: read successful response evidence: %w", err)
-	}
-	if !started {
-		return 0, 0, 0, nil
-	}
-	var mode, contextPricing string
-	var discount int
-	var requestPrice, reserved int64
-	var p0, p1, p2, p3, u0, u1, u2, u3 int64
-	var unknown int
-	err := tx.QueryRowContext(ctx, `SELECT pricing_mode,discount_percent,request_user_price_milli,user_reserved_milli,
-uncached_user_price_milli,cache_write_user_price_milli,cache_read_user_price_milli,output_user_price_milli,
-usage_uncached_input_tokens,cache_write_input_tokens,cache_read_input_tokens,usage_output_tokens,usage_unknown,context_pricing
-FROM charity_reservations WHERE logical_request_id=?`, requestID).Scan(
-		&mode, &discount, &requestPrice, &reserved, &p0, &p1, &p2, &p3, &u0, &u1, &u2, &u3, &unknown, &contextPricing)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, 0, 0, claim.ErrNotFound
-	}
-	if err != nil {
-		return 0, 0, 0, fmt.Errorf("charity: calculate request charge: %w", err)
-	}
-	policy, err := credits.DecodeContextPricing(contextPricing)
-	if err != nil {
-		return 0, 0, 0, claim.ErrInvariant
-	}
-	usage := credits.TokenUsage{UncachedInput: u0, CacheWriteInput: u1, CacheReadInput: u2, Output: u3}
-	requestPrice, prices := policy.SelectPrices(usage, requestPrice,
-		credits.TokenPrices{UncachedInput: p0, CacheWriteInput: p1, CacheReadInput: p2, Output: p3})
-	original := requestPrice
-	if mode == "per_token" {
-		original, err = credits.PriceTokenUsage(usage, prices)
-		if err != nil {
-			return 0, 0, 0, claim.ErrInvariant
-		}
-		if unknown == 1 && original < reserved {
-			original = reserved
-		}
-	} else if mode != "per_request" {
-		return 0, 0, 0, claim.ErrInvariant
-	}
-	charge, err := credits.ApplyDiscountPercent(original, discount)
-	if err != nil {
-		return 0, 0, 0, claim.ErrInvariant
-	}
-	if unknown == 1 && charge > reserved {
-		charge = reserved
-	}
-	// The fine is applied once, after the discount and any conservative cap.
-	// It never contributes to donor rewards or donation-key usage.
-	fine := policy.Fine(usage)
-	original, err = credits.Add(original, fine)
-	if err != nil {
-		return 0, 0, 0, claim.ErrInvariant
-	}
-	charge, err = credits.Add(charge, fine)
-	if err != nil {
-		return 0, 0, 0, claim.ErrInvariant
-	}
-	return original, charge, fine, nil
 }
 
 func recordModelOutcome(ctx context.Context, tx *sql.Tx, requestID string, success bool, at int64) error {
@@ -1354,6 +1328,7 @@ func (s *Service) Cleanup(ctx context.Context, decisionNow int64, limit int) (in
 }
 
 func normalizeAttemptInput(input claim.CharityAttemptInput) claim.CharityAttemptInput {
+	input.Usage = usageinfo.Normalize(input.Usage)
 	if input.StreakDisposition == "" && input.FailureOrigin == "" {
 		input.StreakDisposition = connectorcontract.StreakNeutral
 		input.FailureOrigin = connectorcontract.OriginPlatform
@@ -1381,7 +1356,8 @@ func validAttemptInput(input claim.CharityAttemptInput) bool {
 		input.Usage.CacheReadInputTokens < 0 || input.Usage.OutputTokens < 0 {
 		return false
 	}
-	return true
+	return input.Usage.Present || input.Usage.UncachedInputTokens == 0 && input.Usage.CacheWriteInputTokens == 0 &&
+		input.Usage.CacheReadInputTokens == 0 && input.Usage.OutputTokens == 0
 }
 
 func validRewardState(state claim.RewardState, input claim.CharityAttemptInput, actual claim.CharityActual) bool {

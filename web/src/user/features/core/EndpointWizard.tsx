@@ -1,3 +1,4 @@
+import { supportsChatStoragePolicy } from '@shared/operations/connectorPolicy';
 import { EndpointTransportNotice } from '@shared/components/EndpointTransportNotice';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { useOperation } from '@shared/operations/useOperation';
@@ -248,7 +249,7 @@ export function EndpointWizard({
         note: keyNote,
         enabled: true,
         ownership_confirmed: true,
-        force_store_false: endpoint.connector_type === 'openai-compatible' && forceStoreFalse,
+        force_store_false: supportsChatStoragePolicy(endpoint.connector_type) && forceStoreFalse,
         max_concurrency: Number(maxConcurrency),
         max_rpm: Number(maxRPM),
       },
@@ -615,7 +616,7 @@ export function EndpointWizard({
             />
             <span>{t('endpoints.ownership')}</span>
           </label>
-          {endpoint.connector_type === 'openai-compatible' ? (
+          {supportsChatStoragePolicy(endpoint.connector_type) ? (
             <label className="core-checkbox">
               <input
                 type="checkbox"

@@ -187,10 +187,10 @@ export function ChannelBindingPresets({
                         mobileLabel: t('common.bindingPresets.channel'),
                         cell: 'title',
                         render: (row) => (
-                          <>
+                          <span className="nb-stack nb-stack--sm">
                             <strong>{row.name}</strong>
                             <small className="nb-workflow-id mono">{row.base_url}</small>
-                          </>
+                          </span>
                         ),
                       },
                       {

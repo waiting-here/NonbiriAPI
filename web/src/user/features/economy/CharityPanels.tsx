@@ -1,4 +1,6 @@
-import { contextPriceProps } from './contextPrices';
+import { OwnerUseAddition } from './OwnerUseAddition';
+import { DonationShareFields, type DonationShare } from './DonationShareFields';
+import { contextPriceProps, contextRows } from './contextPrices';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -161,6 +163,7 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
               <option value="">{t('user.charity.allPricing')}</option>
               <option value="per_request">{t('user.charity.requestPrice')}</option>
               <option value="per_token">{t('user.charity.tokenPricing')}</option>
+              <option value="per_search_unit">{t('common.modalityPricing.perSearchUnit')}</option>
             </select>
           </label>
           <span className="muted">
@@ -172,37 +175,7 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
       {available ? (
         <ul className="economy-model-list" aria-label={t('user.charity.availableModels')}>
           {models.map((model) => {
-            const rows: CharityPriceRow[] =
-              model.pricing.mode === 'per_request'
-                ? [
-                    {
-                      label: t('user.charity.requestPrice'),
-                      userMilli: model.pricing.userPriceMilli,
-                      currentUserMilli: model.pricing.currentUserPriceMilli,
-                    },
-                  ]
-                : [
-                    {
-                      label: t('user.charity.uncachedInputPrice'),
-                      userMilli: model.pricing.userPricesMilli.uncachedInput,
-                      currentUserMilli: model.pricing.currentUserPricesMilli.uncachedInput,
-                    },
-                    {
-                      label: t('user.charity.cacheWriteInputPrice'),
-                      userMilli: model.pricing.userPricesMilli.cacheWriteInput,
-                      currentUserMilli: model.pricing.currentUserPricesMilli.cacheWriteInput,
-                    },
-                    {
-                      label: t('user.charity.cacheReadInputPrice'),
-                      userMilli: model.pricing.userPricesMilli.cacheReadInput,
-                      currentUserMilli: model.pricing.currentUserPricesMilli.cacheReadInput,
-                    },
-                    {
-                      label: t('user.charity.outputPrice'),
-                      userMilli: model.pricing.userPricesMilli.output,
-                      currentUserMilli: model.pricing.currentUserPricesMilli.output,
-                    },
-                  ];
+            const rows: CharityPriceRow[] = contextRows(model.pricing, t);
             return (
               <li key={model.id}>
                 <div className="economy-model-heading">
@@ -288,6 +261,7 @@ export function DonationComposer({
   const [pickerOpen, setPickerOpen] = useState(false);
   const controlCopy = charityControlCopy(useTranslation().i18n.language);
   const [selectedChoices, setSelectedChoices] = useState<readonly EndpointKeyChoice[]>([]);
+  const [shares, setShares] = useState<Record<string, DonationShare>>({});
   const [expiryByKey, setExpiryByKey] = useState<Record<string, TimeDraft>>({});
   const [thresholdByKey, setThresholdByKey] = useState<Record<string, string>>({});
   const [readBlocked, setReadBlocked] = useState(true);
@@ -305,7 +279,15 @@ export function DonationComposer({
   const invalidSelection =
     selectedChoices.length === 0 ||
     selectedChoices.length > 100 ||
-    selectedChoices.some((choice) => choice.eligibility !== 'eligible') ||
+    selectedChoices.some(
+      (choice) =>
+        choice.eligibility !== 'eligible' ||
+        choice.snapshotStale ||
+        !shares[choice.key.id]?.services.length ||
+        !choice.key.credentialId ||
+        !choice.key.credentialVersion ||
+        !choice.key.grantRevision,
+    ) ||
     new Set(selectedChoices.map((choice) => choice.key.id)).size !== selectedChoices.length;
   const invalidExpiry = selectedChoices.some(
     (choice) =>
@@ -361,6 +343,16 @@ export function DonationComposer({
         ? undefined
         : {
             endpointKeyId: choice.key.id,
+            nativeServices: shares[choice.key.id]!.services,
+            credentialId: choice.key.credentialId,
+            credentialVersion: choice.key.credentialVersion,
+            grantRevision: choice.key.grantRevision,
+            ...(shares[choice.key.id]!.sourceId
+              ? {
+                  discoverySourceId: shares[choice.key.id]!.sourceId,
+                  discoverySourceRevision: shares[choice.key.id]!.sourceRevision,
+                }
+              : {}),
             expiresAt,
             failureDisableThreshold,
           };
@@ -477,12 +469,30 @@ export function DonationComposer({
           <DonationResourcePicker
             accountId={draftNamespace}
             selected={selectedChoices}
-            onChange={setSelectedChoices}
+            onChange={(choices) => {
+              setSelectedChoices(choices);
+              setShares((previous) =>
+                Object.fromEntries(
+                  Object.entries(previous).filter(([id]) =>
+                    choices.some((choice) => choice.key.id === id),
+                  ),
+                ),
+              );
+            }}
             disabled={locked}
             enabled={enabled}
             onReadStateChange={setReadBlocked}
             renderSelected={(choice) => (
               <div className="economy-key-expiry">
+                <DonationShareFields
+                  accountId={draftNamespace}
+                  choice={choice}
+                  value={shares[choice.key.id] ?? { services: [] }}
+                  disabled={locked}
+                  onChange={(value) =>
+                    setShares((current) => ({ ...current, [choice.key.id]: value }))
+                  }
+                />
                 <span>{t('user.charity.keyExpiry')}</span>
                 <TimeInput
                   station="user"
@@ -720,6 +730,23 @@ export function DonationKeyPanel({
   const blockingReasons = keyBlockingReasons(donationKey);
   return (
     <article className="economy-donation-key">
+      {accountID &&
+      donationId &&
+      donationRevision &&
+      donationKey.endpointId !== undefined &&
+      (donationStatus === 'pending' || donationStatus === 'approved') &&
+      donationKey.endedReason === null &&
+      donationKey.charityState !== 'ended' &&
+      donationKey.charityState !== 'expired' ? (
+        <Fold lazy title={t('common.connections.addServices')}>
+          <OwnerUseAddition
+            accountId={accountID}
+            donationId={donationId}
+            donationRevision={donationRevision}
+            donationKey={donationKey}
+          />
+        </Fold>
+      ) : null}
       <div className="item-header">
         <div>
           {donationId ? (

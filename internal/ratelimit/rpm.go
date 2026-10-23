@@ -16,27 +16,30 @@ const (
 	DefaultRPMGlobalLimit = 600
 	// DefaultRPMPerUserLimit is the finite per-user default exposed by
 	// DefaultRPMConfig.
-	DefaultRPMPerUserLimit = 60
+	DefaultRPMPerUserLimit      = 60
+	DefaultRPMLightPerUserLimit = 30
 )
 
 // RPMLimits contains the site-wide, per-user and charity-only per-user caps.
 type RPMLimits struct {
-	GlobalLimit         int
-	PerUserLimit        int
-	CharityPerUserLimit int
+	GlobalLimit              int
+	PerUserLimit             int
+	CharityPerUserLimit      int
+	LightCharityPerUserLimit int
 }
 
 // RPMConfig configures a process-local global and per-user sliding window.
 // GlobalLimit includes active reservations and committed records. A new
 // reservation is rejected when either cap is already reached.
 type RPMConfig struct {
-	Window              time.Duration
-	GlobalLimit         int
-	PerUserLimit        int
-	CharityPerUserLimit int
-	MaxUserKeys         int
-	MaxEvents           int
-	MaxKeyBytes         int
+	Window                   time.Duration
+	GlobalLimit              int
+	PerUserLimit             int
+	CharityPerUserLimit      int
+	LightCharityPerUserLimit int
+	MaxUserKeys              int
+	MaxEvents                int
+	MaxKeyBytes              int
 }
 
 // DefaultRPMConfig returns finite defaults suitable for an explicitly shared
@@ -74,19 +77,19 @@ func (c RPMConfig) normalized() (RPMConfig, error) {
 		return RPMConfig{}, err
 	}
 	if c.GlobalLimit < 1 || c.GlobalLimit > c.MaxEvents ||
-		c.PerUserLimit < 1 || c.PerUserLimit > c.MaxEvents || c.CharityPerUserLimit < 0 || c.CharityPerUserLimit > c.MaxEvents {
+		c.PerUserLimit < 1 || c.PerUserLimit > c.MaxEvents || c.CharityPerUserLimit < 0 || c.CharityPerUserLimit > c.MaxEvents || c.LightCharityPerUserLimit < 0 || c.LightCharityPerUserLimit > c.MaxEvents {
 		return RPMConfig{}, ErrInvalidConfig
 	}
 	return c, nil
 }
 
 func (c RPMConfig) limits() RPMLimits {
-	return RPMLimits{GlobalLimit: c.GlobalLimit, PerUserLimit: c.PerUserLimit, CharityPerUserLimit: c.CharityPerUserLimit}
+	return RPMLimits{GlobalLimit: c.GlobalLimit, PerUserLimit: c.PerUserLimit, CharityPerUserLimit: c.CharityPerUserLimit, LightCharityPerUserLimit: c.LightCharityPerUserLimit}
 }
 
 func validateRPMLimits(limits RPMLimits, maxEvents int) error {
 	if limits.GlobalLimit < 1 || limits.GlobalLimit > maxEvents ||
-		limits.PerUserLimit < 1 || limits.PerUserLimit > maxEvents || limits.CharityPerUserLimit < 0 || limits.CharityPerUserLimit > maxEvents {
+		limits.PerUserLimit < 1 || limits.PerUserLimit > maxEvents || limits.CharityPerUserLimit < 0 || limits.CharityPerUserLimit > maxEvents || limits.LightCharityPerUserLimit < 0 || limits.LightCharityPerUserLimit > maxEvents {
 		return ErrInvalidConfig
 	}
 	return nil
@@ -115,6 +118,7 @@ type RPMDecision struct {
 	UserLimit                  int
 	RetryAfter                 time.Duration
 	CharityCount, CharityLimit int
+	Light                      bool
 }
 
 type rpmEventState uint32
@@ -134,6 +138,7 @@ type rpmEvent struct {
 	observer RPMObserver
 	decision RPMDecision
 	charity  bool
+	light    bool
 }
 
 // RPM is a thread-safe, bounded sliding-window limiter. One instance must be
@@ -149,6 +154,7 @@ type RPM struct {
 	maxKeyBytes int
 
 	global     []*rpmEvent
+	globalPeak int
 	users      map[string][]*rpmEvent
 	closed     bool
 	eventCount int
@@ -183,6 +189,23 @@ func (r *RPM) Limits() RPMLimits {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.limits
+}
+
+// SampleGlobal reads the same sliding window used for admission. It creates
+// no event. The peak includes short bursts between calls; this method has one
+// sampling consumer, which resets the interval peak to the current value.
+func (r *RPM) SampleGlobal() (current, peak, limit int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := r.clock.Now()
+	for _, event := range r.global {
+		if event != nil && event.expires.After(now) && event.state.Load() != uint32(rpmEventReleased) {
+			current++
+		}
+	}
+	peak = max(r.globalPeak, current)
+	r.globalPeak = current
+	return current, peak, r.limits.GlobalLimit
 }
 
 // SetLimits changes the caps without replacing shared counters. Existing
@@ -391,10 +414,10 @@ func (r *RPM) reserve(ctx context.Context, userKey string, userLimit int) (*RPMR
 }
 
 func (r *RPM) reserveObserved(ctx context.Context, userKey string, userLimit int, observer RPMObserver) (*RPMReservation, RPMDecision, error) {
-	return r.reserveModelObserved(ctx, userKey, userLimit, false, 0, observer)
+	return r.reserveModelObserved(ctx, userKey, userLimit, false, false, 0, observer)
 }
 
-func (r *RPM) reserveModelObserved(ctx context.Context, userKey string, userLimit int, charity bool, charityLimit int, observer RPMObserver) (*RPMReservation, RPMDecision, error) {
+func (r *RPM) reserveModelObserved(ctx context.Context, userKey string, userLimit int, charity, light bool, charityLimit int, observer RPMObserver) (*RPMReservation, RPMDecision, error) {
 	if r == nil {
 		return nil, RPMDecision{}, ErrClosed
 	}
@@ -431,8 +454,9 @@ func (r *RPM) reserveModelObserved(ctx context.Context, userKey string, userLimi
 		userLimit = r.limits.PerUserLimit
 	}
 	decision := r.decisionLocked(userKey, userLimit, now)
+	decision.Light = light
 	if charity {
-		decision = r.charityDecisionLocked(userKey, charityLimit, now, decision)
+		decision = r.charityDecisionLocked(userKey, charityLimit, light, now, decision)
 	}
 	if !decision.Allowed {
 		r.observeLocked(observer, "denied", now, now, decision)
@@ -445,7 +469,7 @@ func (r *RPM) reserveModelObserved(ctx context.Context, userKey string, userLimi
 		return nil, decision, ErrCapacity
 	}
 	event := r.newEventLocked(userKey, now, rpmEventActive)
-	event.charity = charity
+	event.charity, event.light = charity, light
 	if charity {
 		decision.CharityCount++
 	}
@@ -486,6 +510,7 @@ func (r *RPM) newEventLocked(userKey string, now time.Time, state rpmEventState)
 	event := &rpmEvent{id: rand.Text(), at: now, expires: now.Add(r.window), user: userKey}
 	event.state.Store(uint32(state))
 	r.global = append(r.global, event)
+	r.globalPeak = max(r.globalPeak, len(r.global))
 	r.users[userKey] = append(r.users[userKey], event)
 	r.eventCount++
 	return event

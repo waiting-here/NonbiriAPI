@@ -1,9 +1,8 @@
 import { blinkAt, PaintCadence, eyelidProfileWidth } from '@shared/animation/illustration';
 import { highResolutionArt } from './art-resolution';
-import { mirrorSea } from './mirror-sea-config';
 import { mirrorSeaEyelids } from './mirror-sea-eyelids';
 import { mirrorSeaShader } from './mirror-sea-shader';
-import { portraitView } from './portrait';
+import { mirrorSeaLayout } from './mirror-sea-layout';
 
 type Options = {
   polished?: boolean;
@@ -14,10 +13,15 @@ type Options = {
   dark?: boolean;
   highResolution?: boolean;
   characterOnly?: boolean;
+  characterPlate?: boolean;
+  appearanceLayer?: 'reflection' | 'light';
   backgroundOnly?: boolean;
+  variant?: 'card' | 'cover' | 'illustration' | 'appearance';
   frozenTime?: number;
   paused?: () => boolean;
   signal?: AbortSignal;
+  /** Page background: paint less often while the user types or scrolls. */
+  ambient?: boolean;
 };
 
 function image(src: string, signal?: AbortSignal) {
@@ -55,7 +59,9 @@ export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Option
     return image(options.highResolution ? highResolutionArt(url) : url, options.signal);
   };
   const [background, hero, closed, shadow] = await Promise.all([
-    options.characterOnly ? null : source(options.dark ? 'background-dark' : 'background-light'),
+    options.characterOnly || options.characterPlate || options.appearanceLayer
+      ? null
+      : source(options.dark ? 'background-dark' : 'background-light'),
     source('portrait'),
     source('closed'),
     source('shadow'),
@@ -64,7 +70,7 @@ export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Option
   const context = canvas.getContext('2d');
   const layer = document.createElement('canvas');
   const gl = layer.getContext('webgl', {
-    alpha: !!options.characterOnly,
+    alpha: !!(options.characterOnly || options.characterPlate || options.appearanceLayer),
     premultipliedAlpha: false,
     antialias: false,
   });
@@ -80,7 +86,7 @@ export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Option
     last = performance.now(),
     painted = false;
   const observer = new ResizeObserver(() => resize());
-  const cadence = new PaintCadence();
+  const cadence = new PaintCadence(undefined, options.ambient);
   const dispose = () => {
     if (stopped) return;
     stopped = true;
@@ -162,6 +168,19 @@ export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Option
     );
     gl.uniform1f(gl.getUniformLocation(program, 'characterOnly'), options.characterOnly ? 1 : 0);
     gl.uniform1f(gl.getUniformLocation(program, 'backgroundOnly'), options.backgroundOnly ? 1 : 0);
+    gl.uniform1f(gl.getUniformLocation(program, 'characterPlate'), options.characterPlate ? 1 : 0);
+    gl.uniform1f(
+      gl.getUniformLocation(program, 'reflectionPlate'),
+      options.appearanceLayer === 'reflection' ? 1 : 0,
+    );
+    gl.uniform1f(
+      gl.getUniformLocation(program, 'lightPlate'),
+      options.appearanceLayer === 'light' ? 1 : 0,
+    );
+    gl.uniform1f(
+      gl.getUniformLocation(program, 'independentBackground'),
+      options.backgroundOnly && options.variant === 'appearance' ? 1 : 0,
+    );
   } catch (error) {
     dispose();
     throw error;
@@ -182,25 +201,19 @@ export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Option
     layer.width = Math.round(canvas.width * sampling);
     layer.height = Math.round(canvas.height * sampling);
     gl.viewport(0, 0, layer.width, layer.height);
-    if (options.landscape) {
-      const aspect = width / height,
-        original = 1672 / 941;
-      const vw = Math.min(1, aspect / original),
-        vh = Math.min(1, original / aspect);
-      // Keep the same top edge as the static painting, including on ultrawide screens.
-      gl.uniform4f(uniform('view'), (1 - vw) * mirrorSea.cropPosition, 0, vw, vh);
-      gl.uniform4f(uniform('heroBox'), ...mirrorSea.landscapeHero);
-    } else {
-      gl.uniform4fv(
-        uniform('view'),
-        options.polished
-          ? portraitView(mirrorSea.portraitCrop, 'mirrorsea')
-          : mirrorSea.portraitCrop,
-      );
-      const [x, y, w, h] = mirrorSea.portraitHero,
-        [cx, cy, cw, ch] = mirrorSea.portraitCrop;
-      gl.uniform4f(uniform('heroBox'), cx + x * cw, cy + y * ch, w * cw, h * ch);
-    }
+    const plate = options.characterPlate || options.appearanceLayer;
+    const layout =
+      plate || (options.backgroundOnly && options.variant === 'appearance')
+        ? { view: [0, 0, 1, 1], heroBox: [0, 0, 1, 1] }
+        : mirrorSeaLayout(
+            width,
+            height,
+            !!options.landscape,
+            !!options.polished,
+            options.variant === 'appearance',
+          );
+    gl.uniform4fv(uniform('view'), layout.view);
+    gl.uniform4fv(uniform('heroBox'), layout.heroBox);
     painted = false;
     cadence.reset();
     if (frozenTime !== undefined) frame(performance.now());

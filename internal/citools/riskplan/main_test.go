@@ -51,6 +51,8 @@ func TestVerificationClosure(t *testing.T) {
 		{name: "lock", files: []string{"web/package-lock.json"}, full: true, web: true, race: true},
 		{name: "gate", files: []string{"scripts/check-go.sh"}, full: true, web: true, race: true},
 		{name: "web", files: []string{"web/src/user/Page.tsx"}, web: true, expected: []string{}},
+		{name: "worker", files: []string{"deploy/cloudflare-worker/worker.mjs"}, web: true, expected: []string{}},
+		{name: "worker configuration", files: []string{"deploy/cloudflare-worker/wrangler.jsonc"}, web: true, expected: []string{}},
 		{name: "docs", files: []string{"README.md"}, expected: []string{}},
 		{name: "empty", full: true, web: true, race: true},
 		{name: "bad baseline", files: []string{"README.md"}, err: errors.New("missing"), full: true, web: true, race: true},

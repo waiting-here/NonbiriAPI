@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { Artwork } from './Artwork';
+import { ArtworkBadge } from '@shared/artwork/ArtworkImage';
 import type { Card } from './types';
 
 export function CardTile({
@@ -9,6 +10,7 @@ export function CardTile({
   onClick,
   index = 0,
   english = false,
+  showRating = true,
 }: {
   card: Card;
   owned?: boolean;
@@ -16,6 +18,7 @@ export function CardTile({
   onClick: () => void;
   index?: number;
   english?: boolean;
+  showRating?: boolean;
 }) {
   return (
     <button
@@ -25,6 +28,7 @@ export function CardTile({
       aria-label={(english ? card.name_en : card.name) + (note ? ', ' + note : '')}
     >
       <Artwork card={card} />
+      {showRating && <ArtworkBadge artworkKey={'card:' + card.id} />}
       <span className="gacha-card__rarity">{card.rarity}</span>
       <span className="gacha-card__footer">
         <span>{english ? card.name_en.split(' · ')[0] : card.name.split('·')[0]}</span>

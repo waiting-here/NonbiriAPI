@@ -10,6 +10,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 )
 
@@ -34,7 +35,7 @@ JOIN logical_requests lr ON lr.id=cr.logical_request_id
 JOIN dispatch_claims c ON c.logical_request_id=lr.id
 WHERE cr.logical_request_id=? AND cr.user_id=? AND lr.user_id=?
  AND cr.state IN ('reserved','dispatched') AND lr.state IN ('accepted','running')
- AND lr.route_kind IN ('charity_chat_completions','charity_embeddings','charity_images_generations','charity_decisions') AND c.id=? AND c.state='claimed' AND c.purpose='charity'`,
+ AND lr.route_kind IN `+requestkind.CharityKindsSQL+` AND c.id=? AND c.state='claimed' AND c.purpose='charity'`,
 		input.RequestID, input.ActorUserID, input.ActorUserID, input.ClaimID).Scan(&modelID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return claim.ErrNotFound

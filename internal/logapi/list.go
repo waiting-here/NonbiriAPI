@@ -16,7 +16,7 @@ COALESCE((SELECT ce.delta_mag
  WHERE co.source_type='logical_request' AND co.source_id=l.logical_request_id
    AND co.kind IN ('forward_settle','charity_settle')
    AND ce.account_kind_snapshot='platform' AND ce.delta_sign=1
- ORDER BY co.ledger_seq DESC,ce.line_no ASC LIMIT 1),zeroblob(16)),l.rejection_stage,l.rejection_reason,l.request_method,l.request_path,l.requested_streaming,l.automatic_actions`
+ ORDER BY co.ledger_seq DESC,ce.line_no ASC LIMIT 1),zeroblob(16)),l.rejection_stage,l.rejection_reason,l.request_method,l.request_path,l.requested_streaming,l.automatic_actions,l.usage_details`
 
 // Each condition can match a different attempt. Independent sets also prevent
 // repeated attempts from duplicating logical requests or their count.
@@ -98,6 +98,7 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 		return Page[UserLogRow]{}, ErrInvalid
 	}
 	page := Page[UserLogRow]{Data: make([]UserLogRow, 0, capacity), Pagination: metadata}
+	privacyIDs := make([]int64, 0, capacity)
 	positions := make([]listCursor, 0, capacity+1)
 	for rows.Next() {
 		var model string
@@ -110,8 +111,9 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 			return Page[UserLogRow]{}, ErrInvariant
 		}
 		if len(page.Data) < filter.Limit {
-			switch RouteKind(record.routeKind) {
-			case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages, RouteOpenAIDecisions, RouteDiscovery:
+			privacyIDs = append(privacyIDs, record.rowID)
+			switch kind := RouteKind(record.routeKind); {
+			case kind.IsSelf() || kind == RouteDiscovery:
 				page.Data = append(page.Data, UserSelfLogRow{
 					RejectionFields: rejectionFields(record),
 					ID:              record.id, RouteKind: RouteKind(record.routeKind),
@@ -120,7 +122,7 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 					StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
 					Model: model, AttemptCount: strconv.FormatInt(record.attemptCount, 10),
 				})
-			case RouteCharityChat, RouteCharityEmbeddings, RouteCharityImages, RouteCharityDecisions:
+			case kind.IsCharity():
 				page.Data = append(page.Data, UserCharityLogRow{
 					RejectionFields: rejectionFields(record),
 					ID:              record.id, RouteKind: RouteKind(record.routeKind),
@@ -137,6 +139,12 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 	if err := rows.Err(); err != nil {
 		return Page[UserLogRow]{}, translateReadError(ctx, err)
 	}
+	if err := rows.Close(); err != nil {
+		return Page[UserLogRow]{}, translateReadError(ctx, err)
+	}
+	if err := redactUserLogRows(ctx, reader, privacyIDs, page.Data); err != nil {
+		return Page[UserLogRow]{}, err
+	}
 	if len(positions) > filter.Limit {
 		next, err := repository.encodeListCursor("logapi-user-list-v1", owner, positions[filter.Limit-1])
 		if err != nil {
@@ -145,9 +153,6 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 		page.NextCursor = &next
 	}
 	if tx != nil {
-		if err := rows.Close(); err != nil {
-			return Page[UserLogRow]{}, translateReadError(ctx, err)
-		}
 		if err := tx.Commit(); err != nil {
 			return Page[UserLogRow]{}, translateReadError(ctx, err)
 		}

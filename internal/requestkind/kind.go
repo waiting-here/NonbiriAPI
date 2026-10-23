@@ -19,14 +19,20 @@ const (
 )
 
 func (k Kind) IsSelf() bool {
-	return k == OpenAIChat || k == OpenAIEmbeddings || k == OpenAIImages || k == OpenAIDecisions
+	return k == OpenAIChat || k == OpenAIEmbeddings || k == OpenAIImages || k == OpenAIDecisions || extendedOperation(k, "openai_") != ""
 }
 func (k Kind) IsCharity() bool {
-	return k == CharityChat || k == CharityEmbeddings || k == CharityImages || k == CharityDecisions
+	return k == CharityChat || k == CharityEmbeddings || k == CharityImages || k == CharityDecisions || extendedOperation(k, "charity_") != ""
 }
 func (k Kind) IsModelCall() bool { return k.IsSelf() || k.IsCharity() }
 func (k Kind) Valid() bool       { return k.IsModelCall() || k == Discovery }
 func (k Kind) Operation() contract.Operation {
+	if operation := extendedOperation(k, "openai_"); operation != "" {
+		return operation
+	}
+	if operation := extendedOperation(k, "charity_"); operation != "" {
+		return operation
+	}
 	switch k {
 	case OpenAIChat, CharityChat:
 		return contract.OperationChatCompletions
@@ -42,6 +48,14 @@ func (k Kind) Operation() contract.Operation {
 }
 
 func ForOperation(operation contract.Operation, charity bool) Kind {
+	for _, current := range contract.AllOperations()[4:] {
+		if current == operation {
+			if charity {
+				return Kind("charity_" + string(operation))
+			}
+			return Kind("openai_" + string(operation))
+		}
+	}
 	switch operation {
 	case contract.OperationChatCompletions:
 		if charity {
@@ -69,6 +83,9 @@ func ForOperation(operation contract.Operation, charity bool) Kind {
 }
 
 func OperationForPath(path string) contract.Operation {
+	if operation, ok := inferencePaths[path]; ok {
+		return operation
+	}
 	switch path {
 	case "/v1/chat/completions":
 		return contract.OperationChatCompletions

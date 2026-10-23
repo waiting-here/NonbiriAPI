@@ -16,7 +16,7 @@ Preserve the database's stable encrypted renewed-review matching material with t
 
 ## Gateway cost attribution
 
-The runtime administrator setting `gateway_user_attribution_enabled` is a boolean, off by default (site-config JSON `false|true`). Enabling it includes a server-generated user-and-gateway-origin pseudonym in subsequent Gateway v3 chat and embedding requests for cost attribution. Disabling it omits the tag. It can correlate requests from the same user; it is not anonymous and does not claim upstream safety processing. The caller cannot override it. Existing OpenAI and Anthropic settings remain independent. It uses the ordinary configuration catalog, administrator authorization, revision and audit rules; no startup environment variable or rebuild is required.
+The runtime administrator setting `gateway_user_attribution_enabled` is a boolean, off by default (site-config JSON `false|true`). Enabling it includes a server-generated user-and-gateway-origin pseudonym in subsequent Gateway v3/v4 text, image generation, embedding and rerank requests for cost attribution. Disabling it omits the tag. It can correlate requests from the same user; it is not anonymous and does not claim upstream safety processing. The caller cannot override it. Existing OpenAI and Anthropic settings remain independent. It uses the ordinary configuration catalog, administrator authorization, revision and audit rules; no startup environment variable or rebuild is required.
 
 ## Startup environment
 
@@ -38,7 +38,9 @@ Copy [admin.env.example](../admin.env.example) to a private path outside the che
 | `NONBIRI_SITE_BASE_URL` | yes | canonical public origin of the user station |
 | `NONBIRI_ADMIN_HOST` | no | separate admin host; blank/unset derives `admin.<user-host>` (explicit value required for IPv6 user hosts) |
 | `NONBIRI_TRUSTED_PROXY_CIDRS` | no | peers allowed to supply forwarding metadata; defaults to loopback ranges; `none` disables trust |
-| `NONBIRI_CLOUDFLARE_ROUTES` | no | JSON array of exact endpoint-to-gateway routes; unset, blank or `[]` disables forwarding. See [Cloudflare forwarding](cloudflare-egress.md). |
+| `NONBIRI_CLOUDFLARE_WORKER_URL` | no | Complete HTTPS generic Worker entry URL. Configure together with its token; see [Cloudflare forwarding](cloudflare-egress.md). |
+| `NONBIRI_CLOUDFLARE_WORKER_TOKEN` | no | Private shared Worker token, 32–4096 visible ASCII characters without whitespace. Must match the Worker's `NONBIRI_PROXY_TOKEN` secret. |
+| `NONBIRI_CLOUDFLARE_ROUTES` | no | Legacy exact endpoint-to-AI-Gateway mappings, used only without a Worker. Unset, blank or `[]` loads no mappings. |
 
 The timeout variables accept integer seconds only; decimals and out-of-range values are rejected. Blank or unset values use the defaults. Budgets cover the whole process phase rather than restarting for each step. Opening the database alone does not mean the application is ready; readiness follows full initialization and listener binding. See the [API contract](api-contract.md) for `/readyz`.
 
@@ -91,7 +93,7 @@ boards. Ranking windows and retention are fixed behavior, not new site settings.
 Current effective abuse windows persist across restarts; changing their settings
 keeps the existing bounded trimming and one-penalty-per-window behavior.
 
-Embeddings require the `embeddings` operation in the platform model's `model_types`; existing models retain it, while newly created models default to chat. Configure an `openai-compatible` versioned base; the connector appends `/embeddings`. Personal and charity model connections use their existing workflow, with no separate startup variable or price configuration. Token-priced embeddings use only the uncached-input price and reward rate; a batch is one call for per-request pricing and call quotas. Missing usage follows the model's accepted reserve or global inheritance and earns no donor reward. Minimum-content penalties and the `force_store_false`/`flatten_tool_calls` policies apply only to chat. Force-store-false remains OpenAI-compatible only; tool flattening also supports Anthropic-compatible and Gateway v3 chat. Other shared limits remain active.
+Embeddings require the `embeddings` operation in the platform model's `model_types`; existing models retain it, while newly created models default to chat. Configure an `openai-compatible` versioned base; the connector appends `/embeddings`. Personal and charity model connections use their existing workflow, with no separate startup variable or price configuration. Token-priced embeddings use only the uncached-input price and reward rate; a batch is one call for per-request pricing and call quotas. Missing usage follows the model's accepted reserve or global inheritance and earns no donor reward. Minimum-content penalties and the `force_store_false`/`flatten_tool_calls` policies apply only to chat. Force-store-false remains OpenAI-compatible only; tool flattening also supports Anthropic-compatible and Gateway v3/v4 chat. Other shared limits remain active.
 
 The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. A fresh database starts with maintenance on and registration, activities, charity, donation intake, and all games off. Existing administrator choices are preserved during upgrades.
 
@@ -103,6 +105,7 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `game_{game}_{mode}_rake_{platform,welfare,thursday}_bp` | integer `[0,9999]` | each `0`; the three rates must sum below 10000 and apply only to the losing entry |
 | `site_name` | non-empty text, ≤256 bytes | display name; frontend falls back when unset |
 | `site_logo_url` | text, ≤2048 bytes, blank allowed | display image URL; blank uses the default mark |
+| `artwork_r18_disabled` | boolean | `true`; disables R-18 built-in artwork, preserving collections and saved preferences. Administrator-only writes; the same boolean is included in both public configuration projections |
 | `announcement_epoch` | read-only opaque ID | generated for each fresh database and used to isolate announcement caches |
 | `legal_privacy_override_zh`, `legal_privacy_override_en` | multiline text, ≤65536 bytes each | blank uses the embedded privacy template |
 | `legal_terms_override_zh`, `legal_terms_override_en` | multiline text, ≤65536 bytes each | blank uses the embedded terms template |
@@ -112,8 +115,9 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `default_endpoint_key_limit` | integer `[1,10000]` | 20 per endpoint |
 | `default_model_limit` | integer `[1,10000]` | 100 per user |
 | `default_binding_limit` | integer `[1,10000]` | 50 per model |
-| `default_rpm_per_user` | integer `[1,4096]` | 60 charity model calls per user; the user's `rpm_limit` overrides this default |
-| `global_rpm_per_user` | integer `[1,4096]` | 60 model calls per user, including personal and charity calls |
+| `default_rpm_per_user` | integer `[1,4096]` | 60 heavy charity calls per user; the user's `rpm_limit` overrides this default |
+| `default_light_rpm_per_user` | integer `[1,4096]` | 30 light charity calls per user; `light_rpm_limit` overrides this default |
+| `global_rpm_per_user` | integer `[1,4096]` | 60 model calls per user across both classes and personal/charity calls; `global_rpm_limit` overrides this default |
 | `global_rpm` | integer `[1,4096]` | 600 across the process |
 | `default_per_endpoint_concurrency` | integer `[1,100000]` | 8 per normalized base URL |
 | `egress_global_concurrency` | integer `[1,100000]` | 32 across all outbound requests |
@@ -207,11 +211,19 @@ The administrator user APIs expose both nullable raw values and their current fa
   "rpm_limit": null,
   "effective_rpm_limit": "60",
   "concurrency_limit": null,
-  "effective_concurrency_limit": "5"
+  "effective_concurrency_limit": "5",
+  "light_rpm_limit": null,
+  "effective_light_rpm_limit": "30",
+  "light_concurrency_limit": null,
+  "effective_light_concurrency_limit": "15",
+  "global_rpm_limit": null,
+  "effective_global_rpm_limit": "60"
 }
 ```
 
-`PATCH /admin/api/users/{id}` accepts `endpoint_limit` (`0..10000`), `rpm_limit` (`1..4096`), and `concurrency_limit` (`1..100000`) as canonical decimal strings in profile mode. Effective projections are also strings. The matching `/api/steward/users/{id}` route lets a current L6 steward change another current L1–L5 user's settings, subject to a final transaction permission check. An absent field is unchanged and JSON `null` restores its fallback. The user RPM override applies to charity calls. An explicit override may be lower, equal to, or higher than the corresponding default; defaults are not clamps. The global RPM and egress gates remain independent. A concurrency value of `0` is invalid and never means unlimited.
+Profile mode on `PATCH /admin/api/users/{id}` accepts canonical decimal strings or null: `endpoint_limit` (0–10000), `rpm_limit`, `light_rpm_limit` and `global_rpm_limit` (1–4096), and `concurrency_limit` and `light_concurrency_limit` (1–100000). Effective fields are strings. Omission preserves a value; null restores the fallback. Heavy charity RPM uses the existing RPM default, light charity RPM defaults to 30, and combined user RPM uses the site global-per-user default. Heavy and light concurrency default to 5 and 15. These pools each combine personal and charity calls. Embeddings, rerank, SystemOne and decisions are light; all other inference operations are heavy. Classification uses the ingress operation, independent of model names or capabilities.
+
+Administrators may edit these limits. On `/api/steward/users/{id}`, an L5 or L6 steward may edit the five inference limits only for another non-administrator account whose effective level is strictly lower. A profile request containing other fields retains its existing permissions; endpoint settings still require an administrator or eligible L6 steward. Batch edits use the same per-user checks. Permission is rechecked before replay and mutation. Explicit limits can exceed defaults; zero never means unlimited. Site-wide RPM and egress limits remain independent.
 
 Donated-key `max_concurrency` and `max_rpm` edit the same physical `endpoint_key_limits` used by personal calls. Both are JSON integers 0–2147483647; zero adds no per-key limit and existing site/user gates still apply. Management PATCH requires the donation `expected_revision` and, when either field is present, the physical `expected_key_limits_revision`. Null is invalid; omission preserves the value. A concurrent owner edit conflicts. Administrators and L6 may edit authorized donated keys; L5 remains limited to its existing model/source scope with `charity_model_id`. This shared effect must be shown when submitting a donation. See [API revision and replay rules](api-contract.md#31-endpoints-and-keys).
 
@@ -225,7 +237,7 @@ A brand-new account is accepted only when all of these are true:
 
 If either ID is blank, registration and sign-in without an exemption cannot complete. Existing accounts can sign in while registration is closed, but by default must still satisfy the guild and role checks. Administrators may enable `discord_registered_user_gate_exempt` globally or set `discord_gate_policy` in a user's profile to `inherit` (the default), `require`, or `exempt`. The per-user setting takes priority. Only administrators can change this setting through `PATCH /admin/api/users/{id}` in profile mode; stewards and users cannot change it. The current value is included in the user's account export and disappears with account deletion.
 
-Changes apply at the next OAuth sign-in. Existing sessions and API keys keep their current lifetime and authority checks. Exemption never bypasses Discord identity verification, bans, blacklists, account deletion or new-registration requirements. Normal users may update their interface language and `game_profile_public` leaderboard preference through `PATCH /api/me`; endpoint, RPM, and concurrency limits are managed by administrators or authorized current L6 stewards; level-5 trainees cannot change user limits and receive only their scoped charity-maintenance permissions, including shared physical-key limits within that scope.
+Changes apply at the next OAuth sign-in. Existing sessions and API keys keep their current lifetime and authority checks. Exemption never bypasses Discord identity verification, bans, blacklists, account deletion or new-registration requirements. Normal users may update their interface language and `game_profile_public` leaderboard preference through `PATCH /api/me`; endpoint limits are managed by administrators or authorized L6 stewards. L5 and L6 stewards may change inference limits only for strictly lower-level users; their other permissions remain unchanged.
 
 ### Mainstream channel catalog
 
@@ -233,7 +245,7 @@ Mainstream channels are managed through `/admin/api/mainstream-channels`, not `s
 
 ### Runtime application
 
-RPM and concurrency settings update the shared in-process controllers immediately. Per-user concurrency admission occurs before bounded model classification and RPM reservation. Charity calls check their charity cap first, then both the per-user global and site-wide caps; personal calls use the latter two. A concurrency refusal creates no RPM hit or automatic penalty. Resource-count caps are read transactionally on each create. Display, legal, donation guidance, registration, OAuth admission, maintenance, Connector defaults, activities, reports, and game values are read from the database without rebuilding; responses are `no-store`. The site timezone offset carries no runtime singleton: consumers resolve it per transaction and fail closed when it is unset.
+RPM and concurrency settings update the shared in-process controllers immediately. The operation selects the light or heavy concurrency pool before reading the request body. Bounded model classification then selects personal or charity accounting. Charity calls check their class-specific charity cap first, then both the combined per-user global and site-wide caps; personal calls use the latter two. Changing limits preserves active permits and existing RPM events, including restored identity windows. A concurrency refusal creates no RPM hit or automatic penalty. Resource-count caps are read transactionally on each create. Display, legal, donation guidance, registration, OAuth admission, maintenance, Connector defaults, activities, reports, and game values are read from the database without rebuilding; responses are `no-store`. The site timezone offset carries no runtime singleton: consumers resolve it per transaction and fail closed when it is unset.
 
 `GET /api/config` exposes only the display/legal values, the two donation notices, `maintenance_mode`, `registration_open`, and `announcement_epoch`. The admin-host bootstrap endpoint exposes the same safe projection after administrator authentication. Neither exposes operational rate limits, Discord gate IDs, alert preferences, or secrets.
 
@@ -272,9 +284,17 @@ Failed discovery displays a dedicated explanation and, while its diagnostic reco
 
 The Gacha Simulator entry is hidden by default and can be shown in its administrator settings. The display switch does not disable the activity URL. Eligible signed-in users can use the activity when the site is operational and its timezone is configured. Its dedicated administrator page uses `GET/POST /admin/api/gacha` for rules, prices, quotas, pools and saved presets. The generic activity master switch does not close this permanent collection activity. Only published limited pools use schedules; installation does not publish a limited pool automatically. See [the activity guide](gacha.md).
 
-## Managed charity session headers
+## Managed session headers
 
-Model settings may define random session headers, shared by the same user and model until idle expiry. UUID v4 and lowercase hexadecimal formats are available. See [configuration, reuse and lifecycle](charity-session-headers.md).
+Personal and charity model settings use the same managed-header fields and save them with the model. Request adaptation saves separately, with request-header and request-body groups. Owners edit their personal models; administrator/level-6 authority edits charity settings, and level-6 charity request adaptation remains read-only.
+
+Each header selects `uuid_v4`, `hex_32`, `opencode_session`, `opencode_message` or `opencode_part`. Idle lifetime accepts 0–86,400 seconds; omission or a blank browser field uses 300. Zero generates a new value for each logical request, reused by its internal retries, without an absolute uniqueness guarantee. Positive lifetimes reuse a value for the same user/model/header until idle expiry. See [field defaults, precedence, export and lifecycle](charity-session-headers.md).
+
+## Global pressure and appearance
+
+Administrator and level-5/6 steward management logs display sampled global concurrency and RPM, their approximate 24-hour peaks and persistent all-time observed maxima. There is no new site setting or CallerKey permission. Sampling is every five seconds; visible pages refresh every 15 seconds. Refresh failures mark retained values stale, while revoked session access hides the panel. See [pressure routes and observation limits](api-contract.md#global-pressure).
+
+Appearance controls offer light, dark or system theme and three intensity levels (`vivid`, `balanced`, `focus`). A manual theme/intensity choice takes priority over the corresponding system preference. Without a saved intensity, reduced transparency selects focus. Preferences apply immediately and are stored in the browser when available; they are separate from server-authorized cosmetic unlocks.
 
 ## Charity context prices
 

@@ -68,6 +68,14 @@ function install(handler: (call: Call) => unknown | Promise<unknown>) {
         body = { version: 'go1.26.6-zoneinfo', zones: ['UTC'] };
       else if (call.path === '/admin/api/time-context' || call.path === '/api/steward/time-context')
         body = { mode: 'site', offset_minutes: 330 };
+      else if (call.method === 'GET' && url.pathname.endsWith('/caller-key'))
+        body = {
+          user_id: url.pathname.split('/').at(-2),
+          generation: '0',
+          active: false,
+          created_at: null,
+          updated_at: 1_800_000_000,
+        };
       else body = await handler(call);
       return body instanceof Response ? body : json(body);
     }),
@@ -83,6 +91,202 @@ afterEach(() => {
 });
 
 describe('shared account management', () => {
+  it('clears limit selections when paging and returning to the original page', async () => {
+    const first = userFixture('7'),
+      second = userFixture('8');
+    let releasePage: () => void = () => undefined;
+    const nextPage = new Promise<void>((resolve) => {
+      releasePage = resolve;
+    });
+    install(async (call) => {
+      if (call.path === '/admin/api/session') return { admin: { username: 'fixture-admin' } };
+      if (call.path.startsWith('/admin/api/users?')) {
+        const current = new URL(call.path, 'https://fixture.test').searchParams.get('page') ?? '1';
+        if (current === '2') await nextPage;
+        return {
+          data: current === '1' ? [first] : [second],
+          next_cursor: null,
+          pagination: { page: current, page_size: 20, total_items: '21', total_pages: '2' },
+        };
+      }
+      throw new Error('Unexpected request ' + call.path);
+    });
+    const view = await renderWithProviders(<UsersPage />, {
+      station: 'admin',
+      role: 'admin',
+      route: '/users',
+      locale: 'en',
+    });
+    await view.user.click(
+      await screen.findByRole('checkbox', { name: 'Select member-7 for limits' }),
+    );
+    await view.user.click(screen.getByRole('button', { name: 'Next' }));
+    await view.user.click(
+      screen
+        .getByText('Edit selected users’ inference limits', { selector: 'strong' })
+        .closest('summary')!,
+    );
+    expect(
+      screen.getByRole('button', { name: 'Select eligible users on this page' }),
+    ).toBeDisabled();
+    await act(async () => releasePage());
+    expect(
+      await screen.findByRole('checkbox', { name: 'Select member-8 for limits' }),
+    ).not.toBeChecked();
+    await view.user.click(screen.getByRole('button', { name: 'Previous' }));
+    expect(
+      await screen.findByRole('checkbox', { name: 'Select member-7 for limits' }),
+    ).not.toBeChecked();
+  });
+
+  it('lets a level-five steward change only inference limits and restore inherited values', async () => {
+    let target = {
+      ...userFixture('7', 4),
+      global_rpm_limit: '80',
+      effective_global_rpm_limit: '80',
+    };
+    const calls = install((call) => {
+      if (call.path === '/api/session') return session(5);
+      if (call.path.startsWith('/api/steward/users?')) return page([target]);
+      if (call.path === '/api/steward/users/7' && call.method === 'GET') return target;
+      if (call.path === '/api/steward/users/7' && call.method === 'PATCH') {
+        target = {
+          ...target,
+          ...call.body,
+          revision: String(BigInt(target.revision) + 1n),
+        } as typeof target;
+        return target;
+      }
+      throw new Error('Unexpected request ' + call.path);
+    });
+    const view = await renderWithProviders(<StewardPage />, {
+      station: 'user',
+      role: 'level5',
+      route: '/steward?tab=users&user=7',
+      locale: 'en',
+    });
+    await view.user.click(await screen.findByRole('tab', { name: 'Limits and level' }));
+    expect(screen.queryByLabelText('Endpoint limit')).toBeNull();
+    expect(screen.queryByLabelText('Set level')).toBeNull();
+    expect(screen.queryByLabelText('Language')).toBeNull();
+    expect(screen.getByText('Current limit: 80')).toBeVisible();
+    fireEvent.change(screen.getByLabelText('Global RPM per user'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Light charity RPM'), { target: { value: '40' } });
+    fireEvent.change(screen.getByLabelText('Light concurrency'), { target: { value: '20' } });
+    await view.user.click(screen.getByRole('button', { name: 'Save settings' }));
+    await waitFor(() => expect(calls.filter((c) => c.method === 'PATCH')).toHaveLength(1));
+    expect(calls.find((c) => c.method === 'PATCH')!.body).toEqual({
+      mode: 'profile',
+      expected_revision: '1',
+      global_rpm_limit: null,
+      rpm_limit: null,
+      light_rpm_limit: '40',
+      concurrency_limit: null,
+      light_concurrency_limit: '20',
+    });
+  });
+
+  it.each([
+    { id: '7', level: 5, admin: false },
+    { id: '7', level: 6, admin: false },
+    { id: '9', level: 4, admin: false },
+    { id: '7', level: 1, admin: true },
+  ])(
+    'keeps inference limits read-only for protected target $id/$level/$admin',
+    async ({ id, level, admin }) => {
+      const target = { ...userFixture(id, level), is_admin: admin };
+      install((call) => {
+        if (call.path === '/api/session') return session(5);
+        if (call.path.startsWith('/api/steward/users?')) return page([target]);
+        if (call.path === '/api/steward/users/' + id) return target;
+        throw new Error('Unexpected request ' + call.path);
+      });
+      const view = await renderWithProviders(<StewardPage />, {
+        station: 'user',
+        role: 'level5',
+        route: '/steward?tab=users&user=' + id,
+        locale: 'en',
+      });
+      await view.user.click(await screen.findByRole('tab', { name: 'Limits and level' }));
+      expect(screen.queryByRole('button', { name: 'Save settings' })).toBeNull();
+      expect(screen.queryByLabelText('Light charity RPM')).toBeNull();
+      expect(
+        screen.queryByRole('checkbox', { name: 'Select member-' + id + ' for limits' }),
+      ).toBeNull();
+    },
+  );
+
+  it('batches only selected users and retries failures with the original request identity', async () => {
+    const targets = [userFixture('7'), userFixture('8'), userFixture('10', 6)];
+    let failed = true;
+    let finishRefresh!: () => void;
+    const refresh = new Promise<void>((resolve) => {
+      finishRefresh = resolve;
+    });
+    const calls = install(async (call) => {
+      if (call.path === '/admin/api/session') return { admin: { username: 'fixture-admin' } };
+      if (call.path.startsWith('/admin/api/users?')) {
+        if (!failed) await refresh;
+        return page(targets);
+      }
+      if (call.path === '/admin/api/users/7' && call.method === 'PATCH')
+        return { ...targets[0], revision: '2' };
+      if (call.path === '/admin/api/users/8' && call.method === 'PATCH') {
+        if (failed) {
+          failed = false;
+          return json({ error: { code: 'unavailable', message: 'Try again' } }, 503);
+        }
+        return { ...targets[1], revision: '2' };
+      }
+      throw new Error('Unexpected request ' + call.path);
+    });
+    const view = await renderWithProviders(<UsersPage />, {
+      station: 'admin',
+      role: 'admin',
+      route: '/users',
+      locale: 'en',
+    });
+    await view.user.click(
+      await screen.findByRole('checkbox', { name: 'Select member-7 for limits' }),
+    );
+    await view.user.click(screen.getByRole('checkbox', { name: 'Select member-8 for limits' }));
+    await view.user.click(
+      screen
+        .getByText('Edit selected users’ inference limits', { selector: 'strong' })
+        .closest('summary')!,
+    );
+    await view.user.selectOptions(screen.getByLabelText('Light charity RPM action'), 'set');
+    await view.user.type(screen.getByLabelText('Light charity RPM'), '45');
+    await view.user.selectOptions(screen.getByLabelText('Global RPM per user action'), 'inherit');
+    await view.user.click(screen.getByRole('button', { name: 'Apply to selected users' }));
+    await screen.findByRole('button', { name: 'Retry failed users' });
+    await waitFor(() =>
+      expect(calls.filter((c) => c.path.startsWith('/admin/api/users?'))).toHaveLength(2),
+    );
+    expect(screen.queryByText('Saving selected users…')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry failed users' })).toBeDisabled();
+    await act(async () => finishRefresh());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Retry failed users' })).toBeEnabled(),
+    );
+    await view.user.click(screen.getByRole('button', { name: 'Retry failed users' }));
+    await waitFor(() => expect(calls.filter((c) => c.method === 'PATCH')).toHaveLength(3));
+    const writes = calls.filter((c) => c.method === 'PATCH');
+    expect(writes.map((c) => c.path)).toEqual([
+      '/admin/api/users/7',
+      '/admin/api/users/8',
+      '/admin/api/users/8',
+    ]);
+    expect(writes[0].body).toEqual({
+      mode: 'profile',
+      expected_revision: '1',
+      global_rpm_limit: null,
+      light_rpm_limit: '45',
+    });
+    expect(writes[2].body).toEqual(writes[1].body);
+    expect(writes[2].headers.get('Idempotency-Key')).toBe(writes[1].headers.get('Idempotency-Key'));
+  });
+
   it('lets a level-five steward find an account and ban it without exposing other writes', async () => {
     let target = userFixture('7', 4);
     const calls = install((call) => {
@@ -112,7 +316,8 @@ describe('shared account management', () => {
     expect(screen.queryByRole('tab', { name: 'Credits' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Inspect user IPs' })).toBeNull();
     await view.user.click(screen.getByRole('tab', { name: 'Limits and level' }));
-    expect(screen.queryByRole('button', { name: 'Save settings' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save settings' })).toBeDisabled();
+    expect(screen.getByLabelText('Light charity RPM')).toBeEnabled();
     expect(screen.queryByLabelText('Endpoint limit')).toBeNull();
     await view.user.click(screen.getByRole('tab', { name: 'Penalties' }));
     await view.user.type(screen.getByLabelText('Reason'), 'Account review');
@@ -448,8 +653,8 @@ describe('shared account management', () => {
       );
       await view.user.click(await screen.findByRole('tab', { name: 'Limits and level' }));
       const endpoint = await screen.findByLabelText('Endpoint limit');
-      const rpm = screen.getByLabelText('Charity RPM limit');
-      const concurrency = screen.getByLabelText('In-flight concurrency limit');
+      const rpm = screen.getByLabelText('Heavy charity RPM');
+      const concurrency = screen.getByLabelText('Heavy concurrency');
       const save = screen.getByRole('button', { name: 'Save settings' });
       fireEvent.change(endpoint, { target: { value: '99' } });
       fireEvent.change(concurrency, { target: { value: '999' } });
@@ -465,8 +670,11 @@ describe('shared account management', () => {
         mode: 'profile',
         expected_revision: '1',
         endpoint_limit: '99',
+        global_rpm_limit: null,
         rpm_limit: null,
+        light_rpm_limit: null,
         concurrency_limit: '999',
+        light_concurrency_limit: null,
         lang: 'en',
       });
       expect(write.headers.get('Idempotency-Key')).toBeTruthy();

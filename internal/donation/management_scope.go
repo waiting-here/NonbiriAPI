@@ -70,6 +70,8 @@ func scopedDonationRoute(route string) bool {
 		routeStewardRecurring, routeStewardFailurePolicy, routeStewardFailureReset,
 		routeStewardFailureReset + "/selection", routeStewardDiscoverySelection:
 		return true
+	case routeStewardUses, routeStewardUses + "/{useId}/failure-streak-reset":
+		return true
 	}
 	return false
 }

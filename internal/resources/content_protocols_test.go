@@ -18,8 +18,8 @@ func TestContentProtocolsShareURLWithSeparateCredentialsAndExport(t *testing.T) 
 		endpoint := e.createEndpointWithConnector(t, owner, resourceTestKey(byte('a'+i)), kind, true)
 		key := e.createEndpointKey(t, owner, resourceTestID(t, endpoint.ID), resourceTestKey(byte('f'+i)))
 		var actual string
-		if err := e.store.DB().QueryRow(`SELECT s.connector_type FROM endpoint_key_secrets s JOIN endpoint_keys k ON k.secret_ref_id=s.id WHERE k.id=?`, resourceTestID(t, key.ID)).Scan(&actual); err != nil || actual != kind {
-			t.Fatalf("secret context=%s error=%v", actual, err)
+		if err := e.store.DB().QueryRow(`SELECT s.connector_type FROM endpoint_key_secrets s JOIN endpoint_key_current_credentials k ON k.secret_ref_id=s.id WHERE k.id=?`, resourceTestID(t, key.ID)).Scan(&actual); err != nil || actual != kind {
+			t.Fatalf("legacy credential context=%s error=%v", actual, err)
 		}
 	}
 	model := e.createModel(t, owner, resourceTestKey('k'), "provider", "decisions")
@@ -61,7 +61,7 @@ func TestContentProtocolsMainstreamChannelCreationAndOptions(t *testing.T) {
 		}
 	}
 	options, err := e.repository.GetEndpointCreateOptions(context.Background(), user)
-	if err != nil || len(options.BaseConnectorTypes) != 6 || len(options.MainstreamChannels) != 3 {
+	if err != nil || len(options.BaseConnectorTypes) != 13 || len(options.MainstreamChannels) != 3 {
 		t.Fatalf("options=%+v err=%v", options, err)
 	}
 }

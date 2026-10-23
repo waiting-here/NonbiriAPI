@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 
 export function FilterBar({
   search,
+  as: Tag = 'form',
   persistKey,
   ariaLabel,
   secondary,
@@ -15,6 +16,7 @@ export function FilterBar({
   onSubmit,
 }: {
   search: ReactNode;
+  as?: 'form' | 'div';
   persistKey?: string;
   ariaLabel?: string;
   secondary?: ReactNode;
@@ -35,7 +37,19 @@ export function FilterBar({
     }
   });
   return (
-    <form
+    <Tag
+      role={Tag === 'div' ? 'search' : undefined}
+      onKeyDown={(event) => {
+        if (
+          Tag === 'div' &&
+          event.key === 'Enter' &&
+          (event.target as HTMLElement).tagName === 'INPUT'
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          onSubmit();
+        }
+      }}
       className="nb-filter"
       aria-label={ariaLabel}
       onSubmit={(event) => {
@@ -89,6 +103,6 @@ export function FilterBar({
           ) : null}
         </div>
       ) : null}
-    </form>
+    </Tag>
   );
 }

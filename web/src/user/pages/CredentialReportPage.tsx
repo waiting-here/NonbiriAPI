@@ -15,16 +15,28 @@ const CONNECTOR_LABEL_KEYS: Record<CredentialReportInput['connector_type'], stri
   'openai-compatible': 'user.report.connector.openaiCompatible',
   'anthropic-compatible': 'user.report.connector.anthropicCompatible',
   'ai-sdk-gateway-v3': 'common.gatewayName',
+  'ai-sdk-gateway-v4': 'common.gatewayV4Name',
   'google-gemini': 'common.connectorGemini',
   'openai-responses': 'common.connectorResponses',
   'openai-decisions': 'common.connectorDecisions',
+  'cohere-rerank': 'common.connectorRerank.cohere',
+  'jina-rerank': 'common.connectorRerank.jina',
+  'siliconflow-rerank': 'common.connectorRerank.siliconflow',
+  'voyage-rerank': 'common.connectorRerank.voyage',
+  'typesafe-systemone': 'common.connectorSystemOne',
+  'openai-chat-completions': 'common.connectorChatCompletions',
 };
 
 function validBaseURL(value: string): boolean {
   if (new TextEncoder().encode(value).byteLength > 4_096) return false;
   try {
     const parsed = new URL(value);
-    return (parsed.protocol === 'https:' || parsed.protocol === 'http:') && Boolean(parsed.hostname) && !parsed.username && !parsed.password;
+    return (
+      (parsed.protocol === 'https:' || parsed.protocol === 'http:') &&
+      Boolean(parsed.hostname) &&
+      !parsed.username &&
+      !parsed.password
+    );
   } catch {
     return false;
   }
@@ -33,7 +45,8 @@ function validBaseURL(value: string): boolean {
 export function CredentialReportPage() {
   const { t } = useTranslation();
   const config = usePublicConfig();
-  const [connector, setConnector] = useState<CredentialReportInput['connector_type']>('openai-compatible');
+  const [connector, setConnector] =
+    useState<CredentialReportInput['connector_type']>('openai-compatible');
   const [baseURL, setBaseURL] = useState('');
   const [secret, setSecret] = useState('');
   const [note, setNote] = useState('');
@@ -51,24 +64,37 @@ export function CredentialReportPage() {
     return () => window.removeEventListener('pagehide', clear);
   }, []);
 
-  const payload = useMemo<CredentialReportInput>(() => ({
-    connector_type: connector,
-    base_url: baseURL.trim(),
-    secret,
-    note,
-  }), [baseURL, connector, note, secret]);
+  const payload = useMemo<CredentialReportInput>(
+    () => ({
+      connector_type: connector,
+      base_url: baseURL.trim(),
+      secret,
+      note,
+    }),
+    [baseURL, connector, note, secret],
+  );
 
   const clearForm = () => {
     intentKey.current = null;
-    setBaseURL(''); setSecret(''); setNote(''); setError(null); setValidation(false); setState('idle');
+    setBaseURL('');
+    setSecret('');
+    setNote('');
+    setError(null);
+    setValidation(false);
+    setState('idle');
   };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    setValidation(false); setError(null);
+    setValidation(false);
+    setError(null);
     if (config.data?.maintenanceMode) return;
-    if (!validBaseURL(payload.base_url) || !secret || new TextEncoder().encode(secret).byteLength > 65_536
-      || Array.from(note).length > 2_048) {
+    if (
+      !validBaseURL(payload.base_url) ||
+      !secret ||
+      new TextEncoder().encode(secret).byteLength > 65_536 ||
+      Array.from(note).length > 2_048
+    ) {
       setValidation(true);
       return;
     }
@@ -78,7 +104,10 @@ export function CredentialReportPage() {
     try {
       await submitCredentialReport(payload, currentIntent);
       intentKey.current = null;
-      setSecret(''); setNote(''); setBaseURL(''); setState('accepted');
+      setSecret('');
+      setNote('');
+      setBaseURL('');
+      setState('accepted');
     } catch (submitError) {
       setError(submitError);
       setState('idle');
@@ -96,41 +125,133 @@ export function CredentialReportPage() {
         title={t('user.report.title')}
         description={t('user.report.description')}
       />
-      {config.isPending ? <LoadingState /> : config.error ? <ErrorState error={config.error} onRetry={() => void config.refetch()} /> : (
+      {config.isPending ? (
+        <LoadingState />
+      ) : config.error ? (
+        <ErrorState error={config.error} onRetry={() => void config.refetch()} />
+      ) : (
         <Card className="ops-stack">
-          {config.data.maintenanceMode ? <p className="inline-notice" role="status">{t('user.report.maintenanceUnavailable')}</p> : null}
+          {config.data.maintenanceMode ? (
+            <p className="inline-notice" role="status">
+              {t('user.report.maintenanceUnavailable')}
+            </p>
+          ) : null}
           {state === 'accepted' ? (
-            <div role="status" className="ops-stack"><h2>{t('user.report.acceptedTitle')}</h2>
+            <div role="status" className="ops-stack">
+              <h2>{t('user.report.acceptedTitle')}</h2>
               <p>{t('user.report.acceptedBody')}</p>
-              <button type="button" className="nb-btn nb-btn--secondary" onClick={() => setState('idle')}>{t('user.report.submitAnother')}</button>
+              <button
+                type="button"
+                className="nb-btn nb-btn--secondary"
+                onClick={() => setState('idle')}
+              >
+                {t('user.report.submitAnother')}
+              </button>
             </div>
           ) : (
             <form className="ops-stack" onSubmit={submit}>
-              <label className="ops-form-field">{t('user.report.connectorLabel')}
-                <select value={connector} onChange={(event) => { intentKey.current = null; setConnector(event.target.value as CredentialReportInput['connector_type']); }}>
-                  <option value="openai-compatible">{t(CONNECTOR_LABEL_KEYS['openai-compatible'])}</option>
-                  <option value="anthropic-compatible">{t(CONNECTOR_LABEL_KEYS['anthropic-compatible'])}</option>
-                  <option value="ai-sdk-gateway-v3">{t(CONNECTOR_LABEL_KEYS['ai-sdk-gateway-v3'])}</option>
+              <label className="ops-form-field">
+                {t('user.report.connectorLabel')}
+                <select
+                  value={connector}
+                  onChange={(event) => {
+                    intentKey.current = null;
+                    setConnector(event.target.value as CredentialReportInput['connector_type']);
+                  }}
+                >
+                  <option value="openai-compatible">
+                    {t(CONNECTOR_LABEL_KEYS['openai-compatible'])}
+                  </option>
+                  <option value="anthropic-compatible">
+                    {t(CONNECTOR_LABEL_KEYS['anthropic-compatible'])}
+                  </option>
+                  <option value="ai-sdk-gateway-v3">
+                    {t(CONNECTOR_LABEL_KEYS['ai-sdk-gateway-v3'])}
+                  </option>
+                  <option value="ai-sdk-gateway-v4">
+                    {t(CONNECTOR_LABEL_KEYS['ai-sdk-gateway-v4'])}
+                  </option>
                   <option value="google-gemini">{t(CONNECTOR_LABEL_KEYS['google-gemini'])}</option>
-                  <option value="openai-responses">{t(CONNECTOR_LABEL_KEYS['openai-responses'])}</option>
-                  <option value="openai-decisions">{t(CONNECTOR_LABEL_KEYS['openai-decisions'])}</option>
+                  <option value="openai-responses">
+                    {t(CONNECTOR_LABEL_KEYS['openai-responses'])}
+                  </option>
+                  <option value="openai-decisions">
+                    {t(CONNECTOR_LABEL_KEYS['openai-decisions'])}
+                  </option>
+                  <option value="cohere-rerank">{t(CONNECTOR_LABEL_KEYS['cohere-rerank'])}</option>
+                  <option value="jina-rerank">{t(CONNECTOR_LABEL_KEYS['jina-rerank'])}</option>
+                  <option value="siliconflow-rerank">
+                    {t(CONNECTOR_LABEL_KEYS['siliconflow-rerank'])}
+                  </option>
+                  <option value="voyage-rerank">{t(CONNECTOR_LABEL_KEYS['voyage-rerank'])}</option>
+                  <option value="typesafe-systemone">
+                    {t(CONNECTOR_LABEL_KEYS['typesafe-systemone'])}
+                  </option>
+                  <option value="openai-chat-completions">
+                    {t(CONNECTOR_LABEL_KEYS['openai-chat-completions'])}
+                  </option>
                 </select>
               </label>
-              <label className="ops-form-field">{t('user.report.baseUrlLabel')}
-                <input type="url" placeholder="https://api.example.com/v1" required maxLength={4096} value={baseURL} onChange={(event) => { intentKey.current = null; setBaseURL(event.target.value); }} autoComplete="url" />
+              <label className="ops-form-field">
+                {t('user.report.baseUrlLabel')}
+                <input
+                  type="url"
+                  placeholder="https://api.example.com/v1"
+                  required
+                  maxLength={4096}
+                  value={baseURL}
+                  onChange={(event) => {
+                    intentKey.current = null;
+                    setBaseURL(event.target.value);
+                  }}
+                  autoComplete="url"
+                />
               </label>
-              <label className="ops-form-field">{t('user.report.secretLabel')}
-                <textarea className="ops-secret" required rows={4} value={secret} onChange={(event) => { intentKey.current = null; setSecret(event.target.value); }} autoComplete="off" spellCheck={false} />
+              <label className="ops-form-field">
+                {t('user.report.secretLabel')}
+                <textarea
+                  className="ops-secret"
+                  required
+                  rows={4}
+                  value={secret}
+                  onChange={(event) => {
+                    intentKey.current = null;
+                    setSecret(event.target.value);
+                  }}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
               </label>
-              <label className="ops-form-field">{t('user.report.noteLabel')}
-                <textarea rows={5} maxLength={2048} value={note} onChange={(event) => { intentKey.current = null; setNote(event.target.value); }} />
+              <label className="ops-form-field">
+                {t('user.report.noteLabel')}
+                <textarea
+                  rows={5}
+                  maxLength={2048}
+                  value={note}
+                  onChange={(event) => {
+                    intentKey.current = null;
+                    setNote(event.target.value);
+                  }}
+                />
               </label>
               <Note tone="warn">{t('user.report.noteWarning')}</Note>
-              {validation ? <p className="field-error" role="alert">{t('user.report.validationError')}</p> : null}
+              {validation ? (
+                <p className="field-error" role="alert">
+                  {t('user.report.validationError')}
+                </p>
+              ) : null}
               {error ? <ErrorState error={error} /> : null}
               <div className="ops-actions">
-                <button className="nb-btn nb-btn--primary" type="submit" disabled={state === 'submitting' || config.data.maintenanceMode}>{state === 'submitting' ? t('user.report.submitting') : t('user.report.submit')}</button>
-                <button className="nb-btn nb-btn--secondary" type="button" onClick={clearForm}>{t('user.report.cancelAndClear')}</button>
+                <button
+                  className="nb-btn nb-btn--primary"
+                  type="submit"
+                  disabled={state === 'submitting' || config.data.maintenanceMode}
+                >
+                  {state === 'submitting' ? t('user.report.submitting') : t('user.report.submit')}
+                </button>
+                <button className="nb-btn nb-btn--secondary" type="button" onClick={clearForm}>
+                  {t('user.report.cancelAndClear')}
+                </button>
               </div>
             </form>
           )}

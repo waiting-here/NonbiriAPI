@@ -2,12 +2,15 @@ package gateway
 
 import (
 	"crypto/rand"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"math"
 	"strings"
 
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
@@ -107,6 +110,20 @@ func parseUsage(raw []byte) (contract.Usage, error) {
 	if _, ok := usageTotal(out); !ok {
 		return contract.Usage{TotalMismatch: out.TotalMismatch}, errResponse
 	}
+	// The native report can explicitly classify all output as text. A
+	// reasoning-only count is still billed by the aggregate output bucket.
+	if value.Output.Text != nil && *value.Output.Text == outputTokens && (value.Output.Reasoning == nil || *value.Output.Reasoning == 0) {
+		var fields struct {
+			Output object `json:"outputTokens"`
+		}
+		_ = json.Unmarshal(raw, &fields)
+		if only(fields.Output, "total", "text", "reasoning") {
+			out.Modalities.OutputPresent = true
+			out.Modalities.Output[contract.ModalityText] = outputTokens
+		} else {
+			out.Modalities.OutputReason = contract.ModalityUnknown
+		}
+	}
 	return out, nil
 }
 
@@ -154,6 +171,11 @@ func finishReason(raw []byte) (string, error) {
 	if err != nil || !ok || !only(value, "unified", "raw") {
 		return "", errResponse
 	}
+	if raw, exists := value["raw"]; exists && !isNull(raw) {
+		if _, valid := text(raw); !valid {
+			return "", errResponse
+		}
+	}
 	switch reason {
 	case "stop", "length":
 		return reason, nil
@@ -161,13 +183,15 @@ func finishReason(raw []byte) (string, error) {
 		return "tool_calls", nil
 	case "content-filter":
 		return "content_filter", nil
+	case "other", "error":
+		return "", errUnsuccessfulFinish
 	default:
 		return "", errResponse
 	}
 }
 
 // Provider warnings describe degraded or unsupported settings, not a failed
-// generation. Validate their v3 shape without rejecting usable responses.
+// generation. Validate the known v3/v4 shapes without exposing private details.
 func warningsOK(raw []byte) bool {
 	if len(raw) == 0 {
 		return true
@@ -193,6 +217,13 @@ func warningsOK(raw []byte) bool {
 				}
 			}
 		case "other":
+			if _, ok := text(warning["message"]); !ok {
+				return false
+			}
+		case "deprecated":
+			if _, ok := text(warning["setting"]); !ok {
+				return false
+			}
 			if _, ok := text(warning["message"]); !ok {
 				return false
 			}
@@ -240,11 +271,11 @@ func translateChat(raw []byte, model string, created int64) ([]byte, contract.Us
 	if err != nil || !warningsOK(root["warnings"]) {
 		return nil, contract.Usage{}, errResponse
 	}
-	reason, err := finishReason(root["finishReason"])
-	if err != nil {
-		return nil, contract.Usage{}, err
-	}
 	usage, err := parseUsage(root["usage"])
+	if err != nil {
+		return nil, usage, err
+	}
+	reason, err := finishReason(root["finishReason"])
 	if err != nil {
 		return nil, usage, err
 	}
@@ -264,7 +295,7 @@ func translateChat(raw []byte, model string, created int64) ([]byte, contract.Us
 		switch kind {
 		case "text", "reasoning":
 			value, ok := text(part["text"])
-			if !ok {
+			if !ok || !noCitations(part["citations"]) {
 				return nil, usage, errResponse
 			}
 			if kind == "reasoning" {
@@ -304,19 +335,34 @@ func translateChat(raw []byte, model string, created int64) ([]byte, contract.Us
 	return body, usage, err
 }
 
+func noCitations(raw []byte) bool {
+	if len(raw) == 0 {
+		return true
+	}
+	var citations []json.RawMessage
+	return json.Unmarshal(raw, &citations) == nil && citations != nil && len(citations) == 0
+}
+
 func translateEmbedding(raw []byte, model string, count int) ([]byte, contract.Usage, error) {
+	return translateEmbeddingRequest(raw, &openai.EmbeddingRequest{Model: model, InputCount: count, EncodingFormat: "float"})
+}
+
+func translateEmbeddingRequest(raw []byte, request *openai.EmbeddingRequest) ([]byte, contract.Usage, error) {
+	if request == nil || request.InputCount < 1 || (request.EncodingFormat != "float" && request.EncodingFormat != "base64") {
+		return nil, contract.Usage{}, errResponse
+	}
 	root, err := parseObject(raw)
-	if err != nil {
+	if err != nil || !warningsOK(root["warnings"]) {
 		return nil, contract.Usage{}, errResponse
 	}
 	var vectors [][]json.RawMessage
-	if json.Unmarshal(root["embeddings"], &vectors) != nil || len(vectors) != count {
+	if json.Unmarshal(root["embeddings"], &vectors) != nil || len(vectors) != request.InputCount {
 		return nil, contract.Usage{}, errResponse
 	}
 	dimensions := 0
 	data := make([]any, len(vectors))
 	for i, vector := range vectors {
-		if len(vector) == 0 || len(vector) > 65536 || dimensions != 0 && dimensions != len(vector) {
+		if len(vector) == 0 || len(vector) > 65536 || dimensions != 0 && dimensions != len(vector) || request.Dimensions > 0 && len(vector) != request.Dimensions {
 			return nil, contract.Usage{}, errResponse
 		}
 		dimensions = len(vector)
@@ -328,7 +374,21 @@ func translateEmbedding(raw []byte, model string, count int) ([]byte, contract.U
 			}
 			converted[j] = n
 		}
-		data[i] = map[string]any{"object": "embedding", "index": i, "embedding": converted}
+		var value any = converted
+		if request.EncodingFormat == "base64" {
+			encoded := make([]byte, 4*len(converted))
+			for j, n := range converted {
+				f := float32(n)
+				if math.IsInf(float64(f), 0) {
+					clear(encoded)
+					return nil, contract.Usage{}, errResponse
+				}
+				binary.LittleEndian.PutUint32(encoded[j*4:], math.Float32bits(f))
+			}
+			value = base64.StdEncoding.EncodeToString(encoded)
+			clear(encoded)
+		}
+		data[i] = map[string]any{"object": "embedding", "index": i, "embedding": value}
 	}
 	usage := contract.Usage{}
 	if raw, present := root["usage"]; present && !isNull(raw) {
@@ -343,10 +403,14 @@ func translateEmbedding(raw []byte, model string, count int) ([]byte, contract.U
 			usage.UncachedInputTokens = *value.Tokens
 		}
 	}
-	out := map[string]any{"object": "list", "model": model, "data": data}
+	out := map[string]any{"object": "list", "model": request.Model, "data": data}
 	if usage.Present {
 		out["usage"] = map[string]int64{"prompt_tokens": usage.UncachedInputTokens, "total_tokens": usage.UncachedInputTokens}
 	}
 	body, err := json.Marshal(out)
+	if int64(len(body)) > openai.DefaultMaxEmbeddingResponseBytes {
+		clear(body)
+		return nil, usage, errResponse
+	}
 	return body, usage, err
 }

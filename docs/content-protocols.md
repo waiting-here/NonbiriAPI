@@ -5,12 +5,13 @@ The connector selected for an endpoint determines its upstream protocol. The sam
 | Connector | Platform operation | Upstream resource appended to the versioned base |
 | --- | --- | --- |
 | `google-gemini` | `/v1/chat/completions` | `/models/{model}:generateContent`, or `:streamGenerateContent?alt=sse` |
-| `openai-responses` | `/v1/chat/completions` | `/responses` |
+| `openai-responses` | `/v1/chat/completions` conversion and native `/v1/responses`, `/v1/responses/compact`, `/v1/responses/input_tokens` | `/responses` or its corresponding native suffix |
+| `openai-chat-completions` | Native `/v1/chat/completions` and bounded `/v1/responses` conversion | `/chat/completions` |
 | `openai-decisions` | `/v1/decisions` | `/decisions` |
 
-Gemini and Responses do not serve embeddings, image generation or Decisions. There is no platform `/v1/responses` endpoint or stored upstream conversation. The existing OpenAI-compatible connector does not acquire Decisions support. A platform model must enable the corresponding `model_types` value, and its binding must support that operation.
+Gemini and the dedicated Chat/Responses types do not serve embeddings, image generation or Decisions. Native Responses is stateless and does not create a stored platform conversation. The OpenAI-compatible connector sends Chat and Responses natively and does not acquire Decisions support. A platform model must enable the corresponding `model_types` value, and its binding must support that operation. See [direct inference](direct-inference.md) for the complete registry and the new Responses-to-Chat conversion; the existing Chat translation subsets below retain their limits.
 
-All three connectors use the shared outbound boundary, cancellation, timeouts, concurrency limits and credential protections. Responses are bounded to 8 MiB for JSON or 32 MiB cumulatively for SSE, with 256 KiB lines and 1 MiB events, or a smaller configured shared limit. Translated output also respects those bounds. Upstream IDs and model metadata are projected to local completion IDs and the requested platform model; explicit continuation fields below retain the opaque information needed by that protocol.
+These connectors use the shared outbound boundary, cancellation, timeouts, concurrency limits and credential protections. Responses are bounded to 8 MiB for JSON or 32 MiB cumulatively for SSE, with 256 KiB lines and 1 MiB events, or a smaller configured shared limit. Translated output also respects those bounds. Upstream IDs and model metadata are projected to local completion IDs and the requested platform model; explicit continuation fields below retain the opaque information needed by that protocol.
 
 ## Gemini Chat
 
@@ -31,6 +32,17 @@ A successful stream requires a recognized candidate finish reason. `STOP` maps t
 Usage maps `promptTokenCount - cachedContentTokenCount` to uncached input, cached tokens to cache-read, and `candidatesTokenCount + thoughtsTokenCount` to output. Cache-write is zero. Cumulative snapshots replace earlier counts. Invalid, regressive or overflowing counts make usage unknown; inconsistent totals retain a diagnostic flag. Server-tool prompt consumption is not mapped into ordinary Chat buckets. Caller usage chunks follow `stream_options.include_usage`.
 
 Discovery uses bounded `GET /models` pagination: at most 20 pages, 1 MiB in total and 1,000 original entries. Only models advertising `generateContent` are retained. Page cycles, malformed entries and credential reflection reject the complete discovery result.
+
+## Multimodal usage and prices
+
+Provider pricing can distinguish input modalities. Platform token billing has
+four buckets: uncached input, cache-write input, cache-read input and output.
+Separate text, image, audio or video prices are not available. Gemini modality
+breakdowns and OpenAI audio-token details are not split into new billing buckets;
+valid aggregate usage is settled at the configured bucket prices. Image responses
+may retain supported text/image usage details in the public response while
+settlement uses aggregate buckets. Per-request prices remain fixed. These totals
+do not reproduce a provider's modality-specific invoice.
 
 ## Responses Chat
 
@@ -58,9 +70,15 @@ Usage uses `input_tokens - cached_tokens - cache_write_tokens`, separate cache b
 }
 ```
 
-`input` is a string or supported message/function/custom-tool history. Messages support text and user/tool images; files, audio and item references are rejected. Histories must pair call IDs with their outputs. Questions contain 1–200 predicate, choice or score entries. Choices contain 2–255 unique typed string/boolean values; score levels retain their declared order. Names are optional and positional. Cache key/options follow the native API. The platform replaces `model` and `safety_identifier` at dispatch. Omitted `stream` is normal; `stream:false` is a local convenience and is stripped. `stream:true`, `stream:null`, unknown top-level fields and native extensions are rejected before dispatch.
+`input` is a string or supported message/function/custom-tool history. User messages support `input_text`, `input_image` and `input_json`; tool outputs support text and images. Developer/system messages accept input text, while assistant messages accept output text or refusals. Histories must pair call IDs with their outputs. Files, audio and item references are rejected.
 
-The response contains `model`, `answers` and valid native `usage` when available. Answer count, ordering, names, types, choice values, score levels and probabilities are checked against the request. Per-question refusals are valid answers. The public model name replaces the physical one. Usage follows the same four-bucket accounting as Responses; missing or malformed usage uses existing conservative settlement.
+Questions contain 1–400 predicate, choice or score entries. Each question's `instructions` is a string or a nonempty array of `input_text`, `input_image` and `input_json` parts, without a message role or cache breakpoint. The 128-image request limit combines shared input, tool outputs and all questions. Choices contain 2–255 unique typed string/boolean values; score questions contain 2–10 levels in their declared order. Names are optional and positional.
+
+An `input_json` part has `type` and `data` fields. `data` is an object or an array of objects; nested values may use any JSON type. Each part allows at most 32 container levels, 10,000 values (including containers, excluding object keys) and 256 KiB of compact UTF-8 JSON. Numbers retain their JSON representation. Keys such as `role` and `image_url` inside `data` remain ordinary data and do not create messages or images. JSON parts do not accept cache breakpoints.
+
+Cache key/options follow the native API with `implicit`/`explicit` mode and `30m` TTL. Explicit breakpoints remain on shared text/image parts; questions are outside the reusable prefix. The platform replaces `model` and `safety_identifier` at dispatch. Omitted `stream` is normal; `stream:false` is a local convenience and is stripped. `stream:true`, `stream:null`, unknown top-level fields and native extensions are rejected before dispatch.
+
+The response contains `model`, `answers` and valid native `usage` when available. Answer count, ordering, names, types, choice values, score levels and probabilities are checked against the request. Per-question refusals are valid answers. The public model name replaces the physical one. Usage follows the same four-bucket accounting as Responses: cache-read/write tokens are subsets of input and are subtracted once to obtain ordinary input. Missing or malformed usage uses existing conservative settlement. Pricing remains configured by the deployment; upstream price changes do not update platform prices automatically.
 
 All questions in one request constitute one logical platform call. Existing per-call or token pricing, quotas, reservation, donor reward, idempotent settlement and account-deletion rules apply; there is no new per-question price. Chat minimum-content penalties, transport conversion and tool flattening do not apply to Decisions. Original caller-rule auditing still precedes business rejection and adaptation. Debug dry interception remains a 422 diagnostic result, without upstream traffic or accounting.
 

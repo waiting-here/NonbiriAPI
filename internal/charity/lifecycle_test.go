@@ -4,7 +4,44 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/usageinfo"
 )
+
+func TestConsumerUsageDetailsAggregateAndRetainUnknowns(t *testing.T) {
+	e := newCharityTestEnv(t)
+	first := e.accept(t, e.requestModel, 2400, 1)
+	second := e.accept(t, e.requestModel, 2400, 1)
+	tx := beginTestTx(t, e.store.DB())
+	defer tx.Rollback()
+	u := contract.Usage{Present: true, UncachedInputTokens: 2, OutputTokens: 1, SearchUnitsPresent: true, SearchUnitsMicros: 1250000, Modalities: contract.ModalityUsage{InputPresent: true, OutputPresent: true, Input: [3][4]int64{{1, 1, 0, 0}}, Output: [4]int64{1, 0, 0, 0}}}
+	for _, id := range []string{first, second} {
+		if _, err := tx.Exec(`UPDATE charity_reservations SET usage_uncached_input_tokens=2,usage_output_tokens=1,usage_details=? WHERE logical_request_id=?`, usageinfo.Encode(u), id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := e.service.ExportConsumerTx(t.Context(), tx, e.callerID, charityTestNow+1, 10)
+	if err != nil || !got.UsageDetailsPresent || got.UsageDetails.SearchUnitsMicros != 2500000 || got.UsageDetails.Modalities.Input[0][1] != 2 {
+		t.Fatalf("aggregate details: %+v %v", got, err)
+	}
+	if _, err := tx.Exec(`UPDATE charity_reservations SET usage_details='{}' WHERE logical_request_id=?`, second); err != nil {
+		t.Fatal(err)
+	}
+	got, err = e.service.ExportConsumerTx(t.Context(), tx, e.callerID, charityTestNow+1, 10)
+	if err != nil || !got.UsageDetailsPresent || got.UsageDetails.SearchUnitsPresent || got.UsageDetails.Modalities.InputPresent || got.UncachedInput != "4" {
+		t.Fatalf("legacy contribution: %+v %v", got, err)
+	}
+	for _, id := range []string{first, second} {
+		if _, err := tx.Exec(`UPDATE charity_reservations SET usage_unknown=1,usage_details=? WHERE logical_request_id=?`, usageinfo.Encode(contract.Usage{SearchUnitsPresent: true, SearchUnitsMicros: 1}), id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err = e.service.ExportConsumerTx(t.Context(), tx, e.callerID, charityTestNow+1, 10)
+	if err != nil || got.UsageDetails.Present || !got.UsageDetails.SearchUnitsPresent || got.UsageDetails.SearchUnitsMicros != 2 {
+		t.Fatalf("independent units: %+v %v", got, err)
+	}
+}
 
 func TestExportConsumerTxAggregateCutoffAndCleanupRollback(t *testing.T) {
 	environment := newCharityTestEnv(t)

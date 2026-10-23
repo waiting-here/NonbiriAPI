@@ -29,7 +29,7 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 			}
 		}
 	}()
-	if ctx == nil || backend.IsNil(input.Backend) || input.Target.Type() != contract.TypeAISDKGatewayV3 {
+	if ctx == nil || backend.IsNil(input.Backend) || !input.Target.Type().AISDKGateway() {
 		return result
 	}
 	if ctx.Err() != nil {
@@ -40,7 +40,7 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 		result.Failure = contract.DiscoveryFailureTransport
 		return result
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(client.BaseURL(), "/")+"/config", nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, ModelsURL(client.BaseURL()), nil)
 	if err != nil {
 		return result
 	}
@@ -126,10 +126,20 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 			result.Models = nil
 			return result
 		}
-		// Catalogs may contain image, video, speech, transcription, reranking
-		// and future model types. They are not chat/embedding candidates.
-		if kind != "language" && kind != "embedding" {
+		// Unrelated and future catalog services are not inference candidates.
+		if kind != "language" && kind != "embedding" && kind != "image" && kind != "reranking" {
 			continue
+		}
+		if raw, present := entry["specification"]; present {
+			spec, err := parseObject(raw)
+			version, ok := text(spec["specificationVersion"])
+			if err != nil || !ok {
+				result.Models = nil
+				return result
+			}
+			if version != "v"+specificationVersion(input.Target.Type()) {
+				continue
+			}
 		}
 		id, ok := text(entry["id"])
 		if !ok || !opaque(id, 512) || seen[id] || len(result.Models) >= 1000 {
@@ -148,9 +158,14 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 			result.Models = nil
 			return result
 		}
-		result.Models = append(result.Models, contract.DiscoveredModel{ID: id, Provider: provider})
+		service := map[string]contract.NativeService{"language": contract.NativeServiceGatewayText, "embedding": contract.NativeServiceEmbeddings, "image": contract.NativeServiceImagesGenerations, "reranking": contract.NativeServiceRerank}[kind]
+		services, _ := contract.ParseNativeServices([]contract.NativeService{service})
+		result.Models = append(result.Models, contract.DiscoveredModel{ID: id, Provider: provider, NativeServices: services})
 	}
 	result.Failure = contract.DiscoveryFailureNone
 	result.Diagnostic = ""
 	return result
 }
+
+// ModelsURL is the catalog endpoint before pagination parameters are added.
+func ModelsURL(baseURL string) string { return strings.TrimSuffix(baseURL, "/") + "/config" }

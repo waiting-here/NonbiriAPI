@@ -251,9 +251,7 @@ func (s *Service) MaintainOrphanSecretsAt(
 WHERE id IN (
  SELECT id FROM endpoint_key_secrets
  WHERE orphaned_at IS NOT NULL AND orphaned_at<=?
-   AND NOT EXISTS(SELECT 1 FROM endpoint_keys k WHERE k.secret_ref_id=endpoint_key_secrets.id)
-   AND NOT EXISTS(SELECT 1 FROM dispatch_claims c WHERE c.secret_ref_id=endpoint_key_secrets.id
-                  AND c.state IN ('claimed','dispatched'))
+   AND NOT EXISTS(SELECT 1 FROM secret_live_references live WHERE live.secret_ref_id=endpoint_key_secrets.id)
  ORDER BY orphaned_at,id LIMIT ?
 )`, threshold, limit)
 	if err != nil {
@@ -273,9 +271,7 @@ WHERE id IN (
 WHERE id IN (
  SELECT id FROM endpoint_key_secrets
  WHERE orphaned_at IS NULL
-   AND NOT EXISTS(SELECT 1 FROM endpoint_keys k WHERE k.secret_ref_id=endpoint_key_secrets.id)
-   AND NOT EXISTS(SELECT 1 FROM dispatch_claims c WHERE c.secret_ref_id=endpoint_key_secrets.id
-                  AND c.state IN ('claimed','dispatched'))
+   AND NOT EXISTS(SELECT 1 FROM secret_live_references live WHERE live.secret_ref_id=endpoint_key_secrets.id)
  ORDER BY id LIMIT ?
 ) AND orphaned_at IS NULL`, decisionNow, remaining)
 		if err != nil {
@@ -317,9 +313,7 @@ func hasOrphanSecretWork(ctx context.Context, tx *sql.Tx, threshold int64) (bool
 	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
  SELECT 1 FROM endpoint_key_secrets s
  WHERE (s.orphaned_at IS NULL OR s.orphaned_at<=?)
-   AND NOT EXISTS(SELECT 1 FROM endpoint_keys k WHERE k.secret_ref_id=s.id)
-   AND NOT EXISTS(SELECT 1 FROM dispatch_claims c WHERE c.secret_ref_id=s.id
-                  AND c.state IN ('claimed','dispatched'))
+   AND NOT EXISTS(SELECT 1 FROM secret_live_references live WHERE live.secret_ref_id=s.id)
 )`, threshold).Scan(&pending); err != nil {
 		return false, fmt.Errorf("claim: inspect orphan credential backlog: %w", err)
 	}

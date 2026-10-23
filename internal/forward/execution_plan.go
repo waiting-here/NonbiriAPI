@@ -42,7 +42,7 @@ func (service *Service) snapshot(
 		if len(connectorTypes) == 0 {
 			return executionPlan{}, &openai.ValidationError{Detail: requestattempt.NewDetail("request", "no connector supports the required request features")}
 		}
-		value, err := service.charity.Snapshot(ctx, userID, admission.modelID, admission.decisionNow, connectorTypes)
+		value, err := service.charity.Snapshot(ctx, userID, admission.modelID, admission.decisionNow, connectorTypes, request.operation)
 		if err != nil {
 			return executionPlan{}, err
 		}
@@ -75,6 +75,11 @@ func (service *Service) snapshot(
 	if decision.Active && decision.ClaimPurpose != plan.purpose {
 		return executionPlan{}, ErrInternal
 	}
+	var expandErr error
+	plan.candidates, expandErr = expandServiceTargets(plan.candidates, request.operation)
+	if expandErr != nil {
+		return executionPlan{}, expandErr
+	}
 
 	if err := service.freezeGatewayModels(ctx, &plan); err != nil {
 		return executionPlan{}, err
@@ -93,6 +98,12 @@ func (service *Service) snapshot(
 		if !service.validCandidate(candidate, admission.charity) {
 			plan.clearPrepared()
 			return executionPlan{}, ErrInternal
+		}
+		if candidate.preparationError != nil {
+			if rejection == nil {
+				rejection = candidate.preparationError
+			}
+			continue
 		}
 		candidateRequest := candidate.prepared.source(request)
 		policy := candidate.Policy
@@ -114,6 +125,7 @@ func (service *Service) snapshot(
 			}
 		}
 	}
+	capable = firstCapableBindings(capable)
 	plan.clearUnusedPrepared(capable)
 	clear(plan.candidates)
 	if len(capable) == 0 {
@@ -122,7 +134,13 @@ func (service *Service) snapshot(
 		}
 		return executionPlan{}, openai.ErrInvalidRequest
 	}
-	ordered, err := orderCandidates(plan.strategy, capable)
+	var ordered []RouteCandidate
+	var err error
+	if plan.charity {
+		ordered, err = service.charity.OrderSelected(capable, plan.charityStrategy)
+	} else {
+		ordered, err = orderCandidates(plan.strategy, capable)
+	}
 	if err != nil {
 		for _, candidate := range capable {
 			if candidate.prepared != nil {
@@ -163,7 +181,7 @@ func (service *Service) supportedCharityConnectorTypes(request *validatedRequest
 		}
 		if service.adaptations != nil {
 			descriptor, ok := service.registry.Descriptor(connectorType)
-			if ok && (request.chat == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityText)) && (request.embedding == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityEmbeddings)) && (request.image == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityImagesGenerations)) && (request.decision == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityDecisions)) {
+			if ok && (request.chat == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityText)) && (request.embedding == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityEmbeddings)) && (request.image == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityImagesGenerations)) && (request.decision == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityDecisions)) && (request.inference == nil || descriptor.Capabilities.Has(connectorcontract.OperationCapability(request.operation))) {
 				connectorTypes = append(connectorTypes, connectorType)
 			}
 		} else if request.supports(service.registry, connectorType) {

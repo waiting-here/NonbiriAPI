@@ -52,6 +52,7 @@ export async function renderWallpaper(
   signal: AbortSignal,
   quality: WallpaperQuality = wallpaperQuality(),
 ): Promise<() => void> {
+  if (signal.aborted) return () => {};
   const prefix = '/assets/gacha/appearances/layers/' + (quality === 'high' ? 'hires/' : '');
   const id = `${scene}-${theme}` as const;
   const names = [
@@ -88,7 +89,8 @@ export async function renderWallpaper(
     textures: WebGLTexture[] = [],
     buffers: WebGLBuffer[] = [];
   const program = gl.createProgram();
-  const cadence = new PaintCadence();
+  // Wallpapers are always page backgrounds.
+  const cadence = new PaintCadence(undefined, true);
   let frameID = 0,
     stopped = false,
     elapsed = 0,

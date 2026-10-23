@@ -128,7 +128,7 @@ func TestAuthorizeLiveRolesAndOwnerIsolation(t *testing.T) {
 		})
 	}
 
-	result, err := store.DB().Exec(`INSERT INTO endpoints(user_id,connector_type,base_url,created_at,updated_at) VALUES(?,'openai-compatible','https://owned.example/v1',?,?)`, userID, authTestNow, authTestNow)
+	result, err := store.DB().Exec(`INSERT INTO endpoints(user_id,connector_type,base_url,native_service_mask,capability_origin,created_at,updated_at) VALUES(?,'openai-compatible','https://owned.example/v1',1,'legacy',?,?)`, userID, authTestNow, authTestNow)
 	if err != nil {
 		t.Fatalf("insert endpoint: %v", err)
 	}

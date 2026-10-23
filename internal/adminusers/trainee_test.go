@@ -85,8 +85,6 @@ func TestTraineeCannotEditUserProfileOrEconomy(t *testing.T) {
 	}
 	for index, fields := range []string{
 		`"mode":"profile","endpoint_limit":"20"`,
-		`"mode":"profile","rpm_limit":"100"`,
-		`"mode":"profile","concurrency_limit":"30"`,
 		`"mode":"profile","level":4`,
 		`"mode":"profile","lang":"en"`,
 		`"mode":"profile","discord_gate_policy":"exempt"`,

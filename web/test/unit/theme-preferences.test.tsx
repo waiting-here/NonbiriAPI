@@ -1,13 +1,10 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import i18n, {
-  configureI18n,
-  detectLanguage,
-  LANGUAGE_STORAGE_KEY,
-} from '@shared/i18n';
+import i18n, { configureI18n, detectLanguage, LANGUAGE_STORAGE_KEY } from '@shared/i18n';
 import { ThemeProvider } from '@shared/theme/ThemeProvider';
 import {
+  APPEARANCE_INTENSITY_STORAGE_KEY,
   DENSITY_STORAGE_KEY,
   FONT_SIZE_STORAGE_KEY,
   THEME_STORAGE_KEY,
@@ -17,12 +14,16 @@ import { useTheme } from '@shared/theme/useTheme';
 const originalNavigatorLanguages = Object.getOwnPropertyDescriptor(navigator, 'languages');
 
 function ThemeProbe() {
-  const { theme, density, fontSize, setDensity, setFontSize } = useTheme();
+  const { theme, density, fontSize, intensity, setDensity, setFontSize, setIntensity } = useTheme();
   return (
     <div>
       <output data-testid="theme">{theme}</output>
       <output data-testid="density">{density}</output>
       <output data-testid="font-size">{fontSize}</output>
+      <output data-testid="intensity">{intensity}</output>
+      <button type="button" onClick={() => setIntensity('vivid')}>
+        Vivid appearance
+      </button>
       <button type="button" onClick={() => setDensity('compact')}>
         Compact density
       </button>
@@ -58,6 +59,7 @@ afterEach(() => {
   delete document.documentElement.dataset.density;
   delete document.documentElement.dataset.fontSize;
   delete document.documentElement.dataset.theme;
+  delete document.documentElement.dataset.appearanceIntensity;
 });
 
 describe('theme preference boundary', () => {
@@ -118,6 +120,79 @@ describe('theme preference boundary', () => {
     expect(document.documentElement.dataset.fontSize).toBe('large');
     expect(window.localStorage.getItem(DENSITY_STORAGE_KEY)).toBe('compact');
     expect(window.localStorage.getItem(FONT_SIZE_STORAGE_KEY)).toBe('large');
+  });
+});
+
+function reducedTransparency(initial = false) {
+  let matches = initial;
+  const listeners = new Set<() => void>();
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    get matches() {
+      return query === '(prefers-reduced-transparency: reduce)' && matches;
+    },
+    media: query,
+    addEventListener: (_event: string, listener: () => void) => {
+      if (query === '(prefers-reduced-transparency: reduce)') listeners.add(listener);
+    },
+    removeEventListener: (_event: string, listener: () => void) => listeners.delete(listener),
+  }));
+  return (next: boolean) =>
+    act(() => {
+      matches = next;
+      listeners.forEach((listener) => listener());
+    });
+}
+
+describe('appearance intensity preference', () => {
+  test('follows system changes until an explicit choice, then persists across remounts', async () => {
+    const changeSystem = reducedTransparency(true);
+    const user = userEvent.setup();
+    const first = render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+    expect(document.documentElement.dataset.appearanceIntensity).toBe('focus');
+    expect(localStorage.getItem(APPEARANCE_INTENSITY_STORAGE_KEY)).toBeNull();
+    changeSystem(false);
+    expect(document.documentElement.dataset.appearanceIntensity).toBe('balanced');
+    changeSystem(true);
+    expect(document.documentElement.dataset.appearanceIntensity).toBe('focus');
+    await user.click(screen.getByRole('button', { name: 'Vivid appearance' }));
+    changeSystem(false);
+    changeSystem(true);
+    expect(document.documentElement.dataset.appearanceIntensity).toBe('vivid');
+    expect(localStorage.getItem(APPEARANCE_INTENSITY_STORAGE_KEY)).toBe('vivid');
+    first.unmount();
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+    expect(screen.getByTestId('intensity')).toHaveTextContent('vivid');
+    expect(document.documentElement.dataset.appearanceIntensity).toBe('vivid');
+  });
+
+  test('keeps a session choice when storage is blocked', async () => {
+    const changeSystem = reducedTransparency(true);
+    vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
+      throw new DOMException('blocked', 'SecurityError');
+    });
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('blocked', 'SecurityError');
+    });
+    const user = userEvent.setup();
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+    expect(document.documentElement.dataset.appearanceIntensity).toBe('focus');
+    await user.click(screen.getByRole('button', { name: 'Vivid appearance' }));
+    changeSystem(false);
+    changeSystem(true);
+    expect(screen.getByTestId('intensity')).toHaveTextContent('vivid');
+    expect(document.documentElement.dataset.appearanceIntensity).toBe('vivid');
   });
 });
 

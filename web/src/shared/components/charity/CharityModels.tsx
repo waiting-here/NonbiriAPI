@@ -1,8 +1,12 @@
-import type { RecurringDiscount } from '@shared/operations/recurringDiscount';
+import { CharityTargets } from './CharityTargets';
+import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
+import { isAISDKGateway } from '@shared/operations/connectorPolicy';
+import { CloudflareProxyField, CloudflareProxySummary } from '../CloudflareProxyField';
 import { SessionHeaderFields } from './SessionHeaderFields';
 import { PriceTools } from './PriceTools';
 import {
   priceDraftError,
+  draftPriceConfig,
   priceDraft,
   priceDraftSignature,
   snapshotPriceDraft,
@@ -10,7 +14,12 @@ import {
 } from './priceDraft';
 import { DraftLeaveGuard } from './DraftLeaveScope';
 import { PageHeader } from '../States';
-import type { SessionHeader } from '@shared/operations/charity';
+import {
+  buildSessionHeaders,
+  sessionHeaderDraft,
+  validSessionHeaderDraft,
+  type SessionHeaderDraft,
+} from '@shared/sessionHeaders';
 import { PriceConfigFields } from './PriceConfigFields';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ModelTypesField, ModelTypesSummary } from '@shared/components/ModelTypesField';
@@ -41,7 +50,6 @@ import {
   patchManagedCharityModel,
   type CharityModel,
   type CharityRole,
-  type TokenPrices,
 } from '@shared/operations/charity';
 import {
   getManagedCharityModel,
@@ -58,7 +66,7 @@ import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { buildRolePolicy, draftFromRolePolicy, type RolePolicyDraft } from '@shared/rolePolicy';
 import '@shared/styles/charity-management.css';
-import { timeDraftValue, type TimeDraft } from '@shared/time';
+import { timeDraftValue } from '@shared/time';
 import type { TransportRule } from '@shared/transportRule';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
@@ -88,15 +96,9 @@ import {
   validText,
 } from './managementFields';
 
-interface ModelDraft {
-  sessionHeaders: SessionHeader[];
-  longEnabled: boolean;
-  longThreshold: string;
-  longRequest: string;
-  longPrices: TokenPrices;
-  penaltyEnabled: boolean;
-  penaltyThreshold: string;
-  penaltyFine: string;
+interface ModelDraft extends PriceDraft {
+  cloudflareProxy: boolean;
+  sessionHeaders: SessionHeaderDraft[];
   modelTypes: ModelType[];
   transportRule: TransportRule;
   rolePolicy: RolePolicyDraft;
@@ -109,23 +111,13 @@ interface ModelDraft {
   enabled: boolean;
   allowedLevels: number[];
   publicDescription: string;
-  tokenReserveCredits: string | null;
-  mode: 'per_request' | 'per_token';
-  requestUser: string;
-  requestDonor: string;
-  userPrices: TokenPrices;
-  donorRewards: TokenPrices;
-  recurringDiscount: RecurringDiscount;
-  discountEnabled: boolean;
-  discountPercent: number;
-  discountStart: TimeDraft;
-  discountEnd: TimeDraft;
   flatten: boolean;
 }
 function modelDraft(model?: CharityModel): ModelDraft {
   return {
     ...priceDraft(model),
-    sessionHeaders: model?.session_headers?.map((value) => ({ ...value })) ?? [],
+    cloudflareProxy: model?.cloudflare_proxy_enabled ?? false,
+    sessionHeaders: sessionHeaderDraft(model?.session_headers),
     modelTypes: model ? [...model.model_types] : ['chat_completions'],
     transportRule: model?.transport_rule ?? 'passthrough',
     rolePolicy: draftFromRolePolicy(model?.role_policy),
@@ -152,7 +144,8 @@ function modelBody(
   const rolePolicy = buildRolePolicy(draft.rolePolicy);
   if (rolePolicy.error) throw new Error('Role fields are not ready');
   const body = {
-    session_headers: draft.sessionHeaders.map((v) => ({ ...v, name: v.name.trim() })),
+    cloudflare_proxy_enabled: draft.cloudflareProxy,
+    session_headers: buildSessionHeaders(draft.sessionHeaders),
     model_types: draft.modelTypes,
     transport_rule: draft.transportRule,
     role_policy: rolePolicy.policy,
@@ -164,29 +157,7 @@ function modelBody(
     enabled: draft.enabled,
     allowed_levels: MODEL_LEVELS.filter((level) => draft.allowedLevels.includes(level)),
     public_description: normalizePublicDescriptionInput(draft.publicDescription),
-    pricing: {
-      ...(draft.mode === 'per_request'
-        ? { mode: 'per_request', user_price: draft.requestUser, donor_reward: draft.requestDonor }
-        : { mode: 'per_token', user_prices: draft.userPrices, donor_rewards: draft.donorRewards }),
-      ...(draft.longEnabled
-        ? {
-            long_context: {
-              input_threshold: draft.longThreshold,
-              ...(draft.mode === 'per_request'
-                ? { user_price: draft.longRequest }
-                : { user_prices: draft.longPrices }),
-            },
-          }
-        : {}),
-      ...(draft.penaltyEnabled
-        ? {
-            context_penalty: {
-              input_threshold: draft.penaltyThreshold,
-              fine: draft.penaltyFine,
-            },
-          }
-        : {}),
-    },
+    pricing: draftPriceConfig(draft)!.pricing,
     recurring_discount: structuredClone(draft.recurringDiscount),
     discount: {
       enabled: draft.discountEnabled,
@@ -204,6 +175,7 @@ function modelBody(
 }
 
 type ModelValidation =
+  | 'searchUnitOperations'
   | 'modelTypes'
   | 'rolePolicy'
   | 'excludedFields'
@@ -221,15 +193,11 @@ type ModelValidation =
 
 function modelDraftError(draft: ModelDraft): ModelValidation | null {
   if (
-    draft.sessionHeaders.some(
-      (v) =>
-        !v.name.trim() ||
-        !Number.isInteger(v.idle_seconds) ||
-        v.idle_seconds < 1 ||
-        v.idle_seconds > 86400,
-    )
+    draft.mode === 'per_search_unit' &&
+    (draft.modelTypes.length !== 1 || draft.modelTypes[0] !== 'rerank')
   )
-    return 'sessionHeaders';
+    return 'searchUnitOperations';
+  if (!validSessionHeaderDraft(draft.sessionHeaders)) return 'sessionHeaders';
   if (!draft.modelTypes.length) return 'modelTypes';
   if (buildRolePolicy(draft.rolePolicy).error) return 'rolePolicy';
   if (
@@ -413,6 +381,16 @@ function ModelForm({
           disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
           showError
         />
+        <CloudflareProxyField
+          enabled={draft.cloudflareProxy}
+          mode={model?.cloudflare_proxy_mode}
+          disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
+          onChange={(cloudflareProxy) => setDraft({ ...draft, cloudflareProxy })}
+        />
+        <SessionHeaderFields
+          value={draft.sessionHeaders}
+          onChange={(sessionHeaders) => setDraft((value) => ({ ...value, sessionHeaders }))}
+        />
         <p className="nb-sub">{t('common.operations.charity.operationHelp')}</p>
         {draft.modelTypes.includes('embeddings') ? (
           <p className="nb-sub">{t('common.operations.charity.embeddingBillingHelp')}</p>
@@ -471,7 +449,8 @@ function ModelForm({
                 <small>{t('common.operations.charity.routeAffinityTTLHelp')}</small>
               </label>
             ) : null}
-            {draft.modelTypes.includes('chat_completions') ? (
+            {draft.modelTypes.includes('chat_completions') ||
+            draft.modelTypes.includes('responses') ? (
               <>
                 <TransportRuleField
                   value={draft.transportRule}
@@ -567,7 +546,7 @@ function ModelForm({
             </label>
           </div>
         </fieldset>
-        {draft.modelTypes.includes('chat_completions') ? (
+        {draft.modelTypes.includes('chat_completions') || draft.modelTypes.includes('responses') ? (
           <RolePolicyEditor
             value={draft.rolePolicy}
             onChange={(rolePolicy) => {
@@ -581,6 +560,7 @@ function ModelForm({
         <div className={`nb-workflow-price-workspace${referenceOpen ? ' is-reference-open' : ''}`}>
           <div className="nb-workflow-price-editor">
             <PriceConfigFields
+              allowSearchUnits={draft.modelTypes.length === 1 && draft.modelTypes[0] === 'rerank'}
               value={draft}
               role={role}
               onChange={(fields) => setDraft((current) => ({ ...current, ...fields }))}
@@ -662,10 +642,6 @@ function ModelForm({
             </Panel>
           </div>
         </div>
-        <SessionHeaderFields
-          value={draft.sessionHeaders}
-          onChange={(sessionHeaders) => setDraft((value) => ({ ...value, sessionHeaders }))}
-        />
       </fieldset>
       {save.error ? (
         <ErrorState error={save.error} />
@@ -677,17 +653,19 @@ function ModelForm({
       ) : null}
       {validationError && validationError !== 'rolePolicy' && validationError !== 'modelTypes' ? (
         <p className="field-error" role="alert">
-          {validationError === 'excludedFields'
-            ? copy.excludedInvalid
-            : validationError === 'modelLevels'
-              ? t('common.operations.charity.validation.modelLevels')
-              : validationError === 'publicDescription'
-                ? t('common.operations.charity.validation.publicDescription')
-                : validationError === 'affinityTTLSeconds'
-                  ? t('common.operations.charity.validation.affinityTTLSeconds')
-                  : validationError === 'recurringDiscount'
-                    ? t('common.operations.charity.validation.recurringDiscount')
-                    : t(`common.operations.charity.validation.${validationError}`)}
+          {validationError === 'searchUnitOperations'
+            ? t('common.operations.charity.validation.searchUnitOperations')
+            : validationError === 'excludedFields'
+              ? copy.excludedInvalid
+              : validationError === 'modelLevels'
+                ? t('common.operations.charity.validation.modelLevels')
+                : validationError === 'publicDescription'
+                  ? t('common.operations.charity.validation.publicDescription')
+                  : validationError === 'affinityTTLSeconds'
+                    ? t('common.operations.charity.validation.affinityTTLSeconds')
+                    : validationError === 'recurringDiscount'
+                      ? t('common.operations.charity.validation.recurringDiscount')
+                      : t(`common.operations.charity.validation.${validationError}`)}
         </p>
       ) : null}
       <div className="ops-actions">
@@ -911,9 +889,8 @@ function BindingsPanel({
       {showAdaptation ? (
         <Fold
           lazy
-          title={t('common.operations.charity.adaptationSettings', {
-            defaultValue: 'Request adaptation',
-          })}
+          title={t('requestAdaptation.model.title')}
+          summary={t('requestAdaptation.model.saveHelp')}
         >
           <RequestAdaptationEditor
             key={`${accountId}:${role}:${model.id}`}
@@ -921,15 +898,21 @@ function BindingsPanel({
             scope="charity-model"
             gatewayCacheDefaults={Boolean(
               bindings.data?.bindings.length &&
-              bindings.data.bindings.every(
-                (entry) => entry.source.connector_type === 'ai-sdk-gateway-v3',
-              ),
+              bindings.data.bindings
+                .flatMap(
+                  (entry) =>
+                    entry.targets?.map((target) => target.connector_type) ?? [
+                      entry.source.connector_type,
+                    ],
+                )
+                .every((type) => type !== undefined && isAISDKGateway(type)),
             )}
             editable={role === 'admin'}
           />
         </Fold>
       ) : null}
       <Card>
+        <CharityTargets role={role} accountId={accountId} model={model} />
         <h3>{t('common.operations.charity.orderedBindings')}</h3>
         {bindings.isPending ? (
           <LoadingState />
@@ -961,8 +944,9 @@ function BindingsPanel({
                         className="ops-cell-wide"
                         data-label={t('common.operations.charity.source')}
                       >
-                        {entry.source.connector_type} · {entry.source.canonical_base_url} ·{' '}
-                        {entry.source.display_head}…{entry.source.display_tail}
+                        <GatewayConnectorLabel value={entry.source.connector_type} /> ·{' '}
+                        {entry.source.canonical_base_url} · {entry.source.display_head}…
+                        {entry.source.display_tail}
                         {entry.source_types.length === 0 ? (
                           <>
                             <br />
@@ -983,7 +967,8 @@ function BindingsPanel({
                         data-label={t(charityCopyKey(role, 'upstreamModel'))}
                       >
                         {entry.upstream_model_id}
-                        {entry.source.connector_type === 'ai-sdk-gateway-v3' ? (
+                        {(entry.targets?.every((target) => isAISDKGateway(target.connector_type)) ??
+                        isAISDKGateway(entry.source.connector_type)) ? (
                           <GatewayCapabilitySummary entry={entry.gateway_capabilities} />
                         ) : null}
                       </td>
@@ -1078,10 +1063,18 @@ function BindingsPanel({
               key={`${accountId}:${model.id}:${adaptationBinding}`}
               url={`${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-models/${encodeURIComponent(model.id)}/bindings/${encodeURIComponent(adaptationBinding)}/request-adaptation`}
               scope="binding"
-              connectorType={
-                bindings.data.bindings.find((entry) => entry.id === adaptationBinding)?.source
-                  .connector_type
-              }
+              connectorType={(() => {
+                const entry = bindings.data.bindings.find(
+                  (entry) => entry.id === adaptationBinding,
+                );
+                if (!entry) return undefined;
+                const connectors = entry.targets?.map((target) => target.connector_type) ?? [
+                  entry.source.connector_type,
+                ];
+                return connectors.every((connector) => connector === connectors[0])
+                  ? connectors[0]
+                  : undefined;
+              })()}
               editable={role === 'admin'}
             />
           </Fold>
@@ -1528,6 +1521,14 @@ export function ModelsPanel({
             </CharityModelScope>
           ) : selected ? (
             <fieldset className="ops-stack ops-unframed" disabled={detail.isFetching}>
+              {trainee ? (
+                <dl className="nb-kv">
+                  <CloudflareProxySummary
+                    enabled={selected.cloudflare_proxy_enabled}
+                    mode={selected.cloudflare_proxy_mode}
+                  />
+                </dl>
+              ) : null}
               {trainee ? (
                 <CharityRolePolicyForm
                   key={`roles:${selected.id}`}

@@ -4,11 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"reflect"
 	"testing"
 )
 
-func TestAdditiveConversionLeavesUnrelatedHistoryForExplicitAudit(t *testing.T) {
+func TestConversionAuditsRebuiltCredentialsAndPreservesUnrelatedHistory(t *testing.T) {
 	for _, fault := range []string{"credential", "foreign-key"} {
 		t.Run(fault, func(t *testing.T) {
 			path, vault := sourceFixtureFromDDL(t, schema21SQLForTest(t), 21, stableSchema21Manifest)
@@ -22,6 +21,7 @@ func TestAdditiveConversionLeavesUnrelatedHistoryForExplicitAudit(t *testing.T) 
 			case "foreign-key":
 				mustExec(t, database, "PRAGMA foreign_keys=OFF; INSERT INTO account_mfa_attempts(user_id,window_start,failures,blocked_until) VALUES(999999,1,1,0)")
 			}
+			beforeRows := gatewayRows(t, database)
 			if err := database.Close(); err != nil {
 				t.Fatal(err)
 			}
@@ -30,24 +30,34 @@ func TestAdditiveConversionLeavesUnrelatedHistoryForExplicitAudit(t *testing.T) 
 			}
 			var events []Progress
 			result, err := Run(t.Context(), path, vault, Options{Apply: true, Progress: func(p Progress) { events = append(events, p) }})
+			if fault == "credential" {
+				if err == nil {
+					t.Fatal("rebuilt credentials were not audited")
+				}
+				database, openErr := sql.Open("sqlite", path)
+				if openErr != nil {
+					t.Fatal(openErr)
+				}
+				assertExactPublishedSource(t, database, 21, stableSchema21Manifest, beforeRows)
+				if err := database.Close(); err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
 			if err != nil || result.Status != "converted" {
-				t.Fatal("additive conversion scanned unrelated history", result, err)
+				t.Fatal("conversion rejected unrelated history", result, err)
 			}
-			checkedTables := map[string]bool{}
+			var credentialAudit, endpointRebuild, endpointRelations bool
 			for _, event := range events {
-				if event.Phase == "audit" || event.Phase == "rebuild" {
-					t.Fatal("additive conversion performed a historical audit/rebuild", event)
-				}
-				if event.Phase == "relationships" {
-					checkedTables[event.Table] = true
+				credentialAudit = credentialAudit || event.Phase == "audit" && event.Table == "endpoint_key_secrets"
+				endpointRebuild = endpointRebuild || event.Phase == "rebuild" && event.Table == "endpoints"
+				endpointRelations = endpointRelations || event.Phase == "relationships" && event.Table == "endpoint_keys"
+				if event.Phase == "relationships" && event.Table == "account_mfa_attempts" {
+					t.Fatal("conversion scanned an unrelated historical relationship", event)
 				}
 			}
-			want := map[string]bool{"donation_key_cooldowns": true, "dispatch_retry_after_observations": true,
-				"request_header_facts": true, "charity_price_template_audits": true, "donation_owner_preferences": true,
-				"donation_key_backoffs": true, "dispatch_smart_backoff_facts": true,
-				"channel_charity_binding_presets": true, "channel_charity_binding_mappings": true}
-			if !reflect.DeepEqual(checkedTables, want) {
-				t.Fatal("unexpected relationship scope", checkedTables)
+			if !credentialAudit || !endpointRebuild || !endpointRelations {
+				t.Fatal("conversion omitted affected checks", credentialAudit, endpointRebuild, endpointRelations)
 			}
 			if _, err := Run(t.Context(), path, vault, Options{}); err == nil {
 				t.Fatal("explicit current audit missed preserved damage")
@@ -101,6 +111,7 @@ func TestRebuiltSourceRetainsCredentialAndAffectedRelationChecks(t *testing.T) {
 			for _, ddl := range triggers {
 				mustExec(t, database, ddl)
 			}
+			beforeRows := gatewayRows(t, database)
 			if err := database.Close(); err != nil {
 				t.Fatal(err)
 			}
@@ -113,10 +124,7 @@ func TestRebuiltSourceRetainsCredentialAndAffectedRelationChecks(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer database.Close()
-			plan, err := storageSchema.plan(t.Context(), database)
-			if err != nil || len(plan.steps) != 9 {
-				t.Fatal("failure did not preserve source", err)
-			}
+			assertExactPublishedSource(t, database, 17, stableSchema17Manifest, beforeRows)
 			if fault != "credential" {
 				var rolledBack bool
 				for _, event := range events {
@@ -134,10 +142,18 @@ func TestOfflineCancellationAtConversionBoundariesRestoresExactSource(t *testing
 	for _, phase := range []string{"rebuild", "relationships", "target", "commit"} {
 		t.Run(phase, func(t *testing.T) {
 			path, vault := sourceFixtureFromDDL(t, schema20SQLForTest(t), 20, stableSchema20Manifest)
+			database, err := sql.Open("sqlite", path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			beforeRows := gatewayRows(t, database)
+			if err := database.Close(); err != nil {
+				t.Fatal(err)
+			}
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			var rolledBack bool
-			_, err := Run(ctx, path, vault, Options{Apply: true, Progress: func(event Progress) {
+			_, err = Run(ctx, path, vault, Options{Apply: true, Progress: func(event Progress) {
 				if event.Phase == phase && event.State == "started" {
 					cancel()
 				}
@@ -146,13 +162,13 @@ func TestOfflineCancellationAtConversionBoundariesRestoresExactSource(t *testing
 			if !errors.Is(err, context.Canceled) || !rolledBack {
 				t.Fatal("cancel did not finish rollback", rolledBack, err)
 			}
-			database, err := sql.Open("sqlite", path)
+			database, err = sql.Open("sqlite", path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			plan, err := storageSchema.plan(t.Context(), database)
-			if err := errors.Join(err, database.Close()); err != nil || len(plan.steps) != 6 {
-				t.Fatal("exact source not restored", err)
+			assertExactPublishedSource(t, database, 20, stableSchema20Manifest, beforeRows)
+			if err := database.Close(); err != nil {
+				t.Fatal(err)
 			}
 			if _, err := Run(t.Context(), path, vault, Options{Apply: true}); err != nil {
 				t.Fatal("retry after cancellation failed", err)

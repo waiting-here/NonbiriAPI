@@ -130,7 +130,7 @@ func TestCatalogFilteredCountAndProjectionFollowResourceChangesWithoutWrites(t *
 		if err := env.store.DB().QueryRow(`SELECT total_changes()`).Scan(&after); err != nil || after != before {
 			t.Fatalf("catalog wrote state: %d/%d %v", before, after, err)
 		}
-		_, err := env.service.snapshot(ctx, modelID, env.clock.Load(), false, nil)
+		_, err := env.service.snapshot(ctx, modelID, env.clock.Load(), false, nil, connectorcontract.OperationChatCompletions)
 		if (err == nil) != want {
 			t.Fatalf("runtime disagrees: want=%v err=%v", want, err)
 		}
@@ -165,9 +165,10 @@ func TestCatalogFilteredCountAndProjectionFollowResourceChangesWithoutWrites(t *
 	exec(`UPDATE endpoints SET enabled=0 WHERE id=(SELECT endpoint_id FROM endpoint_keys WHERE id=?)`, physical)
 	check(false)
 	exec(`UPDATE endpoints SET enabled=1 WHERE id=(SELECT endpoint_id FROM endpoint_keys WHERE id=?)`, physical)
-	exec(`UPDATE model_pair_catalog SET automatic_supports=0,manual_supports=0 WHERE endpoint_key_id=?`, physical)
-	check(false)
-	exec(`UPDATE model_pair_catalog SET automatic_supports=1 WHERE endpoint_key_id=?`, physical)
+	env.seedAutomaticCatalog(t, physical)
+	exec(`DELETE FROM donation_key_manual_models WHERE donation_key_id=?`, key)
+	check(true)
+	env.seedAutomaticCatalog(t, physical, "upstream")
 	check(true)
 	exec(`UPDATE donation_keys SET expires_at=? WHERE id=?`, env.clock.Load(), key)
 	check(false)
@@ -357,7 +358,7 @@ func TestCatalogResourceAvailabilityHonorsCandidateCeiling(t *testing.T) {
 		}
 		selections = append(selections, BindingSelection{DonationKeyID: fmt.Sprint(key), UpstreamModelID: "upstream"})
 	}
-	if _, err := env.service.AddBindingsAdmin(context.Background(), modelID, routingMutation(t, 'B', http.MethodPost, routeAdminBindingBatch, []int64{modelID}, map[string]any{"ceiling": true}), BindingBatch{ExpectedBindingRevision: "0", Selections: selections}); err != nil {
+	if _, err := env.service.AddBindingsReceiptAdmin(context.Background(), modelID, routingMutation(t, 'B', http.MethodPost, routeAdminBindingReceipt, []int64{modelID}, map[string]any{"ceiling": true}), BindingBatch{ExpectedBindingRevision: "0", Selections: selections}); err != nil {
 		t.Fatal(err)
 	}
 	yes := true
@@ -365,7 +366,7 @@ func TestCatalogResourceAvailabilityHonorsCandidateCeiling(t *testing.T) {
 	if err != nil || page.Pagination.TotalItems != "0" {
 		t.Fatalf("oversized candidate set counted as available: %+v %v", page, err)
 	}
-	if _, err := env.service.snapshot(context.Background(), modelID, env.clock.Load(), false, nil); !errors.Is(err, ErrResourceLimit) {
+	if _, err := env.service.snapshot(context.Background(), modelID, env.clock.Load(), false, nil, connectorcontract.OperationChatCompletions); !errors.Is(err, ErrResourceLimit) {
 		t.Fatalf("runtime ceiling: %v", err)
 	}
 	if _, err := env.service.ListAvailableModels(t.Context(), env.caller, env.clock.Load(), MaxAvailableModels); !errors.Is(err, ErrResourceLimit) {
@@ -381,7 +382,7 @@ func TestCatalogResourceAvailabilityHonorsCandidateCeiling(t *testing.T) {
 	if err != nil || page.Pagination.TotalItems != "1" || !page.Models[0].CurrentlyAvailable {
 		t.Fatalf("legal candidate count: %+v %v", page, err)
 	}
-	if _, err := env.service.snapshot(context.Background(), modelID, env.clock.Load(), false, nil); err != nil {
+	if _, err := env.service.snapshot(context.Background(), modelID, env.clock.Load(), false, nil, connectorcontract.OperationChatCompletions); err != nil {
 		t.Fatal(err)
 	}
 }

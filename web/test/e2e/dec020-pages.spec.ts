@@ -2,6 +2,7 @@ import { numberedResponse } from './numbered-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
   assertNoSensitiveBrowserPersistence,
+  assertWorkbenchWidth,
   assertResponsiveOperationTables,
   collectConsoleViolations,
   installURLPersistenceObserver,
@@ -11,6 +12,14 @@ import {
   userSession,
 } from './support';
 import { expect, test } from './test';
+import {
+  createOptions,
+  mockConnectionResources,
+  mixedMainstreamLayout,
+  mainstreamProjection,
+} from './connection-fixtures';
+import commonCopy from '../../src/shared/i18n/common/en.json' with { type: 'json' };
+const connectionCopy = commonCopy.common.connections;
 
 type BrowserContext = Parameters<typeof installURLPersistenceObserver>[0];
 type Page = Parameters<typeof collectConsoleViolations>[0];
@@ -242,6 +251,11 @@ function endpointKeySummary(id: string, endpointID: string, displayHead = `key-$
   return {
     id,
     endpoint_id: endpointID,
+    credential_id: id,
+    credential_version: '1',
+    grant_revision: '1',
+    native_services: ['chat_completions', 'responses'],
+    discovery_source_id: null,
     display_head: displayHead,
     display_tail: 'tail',
     note: '',
@@ -259,6 +273,9 @@ test('administrator mainstream channel CRUD keeps channel details and archive co
   page,
 }) => {
   const guard = await prepare(context, page, 'admin', 'admin', 'en', 'dark');
+  await page.route(`${ADMIN_ORIGIN}/admin/api/endpoint-create-options`, (route) =>
+    route.fulfill({ json: createOptions }),
+  );
   let channel: Record<string, unknown> | null = null;
   const requests: Array<{ method: string; body: Record<string, unknown> | null }> = [];
 
@@ -311,13 +328,23 @@ test('administrator mainstream channel CRUD keeps channel details and archive co
     }
     if (request.method() === 'POST' && url.pathname === '/admin/api/mainstream-channels') {
       const input = body ?? {};
+      if (mixedMainstreamLayout(input))
+        return route.fulfill({
+          status: 400,
+          json: { error: { code: 'invalid_request', message: 'Use one channel layout.' } },
+        });
       channel = {
         id: MAINSTREAM_CHANNEL_ID,
         name: String(input.name ?? ''),
         category: input.category,
-        connector_type: input.connector_type,
-        base_url: input.base_url,
+        ...mainstreamProjection(input),
         enabled: input.enabled,
+        entries: ((input.entries ?? []) as Record<string, unknown>[]).map((entry, index) => ({
+          ...entry,
+          id: String(index + 1),
+        })),
+        discovery_source: input.discovery_source,
+        model_mappings: input.model_mappings,
         state: 'active',
         revision: '1',
         created_at: 1_800_000_000,
@@ -342,10 +369,16 @@ test('administrator mainstream channel CRUD keeps channel details and archive co
         });
         return;
       }
+      if (mixedMainstreamLayout(body ?? {}))
+        return route.fulfill({
+          status: 400,
+          json: { error: { code: 'invalid_request', message: 'Use one channel layout.' } },
+        });
       channel = {
         ...channel,
         ...body,
-        revision: '2',
+        ...mainstreamProjection(body ?? {}),
+        revision: (BigInt(String(channel.revision)) + 1n).toString(),
         updated_at: 1_800_000_010,
       };
       delete channel.expected_revision;
@@ -365,7 +398,7 @@ test('administrator mainstream channel CRUD keeps channel details and archive co
           ...channel,
           enabled: false,
           state: 'retired',
-          revision: '3',
+          revision: '4',
           retired_at: 1_800_000_020,
           updated_at: 1_800_000_020,
         };
@@ -381,19 +414,32 @@ test('administrator mainstream channel CRUD keeps channel details and archive co
   await page.getByRole('button', { name: /New channel/ }).click();
   await page.getByLabel('Channel name').fill('Fixture channel');
   await page.getByRole('combobox', { name: 'Category', exact: true }).selectOption('api_platform');
+  await page.getByRole('button', { name: connectionCopy.addEntry, exact: true }).click();
   await page
-    .getByRole('combobox', { name: 'API format', exact: true })
+    .getByRole('combobox', { name: connectionCopy.protocol, exact: true })
     .selectOption('anthropic-compatible');
-  await page.getByLabel('API base URL').fill('https://channel.example.test/v1');
+  await page
+    .getByLabel(connectionCopy.entryURL, { exact: true })
+    .fill('https://channel.example.test/v1');
   await page.getByRole('button', { name: 'Create channel' }).click();
 
   await expect(page.getByRole('heading', { name: 'Channel details' })).toBeVisible();
   expect(requests.find((request) => request.method === 'POST')?.body).toEqual({
     name: 'Fixture channel',
     category: 'api_platform',
-    connector_type: 'anthropic-compatible',
-    base_url: 'https://channel.example.test/v1',
     enabled: true,
+    entries: [
+      {
+        name: '',
+        connector_type: 'anthropic-compatible',
+        base_url: 'https://channel.example.test/v1',
+        native_services: ['anthropic_messages'],
+        rerank_format: '',
+        enabled: true,
+      },
+    ],
+    discovery_source: null,
+    model_mappings: [],
   });
   const editName = page.getByLabel('Channel name');
   await editName.fill('Renamed channel');
@@ -404,6 +450,21 @@ test('administrator mainstream channel CRUD keeps channel details and archive co
     name: 'Renamed channel',
   });
 
+  await page
+    .getByLabel(connectionCopy.entryURL, { exact: true })
+    .fill('https://updated-channel.example.test/v1');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect.poll(() => requests.filter((row) => row.method === 'PATCH').length).toBe(2);
+  const layoutPatch = requests.filter((row) => row.method === 'PATCH').at(-1)?.body;
+  expect(layoutPatch).toMatchObject({
+    expected_revision: '2',
+    entries: [
+      expect.objectContaining({ id: '1', base_url: 'https://updated-channel.example.test/v1' }),
+    ],
+  });
+  expect(layoutPatch).not.toHaveProperty('connector_type');
+  expect(layoutPatch).not.toHaveProperty('base_url');
+
   await page.getByRole('button', { name: 'Archive channel' }).click();
   const dialog = page.getByRole('alertdialog');
   await expect(dialog).toBeVisible();
@@ -412,7 +473,7 @@ test('administrator mainstream channel CRUD keeps channel details and archive co
     page.getByText('Archived channels cannot be edited or re-enabled.', { exact: false }),
   ).toBeVisible();
   expect(requests.find((request) => request.method === 'DELETE')?.body).toEqual({
-    expected_revision: '2',
+    expected_revision: '3',
     confirmation: 'retire',
   });
   await assertClean(page, guard);
@@ -423,6 +484,7 @@ test('user endpoint source wizard submits an immutable mainstream channel select
   page,
 }) => {
   const guard = await prepare(context, page, 'user', 'user');
+  await mockConnectionResources(page);
   const endpointID = '21';
   const endpoint = {
     id: endpointID,
@@ -449,10 +511,25 @@ test('user endpoint source wizard submits an immutable mainstream channel select
     path: '/api/endpoint-create-options',
     body: {
       base_connector_types: ['anthropic-compatible', 'openai-compatible'],
+      native_service_options: createOptions.native_service_options,
       mainstream_channels: [
         {
           id: MAINSTREAM_CHANNEL_ID,
           name: 'Hosted channel',
+          revision: '2',
+          entries: [
+            {
+              id: '101',
+              name: 'Hosted entry',
+              connector_type: 'openai-compatible',
+              base_url: 'https://channel.example.test/v1',
+              native_services: ['chat_completions', 'responses'],
+              rerank_format: '',
+              enabled: true,
+            },
+          ],
+          discovery_source: null,
+          model_mappings: [],
           connector_type: 'openai-compatible',
           base_url: 'https://channel.example.test/v1',
         },
@@ -473,32 +550,34 @@ test('user endpoint source wizard submits an immutable mainstream channel select
     });
   });
 
-  await page.goto(`${USER_ORIGIN}/endpoints`);
-  await page.getByRole('button', { name: '＋ Add service', exact: true }).first().click();
-  await page
-    .getByRole('button', { name: 'Need advanced options? Set up manually', exact: true })
-    .click();
-  const wizard = page.getByRole('region', { name: 'Add service manually', exact: true });
+  await page.goto(`${USER_ORIGIN}/endpoints?connection_id=1`);
+  await page.getByRole('button', { name: connectionCopy.addEntry, exact: true }).first().click();
+  const wizard = page
+    .locator('.nb-expandable-panel')
+    .filter({ has: page.getByRole('heading', { name: connectionCopy.addEntry, exact: true }) });
+  const mainstream = wizard.getByRole('radio', { name: connectionCopy.mainstream, exact: true });
+  await mainstream.locator('..').click();
+  await expect(mainstream).toBeChecked();
+  await wizard
+    .getByRole('combobox', { name: connectionCopy.mainstream, exact: true })
+    .selectOption(MAINSTREAM_CHANNEL_ID);
+  await wizard.getByRole('checkbox', { name: 'Hosted entry', exact: true }).check();
+  await expect(wizard.getByText('https://channel.example.test/v1', { exact: true })).toBeVisible();
   await expect(
-    wizard
-      .locator('.nb-expandable-panel__head')
-      .getByRole('heading', { name: 'Add service manually' }),
-  ).toBeVisible();
-  await expect(wizard.getByRole('button', { name: 'Common services' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  await wizard.getByRole('button', { name: 'Next' }).click();
-  await expect(wizard.getByLabel('Service address')).toHaveValue('https://channel.example.test/v1');
-  await expect(wizard.getByLabel('Service address')).toHaveAttribute('readonly');
-  await wizard.getByLabel('Note').fill('Selected channel endpoint');
-  await wizard.getByRole('button', { name: 'Create service' }).click();
-  await expect(page.getByLabel('Key', { exact: true })).toBeVisible();
+    wizard.getByRole('textbox', { name: connectionCopy.entryURL, exact: true }),
+  ).toHaveCount(0);
+  await wizard.getByRole('button', { name: connectionCopy.saveEntries, exact: true }).click();
+  await expect(wizard.getByText(connectionCopy.entrySaved)).toBeVisible();
   expect(postBody).toEqual({
     source: 'mainstream',
     channel_id: MAINSTREAM_CHANNEL_ID,
-    note: 'Selected channel endpoint',
+    note: 'Hosted entry',
     enabled: true,
+    connection_id: '1',
+    channel_entry_id: '101',
+    channel_revision: '2',
+    native_services: ['chat_completions', 'responses'],
+    rerank_format: '',
   });
   await assertClean(page, guard);
 });
@@ -725,19 +804,7 @@ test.describe('donation expiry in UTC', () => {
     await expect(priceTable.getByText('Donor reward')).toHaveCount(0);
     for (const width of [320, 390, 1440, 1935]) {
       await page.setViewportSize({ width, height: 1000 });
-      const layout = await page.locator('.economy-page').evaluate((element) => {
-        const main = element.closest('main')!;
-        const outer = main.getBoundingClientRect();
-        const inner = element.getBoundingClientRect();
-        const style = getComputedStyle(main);
-        return {
-          width: inner.width,
-          available: outer.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
-          overflow: document.documentElement.scrollWidth > innerWidth,
-        };
-      });
-      expect(layout.overflow).toBe(false);
-      expect(layout.width).toBeGreaterThanOrEqual(layout.available - 2);
+      await assertWorkbenchWidth(page, '.economy-page');
       await assertPricesFit(page);
     }
     await page.setViewportSize({ width: 390, height: 844 });
@@ -784,6 +851,7 @@ test.describe('donation expiry in UTC', () => {
     const keyChoices = resources.locator('.donation-resource-picker__section').nth(1);
     await expect(keyChoices.getByRole('checkbox', { name: /key-11…tail/ })).toBeDisabled();
     await keyChoices.getByRole('checkbox', { name: /key-free…tail/ }).check();
+    await picker.getByRole('checkbox', { name: 'Chat completions', exact: true }).check();
     await picker.getByLabel('Expiry for key-free…tail').fill('2027-01-15T08:00');
     await picker.getByRole('button', { name: 'Done', exact: true }).click();
     await composer
@@ -806,7 +874,16 @@ test.describe('donation expiry in UTC', () => {
       description: 'Per-key expiry fixture',
       ownership_authorized: true,
       discord_public_thanks: false,
-      keys: [{ endpoint_key_id: '14', expires_at: 1_800_000_000 }],
+      keys: [
+        {
+          endpoint_key_id: '14',
+          native_services: ['chat_completions'],
+          credential_id: '14',
+          credential_version: '1',
+          grant_revision: '1',
+          expires_at: 1_800_000_000,
+        },
+      ],
     });
     await assertClean(page, guard);
   });

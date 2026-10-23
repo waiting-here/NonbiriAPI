@@ -13,6 +13,17 @@ const request: CharityPriceConfig = {
 const token: CharityPriceConfig = {
   pricing: {
     mode: 'per_token',
+    user_modalities: {
+      input_enabled: true,
+      output_enabled: false,
+      audio: { uncached_input: '0', cache_write_input: '0', cache_read_input: '0', output: '0' },
+    },
+    donor_modalities: {
+      input_enabled: false,
+      output_enabled: true,
+      text: { uncached_input: '0', cache_write_input: '0', cache_read_input: '0', output: '2' },
+    },
+
     user_prices: {
       uncached_input: '20',
       cache_write_input: '24',
@@ -27,6 +38,13 @@ const token: CharityPriceConfig = {
     },
     long_context: {
       input_threshold: '100000',
+      donor_rewards: {
+        uncached_input: '1',
+        cache_write_input: '2',
+        cache_read_input: '3',
+        output: '4',
+      },
+      donor_modalities: { input_enabled: false, output_enabled: false },
       user_prices: {
         uncached_input: '40',
         cache_write_input: '48',
@@ -59,6 +77,8 @@ const model = (index: number): CharityModel => ({
   allowed_levels: [1],
   public_description: '',
   transport_rule: 'passthrough',
+  cloudflare_proxy_enabled: false,
+  cloudflare_proxy_mode: 'direct',
   flatten_tool_calls: false,
   revision: '9',
   binding_revision: '0',

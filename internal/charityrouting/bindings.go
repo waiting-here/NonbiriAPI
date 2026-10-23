@@ -12,7 +12,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
@@ -92,6 +93,9 @@ func (s *Service) bindingCandidates(ctx context.Context, role roleKind, actorUse
 		return nil, 0, "", err
 	}
 	if err := annotateBindingCandidates(ctx, tx, items, modelID, scope.Trainee); err != nil {
+		return nil, 0, "", err
+	}
+	if err := annotateCandidateServicesTx(ctx, tx, items, modelID); err != nil {
 		return nil, 0, "", err
 	}
 	nextKey, nextModel := int64(0), ""
@@ -203,15 +207,22 @@ func (s *Service) addBindings(ctx context.Context, role roleKind, actorUserID, m
 	}
 	committed := false
 	defer finishTx(tx, &committed)
+	allTargets := []validatedTarget{}
 	for _, selection := range selections {
+		allTargets = append(allTargets, selection.targets...)
+	}
+	if len(allTargets) > maxBindingBatch {
+		return result, ErrResourceLimit
+	}
+	for _, selection := range allTargets {
 		var donationID int64
-		if err := tx.QueryRowContext(ctx, `SELECT donation_id FROM donation_keys WHERE id=?`, selection.donationKeyID).Scan(&donationID); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT donation_id FROM donation_keys WHERE id=?`, selection.keyID).Scan(&donationID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return result, ErrNotFound
 			}
 			return result, err
 		}
-		if err := scope.RequireKey(ctx, tx, donationID, selection.donationKeyID, now, true); err != nil {
+		if err := scope.RequireKey(ctx, tx, donationID, selection.keyID, now, true); err != nil {
 			return result, managementScopeError(err)
 		}
 	}
@@ -237,27 +248,26 @@ func (s *Service) addBindings(ctx context.Context, role roleKind, actorUserID, m
 	if count+len(selections) > maxBindingBatch {
 		return result, ErrResourceLimit
 	}
+	var targetCount int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM charity_binding_targets t JOIN charity_model_bindings b ON b.id=t.binding_id WHERE b.charity_model_id=?`, modelID).Scan(&targetCount); err != nil {
+		return result, err
+	}
+	if targetCount+len(allTargets) > maxBindingBatch {
+		return result, ErrResourceLimit
+	}
+	if err := validateTargetsTx(ctx, tx, scope, modelID, allTargets, now); err != nil {
+		return result, err
+	}
+	if err := rejectDuplicateTargetsTx(ctx, tx, modelID, 0, allTargets); err != nil {
+		return result, err
+	}
+	start := 0
 	for index, selection := range selections {
-		var endpointKeyID int64
-		err := tx.QueryRowContext(ctx, `SELECT dk.endpoint_key_id
-FROM donation_keys dk
-JOIN donations d ON d.id=dk.donation_id
-JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
-WHERE `+charityscope.SupportSQL("dk.id", "m.endpoint_key_id", "?")+` AND dk.id=? AND d.status='approved' AND (dk.expires_at IS NULL OR dk.expires_at>?)
-AND dk.ended_at IS NULL`,
-			selection.upstreamModelID, selection.upstreamModelID, selection.donationKeyID, now).Scan(&endpointKeyID)
-		if errors.Is(err, sql.ErrNoRows) {
-			return result, ErrNotFound
-		}
-		if err != nil {
-			return result, fmt.Errorf("charity routing: validate binding candidate: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO charity_model_bindings(
-charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
-VALUES(?,?,?,?,?,?,?)`, modelID, selection.donationKeyID, endpointKeyID, selection.upstreamModelID,
-			count+index, now, now); err != nil {
+		end := start + len(selection.targets)
+		if _, err := insertBindingGroupTx(ctx, tx, modelID, count+index, allTargets[start:end], now); err != nil {
 			return result, classifyWrite("add charity binding", err)
 		}
+		start = end
 	}
 	if err := advanceBindingRevisionTx(ctx, tx, modelID, expected, now); err != nil {
 		return result, err
@@ -297,6 +307,9 @@ func (s *Service) OrderBindingsSteward(ctx context.Context, actorUserID, modelID
 		return resources.MutationResult[StewardBindings]{}, err
 	}
 	value := stewardBindings(admin.Value)
+	if input.Response == "receipt" {
+		return resources.MutationResult[StewardBindings]{Value: value, Status: admin.Status, Body: admin.Body, Replayed: admin.Replayed}, nil
+	}
 	body, err := json.Marshal(value)
 	if err != nil {
 		return resources.MutationResult[StewardBindings]{}, ErrUnavailable
@@ -307,7 +320,7 @@ func (s *Service) OrderBindingsSteward(ctx context.Context, actorUserID, modelID
 func (s *Service) orderBindings(ctx context.Context, role roleKind, actorUserID, modelID int64, mutation resources.ControlMutation, input BindingOrder) (resources.MutationResult[AdminBindings], error) {
 	expected, err := parseNonnegativeRevision(input.ExpectedBindingRevision)
 	order, orderErr := parseUniqueStringIDs(input.Order, true)
-	if s == nil || ctx == nil || modelID <= 0 || err != nil || orderErr != nil {
+	if s == nil || ctx == nil || modelID <= 0 || err != nil || orderErr != nil || input.Response != "" && input.Response != "receipt" {
 		return resources.MutationResult[AdminBindings]{}, ErrInvalidRequest
 	}
 	now, err := s.nowUnix()
@@ -325,7 +338,7 @@ func (s *Service) orderBindings(ctx context.Context, role roleKind, actorUserID,
 		return resources.MutationResult[AdminBindings]{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replayScopedBindings(ctx, tx, decision, scope, now)
+		return replayBindingEdit(ctx, tx, decision, scope, now, input.Response)
 	}
 	current, count, err := readBindingHeadTx(ctx, tx, modelID)
 	if err != nil {
@@ -353,11 +366,7 @@ func (s *Service) orderBindings(ctx context.Context, role roleKind, actorUserID,
 	if err := advanceBindingRevisionTx(ctx, tx, modelID, expected, now); err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
-	value, err := readAdminBindingsTx(ctx, tx, modelID)
-	if err != nil {
-		return resources.MutationResult[AdminBindings]{}, err
-	}
-	out, err := finishJSON(ctx, tx, decision, http.StatusOK, value)
+	out, err := finishBindingEdit(ctx, tx, decision, modelID, expected+1, input.Response)
 	if err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
@@ -383,6 +392,9 @@ func (s *Service) DeleteBindingSteward(ctx context.Context, actorUserID, modelID
 		return resources.MutationResult[StewardBindings]{}, err
 	}
 	value := stewardBindings(admin.Value)
+	if input.Response == "receipt" {
+		return resources.MutationResult[StewardBindings]{Value: value, Status: admin.Status, Body: admin.Body, Replayed: admin.Replayed}, nil
+	}
 	body, err := json.Marshal(value)
 	if err != nil {
 		return resources.MutationResult[StewardBindings]{}, ErrUnavailable
@@ -392,7 +404,7 @@ func (s *Service) DeleteBindingSteward(ctx context.Context, actorUserID, modelID
 
 func (s *Service) deleteBinding(ctx context.Context, role roleKind, actorUserID, modelID, bindingID int64, mutation resources.ControlMutation, input BindingDelete) (resources.MutationResult[AdminBindings], error) {
 	expected, err := parseNonnegativeRevision(input.ExpectedBindingRevision)
-	if s == nil || ctx == nil || modelID <= 0 || bindingID <= 0 || err != nil {
+	if s == nil || ctx == nil || modelID <= 0 || bindingID <= 0 || err != nil || input.Response != "" && input.Response != "receipt" {
 		return resources.MutationResult[AdminBindings]{}, ErrInvalidRequest
 	}
 	now, err := s.nowUnix()
@@ -410,7 +422,7 @@ func (s *Service) deleteBinding(ctx context.Context, role roleKind, actorUserID,
 		return resources.MutationResult[AdminBindings]{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replayScopedBindings(ctx, tx, decision, scope, now)
+		return replayBindingEdit(ctx, tx, decision, scope, now, input.Response)
 	}
 	current, _, err := readBindingHeadTx(ctx, tx, modelID)
 	if err != nil {
@@ -441,11 +453,7 @@ func (s *Service) deleteBinding(ctx context.Context, role roleKind, actorUserID,
 	if err := advanceBindingRevisionTx(ctx, tx, modelID, expected, now); err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
-	value, err := readAdminBindingsTx(ctx, tx, modelID)
-	if err != nil {
-		return resources.MutationResult[AdminBindings]{}, err
-	}
-	out, err := finishJSON(ctx, tx, decision, http.StatusOK, value)
+	out, err := finishBindingEdit(ctx, tx, decision, modelID, expected+1, input.Response)
 	if err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
@@ -478,13 +486,11 @@ WHERE id=? AND binding_revision=? AND binding_revision<9223372036854775807`, now
 }
 
 type bindingRecord struct {
-	id, donationKeyID, endpointKeyID int64
-	upstreamModelID                  string
-	createdAt                        int64
+	id int64
 }
 
 func rewriteBindingOrderTx(ctx context.Context, tx *sql.Tx, modelID int64, order []int64, now int64) error {
-	rows, err := tx.QueryContext(ctx, `SELECT id,donation_key_id,endpoint_key_id,upstream_model_id,created_at
+	rows, err := tx.QueryContext(ctx, `SELECT id
 FROM charity_model_bindings WHERE charity_model_id=? ORDER BY id`, modelID)
 	if err != nil {
 		return fmt.Errorf("charity routing: read bindings for reorder: %w", err)
@@ -492,7 +498,7 @@ FROM charity_model_bindings WHERE charity_model_id=? ORDER BY id`, modelID)
 	records := make(map[int64]bindingRecord, len(order))
 	for rows.Next() {
 		var record bindingRecord
-		if err := rows.Scan(&record.id, &record.donationKeyID, &record.endpointKeyID, &record.upstreamModelID, &record.createdAt); err != nil {
+		if err := rows.Scan(&record.id); err != nil {
 			rows.Close()
 			return fmt.Errorf("charity routing: scan binding for reorder: %w", err)
 		}
@@ -538,27 +544,39 @@ func readAdminBindingsTx(ctx context.Context, tx *sql.Tx, modelID int64) (AdminB
 	}
 	out.BindingRevision = strconv.FormatInt(revision, 10)
 	rows, err := tx.QueryContext(ctx, `SELECT b.id,b.ord,dk.id,d.id,dk.connector_type,dk.canonical_base_url,
-dk.display_head,dk.display_tail,b.upstream_model_id,COALESCE(pc.automatic_supports,0),(COALESCE(pc.manual_supports,0)+EXISTS(SELECT 1 FROM donation_key_manual_models dm WHERE dm.donation_key_id=dk.id AND dm.normalized_model_id=b.upstream_model_id)),COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),gm.policy_json
+dk.display_head,dk.display_tail,t.upstream_model_id,COALESCE(pc.automatic_supports,0),COALESCE(pc.manual_supports,0),COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),gm.policy_json,
+t.id,t.revision,t.native_service_mask,k.endpoint_id
 FROM charity_model_bindings b
-LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=b.endpoint_key_id
-JOIN donation_keys dk ON dk.id=b.donation_key_id
+JOIN charity_binding_targets t ON t.binding_id=b.id
+JOIN donation_keys dk ON dk.id=t.donation_key_id
 JOIN donations d ON d.id=dk.donation_id
-LEFT JOIN model_pair_catalog pc ON pc.endpoint_key_id=b.endpoint_key_id AND pc.normalized_model_id=b.upstream_model_id
-LEFT JOIN gateway_model_capabilities gm ON dk.connector_type='ai-sdk-gateway-v3' AND gm.base_url=rtrim(dk.canonical_base_url,'/') AND gm.model=b.upstream_model_id
-WHERE b.charity_model_id=? ORDER BY b.ord,b.id`, modelID)
+LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
+LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
+LEFT JOIN charity_model_catalog pc ON pc.donation_key_id=dk.id AND pc.normalized_model_id=t.upstream_model_id
+LEFT JOIN gateway_model_capabilities gm ON dk.connector_type IN ('ai-sdk-gateway-v3','ai-sdk-gateway-v4') AND gm.base_url=rtrim(dk.canonical_base_url,'/') AND gm.model=t.upstream_model_id
+WHERE b.charity_model_id=? ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, maxBindingBatch+1)
 	if err != nil {
 		return AdminBindings{}, fmt.Errorf("charity routing: read bindings: %w", err)
 	}
 	defer rows.Close()
 	out.Bindings = make([]AdminBinding, 0)
+	type targetRow struct {
+		group       int
+		keyID, mask int64
+		value       BindingTarget
+	}
+	var targets []targetRow
+	keyIDs := []int64{}
+	seen := map[int64]int{}
 	for rows.Next() {
 		var item AdminBinding
 		var id, donationKeyID, donationID int64
 		var automatic, manual int64
+		var targetID, targetRevision, mask, endpointID int64
 		var policy sql.NullString
 		if err := rows.Scan(&id, &item.Ord, &donationKeyID, &donationID, &item.Source.ConnectorType,
 			&item.Source.CanonicalBaseURL, &item.Source.DisplayHead, &item.Source.DisplayTail,
-			&item.UpstreamModelID, &automatic, &manual, &item.Source.MaxConcurrency, &item.Source.MaxRPM, &policy); err != nil {
+			&item.UpstreamModelID, &automatic, &manual, &item.Source.MaxConcurrency, &item.Source.MaxRPM, &policy, &targetID, &targetRevision, &mask, &endpointID); err != nil {
 			return AdminBindings{}, fmt.Errorf("charity routing: scan binding: %w", err)
 		}
 		if policy.Valid {
@@ -572,10 +590,39 @@ WHERE b.charity_model_id=? ORDER BY b.ord,b.id`, modelID)
 		item.DonationKeyID = strconv.FormatInt(donationKeyID, 10)
 		item.DonationID = strconv.FormatInt(donationID, 10)
 		item.SourceTypes = sourceTypes(automatic, manual)
-		out.Bindings = append(out.Bindings, item)
+		group, exists := seen[id]
+		if !exists {
+			group = len(out.Bindings)
+			seen[id] = group
+			item.Targets = []BindingTarget{}
+			out.Bindings = append(out.Bindings, item)
+		}
+		targets = append(targets, targetRow{group: group, keyID: donationKeyID, mask: mask, value: BindingTarget{ID: strconv.FormatInt(targetID, 10), Revision: strconv.FormatInt(targetRevision, 10), DonationID: item.DonationID, DonationKeyID: item.DonationKeyID, UpstreamModelID: item.UpstreamModelID, EndpointID: strconv.FormatInt(endpointID, 10), ConnectorType: contract.Type(item.Source.ConnectorType), ConfigurationType: contract.Type(item.Source.ConnectorType).ConfigurationType(), BaseURL: item.Source.CanonicalBaseURL}})
+		keyIDs = append(keyIDs, donationKeyID)
 	}
 	if err := rows.Err(); err != nil {
 		return AdminBindings{}, fmt.Errorf("charity routing: iterate bindings: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return AdminBindings{}, err
+	}
+	if len(targets) > maxBindingBatch {
+		return AdminBindings{}, ErrInvariant
+	}
+	uses, err := connectionstore.LoadApprovedUsesTx(ctx, tx, keyIDs)
+	if err != nil {
+		return AdminBindings{}, targetConnectionError(err)
+	}
+	for _, row := range targets {
+		selected, err := contract.NativeServicesFromMask(row.mask)
+		if err != nil || selected.Empty() {
+			return AdminBindings{}, ErrInvariant
+		}
+		row.value.ServiceProjection, row.value.Uses, err = readTargetProjection(uses[row.keyID], selected)
+		if err != nil {
+			return AdminBindings{}, err
+		}
+		out.Bindings[row.group].Targets = append(out.Bindings[row.group].Targets, row.value)
 	}
 	return out, nil
 }
@@ -583,6 +630,7 @@ WHERE b.charity_model_id=? ORDER BY b.ord,b.id`, modelID)
 type validatedSelection struct {
 	donationKeyID   int64
 	upstreamModelID string
+	targets         []validatedTarget
 }
 
 func validateSelections(input []BindingSelection) ([]validatedSelection, error) {
@@ -592,6 +640,24 @@ func validateSelections(input []BindingSelection) ([]validatedSelection, error) 
 	seen := make(map[string]struct{}, len(input))
 	out := make([]validatedSelection, 0, len(input))
 	for _, value := range input {
+		if value.Targets != nil {
+			if value.DonationKeyID != "" || value.UpstreamModelID != "" {
+				return nil, ErrInvalidRequest
+			}
+			targets, err := targetInputs(value.Targets, false)
+			if err != nil {
+				return nil, err
+			}
+			for _, target := range targets {
+				key := strconv.FormatInt(target.keyID, 10) + "\x00" + target.upstream
+				if _, exists := seen[key]; exists {
+					return nil, ErrInvalidRequest
+				}
+				seen[key] = struct{}{}
+			}
+			out = append(out, validatedSelection{targets: targets})
+			continue
+		}
 		id, err := parsePositiveID(value.DonationKeyID)
 		if err != nil || !validUpstreamModel(value.UpstreamModelID) {
 			return nil, ErrInvalidRequest
@@ -601,7 +667,7 @@ func validateSelections(input []BindingSelection) ([]validatedSelection, error) 
 			return nil, ErrInvalidRequest
 		}
 		seen[key] = struct{}{}
-		out = append(out, validatedSelection{donationKeyID: id, upstreamModelID: value.UpstreamModelID})
+		out = append(out, validatedSelection{donationKeyID: id, upstreamModelID: value.UpstreamModelID, targets: []validatedTarget{{keyID: id, upstream: value.UpstreamModelID, legacy: true}}})
 	}
 	return out, nil
 }
@@ -657,8 +723,9 @@ func sourceTypes(automatic, manual int64) []string {
 
 func stewardCandidate(value AdminBindingCandidate) StewardBindingCandidate {
 	return StewardBindingCandidate{
-		BindingMarkers: value.BindingMarkers,
-		DonationKeyID:  value.DonationKeyID, DonationID: value.DonationID,
+		ServiceProjection: value.ServiceProjection,
+		BindingMarkers:    value.BindingMarkers,
+		DonationKeyID:     value.DonationKeyID, DonationID: value.DonationID,
 		Source: StewardCandidateSource{
 			ConnectorType: value.Source.ConnectorType, CanonicalBaseURL: value.Source.CanonicalBaseURL,
 			DisplayHead: value.Source.DisplayHead, DisplayTail: value.Source.DisplayTail,
@@ -672,6 +739,7 @@ func stewardBindings(value AdminBindings) StewardBindings {
 	out := StewardBindings{BindingRevision: value.BindingRevision, Bindings: make([]StewardBinding, len(value.Bindings))}
 	for index, binding := range value.Bindings {
 		out.Bindings[index] = StewardBinding{
+			Targets:             binding.Targets,
 			GatewayCapabilities: binding.GatewayCapabilities,
 			ID:                  binding.ID, Ord: binding.Ord, DonationKeyID: binding.DonationKeyID, DonationID: binding.DonationID,
 			Source: StewardCandidateSource{

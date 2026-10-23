@@ -35,6 +35,7 @@ type ModelBrowse struct {
 // KeyBindingView contains only the current owner's resource labels. Its state
 // describes configured routing eligibility, not a promise that a call succeeds.
 type KeyBindingView struct {
+	TargetID        string `json:"target_id"`
 	ID              string `json:"id"`
 	ModelID         string `json:"model_id"`
 	ModelFullName   string `json:"model_full_name"`
@@ -53,27 +54,25 @@ type KeyBindingView struct {
 	State           string `json:"state"`
 }
 
-const ownedBindingJoin = ` FROM model_bindings b
+const ownedBindingJoin = ` FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id
 JOIN models m ON m.id=b.model_id
-JOIN endpoint_keys k ON k.id=b.endpoint_key_id
+JOIN endpoint_key_current_credentials k ON k.id=t.endpoint_key_id
 JOIN endpoints e ON e.id=k.endpoint_id
 LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id`
 
-// Keep eligibility aligned with bindingSelectionConnectorTx: current manual
-// support or current successful discovery, and no physical disable/suspension.
+// Explicit targets survive discovery refreshes; current grants decide whether
+// their selected services remain configured for use.
 const ownedBindingState = `CASE
 WHEN e.enabled=0 THEN 'endpoint_disabled'
 WHEN k.enabled=0 THEN 'key_disabled'
 WHEN EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id) THEN 'key_suspended'
-WHEN NOT EXISTS(
- SELECT 1 FROM model_pair_catalog p JOIN model_discovery_evidence d ON d.endpoint_key_id=p.endpoint_key_id
- WHERE p.endpoint_key_id=k.id AND p.normalized_model_id=b.upstream_model_id
- AND (p.manual_supports>0 OR (p.automatic_supports>0 AND d.state='succeeded' AND d.revision=p.automatic_revision))
-) THEN 'unsupported'
+WHEN NOT EXISTS(SELECT 1 FROM self_grant_availability a WHERE a.endpoint_key_id=k.id AND (a.native_service_mask&t.native_service_mask)>0) THEN 'unsupported'
 ELSE 'available' END`
 
 const ownedBindingSelect = `SELECT b.id,m.id,m.full_name,e.id,k.id,e.base_url,e.connector_type,e.note,
-k.display_head,k.display_tail,k.note,b.upstream_model_id,b.ord,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),` + ownedBindingState + ownedBindingJoin
+k.display_head,k.display_tail,k.note,t.upstream_model_id,b.ord,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),` + ownedBindingState + `,t.id` + ownedBindingJoin
+
+const ownedBindingIDSelect = `SELECT t.id` + ownedBindingJoin
 
 const ownedBindingScope = ` WHERE m.user_id=? AND e.user_id=?`
 
@@ -82,7 +81,7 @@ func scanKeyBinding(s pageScanner) (KeyBindingView, error) {
 	var bindingID, modelID, endpointID, keyID int64
 	err := s.Scan(&bindingID, &modelID, &value.ModelFullName, &endpointID, &keyID,
 		&value.EndpointBaseURL, &value.ConnectorType, &value.EndpointNote, &value.DisplayHead, &value.DisplayTail,
-		&value.KeyNote, &value.UpstreamModelID, &value.Ord, &value.MaxConcurrency, &value.MaxRPM, &value.State)
+		&value.KeyNote, &value.UpstreamModelID, &value.Ord, &value.MaxConcurrency, &value.MaxRPM, &value.State, &value.TargetID)
 	if err != nil {
 		return value, err
 	}
@@ -95,7 +94,9 @@ func scanKeyBinding(s pageScanner) (KeyBindingView, error) {
 }
 
 func bindingPreviewTx(ctx context.Context, tx *sql.Tx, scope, order string, args []any) ([]KeyBindingView, error) {
-	rows, err := tx.QueryContext(ctx, ownedBindingSelect+scope+` ORDER BY `+order+` LIMIT 3`, args...)
+	// Select the bounded preview before reading labels and live eligibility.
+	// Partial ordering must not evaluate that projection for skipped targets.
+	rows, err := tx.QueryContext(ctx, `WITH preview AS MATERIALIZED (`+ownedBindingIDSelect+scope+` ORDER BY `+order+` LIMIT 3)`+ownedBindingSelect+` JOIN preview ON preview.id=t.id ORDER BY `+order, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -116,12 +117,11 @@ func endpointBrowseTx(ctx context.Context, tx *sql.Tx, userID int64, endpoint En
 	var subscription, apiPlatform bool
 	err := tx.QueryRowContext(ctx, `SELECT
 (SELECT COUNT(DISTINCT b.model_id)`+ownedBindingJoin+ownedBindingScope+` AND e.id=?),
-(SELECT COUNT(*) FROM endpoint_keys k WHERE k.endpoint_id=? AND k.enabled=1
- AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)),
-EXISTS(SELECT 1 FROM mainstream_channels WHERE state='active' AND enabled=1
- AND connector_type=? AND canonical_base_url=? AND category='subscription'),
-EXISTS(SELECT 1 FROM mainstream_channels WHERE state='active' AND enabled=1
- AND connector_type=? AND canonical_base_url=? AND category='api_platform')`,
+(SELECT COUNT(*) FROM endpoint_keys k JOIN self_grant_availability a ON a.endpoint_key_id=k.id AND a.native_service_mask>0 WHERE k.endpoint_id=? AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)),
+EXISTS(SELECT 1 FROM mainstream_channels c JOIN mainstream_channel_entries ce ON ce.channel_id=c.id WHERE c.state='active' AND c.enabled=1 AND ce.enabled=1
+ AND ce.connector_type=? AND ce.canonical_base_url=? AND c.category='subscription'),
+EXISTS(SELECT 1 FROM mainstream_channels c JOIN mainstream_channel_entries ce ON ce.channel_id=c.id WHERE c.state='active' AND c.enabled=1 AND ce.enabled=1
+ AND ce.connector_type=? AND ce.canonical_base_url=? AND c.category='api_platform')`,
 		userID, userID, endpoint.ID, endpoint.ID,
 		endpoint.ConnectorType, endpoint.BaseURL, endpoint.ConnectorType, endpoint.BaseURL).Scan(&modelCount, &availableKeys, &subscription, &apiPlatform)
 	if err != nil {
@@ -162,12 +162,22 @@ func endpointKeyBrowseTx(ctx context.Context, tx *sql.Tx, userID, endpointID int
 	}
 	scope := ownedBindingScope + ` AND e.id=? AND k.id=?`
 	args := []any{userID, userID, endpointID, keyID}
-	var modelCount, bindingCount, availableCount int64
-	err = tx.QueryRowContext(ctx, `SELECT COUNT(DISTINCT m.id),COUNT(*),COALESCE(SUM(CASE WHEN `+ownedBindingState+`='available' THEN 1 ELSE 0 END),0)`+ownedBindingJoin+scope, args...).Scan(&modelCount, &bindingCount, &availableCount)
+	// Every target here shares one key. Resolve its live authority once within
+	// this snapshot; only the selected service mask varies between targets.
+	var availableMask int64
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT a.native_service_mask FROM self_grant_availability a
+WHERE a.endpoint_key_id=? AND a.owner_user_id=?
+AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=a.endpoint_key_id)),0)`, keyID, userID).Scan(&availableMask)
 	if err != nil {
 		return nil, err
 	}
-	preview, err := bindingPreviewTx(ctx, tx, scope, "b.upstream_model_id,b.id", args)
+	var modelCount, bindingCount, availableCount int64
+	countArgs := append([]any{availableMask}, args...)
+	err = tx.QueryRowContext(ctx, `SELECT COUNT(DISTINCT m.id),COUNT(DISTINCT b.id),COUNT(DISTINCT CASE WHEN (?&t.native_service_mask)>0 THEN b.id ELSE NULL END)`+ownedBindingJoin+scope, countArgs...).Scan(&modelCount, &bindingCount, &availableCount)
+	if err != nil {
+		return nil, err
+	}
+	preview, err := bindingPreviewTx(ctx, tx, scope, "t.upstream_model_id,b.id,t.id", args)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +212,7 @@ func attachModelBrowseTx(ctx context.Context, tx *sql.Tx, userID int64, models [
 		args = append(args, models[i].ID)
 	}
 	scope := ownedBindingScope + ` AND m.id IN (` + strings.TrimSuffix(strings.Repeat("?,", len(models)), ",") + `)`
-	rows, err := tx.QueryContext(ctx, `SELECT m.id,SUM(CASE WHEN `+ownedBindingState+`='available' THEN 1 ELSE 0 END)`+ownedBindingJoin+scope+` GROUP BY m.id`, args...)
+	rows, err := tx.QueryContext(ctx, `SELECT m.id,COUNT(DISTINCT CASE WHEN `+ownedBindingState+`='available' THEN b.id ELSE NULL END)`+ownedBindingJoin+scope+` GROUP BY m.id`, args...)
 	if err != nil {
 		return err
 	}
@@ -222,7 +232,7 @@ func attachModelBrowseTx(ctx context.Context, tx *sql.Tx, userID int64, models [
 	}
 	// Rank only this page's owned bindings. Hydrate the bounded preview after
 	// ranking, so eligibility and labels are read for at most three per model.
-	rows, err = tx.QueryContext(ctx, `WITH preview AS (SELECT b.id,ROW_NUMBER() OVER (PARTITION BY m.id ORDER BY b.ord,b.id) AS position`+ownedBindingJoin+scope+`)`+ownedBindingSelect+` JOIN preview ON preview.id=b.id AND preview.position<=3 ORDER BY m.id,b.ord,b.id`, args...)
+	rows, err = tx.QueryContext(ctx, `WITH preview AS (SELECT t.id,ROW_NUMBER() OVER (PARTITION BY m.id ORDER BY b.ord,b.id,t.ord,t.id) AS position`+ownedBindingJoin+scope+`)`+ownedBindingSelect+` JOIN preview ON preview.id=t.id AND preview.position<=3 ORDER BY m.id,b.ord,b.id,t.ord,t.id`, args...)
 	if err != nil {
 		return err
 	}
@@ -249,9 +259,39 @@ func (r *Repository) ListKeyBindingsPage(ctx context.Context, userID, endpointID
 		scope := ownedBindingScope + ` AND e.id=? AND k.id=?`
 		args := []any{userID, userID, endpointID, keyID}
 		if upstreamModel != "" {
-			scope += ` AND b.upstream_model_id=?`
+			scope += ` AND t.upstream_model_id=?`
 			args = append(args, upstreamModel)
 		}
-		return readNumberedPage(ctx, tx, page, ownedBindingSelect+scope, "b.upstream_model_id,b.id", args, func(s pageScanner) (KeyBindingView, error) { return scanKeyBinding(s) })
+		const order = "t.upstream_model_id,b.id,t.id"
+		// Count and order only target identities. Hydrate the selected page in
+		// this same snapshot and deadline, without evaluating skipped states.
+		selected, err := readNumberedPage(ctx, tx, page, ownedBindingIDSelect+scope, order, args, func(s pageScanner) (int64, error) {
+			var targetID int64
+			err := s.Scan(&targetID)
+			return targetID, err
+		})
+		if err != nil {
+			return Page[KeyBindingView]{}, err
+		}
+		result := Page[KeyBindingView]{Data: make([]KeyBindingView, 0, len(selected.Data)), Pagination: selected.Pagination}
+		if len(selected.Data) == 0 {
+			return result, nil
+		}
+		for _, targetID := range selected.Data {
+			args = append(args, targetID)
+		}
+		rows, err := tx.QueryContext(ctx, ownedBindingSelect+scope+` AND t.id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(selected.Data)), ",")+`) ORDER BY `+order, args...)
+		if err != nil {
+			return Page[KeyBindingView]{}, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			item, err := scanKeyBinding(rows)
+			if err != nil {
+				return Page[KeyBindingView]{}, err
+			}
+			result.Data = append(result.Data, item)
+		}
+		return result, rows.Err()
 	})
 }

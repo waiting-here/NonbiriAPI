@@ -1,4 +1,5 @@
 import { numberedResponse } from './numbered-fixtures';
+import { mockConnectionResources } from './connection-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
   collectConsoleViolations,
@@ -56,7 +57,9 @@ test('user management separates identifiers and copies Discord IDs exactly at de
   await page.goto(`${ADMIN_ORIGIN}/users`);
   const table = page.locator('.nb-md__list .nb-table');
   await expect(table.getByRole('columnheader', { name: 'Username', exact: true })).toBeVisible();
-  const identity = table.locator('tbody tr td').first();
+  const identity = table.getByRole('cell').filter({
+    has: page.getByRole('button', { name: 'fixture-user', exact: true }),
+  });
   await expect(identity).toContainText('fixture-user');
   await expect(identity).toContainText('#7');
   await expect(identity).toContainText('1234…6789');
@@ -109,8 +112,10 @@ for (const locale of ['en', 'zh'] as const) {
         path: '/api/session',
         body: session,
       });
-      await page.route(`${USER_ORIGIN}/api/endpoints?**`, (route) =>
-        route.fulfill({ json: numberedResponse([], '1', 20) }),
+      await mockConnectionResources(
+        page,
+        () => [],
+        () => [],
       );
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto(`${USER_ORIGIN}/endpoints`);

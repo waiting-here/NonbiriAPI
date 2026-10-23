@@ -831,6 +831,11 @@
 .services-key-table td[data-cell='meta'] > .nb-btn {
   padding-inline: 0;
 }
+@media (width >= 48rem) {
+  .services-key-table td.services-key-discovery > .nb-btn:last-child {
+    margin-inline-start: var(--nb-space-2);
+  }
+}
 .services-key-table .nb-inline {
   justify-content: flex-end;
 }
@@ -981,6 +986,9 @@
   }
   .services-detail .nb-facts {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .services-detail .connection-match-facts {
+    grid-template-columns: minmax(0, 1fr);
   }
   .services-key-table td[data-cell='meta'] {
     padding-block: 0;
@@ -1193,4 +1201,17 @@
   .models-workspace .model-sources .nb-seg label:last-child {
     grid-column: 1 / -1;
   }
+}
+.connection-model-batch {
+  min-inline-size: 0;
+}
+
+.connection-model-batch .nb-fold__title {
+  overflow-wrap: anywhere;
+}
+
+.connection-model-link {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }

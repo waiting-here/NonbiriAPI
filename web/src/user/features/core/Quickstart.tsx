@@ -1,3 +1,4 @@
+import { supportsChatStoragePolicy } from '@shared/operations/connectorPolicy';
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { Field, Fold, Note, OptionCards } from '@shared/components/ui';
 import { TransportRuleField } from '@shared/components/TransportRuleField';
@@ -360,7 +361,7 @@ export function Quickstart({
             note: keyNote,
             enabled: true,
             ownership_confirmed: true,
-            force_store_false: endpoint.connector_type === 'openai-compatible' && store,
+            force_store_false: supportsChatStoragePolicy(endpoint.connector_type) && store,
           },
         },
         secret,
@@ -894,7 +895,7 @@ export function Quickstart({
                     />
                     {text('ownership')}
                   </label>
-                  {endpoint.connector_type === 'openai-compatible' ? (
+                  {supportsChatStoragePolicy(endpoint.connector_type) ? (
                     <Fold title={core('models.configurationTitle')}>
                       <label className="core-check">
                         <input

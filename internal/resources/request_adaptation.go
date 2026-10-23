@@ -22,26 +22,26 @@ func resourceAdaptationError(err error) error {
 	}
 }
 
-func (r *Repository) GetEndpointAdaptation(ctx context.Context, userID, endpointID int64) (requestadaptation.Projection, error) {
+func (r *Repository) GetEndpointAdaptation(ctx context.Context, userID, endpointID int64) (requestadaptation.ConfigurationProjection, error) {
 	if r == nil || r.adaptations == nil || ctx == nil || userID <= 0 || endpointID <= 0 {
-		return requestadaptation.Projection{}, ErrInvalidRequest
+		return requestadaptation.ConfigurationProjection{}, ErrInvalidRequest
 	}
 	tx, err := beginTx(ctx, r.db)
 	if err != nil {
-		return requestadaptation.Projection{}, err
+		return requestadaptation.ConfigurationProjection{}, err
 	}
 	defer tx.Rollback()
 	if _, err := getEndpointTx(ctx, tx, userID, endpointID); err != nil {
-		return requestadaptation.Projection{}, err
+		return requestadaptation.ConfigurationProjection{}, err
 	}
 	snapshot, err := r.adaptations.LoadTx(ctx, tx, requestadaptation.Ref{Scope: requestadaptation.ScopeEndpoint, ID: endpointID})
 	if err != nil {
-		return requestadaptation.Projection{}, resourceAdaptationError(err)
+		return requestadaptation.ConfigurationProjection{}, resourceAdaptationError(err)
 	}
 	defer snapshot.Clear()
-	projection := snapshot.Projection()
+	projection := snapshot.ConfigurationProjection()
 	if err := tx.Commit(); err != nil {
-		return requestadaptation.Projection{}, ErrUnavailable
+		return requestadaptation.ConfigurationProjection{}, ErrUnavailable
 	}
 	return projection, nil
 }
@@ -140,26 +140,26 @@ func (api *httpAPI) putEndpointAdaptation(writer http.ResponseWriter, request *h
 	writeMutation(writer, result)
 }
 
-func (r *Repository) GetModelAdaptation(ctx context.Context, userID, modelID int64) (requestadaptation.Projection, error) {
+func (r *Repository) GetModelAdaptation(ctx context.Context, userID, modelID int64) (requestadaptation.ConfigurationProjection, error) {
 	if r == nil || r.adaptations == nil || ctx == nil || userID <= 0 || modelID <= 0 {
-		return requestadaptation.Projection{}, ErrInvalidRequest
+		return requestadaptation.ConfigurationProjection{}, ErrInvalidRequest
 	}
 	tx, err := beginTx(ctx, r.db)
 	if err != nil {
-		return requestadaptation.Projection{}, err
+		return requestadaptation.ConfigurationProjection{}, err
 	}
 	defer tx.Rollback()
-	if _, err := getModelTx(ctx, tx, userID, modelID); err != nil {
-		return requestadaptation.Projection{}, err
+	if _, err := r.getModelTx(ctx, tx, userID, modelID); err != nil {
+		return requestadaptation.ConfigurationProjection{}, err
 	}
 	snapshot, err := r.adaptations.LoadTx(ctx, tx, requestadaptation.Ref{Scope: requestadaptation.ScopePersonalModel, ID: modelID})
 	if err != nil {
-		return requestadaptation.Projection{}, resourceAdaptationError(err)
+		return requestadaptation.ConfigurationProjection{}, resourceAdaptationError(err)
 	}
 	defer snapshot.Clear()
-	projection := snapshot.Projection()
+	projection := snapshot.ConfigurationProjection()
 	if err := tx.Commit(); err != nil {
-		return requestadaptation.Projection{}, ErrUnavailable
+		return requestadaptation.ConfigurationProjection{}, ErrUnavailable
 	}
 	return projection, nil
 }
@@ -185,7 +185,7 @@ func (r *Repository) PutModelAdaptation(ctx context.Context, userID, modelID int
 	if decision.Kind == idempotency.Replay {
 		return replayMutation[requestadaptation.Projection](decision)
 	}
-	if _, err := getModelTx(ctx, tx, userID, modelID); err != nil {
+	if _, err := r.getModelTx(ctx, tx, userID, modelID); err != nil {
 		return MutationResult[requestadaptation.Projection]{}, err
 	}
 	ref := requestadaptation.Ref{Scope: requestadaptation.ScopePersonalModel, ID: modelID}

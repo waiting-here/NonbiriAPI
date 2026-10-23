@@ -36,10 +36,10 @@ func (u TokenUsage) validate() error {
 // TokenPrices holds four unit prices (or donor rewards) in milli-credits per
 // million tokens. Every value is non-negative.
 type TokenPrices struct {
-	UncachedInput   int64
-	CacheWriteInput int64
-	CacheReadInput  int64
-	Output          int64
+	UncachedInput   int64 `json:"uncached_input"`
+	CacheWriteInput int64 `json:"cache_write_input"`
+	CacheReadInput  int64 `json:"cache_read_input"`
+	Output          int64 `json:"output"`
 }
 
 func (p TokenPrices) validate() error {

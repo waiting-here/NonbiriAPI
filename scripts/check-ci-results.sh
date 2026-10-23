@@ -21,3 +21,6 @@ fi
 if [ "${FOURTH_APPLICABLE+x}" = x ]; then
   check_child fourth "$FOURTH_APPLICABLE" "${FOURTH_RESULT:-}"
 fi
+if [ "${FIFTH_APPLICABLE+x}" = x ]; then
+  check_child fifth "$FIFTH_APPLICABLE" "${FIFTH_RESULT:-}"
+fi

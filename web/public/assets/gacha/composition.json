@@ -597,6 +597,22 @@
           2560,
           3840
         ]
+      },
+      "appearance_layers": {
+        "background": "appearances/mirrorsea-{light,dark}.webp",
+        "character": "motion/n-gemini/appearance-hero-{light,dark}.webp",
+        "character_size": [
+          1024,
+          1536
+        ],
+        "character_high_resolution": [
+          2560,
+          3840
+        ],
+        "character_content_height": 1536,
+        "reflection": "motion/n-gemini/appearance-reflection.webp",
+        "light": "motion/n-gemini/appearance-light.webp",
+        "layout": "independent viewport placement with the same mirror mask, fingertip position and floor contact as animation"
       }
     },
     "o-claude": {
@@ -649,11 +665,12 @@
       "character": "motion/p-claude/hero.webp",
       "scene": "elopement",
       "inputs": [
-        "motion/p-claude/background.png",
-        "motion/p-claude/offer.png",
-        "motion/p-claude/arrival.png",
-        "motion/p-claude/closed.png",
-        "motion/p-claude/clean.png"
+        "motion/p-claude/background-light.webp",
+        "motion/p-claude/background-dark.webp",
+        "motion/p-claude/offer.webp",
+        "motion/p-claude/arrival.webp",
+        "motion/p-claude/closed.webp",
+        "motion/p-claude/clean.webp"
       ],
       "portrait_window": [
         0.13,
@@ -672,6 +689,32 @@
           2560,
           3840
         ]
+      },
+      "appearance_layers": {
+        "background": "appearances/elopement-{light,dark}.webp",
+        "character": "motion/p-claude/appearance-hero-{light,dark}.webp",
+        "character_size": [
+          1024,
+          1536
+        ],
+        "character_content_height": 1536,
+        "layout": "independent viewport placement shared by static and animated appearance"
+      },
+      "resolution": {
+        "background_native": [
+          1536,
+          1024
+        ],
+        "background_high": [
+          3840,
+          2560
+        ],
+        "high_method": "resampling",
+        "character_native": [
+          1024,
+          1536
+        ],
+        "character_runtime": "lossless native plates shared across display qualities"
       }
     },
     "q-glm": {
@@ -680,9 +723,10 @@
       "character": "motion/q-glm/hero.webp",
       "scene": "heart-thief",
       "inputs": [
-        "motion/q-glm/background.png",
-        "motion/q-glm/character.png",
-        "motion/q-glm/hair-backing-v3.png"
+        "motion/q-glm/background-light.webp",
+        "motion/q-glm/background-dark.webp",
+        "motion/q-glm/character.webp",
+        "motion/q-glm/hair-backing-v3.webp"
       ],
       "portrait_window": [
         0.13,
@@ -701,6 +745,36 @@
           2560,
           3840
         ]
+      },
+      "appearance_layers": {
+        "background": "appearances/heart-thief-{light,dark}.webp",
+        "background_size": [
+          1536,
+          1024
+        ],
+        "character": "motion/q-glm/appearance-hero-{light,dark}.webp",
+        "character_size": [
+          1086,
+          1488
+        ],
+        "character_content_height": 1448,
+        "layout": "independent viewport placement shared by static and animated appearance"
+      },
+      "resolution": {
+        "background_native": [
+          1536,
+          1024
+        ],
+        "background_high": [
+          3840,
+          2560
+        ],
+        "background_high_method": "resampling; no additional native detail",
+        "character_native": [
+          1086,
+          1448
+        ],
+        "character_high_method": "native plates shared by both display qualities"
       }
     }
   },

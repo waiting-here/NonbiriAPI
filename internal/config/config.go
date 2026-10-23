@@ -76,6 +76,7 @@ type Config struct {
 	AdminHost         string
 	TrustedProxyCIDRs []netip.Prefix
 	CloudflareRoutes  []CloudflareRoute
+	CloudflareWorker  CloudflareWorker
 }
 
 // Load reads environment variables and returns a fully validated Config, or a
@@ -173,6 +174,12 @@ func Load() (*Config, error) {
 		c.CloudflareRoutes = routes
 	}
 
+	worker, workerErr := ParseCloudflareWorker(os.Getenv("NONBIRI_CLOUDFLARE_WORKER_URL"), os.Getenv("NONBIRI_CLOUDFLARE_WORKER_TOKEN"))
+	if workerErr != nil {
+		errs = append(errs, "NONBIRI_CLOUDFLARE_WORKER_URL/TOKEN: "+workerErr.Error())
+	} else {
+		c.CloudflareWorker = worker
+	}
 	if len(errs) > 0 {
 		c.discardSecretVault()
 		return nil, fmt.Errorf("invalid startup configuration:\n  - %s", strings.Join(errs, "\n  - "))

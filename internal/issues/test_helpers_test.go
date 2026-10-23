@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -92,16 +94,18 @@ INSERT INTO users(
 
 func (environment *issueTestEnvironment) seedEndpoint(t *testing.T, userID int64) int64 {
 	t.Helper()
-	result, err := environment.store.DB().Exec(`
-INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,'openai-compatible',?,'',1,1,?,?)`, userID,
-		fmt.Sprintf("https://endpoint-%d.example/v1", environment.sequence.Add(1)), issueTestNow, issueTestNow)
+	ctx := context.Background()
+	tx, err := environment.store.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	id, err := testseed.InsertEndpointTx(ctx, tx, testseed.EndpointInput{OwnerUserID: userID, Type: connectorcontract.TypeOpenAICompatible, BaseURL: fmt.Sprintf("https://endpoint-%d.example/v1", environment.sequence.Add(1)), At: issueTestNow})
+	if err == nil {
+		err = tx.Commit()
+	}
 	if err != nil {
 		t.Fatalf("seed endpoint: %v", err)
-	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		t.Fatalf("seed endpoint id: %v", err)
 	}
 	return id
 }
@@ -111,35 +115,37 @@ func (environment *issueTestEnvironment) seedEndpointKey(t *testing.T, endpointI
 	sequence := environment.sequence.Add(1)
 	contextID := make([]byte, 16)
 	binary.BigEndian.PutUint64(contextID[8:], sequence)
-	secretResult, err := environment.store.DB().Exec(`
-INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
-VALUES(?,'https://upstream.example/v1','openai-compatible','test-envelope',?)`, contextID, issueTestNow)
-	if err != nil {
-		t.Fatalf("seed endpoint key secret: %v", err)
-	}
-	secretID, err := secretResult.LastInsertId()
-	if err != nil {
-		t.Fatalf("seed endpoint key secret id: %v", err)
-	}
 	fingerprint := make([]byte, 32)
 	binary.BigEndian.PutUint64(fingerprint[24:], sequence)
-	keyResult, err := environment.store.DB().Exec(`
-INSERT INTO endpoint_keys(
- endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at
-) VALUES(?,?,?,'sk-test','tail','',1,0,1,?,?)`, endpointID, secretID, fingerprint, issueTestNow, issueTestNow)
+	ctx := context.Background()
+	tx, err := environment.store.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	var base string
+	if err = tx.QueryRowContext(ctx, "SELECT base_url FROM endpoints WHERE id=?", endpointID).Scan(&base); err != nil {
+		t.Fatal(err)
+	}
+	result, err := tx.ExecContext(ctx, "INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at) VALUES(?,?,'openai-compatible','test-envelope',?)", contextID, base, issueTestNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secretID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := testseed.InsertEndpointKeyTx(ctx, tx, testseed.KeyInput{EndpointID: endpointID, SecretRefID: secretID, Fingerprint: fingerprint, DisplayHead: "sk-test", DisplayTail: "tail", At: issueTestNow})
+	if err == nil {
+		_, err = testseed.SeedDiscoverySourceTx(ctx, tx, testseed.DiscoverySourceInput{EndpointKeyID: key.KeyID, ListFormat: "openai", At: issueTestNow})
+	}
+	if err == nil {
+		err = tx.Commit()
+	}
 	if err != nil {
 		t.Fatalf("seed endpoint key: %v", err)
 	}
-	keyID, err := keyResult.LastInsertId()
-	if err != nil {
-		t.Fatalf("seed endpoint key id: %v", err)
-	}
-	if _, err := environment.store.DB().Exec(`
-INSERT INTO model_discovery_evidence(endpoint_key_id,state,revision,safe_class,safe_diag,fetched_count)
-VALUES(?,'unknown',1,'none','',0)`, keyID); err != nil {
-		t.Fatalf("seed discovery evidence: %v", err)
-	}
-	return keyID
+	return key.KeyID
 }
 
 func (environment *issueTestEnvironment) seedModel(t *testing.T, userID int64, suffix string) int64 {
@@ -164,29 +170,50 @@ func (environment *issueTestEnvironment) setDiscovery(t *testing.T, keyID int64,
 	if state == "succeeded" {
 		safeClass = "none"
 	}
-	result, err := environment.store.DB().Exec(`
-UPDATE model_discovery_evidence
-SET state=?,revision=revision+1,operation_hash=NULL,safe_class=?,safe_diag='',started_at=NULL,completed_at=?,fetched_count=0
-WHERE endpoint_key_id=?`, state, safeClass, completedAt, keyID)
+	ctx := context.Background()
+	tx, err := environment.store.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	var sourceRevisionID, sourceRevision, version, generation int64
+	err = tx.QueryRowContext(ctx, "SELECT sr.id,sr.source_revision,sr.credential_version_id,st.result_generation FROM endpoint_key_discovery_sources m JOIN discovery_source_revisions sr ON sr.id=m.source_revision_id JOIN discovery_source_states st ON st.source_revision_id=sr.id WHERE m.endpoint_key_id=?", keyID).Scan(&sourceRevisionID, &sourceRevision, &version, &generation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := tx.ExecContext(ctx, "INSERT INTO discovery_runs(source_revision_id,source_revision_snapshot,credential_version_id,result_generation,authorization_kind,state,safe_class,started_at,completed_at,model_count) VALUES(?,?,?,?,'self',?,?,?,?,0)", sourceRevisionID, sourceRevision, version, generation+1, state, safeClass, completedAt, completedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.ExecContext(ctx, "UPDATE discovery_source_states SET result_generation=?,current_run_id=?,last_successful_run_id=CASE WHEN ?='succeeded' THEN ? ELSE last_successful_run_id END,updated_at=? WHERE source_revision_id=?", generation+1, run, state, run, completedAt, sourceRevisionID)
+	if err == nil {
+		err = tx.Commit()
+	}
 	if err != nil {
 		t.Fatalf("set discovery: %v", err)
-	}
-	if changed, _ := result.RowsAffected(); changed != 1 {
-		t.Fatalf("set discovery changed=%d", changed)
 	}
 }
 
 func (environment *issueTestEnvironment) makeBindingAvailable(t *testing.T, modelID, keyID int64, upstream string) {
 	t.Helper()
-	if _, err := environment.store.DB().Exec(`
-INSERT INTO model_pair_catalog(
- endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at
-) VALUES(?,?,0,1,0,1,?)`, keyID, upstream, issueTestNow); err != nil {
-		t.Fatalf("seed pair catalog: %v", err)
+	ctx := context.Background()
+	tx, err := environment.store.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := environment.store.DB().Exec(`
-INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
-VALUES(?,?,?,0,?,?)`, modelID, keyID, upstream, issueTestNow, issueTestNow); err != nil {
+	defer tx.Rollback()
+	_, err = tx.ExecContext(ctx, "INSERT INTO model_catalog_entries(endpoint_key_id,source_type,source_identity,normalized_model_id,source_revision,native_service_mask,created_at,updated_at) VALUES(?,'manual',?,?,1,0,?,?)", keyID, upstream, upstream, issueTestNow, issueTestNow)
+	if err == nil {
+		_, err = testseed.InsertModelBindingTx(ctx, tx, testseed.BindingInput{ModelID: modelID, KeyID: keyID, UpstreamModelID: upstream, At: issueTestNow})
+	}
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
 		t.Fatalf("seed binding: %v", err)
 	}
 }

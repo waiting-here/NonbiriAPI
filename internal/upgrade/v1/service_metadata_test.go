@@ -35,12 +35,13 @@ func TestServiceMetadataConversionPreservesPopulatedSource(t *testing.T) {
 	for _, tag := range []string{"abusive_third_party", "community_charity"} {
 		mustExec(t, database, `INSERT INTO admin_endpoint_tags(base_url,tag) VALUES(?,?)`, base, tag)
 	}
-	before := allIndexSourceFacts(t, database)
+	columns := legacyConnectionColumns(t, database)
+	before := allIndexSourceFacts(t, database, nil)
 	if err := database.Close(); err != nil {
 		t.Fatal(err)
 	}
 	result, err := Run(t.Context(), path, vault, Options{Apply: true})
-	if err != nil || result.SourceSchemaVersion != 20 || result.TargetSchemaVersion != 26 {
+	if err != nil || result.SourceSchemaVersion != 20 || result.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal(result, err)
 	}
 	store, err := db.Open(path, vault)
@@ -48,16 +49,46 @@ func TestServiceMetadataConversionPreservesPopulatedSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	if after := allIndexSourceFacts(t, store.DB()); !reflect.DeepEqual(before, after) {
+	if after := allIndexSourceFacts(t, store.DB(), columns); !reflect.DeepEqual(before, after) {
 		t.Fatal("metadata conversion changed saved facts")
 	}
+	for _, failure := range []string{"region", "unavailable", "unknown"} {
+		t.Run(failure, func(t *testing.T) {
+			tx, err := store.DB().BeginTx(t.Context(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback()
+			// Each probe inserts a separate terminal legacy result. The migrated
+			// result is immutable, and each rollback leaves the next probe the
+			// same unused generation and exact source authorization.
+			result, err := tx.Exec(`INSERT INTO discovery_runs(
+ source_revision_id,source_revision_snapshot,credential_version_id,result_generation,
+ authorization_kind,state,safe_class,started_at,completed_at)
+ SELECT sr.id,sr.source_revision,sr.credential_version_id,st.result_generation+1,
+ 'legacy','failed',?,3,4
+ FROM endpoint_key_discovery_sources ks
+ JOIN discovery_source_revisions sr ON sr.id=ks.source_revision_id
+ JOIN discovery_source_states st ON st.source_revision_id=sr.id
+ WHERE ks.endpoint_key_id=1`, failure)
+			if failure == "unknown" {
+				if err == nil {
+					t.Fatal("unknown discovery class accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rows, err := result.RowsAffected(); err != nil || rows != 1 {
+				t.Fatalf("new discovery result rows=%d: %v", rows, err)
+			}
+		})
+	}
+	if after := allIndexSourceFacts(t, store.DB(), columns); !reflect.DeepEqual(before, after) {
+		t.Fatal("discovery class probes changed the original saved facts")
+	}
 	mustExec(t, store.DB(), `INSERT INTO admin_endpoint_tags(base_url,tag) VALUES(?,'noncommercial_gateway')`, base)
-	for _, failure := range []string{"region", "unavailable"} {
-		mustExec(t, store.DB(), `UPDATE model_discovery_evidence SET safe_class=? WHERE endpoint_key_id=1`, failure)
-	}
-	if _, err := store.DB().Exec(`UPDATE model_discovery_evidence SET safe_class='unknown' WHERE endpoint_key_id=1`); err == nil {
-		t.Fatal("unknown discovery class accepted")
-	}
 	if _, err := store.DB().Exec(`INSERT INTO admin_endpoint_tags(base_url,tag) VALUES(?,'unknown')`, base); err == nil {
 		t.Fatal("unknown tag accepted")
 	}

@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { isRare } from './catalog';
 import type { Card } from './types';
 import { renderSSR } from './ssr-renderer';
 import { artSourceSet } from './art-resolution';
+import { ArtworkPlaceholder } from '@shared/artwork/ArtworkImage';
+import { useArtworkPolicy } from '@shared/artwork/context';
 
 export function Artwork({
   card,
@@ -15,6 +18,11 @@ export function Artwork({
   full?: boolean;
   paused?: boolean;
 }) {
+  const policy = useArtworkPolicy();
+  const { i18n } = useTranslation();
+  const name = i18n.language?.startsWith('en') ? card.name_en : card.name;
+  const allowed =
+    policy.allowed('card:' + card.id) && policy.sourceAllowed(full ? card.art : card.thumb);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
   const [highResolution, setHighResolution] = useState(
@@ -35,13 +43,13 @@ export function Artwork({
       observer.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, [animated, card.id, card.rarity]);
+  }, [allowed, animated, card.id, card.rarity]);
   const pausedRef = useRef(paused);
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
   useEffect(() => {
-    if (!animated || !isRare(card.rarity) || !canvas.current) return;
+    if (!allowed || !animated || !isRare(card.rarity) || !canvas.current) return;
     const controller = new AbortController();
     let disposed = false,
       cleanup: (() => void) | undefined;
@@ -64,19 +72,23 @@ export function Artwork({
       cleanup?.();
       setReady(false);
     };
-  }, [animated, card.id, card.rarity, highResolution]);
+  }, [allowed, animated, card.id, card.rarity, highResolution]);
   return (
     <span className="gacha-art">
-      <img
-        src={full ? card.art : card.thumb}
-        srcSet={full ? artSourceSet(card.art, 1024, 2560) : undefined}
-        sizes={full ? '(width < 40rem) 90vw, 56vh' : undefined}
-        alt={card.name}
-        loading={full ? 'eager' : 'lazy'}
-        width="1024"
-        height="1536"
-      />
-      {animated && isRare(card.rarity) && (
+      {!allowed ? (
+        <ArtworkPlaceholder name={name} rarity={card.rarity} />
+      ) : (
+        <img
+          src={full ? card.art : card.thumb}
+          srcSet={full ? artSourceSet(card.art, 1024, 2560) : undefined}
+          sizes={full ? '(width < 40rem) 90vw, 56vh' : undefined}
+          alt={name}
+          loading={full ? 'eager' : 'lazy'}
+          width="1024"
+          height="1536"
+        />
+      )}
+      {allowed && animated && isRare(card.rarity) && (
         <canvas
           ref={canvas}
           width="768"

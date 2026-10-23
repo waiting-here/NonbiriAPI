@@ -24,72 +24,85 @@ function response(value: unknown): Response {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('RequestAdaptationEditor', () => {
-  it('keeps a manually entered cache path visible until its value is complete or an explicit TTL is chosen', async () => {
-    let sent: Record<string, unknown> | undefined;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (_url: string, options?: RequestInit) => {
-        if (options?.method === 'PUT')
-          sent = JSON.parse(String(options.body)) as Record<string, unknown>;
-        return response(
-          options?.method === 'PUT'
-            ? {
-                ...projection(),
-                body_defaults: {
-                  mode: 'replace',
-                  values: { '/cache_control': { has_value: true, mask: '••••' } },
-                },
-              }
-            : projection(),
-        );
-      }),
-    );
-    const view = await renderWithProviders(
-      <RequestAdaptationEditor
-        url="/api/endpoints/11/request-adaptation"
-        scope="endpoint"
-        connectorType="ai-sdk-gateway-v3"
-        editable
-      />,
-      { station: 'user', role: 'user' },
-    );
-    const defaults = await screen.findByRole('group', { name: 'Default parameters (when absent)' });
-    await view.user.click(within(defaults).getByRole('button', { name: 'Add field' }));
-    const path = within(defaults).getByRole('textbox', { name: 'Header or path' });
-    await view.user.type(path, '/cache_control');
-    expect(path).toHaveValue('/cache_control');
-    expect(screen.getByLabelText('Automatic cache default')).toHaveValue('custom');
-    await view.user.selectOptions(within(defaults).getByLabelText('Edit'), 'clear');
-    expect(screen.getByLabelText('Automatic cache default')).toHaveValue('custom');
-    await view.user.selectOptions(within(defaults).getByLabelText('Edit'), 'replace');
-    const value = within(defaults).getByRole('textbox', { name: 'Value' });
-    await view.user.click(value);
-    await view.user.paste('{ "type": "ephemeral", "ttl": "1h" }');
-    expect(value).toBeInTheDocument();
-    await view.user.click(screen.getByRole('button', { name: 'Save request rewriting' }));
-    await screen.findByText('Request rewriting saved.');
-    expect(sent?.body_defaults).toEqual({
-      mode: 'replace',
-      values: { '/cache_control': { action: 'replace', value: { type: 'ephemeral', ttl: '1h' } } },
-    });
-    await view.user.click(within(defaults).getByRole('button', { name: 'Add field' }));
-    await view.user.type(
-      within(defaults).getByRole('textbox', { name: 'Header or path' }),
-      '/cache_control',
-    );
-    await view.user.selectOptions(screen.getByLabelText('Automatic cache default'), '5m');
-    expect(within(defaults).queryByRole('textbox', { name: 'Value' })).not.toBeInTheDocument();
-    await view.user.click(screen.getByRole('button', { name: 'Save request rewriting' }));
-    await screen.findByText('Request rewriting saved.');
-    expect(sent?.body_defaults).toEqual({
-      mode: 'replace',
-      values: { '/cache_control': { action: 'replace', value: { type: 'ephemeral', ttl: '5m' } } },
-    });
-  });
+  it.each(['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)(
+    'keeps a manually entered cache path visible for %s until its value is complete or an explicit TTL is chosen',
+    async (connectorType) => {
+      let sent: Record<string, unknown> | undefined;
+      let saved = false;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (_url: string, options?: RequestInit) => {
+          if (options?.method === 'PUT') {
+            sent = JSON.parse(String(options.body)) as Record<string, unknown>;
+            saved = true;
+          }
+          return response(
+            saved
+              ? {
+                  ...projection(),
+                  body_defaults: {
+                    mode: 'replace',
+                    values: { '/cache_control': { has_value: true, mask: '••••' } },
+                  },
+                }
+              : projection(),
+          );
+        }),
+      );
+      const view = await renderWithProviders(
+        <RequestAdaptationEditor
+          url="/api/endpoints/11/request-adaptation"
+          scope="endpoint"
+          connectorType={connectorType}
+          editable
+        />,
+        { station: 'user', role: 'user' },
+      );
+      const defaults = await screen.findByRole('group', {
+        name: 'Default parameters (when absent)',
+      });
+      await view.user.click(within(defaults).getByRole('button', { name: 'Add field' }));
+      const path = within(defaults).getByRole('textbox', { name: 'Header or path' });
+      await view.user.type(path, '/cache_control');
+      expect(path).toHaveValue('/cache_control');
+      expect(screen.getByLabelText('Automatic cache default')).toHaveValue('custom');
+      await view.user.selectOptions(within(defaults).getByLabelText('Edit'), 'clear');
+      expect(screen.getByLabelText('Automatic cache default')).toHaveValue('custom');
+      await view.user.selectOptions(within(defaults).getByLabelText('Edit'), 'replace');
+      const value = within(defaults).getByRole('textbox', { name: 'Value' });
+      await view.user.click(value);
+      await view.user.paste('{ "type": "ephemeral", "ttl": "1h" }');
+      expect(value).toBeInTheDocument();
+      await view.user.click(screen.getByRole('button', { name: 'Save request rewriting' }));
+      await screen.findByText('Request rewriting saved.');
+      expect(sent?.body_defaults).toEqual({
+        mode: 'replace',
+        values: {
+          '/cache_control': { action: 'replace', value: { type: 'ephemeral', ttl: '1h' } },
+        },
+      });
+      await view.user.click(within(defaults).getByRole('button', { name: 'Add field' }));
+      await view.user.type(
+        within(defaults).getByRole('textbox', { name: 'Header or path' }),
+        '/cache_control',
+      );
+      await view.user.selectOptions(screen.getByLabelText('Automatic cache default'), '5m');
+      expect(within(defaults).queryByRole('textbox', { name: 'Value' })).not.toBeInTheDocument();
+      await view.user.click(screen.getByRole('button', { name: 'Save request rewriting' }));
+      await screen.findByText('Request rewriting saved.');
+      expect(sent?.body_defaults).toEqual({
+        mode: 'replace',
+        values: {
+          '/cache_control': { action: 'replace', value: { type: 'ephemeral', ttl: '5m' } },
+        },
+      });
+    },
+  );
   it.each(['5m', '1h'] as const)(
     'sets the Gateway cache default to %s without JSON editing and clears it explicitly',
     async (ttl) => {
       const bodies: Record<string, unknown>[] = [];
+      let saved = false;
       vi.stubGlobal(
         'fetch',
         vi.fn(async (_url: string, options?: RequestInit) => {
@@ -97,6 +110,9 @@ describe('RequestAdaptationEditor', () => {
           current.body_defaults.values = { '/temperature': { has_value: true, mask: '••••' } };
           if (options?.method === 'PUT') {
             bodies.push(JSON.parse(String(options.body)) as Record<string, unknown>);
+            saved = true;
+          }
+          if (saved) {
             current.body_defaults.values = {
               ...current.body_defaults.values,
               '/cache_control': { has_value: true, mask: '••••' },
@@ -183,7 +199,7 @@ describe('RequestAdaptationEditor', () => {
       { station: 'admin', role: 'admin' },
     );
     await screen.findByText(/The cache default inherits with the body defaults/);
-    expect(screen.queryByLabelText('Automatic cache default')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Automatic cache default')).toBeDisabled();
     await view.user.click(screen.getByRole('button', { name: 'Save request adaptation' }));
     await screen.findByText(/Could not save request adaptation/);
     expect(bodies[0].body_defaults).toEqual({ mode: 'inherit', values: {} });

@@ -1,3 +1,5 @@
+import { isAISDKGateway } from '@shared/operations/connectorPolicy';
+import { CloudflareProxySummary } from '@shared/components/CloudflareProxyField';
 import { RequestAdaptationEditor } from '@shared/components/RequestAdaptationEditor';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
@@ -18,7 +20,9 @@ import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isNotFoundError } from '@shared/query/http';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
+import { listReturnPath } from '@shared/operations/listReturn';
+import { useTranslation } from 'react-i18next';
 import { deleteModel, getModel } from './api';
 import { CoreEmpty, CoreErrorPanel, CoreLoading, SafeCopyValue } from './components';
 import { useCoreCopy } from './copy';
@@ -69,6 +73,7 @@ function ModelDetail({
   onDeleted: () => void;
 }) {
   const { t } = useCoreCopy();
+  const { t: sharedText } = useTranslation();
   const textModel = useModelText();
   const [sourceFocusPending, setSourceFocusPending] = useState(focusSources);
   const [requestedStrategy, setRequestedStrategy] = useState<RouteStrategy>();
@@ -76,12 +81,18 @@ function ModelDetail({
   const model = useModel(accountId, modelId);
   // ModelSources owns this complete query; observe its cache without another read.
   const bindings = useBindings(accountId, modelId, false);
-  const connectorType = bindings.data?.bindings[0]?.connector_type;
+  const targetConnectors = bindings.data?.bindings.flatMap(
+    (binding) =>
+      binding.targets?.map((target) => target.connector_type) ?? [binding.connector_type],
+  );
+  const connectorType = targetConnectors?.[0];
   const adaptationConnectorType =
-    connectorType &&
-    bindings.data?.bindings.every((binding) => binding.connector_type === connectorType)
+    connectorType && targetConnectors?.every((value) => value === connectorType)
       ? connectorType
       : undefined;
+  const gatewayCacheDefaults = Boolean(
+    targetConnectors?.length && targetConnectors.every(isAISDKGateway),
+  );
   const [editing, setEditing] = useState<Model | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const permissionScope = `${accountId}\u0000${modelId}`;
@@ -241,6 +252,12 @@ function ModelDetail({
               <PanelBody>
                 <SafeCopyValue value={model.data.full_name} label={textModel('callName')} />
                 <ModelTypesSummary value={model.data.model_types} />
+                <dl className="core-detail-list">
+                  <CloudflareProxySummary
+                    enabled={model.data.cloudflare_proxy_enabled}
+                    mode={model.data.cloudflare_proxy_mode}
+                  />
+                </dl>
               </PanelBody>
             </Panel>
             <ModelSources
@@ -261,7 +278,8 @@ function ModelDetail({
                   <dt>{t('models.silentRetry')}</dt>
                   <dd>{model.data.silent_retry ? t('common.yes') : t('common.no')}</dd>
                 </div>
-                {model.data.model_types.includes('chat_completions') ? (
+                {model.data.model_types.includes('chat_completions') ||
+                model.data.model_types.includes('responses') ? (
                   <>
                     <TransportRuleSummary value={model.data.transport_rule} />
                     <div>
@@ -271,14 +289,22 @@ function ModelDetail({
                   </>
                 ) : null}
               </dl>
-              {model.data.model_types.includes('chat_completions') ? (
+              {model.data.model_types.includes('chat_completions') ||
+              model.data.model_types.includes('responses') ? (
                 <ModelRoleSummary policy={model.data.role_policy} />
               ) : null}
+            </Fold>
+            <Fold
+              lazy
+              title={sharedText('requestAdaptation.model.title')}
+              summary={sharedText('requestAdaptation.model.saveHelp')}
+            >
               <RequestAdaptationEditor
                 key={`${accountId}:${model.data.id}`}
                 url={'/api/models/' + model.data.id + '/request-adaptation'}
                 scope="personal-model"
                 connectorType={adaptationConnectorType}
+                gatewayCacheDefaults={gatewayCacheDefaults}
                 editable={!reconciliationRequired && !replayAttempt}
               />
             </Fold>
@@ -346,6 +372,9 @@ function ModelDetail({
 }
 
 export function ModelsWorkspace({ user }: { user: UserProfile }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const returnTo = listReturnPath(location.state, '/models');
   const { t } = useCoreCopy();
   const textModel = useModelText();
   const [sourceFocusId, setSourceFocusId] = useState<string | null>(null);
@@ -505,7 +534,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
         accountId={user.id}
         modelId={selectedModelId}
         focusSources={sourceFocusId === selectedModelId}
-        onBack={() => setSelectedModelID(null)}
+        onBack={() => (returnTo === '/models' ? setSelectedModelID(null) : navigate(returnTo))}
         onDeleted={() => {
           deletedModelRef.current = { accountId: user.id, id: selectedModelId };
           setSearchParams((previous) => {

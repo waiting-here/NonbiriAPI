@@ -79,7 +79,7 @@ func normalizePriceTemplate(input PriceTemplateInput) (PriceTemplate, error) {
 	}
 	out.Name, out.Description, out.Enabled = input.Name, input.Description, input.Enabled
 	out.Pricing.Mode = input.Pricing.Mode
-	if input.Pricing.Mode == "per_request" {
+	if input.Pricing.Mode != "per_token" {
 		out.Pricing.UserPrice, out.Pricing.DonorReward = new(formatWireAmount(prices.requestUser)), new(formatWireAmount(prices.requestReward))
 	} else {
 		convert := func(v [4]int64) *AdminTokenPrices {

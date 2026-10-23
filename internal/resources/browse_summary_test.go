@@ -6,17 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
-// Seed valid current and stale catalog pairs with many independent logical
-// models. The foreign binding is deliberately hostile storage: owner filtering
-// must cover both the model and the physical endpoint even in that case.
+// Catalog freshness affects new selections; explicit saved targets retain their
+// authority. Models belonging to another owner must not affect browse counts.
 func seedBrowseModels(t *testing.T, env *resourceTestEnvironment, owner, other, keyID int64, count int) {
 	t.Helper()
 	tx, err := env.store.DB().Begin()
@@ -24,8 +25,10 @@ func seedBrowseModels(t *testing.T, env *resourceTestEnvironment, owner, other, 
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`UPDATE model_discovery_evidence SET state='succeeded',revision=3,completed_at=?,fetched_count=2 WHERE endpoint_key_id=?`, resourceTestNow, keyID); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"stale", "automatic"} {
+		if _, err := testseed.SeedDiscoveryCatalogTx(context.Background(), tx, testseed.DiscoveryCatalogInput{EndpointKeyID: keyID, ListFormat: "openai", Models: []testseed.DiscoveryModel{{ID: name}}, At: resourceTestNow}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	for i, name := range []string{"manual", "automatic", "stale", "unsupported"} {
 		manual, automatic, revision := 0, 0, 0
@@ -41,26 +44,15 @@ func seedBrowseModels(t *testing.T, env *resourceTestEnvironment, owner, other, 
 		if _, err := tx.Exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,manual_supports,automatic_supports,automatic_revision,updated_at) VALUES(?,?,?,?,?,?)`, keyID, name, manual, automatic, revision, resourceTestNow); err != nil {
 			t.Fatal(err)
 		}
-		if manual+automatic > 0 {
-			source, identity, sourceRevision := "manual", name, 1
-			if automatic > 0 {
-				source, identity, sourceRevision = "automatic", fmt.Sprintf("%d:0", revision), revision
-			}
-			if _, err := tx.Exec(`INSERT INTO model_catalog_entries(endpoint_key_id,source_type,source_identity,normalized_model_id,source_revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`, keyID, source, identity, name, sourceRevision, resourceTestNow, resourceTestNow); err != nil {
-				t.Fatal(err)
-			}
-		}
+	}
+	if _, err := tx.Exec(`INSERT INTO model_catalog_entries(endpoint_key_id,source_type,source_identity,normalized_model_id,source_revision,native_service_mask,created_at,updated_at) VALUES(?,'manual','manual','manual',1,0,?,?)`, keyID, resourceTestNow, resourceTestNow); err != nil {
+		t.Fatal(err)
 	}
 	models, err := tx.Prepare(`INSERT INTO models(user_id,provider,model,full_name,binding_revision,created_at,updated_at) VALUES(?,'logical',?,?,1,?,?)`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer models.Close()
-	bindings, err := tx.Prepare(`INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,?,0,?,?)`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer bindings.Close()
 	for i := 0; i <= count; i++ {
 		user := owner
 		if i == count {
@@ -75,8 +67,8 @@ func seedBrowseModels(t *testing.T, env *resourceTestEnvironment, owner, other, 
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := bindings.Exec(id, keyID, []string{"manual", "automatic", "stale", "unsupported"}[i%4], resourceTestNow, resourceTestNow); err != nil {
-			t.Fatal(err)
+		if user == owner {
+			seedResourceBindingTx(t, tx, id, keyID, []string{"manual", "automatic", "stale", "unsupported"}[i%4], 0)
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -108,7 +100,7 @@ func TestResourceBrowseCountsCompleteOwnerSetWithBoundedPreviewsAndIndexedPages(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := keys.Data[0].Browse; got == nil || got.ModelCount != "10017" || got.BindingCount != "10017" || got.AvailableBindingCount != "5009" || len(got.Preview) != 3 || got.Discovery.State != "succeeded" {
+	if got := keys.Data[0].Browse; got == nil || got.ModelCount != "10017" || got.BindingCount != "10017" || got.AvailableBindingCount != "10017" || len(got.Preview) != 3 || got.Discovery.State != "succeeded" {
 		t.Fatalf("key browse=%+v", got)
 	}
 	for _, size := range []int{10, 20, 50, 100} {
@@ -146,7 +138,7 @@ func TestResourceBrowseCountsCompleteOwnerSetWithBoundedPreviewsAndIndexedPages(
 		t.Fatal("browse mutated storage")
 	}
 	t.Logf("complete 10017-model summaries and four page sizes in %s", time.Since(started))
-	rows, err := env.store.DB().Query(`EXPLAIN QUERY PLAN `+ownedBindingSelect+ownedBindingScope+` AND e.id=? AND k.id=? ORDER BY b.upstream_model_id,b.id LIMIT 20 OFFSET 9980`, owner, owner, eid, kid)
+	rows, err := env.store.DB().Query(`EXPLAIN QUERY PLAN `+ownedBindingIDSelect+ownedBindingScope+` AND e.id=? AND k.id=? ORDER BY t.upstream_model_id,b.id,t.id LIMIT 20 OFFSET 9980`, owner, owner, eid, kid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,8 +157,8 @@ func TestResourceBrowseCountsCompleteOwnerSetWithBoundedPreviewsAndIndexedPages(
 	rows.Close()
 	plan := strings.Join(plans, "\n")
 	t.Log(plan)
-	if !strings.Contains(plan, "idx_model_bindings_key_browse") || strings.Contains(plan, "TEMP B-TREE FOR ORDER BY") {
-		t.Fatalf("unindexed inverse page: %s", plan)
+	if !strings.Contains(plan, "idx_model_binding_targets_key") || strings.Contains(plan, "CORRELATED") {
+		t.Fatalf("inverse page must use the target index without per-row eligibility: %s", plan)
 	}
 	for _, legacy := range []any{ep, key} {
 		body, err := json.Marshal(legacy)
@@ -192,7 +184,7 @@ func TestResourceBrowseCountsCompleteOwnerSetWithBoundedPreviewsAndIndexedPages(
 	}
 }
 
-func TestResourceBrowseEligibilityMatchesRoutingAndReportsPhysicalReasons(t *testing.T) {
+func TestResourceBrowseRetainsExplicitSelectionsAndReportsPhysicalReasons(t *testing.T) {
 	env := newResourceTestEnvironment(t)
 	owner, other := env.seedUser(t, "browse-states-owner"), env.seedUser(t, "browse-states-other")
 	ep := env.createEndpoint(t, owner, resourceTestKey('a'))
@@ -208,12 +200,29 @@ func TestResourceBrowseEligibilityMatchesRoutingAndReportsPhysicalReasons(t *tes
 		name, sql, physical string
 		available           int
 	}{
-		{"current", `SELECT 1`, "available", 2},
-		{"failed discovery", `UPDATE model_discovery_evidence SET state='failed',safe_class='auth'`, "available", 1},
+		{"current", `SELECT 1`, "available", 4},
+		{"failed discovery", `SELECT 1`, "available", 4},
 		{"key disabled", `UPDATE endpoint_keys SET enabled=0`, "key_disabled", 0},
 		{"endpoint disabled", `UPDATE endpoints SET enabled=0`, "endpoint_disabled", 0},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			if test.name == "failed discovery" {
+				tx, err := env.store.DB().Begin()
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer tx.Rollback()
+				source := seedResourceCheckingDiscoveryTx(t, tx, kid, nil, nil, resourceTestNow, "")
+				if _, err := tx.Exec(`UPDATE discovery_runs SET state='failed',safe_class='auth',completed_at=? WHERE id=?`, resourceTestNow, source.RunID); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := tx.Exec(`UPDATE accepted_operations SET state='completed',terminal_at=? WHERE id=(SELECT operation_id FROM discovery_runs WHERE id=?)`, resourceTestNow, source.RunID); err != nil {
+					t.Fatal(err)
+				}
+				if err := tx.Commit(); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if _, err := env.store.DB().Exec(test.sql); err != nil {
 				t.Fatal(err)
 			}
@@ -221,24 +230,15 @@ func TestResourceBrowseEligibilityMatchesRoutingAndReportsPhysicalReasons(t *tes
 			if err != nil {
 				t.Fatal(err)
 			}
-			tx, err := env.store.DB().Begin()
-			if err != nil {
-				t.Fatal(err)
-			}
 			available := 0
 			for _, item := range page.Data {
-				_, eligible, err := bindingSelectionConnectorTx(context.Background(), tx, owner, kid, item.UpstreamModelID)
-				if err != nil || eligible != (item.State == "available") {
-					t.Fatalf("routing disagreement %+v %v", item, err)
-				}
-				if eligible {
+				if item.State == "available" {
 					available++
 				}
 				if test.physical != "available" && item.State != test.physical {
 					t.Fatalf("physical state=%+v", item)
 				}
 			}
-			tx.Rollback()
 			if available != test.available {
 				t.Fatalf("available=%d", available)
 			}
@@ -363,12 +363,100 @@ func TestKeyBindingPageHTTPStrictScopeAndWindow(t *testing.T) {
 	for _, query := range []string{"", "?page=999&page_size=10", "?upstream_model_id=" + url.QueryEscape("完整/model ID")} {
 		w := resourceHTTPCall(t, api.listKeyBindings, UserPrincipal{UserID: owner}, "GET", "/api/endpoints/"+ep.ID+"/keys/"+key.ID+"/bindings"+query, "", "", pathValues)
 		var page Page[KeyBindingView]
-		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &page) != nil || page.Pagination == nil || page.Pagination.TotalItems != "0" || page.Pagination.Page != "1" {
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &page) != nil || page.Pagination == nil || page.Pagination.TotalItems != "0" || page.Pagination.Page != "1" || page.Data == nil || len(page.Data) != 0 {
 			t.Fatalf("%s: %d %s", query, w.Code, w.Body.String())
 		}
 	}
 	w := resourceHTTPCall(t, api.listKeyBindings, UserPrincipal{UserID: owner}, "GET", "/api/endpoints/"+ep.ID+"/keys/"+key.ID+"/bindings", "{}", "", pathValues)
 	if w.Code != 400 {
 		t.Fatalf("GET body=%d", w.Code)
+	}
+}
+
+func TestEndpointKeyBrowseCountsDistinctBindingsWithLiveServiceMasks(t *testing.T) {
+	env := newResourceTestEnvironment(t)
+	owner, other := env.seedUser(t, "mask-owner"), env.seedUser(t, "mask-other")
+	ep := env.createEndpoint(t, owner, resourceTestKey('a'))
+	eid := resourceTestID(t, ep.ID)
+	key := env.createEndpointKey(t, owner, eid, resourceTestKey('b'))
+	kid := resourceTestID(t, key.ID)
+	seedBrowseModels(t, env, owner, other, kid, 3)
+	// The three roots select chat, embeddings and images. The chat root also
+	// has an image target, which must not inflate either distinct count.
+	if _, err := env.store.DB().Exec(`UPDATE model_binding_targets SET native_service_mask=CASE upstream_model_id WHEN 'manual' THEN 1 WHEN 'automatic' THEN 16 ELSE 32 END;
+INSERT INTO model_binding_targets(binding_id,endpoint_key_id,upstream_model_id,native_service_mask,selection_origin,ord,created_at,updated_at)
+SELECT binding_id,endpoint_key_id,'alternate-image',32,'legacy',1,created_at,updated_at FROM model_binding_targets WHERE upstream_model_id='manual'`); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, change, available string
+	}{
+		{"all services", `SELECT 1`, "3"},
+		{"chat only", `UPDATE endpoints SET native_service_mask=1`, "1"},
+		{"chat and embeddings", `UPDATE endpoints SET native_service_mask=17`, "2"},
+		{"credential disabled", `UPDATE credential_versions SET enabled=0`, "0"},
+		{"credential restored", `UPDATE credential_versions SET enabled=1`, "2"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := env.store.DB().Exec(tc.change); err != nil {
+				t.Fatal(err)
+			}
+			page, err := env.repository.ListEndpointKeysPage(context.Background(), owner, eid, pagination.Default())
+			if err != nil || len(page.Data) != 1 {
+				t.Fatalf("key page: %+v %v", page, err)
+			}
+			got := page.Data[0].Browse
+			if got == nil || got.ModelCount != "3" || got.BindingCount != "3" || got.AvailableBindingCount != tc.available {
+				t.Fatalf("binding counts: %+v want available=%s", got, tc.available)
+			}
+		})
+	}
+}
+
+func TestKeyBindingPagesPreserveTargetOrderAndPreview(t *testing.T) {
+	env := newResourceTestEnvironment(t)
+	owner, other := env.seedUser(t, "target-order-owner"), env.seedUser(t, "target-order-other")
+	ep := env.createEndpoint(t, owner, resourceTestKey('a'))
+	eid := resourceTestID(t, ep.ID)
+	key := env.createEndpointKey(t, owner, eid, resourceTestKey('b'))
+	kid := resourceTestID(t, key.ID)
+	seedBrowseModels(t, env, owner, other, kid, 11)
+	// A later target belongs to an earlier binding. Sorting by target ID alone
+	// or collapsing multiple targets into one binding would change these pages.
+	if _, err := env.store.DB().Exec(`INSERT INTO model_binding_targets(binding_id,endpoint_key_id,upstream_model_id,native_service_mask,selection_origin,ord,created_at,updated_at)
+SELECT binding_id,endpoint_key_id,'automatic',32,'legacy',1,created_at,updated_at FROM model_binding_targets WHERE upstream_model_id='manual' ORDER BY binding_id LIMIT 1`); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := env.store.DB().Query(ownedBindingSelect+ownedBindingScope+` AND e.id=? AND k.id=? ORDER BY t.upstream_model_id,b.id,t.id`, owner, owner, eid, kid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want []KeyBindingView
+	for rows.Next() {
+		item, err := scanKeyBinding(rows)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want = append(want, item)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil || len(want) != 12 {
+		t.Fatalf("expected targets: %d %v", len(want), err)
+	}
+	var got []KeyBindingView
+	for number := 1; number <= 2; number++ {
+		page, err := env.repository.ListKeyBindingsPage(context.Background(), owner, eid, kid, "", pagination.Request{Page: int64(number), Size: 10})
+		if err != nil || page.Pagination.TotalItems != "12" || page.Pagination.Page != strconv.Itoa(number) {
+			t.Fatalf("page %d: %+v %v", number, page, err)
+		}
+		got = append(got, page.Data...)
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("paged targets: %+v want %+v", got, want)
+	}
+	keys, err := env.repository.ListEndpointKeysPage(context.Background(), owner, eid, pagination.Default())
+	if err != nil || len(keys.Data) != 1 || !slices.Equal(keys.Data[0].Browse.Preview, want[:3]) {
+		t.Fatalf("preview: %+v %v", keys, err)
 	}
 }

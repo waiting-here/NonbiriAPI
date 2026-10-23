@@ -149,12 +149,10 @@ func validAffinityTx(ctx context.Context, tx *sql.Tx, record *affinityRecord, re
 	}
 	var secretRefID int64
 	var baseURL string
-	err := tx.QueryRowContext(ctx, `SELECT k.secret_ref_id,s.canonical_base_url
+	err := tx.QueryRowContext(ctx, `SELECT a.secret_ref_id,a.canonical_base_url
 FROM endpoint_keys k
-JOIN endpoints e ON e.id=k.endpoint_id
-JOIN endpoint_key_secrets s ON s.id=k.secret_ref_id
-WHERE k.id=? AND k.enabled=1 AND e.enabled=1 AND s.orphaned_at IS NULL
-AND e.connector_type=s.connector_type AND e.base_url=s.canonical_base_url
+JOIN endpoint_grant_authorizations a ON a.grant_revision_id=k.current_grant_revision_id AND a.endpoint_key_id=k.id
+WHERE k.id=? AND a.relationship_valid=1 AND a.available=1
 AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id)`,
 		record.endpointKeyID).Scan(&secretRefID, &baseURL)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -168,6 +166,37 @@ AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=
 		return false, err
 	}
 	return string(physical[:]) == string(record.physicalID), nil
+}
+
+func validCharityAffinityTx(ctx context.Context, tx *sql.Tx, modelID sql.NullInt64, record *affinityRecord, revision, at int64) (bool, error) {
+	if !modelID.Valid || record == nil || record.revision != revision || record.expiresAt <= at {
+		return false, nil
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT a.secret_ref_id,a.canonical_base_url
+FROM charity_model_bindings b JOIN charity_binding_targets t ON t.binding_id=b.id
+JOIN donation_keys dk ON dk.id=t.donation_key_id
+JOIN charity_use_availability u ON u.donation_key_id=dk.id AND (u.native_service_bit&t.native_service_mask)<>0
+JOIN endpoint_grant_authorizations a ON a.grant_revision_id=u.grant_revision_id
+WHERE b.charity_model_id=? AND dk.endpoint_key_id=?
+AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=dk.endpoint_key_id)`, modelID.Int64, record.endpointKeyID)
+	if err != nil {
+		return false, fmt.Errorf("claim: revalidate approved charity association: %w", err)
+	}
+	defer rows.Close()
+	valid := false
+	for rows.Next() {
+		var secretID int64
+		var baseURL string
+		if err := rows.Scan(&secretID, &baseURL); err != nil {
+			return false, err
+		}
+		physical, err := physicalCharityKeyID(record.endpointKeyID, secretID, baseURL)
+		if err != nil {
+			return false, err
+		}
+		valid = valid || string(physical[:]) == string(record.physicalID)
+	}
+	return valid, rows.Err()
 }
 
 func markRoutingDispatchTx(ctx context.Context, tx *sql.Tx, attemptID string, at int64) error {

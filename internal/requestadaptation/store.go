@@ -23,6 +23,7 @@ type KeyDeriver interface {
 
 type Config struct {
 	DB         *sql.DB
+	ReadDB     *sql.DB
 	Codec      secret.GenerationTwoContextCodec
 	KeyDeriver KeyDeriver
 }
@@ -31,6 +32,7 @@ type Config struct {
 // by the resource service in the same transaction before LoadTx or SaveTx.
 type Store struct {
 	db      *sql.DB
+	readDB  *sql.DB
 	codec   secret.GenerationTwoContextCodec
 	deriver KeyDeriver
 }
@@ -39,7 +41,11 @@ func New(config Config) (*Store, error) {
 	if config.DB == nil || config.Codec == nil || config.KeyDeriver == nil {
 		return nil, ErrUnavailable
 	}
-	return &Store{db: config.DB, codec: config.Codec, deriver: config.KeyDeriver}, nil
+	reader := config.ReadDB
+	if reader == nil {
+		reader = config.DB
+	}
+	return &Store{db: config.DB, readDB: reader, codec: config.Codec, deriver: config.KeyDeriver}, nil
 }
 
 func (s *Store) contextFor(ref Ref) ([]byte, secret.GenerationTwoEndpointKeyContext, error) {
@@ -115,11 +121,20 @@ func (s *Store) LoadTx(ctx context.Context, tx *sql.Tx, ref Ref) (Snapshot, erro
 	if s == nil || tx == nil || !ref.valid() {
 		return Snapshot{}, ErrInvalid
 	}
+	return s.loadSnapshot(ctx, tx, ref)
+}
+
+type snapshotReader interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func (s *Store) loadSnapshot(ctx context.Context, reader snapshotReader, ref Ref) (Snapshot, error) {
 	query := "SELECT revision,secret_context,secret_ciphertext FROM request_adaptations WHERE " + refColumn(ref.Scope) + "=? AND scope=?"
 	var revision int64
 	var contextID []byte
 	var ciphertext string
-	err := tx.QueryRowContext(ctx, query, ref.ID, ref.Scope).Scan(&revision, &contextID, &ciphertext)
+	err := reader.QueryRowContext(ctx, query, ref.ID, ref.Scope).Scan(&revision, &contextID, &ciphertext)
+	defer clear(contextID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Snapshot{Document: Empty(ref.Scope), Revision: "0"}, nil
 	}
@@ -155,16 +170,13 @@ func (s *Store) Load(ctx context.Context, ref Ref) (Snapshot, error) {
 	if s == nil || !ref.valid() {
 		return Snapshot{}, ErrInvalid
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return Snapshot{}, ErrUnavailable
-	}
-	defer tx.Rollback()
-	snapshot, err := s.LoadTx(ctx, tx, ref)
+	// QueryRow releases its connection after Scan. Decoding the captured
+	// envelope does not need to retain a database snapshot.
+	snapshot, err := s.loadSnapshot(ctx, s.readDB, ref)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if err := tx.Commit(); err != nil {
+	if ctx.Err() != nil {
 		snapshot.Clear()
 		return Snapshot{}, ErrUnavailable
 	}
@@ -174,7 +186,7 @@ func (s *Store) Load(ctx context.Context, ref Ref) (Snapshot, error) {
 // LoadMany reads all candidate settings at one SQLite snapshot. It is called
 // once per accepted logical request, before physical attempts begin.
 func (s *Store) LoadMany(ctx context.Context, refs []Ref) (map[Ref]Snapshot, error) {
-	if s == nil || len(refs) > 202 {
+	if s == nil {
 		return nil, ErrInvalid
 	}
 	out := make(map[Ref]Snapshot, len(refs))
@@ -184,6 +196,9 @@ func (s *Store) LoadMany(ctx context.Context, refs []Ref) (map[Ref]Snapshot, err
 			return nil, ErrInvalid
 		}
 		if _, exists := out[ref]; !exists {
+			if len(out) >= 512 {
+				return nil, ErrInvalid
+			}
 			out[ref] = Snapshot{Document: Empty(ref.Scope), Revision: "0"}
 			groups[ref.Scope] = append(groups[ref.Scope], ref.ID)
 		}
@@ -213,7 +228,7 @@ func (s *Store) LoadMany(ctx context.Context, refs []Ref) (map[Ref]Snapshot, err
 			args = append(args, id)
 		}
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, ErrUnavailable
 	}
@@ -223,6 +238,19 @@ func (s *Store) LoadMany(ctx context.Context, refs []Ref) (map[Ref]Snapshot, err
 		return nil, fmt.Errorf("request adaptation: load candidates: %w", err)
 	}
 	defer rows.Close()
+	type encryptedSnapshot struct {
+		ref        Ref
+		revision   int64
+		contextID  []byte
+		ciphertext string
+	}
+	var stored []encryptedSnapshot
+	defer func() {
+		for i := range stored {
+			clear(stored[i].contextID)
+			stored[i] = encryptedSnapshot{}
+		}
+	}()
 	for rows.Next() {
 		var ref Ref
 		var revision int64
@@ -231,11 +259,10 @@ func (s *Store) LoadMany(ctx context.Context, refs []Ref) (map[Ref]Snapshot, err
 		if err := rows.Scan(&ref.Scope, &ref.ID, &revision, &contextID, &ciphertext); err != nil {
 			return nil, fmt.Errorf("request adaptation: scan candidate: %w", err)
 		}
-		value, err := s.openSnapshot(ref, revision, contextID, ciphertext)
-		if err != nil {
-			return nil, err
+		if stored == nil {
+			stored = make([]encryptedSnapshot, 0, len(out))
 		}
-		out[ref] = value
+		stored = append(stored, encryptedSnapshot{ref, revision, contextID, ciphertext})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("request adaptation: iterate candidates: %w", err)
@@ -244,6 +271,24 @@ func (s *Store) LoadMany(ctx context.Context, refs []Ref) (map[Ref]Snapshot, err
 		return nil, ErrUnavailable
 	}
 	if err := tx.Commit(); err != nil {
+		return nil, ErrUnavailable
+	}
+	// Every envelope belongs to the completed SQL snapshot. Decode only after
+	// returning the connection so validation cannot hold up other readers.
+	for i := range stored {
+		if ctx.Err() != nil {
+			return nil, ErrUnavailable
+		}
+		row := &stored[i]
+		value, err := s.openSnapshot(row.ref, row.revision, row.contextID, row.ciphertext)
+		if err != nil {
+			return nil, err
+		}
+		out[row.ref] = value
+		clear(row.contextID)
+		*row = encryptedSnapshot{}
+	}
+	if ctx.Err() != nil {
 		return nil, ErrUnavailable
 	}
 	complete = true

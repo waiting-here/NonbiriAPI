@@ -1,3 +1,4 @@
+import { normalizeUseSummary, type UseSummary } from './donationUses';
 import { exactRecord } from '@shared/operations/wire';
 import { KEY_STATES, type KeyStateFilter } from './keyState';
 import { ApiError } from '@shared/query/http';
@@ -67,9 +68,16 @@ export type DonationPageSafeSource =
         | 'openai-compatible'
         | 'anthropic-compatible'
         | 'ai-sdk-gateway-v3'
+        | 'ai-sdk-gateway-v4'
         | 'google-gemini'
         | 'openai-responses'
-        | 'openai-decisions';
+        | 'openai-decisions'
+        | 'cohere-rerank'
+        | 'jina-rerank'
+        | 'siliconflow-rerank'
+        | 'voyage-rerank'
+        | 'typesafe-systemone'
+        | 'openai-chat-completions';
       base_url: string;
     }
   | {
@@ -78,9 +86,16 @@ export type DonationPageSafeSource =
         | 'openai-compatible'
         | 'anthropic-compatible'
         | 'ai-sdk-gateway-v3'
+        | 'ai-sdk-gateway-v4'
         | 'google-gemini'
         | 'openai-responses'
-        | 'openai-decisions';
+        | 'openai-decisions'
+        | 'cohere-rerank'
+        | 'jina-rerank'
+        | 'siliconflow-rerank'
+        | 'voyage-rerank'
+        | 'typesafe-systemone'
+        | 'openai-chat-completions';
       base_url: string;
       channel_id: string;
       name: string;
@@ -122,6 +137,7 @@ export type DonationState =
 export type DonationStateCounts = Record<DonationState, string>;
 
 interface DonationPageCommon {
+  use_summary?: UseSummary;
   discord_public_thanks?: boolean | null;
   id: string;
   status: DonationStatus;
@@ -241,6 +257,7 @@ const DONATION_KEY_FIELDS = [
 ] as const;
 
 const KEY_SUMMARY_FIELDS = [
+  'can_manage',
   'donation_note',
   'approval_note',
   'visible_models',
@@ -427,7 +444,14 @@ function donationCommon(
     ['pending', 'approved', 'rejected', 'deleted', 'expired'] as const,
     `${label} status`,
   );
-  if (filters.status !== '' && status !== filters.status) invalidResponse(`${label} status filter`);
+  const useSummary =
+    root.use_summary === undefined ? undefined : normalizeUseSummary(root.use_summary);
+  if (
+    filters.status !== '' &&
+    status !== filters.status &&
+    !(filters.status === 'pending' && useSummary && BigInt(useSummary.pending) > 0n)
+  )
+    invalidResponse(`${label} status filter`);
   const review = pageReview(root.review_result, `${label} review`);
   const reviewer = pageReviewer(root.reviewer, `${label} reviewer`);
   if (reviewer !== null && review === null) invalidResponse(`${label} attributed review`);
@@ -463,6 +487,9 @@ function donationCommon(
     invalidResponse(`${label} source identities`);
   }
   return {
+    ...(root.use_summary === undefined
+      ? {}
+      : { use_summary: normalizeUseSummary(root.use_summary) }),
     discord_public_thanks:
       root.discord_public_thanks == null
         ? null
@@ -509,7 +536,7 @@ function normalizeAdminDonationPageItem(
   filters: Required<ManagedDonationPageFilters>,
 ): AdminDonationPageItem {
   const label = `administrator donation ${index + 1}`;
-  const root = record(value, [...DONATION_COMMON_FIELDS, 'owner'], label, [
+  const root = record(value, [...DONATION_COMMON_FIELDS, 'owner', 'use_summary'], label, [
     ...DONATION_COMMON_FIELDS.filter((field) => field !== 'discord_public_thanks'),
     'owner',
   ]);
@@ -525,7 +552,7 @@ function normalizeStewardDonationPageItem(
   filters: Required<ManagedDonationPageFilters>,
 ): StewardDonationPageItem {
   const label = `steward donation ${index + 1}`;
-  const root = record(value, [...DONATION_COMMON_FIELDS, 'owner'], label, [
+  const root = record(value, [...DONATION_COMMON_FIELDS, 'owner', 'use_summary'], label, [
     ...DONATION_COMMON_FIELDS.filter((field) => field !== 'discord_public_thanks'),
     'owner',
   ]);
@@ -548,6 +575,7 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
     KEY_SUMMARY_FIELDS.filter(
       (field) =>
         ![
+          'can_manage',
           'review',
           'key_limits_revision',
           'rate_limited_until',
@@ -563,6 +591,7 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
   );
   const key = normalizeManagedKey(
     {
+      can_manage: root.can_manage,
       review: root.review,
       binding_count: root.binding_count,
       failure_disable_threshold: root.failure_disable_threshold,

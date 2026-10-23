@@ -2,6 +2,22 @@
 
 This standard applies to every existing and future Gacha Simulator card. Rarity determines presentation requirements, not the quality of the underlying illustration. The [activity rules](gacha.md) define acquisition and collection behavior.
 
+## Content classification
+
+`internal/artwork/catalog.json` is the shared Go and browser classification
+registry. Every card, illustration, cover and appearance has an explicit
+`general` or `r18` rating; all current entries are `general`. Asset ownership
+rules cover the corresponding previews, full-size images, layers and variants.
+Shared textures have one owner, and artwork that reuses them declares `uses`
+dependencies so its effective rating includes those sources. Card `scene`
+references additionally govern heartfelt-moment backgrounds.
+
+New artwork must register its files or literal path prefixes and pass catalog
+coverage validation. Keep default appearance and fallback cover general. The
+administrator's R-18 switch controls both rendering and direct asset delivery;
+candidate labels are separate from the artwork, so allowed detail views and
+applied appearances remain unobstructed.
+
 ## Artwork and identity
 
 - Use the established character references. Preserve identifying hair, eyes, anatomy, accessories and signature motifs across outfits; create an original scene for each card.
@@ -111,6 +127,8 @@ For layered scenery, establish the far-to-near order before adding motion. Apply
 
 ## Additional SP content
 
-Across the Mirror Sea uses mirror-edge light and reflected scenery; Amber Vow uses refined portrait and eyelid registration; Run Away with You keeps its offered hand settled; A Notice to Steal Your Heart keeps its head and arms steady while breathing, hair and cloth continue. Each includes standard and enhanced stills, matching dedicated wallpapers and separate heartfelt-moment scenery/character derivatives. These scenes contain no encounter videos or additional background music. See the [asset notice](../web/public/assets/gacha/NOTICE.md) for specific clothing and content guidance.
+Across the Mirror Sea uses mirror-edge light and reflected scenery; Amber Vow uses refined portrait and eyelid registration; Shared Daylight keeps its offered hand settled; A Notice to Steal Your Heart keeps its head and arms steady while breathing, hair and cloth continue. Each includes standard and enhanced stills, matching dedicated wallpapers and separate heartfelt-moment scenery/character derivatives. These scenes contain no encounter videos or additional background music. See the [asset notice](../web/public/assets/gacha/NOTICE.md) for specific clothing and content guidance.
 
 Amber Vow uses separate hall, banner and chandelier plates, with anchored cloth motion, rigid suspended fixtures, moving window light, layered gold dust and foreground books. Its existing 14-bone character and 17.6-second motion remain. A localized footwear texture and separate sole shadows establish floor contact without replacing the face, hands or eye plates. The desktop appearance places the face in the right margin independently of the card composition; compact screens use a separate placement below navigation. Static scenery and character layers share that placement, including when motion is reduced or unavailable. Hall enhancement and transparent-layer resampling are identified separately in the asset notice.
+
+Shared Daylight pairs warm dawn with deep-blue predawn light on the existing platform. A Notice to Steal Your Heart pairs moonlight with candlelight, with its balance and floor shadows anchored to the supporting foot while retaining the raised-foot pose. Across the Mirror Sea adds localized motion and reflected light within the existing mirrors and stone scenery. Each has separate responsive wallpaper layers and matching static fallbacks. Standard and enhanced output share registered character inputs; resampled backgrounds are identified in the asset notice. The moonlit-room background canvas scales with the display between the base and source resolutions.

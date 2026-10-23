@@ -127,7 +127,7 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 	defer wireGuard.Clear()
 	errorGuard := openai.NewResponseGuard(materials...)
 	defer errorGuard.Clear()
-	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), BaseURL: target.BaseURL(), PrivateModel: target.UpstreamModel(), ContainsSecret: errorGuard.ContainsBytes}
+	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), Rules: smartbackoff.RulesFromContext(ctx), BaseURL: target.BaseURL(), PrivateModel: target.UpstreamModel(), ContainsSecret: errorGuard.ContainsBytes}
 	if policy.HasAdaptation || len(policy.ManagedHeaders) > 0 {
 		errorContext.ContainsSecret = func(value []byte) bool { return len(value) > 0 }
 	}

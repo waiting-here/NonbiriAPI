@@ -13,37 +13,8 @@ import (
 )
 
 func validJSON(data []byte) bool {
-	if len(data) == 0 || len(data) > MaxConfigurationBytes || strictjson.ValidateObjectWithFieldLimit(data, 16384) != nil {
-		return false
-	}
-	var value any
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	if decoder.Decode(&value) != nil {
-		return false
-	}
-	return boundedDepth(value, 1)
-}
-
-func boundedDepth(value any, depth int) bool {
-	if depth > MaxDepth {
-		return false
-	}
-	switch item := value.(type) {
-	case map[string]any:
-		for _, child := range item {
-			if !boundedDepth(child, depth+1) {
-				return false
-			}
-		}
-	case []any:
-		for _, child := range item {
-			if !boundedDepth(child, depth+1) {
-				return false
-			}
-		}
-	}
-	return true
+	return len(data) > 0 && len(data) <= MaxConfigurationBytes &&
+		strictjson.ValidateObjectWithValueDepthLimit(data, 16384, MaxDepth) == nil
 }
 
 func ParsePatch(data []byte) (Patch, error) {

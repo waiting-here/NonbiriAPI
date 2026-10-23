@@ -1,0 +1,46 @@
+.endpoint-policies .endpoint-policy-url {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.endpoint-policy-rule {
+  min-width: 0;
+  margin: 0;
+  padding: var(--nb-space-4);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+}
+.endpoint-policy-rule legend {
+  padding-inline: var(--nb-space-2);
+  font-weight: var(--nb-font-weight-semibold);
+}
+.endpoint-policy-rule__fields {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(0, 2fr) minmax(10rem, 1fr);
+  gap: var(--nb-space-4);
+}
+.endpoint-policy-rule__actions {
+  margin-top: var(--nb-space-4);
+}
+@media (width < 48rem) {
+  .endpoint-policy-rule__fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (width < 40rem) {
+  .endpoint-policies .nb-pager .nb-pager__jump,
+  .endpoint-policies .nb-pager__size {
+    display: inline-flex;
+  }
+
+  .endpoint-policies .nb-pager__pages {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .endpoint-policies .nb-pager input,
+  .endpoint-policies .nb-pager select {
+    min-height: 2.5rem;
+  }
+}

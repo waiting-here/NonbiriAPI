@@ -1,3 +1,15 @@
+import {
+  normalizeNativeServices,
+  normalizeRerankFormat,
+  normalizeNativeServiceOption,
+  normalizeServiceProjection,
+  normalizeMainstreamEntry,
+  normalizeDiscoveryPreset,
+  normalizeModelMappings,
+} from '@shared/connections';
+import type { BindingTarget } from './types';
+import { normalizeSessionHeaders } from '@shared/sessionHeaders';
+import { normalizeCloudflareProxyMode } from '@shared/cloudflareProxy';
 import { responseFields } from '@shared/query/responseFields';
 import { normalizeModelTypes } from '@shared/modelTypes';
 import { automaticRestrictions } from '@shared/operations/restrictions';
@@ -555,6 +567,12 @@ export function normalizeUserProfile(value: unknown): UserProfile {
     'charity_suspended_until',
     'endpoint_limit',
     'effective_endpoint_limit',
+    'global_rpm_limit',
+    'effective_global_rpm_limit',
+    'light_rpm_limit',
+    'effective_light_rpm_limit',
+    'light_concurrency_limit',
+    'effective_light_concurrency_limit',
     'rpm_limit',
     'effective_rpm_limit',
     'concurrency_limit',
@@ -603,6 +621,24 @@ export function normalizeUserProfile(value: unknown): UserProfile {
     ),
     endpoint_limit: nullableDecimal(record.endpoint_limit, 'endpoint limit'),
     effective_endpoint_limit: decimal(record.effective_endpoint_limit, 'effective endpoint limit'),
+    global_rpm_limit: nullableDecimal(record.global_rpm_limit, 'global_rpm_limit'),
+    effective_global_rpm_limit: decimal(
+      record.effective_global_rpm_limit,
+      'effective global_rpm_limit',
+    ),
+    light_rpm_limit: nullableDecimal(record.light_rpm_limit, 'light_rpm_limit'),
+    effective_light_rpm_limit: decimal(
+      record.effective_light_rpm_limit,
+      'effective light_rpm_limit',
+    ),
+    light_concurrency_limit: nullableDecimal(
+      record.light_concurrency_limit,
+      'light_concurrency_limit',
+    ),
+    effective_light_concurrency_limit: decimal(
+      record.effective_light_concurrency_limit,
+      'effective light_concurrency_limit',
+    ),
     rpm_limit: nullableDecimal(record.rpm_limit, 'RPM limit'),
     effective_rpm_limit: decimal(record.effective_rpm_limit, 'effective RPM limit'),
     concurrency_limit: nullableDecimal(record.concurrency_limit, 'concurrency limit'),
@@ -649,7 +685,7 @@ export function normalizeEndpointOrigin(value: unknown): EndpointOrigin {
   invalid('endpoint origin');
 }
 
-export function normalizeMainstreamChannelOption(value: unknown): MainstreamChannelOption {
+function normalizeLegacyMainstreamChannelOption(value: unknown): MainstreamChannelOption {
   const record = responseRecord(
     value,
     ['id', 'name', 'connector_type', 'base_url'],
@@ -666,7 +702,7 @@ export function normalizeMainstreamChannelOption(value: unknown): MainstreamChan
   };
 }
 
-export function normalizeEndpointCreateOptions(value: unknown): EndpointCreateOptions {
+function normalizeLegacyEndpointCreateOptions(value: unknown): EndpointCreateOptions {
   const record = responseRecord(
     value,
     ['base_connector_types', 'mainstream_channels'],
@@ -748,7 +784,7 @@ export function normalizeKeyBindingView(value: unknown): KeyBindingView {
       'max_rpm',
       'state',
     ],
-    [],
+    ['target_id'],
     'key binding view',
   );
   if (
@@ -759,6 +795,9 @@ export function normalizeKeyBindingView(value: unknown): KeyBindingView {
     invalid('key binding order');
   }
   return {
+    ...(record.target_id === undefined
+      ? {}
+      : { target_id: id(record.target_id, 'binding target id') }),
     id: id(record.id, 'key binding id'),
     model_id: id(record.model_id, 'key binding model id'),
     model_full_name: scalarString(record.model_full_name, 'key binding model full name'),
@@ -786,7 +825,7 @@ export function normalizeKeyBindingView(value: unknown): KeyBindingView {
 
 function normalizeBrowsePreview(value: unknown): KeyBindingView[] {
   const preview = boundedArray(value, normalizeKeyBindingView, 'binding preview', 3);
-  uniqueBy(preview, (binding) => binding.id, 'binding preview ids');
+  uniqueBy(preview, (binding) => binding.target_id ?? binding.id, 'binding preview ids');
   uniqueBy(
     preview,
     (binding) =>
@@ -896,7 +935,12 @@ function normalizeEndpointKeyBrowse(
     invalid('endpoint key browse counts');
   }
   const preview = normalizeBrowsePreview(record.preview);
-  if (preview.length !== browsePreviewLimit(bindingCount)) {
+  if (
+    (bindingCount === '0' && preview.length > 0) ||
+    (preview.some((row) => row.target_id)
+      ? preview.length < browsePreviewLimit(bindingCount)
+      : preview.length !== browsePreviewLimit(bindingCount))
+  ) {
     invalid('endpoint key browse preview');
   }
   if (
@@ -932,7 +976,12 @@ function normalizeModelBrowse(value: unknown, modelID: string, bindingCount: str
     invalid('model browse available binding count');
   }
   const preview = normalizeBrowsePreview(record.preview);
-  if (preview.length !== browsePreviewLimit(bindingCount)) {
+  if (
+    (bindingCount === '0' && preview.length > 0) ||
+    (preview.some((row) => row.target_id)
+      ? preview.length < browsePreviewLimit(bindingCount)
+      : preview.length !== browsePreviewLimit(bindingCount))
+  ) {
     invalid('model browse preview');
   }
   if (preview.some((binding) => binding.model_id !== modelID)) {
@@ -941,7 +990,7 @@ function normalizeModelBrowse(value: unknown, modelID: string, bindingCount: str
   return { available_binding_count: availableBindingCount, preview };
 }
 
-export function normalizeEndpoint(value: unknown): Endpoint {
+function normalizeLegacyEndpoint(value: unknown): Endpoint {
   const record = responseRecord(
     value,
     [
@@ -983,7 +1032,7 @@ export function normalizeEndpoint(value: unknown): Endpoint {
   };
 }
 
-export function normalizeEndpointKey(value: unknown): EndpointKey {
+function normalizeLegacyEndpointKey(value: unknown): EndpointKey {
   const record = responseRecord(
     value,
     [
@@ -1323,13 +1372,15 @@ export function normalizeModel(value: unknown): Model {
       'transport_rule',
       'silent_retry',
       'flatten_tool_calls',
+      'cloudflare_proxy_enabled',
+      'cloudflare_proxy_mode',
       'revision',
       'binding_revision',
       'binding_count',
       'created_at',
       'updated_at',
     ],
-    ['browse', 'role_policy'],
+    ['browse', 'role_policy', 'session_headers'],
     'logical model',
   );
   const provider = logicalName(record.provider, 'logical model provider');
@@ -1352,6 +1403,12 @@ export function normalizeModel(value: unknown): Model {
     ? normalizeModelBrowse(record.browse, modelID, bindingCount)
     : undefined;
   return {
+    session_headers: normalizeSessionHeaders(record.session_headers),
+    cloudflare_proxy_enabled: exactBoolean(
+      record.cloudflare_proxy_enabled,
+      'Cloudflare proxy setting',
+    ),
+    cloudflare_proxy_mode: normalizeCloudflareProxyMode(record.cloudflare_proxy_mode),
     id: modelID,
     provider,
     model,
@@ -1384,7 +1441,7 @@ function normalizeSourceTypes(value: unknown): CatalogSourceType[] {
   return result;
 }
 
-export function normalizeBindingCandidate(value: unknown): BindingCandidate {
+function normalizeLegacyBindingCandidate(value: unknown): BindingCandidate {
   const record = responseRecord(
     value,
     [
@@ -1424,7 +1481,7 @@ export function normalizeBindingCandidate(value: unknown): BindingCandidate {
   };
 }
 
-export function normalizeBinding(value: unknown): Binding {
+function normalizeLegacyBinding(value: unknown): Binding {
   const record = responseRecord(
     value,
     [
@@ -1724,4 +1781,164 @@ export function canonicalCandidateFilters(filters: CandidateFilters): CanonicalC
 export function normalizeAuthorizationURL(value: unknown): string {
   const record = responseRecord(value, ['authorization_url'], [], 'elevation response');
   return httpsURL(record.authorization_url, 'elevation authorization URL');
+}
+
+export function normalizeEndpoint(value: unknown): Endpoint {
+  const result = normalizeLegacyEndpoint(value);
+  const source = asRecord(value, 'endpoint');
+  return {
+    ...result,
+    ...(Object.hasOwn(source, 'connection_id')
+      ? {
+          connection_id:
+            source.connection_id === null ? null : id(source.connection_id, 'endpoint connection'),
+        }
+      : {}),
+    ...(Object.hasOwn(source, 'configuration_type')
+      ? { configuration_type: connectorType(source.configuration_type) }
+      : {}),
+    ...(Object.hasOwn(source, 'native_services')
+      ? { native_services: normalizeNativeServices(source.native_services) }
+      : {}),
+    ...(Object.hasOwn(source, 'rerank_format')
+      ? { rerank_format: normalizeRerankFormat(source.rerank_format) }
+      : {}),
+  };
+}
+export function normalizeEndpointKey(value: unknown): EndpointKey {
+  const result = normalizeLegacyEndpointKey(value);
+  const source = asRecord(value, 'endpoint key');
+  return {
+    ...result,
+    ...(source.credential_available === undefined
+      ? {}
+      : {
+          credential_available: exactBoolean(source.credential_available, 'credential available'),
+        }),
+    ...(Object.hasOwn(source, 'discovery_source_id')
+      ? {
+          discovery_source_id:
+            source.discovery_source_id === null
+              ? null
+              : id(source.discovery_source_id, 'key discovery source'),
+        }
+      : {}),
+    ...(Object.hasOwn(source, 'credential_id')
+      ? { credential_id: id(source.credential_id, 'key credential') }
+      : {}),
+    ...(Object.hasOwn(source, 'credential_version')
+      ? { credential_version: decimal(source.credential_version, 'key version', true) }
+      : {}),
+    ...(Object.hasOwn(source, 'grant_revision')
+      ? { grant_revision: decimal(source.grant_revision, 'key grant revision', true) }
+      : {}),
+    ...(Object.hasOwn(source, 'native_services')
+      ? { native_services: normalizeNativeServices(source.native_services) }
+      : {}),
+  };
+}
+export function normalizeMainstreamChannelOption(value: unknown): MainstreamChannelOption {
+  const result = normalizeLegacyMainstreamChannelOption(value);
+  const source = asRecord(value, 'mainstream channel option');
+  return {
+    ...result,
+    ...(Object.hasOwn(source, 'revision')
+      ? { revision: decimal(source.revision, 'channel revision', true) }
+      : {}),
+    ...(Object.hasOwn(source, 'entries')
+      ? { entries: boundedArray(source.entries, normalizeMainstreamEntry, 'channel entries', 32) }
+      : {}),
+    ...(Object.hasOwn(source, 'discovery_source')
+      ? { discovery_source: normalizeDiscoveryPreset(source.discovery_source) }
+      : {}),
+    ...(Object.hasOwn(source, 'model_mappings')
+      ? { model_mappings: normalizeModelMappings(source.model_mappings) }
+      : {}),
+  };
+}
+export function normalizeEndpointCreateOptions(value: unknown): EndpointCreateOptions {
+  const result = normalizeLegacyEndpointCreateOptions(value);
+  const source = asRecord(value, 'endpoint create options');
+  const matches = Object.hasOwn(source, 'matching_mainstream_entries')
+    ? boundedArray(
+        source.matching_mainstream_entries,
+        (value) => {
+          const match = responseRecord(
+            value,
+            ['channel_id', 'entry_id'],
+            [],
+            'mainstream entry match',
+          );
+          const channelID = opaqueID(match.channel_id, 'mch_', 'matched channel id');
+          const entryID = id(match.entry_id, 'matched entry id');
+          if (
+            !result.mainstream_channels.some(
+              (channel) =>
+                channel.id === channelID &&
+                channel.entries?.some((entry) => entry.id === entryID && entry.enabled),
+            )
+          )
+            invalid('mainstream entry match');
+          return { channel_id: channelID, entry_id: entryID };
+        },
+        'mainstream entry matches',
+        3200,
+      )
+    : undefined;
+  if (matches)
+    uniqueBy(
+      matches,
+      (match) => match.channel_id + ':' + match.entry_id,
+      'mainstream entry matches',
+    );
+  return {
+    ...result,
+    ...(matches === undefined ? {} : { matching_mainstream_entries: matches }),
+    ...(Object.hasOwn(source, 'native_service_options')
+      ? {
+          native_service_options: boundedArray(
+            source.native_service_options,
+            normalizeNativeServiceOption,
+            'native service options',
+          ),
+        }
+      : {}),
+  };
+}
+
+export function normalizeBindingTarget(value: unknown): BindingTarget {
+  const source = asRecord(value, 'binding target');
+  return {
+    ...normalizeServiceProjection(value),
+    id: id(source.id, 'target id'),
+    revision: decimal(source.revision, 'target revision', true),
+    endpoint_key_id: id(source.endpoint_key_id, 'target endpoint key'),
+    upstream_model_id: manualValue(source.upstream_model_id, false, 'target upstream model'),
+    endpoint_id: id(source.endpoint_id, 'target endpoint'),
+    connector_type: connectorType(source.connector_type),
+    configuration_type: connectorType(source.configuration_type),
+    base_url: normalizeBaseURL(source.base_url, 'target base URL'),
+    credential_id: id(source.credential_id, 'target credential'),
+    credential_version: decimal(source.credential_version, 'target credential version', true),
+    grant_revision: decimal(source.grant_revision, 'target grant revision', true),
+  };
+}
+export function normalizeBindingCandidate(value: unknown): BindingCandidate {
+  const result = normalizeLegacyBindingCandidate(value);
+  const source = asRecord(value, 'binding candidate');
+  return {
+    ...result,
+    ...(Object.hasOwn(source, 'native_services') ? normalizeServiceProjection(value) : {}),
+  };
+}
+export function normalizeBinding(value: unknown): Binding {
+  const result = normalizeLegacyBinding(value);
+  const source = asRecord(value, 'binding');
+  return {
+    ...result,
+    ...(Object.hasOwn(source, 'native_services') ? normalizeServiceProjection(value) : {}),
+    ...(Object.hasOwn(source, 'targets')
+      ? { targets: boundedArray(source.targets, normalizeBindingTarget, 'binding targets', 256) }
+      : {}),
+  };
 }

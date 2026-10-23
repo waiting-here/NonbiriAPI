@@ -2,7 +2,7 @@
 
 [简体中文](README.zh-CN.md)
 
-NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage endpoints, encrypted credentials, model discovery and routing, then use revocable CallerKeys for personal or shared charity calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
+NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage service connections, shared encrypted credentials, model discovery and routing, then use revocable CallerKeys for personal or shared charity calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
 **v1.0.0 is the first stable release.** GitHub Releases provide source code; build instructions are below. Version history is in [CHANGELOG](CHANGELOG.md).
 
@@ -31,10 +31,14 @@ Attempt and request completion use small synchronous transaction batches when
 work overlaps. Success still requires a durable commit, and anonymous queue
 metrics distinguish application waiting from database pool waiting.
 
-Level-5 stewards can inspect user accounts and ban level 1–4 users. They cannot
-change account settings or credits, lift a ban, or replace an active ban. They
-can approve or reject every pending donation. Administrators and level-6
+Level-5 stewards can inspect user accounts, adjust the five inference RPM/concurrency
+overrides or revoke CallerKeys for strictly lower-level users, and ban level 1–4
+users. They cannot change other account settings or credits, lift a ban, or replace
+an active ban. They can approve or reject every pending donation. Administrators and level-6
 stewards can force-reject any approved donation, including manual approvals.
+Administrators can revoke any non-administrator user's CallerKey; level-6
+stewards use the same strictly lower-level rule. Revocation leaves browser
+sessions and upstream credentials usable, and the user may create a replacement.
 
 Administrators manage complete price templates in a dedicated charity workspace,
 with search, pagination, creation, editing and deletion. Administrators and
@@ -48,10 +52,11 @@ donated key to several charity models in one operation. Administrators and
 level-6 stewards can maintain channel presets and apply them to every key in an
 approved donation; missing models and existing bindings are reported individually.
 
-Operators can route selected endpoint bases through
-[Cloudflare AI Gateway](docs/cloudflare-egress.md), including explicit credential
-compatibility settings. Matching uses deployment configuration and works across
-providers while preserving the shared outbound limits.
+Models can use a [Cloudflare Worker](docs/cloudflare-egress.md) to forward
+requests across providers without adding a mapping for each upstream. Personal
+models enable forwarding by default; charity models disable it by default.
+Administrators and level-6 stewards can inspect the loaded configuration. Existing
+AI Gateway mappings remain compatible when no Worker is configured.
 
 | Area | Source and contract |
 | --- | --- |
@@ -63,7 +68,31 @@ providers while preserving the shared outbound limits.
 | Shared components and separate stations | `web/src/shared/`, `web/src/user/`, `web/src/admin/` |
 | Verification and deployment examples | `scripts/`, `.github/workflows/`, `deploy/` |
 
-The connector registry supports OpenAI-compatible, Anthropic-compatible, AI SDK Gateway v3, Google Gemini, OpenAI Responses and OpenAI Decisions upstreams. Public ingress includes `/v1/models`, `/v1/chat/completions`, `/v1/embeddings`, `/v1/images/generations` and `/v1/decisions`. Gemini and Responses translate Chat requests; Decisions uses its native endpoint. Operation support is connector-specific. The backend enforces ownership, credential protection, SSRF, accounting and cancellation. Wire formats and limits are in the [API contract](docs/api-contract.md).
+[Service connections](docs/service-connections.md) group explicitly authorized entries around shared credentials and an independent model directory. OpenAI-compatible and Gateway entries select their native services; each model selects its applicable targets. Credential rotation preserves approved charity versions until explicit review.
+
+When creating a custom entry, matching mainstream presets show their current
+details. Users may explicitly adopt one entry or continue with the custom draft;
+suggestions grant no credential or donation authorization.
+
+The registry has 13 connector types covering OpenAI-compatible, dedicated Chat and Responses, Anthropic, Gateway v3/v4, Gemini, Decisions, System One and four explicit rerank protocols. Both Gateway versions support native text, image generation, embeddings and rerank with complete base URLs and no version probing. Direct HTTP operations include text, images, audio, embeddings, moderation and rerank, with SSE where supported. Chat and Responses share one model service selection and have bounded conversion paths; other services remain independently selectable. See [direct inference](docs/direct-inference.md) for the operation matrix and excluded persistent/realtime resources, and the [API contract](docs/api-contract.md) for ownership, credentials, SSRF, accounting and cancellation rules.
+
+[Decisions](docs/content-protocols.md#decisions) supports up to 400 questions,
+text/image/JSON question content and structured JSON evidence in user messages.
+Native JSON values and numbers are preserved within bounded requests.
+
+Charity pricing supports request, token and search-unit billing, with independent input/output modality prices, donor rewards and long-context tiers. Missing standard classifications fall back to aggregate prices per side. [Pricing rules](docs/charity-context-pricing.md) explain exact units, reservation and failed-generation usage. Light and heavy requests have separate concurrency pools shared by personal and charity calls, and separate charity RPM windows; all calls still share global limits.
+
+Personal and charity models share [managed session-header controls](docs/charity-session-headers.md), including five formats and a zero idle lifetime that generates a value per logical request while preserving it for internal retries, without guaranteeing uniqueness. Model settings and request adaptation save separately.
+
+Authorized request-adaptation configuration reads show saved fixed-header and
+body values without response-protection markers. Marked items stay hidden as a
+whole. Mutation receipts and account exports continue to omit those values.
+
+Administrator and level-5/6 log pages show [global concurrency and RPM](docs/api-contract.md#global-pressure), with approximate 24-hour peaks and persistent observed maxima. Narrowly verified original caller-parameter errors leave donated-key failure streaks unchanged; ambiguous errors keep their existing treatment.
+Short charity-request rejections explain the minimum-length requirement in
+English or Chinese, with the existing status, code, counts and penalty rules.
+
+Browser appearance controls offer light/dark/system themes and three glass intensities, with manual choices taking priority over system preferences. Focus mode supports viewing the background and returning to the previous reading surface.
 
 Anonymous minute metrics separate pool acquisition from transaction work for
 game checkpoints, request accounting and background maintenance. In-flight
@@ -73,6 +102,10 @@ guide before comparing completed latency with current occupancy.
 The optional Gacha Simulator includes layered SP artwork. Amber Vow keeps its
 character beside desktop content, with matching static fallback and enhanced
 artwork; composition and source details are in the [art guide](docs/gacha-art.md).
+Administrators can disable R-18 built-in artwork across the site; this is on by
+default. Candidate lists label rated artwork, while permitted individual viewing
+stays unobstructed. Current assets are general. Collections and saved choices
+remain intact when artwork is disabled; see [artwork availability](docs/gacha.md#artwork-availability).
 
 The mystery shop offers daily bundles of ten standard or limited tickets for
 10,000 credits each, using game credits first. Each bundle has its own daily limit.
@@ -87,10 +120,14 @@ Charity calls automatically wait after recognized recoverable quota errors and
 recover through one real charity request. No per-key setup is required.
 Retry headers take precedence; other errors retain the consecutive-failure policy. See the
 [smart-backoff contract](docs/api-contract.md#413-smart-donated-key-backoff).
+Administrators and level-6 stewards can configure additional recognition rules
+per complete endpoint, shared by its donated keys, and inspect loaded egress
+routes. [Google routing](docs/cloudflare-egress.md#google-official-channels)
+covers AI Studio and Vertex AI's OpenAI-compatible Chat endpoints.
 
 ## Build and develop
 
-Use **Go 1.26.9**, **Node.js ≥22.22.3**, **npm 12.0.1** and Bash; Windows uses Git Bash. The finished binary needs neither Node.js nor a C runtime.
+Use **Go 1.26.9**, **Node.js 22.23.4+ (22.x), 24.22.1+ (24.x), or 26.12.1+ (26.x)**, **npm 12.0.1** and Bash; Windows uses Git Bash. The finished binary needs neither Node.js nor a C runtime.
 
 ```sh
 npm --prefix web ci
@@ -104,7 +141,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed. The v1.0.6 source accepts schema 26 or fresh storage and produces account export 24. Existing schema 16–25 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases.
+Fresh databases start in maintenance with public features closed. The v1.1.0 source accepts schema 33 or fresh storage and produces account export 29. Existing published schema 16–26 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases. Source documentation does not imply that an instance has released or deployed the update.
 
 [Deployment](docs/deployment.md) covers systemd, proxies, immutable artifacts, upgrades and complete-snapshot recovery. Startup variables and online settings have one reference in [configuration](docs/configuration.md).
 

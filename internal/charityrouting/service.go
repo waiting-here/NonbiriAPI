@@ -19,6 +19,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/charitydiscount"
+	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -69,6 +70,8 @@ const (
 )
 
 type Config struct {
+	Connectors    *connector.Registry
+	BaseURLs      resources.BaseURLValidator
 	Store         *db.Store
 	Adaptations   *requestadaptation.Store
 	RoleAuth      RoleFinalTxAuthorizer
@@ -79,6 +82,8 @@ type Config struct {
 }
 
 type Service struct {
+	connectors    *connector.Registry
+	baseURLs      resources.BaseURLValidator
 	db            *sql.DB
 	readDB        *sql.DB
 	adaptations   *requestadaptation.Store
@@ -99,7 +104,7 @@ func New(config Config) (*Service, error) {
 	if nilDependency(config.Entropy) {
 		config.Entropy = cryptorand.Reader
 	}
-	return &Service{db: config.Store.DB(), readDB: config.Store.ReadDB(), adaptations: config.Adaptations, roleAuth: config.RoleAuth, donationState: config.DonationState,
+	return &Service{connectors: config.Connectors, baseURLs: config.BaseURLs, db: config.Store.DB(), readDB: config.Store.ReadDB(), adaptations: config.Adaptations, roleAuth: config.RoleAuth, donationState: config.DonationState,
 		cursorKeys: config.CursorKeys, entropy: config.Entropy, now: config.Now}, nil
 }
 
@@ -181,7 +186,7 @@ func (s *Service) create(ctx context.Context, role roleKind, actorUserID int64, 
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replayModel(decision)
+		return s.replayModel(decision)
 	}
 	fullName := modelname.CharityPrefix + input.Provider + "/" + input.Model
 	result, err := tx.ExecContext(ctx, `INSERT INTO charity_models(
@@ -206,7 +211,7 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)`,
 	encodedHeaders, _ := sessionheader.Encode(input.SessionHeaders)
 	excluded, _ := openai.NormalizeExcludedRequestFields(input.ExcludedRequestFields)
 	encodedExcluded, _ := json.Marshal(excluded)
-	if _, err := tx.ExecContext(ctx, `UPDATE charity_models SET is_mainstream=?,excluded_request_fields=?,transport_rule=?,model_types=?,context_pricing=?,session_headers=?,recurring_discount=? WHERE id=?`, input.IsMainstream, string(encodedExcluded), input.TransportRule, input.ModelTypes, prices.contextPricing, encodedHeaders, recurring, modelID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE charity_models SET is_mainstream=?,excluded_request_fields=?,transport_rule=?,model_types=?,context_pricing=?,session_headers=?,recurring_discount=?,cloudflare_proxy_enabled=? WHERE id=?`, input.IsMainstream, string(encodedExcluded), input.TransportRule, input.ModelTypes, prices.contextPricing, encodedHeaders, recurring, input.CloudflareProxyEnabled, modelID); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO charity_model_stats(model_id) VALUES(?)`, modelID); err != nil {
@@ -235,7 +240,7 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)`,
 			return resources.MutationResult[AdminCharityModel]{}, err
 		}
 	}
-	value, err := getAdminModelTx(ctx, tx, modelID, now)
+	value, err := s.getModelWithCloudflareMode(ctx, tx, modelID, now)
 	if err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
@@ -287,7 +292,7 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 	tx, scope, err := s.beginManagementTx(ctx, role, actorUserID, modelID, false, false)
 	actorID := scope.ActorID
 	if err == nil && scope.Trainee {
-		onlyRole := input.RolePolicy != nil && input.Provider == nil && input.Model == nil && input.Enabled == nil && input.Pricing == nil && input.Discount == nil && input.RecurringDiscount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil && input.AffinityTTLSeconds == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil && input.IsMainstream == nil && input.ExcludedRequestFields == nil && input.ModelTypes == nil && input.TransportRule == nil && input.SessionHeaders == nil
+		onlyRole := input.RolePolicy != nil && input.Provider == nil && input.Model == nil && input.Enabled == nil && input.Pricing == nil && input.Discount == nil && input.RecurringDiscount == nil && input.FlattenToolCalls == nil && input.CloudflareProxyEnabled == nil && input.RouteStrategy == nil && input.AffinityTTLSeconds == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil && input.IsMainstream == nil && input.ExcludedRequestFields == nil && input.ModelTypes == nil && input.TransportRule == nil && input.SessionHeaders == nil
 		if !onlyRole {
 			tx.Rollback()
 			return resources.MutationResult[AdminCharityModel]{}, ErrForbidden
@@ -303,7 +308,7 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replayModel(decision)
+		return s.replayModel(decision)
 	}
 	current, err := readStoredModelTx(ctx, tx, modelID)
 	if err != nil {
@@ -361,6 +366,9 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 		updated.user, updated.reward = prices.user, prices.reward
 		updated.contextPricing = prices.contextPricing
 	}
+	if !validPricingOperations(updated.mode, updated.modelTypes) {
+		return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
+	}
 	if input.Discount != nil {
 		if !validDiscountPatch(*input.Discount) {
 			return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
@@ -394,6 +402,9 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 			return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
 		}
 		updated.rolePolicy = encoded
+	}
+	if input.CloudflareProxyEnabled != nil {
+		updated.cloudflareProxyEnabled = *input.CloudflareProxyEnabled
 	}
 	if input.FlattenToolCalls != nil {
 		updated.flatten = boolInt(*input.FlattenToolCalls)
@@ -437,7 +448,7 @@ revision=revision+1,updated_at=? WHERE id=? AND revision=?`,
 			return resources.MutationResult[AdminCharityModel]{}, err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE charity_models SET is_mainstream=?,excluded_request_fields=?,transport_rule=?,model_types=?,context_pricing=?,session_headers=?,recurring_discount=? WHERE id=?`, updated.isMainstream, updated.excludedFields, updated.transportRule, updated.modelTypes, updated.contextPricing, updated.sessionHeaders, updated.recurringDiscount, modelID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE charity_models SET is_mainstream=?,excluded_request_fields=?,transport_rule=?,model_types=?,context_pricing=?,session_headers=?,recurring_discount=?,cloudflare_proxy_enabled=? WHERE id=?`, updated.isMainstream, updated.excludedFields, updated.transportRule, updated.modelTypes, updated.contextPricing, updated.sessionHeaders, updated.recurringDiscount, updated.cloudflareProxyEnabled, modelID); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	if input.TokenReserveCredits != nil {
@@ -471,7 +482,7 @@ revision=revision+1,updated_at=? WHERE id=? AND revision=?`,
 			return resources.MutationResult[AdminCharityModel]{}, err
 		}
 	}
-	value, err := getAdminModelTx(ctx, tx, modelID, now)
+	value, err := s.getModelWithCloudflareMode(ctx, tx, modelID, now)
 	if err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
@@ -551,7 +562,7 @@ func (s *Service) GetAdmin(ctx context.Context, modelID int64) (AdminCharityMode
 	if err != nil {
 		return AdminCharityModel{}, err
 	}
-	return getAdminModelTx(ctx, tx, modelID, now)
+	return s.getModelWithCloudflareMode(ctx, tx, modelID, now)
 }
 
 func (s *Service) GetSteward(ctx context.Context, actorUserID, modelID int64) (StewardCharityModel, error) {
@@ -570,7 +581,7 @@ func (s *Service) GetSteward(ctx context.Context, actorUserID, modelID int64) (S
 	if err != nil {
 		return StewardCharityModel{}, err
 	}
-	value, err := getAdminModelTx(ctx, tx, modelID, now)
+	value, err := s.getModelWithCloudflareMode(ctx, tx, modelID, now)
 	if err != nil {
 		return StewardCharityModel{}, err
 	}
@@ -614,7 +625,7 @@ func (s *Service) listModelsForSteward(ctx context.Context, actorUserID int64, q
 	if err != nil {
 		return nil, 0, err
 	}
-	items, next, err := listModelsQuery(ctx, tx, query, enabled, afterID, limit, now, scope.Trainee)
+	items, next, err := s.listModelsQuery(ctx, tx, query, enabled, afterID, limit, now, scope.Trainee)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -638,7 +649,7 @@ func (s *Service) listModels(ctx context.Context, query string, enabled *bool, a
 	if err != nil {
 		return nil, 0, err
 	}
-	return listModelsQuery(ctx, tx, query, enabled, afterID, limit, now)
+	return s.listModelsQuery(ctx, tx, query, enabled, afterID, limit, now)
 }
 
 type modelQueryer interface {
@@ -646,7 +657,7 @@ type modelQueryer interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
-func listModelsQuery(ctx context.Context, queryer modelQueryer, query string, enabled *bool, afterID int64, limit int, now int64, trainee ...bool) ([]AdminCharityModel, int64, error) {
+func (s *Service) listModelsQuery(ctx context.Context, queryer modelQueryer, query string, enabled *bool, afterID int64, limit int, now int64, trainee ...bool) ([]AdminCharityModel, int64, error) {
 	statement := `SELECT id FROM charity_models WHERE id>?`
 	if len(trainee) == 1 && trainee[0] {
 		statement += ` AND is_mainstream=1`
@@ -684,10 +695,12 @@ func listModelsQuery(ctx context.Context, queryer modelQueryer, query string, en
 		}
 		items = append(items, item)
 	}
+	s.attachModelCloudflareMode(items)
 	return items, next, nil
 }
 
 type storedModel struct {
+	cloudflareProxyEnabled           bool
 	recurringDiscount                string
 	sessionHeaders                   string
 	contextPricing                   string
@@ -714,11 +727,11 @@ request_user_price,request_donor_reward,uncached_user_price,cache_write_user_pri
 uncached_donor_reward,cache_write_donor_reward,cache_read_donor_reward,output_donor_reward,
 discount_percent,discount_start_at,discount_end_at,discount_enabled,flatten_tool_calls,revision,binding_revision,
 (SELECT allowed_level_mask FROM charity_model_access WHERE model_id=charity_models.id),
-(SELECT public_description FROM charity_model_access WHERE model_id=charity_models.id),is_mainstream,excluded_request_fields,role_policy,transport_rule,model_types,context_pricing,session_headers,recurring_discount
+(SELECT public_description FROM charity_model_access WHERE model_id=charity_models.id),is_mainstream,excluded_request_fields,role_policy,transport_rule,model_types,context_pricing,session_headers,recurring_discount,cloudflare_proxy_enabled
 FROM charity_models WHERE id=?`, modelID).Scan(&value.id, &value.provider, &value.model, &value.enabled, &value.mode,
 		&value.requestUser, &value.requestReward, &value.user[0], &value.user[1], &value.user[2], &value.user[3],
 		&value.reward[0], &value.reward[1], &value.reward[2], &value.reward[3], &value.discountPercent,
-		&value.discountStart, &value.discountEnd, &value.discountEnabled, &value.flatten, &value.revision, &value.bindingRevision, &value.allowedMask, &value.publicDescription, &value.isMainstream, &value.excludedFields, &value.rolePolicy, &value.transportRule, &value.modelTypes, &value.contextPricing, &value.sessionHeaders, &value.recurringDiscount)
+		&value.discountStart, &value.discountEnd, &value.discountEnabled, &value.flatten, &value.revision, &value.bindingRevision, &value.allowedMask, &value.publicDescription, &value.isMainstream, &value.excludedFields, &value.rolePolicy, &value.transportRule, &value.modelTypes, &value.contextPricing, &value.sessionHeaders, &value.recurringDiscount, &value.cloudflareProxyEnabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return storedModel{}, ErrNotFound
 	}
@@ -753,7 +766,7 @@ COALESCE((SELECT strategy FROM charity_model_routing WHERE model_id=cm.id),'expi
 (SELECT affinity_ttl_seconds FROM charity_routing_settings WHERE model_id=cm.id),
 (SELECT allowed_level_mask FROM charity_model_access WHERE model_id=cm.id),
 (SELECT public_description FROM charity_model_access WHERE model_id=cm.id),
-(SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),cm.is_mainstream,cm.excluded_request_fields,cm.role_policy,cm.transport_rule,cm.model_types,cm.context_pricing,cm.session_headers,cm.recurring_discount
+(SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),cm.is_mainstream,cm.excluded_request_fields,cm.role_policy,cm.transport_rule,cm.model_types,cm.context_pricing,cm.session_headers,cm.recurring_discount,cm.cloudflare_proxy_enabled
 FROM charity_models cm LEFT JOIN charity_model_stats s ON s.model_id=cm.id WHERE cm.id=?`
 
 type rowScanner interface{ Scan(...any) error }
@@ -774,7 +787,7 @@ func scanAdminModel(row rowScanner, at int64) (AdminCharityModel, error) {
 		&requestUser, &requestReward, &user[0], &user[1], &user[2], &user[3],
 		&reward[0], &reward[1], &reward[2], &reward[3], &discountEnabled, &value.Discount.Percent,
 		&start, &end, &flatten, &revision, &bindingRevision, &bindingCount, &samples, &successes,
-		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy, &affinityTTL, &mask, &value.PublicDescription, &tokenReserve, &value.IsMainstream, &excluded, &encodedPolicy, &value.TransportRule, &value.ModelTypes, &contextPricing, &sessionHeaders, &recurring)
+		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy, &affinityTTL, &mask, &value.PublicDescription, &tokenReserve, &value.IsMainstream, &excluded, &encodedPolicy, &value.TransportRule, &value.ModelTypes, &contextPricing, &sessionHeaders, &recurring, &value.CloudflareProxyEnabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AdminCharityModel{}, ErrNotFound
 	}
@@ -810,6 +823,7 @@ func scanAdminModel(row rowScanner, at int64) (AdminCharityModel, error) {
 		return AdminCharityModel{}, ErrInvariant
 	}
 	value.AffinityTTLSeconds = int(affinityTTL.Int64)
+	value.CloudflareProxyMode = "direct"
 	value.Enabled = enabled == 1
 	value.FlattenToolCalls = flatten == 1
 	value.Revision = strconv.FormatInt(revision, 10)
@@ -825,7 +839,7 @@ func scanAdminModel(row rowScanner, at int64) (AdminCharityModel, error) {
 		value.Discount.EndAt = &v
 	}
 	value.Pricing.Mode = mode
-	if mode == "per_request" {
+	if mode == "per_request" || mode == "per_search_unit" {
 		u, r := formatWireAmount(requestUser), formatWireAmount(requestReward)
 		value.Pricing.UserPrice, value.Pricing.DonorReward = &u, &r
 	} else if mode == "per_token" {
@@ -879,6 +893,7 @@ func stewardModel(value AdminCharityModel) StewardCharityModel {
 	}
 	stewardContextPricing(value.Pricing, &pricing)
 	return StewardCharityModel{
+		CloudflareProxyEnabled: value.CloudflareProxyEnabled, CloudflareProxyMode: value.CloudflareProxyMode,
 		RecurringDiscount: value.RecurringDiscount.Clone(), EffectiveDiscount: value.EffectiveDiscount, ServerNow: value.ServerNow,
 		SessionHeaders: append([]sessionheader.Config{}, value.SessionHeaders...),
 		ModelTypes:     value.ModelTypes.Clone(), TransportRule: value.TransportRule, RolePolicy: value.RolePolicy.Clone(),
@@ -927,6 +942,9 @@ func validateModelCreate(input ModelCreate) (validatedPricing, error) {
 	if !validModelName(input.Provider) || !validModelName(input.Model) || !validDiscount(input.Discount) {
 		return validatedPricing{}, ErrInvalidRequest
 	}
+	if !validPricingOperations(input.Pricing.Mode, input.ModelTypes) {
+		return validatedPricing{}, ErrInvalidRequest
+	}
 	return validatePricing(input.Pricing)
 }
 
@@ -957,7 +975,7 @@ func validateModelPatch(input ModelPatch) bool {
 		return false
 	}
 	if input.ExpectedRevision == "" || input.Provider == nil && input.Model == nil && input.Enabled == nil &&
-		input.Pricing == nil && input.Discount == nil && input.RecurringDiscount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil && input.AffinityTTLSeconds == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil && input.IsMainstream == nil && input.ExcludedRequestFields == nil && input.ModelTypes == nil && input.TransportRule == nil && input.RolePolicy == nil && input.SessionHeaders == nil {
+		input.Pricing == nil && input.Discount == nil && input.RecurringDiscount == nil && input.FlattenToolCalls == nil && input.CloudflareProxyEnabled == nil && input.RouteStrategy == nil && input.AffinityTTLSeconds == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil && input.IsMainstream == nil && input.ExcludedRequestFields == nil && input.ModelTypes == nil && input.TransportRule == nil && input.RolePolicy == nil && input.SessionHeaders == nil {
 		return false
 	}
 	if input.Provider != nil && !validModelName(*input.Provider) || input.Model != nil && !validModelName(*input.Model) ||
@@ -1014,8 +1032,11 @@ func validatePricing(input PricingInput) (validatedPricing, error) {
 		return out, err
 	}
 	out.contextPricing = context.Encode()
+	if len(out.contextPricing) > 8192 {
+		return out, ErrInvalidRequest
+	}
 	switch input.Mode {
-	case "per_request":
+	case "per_request", "per_search_unit":
 		if input.UserPrice == nil || input.DonorReward == nil || input.UserPrices != nil || input.DonorRewards != nil {
 			return out, ErrInvalidRequest
 		}
@@ -1088,31 +1109,36 @@ func (s *Service) beginRoleTx(ctx context.Context, role roleKind, actorUserID in
 	if err != nil {
 		return nil, 0, fmt.Errorf("charity routing: begin role transaction: %w", err)
 	}
-	fail := func(err error) (*sql.Tx, int64, error) {
+	actorUserID, err = s.authorizeRoleTx(ctx, tx, role, actorUserID)
+	if err != nil {
 		_ = tx.Rollback()
 		return nil, 0, err
 	}
+	return tx, actorUserID, nil
+}
+
+func (s *Service) authorizeRoleTx(ctx context.Context, tx *sql.Tx, role roleKind, actorUserID int64) (int64, error) {
 	switch role {
 	case roleAdmin:
 		if err := tx.QueryRowContext(ctx, `SELECT id FROM users WHERE is_admin=1`).Scan(&actorUserID); errors.Is(err, sql.ErrNoRows) {
-			return fail(ErrForbidden)
+			return 0, ErrForbidden
 		} else if err != nil {
-			return fail(fmt.Errorf("charity routing: read singleton admin: %w", err))
+			return 0, fmt.Errorf("charity routing: read singleton admin: %w", err)
 		}
 		if err := s.roleAuth.AuthorizeAdminMutation(ctx, tx, actorUserID); err != nil {
-			return fail(mapAuthorization(err))
+			return 0, mapAuthorization(err)
 		}
 	case roleSteward:
 		if actorUserID <= 0 {
-			return fail(ErrInvalidRequest)
+			return 0, ErrInvalidRequest
 		}
 		if err := s.roleAuth.AuthorizeStewardMutation(ctx, tx, actorUserID); err != nil {
-			return fail(mapAuthorization(err))
+			return 0, mapAuthorization(err)
 		}
 	default:
-		return fail(ErrInvalidRequest)
+		return 0, ErrInvalidRequest
 	}
-	return tx, actorUserID, nil
+	return actorUserID, nil
 }
 
 func (s *Service) nowUnix() (int64, error) {
@@ -1414,4 +1440,11 @@ func boolInt(value bool) int {
 		return 1
 	}
 	return 0
+}
+
+func validPricingOperations(mode string, operations modeltype.Set) bool {
+	if mode != "per_search_unit" {
+		return true
+	}
+	return len(operations) == 1 && string(operations[0]) == "rerank"
 }

@@ -10,6 +10,10 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/game/historyexport"
 )
 
+// Smaller pages limit projection work before the first ZIP bytes and between
+// writes, while retaining the same per-page deadline and authorization checks.
+const historyDownloadPageRecords = 25
+
 func (s *Service) downloadHistory(w http.ResponseWriter, r *http.Request, in AdminPageInput) {
 	if in.Cursor != "" || in.Limit != 0 || s.validateSelection(in.Dataset, AdminSelection{}) != nil || s.validateSelection("recent", in.Selection) != nil {
 		writeError(w, ErrInvalidRequest)
@@ -29,7 +33,7 @@ func (s *Service) downloadHistory(w http.ResponseWriter, r *http.Request, in Adm
 	stages = append(stages, stage{input: AdminExportInput{Dataset: "recent", Selection: in.Selection}})
 	// Freeze the archive before the recent set, so retention cannot add a duplicate later.
 	for i := range stages {
-		page, err := s.AdminExport(ctx, stages[i].input)
+		page, err := s.adminExport(ctx, stages[i].input, historyDownloadPageRecords)
 		if err != nil {
 			writeAdminValue(w, nil, err)
 			return
@@ -64,7 +68,7 @@ func (s *Service) downloadHistory(w http.ResponseWriter, r *http.Request, in Adm
 				}
 				stage.input.Cursor = page.NextCursor
 				var err error
-				page, err = s.AdminExport(ctx, stage.input)
+				page, err = s.adminExport(ctx, stage.input, historyDownloadPageRecords)
 				if err != nil {
 					return err
 				}

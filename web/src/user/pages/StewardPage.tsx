@@ -1,4 +1,4 @@
-import { useLocation } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { UserManagement } from '@shared/components/UserManagement';
 import { BlacklistManagement } from '../../admin/pages/BlacklistPage';
 import { AnnouncementManagement } from '@shared/components/AnnouncementManagement';
@@ -100,14 +100,22 @@ function StewardPageContent() {
   if (authority.error)
     return (
       <div className="page ops-page">
-        <PageHeader title={t('user.steward.title')} description={t('user.steward.description')} />
+        <PageHeader
+          icon="steward"
+          title={t('user.steward.title')}
+          description={t('user.steward.description')}
+        />
         <ErrorState error={authority.error} onRetry={() => void authority.refetch()} />
       </div>
     );
   if (!authority.data || !allowed)
     return (
       <div className="page ops-page">
-        <PageHeader title={t('user.steward.title')} description={t('user.steward.description')} />
+        <PageHeader
+          icon="steward"
+          title={t('user.steward.title')}
+          description={t('user.steward.description')}
+        />
         <Card>
           <p className="field-error" role="alert">
             {t('user.steward.accessDenied')} {t('user.steward.sensitiveStateCleared')}
@@ -119,11 +127,21 @@ function StewardPageContent() {
   return (
     <TimeContextProvider station="steward">
       <div className="page ops-page">
-        {section !== 'users' && section !== 'blacklist' ? (
-          <PageHeader
-            title={t('user.steward.title')}
-            description={t('user.steward.presentation.description')}
-          />
+        <PageHeader
+          icon="steward"
+          title={t('user.steward.title')}
+          description={t('user.steward.presentation.description')}
+        />
+        {!trainee ? (
+          <div className="nb-actions">
+            <Link
+              className="nb-btn nb-btn--secondary"
+              to="/endpoint-policies"
+              state={{ returnTo: location.pathname + location.search }}
+            >
+              {t('common.endpointPolicies.title')}
+            </Link>
+          </div>
         ) : null}
         <Tabs
           label={t('user.steward.sectionsLabel')}
@@ -184,6 +202,7 @@ function StewardPageContent() {
             scopeReady={allowed}
             sessionError={authority.error}
             onAuthorityLoss={authorityLoss}
+            embedded
           />
         ) : null}
         {section === 'blacklist' ? (
@@ -195,6 +214,7 @@ function StewardPageContent() {
             sessionFetching={authority.isFetching}
             refreshSession={() => void authority.refetch()}
             onAuthorityLoss={authorityLoss}
+            embedded
           />
         ) : null}
         {section === 'announcements' ? (

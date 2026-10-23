@@ -45,12 +45,12 @@ func TestRequestRecoveryUsesStateIndexAndPreservesOrder(t *testing.T) {
 	key := fixture.seedKey(userID, "recovery-order")
 	key.candidate.UpstreamModelID = ""
 	// The oldest request has an active claim and cannot be finalized yet.
-	blocked, _, err := fixture.service.ClaimDiscovery(ctx, DiscoveryClaimInput{ActorUserID: userID, Candidate: key.candidate})
+	blocked, _, err := fixture.service.ClaimDiscovery(ctx, fixture.discoveryInput(DiscoveryClaimInput{ActorUserID: userID, Candidate: key.candidate}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	fixture.clock.Store(2_000)
-	running, handle, err := fixture.service.ClaimDiscovery(ctx, DiscoveryClaimInput{ActorUserID: userID, Candidate: key.candidate})
+	running, handle, err := fixture.service.ClaimDiscovery(ctx, fixture.discoveryInput(DiscoveryClaimInput{ActorUserID: userID, Candidate: key.candidate}))
 	if err != nil {
 		t.Fatal(err)
 	}

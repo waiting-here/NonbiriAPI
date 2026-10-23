@@ -43,7 +43,7 @@ func DecodeDecisionRequest(reader io.Reader, limit int64) (*DecisionRequest, err
 		return nil, err
 	}
 	defer clear(body)
-	if !validateEmbeddingJSON(body) {
+	if !validateDecisionJSON(body) {
 		return nil, invalidField("body", "expected one valid UTF-8 JSON object")
 	}
 	fields, err := decodeJSONObject(body, maxTopLevelFields)
@@ -58,6 +58,7 @@ func DecodeDecisionRequest(reader io.Reader, limit int64) (*DecisionRequest, err
 		}
 	}()
 	inputSeen := false
+	images := 0
 	for _, field := range fields {
 		switch field.name {
 		case "model":
@@ -65,14 +66,14 @@ func DecodeDecisionRequest(reader io.Reader, limit int64) (*DecisionRequest, err
 				return nil, invalidField("model", "expected a valid model name")
 			}
 		case "input":
-			if !validDecisionInput(field.value) {
+			if !validDecisionInput(field.value, &images) {
 				return nil, invalidField("input", "expected supported messages or matching tool history with at most 128 images")
 			}
 			inputSeen = true
 		case "questions":
-			r.questions, err = decodeDecisionQuestions(field.value)
+			r.questions, err = decodeDecisionQuestions(field.value, &images)
 			if err != nil {
-				return nil, invalidField("questions", "expected 1 to 200 predicate, choice, or score questions")
+				return nil, invalidField("questions", "expected 1 to 400 predicate, choice, or score questions within request limits")
 			}
 		case "stream":
 			if !bytes.Equal(bytes.TrimSpace(field.value), []byte("false")) {
@@ -175,10 +176,10 @@ func decisionValue(raw []byte) (json.RawMessage, bool) {
 	return encoded, true
 }
 
-func decodeDecisionQuestions(raw []byte) ([]decisionQuestion, error) {
+func decodeDecisionQuestions(raw []byte, images *int) ([]decisionQuestion, error) {
 	var questions []decisionQuestion
 	ok := visitJSONArray(raw, func(item []byte) bool {
-		if len(questions) >= 200 {
+		if len(questions) >= 400 {
 			return false
 		}
 		object, ok := decisionObject(item, "type", "instructions", "name", "choices", "levels")
@@ -189,7 +190,7 @@ func decodeDecisionQuestions(raw []byte) ([]decisionQuestion, error) {
 		if !ok {
 			return false
 		}
-		if _, ok = decisionString(object["instructions"], 0, 1<<20); !ok || !optionalDecisionString(object["name"], 0, 1<<20, false) {
+		if !validDecisionInstructions(object["instructions"], images) || !optionalDecisionString(object["name"], 0, 1<<20, false) {
 			return false
 		}
 		q := decisionQuestion{kind: kind, name: json.RawMessage("null")}
@@ -232,13 +233,13 @@ func decodeDecisionQuestions(raw []byte) ([]decisionQuestion, error) {
 					return false
 				}
 				label, ok := decisionString(level["label"], 0, 1<<20)
-				if !ok {
+				if !ok || len(q.labels) >= 10 {
 					return false
 				}
 				q.labels = append(q.labels, label)
 				return true
 			})
-			if !ok || len(q.labels) == 0 {
+			if !ok || len(q.labels) < 2 {
 				return false
 			}
 		default:
@@ -253,11 +254,21 @@ func decodeDecisionQuestions(raw []byte) ([]decisionQuestion, error) {
 	return questions, nil
 }
 
-func validDecisionInput(raw []byte) bool {
+func validDecisionInstructions(raw []byte, images *int) bool {
+	if _, ok := decisionString(raw, 0, 1<<20); ok {
+		return true
+	}
+	parts := 0
+	return visitJSONArray(raw, func(part []byte) bool {
+		parts++
+		return validDecisionPart(part, "question", images)
+	}) && parts > 0
+}
+
+func validDecisionInput(raw []byte, images *int) bool {
 	if _, ok := decisionString(raw, 0, 10<<20); ok {
 		return true
 	}
-	images := 0
 	calls := map[string]string{}
 	outputs := map[string]bool{}
 	return visitJSONArray(raw, func(raw []byte) bool {
@@ -283,7 +294,7 @@ func validDecisionInput(raw []byte) bool {
 			if !optionalDecisionEnum(object["phase"], true, "commentary", "final_answer") || role != "assistant" && len(object["phase"]) != 0 && !isJSONNull(object["phase"]) {
 				return false
 			}
-			return validDecisionContent(object["content"], role, &images)
+			return validDecisionContent(object["content"], role, images)
 		}
 		if !optionalDecisionString(object["id"], 0, 1<<20, true) || !optionalDecisionEnum(object["status"], true, "in_progress", "completed", "incomplete") {
 			return false
@@ -318,7 +329,7 @@ func validDecisionInput(raw []byte) bool {
 				return false
 			}
 			outputs[id] = true
-			return validDecisionContent(object["output"], "user", &images)
+			return validDecisionContent(object["output"], "tool", images)
 		default:
 			return false
 		}
@@ -329,65 +340,81 @@ func validDecisionContent(raw []byte, role string, images *int) bool {
 	if _, ok := decisionString(raw, 0, 10<<20); ok {
 		return true
 	}
-	return visitJSONArray(raw, func(raw []byte) bool {
-		object, ok := decisionObject(raw, "type", "text", "refusal", "image_url", "detail", "prompt_cache_breakpoint")
-		if !ok {
-			return false
-		}
-		kind, ok := decisionString(object["type"], 1, 32)
-		if !ok {
-			return false
-		}
-		if breakpoint := object["prompt_cache_breakpoint"]; len(breakpoint) != 0 && !isJSONNull(breakpoint) {
-			bp, ok := decisionObject(breakpoint, "mode")
-			if !ok || !bytes.Equal(bp["mode"], []byte(`"explicit"`)) {
-				return false
-			}
-		}
-		switch kind {
-		case "input_text":
-			if role == "assistant" {
-				return false
-			}
-			if _, ok := decisionObject(raw, "type", "text", "prompt_cache_breakpoint"); !ok {
-				return false
-			}
-			_, ok = decisionString(object["text"], 0, 10<<20)
-			return ok
-		case "output_text", "refusal":
-			if role != "assistant" {
-				return false
-			}
-			field := "text"
-			if kind == "refusal" {
-				field = "refusal"
-			}
-			if _, ok := decisionObject(raw, "type", field); !ok {
-				return false
-			}
-			_, ok = decisionString(object[field], 0, 10<<20)
-			return ok
-		case "input_image":
-			if role != "user" || !optionalDecisionEnum(object["detail"], true, "low", "high", "auto", "original") {
-				return false
-			}
-			if _, ok := decisionObject(raw, "type", "image_url", "detail", "prompt_cache_breakpoint"); !ok {
-				return false
-			}
-			value, ok := decisionString(object["image_url"], 1, 1<<30)
-			if !ok {
-				return false
-			}
-			parsed, err := url.Parse(value)
-			if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http" && parsed.Scheme != "data") || parsed.Scheme != "data" && (parsed.Hostname() == "" || parsed.User != nil) {
-				return false
-			}
-			*images++
-			return *images <= 128
-		default:
-			return false
-		}
+	return visitJSONArray(raw, func(part []byte) bool {
+		return validDecisionPart(part, role, images)
 	})
+}
+
+func validDecisionPart(raw []byte, role string, images *int) bool {
+	object, ok := decisionObject(raw, "type", "text", "refusal", "image_url", "detail", "data", "prompt_cache_breakpoint")
+	if !ok {
+		return false
+	}
+	kind, ok := decisionString(object["type"], 1, 32)
+	if !ok {
+		return false
+	}
+	keys := []string{"type"}
+	if role != "question" && (kind == "input_text" || kind == "input_image") {
+		keys = append(keys, "prompt_cache_breakpoint")
+	}
+	if breakpoint := object["prompt_cache_breakpoint"]; len(breakpoint) != 0 && !isJSONNull(breakpoint) {
+		bp, ok := decisionObject(breakpoint, "mode")
+		if !ok || !bytes.Equal(bp["mode"], []byte(`"explicit"`)) {
+			return false
+		}
+	}
+	switch kind {
+	case "input_text":
+		if role == "assistant" {
+			return false
+		}
+		if _, ok := decisionObject(raw, append(keys, "text")...); !ok {
+			return false
+		}
+		_, ok = decisionString(object["text"], 0, 10<<20)
+		return ok
+	case "output_text", "refusal":
+		if role != "assistant" {
+			return false
+		}
+		field := "text"
+		if kind == "refusal" {
+			field = "refusal"
+		}
+		if _, ok := decisionObject(raw, "type", field); !ok {
+			return false
+		}
+		_, ok = decisionString(object[field], 0, 10<<20)
+		return ok
+	case "input_image":
+		if role != "user" && role != "tool" && role != "question" || !optionalDecisionEnum(object["detail"], true, "low", "high", "auto", "original") {
+			return false
+		}
+		if _, ok := decisionObject(raw, append(keys, "image_url", "detail")...); !ok {
+			return false
+		}
+		value, ok := decisionString(object["image_url"], 1, 1<<30)
+		if !ok {
+			return false
+		}
+		parsed, err := url.Parse(value)
+		if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http" && parsed.Scheme != "data") || parsed.Scheme != "data" && (parsed.Hostname() == "" || parsed.User != nil) {
+			return false
+		}
+		*images++
+		return *images <= 128
+	case "input_json":
+		if role != "user" && role != "question" {
+			return false
+		}
+		if _, ok := decisionObject(raw, "type", "data"); !ok {
+			return false
+		}
+		return validDecisionJSON(object["data"])
+	default:
+		return false
+	}
 }
 
 func (r *DecisionRequest) RequestBodyLimit() int64 {

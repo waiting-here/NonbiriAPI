@@ -14,6 +14,8 @@ import {
 } from './context';
 import { AppearanceBackdrop } from './AppearanceBackdrop';
 import './appearance.css';
+import { ConfiguredArtworkPolicy } from '@shared/artwork/policy';
+import { useArtworkPolicy } from '@shared/artwork/context';
 
 const defaults: AppearanceState = { selected: 'default', unlocked: ['default'], updated_at: null };
 
@@ -39,12 +41,16 @@ export function AppearanceProvider({
     onSuccess: (state) => client.setQueryData(key, state),
   });
   const state = port && !query.error ? (query.data ?? defaults) : defaults;
+  const policy = useArtworkPolicy();
+  const effectiveSelected = policy.allowed('appearance:' + state.selected)
+    ? state.selected
+    : 'default';
   useLayoutEffect(() => {
-    document.documentElement.dataset.appearance = state.selected;
+    document.documentElement.dataset.appearance = effectiveSelected;
     return () => {
       delete document.documentElement.dataset.appearance;
     };
-  }, [state.selected]);
+  }, [effectiveSelected]);
   const refresh = useCallback(() => {
     void client.invalidateQueries({ queryKey: appearanceKey(scope) });
   }, [client, scope]);
@@ -65,7 +71,7 @@ export function AppearanceProvider({
           : null
       }
     >
-      <AppearanceBackdrop selected={state.selected} moment={state.moment} />
+      <AppearanceBackdrop selected={effectiveSelected} moment={state.moment} />
       {children}
     </AppearanceContext>
   );
@@ -103,8 +109,10 @@ export function AccountAppearance({
     };
   }, [account, client]);
   return (
-    <AppearanceProvider key={account ?? 'anonymous'} port={port}>
-      {children}
-    </AppearanceProvider>
+    <ConfiguredArtworkPolicy>
+      <AppearanceProvider key={account ?? 'anonymous'} port={port}>
+        {children}
+      </AppearanceProvider>
+    </ConfiguredArtworkPolicy>
   );
 }

@@ -45,6 +45,12 @@ const adminUser = {
   effective_rpm_limit: '60',
   concurrency_limit: null,
   effective_concurrency_limit: '5',
+  global_rpm_limit: null,
+  effective_global_rpm_limit: '60',
+  light_rpm_limit: null,
+  effective_light_rpm_limit: '30',
+  light_concurrency_limit: null,
+  effective_light_concurrency_limit: '15',
   lang: 'en',
   balance: '0',
   game_balance: '0',
@@ -193,7 +199,7 @@ describe('administrator paged operation pages', () => {
     });
     expect(await screen.findByText('8,007,199,254,740.123')).toBeVisible();
     expect(screen.getByText('Trusted steward')).toBeVisible();
-    expect(screen.getByText(/1234…5678/)).toHaveAttribute('title', '123456789012345678');
+    expect(screen.getByText(/1234…5678/)).toHaveAttribute('title', '#7 · 123456789012345678');
     expect(screen.queryByText('8007199254740.123')).not.toBeInTheDocument();
   });
 

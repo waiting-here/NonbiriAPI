@@ -2,10 +2,10 @@ package charityrouting
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -16,68 +16,7 @@ import (
 )
 
 func (environment *routingTestEnv) seedPresetCandidate(t *testing.T, ownerID, donationID int64, identity, upstream string, connectorType connectorcontract.Type, channel ...string) (int64, int64, int64) {
-	t.Helper()
-	now := environment.clock.Load()
-	baseURL := "https://preset.routing.test/v1"
-	var channelID, channelRevision, channelName, channelCategory any
-	if len(channel) > 0 {
-		channelID, channelRevision, channelName, channelCategory = channel[0], 1, "Example", "subscription"
-	}
-	result, err := environment.store.DB().Exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category)
-VALUES(?,?,?,'private',1,1,?,?,?,?,?,?)`, ownerID, string(connectorType), baseURL, now, now, channelID, channelRevision, channelName, channelCategory)
-	if err != nil {
-		t.Fatal(err)
-	}
-	endpointID, _ := result.LastInsertId()
-	digest := sha256.Sum256([]byte(identity))
-	contextID := append([]byte(nil), digest[:16]...)
-	fingerprint := append([]byte(nil), digest[:]...)
-	result, err = environment.store.DB().Exec(`INSERT INTO endpoint_key_secrets(
-context_id,canonical_base_url,connector_type,encrypted_secret,created_at) VALUES(?,?,?,'envelope',?)`, contextID, baseURL, string(connectorType), now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	secretID, _ := result.LastInsertId()
-	result, err = environment.store.DB().Exec(`INSERT INTO endpoint_keys(
-endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at)
-VALUES(?,?,?,'head','tail','private key note',1,1,1,?,?)`, endpointID, secretID, fingerprint, now, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	endpointKeyID, _ := result.LastInsertId()
-	if donationID == 0 {
-		result, err = environment.store.DB().Exec(`INSERT INTO donations(
-user_id,status,revision,description,review_note,reviewed_by_role,created_at,updated_at)
-VALUES(?,'approved',1,'description','','admin',?,?)`, ownerID, now, now)
-		if err != nil {
-			t.Fatal(err)
-		}
-		donationID, _ = result.LastInsertId()
-	}
-	zero, one := db.EncodeU128(db.U128{}), db.EncodeU128(db.U128{15: 1})
-	result, err = environment.store.DB().Exec(`INSERT INTO donation_keys(
-donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,
-price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,
-failure_streak,streak_generation,next_claim_seq,next_fold_seq,enabled,token_reserve,safe_note,created_at,updated_at,
-authorized_expires_at,expires_at,source_endpoint_key_id,report_fingerprint,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category)
-VALUES(?,?,?,?,?,?,
-?,?,?,?,?,?,?,?,?,?,1,10,'safe label',?,?,NULL,NULL,?,?,?,?,?,?)`, donationID, endpointKeyID,
-		"head", "tail", baseURL, string(connectorType), zero, zero, zero, zero, zero, zero, zero, one, one, one, now, now,
-		endpointKeyID, fingerprint, channelID, channelRevision, channelName, channelCategory)
-	if err != nil {
-		t.Fatal(err)
-	}
-	donationKeyID, _ := result.LastInsertId()
-	if _, err := environment.store.DB().Exec(`INSERT INTO donation_key_memberships(endpoint_key_id,donation_key_id,donation_id,created_at)
-VALUES(?,?,?,?)`, endpointKeyID, donationKeyID, donationID, now); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := environment.store.DB().Exec(`INSERT INTO model_pair_catalog(
-endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at)
-VALUES(?,?,1,1,1,1,?)`, endpointKeyID, upstream, now); err != nil {
-		t.Fatal(err)
-	}
-	return donationID, donationKeyID, endpointKeyID
+	return environment.seedCandidateAt(t, ownerID, donationID, identity, "https://preset.routing.test/v1", upstream, connectorType, channel...)
 }
 func presetExec(t *testing.T, e *routingTestEnv, q string, args ...any) {
 	t.Helper()
@@ -94,7 +33,7 @@ func presetFixture(t *testing.T) (*routingTestEnv, string, int64, []int64, []str
 	if err != nil {
 		t.Fatal(err)
 	}
-	presetExec(t, e, `INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at) VALUES(?,'Example','subscription','openai-compatible','https://preset.routing.test/v1',1,'active',1,?,?)`, channel, routingTestNow, routingTestNow)
+	seedRoutingChannel(t, e, channel, "Example", "https://preset.routing.test/v1")
 	var donationID int64
 	keys := []int64{}
 	models := []string{}
@@ -102,11 +41,23 @@ func presetFixture(t *testing.T) (*routingTestEnv, string, int64, []int64, []str
 		did, key, physical := e.seedPresetCandidate(t, owner, donationID, fmt.Sprint(i), "up-0", connectorcontract.TypeOpenAICompatible, channel)
 		donationID = did
 		keys = append(keys, key)
+		catalog := []testseed.DiscoveryModel{{ID: "up-0"}}
 		for j := 1; j < 6; j++ {
 			if i == 1 && j == 3 {
 				continue
 			}
-			presetExec(t, e, `INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,?,1,0,1,1,?)`, physical, fmt.Sprint("up-", j), routingTestNow)
+			catalog = append(catalog, testseed.DiscoveryModel{ID: fmt.Sprint("up-", j)})
+		}
+		tx, err := e.store.DB().BeginTx(t.Context(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := testseed.SeedDiscoveryCatalogTx(t.Context(), tx, testseed.DiscoveryCatalogInput{EndpointKeyID: physical, ListFormat: "openai", Models: catalog, At: routingTestNow}); err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
 		}
 	}
 	for i := range 6 {
@@ -192,7 +143,7 @@ func TestPresetBindingMatrixSkipsMissingAndReplaysWithoutReordering(t *testing.T
 		}
 	}
 	var order string
-	if err := e.store.DB().QueryRow(`SELECT group_concat(donation_key_id,',') FROM (SELECT donation_key_id FROM charity_model_bindings WHERE charity_model_id=? ORDER BY ord)`, models[0]).Scan(&order); err != nil || order != fmt.Sprintf("%d,%d,%d", keys[0], keys[1], keys[2]) {
+	if err := e.store.DB().QueryRow(`SELECT group_concat(donation_key_id,',') FROM (SELECT t.donation_key_id FROM charity_model_bindings b JOIN charity_binding_targets t ON t.binding_id=b.id WHERE b.charity_model_id=? ORDER BY b.ord,t.ord)`, models[0]).Scan(&order); err != nil || order != fmt.Sprintf("%d,%d,%d", keys[0], keys[1], keys[2]) {
 		t.Fatal(order, err)
 	}
 	// Source menus include fully bound sources only on explicit request.

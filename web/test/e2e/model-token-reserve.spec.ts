@@ -80,8 +80,9 @@ const scenarios: readonly Scenario[] = [
     pricingLabel: 'Pricing mode',
     perRequest: 'Per request',
     perToken: 'Per token',
-    reserveLabel: 'Call reservation (credits)',
-    reserveHelp: 'Leave blank to inherit the global configuration.',
+    reserveLabel: 'Usage reserve (credits)',
+    reserveHelp:
+      'Used before usage-based requests. Leave blank to use the caller key or site reserve.',
     marker: 'model-reserve-admin-ephemeral-8f4c',
   },
   {
@@ -98,8 +99,8 @@ const scenarios: readonly Scenario[] = [
     pricingLabel: '计价模式',
     perRequest: '按次',
     perToken: '按 token',
-    reserveLabel: '调用前预留积分',
-    reserveHelp: '留空继承全局配置。',
+    reserveLabel: '用量预留（积分）',
+    reserveHelp: '用于按用量计费请求的预留。留空沿用调用密钥或站点设置。',
     marker: 'model-reserve-steward-ephemeral-2c7d',
   },
 ];
@@ -145,6 +146,8 @@ function initialModel(): JSONRecord {
     pricing: tokenPricing(),
     discount: { enabled: false, percent: 0, start_at: null, end_at: null },
     transport_rule: 'passthrough',
+    cloudflare_proxy_enabled: false,
+    cloudflare_proxy_mode: 'direct',
     flatten_tool_calls: false,
     revision: '1',
     binding_revision: '0',
@@ -689,7 +692,7 @@ for (const scenario of scenarios) {
         .locator('.card')
         .filter({ has: page.getByRole('heading', { name: MODEL_NAME, exact: true }) });
       const types = editor.getByRole('group', { name: /Model types|模型类型/ });
-      const chat = types.getByRole('checkbox', { name: /Chat completions|聊天补全/ });
+      const chat = types.getByRole('checkbox', { name: 'Chat Completions / Responses' });
       const embeddings = types.getByRole('checkbox', { name: /Embeddings|向量化/ });
       const images = types.getByRole('checkbox', { name: /Image generation|图像生成/ });
       const save = editor.getByRole('button', { name: /Save model|保存模型/ });

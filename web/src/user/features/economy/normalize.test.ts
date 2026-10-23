@@ -91,6 +91,28 @@ const DONATION_FIXTURE = {
   updated_at: 1_788_100_010,
 } as const;
 
+function pendingUseDonation() {
+  const key = DONATION_FIXTURE.keys[0];
+  return {
+    ...DONATION_FIXTURE,
+    status: 'pending',
+    review_result: null,
+    use_summary: { total: '1', pending: '0', approved: '1' },
+    keys: [
+      {
+        ...key,
+        endpoint_id: '71',
+        review: { required: false, revision: null, material_available: true },
+        charity_state: 'pending',
+        limits: { price: null, calls: '7', tokens: null },
+        usage: { ...key.usage, price_used: '0', calls_used: '0' },
+        token_reserve: 0,
+        streak: { generation: '1', count: '0', failure_disabled: false },
+      },
+    ],
+  };
+}
+
 const CAPABILITY_SERVER_NOW = 1_788_100_000;
 
 function capabilityModel(provider = 'provider', model = 'model') {
@@ -668,6 +690,95 @@ describe('economy closed-wire normalizers', () => {
     ).toThrow();
   });
 
+  it('preserves approved-use budgets without promoting a pending submission header', () => {
+    const wire = pendingUseDonation();
+    const donation = normalizeDonation(wire);
+    expect(donation).toMatchObject({
+      status: 'pending',
+      reviewResult: null,
+      useSummary: { total: '1', pending: '0', approved: '1' },
+      keys: [
+        {
+          endpointId: '71',
+          charityState: 'pending',
+          limits: { price: null, calls: '7', tokens: null },
+          usage: { priceUsed: '0', callsUsed: '0' },
+          tokenReserve: 0,
+          streak: { generation: '1', count: '0', failureDisabled: false },
+        },
+      ],
+    });
+    const legacy: Record<string, unknown> = { ...wire };
+    delete legacy.use_summary;
+    expect(() => normalizeDonation(legacy)).toThrow('pending donation state');
+  });
+
+  it.each([
+    { reason: 'withdrawn', status: 'deleted', review: null, state: 'ended' },
+    {
+      reason: 'terminated',
+      status: 'deleted',
+      review: DONATION_FIXTURE.review_result,
+      state: 'ended',
+    },
+    { reason: 'expired', status: 'expired', review: null, state: 'expired' },
+  ])(
+    'preserves use-level budget history after $reason without deriving a review',
+    ({ reason, status, review, state }) => {
+      const wire = pendingUseDonation();
+      const key = wire.keys[0];
+      const payload = {
+        ...wire,
+        status,
+        review_result: review,
+        use_summary: { total: '1', pending: '0', approved: '0' },
+        keys: [
+          {
+            ...key,
+            charity_state: state,
+            ended_reason: reason,
+            expires_at: DONATION_FIXTURE.updated_at,
+            usage: { ...key.usage, calls_used: '2' },
+          },
+        ],
+      };
+      const donation = normalizeDonation(payload);
+      expect(donation.status).toBe(status);
+      expect(donation.reviewResult).toEqual(
+        review === null
+          ? null
+          : { decision: review.decision, reason: review.reason, reviewedAt: review.reviewed_at },
+      );
+      expect(donation.useSummary).toEqual(payload.use_summary);
+      expect(donation.keys[0]).toMatchObject({
+        charityState: state,
+        endedReason: reason,
+        limits: { calls: '7' },
+        usage: { callsUsed: '2' },
+      });
+      if (reason === 'expired') {
+        const legacy: Record<string, unknown> = { ...payload };
+        delete legacy.use_summary;
+        expect(() => normalizeDonation(legacy)).toThrow('expired donation state');
+      }
+    },
+  );
+
+  it('keeps structural and scalar validation for use-level donation projections', () => {
+    const wire = pendingUseDonation();
+    const key = wire.keys[0];
+    for (const payload of [
+      { ...wire, use_summary: null },
+      { ...wire, use_summary: { ...wire.use_summary, approved: 'invalid' } },
+      { ...wire, keys: [{ ...key, limits: { ...key.limits, calls: 7 } }] },
+      { ...wire, keys: [{ ...key, limits: { ...key.limits, calls: '9000000000000001' } }] },
+      { ...wire, keys: [{ ...key, charity_state: 'approved' }] },
+      { ...wire, keys: [key, key] },
+      { ...wire, updated_at: wire.created_at - 1 },
+    ])
+      expect(() => normalizeDonation(payload)).toThrow();
+  });
+
   it('accepts every DonationKey state and preserves partial versus final deletion', () => {
     const base = DONATION_FIXTURE.keys[0];
     const states = [
@@ -994,4 +1105,62 @@ it('retains independent context thresholds and exact alternate prices', () => {
     inputThreshold: '200000',
     fineMilli: '50000',
   });
+});
+
+it('projects independent modality prices and search-unit prices without exposing rewards', () => {
+  const rates = {
+    uncached_input: '1000',
+    cache_write_input: '1000',
+    cache_read_input: '1000',
+    output: '1000',
+  };
+  const discounted = {
+    uncached_input: '800',
+    cache_write_input: '800',
+    cache_read_input: '800',
+    output: '800',
+  };
+  const modality = { input_enabled: true, output_enabled: false, audio: rates };
+  const model = {
+    ...capabilityModel(),
+    pricing: {
+      mode: 'per_token',
+      user_price_milli: null,
+      discounted_user_price_milli: null,
+      current_user_price_milli: null,
+      user_prices_milli: rates,
+      discounted_user_prices_milli: discounted,
+      current_user_prices_milli: discounted,
+      user_modalities_milli: modality,
+      discounted_user_modalities_milli: { ...modality, audio: discounted },
+      current_user_modalities_milli: { ...modality, audio: discounted },
+      donor_modalities_milli: { input_enabled: true, output_enabled: true, text: rates },
+    },
+  };
+  const payload = {
+    state: 'available',
+    models: [model],
+    donation_intake: 'open',
+    server_now: CAPABILITY_SERVER_NOW,
+  };
+  const result = normalizeCharityCapability(payload).models[0].pricing;
+  expect(result.userModalitiesMilli).toEqual({
+    inputEnabled: true,
+    outputEnabled: false,
+    audio: {
+      uncachedInput: '1000',
+      cacheWriteInput: '1000',
+      cacheReadInput: '1000',
+      output: '1000',
+    },
+  });
+  expect(result).not.toHaveProperty('donorModalitiesMilli');
+  const search = {
+    ...capabilityModel(),
+    model_types: ['rerank'],
+    pricing: { ...capabilityModel().pricing, mode: 'per_search_unit' },
+  };
+  expect(
+    normalizeCharityCapability({ ...payload, models: [search] }).models[0].pricing,
+  ).toMatchObject({ mode: 'per_search_unit', userPriceMilli: '3000' });
 });

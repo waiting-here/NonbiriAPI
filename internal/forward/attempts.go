@@ -12,6 +12,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
@@ -84,7 +85,8 @@ func (service *Service) runAttempts(
 		claimInput := claim.ClaimInput{
 			RequestID: accepted.ID, ActorUserID: userID, AttemptSeq: index + 1, Purpose: plan.purpose,
 			Candidate: claim.Candidate{
-				EndpointID: candidate.EndpointID, EndpointKeyID: candidate.EndpointKeyID,
+				Authorization: candidate.Authorization,
+				EndpointID:    candidate.EndpointID, EndpointKeyID: candidate.EndpointKeyID,
 				ConnectorType: candidate.ConnectorType, CanonicalBaseURL: candidate.CanonicalBaseURL,
 				UpstreamModelID: candidate.UpstreamModelID, Policy: candidate.Policy,
 			},
@@ -104,7 +106,7 @@ func (service *Service) runAttempts(
 					floor = outputFloor(choice)
 				}
 				claimInput.BalancedCandidates = append(claimInput.BalancedCandidates, claim.BalancedCandidate{
-					Candidate: claim.Candidate{EndpointID: choice.EndpointID, EndpointKeyID: choice.EndpointKeyID,
+					Candidate: claim.Candidate{Authorization: choice.Authorization, EndpointID: choice.EndpointID, EndpointKeyID: choice.EndpointKeyID,
 						ConnectorType: choice.ConnectorType, CanonicalBaseURL: choice.CanonicalBaseURL,
 						UpstreamModelID: choice.UpstreamModelID, Policy: choice.Policy},
 					DonationKeyID:    choice.DonationKeyID,
@@ -148,7 +150,7 @@ func (service *Service) runAttempts(
 			selected := -1
 			for position, choice := range remaining {
 				if choice.EndpointKeyID == handle.EndpointKeyID() && choice.DonationKeyID == handle.DonationKeyID() &&
-					choice.UpstreamModelID == handle.Target().UpstreamModel() {
+					choice.UpstreamModelID == handle.Target().UpstreamModel() && choice.Authorization == handle.Authorization() {
 					selected = position
 					candidate = choice
 					break
@@ -258,13 +260,19 @@ func (service *Service) runAttempts(
 			run.completeUndeliveredSynthetic(parent, service, handle, "connector unavailable")
 			break
 		}
-		attemptContext := smartbackoff.WithCharityCall(executionContext, plan.charity)
+		attemptContext := egress.WithCloudflareProxy(executionContext, plan.cloudflareProxyEnabled)
+		attemptContext = smartbackoff.WithCharityCall(attemptContext, plan.charity)
+		var backoffRules []smartbackoff.Rule
+		if info, ok := dispatch.(interface{ BackoffRules() []smartbackoff.Rule }); ok {
+			backoffRules = info.BackoffRules()
+		}
+		attemptContext = smartbackoff.WithRules(attemptContext, backoffRules)
 		if service.errorScope != nil {
 			attemptContext = service.errorScope(attemptContext, accepted.ID, index+1)
 		}
 		result := protocolConnector.Attempt(attemptContext, connector.AttemptInput{
 			Operation: attemptRequest.operation,
-			Target:    dispatch.Target(), Credential: credential, Ingress: attemptRequest.chat, Embedding: attemptRequest.embedding, Image: attemptRequest.image, Decision: attemptRequest.decision,
+			Target:    dispatch.Target(), Credential: credential, Ingress: attemptRequest.chat, Embedding: attemptRequest.embedding, Image: attemptRequest.image, Decision: attemptRequest.decision, Inference: attemptRequest.inference,
 			Policy: policy, Sink: sink, Observer: service.observer,
 			TraceID: traceID(trace, accepted.ID), AttemptIndex: index,
 		})

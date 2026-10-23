@@ -1,4 +1,14 @@
+import { InferenceLimitFields, InferenceLimitSummary } from './userInferenceLimits';
+import { UserLimitBatch } from './UserLimitBatch';
+import {
+  INFERENCE_LIMITS,
+  canEditInferenceLimits,
+  inferenceLimitDraft,
+  parseInferenceLimit,
+  type InferenceLimitDraft,
+} from '@shared/operations/userInferenceLimits';
 import { Button } from '@shared/components/ui/Button';
+import { Icon } from '@shared/components/Icon';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { routePath } from '@shared/routing/routeRegistry';
@@ -27,6 +37,7 @@ import {
   ErrorState,
   LoadingState,
   PageHeader,
+  SectionHead,
   StatusBadge,
 } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -39,6 +50,8 @@ import { formatCredits } from '../../user/games/common/strict';
 import { DeletedAccountCard } from './DeletedAccountCard';
 import {
   banManagedUser,
+  getManagedCallerKey,
+  revokeManagedCallerKey,
   mutateManagedUser,
   unbanManagedUser,
   getManagedUserDetail,
@@ -59,8 +72,7 @@ import './userManagement.css';
 
 interface UserDraft {
   endpointLimit: string;
-  rpmLimit: string;
-  concurrencyLimit: string;
+  inferenceLimits: InferenceLimitDraft;
   level: string;
   lang: '' | 'zh' | 'en';
   discordGatePolicy: AdminUser['discord_gate_policy'];
@@ -90,8 +102,7 @@ const economyTargetLabels = {
 
 const draftFor = (user: AdminUser): UserDraft => ({
   endpointLimit: user.endpoint_limit ?? '',
-  rpmLimit: user.rpm_limit ?? '',
-  concurrencyLimit: user.concurrency_limit ?? '',
+  inferenceLimits: inferenceLimitDraft(user),
   level: user.level.manual === null ? '' : String(user.level.manual),
   lang: user.lang,
   discordGatePolicy: user.discord_gate_policy,
@@ -116,6 +127,141 @@ function profileOutcome(outcome: OperationOutcome, recheck: () => void): Outcome
   if (outcome === 'unknown') return { kind: 'unknown', recheck };
   if (outcome === 'conflict') return { kind: 'conflict', reload: recheck };
   return { kind: 'idle' };
+}
+
+function ManagedCallerKeyControl({
+  user,
+  role,
+  account,
+  onAuthorityLoss,
+}: {
+  user: AdminUser;
+  role: ManagementRole;
+  account: string;
+  onAuthorityLoss?: () => void;
+}) {
+  const { t } = useTranslation();
+  const formatDateTime = useDateTimeFormatter();
+  const client = useQueryClient();
+  const [confirmGeneration, setConfirmGeneration] = useState<string | null>(null);
+  const queryKey = managedUserKeys.callerKey(role, account, user.id);
+  const metadata = useQuery({
+    queryKey,
+    queryFn: ({ signal }) => getManagedCallerKey(role, user.id, signal),
+    retry: false,
+  });
+  const operation = useRetainedOperation(
+    (input: { generation: string }, key, context) =>
+      revokeManagedCallerKey(role, user.id, input.generation, key, context.signal),
+    async (_input, error, context) => {
+      if (error !== null) return;
+      const current = await getManagedCallerKey(role, user.id, context.signal);
+      context.commit(() => client.setQueryData(queryKey, current));
+    },
+    managementRoot(role),
+  );
+  const authorityError = metadata.error ?? operation.error ?? operation.refreshError;
+  useEffect(() => {
+    if (isUnauthorized(authorityError) || isForbidden(authorityError)) onAuthorityLoss?.();
+  }, [authorityError, onAuthorityLoss]);
+  const reload = async () => {
+    const result = await metadata.refetch();
+    if (!result.error && operation.outcome === 'conflict') operation.reset();
+  };
+  const check = () => {
+    if (operation.outcome === 'unknown' && operation.variables) {
+      operation.mutate(operation.variables);
+    } else if (operation.isSuccess) {
+      void operation.refresh();
+    } else {
+      void reload();
+    }
+  };
+  const locked =
+    operation.isPending ||
+    metadata.isFetching ||
+    operation.outcome === 'unknown' ||
+    operation.outcome === 'conflict' ||
+    operation.outcome === 'refresh-failed';
+
+  return (
+    <Card className="nb-stack">
+      <h2>{t('management.users.callerKeyTitle')}</h2>
+      {metadata.isPending ? <LoadingState /> : null}
+      {metadata.error ? <ErrorState error={metadata.error} onRetry={() => void reload()} /> : null}
+      {metadata.data && !metadata.error && operation.outcome !== 'refresh-failed' ? (
+        <>
+          <p>
+            {t(
+              metadata.data.active
+                ? 'management.users.callerKeyActive'
+                : 'management.users.callerKeyEmpty',
+            )}
+          </p>
+          <dl className="nb-facts nb-facts--inline">
+            {metadata.data.created_at !== null ? (
+              <>
+                <dt>{t('management.users.callerKeyCreated')}</dt>
+                <dd>{formatDateTime(metadata.data.created_at)}</dd>
+              </>
+            ) : null}
+            <dt>{t('management.users.callerKeyUpdated')}</dt>
+            <dd>{formatDateTime(metadata.data.updated_at)}</dd>
+          </dl>
+          {metadata.data.active ? (
+            <div className="nb-actions">
+              <Button
+                type="button"
+                variant="danger-outline"
+                disabled={locked}
+                onClick={() => setConfirmGeneration(metadata.data.generation)}
+              >
+                {t('management.users.callerKeyRevoke')}
+              </Button>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+      {operation.isSuccess && operation.data ? (
+        <p role="status">
+          {t(
+            operation.data.revoked
+              ? 'management.users.callerKeyRevoked'
+              : 'management.users.callerKeyNoChange',
+          )}
+        </p>
+      ) : null}
+      <OutcomeNote
+        outcome={profileOutcome(operation.outcome, check)}
+        busy={operation.isPending || metadata.isFetching}
+        body={
+          operation.outcome === 'conflict'
+            ? t('management.users.callerKeyConflict')
+            : operation.outcome === 'unknown'
+              ? t('management.users.callerKeyUnknown')
+              : undefined
+        }
+      />
+      {operation.outcome === 'failed' && operation.error ? (
+        <ErrorState error={operation.error} />
+      ) : null}
+      <ConfirmDialog
+        open={confirmGeneration !== null}
+        danger
+        title={t('management.users.callerKeyConfirmTitle')}
+        description={t('management.users.callerKeyConfirmBody', { user: user.username })}
+        confirmLabel={t('management.users.callerKeyRevoke')}
+        onCancel={() => setConfirmGeneration(null)}
+        onConfirm={() => {
+          if (confirmGeneration === null || locked) return;
+          const generation = confirmGeneration;
+          setConfirmGeneration(null);
+          operation.mutate({ generation });
+        }}
+        confirmDisabled={locked}
+      />
+    </Card>
+  );
 }
 
 function UserAuthority({
@@ -151,6 +297,10 @@ function UserAuthority({
   const [economyConfirm, setEconomyConfirm] = useState<EconomyIntent | null>(null);
   const editable =
     !trainee && (role === 'admin' || (user.id !== account && user.level.effective < 6));
+  const limitsEditable = canEditInferenceLimits(user, role, account, trainee);
+  const callerKeyEditable =
+    !user.is_admin &&
+    (role === 'admin' || (user.id !== account && user.level.effective < (trainee ? 5 : 6)));
   const canBan =
     editable || (trainee && user.id !== account && user.level.effective <= 4 && !user.is_banned);
   const root = managementRoot(role);
@@ -201,28 +351,37 @@ function UserAuthority({
     setEconomyConfirm(null);
   }, [user.revision]);
   const endpoint = nullableLimit(draft.endpointLimit, 0, 10_000);
-  const rpm = nullableLimit(draft.rpmLimit, 1, 4_096);
-  const concurrency = nullableLimit(draft.concurrencyLimit, 1, 100_000);
-  const invalidLimits = endpoint === undefined || rpm === undefined || concurrency === undefined;
+  const inferenceLimits = Object.fromEntries(
+    INFERENCE_LIMITS.map(({ key, max }) => [
+      key,
+      parseInferenceLimit(draft.inferenceLimits[key], max),
+    ]),
+  );
+  const invalidLimits =
+    (editable && endpoint === undefined) ||
+    (limitsEditable && Object.values(inferenceLimits).some((value) => value === undefined));
 
   const baseline =
     confirmedUser && BigInt(confirmedUser.revision) > BigInt(user.revision) ? confirmedUser : user;
   const profileChanged =
-    endpoint !== baseline.endpoint_limit ||
-    rpm !== baseline.rpm_limit ||
-    concurrency !== baseline.concurrency_limit ||
-    draft.lang !== baseline.lang ||
-    (role === 'admin' && draft.discordGatePolicy !== baseline.discord_gate_policy);
-  const levelChanged = (draft.level ? Number(draft.level) : null) !== baseline.level.manual;
+    (limitsEditable &&
+      INFERENCE_LIMITS.some(({ key }) => inferenceLimits[key] !== baseline[key])) ||
+    (editable &&
+      (endpoint !== baseline.endpoint_limit ||
+        draft.lang !== baseline.lang ||
+        (role === 'admin' && draft.discordGatePolicy !== baseline.discord_gate_policy)));
+  const levelChanged =
+    editable && (draft.level ? Number(draft.level) : null) !== baseline.level.manual;
+
   const profileBusy = coordinating || profile.isPending || manualLevel.isPending;
   const saveLimits = async () => {
-    if (!editable || invalidLimits || profileBusy) return;
+    if ((!editable && !limitsEditable) || invalidLimits || profileBusy) return;
     const profileBody = {
       mode: 'profile',
-      endpoint_limit: endpoint,
-      rpm_limit: rpm,
-      concurrency_limit: concurrency,
-      ...(draft.lang ? { lang: draft.lang } : {}),
+      ...(limitsEditable ? inferenceLimits : {}),
+      ...(editable
+        ? { endpoint_limit: endpoint, ...(draft.lang ? { lang: draft.lang } : {}) }
+        : {}),
       ...(role === 'admin' && draft.discordGatePolicy !== baseline.discord_gate_policy
         ? { discord_gate_policy: draft.discordGatePolicy }
         : {}),
@@ -340,11 +499,12 @@ function UserAuthority({
     <div className="ops-stack user-authority">
       {trainee ? <Note>{t('management.users.traineeReadOnly')}</Note> : null}
       <Card>
-        <div className="ops-actions">
-          <h2>{user.username}</h2>
-          <Button variant="ghost" type="button" onClick={onClose}>
+        <div className="user-authority__head">
+          <Button variant="ghost" type="button" className="user-authority__back" onClick={onClose}>
+            <Icon name="arrow-left" />
             {t('management.users.backToList')}
           </Button>
+          <h2>{user.username}</h2>
         </div>
         <dl className="nb-facts nb-facts--inline user-identity">
           <dt>{t('management.users.userId')}</dt>
@@ -389,6 +549,7 @@ function UserAuthority({
       />
       <section
         role="tabpanel"
+        className="nb-stack"
         id={`${tabID}-overview-panel`}
         aria-labelledby={`${tabID}-overview`}
         hidden={tab !== 'overview'}
@@ -456,8 +617,17 @@ function UserAuthority({
             <LoanHistory role={role} account={account} userID={user.id} />
           </div>
         </Card>
+        {callerKeyEditable ? (
+          <ManagedCallerKeyControl
+            key={JSON.stringify([role, account, trainee, user.id, user.level.effective])}
+            user={user}
+            role={role}
+            account={account}
+            onAuthorityLoss={onAuthorityLoss}
+          />
+        ) : null}
       </section>
-      {editable ? (
+      {editable || limitsEditable ? (
         <>
           <section
             role="tabpanel"
@@ -467,92 +637,105 @@ function UserAuthority({
           >
             <Card>
               <h2>
-                {t('management.users.manageLimitsTitle')} /{' '}
-                {t('management.users.levelSectionTitle')}
+                {t('management.users.manageLimitsTitle')}
+                {editable ? ' / ' + t('management.users.levelSectionTitle') : ''}
               </h2>
               <p>{t('management.users.limitHint')}</p>
               <Fold title={t('common.operations.management.details')}>
                 <p>{t('management.users.revisionGuard', { revision: user.revision })}</p>
               </Fold>
-              <div className="ops-field-grid">
-                <label>
-                  <span>{t('management.users.endpointLimit')}</span>
-                  <input
-                    inputMode="numeric"
-                    value={draft.endpointLimit}
-                    onChange={(event) => setDraft({ ...draft, endpointLimit: event.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>{t('management.users.rpmLimit')}</span>
-                  <input
-                    inputMode="numeric"
-                    value={draft.rpmLimit}
-                    onChange={(event) => setDraft({ ...draft, rpmLimit: event.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>{t('management.users.concurrencyLimit')}</span>
-                  <input
-                    inputMode="numeric"
-                    value={draft.concurrencyLimit}
-                    onChange={(event) =>
-                      setDraft({ ...draft, concurrencyLimit: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  <span>{t('management.users.levelControl')}</span>
-                  <select
-                    value={draft.level}
-                    onChange={(event) => setDraft({ ...draft, level: event.target.value })}
-                  >
-                    <option value="">{t('management.users.levelManualNone')}</option>
-                    {(role === 'admin' ? [1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5]).map((level) => (
-                      <option key={level} value={level}>
-                        {level}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <label className="ops-form-field">
-                <span>{t('management.users.language')}</span>
-                <select
-                  value={draft.lang}
-                  onChange={(event) =>
-                    setDraft({ ...draft, lang: event.target.value as UserDraft['lang'] })
-                  }
-                >
-                  <option value="" disabled>
-                    {t('management.users.languageDefault')}
-                  </option>
-                  <option value="zh">中文</option>
-                  <option value="en">English</option>
-                </select>
-              </label>
-              {role === 'admin' ? (
-                <Field
-                  label={t('management.users.discordGatePolicy')}
-                  help={t('management.users.discordGateHelp')}
-                >
-                  {(field) => (
-                    <select
-                      {...field}
-                      value={draft.discordGatePolicy}
-                      onChange={(event) =>
-                        setDraft({
-                          ...draft,
-                          discordGatePolicy: event.target.value as UserDraft['discordGatePolicy'],
-                        })
-                      }
+              {limitsEditable ? (
+                <InferenceLimitFields
+                  user={baseline}
+                  value={draft.inferenceLimits}
+                  onChange={(inferenceLimits) => setDraft({ ...draft, inferenceLimits })}
+                />
+              ) : (
+                <InferenceLimitSummary user={user} />
+              )}
+              <Fold title={t('management.users.inferenceLimitRules')}>
+                <p>{t('management.users.inferenceLimitHelp')}</p>
+              </Fold>
+              {editable ? (
+                <>
+                  <div className="ops-field-grid">
+                    <Field label={t('management.users.endpointLimit')}>
+                      {(field) => (
+                        <input
+                          {...field}
+                          inputMode="numeric"
+                          value={draft.endpointLimit}
+                          onChange={(event) =>
+                            setDraft({ ...draft, endpointLimit: event.target.value })
+                          }
+                        />
+                      )}
+                    </Field>
+                    <Field label={t('management.users.levelControl')}>
+                      {(field) => (
+                        <select
+                          {...field}
+                          value={draft.level}
+                          onChange={(event) => setDraft({ ...draft, level: event.target.value })}
+                        >
+                          <option value="">{t('management.users.levelManualNone')}</option>
+                          {(role === 'admin' ? [1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5]).map(
+                            (level) => (
+                              <option key={level} value={level}>
+                                {level}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      )}
+                    </Field>
+                  </div>
+                  <Field label={t('management.users.language')}>
+                    {(field) => (
+                      <select
+                        {...field}
+                        value={draft.lang}
+                        onChange={(event) =>
+                          setDraft({ ...draft, lang: event.target.value as UserDraft['lang'] })
+                        }
+                      >
+                        <option value="" disabled>
+                          {t('management.users.languageDefault')}
+                        </option>
+                        <option value="zh">中文</option>
+                        <option value="en">English</option>
+                      </select>
+                    )}
+                  </Field>
+                  {role === 'admin' ? (
+                    <Field
+                      label={t('management.users.discordGatePolicy')}
+                      help={t('management.users.discordGateHelp')}
                     >
-                      <option value="inherit">{t('management.users.discordGateInherit')}</option>
-                      <option value="require">{t('management.users.discordGateRequire')}</option>
-                      <option value="exempt">{t('management.users.discordGateExempt')}</option>
-                    </select>
-                  )}
-                </Field>
+                      {(field) => (
+                        <select
+                          {...field}
+                          value={draft.discordGatePolicy}
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              discordGatePolicy: event.target
+                                .value as UserDraft['discordGatePolicy'],
+                            })
+                          }
+                        >
+                          <option value="inherit">
+                            {t('management.users.discordGateInherit')}
+                          </option>
+                          <option value="require">
+                            {t('management.users.discordGateRequire')}
+                          </option>
+                          <option value="exempt">{t('management.users.discordGateExempt')}</option>
+                        </select>
+                      )}
+                    </Field>
+                  ) : null}
+                </>
               ) : null}
               {invalidLimits ? (
                 <p className="field-error" role="alert">
@@ -596,6 +779,30 @@ function UserAuthority({
               )}
             </Card>
           </section>
+        </>
+      ) : (
+        <>
+          <section
+            role="tabpanel"
+            id={`${tabID}-limits-panel`}
+            aria-labelledby={`${tabID}-limits`}
+            hidden={tab !== 'limits'}
+          >
+            <Card>
+              {!trainee ? <p>{t('management.users.readOnly')}</p> : null}
+              <dl className="ops-kv">
+                <dt>{t('management.users.endpointLimit')}</dt>
+                <dd>{user.effective_endpoint_limit}</dd>
+                <dt>{t('management.users.language')}</dt>
+                <dd>{user.lang || t('management.users.languageDefault')}</dd>
+              </dl>
+              <InferenceLimitSummary user={user} />
+            </Card>
+          </section>
+        </>
+      )}
+      {editable ? (
+        <>
           <section
             role="tabpanel"
             id={`${tabID}-economy-panel`}
@@ -729,26 +936,6 @@ function UserAuthority({
         <>
           <section
             role="tabpanel"
-            id={`${tabID}-limits-panel`}
-            aria-labelledby={`${tabID}-limits`}
-            hidden={tab !== 'limits'}
-          >
-            <Card>
-              {!trainee ? <p>{t('management.users.readOnly')}</p> : null}
-              <dl className="ops-kv">
-                <dt>{t('management.users.endpointLimit')}</dt>
-                <dd>{user.effective_endpoint_limit}</dd>
-                <dt>{t('management.users.rpmLimit')}</dt>
-                <dd>{user.effective_rpm_limit}</dd>
-                <dt>{t('management.users.concurrencyLimit')}</dt>
-                <dd>{user.effective_concurrency_limit}</dd>
-                <dt>{t('management.users.language')}</dt>
-                <dd>{user.lang || t('management.users.languageDefault')}</dd>
-              </dl>
-            </Card>
-          </section>
-          <section
-            role="tabpanel"
             id={`${tabID}-economy-panel`}
             aria-labelledby={`${tabID}-economy`}
             hidden={tab !== 'economy'}
@@ -854,6 +1041,8 @@ interface UserManagementProps {
   onAuthorityLoss?: () => void;
   renderDeletion?: (user: AdminUser, refresh: () => Promise<unknown>) => ReactNode;
   renderSecurity?: (user: AdminUser) => ReactNode;
+  /** Rendered inside a page that already owns the h1. */
+  embedded?: boolean;
 }
 
 export function UserManagement({
@@ -865,6 +1054,7 @@ export function UserManagement({
   renderDeletion,
   renderSecurity,
   trainee = false,
+  embedded = false,
 }: UserManagementProps) {
   const { t } = useTranslation();
   const accountLabels = accountCopy(t);
@@ -963,6 +1153,39 @@ export function UserManagement({
       !invalidCommittedUserID &&
       !invalidCommittedDiscordID,
   });
+  const batchScope = JSON.stringify([
+    account,
+    role,
+    query,
+    banned,
+    level,
+    userID,
+    discordID,
+    accountState,
+    pager.page,
+    pager.pageSize,
+  ]);
+  const [limitSelection, setLimitSelection] = useState<{ scope: string; ids: string[] }>({
+    scope: '',
+    ids: [],
+  });
+  const [batchBusy, setBatchBusy] = useState(false);
+  useEffect(() => {
+    // Returning to a previous page starts a fresh explicit selection.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLimitSelection({ scope: batchScope, ids: [] });
+  }, [batchScope]);
+
+  const eligibleUsers = (users.data?.data ?? []).flatMap((entry) =>
+    entry.account_state === 'active' && canEditInferenceLimits(entry.user, role, account, trainee)
+      ? [entry.user]
+      : [],
+  );
+  const limitSelected =
+    limitSelection.scope === batchScope
+      ? limitSelection.ids.filter((id) => eligibleUsers.some((user) => user.id === id))
+      : [];
+  const setLimitSelected = (ids: string[]) => setLimitSelection({ scope: batchScope, ids });
   const detailUnavailable =
     isUnauthorized(users.error) ||
     isForbidden(users.error) ||
@@ -1010,6 +1233,7 @@ export function UserManagement({
     nextAccountState: AccountState = accountState,
     nextDiscordID = discordID,
   ) => {
+    if (batchBusy) return;
     if (
       (nextUserID !== '' && !isPageNumber(nextUserID, 9_223_372_036_854_775_807n)) ||
       (nextDiscordID !== '' && !isPageNumber(nextDiscordID, 18_446_744_073_709_551_615n))
@@ -1085,12 +1309,21 @@ export function UserManagement({
   if (authorityError) return <ErrorState error={authorityError} />;
   return (
     <div className="page ops-page user-management">
-      <PageHeader
-        title={role === 'admin' ? t('admin.navigation.users') : t('management.users.title')}
-        description={t(
-          trainee ? 'management.users.traineeDescription' : 'management.users.description',
-        )}
-      />
+      {embedded ? (
+        <SectionHead
+          title={t('management.users.title')}
+          description={t(
+            trainee ? 'management.users.traineeDescription' : 'management.users.description',
+          )}
+        />
+      ) : (
+        <PageHeader
+          title={role === 'admin' ? t('admin.navigation.users') : t('management.users.title')}
+          description={t(
+            trainee ? 'management.users.traineeDescription' : 'management.users.description',
+          )}
+        />
+      )}
       <div className={`nb-md${selection ? ' has-selection' : ''}`}>
         <div className="nb-md__list ops-stack" ref={listRef} tabIndex={-1}>
           <Card>
@@ -1144,6 +1377,7 @@ export function UserManagement({
                   <label>
                     <span>{accountLabels.allAccounts}</span>
                     <select
+                      disabled={batchBusy}
                       value={accountState}
                       onChange={(event) =>
                         commitListState(
@@ -1163,6 +1397,7 @@ export function UserManagement({
                   <label>
                     <span>{t('management.users.filterStatus')}</span>
                     <select
+                      disabled={batchBusy}
                       value={banned}
                       onChange={(event) =>
                         commitListState(
@@ -1181,6 +1416,7 @@ export function UserManagement({
                   <label>
                     <span>{t('management.users.level')}</span>
                     <select
+                      disabled={batchBusy}
                       value={level}
                       onChange={(event) =>
                         commitListState(query, banned, event.target.value, userIDDraft)
@@ -1206,7 +1442,10 @@ export function UserManagement({
                   {accountLabels.discordInvalid}
                 </p>
               ) : null}
-              <Button type="submit" disabled={invalidUserIDDraft || invalidDiscordIDDraft}>
+              <Button
+                type="submit"
+                disabled={batchBusy || invalidUserIDDraft || invalidDiscordIDDraft}
+              >
                 {t('common.applyFilter')}
               </Button>
             </form>
@@ -1246,8 +1485,46 @@ export function UserManagement({
                   selectedKey={selection}
                   columns={[
                     {
+                      key: 'limit_selection',
+                      header: (
+                        <span className="user-list-selection-heading">
+                          {t('management.users.limitSelection')}
+                        </span>
+                      ),
+                      cell: 'meta',
+                      render: (entry) => (
+                        <span className="user-list-selection">
+                          {entry.account_state === 'active' &&
+                          canEditInferenceLimits(entry.user, role, account, trainee) ? (
+                            <label className="user-limit-select">
+                              <input
+                                type="checkbox"
+                                aria-label={t('management.users.selectLimitUser', {
+                                  user: entry.user.username,
+                                })}
+                                checked={limitSelected.includes(entry.user.id)}
+                                disabled={batchBusy || users.isFetching}
+                                onChange={(event) =>
+                                  setLimitSelected(
+                                    event.target.checked
+                                      ? [...limitSelected, entry.user.id]
+                                      : limitSelected.filter((id) => id !== entry.user.id),
+                                  )
+                                }
+                              />
+                            </label>
+                          ) : null}
+                        </span>
+                      ),
+                    },
+
+                    {
                       key: 'user',
-                      header: t('management.users.username'),
+                      header: (
+                        <span className="user-list-identity-heading">
+                          {t('management.users.username')}
+                        </span>
+                      ),
                       cell: 'title',
                       render: (entry) => {
                         const deleted = entry.account_state === 'deleted';
@@ -1261,6 +1538,7 @@ export function UserManagement({
                           >
                             <button
                               className="user-list-name"
+                              title={deleted ? accountLabels.deleted : entry.user.username}
                               type="button"
                               disabled={!scopeReady || users.isFetching}
                               aria-label={deleted ? t('management.users.view') : undefined}
@@ -1272,7 +1550,14 @@ export function UserManagement({
                             >
                               {deleted ? accountLabels.deleted : entry.user.username}
                             </button>
-                            <span title={discord ?? undefined}>
+                            <span
+                              title={
+                                '#' +
+                                (id ?? accountLabels.unknown) +
+                                ' · ' +
+                                (discord ?? t('management.users.discordUnlinked'))
+                              }
+                            >
                               #{id ?? accountLabels.unknown} ·{' '}
                               {discord
                                 ? `${discord.slice(0, 4)}…${discord.slice(-4)}`
@@ -1284,21 +1569,34 @@ export function UserManagement({
                     },
                     {
                       key: 'level',
-                      header: t('management.users.level'),
+                      header: (
+                        <span className="user-list-level-heading">
+                          {t('management.users.level')}
+                        </span>
+                      ),
                       cell: 'meta',
-                      render: (entry) =>
-                        entry.account_state === 'deleted'
-                          ? entry.deleted.effective_level === null
-                            ? accountLabels.unknown
-                            : t('management.users.levelValue', {
-                                level: entry.deleted.effective_level,
-                              })
-                          : entry.user.level.display_name ||
-                            t('management.users.levelValue', { level: entry.user.level.effective }),
+                      render: (entry) => (
+                        <span className="user-list-level">
+                          {entry.account_state === 'deleted'
+                            ? entry.deleted.effective_level === null
+                              ? accountLabels.unknown
+                              : t('management.users.levelValue', {
+                                  level: entry.deleted.effective_level,
+                                })
+                            : entry.user.level.display_name ||
+                              t('management.users.levelValue', {
+                                level: entry.user.level.effective,
+                              })}
+                        </span>
+                      ),
                     },
                     {
                       key: 'status',
-                      header: t('management.users.status'),
+                      header: (
+                        <span className="user-list-status-heading">
+                          {t('management.users.status')}
+                        </span>
+                      ),
                       cell: 'status',
                       render: (entry) =>
                         entry.account_state === 'deleted' ? (
@@ -1317,7 +1615,14 @@ export function UserManagement({
                     },
                     {
                       key: 'balance',
-                      header: t('management.users.creditsBalance'),
+                      header: (
+                        <span
+                          className="user-list-balance-heading"
+                          title={t('management.users.creditsBalance')}
+                        >
+                          {t('management.users.creditsBalance')}
+                        </span>
+                      ),
                       cell: 'meta',
                       align: 'num',
                       mobileLabel: t('management.users.creditsBalance'),
@@ -1326,10 +1631,14 @@ export function UserManagement({
                           entry.account_state === 'deleted'
                             ? entry.deleted.general_balance
                             : entry.user.balance;
-                        return balance === null ? (
-                          accountLabels.unknown
-                        ) : (
-                          <span className="nb-amount">{formatCredits(balance)}</span>
+                        return (
+                          <span className="user-list-balance">
+                            {balance === null ? (
+                              accountLabels.unknown
+                            ) : (
+                              <span className="nb-amount">{formatCredits(balance)}</span>
+                            )}
+                          </span>
                         );
                       },
                     },
@@ -1337,11 +1646,34 @@ export function UserManagement({
                 />
               </div>
             )}
+            {scopeReady &&
+            !sessionError &&
+            !users.error &&
+            users.data &&
+            eligibleUsers.length > 0 ? (
+              <UserLimitBatch
+                key={batchScope}
+                role={role}
+                users={eligibleUsers}
+                selected={limitSelected}
+                onSelected={setLimitSelected}
+                onBusy={setBatchBusy}
+                loading={users.isFetching}
+                refresh={async () => {
+                  const result = await users.refetch();
+                  if (result.error) throw result.error;
+                  if (selected) {
+                    const current = await detail.refetch();
+                    if (current.error) throw current.error;
+                  }
+                }}
+              />
+            ) : null}
             {scopeReady && !sessionError && !users.error && users.data ? (
               <PagePagination
                 metadata={users.data.pagination}
                 requestedPage={pager.page}
-                busy={users.isFetching}
+                busy={users.isFetching || batchBusy}
                 onPageChange={pager.setPage}
                 onPageSizeChange={pager.setPageSize}
               />

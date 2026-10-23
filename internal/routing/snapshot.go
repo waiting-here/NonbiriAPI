@@ -13,6 +13,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
@@ -31,6 +32,7 @@ var (
 
 const (
 	MaxSnapshotCandidates = 100
+	MaxSnapshotTargets    = 256
 	MaxRoutableModels     = 1000
 )
 
@@ -55,20 +57,23 @@ type Identity struct {
 // fields are safe logical-model facts only; no binding, endpoint, key, catalog
 // row, or secret reference can be represented by this type.
 type LogicalPreflight struct {
-	modelTypes       modeltype.Set
-	transportRule    transportpolicy.Rule
-	rolePolicy       rolepolicy.Policy
-	modelID          int64
-	ownerUserID      int64
-	provider         string
-	model            string
-	fullName         string
-	routeStrategy    string
-	silentRetry      bool
-	flattenToolCalls bool
-	revision         int64
-	bindingRevision  int64
+	cloudflareProxyEnabled bool
+	modelTypes             modeltype.Set
+	transportRule          transportpolicy.Rule
+	rolePolicy             rolepolicy.Policy
+	modelID                int64
+	ownerUserID            int64
+	provider               string
+	model                  string
+	fullName               string
+	routeStrategy          string
+	silentRetry            bool
+	flattenToolCalls       bool
+	revision               int64
+	bindingRevision        int64
 }
+
+func (p LogicalPreflight) CloudflareProxyEnabled() bool { return p.cloudflareProxyEnabled }
 
 func (p LogicalPreflight) ModelTypes() modeltype.Set { return p.modelTypes.Clone() }
 
@@ -98,48 +103,71 @@ type RoutableModel struct {
 }
 
 type Candidate struct {
-	bindingID        int64
-	endpointID       int64
-	endpointKeyID    int64
-	connectorType    string
-	canonicalBaseURL string
-	upstreamModelID  string
-	forceStoreFalse  bool
-	endpointRevision int64
-	keyRevision      int64
-	order            int
+	bindingID           int64
+	targetID            int64
+	targetRevision      int64
+	targetOrder         int
+	credentialID        int64
+	credentialVersionID int64
+	credentialVersion   int64
+	grantRevisionID     int64
+	grantRevision       int64
+	nativeServices      connectorcontract.NativeServiceSet
+	rerankFormat        connectorcontract.RerankFormat
+	endpointID          int64
+	endpointKeyID       int64
+	connectorType       string
+	canonicalBaseURL    string
+	upstreamModelID     string
+	forceStoreFalse     bool
+	endpointRevision    int64
+	keyRevision         int64
+	order               int
 }
 
-func (c Candidate) BindingID() int64           { return c.bindingID }
-func (c Candidate) EndpointID() int64          { return c.endpointID }
-func (c Candidate) EndpointKeyID() int64       { return c.endpointKeyID }
-func (c Candidate) ConnectorType() string      { return c.connectorType }
-func (c Candidate) CanonicalBaseURL() string   { return c.canonicalBaseURL }
-func (c Candidate) UpstreamModelID() string    { return c.upstreamModelID }
-func (c Candidate) ForceStoreFalse() bool      { return c.forceStoreFalse }
-func (c Candidate) EndpointRevision() int64    { return c.endpointRevision }
-func (c Candidate) EndpointKeyRevision() int64 { return c.keyRevision }
-func (c Candidate) Order() int                 { return c.order }
-func (Candidate) String() string               { return "[redacted routing candidate]" }
-func (Candidate) GoString() string             { return "[redacted routing candidate]" }
-func (Candidate) LogValue() slog.Value         { return slog.StringValue("[redacted routing candidate]") }
+func (c Candidate) BindingID() int64                                   { return c.bindingID }
+func (c Candidate) TargetID() int64                                    { return c.targetID }
+func (c Candidate) TargetRevision() int64                              { return c.targetRevision }
+func (c Candidate) TargetOrder() int                                   { return c.targetOrder }
+func (c Candidate) CredentialID() int64                                { return c.credentialID }
+func (c Candidate) CredentialVersionID() int64                         { return c.credentialVersionID }
+func (c Candidate) CredentialVersion() int64                           { return c.credentialVersion }
+func (c Candidate) GrantRevisionID() int64                             { return c.grantRevisionID }
+func (c Candidate) GrantRevision() int64                               { return c.grantRevision }
+func (c Candidate) NativeServices() connectorcontract.NativeServiceSet { return c.nativeServices }
+func (c Candidate) RerankFormat() connectorcontract.RerankFormat       { return c.rerankFormat }
+func (c Candidate) EndpointID() int64                                  { return c.endpointID }
+func (c Candidate) EndpointKeyID() int64                               { return c.endpointKeyID }
+func (c Candidate) ConnectorType() string                              { return c.connectorType }
+func (c Candidate) CanonicalBaseURL() string                           { return c.canonicalBaseURL }
+func (c Candidate) UpstreamModelID() string                            { return c.upstreamModelID }
+func (c Candidate) ForceStoreFalse() bool                              { return c.forceStoreFalse }
+func (c Candidate) EndpointRevision() int64                            { return c.endpointRevision }
+func (c Candidate) EndpointKeyRevision() int64                         { return c.keyRevision }
+func (c Candidate) Order() int                                         { return c.order }
+func (Candidate) String() string                                       { return "[redacted routing candidate]" }
+func (Candidate) GoString() string                                     { return "[redacted routing candidate]" }
+func (Candidate) LogValue() slog.Value                                 { return slog.StringValue("[redacted routing candidate]") }
 
 type Snapshot struct {
-	modelTypes       modeltype.Set
-	transportRule    transportpolicy.Rule
-	rolePolicy       rolepolicy.Policy
-	modelID          int64
-	ownerUserID      int64
-	provider         string
-	model            string
-	fullName         string
-	routeStrategy    string
-	silentRetry      bool
-	flattenToolCalls bool
-	revision         int64
-	bindingRevision  int64
-	candidates       []Candidate
+	cloudflareProxyEnabled bool
+	modelTypes             modeltype.Set
+	transportRule          transportpolicy.Rule
+	rolePolicy             rolepolicy.Policy
+	modelID                int64
+	ownerUserID            int64
+	provider               string
+	model                  string
+	fullName               string
+	routeStrategy          string
+	silentRetry            bool
+	flattenToolCalls       bool
+	revision               int64
+	bindingRevision        int64
+	candidates             []Candidate
 }
+
+func (s Snapshot) CloudflareProxyEnabled() bool { return s.cloudflareProxyEnabled }
 
 func (s Snapshot) ModelTypes() modeltype.Set { return s.modelTypes.Clone() }
 
@@ -147,23 +175,30 @@ func (s Snapshot) TransportRule() transportpolicy.Rule { return s.transportRule 
 
 func (s Snapshot) RolePolicy() rolepolicy.Policy { return s.rolePolicy.Clone() }
 
-func (s Snapshot) ModelID() int64          { return s.modelID }
-func (s Snapshot) OwnerUserID() int64      { return s.ownerUserID }
-func (s Snapshot) Provider() string        { return s.provider }
-func (s Snapshot) Model() string           { return s.model }
-func (s Snapshot) FullName() string        { return s.fullName }
-func (s Snapshot) RouteStrategy() string   { return s.routeStrategy }
-func (s Snapshot) SilentRetry() bool       { return s.silentRetry }
-func (s Snapshot) FlattenToolCalls() bool  { return s.flattenToolCalls }
-func (s Snapshot) Revision() int64         { return s.revision }
-func (s Snapshot) BindingRevision() int64  { return s.bindingRevision }
-func (s Snapshot) CandidateCount() int     { return len(s.candidates) }
+func (s Snapshot) ModelID() int64         { return s.modelID }
+func (s Snapshot) OwnerUserID() int64     { return s.ownerUserID }
+func (s Snapshot) Provider() string       { return s.provider }
+func (s Snapshot) Model() string          { return s.model }
+func (s Snapshot) FullName() string       { return s.fullName }
+func (s Snapshot) RouteStrategy() string  { return s.routeStrategy }
+func (s Snapshot) SilentRetry() bool      { return s.silentRetry }
+func (s Snapshot) FlattenToolCalls() bool { return s.flattenToolCalls }
+func (s Snapshot) Revision() int64        { return s.revision }
+func (s Snapshot) BindingRevision() int64 { return s.bindingRevision }
+func (s Snapshot) CandidateCount() int {
+	groups := make(map[int64]struct{})
+	for _, candidate := range s.candidates {
+		groups[candidate.bindingID] = struct{}{}
+	}
+	return len(groups)
+}
 func (s Snapshot) Candidates() []Candidate { return append([]Candidate(nil), s.candidates...) }
 func (Snapshot) String() string            { return "[redacted routing snapshot]" }
 func (Snapshot) GoString() string          { return "[redacted routing snapshot]" }
 func (Snapshot) LogValue() slog.Value      { return slog.StringValue("[redacted routing snapshot]") }
 
 type modelFacts struct {
+	cloudflareProxyEnabled                bool
 	modelTypes                            modeltype.Set
 	transportRule                         transportpolicy.Rule
 	rolePolicy                            rolepolicy.Policy
@@ -177,7 +212,7 @@ type modelFacts struct {
 // be a full name; disagreement is rejected instead of selecting one by
 // precedence. This transaction never reads physical candidates.
 func (s *Store) Preflight(ctx context.Context, ownerUserID int64, identifier string) (LogicalPreflight, error) {
-	if s == nil || s.db == nil || ctx == nil || ownerUserID <= 0 || identifier == "" {
+	if s == nil || s.readDB == nil || ctx == nil || ownerUserID <= 0 || identifier == "" {
 		return LogicalPreflight{}, ErrInvalidIdentity
 	}
 	modelID, hasID, idErr := parseModelID(identifier)
@@ -188,7 +223,7 @@ func (s *Store) Preflight(ctx context.Context, ownerUserID int64, identifier str
 		}
 		return LogicalPreflight{}, ErrInvalidIdentity
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return LogicalPreflight{}, fmt.Errorf("routing: begin preflight: %w", err)
 	}
@@ -219,13 +254,13 @@ func (s *Store) ListRoutableModels(ctx context.Context, ownerUserID int64, limit
 FROM models m
 WHERE m.user_id=? AND EXISTS(
  SELECT 1 FROM model_bindings b
- JOIN endpoint_keys k ON k.id=b.endpoint_key_id
+ JOIN model_binding_targets t ON t.binding_id=b.id
+ JOIN endpoint_keys k ON k.id=t.endpoint_key_id
  JOIN endpoints e ON e.id=k.endpoint_id
- JOIN model_pair_catalog p ON p.endpoint_key_id=k.id AND p.normalized_model_id=b.upstream_model_id
- JOIN model_discovery_evidence d ON d.endpoint_key_id=k.id
+ JOIN self_grant_availability a ON a.endpoint_key_id=k.id AND a.owner_user_id=m.user_id
  WHERE b.model_id=m.id AND e.user_id=m.user_id AND e.enabled=1 AND k.enabled=1
    AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)
-   AND (p.manual_supports>0 OR (p.automatic_supports>0 AND d.state='succeeded' AND d.revision=p.automatic_revision))
+   AND (a.native_service_mask & t.native_service_mask)<>0
 )
 ORDER BY m.full_name,m.id LIMIT ?`, ownerUserID, limit+1)
 	if err != nil {
@@ -259,14 +294,14 @@ ORDER BY m.full_name,m.id LIMIT ?`, ownerUserID, limit+1)
 }
 
 func (s *Store) Snapshot(ctx context.Context, ownerUserID int64, identity Identity) (Snapshot, error) {
-	if s == nil || s.db == nil || ctx == nil || ownerUserID <= 0 {
+	if s == nil || s.readDB == nil || ctx == nil || ownerUserID <= 0 {
 		return Snapshot{}, ErrInvalidIdentity
 	}
 	modelID, hasID, err := parseModelID(identity.ModelID)
 	if err != nil || (identity.FullName != "" && !validFullName(identity.FullName)) || (!hasID && identity.FullName == "") {
 		return Snapshot{}, ErrInvalidIdentity
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("routing: begin snapshot: %w", err)
 	}
@@ -288,7 +323,7 @@ func (s *Store) Snapshot(ctx context.Context, ownerUserID int64, identity Identi
 	return Snapshot{
 		modelTypes: facts.modelTypes.Clone(), transportRule: facts.transportRule, rolePolicy: facts.rolePolicy.Clone(), modelID: facts.id, ownerUserID: facts.userID, provider: facts.provider,
 		model: facts.model, fullName: facts.fullName, routeStrategy: facts.strategy,
-		silentRetry: facts.silentRetry == 1, flattenToolCalls: facts.flattenToolCalls == 1,
+		silentRetry: facts.silentRetry == 1, flattenToolCalls: facts.flattenToolCalls == 1, cloudflareProxyEnabled: facts.cloudflareProxyEnabled,
 		revision: facts.revision, bindingRevision: facts.bindingRevision,
 		candidates: append([]Candidate(nil), candidates...),
 	}, nil
@@ -331,7 +366,7 @@ func logicalPreflight(facts modelFacts) LogicalPreflight {
 	return LogicalPreflight{
 		modelTypes: facts.modelTypes.Clone(), transportRule: facts.transportRule, rolePolicy: facts.rolePolicy.Clone(), modelID: facts.id, ownerUserID: facts.userID, provider: facts.provider, model: facts.model,
 		fullName: facts.fullName, routeStrategy: facts.strategy, silentRetry: facts.silentRetry == 1,
-		flattenToolCalls: facts.flattenToolCalls == 1, revision: facts.revision,
+		flattenToolCalls: facts.flattenToolCalls == 1, cloudflareProxyEnabled: facts.cloudflareProxyEnabled, revision: facts.revision,
 		bindingRevision: facts.bindingRevision,
 	}
 }
@@ -378,13 +413,13 @@ func parseModelID(value string) (int64, bool, error) {
 
 func readModelByID(ctx context.Context, tx *sql.Tx, ownerUserID, modelID int64) (modelFacts, error) {
 	return scanModelFacts(tx.QueryRowContext(ctx, `
-SELECT id,user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision,role_policy,transport_rule,model_types
+SELECT id,user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision,role_policy,transport_rule,model_types,cloudflare_proxy_enabled
 FROM models WHERE id=? AND user_id=?`, modelID, ownerUserID))
 }
 
 func readModelByName(ctx context.Context, tx *sql.Tx, ownerUserID int64, fullName string) (modelFacts, error) {
 	return scanModelFacts(tx.QueryRowContext(ctx, `
-SELECT id,user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision,role_policy,transport_rule,model_types
+SELECT id,user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision,role_policy,transport_rule,model_types,cloudflare_proxy_enabled
 FROM models WHERE full_name=? AND user_id=?`, fullName, ownerUserID))
 }
 
@@ -392,7 +427,7 @@ func scanModelFacts(row *sql.Row) (modelFacts, error) {
 	var facts modelFacts
 	var encodedPolicy string
 	err := row.Scan(&facts.id, &facts.userID, &facts.provider, &facts.model, &facts.fullName,
-		&facts.strategy, &facts.silentRetry, &facts.flattenToolCalls, &facts.revision, &facts.bindingRevision, &encodedPolicy, &facts.transportRule, &facts.modelTypes)
+		&facts.strategy, &facts.silentRetry, &facts.flattenToolCalls, &facts.revision, &facts.bindingRevision, &encodedPolicy, &facts.transportRule, &facts.modelTypes, &facts.cloudflareProxyEnabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return modelFacts{}, ErrNotFound
 	}
@@ -413,52 +448,78 @@ func scanModelFacts(row *sql.Row) (modelFacts, error) {
 
 func readCandidates(ctx context.Context, tx *sql.Tx, ownerUserID, modelID int64) ([]Candidate, error) {
 	rows, err := tx.QueryContext(ctx, `
-SELECT b.id,e.id,k.id,e.connector_type,e.base_url,b.upstream_model_id,k.force_store_false,e.revision,k.revision,b.ord
+SELECT b.id,t.id,t.revision,t.ord,t.native_service_mask,e.id,k.id,e.connector_type,e.base_url,t.upstream_model_id,k.force_store_false,e.revision,k.revision,b.ord
 FROM model_bindings b
 JOIN models m ON m.id=b.model_id
-JOIN endpoint_keys k ON k.id=b.endpoint_key_id
+JOIN model_binding_targets t ON t.binding_id=b.id
+JOIN endpoint_keys k ON k.id=t.endpoint_key_id
 JOIN endpoints e ON e.id=k.endpoint_id
-JOIN model_pair_catalog p ON p.endpoint_key_id=k.id AND p.normalized_model_id=b.upstream_model_id
-JOIN model_discovery_evidence d ON d.endpoint_key_id=k.id
 WHERE m.id=? AND m.user_id=? AND e.user_id=? AND e.enabled=1 AND k.enabled=1
   AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)
-  AND (p.manual_supports>0 OR (p.automatic_supports>0 AND d.state='succeeded' AND d.revision=p.automatic_revision))
-ORDER BY b.ord,b.id LIMIT ?`, modelID, ownerUserID, ownerUserID, MaxSnapshotCandidates+1)
+ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, ownerUserID, ownerUserID, MaxSnapshotTargets+1)
 	if err != nil {
 		return nil, fmt.Errorf("routing: read candidates: %w", err)
 	}
 	defer rows.Close()
 	var candidates []Candidate
-	seen := make(map[string]struct{})
+	var keyIDs []int64
 	for rows.Next() {
 		var candidate Candidate
 		var forceStore int
-		if err := rows.Scan(&candidate.bindingID, &candidate.endpointID, &candidate.endpointKeyID,
+		var mask int64
+		if err := rows.Scan(&candidate.bindingID, &candidate.targetID, &candidate.targetRevision, &candidate.targetOrder, &mask, &candidate.endpointID, &candidate.endpointKeyID,
 			&candidate.connectorType, &candidate.canonicalBaseURL, &candidate.upstreamModelID,
 			&forceStore, &candidate.endpointRevision, &candidate.keyRevision, &candidate.order); err != nil {
 			return nil, fmt.Errorf("routing: scan candidate: %w", err)
 		}
 		if forceStore < 0 || forceStore > 1 || candidate.bindingID <= 0 || candidate.endpointID <= 0 ||
 			candidate.endpointKeyID <= 0 || candidate.endpointRevision < 1 || candidate.keyRevision < 1 ||
-			candidate.order < 0 || candidate.order > 255 {
+			candidate.targetID <= 0 || candidate.targetRevision <= 0 || candidate.targetOrder < 0 || candidate.targetOrder > 511 ||
+			candidate.order < 0 || candidate.order > 511 {
 			return nil, errors.New("routing: invalid persisted candidate")
 		}
-		if forceStore == 1 && candidate.connectorType != string(connectorcontract.TypeOpenAICompatible) {
+		if forceStore == 1 && !connectorcontract.Type(candidate.connectorType).OpenAIServiceFamily() {
 			return nil, errors.New("routing: incompatible persisted candidate policy")
 		}
-		identity := strconv.FormatInt(candidate.endpointKeyID, 10) + "\x00" + candidate.upstreamModelID
-		if _, duplicate := seen[identity]; duplicate {
-			return nil, ErrAmbiguousIdentity
+		candidate.nativeServices, err = connectorcontract.NativeServicesFromMask(mask)
+		if err != nil || candidate.nativeServices.Empty() {
+			return nil, errors.New("routing: invalid persisted target services")
 		}
-		seen[identity] = struct{}{}
 		candidate.forceStoreFalse = forceStore == 1
 		candidates = append(candidates, candidate)
-		if len(candidates) > MaxSnapshotCandidates {
+		keyIDs = append(keyIDs, candidate.endpointKeyID)
+		if len(candidates) > MaxSnapshotTargets {
 			return nil, ErrResourceLimit
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("routing: read candidates: %w", err)
 	}
-	return candidates, nil
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	grants, err := connectionstore.LoadSelfGrantsTx(ctx, tx, ownerUserID, keyIDs)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]Candidate, 0, len(candidates))
+	groups := make(map[int64]struct{})
+	for _, candidate := range candidates {
+		grant, ok := grants[candidate.endpointKeyID]
+		if !ok {
+			continue
+		}
+		candidate.nativeServices = candidate.nativeServices.Intersect(grant.EffectiveServices)
+		if candidate.nativeServices.Empty() {
+			continue
+		}
+		candidate.credentialID, candidate.credentialVersionID, candidate.credentialVersion = grant.CredentialID, grant.CredentialVersionID, grant.CredentialVersion
+		candidate.grantRevisionID, candidate.grantRevision, candidate.rerankFormat = grant.GrantRevisionID, grant.GrantRevision, grant.RerankFormat
+		result = append(result, candidate)
+		groups[candidate.bindingID] = struct{}{}
+	}
+	if len(groups) > MaxSnapshotCandidates {
+		return nil, ErrResourceLimit
+	}
+	return result, nil
 }

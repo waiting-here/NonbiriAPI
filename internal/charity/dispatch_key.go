@@ -7,24 +7,40 @@ import (
 	"math/big"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 )
 
 func (s *Service) revalidateDispatchKey(ctx context.Context, tx *sql.Tx, input claim.CharityDispatch) error {
 	check := claim.CharityClaimInput{RequestID: input.RequestID, ClaimID: input.ClaimID, ActorUserID: input.ActorUserID, ClaimedAt: input.DispatchedAt}
-	err := tx.QueryRowContext(ctx, `SELECT c.donation_key_id,c.endpoint_key_id,k.endpoint_id,l.upstream_model_id FROM dispatch_claims c JOIN endpoint_keys k ON k.id=c.endpoint_key_id JOIN request_logs l ON l.logical_request_id=c.logical_request_id WHERE c.id=?`, input.ClaimID).Scan(&check.DonationKeyID, &check.EndpointKeyID, &check.EndpointID, &check.UpstreamModelID)
+	a := &check.Authorization
+	var nativeBit int64
+	err := tx.QueryRowContext(ctx, `SELECT c.donation_key_id,t.endpoint_key_id_snapshot,t.endpoint_id_snapshot,t.upstream_model_id,
+b.binding_id,t.target_id_snapshot,t.target_revision,t.credential_id_snapshot,t.credential_version_id,t.credential_version,
+t.grant_revision_id_snapshot,t.grant_revision,t.configured_type,t.rerank_format,t.use_id_snapshot,t.use_revision_id_snapshot,u.use_revision,t.native_service_bit
+FROM dispatch_claims c JOIN dispatch_claim_targets t ON t.claim_id=c.id AND t.authorization_kind='charity'
+JOIN charity_binding_targets b ON b.id=t.target_id_snapshot
+JOIN donation_use_revisions u ON u.id=t.use_revision_id_snapshot AND u.use_id=t.use_id_snapshot
+WHERE c.id=? AND c.state='claimed'`, input.ClaimID).Scan(&check.DonationKeyID, &check.EndpointKeyID, &check.EndpointID, &check.UpstreamModelID,
+		&a.BindingID, &a.TargetID, &a.TargetRevision, &a.CredentialID, &a.CredentialVersionID, &a.CredentialVersion,
+		&a.GrantRevisionID, &a.GrantRevision, &a.ConfiguredType, &a.RerankFormat, &a.UseID, &a.UseRevisionID, &a.UseRevision, &nativeBit)
 	if errors.Is(err, sql.ErrNoRows) {
 		return claim.ErrNotFound
 	}
 	if err != nil {
 		return err
 	}
+	services, err := contract.NativeServicesFromMask(nativeBit)
+	if err != nil || len(services.Services()) != 1 {
+		return claim.ErrInvariant
+	}
+	a.NativeService = services.Services()[0]
 	row, err := readClaimKey(ctx, tx, check)
 	if err != nil {
 		return err
 	}
-	if row.status != "approved" || row.endedReason != "" || row.keyEnabled != 1 || row.failureDisabled != 0 || row.endpointEnabled != 1 || row.physicalKeyEnabled != 1 || (row.expiresAt.Valid && row.expiresAt.Int64 <= input.DispatchedAt) {
+	if !row.approvedUse || row.endedReason != "" || row.keyEnabled != 1 || row.failureDisabled != 0 || row.endpointEnabled != 1 || row.physicalKeyEnabled != 1 || (row.expiresAt.Valid && row.expiresAt.Int64 <= input.DispatchedAt) {
 		return claim.ErrNotFound
 	}
 	if row.rateLimitedUntil.Valid && row.rateLimitedUntil.Int64 > input.DispatchedAt {

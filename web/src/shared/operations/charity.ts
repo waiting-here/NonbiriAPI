@@ -1,4 +1,13 @@
 import {
+  normalizeNativeServices,
+  normalizeServiceProjection,
+  type ServiceProjection,
+} from '@shared/connections';
+import { normalizeUseSummary, type UseSummary } from './donationUses';
+import { normalizeSessionHeaders, type SessionHeader } from '@shared/sessionHeaders';
+export type { SessionHeader } from '@shared/sessionHeaders';
+import { normalizeCloudflareProxyMode, type CloudflareProxyMode } from '@shared/cloudflareProxy';
+import {
   normalizeRecurringDiscount,
   normalizeEffectiveDiscount,
   type RecurringDiscount,
@@ -76,9 +85,16 @@ type CharityConnectorType =
   | 'openai-compatible'
   | 'anthropic-compatible'
   | 'ai-sdk-gateway-v3'
+  | 'ai-sdk-gateway-v4'
   | 'google-gemini'
   | 'openai-responses'
-  | 'openai-decisions';
+  | 'openai-decisions'
+  | 'cohere-rerank'
+  | 'jina-rerank'
+  | 'siliconflow-rerank'
+  | 'voyage-rerank'
+  | 'typesafe-systemone'
+  | 'openai-chat-completions';
 
 export type ManagedSafeSource =
   | {
@@ -97,6 +113,7 @@ export type ManagedSafeSource =
     };
 
 export interface ManagedDonationKey extends SmartBackoffFields {
+  can_manage?: boolean;
   review?: { required: boolean; revision: string | null; material_available: boolean };
   failure_disable_threshold: string;
   binding_count: string;
@@ -144,6 +161,7 @@ export interface ManagedDonationKey extends SmartBackoffFields {
 }
 
 interface DonationCommon {
+  use_summary?: UseSummary;
   first_approval_origin?: 'auto' | 'manual' | 'unknown' | 'none';
   can_force_reject?: boolean;
   force_reject_unavailable_reason?: string | null;
@@ -203,9 +221,16 @@ export function normalizeManagedSource(
       'openai-compatible',
       'anthropic-compatible',
       'ai-sdk-gateway-v3',
+      'ai-sdk-gateway-v4',
       'google-gemini',
       'openai-responses',
       'openai-decisions',
+      'cohere-rerank',
+      'jina-rerank',
+      'siliconflow-rerank',
+      'voyage-rerank',
+      'typesafe-systemone',
+      'openai-chat-completions',
     ] as const,
     `${label} connector`,
   );
@@ -293,6 +318,7 @@ export function normalizeManagedKey(
       'output_token_reserve',
       'breakdown_started_at',
       'review',
+      'can_manage',
     ],
     label,
     required,
@@ -374,6 +400,9 @@ export function normalizeManagedKey(
     invalidResponse(`${label} expiry authorization`);
   }
   return {
+    ...(root.can_manage === undefined
+      ? {}
+      : { can_manage: boolean(root.can_manage, `${label} management capability`) }),
     ...(root.review === undefined
       ? {}
       : {
@@ -574,6 +603,9 @@ function normalizeDonationCommon(root: ReturnType<typeof record>, label: string)
   if (status === 'rejected' && review?.decision !== 'reject' && review?.decision !== 'force_reject')
     invalidResponse(`${label} rejected review`);
   return {
+    ...(root.use_summary === undefined
+      ? {}
+      : { use_summary: normalizeUseSummary(root.use_summary) }),
     first_approval_origin:
       root.first_approval_origin === undefined
         ? 'unknown'
@@ -623,6 +655,7 @@ export function normalizeAdminDonation(value: unknown): AdminDonation {
     'reviewer',
     'created_at',
     'updated_at',
+    'use_summary',
     'first_approval_origin',
     'can_force_reject',
     'force_reject_unavailable_reason',
@@ -635,6 +668,7 @@ export function normalizeAdminDonation(value: unknown): AdminDonation {
       (field) =>
         ![
           'discord_public_thanks',
+          'use_summary',
           'first_approval_origin',
           'can_force_reject',
           'force_reject_unavailable_reason',
@@ -674,6 +708,7 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
     'reviewer',
     'created_at',
     'updated_at',
+    'use_summary',
     'first_approval_origin',
     'can_force_reject',
     'force_reject_unavailable_reason',
@@ -686,6 +721,7 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
       (field) =>
         ![
           'discord_public_thanks',
+          'use_summary',
           'first_approval_origin',
           'can_force_reject',
           'force_reject_unavailable_reason',
@@ -709,12 +745,9 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
   };
 }
 
-export interface SessionHeader {
-  name: string;
-  idle_seconds: number;
-  format: 'uuid_v4' | 'hex_32';
-}
 export interface CharityModel {
+  cloudflare_proxy_enabled: boolean;
+  cloudflare_proxy_mode: CloudflareProxyMode;
   session_headers?: SessionHeader[];
   model_types: import('@shared/modelTypes').ModelType[];
   transport_rule: TransportRule;
@@ -732,10 +765,20 @@ export interface CharityModel {
   public_description: string;
   token_reserve_credits: string | null;
   pricing: (
-    | { mode: 'per_request'; user_price: string; donor_reward: string }
+    | { mode: 'per_request' | 'per_search_unit'; user_price: string; donor_reward: string }
     | { mode: 'per_token'; user_prices: TokenPrices; donor_rewards: TokenPrices }
   ) & {
-    long_context?: { input_threshold: string; user_price?: string; user_prices?: TokenPrices };
+    user_modalities?: ModalityPricing;
+    donor_modalities?: ModalityPricing;
+    long_context?: {
+      input_threshold: string;
+      user_price?: string;
+      user_prices?: TokenPrices;
+      donor_reward?: string;
+      donor_rewards?: TokenPrices;
+      user_modalities?: ModalityPricing;
+      donor_modalities?: ModalityPricing;
+    };
     context_penalty?: { input_threshold: string; fine: string };
   };
   discount: { enabled: boolean; percent: number; start_at: number | null; end_at: number | null };
@@ -750,6 +793,32 @@ export interface CharityModel {
   created_at: number;
   updated_at: number;
 }
+export interface ModalityPricing {
+  input_enabled: boolean;
+  output_enabled: boolean;
+  text?: TokenPrices;
+  image?: TokenPrices;
+  audio?: TokenPrices;
+  video?: TokenPrices;
+}
+export const MODALITIES = ['text', 'image', 'audio', 'video'] as const;
+
+export function normalizeModalityPricing(value: unknown, label: string): ModalityPricing {
+  const root = record(value, ['input_enabled', 'output_enabled', ...MODALITIES], label, [
+    'input_enabled',
+    'output_enabled',
+  ]);
+  const result: ModalityPricing = {
+    input_enabled: boolean(root.input_enabled, label),
+    output_enabled: boolean(root.output_enabled, label),
+  };
+  for (const modality of MODALITIES) {
+    if (root[modality] != null)
+      result[modality] = normalizeTokenPrices(root[modality], label + ' ' + modality);
+  }
+  return result;
+}
+
 export interface TokenPrices {
   uncached_input: string;
   cache_write_input: string;
@@ -757,7 +826,8 @@ export interface TokenPrices {
   output: string;
 }
 
-export interface CharityBinding {
+export interface CharityBinding extends Partial<ServiceProjection> {
+  targets?: CharityTarget[];
   gateway_capabilities?: GatewayCapabilityPolicy | null;
   id: string;
   ord: number;
@@ -815,17 +885,19 @@ export function normalizeCharityPriceConfig(
       'donor_rewards',
       'long_context',
       'context_penalty',
+      'user_modalities',
+      'donor_modalities',
     ],
     `${label} pricing`,
     ['mode'],
   );
   const mode = oneOf(
     pricingRoot.mode,
-    ['per_request', 'per_token'] as const,
+    ['per_request', 'per_token', 'per_search_unit'] as const,
     `${label} pricing mode`,
   );
   let pricing: CharityModel['pricing'];
-  if (mode === 'per_request') {
+  if (mode !== 'per_token') {
     if (
       !Object.hasOwn(pricingRoot, 'user_price') ||
       !Object.hasOwn(pricingRoot, 'donor_reward') ||
@@ -852,10 +924,22 @@ export function normalizeCharityPriceConfig(
       donor_rewards: normalizeTokenPrices(pricingRoot.donor_rewards, `${label} donor rewards`),
     };
   }
+  for (const side of ['user_modalities', 'donor_modalities'] as const) {
+    if (pricingRoot[side] != null)
+      pricing[side] = normalizeModalityPricing(pricingRoot[side], label + ' ' + side);
+  }
   if (pricingRoot.long_context != null) {
     const long = record(
       pricingRoot.long_context,
-      ['input_threshold', 'user_price', 'user_prices'],
+      [
+        'input_threshold',
+        'user_price',
+        'user_prices',
+        'donor_reward',
+        'donor_rewards',
+        'user_modalities',
+        'donor_modalities',
+      ],
       'long context',
       ['input_threshold'],
     );
@@ -865,6 +949,21 @@ export function normalizeCharityPriceConfig(
         ? { user_price: amount(long.user_price, 'long context price', false) }
         : { user_prices: normalizeTokenPrices(long.user_prices, 'long context prices') }),
     };
+  }
+  for (const side of ['user_modalities', 'donor_modalities'] as const) {
+    const long = pricingRoot.long_context as Record<string, unknown> | undefined;
+    if (long?.[side] != null && pricing.long_context)
+      pricing.long_context[side] = normalizeModalityPricing(long[side], label + ' long ' + side);
+  }
+  if (pricing.long_context) {
+    const long = pricingRoot.long_context as Record<string, unknown>;
+    if (long.donor_reward != null)
+      pricing.long_context.donor_reward = amount(long.donor_reward, 'long context reward', false);
+    if (long.donor_rewards != null)
+      pricing.long_context.donor_rewards = normalizeTokenPrices(
+        long.donor_rewards,
+        'long context rewards',
+      );
   }
   if (pricingRoot.context_penalty != null) {
     const penalty = record(
@@ -918,6 +1017,8 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     'effective_discount',
     'server_now',
     'flatten_tool_calls',
+    'cloudflare_proxy_enabled',
+    'cloudflare_proxy_mode',
     'transport_rule',
     'revision',
     'binding_revision',
@@ -965,18 +1066,13 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     (percent !== null && !/^(0|[1-9][0-9]?|100)(\.[0-9]{1,2})?$/.test(percent))
   )
     invalidResponse(`${label} success percent`);
-  const sessionHeaders =
-    root.session_headers === undefined
-      ? []
-      : array(root.session_headers, label + ' session headers', 16).map((v) => {
-          const entry = record(v, ['name', 'idle_seconds', 'format'], label + ' session header');
-          return {
-            name: string(entry.name, label + ' header name', { min: 1 }),
-            idle_seconds: integer(entry.idle_seconds, label + ' header idle', 1, 86400),
-            format: oneOf(entry.format, ['uuid_v4', 'hex_32'] as const, label + ' header format'),
-          };
-        });
+  const sessionHeaders = normalizeSessionHeaders(root.session_headers);
   return {
+    cloudflare_proxy_enabled: boolean(
+      root.cloudflare_proxy_enabled,
+      `${label} Cloudflare proxy setting`,
+    ),
+    cloudflare_proxy_mode: normalizeCloudflareProxyMode(root.cloudflare_proxy_mode),
     session_headers: sessionHeaders,
     id: decimalID(root.id, `${label} id`),
     provider,
@@ -1106,9 +1202,16 @@ function normalizeSource(value: unknown, label: string): CharityBinding['source'
         'openai-compatible',
         'anthropic-compatible',
         'ai-sdk-gateway-v3',
+        'ai-sdk-gateway-v4',
         'google-gemini',
         'openai-responses',
         'openai-decisions',
+        'cohere-rerank',
+        'jina-rerank',
+        'siliconflow-rerank',
+        'voyage-rerank',
+        'typesafe-systemone',
+        'openai-chat-completions',
       ] as const,
       `${label} connector`,
     ),
@@ -1132,7 +1235,7 @@ function normalizeCandidateSourceTypes(value: unknown, label: string): ('automat
   return values;
 }
 
-function normalizeBinding(value: unknown, label: string): CharityBinding {
+function normalizeLegacyBinding(value: unknown, label: string): CharityBinding {
   const root = record(
     value,
     [
@@ -1170,7 +1273,7 @@ function normalizeBinding(value: unknown, label: string): CharityBinding {
   };
 }
 
-export function normalizeCharityBindingCandidate(
+function normalizeLegacyCharityBindingCandidate(
   value: unknown,
   label: string,
   requireBindingMarkers = false,
@@ -1498,7 +1601,11 @@ export const addManagedBindings = (
   role: CharityRole,
   id: string,
   revision: string,
-  selections: { donation_key_id: string; upstream_model_id: string }[],
+  selections: {
+    donation_key_id: string;
+    upstream_model_id: string;
+    native_services?: import('@shared/nativeServices').NativeService[];
+  }[],
   key: string,
 ) =>
   decoded(
@@ -1506,7 +1613,12 @@ export const addManagedBindings = (
     (value) => normalizeBindings(value, `${role} charity bindings`),
     idempotentOptions(key, {
       method: 'POST',
-      json: { expected_binding_revision: revision, selections },
+      json: {
+        expected_binding_revision: revision,
+        selections: selections.map(({ native_services, ...flat }) =>
+          native_services === undefined ? flat : { targets: [{ ...flat, native_services }] },
+        ),
+      },
     }),
   );
 export interface BindingBatchReceipt {
@@ -1520,7 +1632,11 @@ export const addManagedBindingsReceipt = (
   role: CharityRole,
   id: string,
   revision: string,
-  selections: { donation_key_id: string; upstream_model_id: string }[],
+  selections: {
+    donation_key_id: string;
+    upstream_model_id: string;
+    native_services?: import('@shared/nativeServices').NativeService[];
+  }[],
   key: string,
 ): Promise<BindingBatchReceipt> =>
   decoded(
@@ -1548,30 +1664,160 @@ export const addManagedBindingsReceipt = (
     },
     idempotentOptions(key, {
       method: 'POST',
-      json: { expected_binding_revision: revision, selections },
+      json: {
+        expected_binding_revision: revision,
+        selections: selections.map(({ native_services, ...flat }) =>
+          native_services === undefined ? flat : { targets: [{ ...flat, native_services }] },
+        ),
+      },
     }),
   );
-export const orderManagedBindings = (
+export const orderManagedBindings = async (
   role: CharityRole,
   id: string,
   revision: string,
   order: string[],
   key: string,
-) =>
-  decoded(
-    `${base(role)}/charity-models/${encodeURIComponent(decimalID(id, `${role} charity model id`))}/bindings/order`,
-    (value) => normalizeBindings(value, `${role} charity bindings`),
-    idempotentOptions(key, { method: 'PUT', json: { expected_binding_revision: revision, order } }),
+) => {
+  await decoded(
+    `${base(role)}/charity-models/${encodeURIComponent(decimalID(id, 'charity model id'))}/bindings/order`,
+    () => undefined,
+    idempotentOptions(key, {
+      method: 'PUT',
+      json: { expected_binding_revision: revision, order, response: 'receipt' },
+    }),
   );
-export const deleteManagedBinding = (
+  return getManagedBindings(role, id);
+};
+export const deleteManagedBinding = async (
   role: CharityRole,
   modelID: string,
   bindingID: string,
   revision: string,
   key: string,
-) =>
-  decoded(
-    `${base(role)}/charity-models/${encodeURIComponent(decimalID(modelID, `${role} charity model id`))}/bindings/${encodeURIComponent(decimalID(bindingID, `${role} charity binding id`))}`,
-    (value) => normalizeBindings(value, `${role} charity bindings`),
-    idempotentOptions(key, { method: 'DELETE', json: { expected_binding_revision: revision } }),
+) => {
+  await decoded(
+    `${base(role)}/charity-models/${encodeURIComponent(decimalID(modelID, 'charity model id'))}/bindings/${encodeURIComponent(decimalID(bindingID, 'charity binding id'))}`,
+    () => undefined,
+    idempotentOptions(key, {
+      method: 'DELETE',
+      json: { expected_binding_revision: revision, response: 'receipt' },
+    }),
   );
+  return getManagedBindings(role, modelID);
+};
+
+export interface CharityTarget extends ServiceProjection {
+  id: string;
+  revision: string;
+  donation_key_id: string;
+  upstream_model_id: string;
+  donation_id: string;
+  endpoint_id: string;
+  connector_type: CharityConnectorType;
+  configuration_type: CharityConnectorType;
+  base_url: string;
+  uses: {
+    use_id: string;
+    native_service: import('@shared/nativeServices').NativeService;
+    credential_id: string;
+    credential_version: string;
+    grant_revision: string;
+    revision: string;
+  }[];
+}
+function normalizeCharityTarget(value: unknown): CharityTarget {
+  const row = record(
+    value,
+    [
+      'id',
+      'revision',
+      'donation_id',
+      'endpoint_id',
+      'donation_key_id',
+      'upstream_model_id',
+      'native_services',
+      'model_types',
+      'service_routes',
+      'capabilities',
+      'uses',
+      'connector_type',
+      'configuration_type',
+      'base_url',
+    ],
+    'charity target',
+  );
+  return {
+    id: decimalID(row.id, 'target'),
+    revision: decimalID(row.revision, 'target revision'),
+    donation_id: decimalID(row.donation_id, 'donation'),
+    endpoint_id: decimalID(row.endpoint_id, 'endpoint'),
+    connector_type: normalizeSource(
+      {
+        connector_type: row.connector_type,
+        canonical_base_url: row.base_url,
+        display_head: '',
+        display_tail: '',
+      },
+      'target source',
+    ).connector_type,
+    configuration_type: normalizeSource(
+      {
+        connector_type: row.configuration_type,
+        canonical_base_url: row.base_url,
+        display_head: '',
+        display_tail: '',
+      },
+      'target configuration',
+    ).connector_type,
+    base_url: string(row.base_url, 'target URL'),
+    donation_key_id: decimalID(row.donation_key_id, 'donation key'),
+    upstream_model_id: string(row.upstream_model_id, 'target model'),
+    ...normalizeServiceProjection(value),
+    uses: array(row.uses, 'approved uses').map((value) => {
+      const use = record(
+        value,
+        [
+          'use_id',
+          'native_service',
+          'credential_id',
+          'credential_version',
+          'grant_revision',
+          'revision',
+        ],
+        'target approved use',
+      );
+      return {
+        use_id: decimalID(use.use_id, 'use'),
+        native_service: normalizeNativeServices([use.native_service])[0]!,
+        credential_id: decimalID(use.credential_id, 'credential'),
+        credential_version: decimalID(use.credential_version, 'version'),
+        grant_revision: decimalID(use.grant_revision, 'grant revision'),
+        revision: decimalID(use.revision, 'use revision'),
+      };
+    }),
+  };
+}
+function normalizeBinding(value: unknown, label: string): CharityBinding {
+  const base = normalizeLegacyBinding(value, label);
+  const row = value as Record<string, unknown>;
+  return {
+    ...base,
+    ...(row.native_services === undefined ? {} : normalizeServiceProjection(value)),
+    ...(row.targets === undefined
+      ? {}
+      : { targets: array(row.targets, 'binding targets').map(normalizeCharityTarget) }),
+  };
+}
+export function normalizeCharityBindingCandidate(
+  value: unknown,
+  label: string,
+  requireBindingMarkers = false,
+): CharityBindingCandidate {
+  const base = normalizeLegacyCharityBindingCandidate(value, label, requireBindingMarkers);
+  const row = value as Record<string, unknown>;
+  return {
+    ...base,
+    ...(row.native_services === undefined ? {} : normalizeServiceProjection(value)),
+  };
+}

@@ -179,6 +179,7 @@ VALUES(?,'pending',1,?,'','',?,?,?)`, userID, input.Description, now, now, input
 	one := db.U128{}
 	one[15] = 1
 	defaultSettings := make([]KeySetting, 0, len(keys))
+	members := make(map[int64]int64, len(keys))
 	for _, key := range keys {
 		result, err = tx.ExecContext(ctx, `INSERT INTO donation_keys(
 donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,
@@ -198,6 +199,7 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		if err != nil || donationKeyID <= 0 {
 			return Donation{}, ErrInvariant
 		}
+		members[key.id] = donationKeyID
 		required, err := s.reviewMaterial.CaptureDonationKey(ctx, tx, donationKeyID, key.id, time.Unix(now, 0))
 		if err != nil {
 			return Donation{}, mapReviewError(err)
@@ -236,6 +238,11 @@ WHERE id=? AND status='pending' AND revision=1`, now, now, donationID)
 donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at)
 VALUES(?,1,NULL,'','approve','',?)`, donationID, now); err != nil {
 			return Donation{}, fmt.Errorf("donation: record automatic approval: %w", err)
+		}
+	}
+	for _, key := range keys {
+		if err := createInitialUsesTx(ctx, tx, members[key.id], key.use, autoApprove, now); err != nil {
+			return Donation{}, err
 		}
 	}
 	value, err := getOwnerDonationTx(ctx, tx, userID, donationID, now)
@@ -575,6 +582,9 @@ VALUES(?,?,?,?,?,?,?)`, donationID, revision+1, actorID, role, input.Decision, i
 		if err := s.reviewMaterial.ApproveDonationKeys(ctx, tx, donationID, approvals, time.Unix(now, 0)); err != nil {
 			return mapReviewError(err)
 		}
+		if err := s.approveInitialUsesTx(ctx, tx, donationID, actorID, role, input.KeySettings, input.Reason, now); err != nil {
+			return err
+		}
 	}
 
 	if err := applyApprovalKeySettingsTx(ctx, tx, donationID, input.KeySettings, now); err != nil {
@@ -826,7 +836,14 @@ func (s *Service) manageKey(
 	} else if err != nil {
 		return roleDonationMutation{}, fmt.Errorf("donation: read key management state: %w", err)
 	}
-	if status != "approved" || revision != input.ExpectedRevision {
+	if status != "approved" && status != "pending" || revision != input.ExpectedRevision {
+		return roleDonationMutation{}, ErrConflict
+	}
+	keyState, err := readResetKeyTx(ctx, tx, donationID, keyID, now)
+	if err != nil {
+		return roleDonationMutation{}, err
+	}
+	if !keyState.eligible {
 		return roleDonationMutation{}, ErrConflict
 	}
 	if err := manageDonationKeyTx(ctx, tx, donationID, keyID, actorID, scope.AuditRole(role == reviewerAdmin), input, now); err != nil {
@@ -947,7 +964,7 @@ func receiptBindingCount(ctx context.Context, tx *sql.Tx, donationID int64, keyT
 		return 0, ErrInvariant
 	}
 	var count int64
-	err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM charity_model_bindings b
+	err = tx.QueryRowContext(ctx, `SELECT COUNT(DISTINCT b.binding_id) FROM charity_binding_targets b
 JOIN donation_keys dk ON dk.id=b.donation_key_id WHERE dk.donation_id=? AND dk.id=?`, donationID, keyID).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("donation: read receipt binding count: %w", err)
@@ -1070,7 +1087,7 @@ WHERE id=? AND donation_id=? AND ended_at IS NULL`, args...)
 		return err
 	}
 	result, err = tx.ExecContext(ctx, `UPDATE donations SET revision=revision+1,updated_at=?
-WHERE id=? AND status='approved' AND revision=?`, now, donationID, input.ExpectedRevision)
+WHERE id=? AND status IN ('pending','approved') AND terminal_at IS NULL AND revision=?`, now, donationID, input.ExpectedRevision)
 	if err != nil {
 		return fmt.Errorf("donation: advance managed revision: %w", err)
 	}
@@ -1171,6 +1188,7 @@ func (s *Service) materializeRoleExpiryStandalone(
 }
 
 type submissionKey struct {
+	use                            useSubmission
 	failureDisableThreshold        db.U128
 	id                             int64
 	head, tail, baseURL, connector string
@@ -1229,7 +1247,7 @@ func validateSubmissionKeys(ctx context.Context, tx *sql.Tx, userID int64, input
 	rows, err := tx.QueryContext(ctx, `SELECT k.id,k.display_head,k.display_tail,e.base_url,e.connector_type,
 k.secret_fingerprint,e.mainstream_channel_id,e.mainstream_channel_revision,
 e.mainstream_channel_name,e.mainstream_channel_category
-FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id
+FROM endpoint_key_current_credentials k JOIN endpoints e ON e.id=k.endpoint_id
 WHERE e.user_id=? AND k.id IN (`+placeholders+`)
 AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)
 AND NOT EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.endpoint_key_id=k.id)
@@ -1255,6 +1273,12 @@ ORDER BY k.id`, args...)
 	}
 	if len(keys) != len(ids) {
 		return nil, ErrNotFound
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := attachSubmissionUsesTx(ctx, tx, userID, inputs, keys); err != nil {
+		return nil, err
 	}
 	return keys, nil
 }

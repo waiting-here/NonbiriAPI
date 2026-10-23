@@ -271,7 +271,7 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 			result.Committed = sink.Committed()
 		}()
 	}
-	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx),
+	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), Rules: smartbackoff.RulesFromContext(ctx),
 		BaseURL: target.baseURL, PrivateModel: target.upstreamModel,
 		ContainsSecret: func(value []byte) bool {
 			scanner := wireGuard.clone()

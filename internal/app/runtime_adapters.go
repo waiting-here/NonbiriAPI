@@ -111,6 +111,10 @@ func loadRuntimeLimits(ctx context.Context, store *db.Store) (ratelimit.RPMConfi
 	if err != nil {
 		return ratelimit.RPMConfig{}, egress.ConcurrencyLimits{}, err
 	}
+	lightRPM, err := parse(adminapi.KeyDefaultLightRPMPerUser, 4096)
+	if err != nil {
+		return ratelimit.RPMConfig{}, egress.ConcurrencyLimits{}, err
+	}
 	globalUserRPM, err := parse(adminapi.KeyGlobalRPMPerUser, 4096)
 	if err != nil {
 		return ratelimit.RPMConfig{}, egress.ConcurrencyLimits{}, err
@@ -127,6 +131,7 @@ func loadRuntimeLimits(ctx context.Context, store *db.Store) (ratelimit.RPMConfi
 	rpm.GlobalLimit = globalRPM
 	rpm.PerUserLimit = globalUserRPM
 	rpm.CharityPerUserLimit = defaultRPM
+	rpm.LightCharityPerUserLimit = lightRPM
 	return rpm, egress.ConcurrencyLimits{Global: egressGlobal, PerEndpoint: egressPerEndpoint}, nil
 }
 
@@ -372,4 +377,10 @@ func (fanout *userSessionInvalidationFanout) UserMFAChanged(userID int64) {
 
 func (fanout *userSessionInvalidationFanout) InvalidateUserAuthority(userID int64) {
 	fanout.UserSessionInvalidated(userID)
+}
+
+func (fanout *userSessionInvalidationFanout) UserLimitsChanged(userID int64) {
+	if fanout != nil && userID > 0 && fanout.limitsChanged != nil {
+		fanout.limitsChanged(userID)
+	}
 }

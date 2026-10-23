@@ -1,4 +1,6 @@
 import { artSourceSet } from './art-resolution';
+import { ArtworkImage, ArtworkBadge } from '@shared/artwork/ArtworkImage';
+import { useArtworkPolicy } from '@shared/artwork/context';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Button } from '@shared/components/ui/Button';
 import { Icon } from '@shared/components/Icon';
@@ -42,6 +44,7 @@ export function DrawReveal({
   replay?: boolean;
 }) {
   const t = (zh: string, en: string) => (english ? en : zh);
+  const artworkPolicy = useArtworkPolicy();
   const required = receipt.items.flatMap((item, i) =>
     !replay && !item.duplicate && isRare(cardById[item.card_id].rarity) ? [i] : [],
   );
@@ -149,15 +152,18 @@ export function DrawReveal({
     };
     document.addEventListener('visibilitychange', visibility);
     for (const item of receipt.items) {
+      const card = cardById[item.card_id];
+      if (!artworkPolicy.allowed('card:' + card.id) || !artworkPolicy.sourceAllowed(card.art))
+        continue;
       const image = new Image();
-      image.src = cardById[item.card_id].art;
+      image.src = card.art;
     }
     return () => {
       document.removeEventListener('visibilitychange', visibility);
       navigator.vibrate?.(0);
       audio.stopEffects();
     };
-  }, [receipt, audio]);
+  }, [receipt, audio, artworkPolicy]);
   useEffect(() => {
     if (!cueKey || preferences.reduced || hidden || paused || cues.current.has(cueKey)) return;
     const timer = window.setTimeout(() => {
@@ -318,6 +324,9 @@ export function DrawReveal({
                     <span className="gacha-draw-face gacha-draw-back" aria-hidden="true" />
                     <span className="gacha-draw-face gacha-draw-front" aria-hidden={!open}>
                       <Artwork card={c} animated={false} />
+                      {open && receipt.items.length > 1 && (
+                        <ArtworkBadge artworkKey={'card:' + c.id} />
+                      )}
                       <span className="gacha-draw-rarity">{c.rarity}</span>
                       {!item.duplicate && <span className="gacha-draw-new">NEW</span>}
                       <span className="gacha-draw-name">
@@ -357,7 +366,9 @@ export function DrawReveal({
             data-card-id={card.id}
             data-rarity={card.rarity}
           >
-            <img
+            <ArtworkImage
+              artworkKey={'illustration:' + card.theme}
+              fallbackSrc="/assets/gacha/covers/permanent.webp"
               className="gacha-cinema__scenery"
               src={themeById[card.theme].art}
               srcSet={artSourceSet(

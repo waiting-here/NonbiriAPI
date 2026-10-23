@@ -60,6 +60,7 @@ func TestLoadManyBatchesScopedIDsAtOneSnapshot(t *testing.T) {
 	driverName := fmt.Sprintf("adaptation-query-counter-%d", queryCounterNames.Add(1))
 	sql.Register(driverName, queryCounterDriver{&count})
 	store, database := testStoreDriver(t, driverName, filepath.Join(t.TempDir(), "adaptation.sqlite"))
+	database.SetMaxOpenConns(1)
 	if _, err := database.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		t.Fatal(err)
 	}
@@ -80,9 +81,12 @@ func TestLoadManyBatchesScopedIDsAtOneSnapshot(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// A writer commits while the reader is decrypting its first row. Every
-	// subsequent row must still belong to the original SQL snapshot.
+	// A writer commits after the captured SQL snapshot is released and while
+	// its first row is decoded. Later rows retain that original snapshot.
 	store.codec = &openHookCodec{GenerationTwoContextCodec: store.codec, afterFirst: func() {
+		if database.Stats().InUse != 0 {
+			t.Fatal("decoding retained the SQL snapshot")
+		}
 		if _, err := database.Exec("UPDATE request_adaptations SET revision=2 WHERE scope='binding'"); err != nil {
 			t.Fatal(err)
 		}
@@ -117,6 +121,36 @@ func TestLoadManyBatchesScopedIDsAtOneSnapshot(t *testing.T) {
 	}
 	if got, err := store.LoadMany(t.Context(), []Ref{{ScopeEndpoint, 3}}); !errors.Is(err, ErrUnavailable) || got != nil {
 		t.Fatal("transplanted envelope accepted in batch", err)
+	}
+}
+
+func TestLoadManyTargetCapacityKeepsOneSnapshot(t *testing.T) {
+	var count atomic.Int64
+	driverName := fmt.Sprintf("adaptation-capacity-counter-%d", queryCounterNames.Add(1))
+	sql.Register(driverName, queryCounterDriver{&count})
+	store, _ := testStoreDriver(t, driverName, filepath.Join(t.TempDir(), "adaptation.sqlite"))
+	refs := make([]Ref, 512)
+	for i := range refs {
+		refs[i] = Ref{ScopeEndpoint, int64(i + 1)}
+	}
+	// Multiple wires for one endpoint still read one configuration record.
+	refs = append(refs, refs...)
+	count.Store(0)
+	snapshots, err := store.LoadMany(t.Context(), refs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		for _, snapshot := range snapshots {
+			snapshot.Clear()
+		}
+	}()
+	if len(snapshots) != 512 || count.Load() != 1 {
+		t.Fatalf("got %d configurations in %d queries", len(snapshots), count.Load())
+	}
+	refs = append(refs, Ref{ScopeEndpoint, 513})
+	if _, err := store.LoadMany(t.Context(), refs); !errors.Is(err, ErrInvalid) || count.Load() != 1 {
+		t.Fatalf("oversized set reached storage: %v", err)
 	}
 }
 

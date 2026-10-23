@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -124,22 +125,21 @@ func seedDiscoveryRecoveryRoot(
 	operationHash[0] = byte(discriminator)
 	payloadHash := make([]byte, 32)
 	payloadHash[0] = byte(discriminator + 1)
-	checkpoint := key.ID + ":2"
 	tx, err := environment.store.DB().BeginTx(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("begin recovery seed: %v", err)
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`UPDATE model_discovery_evidence
-SET state='checking',revision=2,operation_hash=?,safe_class='none',safe_diag='',started_at=?,completed_at=NULL,fetched_count=0
-WHERE endpoint_key_id=?`, operationHash, startedAt, keyID); err != nil {
-		t.Fatalf("seed checking evidence: %v", err)
-	}
 	if _, err := tx.Exec(`INSERT INTO accepted_operations(
 id,kind,actor_user_id,actor_role,payload_hash,state,checkpoint,last_error_class,created_at,terminal_at)
 VALUES(?,'model_discovery',?,'user',?,'accepted',?,NULL,?,NULL)`,
-		operationID, userID, payloadHash, checkpoint, startedAt); err != nil {
+		operationID, userID, payloadHash, "", startedAt); err != nil {
 		t.Fatalf("seed accepted discovery operation: %v", err)
+	}
+	source := seedResourceCheckingDiscoveryTx(t, tx, keyID, operationID, operationHash, startedAt, "")
+	checkpoint := fmt.Sprintf("source:%d:%d", source.SourceRevisionID, source.ResultGeneration)
+	if _, err := tx.Exec("UPDATE accepted_operations SET checkpoint=? WHERE id=?", checkpoint, operationID); err != nil {
+		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {
 		t.Fatalf("commit recovery seed: %v", err)

@@ -154,8 +154,11 @@ func TestSiteConfigHTTPReadContracts(t *testing.T) {
 	if err := json.Unmarshal(bootstrap.Body.Bytes(), &bootstrapWire); err != nil {
 		t.Fatal(err)
 	}
-	if len(bootstrapWire) != 12 {
-		t.Fatalf("bootstrap field count=%d, want 12: %v", len(bootstrapWire), bootstrapWire)
+	if len(bootstrapWire) != 13 {
+		t.Fatalf("bootstrap field count=%d, want 13: %v", len(bootstrapWire), bootstrapWire)
+	}
+	if bootstrapWire["artwork_r18_disabled"] != true {
+		t.Fatal("administrator bootstrap did not preserve the safe artwork default")
 	}
 	if _, stale := bootstrapWire["default_locale"]; stale {
 		t.Fatal("stale default_locale leaked into administrator bootstrap")

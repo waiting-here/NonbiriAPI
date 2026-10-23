@@ -30,6 +30,18 @@ it('ships each new SP surface and registered moment layer in both resolutions', 
         (mode) => '/assets/gacha/appearances/' + appearance + '-' + mode + '.webp',
       ),
     ];
+    const appearanceLayers = composition.cards[id].appearance_layers;
+    if (appearanceLayers) {
+      for (const mode of ['light', 'dark']) {
+        const filename = appearanceLayers.character.replace('{light,dark}', mode);
+        const file = resolve('public/assets/gacha', filename);
+        expect(statSync(file).size, filename).toBeGreaterThan(1000);
+        expect(readFileSync(file).subarray(8, 12).toString(), filename).toBe('WEBP');
+        if (appearanceLayers.character_high_resolution) images.push('/assets/gacha/' + filename);
+      }
+      for (const filename of [appearanceLayers.reflection, appearanceLayers.light].filter(Boolean))
+        images.push('/assets/gacha/' + filename);
+    }
     for (const src of [...images, ...images.map(highResolutionArt), card.thumb]) {
       const file = resolve('public', '.' + src);
       expect(statSync(file).size, src).toBeGreaterThan(1000);

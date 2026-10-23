@@ -46,6 +46,11 @@ func TestPersonalCharityReadsExcludeProfilesAndRequireLiveLevelSix(t *testing.T)
 	}
 	bindBody := fmt.Sprintf(`{"endpoint_key_ids":["%s"],"upstream_model_id":"exact/model"}`, key)
 	decodeBatch(t, f.request(f.ctx, "POST", f.bindingPath(), strings.Repeat("M", 22), bindBody), 200)
+	manual := charityrouting.ManualCatalogInput{Entries: []string{"exact/model"}, ExpectedManualCatalogRevision: "1"}
+	if _, err := f.service.charity.MutateManualCatalog(steward, false, f.userID, dID, memberID, 0,
+		automationMutation("N", "POST", "/api/steward/donations/{id}/keys/{keyId}/models/manual", []string{donationID, member}, manual), manual); err != nil {
+		t.Fatal(err)
+	}
 	price, reward := "0", "0"
 	modelInput := charityrouting.ModelCreate{Provider: "safe", Model: "charity", Enabled: true, Pricing: charityrouting.PricingInput{Mode: "per_request", UserPrice: &price, DonorReward: &reward}}
 	model, err := f.service.charity.CreateSteward(steward, f.userID, automationMutation("C", "POST", "/api/steward/charity-models", nil, modelInput), modelInput)

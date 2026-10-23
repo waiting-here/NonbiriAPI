@@ -9,63 +9,74 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
 type createModelRequest struct {
-	ModelTypes       requestField[modeltype.Set]        `json:"model_types"`
-	TransportRule    requestField[transportpolicy.Rule] `json:"transport_rule"`
-	RolePolicy       requestField[rolepolicy.Policy]    `json:"role_policy"`
-	Provider         requestField[string]               `json:"provider"`
-	Model            requestField[string]               `json:"model"`
-	RouteStrategy    requestField[string]               `json:"route_strategy"`
-	SilentRetry      requestField[bool]                 `json:"silent_retry"`
-	FlattenToolCalls requestField[bool]                 `json:"flatten_tool_calls"`
+	SessionHeaders         requestField[[]sessionheader.Config] `json:"session_headers"`
+	CloudflareProxyEnabled requestField[bool]                   `json:"cloudflare_proxy_enabled"`
+	ModelTypes             requestField[modeltype.Set]          `json:"model_types"`
+	TransportRule          requestField[transportpolicy.Rule]   `json:"transport_rule"`
+	RolePolicy             requestField[rolepolicy.Policy]      `json:"role_policy"`
+	Provider               requestField[string]                 `json:"provider"`
+	Model                  requestField[string]                 `json:"model"`
+	RouteStrategy          requestField[string]                 `json:"route_strategy"`
+	SilentRetry            requestField[bool]                   `json:"silent_retry"`
+	FlattenToolCalls       requestField[bool]                   `json:"flatten_tool_calls"`
 }
 
 type createModelCanonical struct {
-	ModelTypes       *modeltype.Set        `json:"model_types,omitempty"`
-	TransportRule    *transportpolicy.Rule `json:"transport_rule,omitempty"`
-	RolePolicy       *rolepolicy.Policy    `json:"role_policy,omitempty"`
-	Provider         string                `json:"provider"`
-	Model            string                `json:"model"`
-	RouteStrategy    *string               `json:"route_strategy,omitempty"`
-	SilentRetry      *bool                 `json:"silent_retry,omitempty"`
-	FlattenToolCalls *bool                 `json:"flatten_tool_calls,omitempty"`
+	SessionHeaders         *[]sessionheader.Config `json:"session_headers,omitempty"`
+	CloudflareProxyEnabled *bool                   `json:"cloudflare_proxy_enabled,omitempty"`
+	ModelTypes             *modeltype.Set          `json:"model_types,omitempty"`
+	TransportRule          *transportpolicy.Rule   `json:"transport_rule,omitempty"`
+	RolePolicy             *rolepolicy.Policy      `json:"role_policy,omitempty"`
+	Provider               string                  `json:"provider"`
+	Model                  string                  `json:"model"`
+	RouteStrategy          *string                 `json:"route_strategy,omitempty"`
+	SilentRetry            *bool                   `json:"silent_retry,omitempty"`
+	FlattenToolCalls       *bool                   `json:"flatten_tool_calls,omitempty"`
 }
 
 type patchModelRequest struct {
-	ModelTypes       requestField[modeltype.Set]        `json:"model_types"`
-	TransportRule    requestField[transportpolicy.Rule] `json:"transport_rule"`
-	RolePolicy       requestField[rolepolicy.Policy]    `json:"role_policy"`
-	Provider         requestField[string]               `json:"provider"`
-	Model            requestField[string]               `json:"model"`
-	RouteStrategy    requestField[string]               `json:"route_strategy"`
-	SilentRetry      requestField[bool]                 `json:"silent_retry"`
-	FlattenToolCalls requestField[bool]                 `json:"flatten_tool_calls"`
-	ExpectedRevision requestField[string]               `json:"expected_revision"`
+	SessionHeaders         requestField[[]sessionheader.Config] `json:"session_headers"`
+	CloudflareProxyEnabled requestField[bool]                   `json:"cloudflare_proxy_enabled"`
+	ModelTypes             requestField[modeltype.Set]          `json:"model_types"`
+	TransportRule          requestField[transportpolicy.Rule]   `json:"transport_rule"`
+	RolePolicy             requestField[rolepolicy.Policy]      `json:"role_policy"`
+	Provider               requestField[string]                 `json:"provider"`
+	Model                  requestField[string]                 `json:"model"`
+	RouteStrategy          requestField[string]                 `json:"route_strategy"`
+	SilentRetry            requestField[bool]                   `json:"silent_retry"`
+	FlattenToolCalls       requestField[bool]                   `json:"flatten_tool_calls"`
+	ExpectedRevision       requestField[string]                 `json:"expected_revision"`
 }
 
 type patchModelCanonical struct {
-	ModelTypes       *modeltype.Set        `json:"model_types,omitempty"`
-	TransportRule    *transportpolicy.Rule `json:"transport_rule,omitempty"`
-	RolePolicy       *rolepolicy.Policy    `json:"role_policy,omitempty"`
-	Provider         *string               `json:"provider,omitempty"`
-	Model            *string               `json:"model,omitempty"`
-	RouteStrategy    *string               `json:"route_strategy,omitempty"`
-	SilentRetry      *bool                 `json:"silent_retry,omitempty"`
-	FlattenToolCalls *bool                 `json:"flatten_tool_calls,omitempty"`
-	ExpectedRevision string                `json:"expected_revision"`
+	SessionHeaders         *[]sessionheader.Config `json:"session_headers,omitempty"`
+	CloudflareProxyEnabled *bool                   `json:"cloudflare_proxy_enabled,omitempty"`
+	ModelTypes             *modeltype.Set          `json:"model_types,omitempty"`
+	TransportRule          *transportpolicy.Rule   `json:"transport_rule,omitempty"`
+	RolePolicy             *rolepolicy.Policy      `json:"role_policy,omitempty"`
+	Provider               *string                 `json:"provider,omitempty"`
+	Model                  *string                 `json:"model,omitempty"`
+	RouteStrategy          *string                 `json:"route_strategy,omitempty"`
+	SilentRetry            *bool                   `json:"silent_retry,omitempty"`
+	FlattenToolCalls       *bool                   `json:"flatten_tool_calls,omitempty"`
+	ExpectedRevision       string                  `json:"expected_revision"`
 }
 
 type bindingSelectionRequest struct {
-	EndpointKeyID   requestField[string] `json:"endpoint_key_id"`
-	UpstreamModelID requestField[string] `json:"upstream_model_id"`
+	Targets         requestField[[]bindingTargetRequest] `json:"targets"`
+	EndpointKeyID   requestField[string]                 `json:"endpoint_key_id"`
+	UpstreamModelID requestField[string]                 `json:"upstream_model_id"`
 }
 
 type bindingSelectionCanonical struct {
-	EndpointKeyID   string `json:"endpoint_key_id"`
-	UpstreamModelID string `json:"upstream_model_id"`
+	EndpointKeyID   string                   `json:"endpoint_key_id,omitempty"`
+	UpstreamModelID string                   `json:"upstream_model_id,omitempty"`
+	Targets         []bindingTargetCanonical `json:"targets,omitempty"`
 }
 
 type addBindingsRequest struct {
@@ -79,21 +90,25 @@ type addBindingsCanonical struct {
 }
 
 type orderBindingsRequest struct {
+	Response                requestField[string]   `json:"response"`
 	ExpectedBindingRevision requestField[string]   `json:"expected_binding_revision"`
 	Order                   requestField[[]string] `json:"order"`
 }
 
 type orderBindingsCanonical struct {
+	Response                *string  `json:"response,omitempty"`
 	ExpectedBindingRevision string   `json:"expected_binding_revision"`
 	Order                   []string `json:"order"`
 }
 
 type expectedBindingRevisionRequest struct {
+	Response                requestField[string] `json:"response"`
 	ExpectedBindingRevision requestField[string] `json:"expected_binding_revision"`
 }
 
 type expectedBindingRevisionCanonical struct {
-	ExpectedBindingRevision string `json:"expected_binding_revision"`
+	Response                *string `json:"response,omitempty"`
+	ExpectedBindingRevision string  `json:"expected_binding_revision"`
 }
 
 func (api *httpAPI) listModels(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
@@ -134,7 +149,16 @@ func (api *httpAPI) createModel(writer http.ResponseWriter, request *http.Reques
 		writeResourceError(writer, ErrInvalidRequest)
 		return
 	}
+	if body.SessionHeaders.Set {
+		values, err := sessionheader.Normalize(body.SessionHeaders.Value)
+		if err != nil {
+			writeResourceError(writer, ErrInvalidRequest)
+			return
+		}
+		body.SessionHeaders.Value = values
+	}
 	canonical := createModelCanonical{
+		SessionHeaders: optionalPointer(body.SessionHeaders), CloudflareProxyEnabled: optionalPointer(body.CloudflareProxyEnabled),
 		ModelTypes: optionalPointer(body.ModelTypes), RolePolicy: optionalPointer(body.RolePolicy), TransportRule: optionalPointer(body.TransportRule),
 		Provider: body.Provider.Value, Model: body.Model.Value,
 		RouteStrategy: optionalPointer(body.RouteStrategy), SilentRetry: optionalPointer(body.SilentRetry),
@@ -144,7 +168,10 @@ func (api *httpAPI) createModel(writer http.ResponseWriter, request *http.Reques
 	if !ok {
 		return
 	}
-	input := CreateModelInput{Provider: canonical.Provider, Model: canonical.Model, RolePolicy: canonical.RolePolicy}
+	input := CreateModelInput{CloudflareProxyEnabled: canonical.CloudflareProxyEnabled, Provider: canonical.Provider, Model: canonical.Model, RolePolicy: canonical.RolePolicy}
+	if canonical.SessionHeaders != nil {
+		input.SessionHeaders = *canonical.SessionHeaders
+	}
 	if canonical.ModelTypes != nil {
 		input.ModelTypes = canonical.ModelTypes.Clone()
 	}
@@ -195,11 +222,20 @@ func (api *httpAPI) patchModel(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	revision, revisionOK := canonicalExpectedRevision(body.ExpectedRevision)
-	if !revisionOK || (!body.Provider.Set && !body.Model.Set && !body.RouteStrategy.Set && !body.SilentRetry.Set && !body.FlattenToolCalls.Set && !body.RolePolicy.Set && !body.TransportRule.Set && !body.ModelTypes.Set) {
+	if !revisionOK || (!body.Provider.Set && !body.Model.Set && !body.RouteStrategy.Set && !body.SilentRetry.Set && !body.FlattenToolCalls.Set && !body.RolePolicy.Set && !body.TransportRule.Set && !body.ModelTypes.Set && !body.CloudflareProxyEnabled.Set && !body.SessionHeaders.Set) {
 		writeResourceError(writer, ErrInvalidRequest)
 		return
 	}
+	if body.SessionHeaders.Set {
+		values, err := sessionheader.Normalize(body.SessionHeaders.Value)
+		if err != nil {
+			writeResourceError(writer, ErrInvalidRequest)
+			return
+		}
+		body.SessionHeaders.Value = values
+	}
 	canonical := patchModelCanonical{
+		SessionHeaders: optionalPointer(body.SessionHeaders), CloudflareProxyEnabled: optionalPointer(body.CloudflareProxyEnabled),
 		ModelTypes: optionalPointer(body.ModelTypes), RolePolicy: optionalPointer(body.RolePolicy), TransportRule: optionalPointer(body.TransportRule),
 		Provider: optionalPointer(body.Provider), Model: optionalPointer(body.Model),
 		RouteStrategy: optionalPointer(body.RouteStrategy), SilentRetry: optionalPointer(body.SilentRetry),
@@ -210,6 +246,7 @@ func (api *httpAPI) patchModel(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	result, err := api.repository.PatchModel(request.Context(), principal.UserID, modelID, mutation, PatchModelInput{
+		SessionHeaders: canonical.SessionHeaders, CloudflareProxyEnabled: canonical.CloudflareProxyEnabled,
 		ModelTypes: canonical.ModelTypes, TransportRule: canonical.TransportRule, RolePolicy: canonical.RolePolicy, Provider: canonical.Provider, Model: canonical.Model, RouteStrategy: canonical.RouteStrategy,
 		SilentRetry: canonical.SilentRetry, FlattenToolCalls: canonical.FlattenToolCalls, ExpectedRevision: revision,
 	})
@@ -330,7 +367,7 @@ func (api *httpAPI) listBindings(writer http.ResponseWriter, request *http.Reque
 	writeJSON(writer, http.StatusOK, bindings)
 }
 
-func (api *httpAPI) addBindings(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
+func (api *httpAPI) addBindingsWithReceipt(writer http.ResponseWriter, request *http.Request, principal UserPrincipal, compact bool) {
 	modelID, ok := parsePathID(writer, request, "id")
 	if !ok || !requireEmptyQuery(writer, request) {
 		return
@@ -347,6 +384,20 @@ func (api *httpAPI) addBindings(writer http.ResponseWriter, request *http.Reques
 	selections := make([]BindingSelection, len(body.Selections.Value))
 	canonicalSelections := make([]bindingSelectionCanonical, len(body.Selections.Value))
 	for index, selection := range body.Selections.Value {
+		if selection.Targets.Set {
+			if selection.EndpointKeyID.Set || selection.UpstreamModelID.Set {
+				writeResourceError(writer, ErrInvalidRequest)
+				return
+			}
+			targets, canonicalTargets, ok := parseBindingTargetRequests(selection.Targets.Value)
+			if !ok {
+				writeResourceError(writer, ErrInvalidRequest)
+				return
+			}
+			selections[index] = BindingSelection{Targets: targets}
+			canonicalSelections[index] = bindingSelectionCanonical{Targets: canonicalTargets}
+			continue
+		}
 		if !selection.EndpointKeyID.Set || !selection.UpstreamModelID.Set {
 			writeResourceError(writer, ErrInvalidRequest)
 			return
@@ -360,11 +411,15 @@ func (api *httpAPI) addBindings(writer http.ResponseWriter, request *http.Reques
 		canonicalSelections[index] = bindingSelectionCanonical{EndpointKeyID: selection.EndpointKeyID.Value, UpstreamModelID: selection.UpstreamModelID.Value}
 	}
 	canonical := addBindingsCanonical{ExpectedBindingRevision: body.ExpectedBindingRevision.Value, Selections: canonicalSelections}
-	mutation, ok := controlMutation(writer, request, routeBindingBatch, []int64{modelID}, canonical)
+	route := routeBindingBatch
+	if compact {
+		route = routeBindingBatchReceipt
+	}
+	mutation, ok := controlMutation(writer, request, route, []int64{modelID}, canonical)
 	if !ok {
 		return
 	}
-	result, err := api.repository.AddBindings(request.Context(), principal.UserID, modelID, mutation, revision, selections)
+	result, err := api.repository.addBindings(request.Context(), principal.UserID, modelID, mutation, revision, selections, compact)
 	if err != nil {
 		writeResourceError(writer, err)
 		return
@@ -381,6 +436,10 @@ func (api *httpAPI) orderBindings(writer http.ResponseWriter, request *http.Requ
 	if _, ok := decodeStrictObject(writer, request, &body); !ok {
 		return
 	}
+	if body.Response.Set && body.Response.Value != "receipt" {
+		writeResourceError(writer, ErrInvalidRequest)
+		return
+	}
 	revision, revisionOK := canonicalExpectedGeneration(body.ExpectedBindingRevision)
 	if !revisionOK || !body.Order.Set {
 		writeResourceError(writer, ErrInvalidRequest)
@@ -395,12 +454,12 @@ func (api *httpAPI) orderBindings(writer http.ResponseWriter, request *http.Requ
 		}
 		order[index] = id
 	}
-	canonical := orderBindingsCanonical{ExpectedBindingRevision: body.ExpectedBindingRevision.Value, Order: append([]string(nil), body.Order.Value...)}
+	canonical := orderBindingsCanonical{Response: optionalPointer(body.Response), ExpectedBindingRevision: body.ExpectedBindingRevision.Value, Order: append([]string(nil), body.Order.Value...)}
 	mutation, ok := controlMutation(writer, request, routeBindingOrder, []int64{modelID}, canonical)
 	if !ok {
 		return
 	}
-	result, err := api.repository.OrderBindings(request.Context(), principal.UserID, modelID, mutation, revision, order)
+	result, err := api.repository.orderBindings(request.Context(), principal.UserID, modelID, mutation, revision, order, body.Response.Set)
 	if err != nil {
 		writeResourceError(writer, err)
 		return
@@ -421,17 +480,21 @@ func (api *httpAPI) deleteBinding(writer http.ResponseWriter, request *http.Requ
 	if _, ok := decodeStrictObject(writer, request, &body); !ok {
 		return
 	}
+	if body.Response.Set && body.Response.Value != "receipt" {
+		writeResourceError(writer, ErrInvalidRequest)
+		return
+	}
 	revision, revisionOK := canonicalExpectedGeneration(body.ExpectedBindingRevision)
 	if !revisionOK {
 		writeResourceError(writer, ErrInvalidRequest)
 		return
 	}
-	canonical := expectedBindingRevisionCanonical{ExpectedBindingRevision: body.ExpectedBindingRevision.Value}
+	canonical := expectedBindingRevisionCanonical{Response: optionalPointer(body.Response), ExpectedBindingRevision: body.ExpectedBindingRevision.Value}
 	mutation, ok := controlMutation(writer, request, routeBinding, []int64{modelID, bindingID}, canonical)
 	if !ok {
 		return
 	}
-	result, err := api.repository.DeleteBinding(request.Context(), principal.UserID, modelID, bindingID, mutation, revision)
+	result, err := api.repository.deleteBinding(request.Context(), principal.UserID, modelID, bindingID, mutation, revision, body.Response.Set)
 	if err != nil {
 		writeResourceError(writer, err)
 		return

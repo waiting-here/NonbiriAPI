@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -83,10 +84,29 @@ func TestAutomationAdmissionIsSharedAndReleasesCapacity(t *testing.T) {
 }
 
 func TestAutomationErrorsNeverExposeCauses(t *testing.T) {
-	for _, err := range []error{errors.New("upstream-secret"), atStep("keys[1]", errors.New("upstream-secret")), &discoveryFailureError{class: "upstream-secret"}} {
+	for _, err := range []error{errors.New("upstream-secret"), atStep("keys[1]", errors.New("upstream-secret")), &discoveryFailureError{class: "upstream-secret"}, &resources.DonationDiscoveryFailure{Class: "upstream-secret"}} {
 		_, message := safeError(err)
 		if strings.Contains(message, "upstream-secret") {
 			t.Fatal("raw error exposed")
+		}
+	}
+}
+
+func TestAutomationDiscoveryErrorsKeepResourceFailuresDistinct(t *testing.T) {
+	for _, test := range []struct {
+		err  error
+		code string
+	}{
+		{charityrouting.ErrDiscoveryModelMissing, "model_not_found"},
+		{&resources.DonationDiscoveryFailure{Class: resources.DiscoveryFailureAuth}, "discovery_failed"},
+		{resources.ErrUnavailable, "service_unavailable"},
+		{charityrouting.ErrNotFound, "not_found"},
+		{resources.ErrNotFound, "not_found"},
+		{resources.ErrConflict, "conflict"},
+		{context.Canceled, "incomplete"},
+	} {
+		if code, _ := safeError(test.err); code != test.code {
+			t.Fatalf("%v mapped to %s, want %s", test.err, code, test.code)
 		}
 	}
 }

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/artwork"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 )
@@ -208,7 +210,7 @@ func (s *Service) AdminSave(ctx context.Context, actor int64, key string, input 
 		if e != nil || !db.ValidateOpaqueID(pool.ID, "gp_") {
 			return out, ErrInvalid
 		}
-		var raw string
+		var raw, previousCover string
 		var current int64
 		e = tx.QueryRowContext(ctx, "SELECT config,revision FROM gacha_pools WHERE id=?", pool.ID).Scan(&raw, &current)
 		if e == nil {
@@ -219,6 +221,7 @@ func (s *Service) AdminSave(ctx context.Context, actor int64, key string, input 
 			if e = json.Unmarshal([]byte(raw), &previous); e != nil {
 				return out, e
 			}
+			previousCover = previous.Cover
 			if previous.Published && previous.StartsAt != nil && *previous.StartsAt <= at {
 				if !pool.Published || pool.Rules != previous.Rules || !sameSet(pool.Featured, previous.Featured) ||
 					pool.StartsAt == nil || *pool.StartsAt != *previous.StartsAt || pool.EndsAt == nil || previous.EndsAt == nil || *pool.EndsAt < *previous.EndsAt {
@@ -229,6 +232,9 @@ func (s *Service) AdminSave(ctx context.Context, actor int64, key string, input 
 			return out, e
 		} else if input.ExpectedRevision != 0 {
 			return out, ErrConflict
+		}
+		if err = s.checkCoverSelection(ctx, tx, pool.Cover, previousCover); err != nil {
+			return out, err
 		}
 		pool.Revision = revision
 		_, err = tx.ExecContext(ctx, `INSERT INTO gacha_pools(id,config,revision,created_at) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET config=excluded.config,revision=excluded.revision`,
@@ -253,12 +259,23 @@ func (s *Service) AdminSave(ctx context.Context, actor int64, key string, input 
 			return out, err
 		}
 		var current int64
-		e := tx.QueryRowContext(ctx, "SELECT revision FROM gacha_presets WHERE id=?", p.ID).Scan(&current)
+		var previousRaw, previousCover string
+		e := tx.QueryRowContext(ctx, "SELECT revision,config FROM gacha_presets WHERE id=?", p.ID).Scan(&current, &previousRaw)
 		if e == nil && current != input.ExpectedRevision || errors.Is(e, sql.ErrNoRows) && input.ExpectedRevision != 0 {
 			return out, ErrConflict
 		}
 		if e != nil && !errors.Is(e, sql.ErrNoRows) {
 			return out, e
+		}
+		if e == nil {
+			var previous Pool
+			if err = json.Unmarshal([]byte(previousRaw), &previous); err != nil {
+				return out, err
+			}
+			previousCover = previous.Cover
+		}
+		if err = s.checkCoverSelection(ctx, tx, p.Pool.Cover, previousCover); err != nil {
+			return out, err
 		}
 		p.Revision = revision
 		_, err = tx.ExecContext(ctx, `INSERT INTO gacha_presets(id,name,config,revision) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,config=excluded.config,revision=excluded.revision`, p.ID, p.Name, jsonText(p.Pool), revision)
@@ -295,4 +312,18 @@ func sameSet(a, b []string) bool {
 		right[id] = true
 	}
 	return reflect.DeepEqual(left, right)
+}
+
+func (s *Service) checkCoverSelection(ctx context.Context, tx *sql.Tx, selected, previous string) error {
+	if selected == previous {
+		return nil
+	}
+	disabled, err := artwork.R18DisabledTx(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if !s.config.Artwork.Allowed("cover:"+selected, disabled) {
+		return authz.ErrForbidden
+	}
+	return nil
 }

@@ -18,7 +18,7 @@ func setTestKeyLimits(t *testing.T, f *claimFixture, keyID, concurrency, rpm int
 
 func selfLimitInput(f *claimFixture, userID int64, key testKey) ClaimInput {
 	request := f.acceptSelf(userID, 1)
-	return ClaimInput{RequestID: request.ID, ActorUserID: userID, AttemptSeq: 1, Purpose: PurposeSelf, Candidate: key.candidate}
+	return ClaimInput{RequestID: request.ID, ActorUserID: userID, AttemptSeq: 1, Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate}
 }
 
 func dispatchLimitClaim(t *testing.T, f *claimFixture, handle Handle) {
@@ -51,7 +51,7 @@ func TestKeyConcurrencyAdmissionIsAtomicAcrossPersonalCharityAndDebug(t *testing
 			for i := range inputs {
 				if i%3 == 0 {
 					request := f.acceptCharity(caller, 1)
-					inputs[i] = ClaimInput{RequestID: request.ID, ActorUserID: caller, AttemptSeq: 1, Purpose: PurposeCharity, Candidate: key.candidate, DonationKeyID: donationID}
+					inputs[i] = ClaimInput{RequestID: request.ID, ActorUserID: caller, AttemptSeq: 1, Purpose: PurposeCharity, Candidate: key.charityCandidates[1], DonationKeyID: donationID}
 				} else {
 					inputs[i] = selfLimitInput(f, owner, key)
 					if i%3 == 2 {
@@ -185,7 +185,7 @@ func TestKeyLimitsChangesPreserveAdmittedClaimsAndDiscoveryIsSeparate(t *testing
 	dispatchLimitClaim(t, f, two)
 	discovery := key.candidate
 	discovery.UpstreamModelID = ""
-	if _, _, err := f.service.ClaimDiscovery(ctx, DiscoveryClaimInput{ActorUserID: owner, Candidate: discovery}); err != nil {
+	if _, _, err := f.service.ClaimDiscovery(ctx, f.discoveryInput(DiscoveryClaimInput{ActorUserID: owner, Candidate: discovery})); err != nil {
 		t.Fatalf("discovery should retain separate protection: %v", err)
 	}
 	completeLimitClaim(t, f, one)

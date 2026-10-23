@@ -110,11 +110,11 @@ func (repository *Repository) readEndpointSnapshotsTx(ctx context.Context, tx *s
 	if row.cursorPhase != indexPhaseEndpoint {
 		return nil, false, nil
 	}
-	query := `SELECT k.id,e.user_id,u.discord_id,
+	query := `SELECT DISTINCT k.id,e.user_id,u.discord_id,
 CASE WHEN u.guild_nick<>'' THEN u.guild_nick ELSE u.username END,
-e.connector_type,e.base_url,k.display_head,k.display_tail,k.secret_fingerprint
-FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id JOIN users u ON u.id=e.user_id
-WHERE k.id>? AND k.secret_fingerprint=? AND e.connector_type=? AND e.base_url=?`
+e.connector_type,e.base_url,ev.display_head,ev.display_tail,ev.report_fingerprint
+FROM endpoint_key_credential_evidence ev JOIN endpoint_keys k ON k.id=ev.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id JOIN users u ON u.id=e.user_id
+WHERE k.id>? AND ev.report_fingerprint=? AND e.connector_type=? AND e.base_url=?`
 	args := []any{row.cursor, row.fingerprint[:], row.connector, row.baseURL}
 	if row.status == "expired" {
 		if !row.deadline.Valid {
@@ -164,22 +164,25 @@ func (repository *Repository) readDonationTombstoneSnapshotsTx(ctx context.Conte
 	if row.cursorPhase != indexPhaseDonation {
 		return nil, false, nil
 	}
-	query := `WITH candidates AS (
+	query := `WITH material AS (
+SELECT id AS donation_key_id,display_head,display_tail FROM donation_keys WHERE report_fingerprint=?
+UNION SELECT u.donation_key_id,ur.display_head,ur.display_tail FROM donation_use_revisions ur JOIN donation_uses u ON u.id=ur.use_id WHERE ur.report_fingerprint=?
+), candidates AS (
 SELECT dk.id,dk.source_endpoint_key_id,dk.ended_at,d.user_id,u.discord_id,
 CASE WHEN u.guild_nick<>'' THEN u.guild_nick ELSE u.username END AS owner_display_name,
-dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,
+dk.connector_type,dk.canonical_base_url,material.display_head,material.display_tail,
 ROW_NUMBER() OVER (
  PARTITION BY dk.source_endpoint_key_id
  ORDER BY dk.ended_at DESC,dk.id DESC
 ) AS snapshot_rank
-FROM donation_keys dk
+FROM material JOIN donation_keys dk ON dk.id=material.donation_key_id
 JOIN donations d ON d.id=dk.donation_id
 LEFT JOIN users u ON u.id=d.user_id
-WHERE dk.report_fingerprint=? AND dk.connector_type=? AND dk.canonical_base_url=?
+WHERE dk.connector_type=? AND dk.canonical_base_url=?
 AND dk.ended_at IS NOT NULL AND dk.report_match_until>?
 AND (d.status IN ('pending','approved') OR
      (d.status IN ('rejected','deleted','expired') AND d.terminal_at IS NOT NULL AND d.terminal_at>?))`
-	args := []any{row.fingerprint[:], row.connector, row.baseURL, now, now - donationRetentionSeconds}
+	args := []any{row.fingerprint[:], row.fingerprint[:], row.connector, row.baseURL, now, now - donationRetentionSeconds}
 	if row.status == "expired" {
 		if !row.deadline.Valid {
 			return nil, false, ErrInvariant

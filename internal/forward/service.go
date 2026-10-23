@@ -469,12 +469,12 @@ func validAdmission(value logicalAdmission) bool {
 func samePersonalSnapshot(preflight logicalAdmission, snapshot PersonalSnapshot, userID int64) bool {
 	return !preflight.charity && snapshot.ModelID == preflight.modelID && snapshot.OwnerUserID == userID &&
 		snapshot.FullName == preflight.fullName && snapshot.RouteStrategy == preflight.strategy &&
-		snapshot.SilentRetry == preflight.silentRetry && snapshot.FlattenToolCalls == preflight.flatten
+		snapshot.SilentRetry == preflight.silentRetry && snapshot.CloudflareProxyEnabled == preflight.cloudflareProxyEnabled && snapshot.FlattenToolCalls == preflight.flatten
 }
 
 func sameCharitySnapshot(preflight logicalAdmission, snapshot CharitySnapshot) bool {
 	return preflight.charity && snapshot.ModelID == preflight.modelID && snapshot.FullName == preflight.fullName &&
-		snapshot.FlattenToolCalls == preflight.flatten && snapshot.ReservedMilli == preflight.reservedMilli
+		snapshot.CloudflareProxyEnabled == preflight.cloudflareProxyEnabled && snapshot.FlattenToolCalls == preflight.flatten && snapshot.ReservedMilli == preflight.reservedMilli
 }
 
 func charityModelID(plan executionPlan) int64 {
@@ -491,6 +491,7 @@ func attemptOutcome(result connectorcontract.AttemptResult) claim.AttemptOutcome
 		kind = claim.ResultResponse
 	}
 	return claim.AttemptOutcome{
+		CallerFault:       result.ErrorDetail.CallerFault(),
 		StreakDisposition: result.StreakDisposition, FailureOrigin: result.FailureOrigin,
 		Kind: kind, UpstreamStatus: result.UpstreamStatus, Diagnostic: result.Diagnostic,
 		UpstreamCode: result.ErrorDetail.Code(), Backoff: result.ErrorDetail.Backoff(),
@@ -678,6 +679,7 @@ func failureForError(err error, charity bool) wireFailure {
 		if errors.As(err, &tooShort) && tooShort != nil && tooShort.Actual >= 0 && tooShort.Minimum >= 0 {
 			message += ": " + strconv.Itoa(tooShort.Actual) + " < " + strconv.Itoa(tooShort.Minimum)
 		}
+		message += ". Charity models require a minimum input length to protect shared resources. Please provide a complete request."
 		return platformFailure(httperr.CodeContentTooShort, message)
 	case errors.Is(err, claim.ErrNotFound):
 		return platformFailure(httperr.CodeUnauthorized, "authentication required")

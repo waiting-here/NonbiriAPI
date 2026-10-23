@@ -38,8 +38,7 @@ func TestCharityClaimsSettleIndependently(t *testing.T) {
 		}
 		handle, err := fixture.service.Claim(context.Background(), ClaimInput{
 			RequestID: request.ID, ActorUserID: consumerID, AttemptSeq: index + 1,
-			Purpose: PurposeCharity, Candidate: keys[index].candidate,
-			DonationKeyID: donationKeyIDs[index], OutputTokenFloor: outputFloor,
+			Purpose: PurposeCharity, Candidate: keys[index].charityCandidates[1], DonationKeyID: donationKeyIDs[index], OutputTokenFloor: outputFloor,
 		})
 		if err != nil {
 			t.Fatalf("claim charity attempt %d: %v", index+1, err)
@@ -113,7 +112,7 @@ func TestCharityClaimsSettleIndependently(t *testing.T) {
 
 	releaseHandle, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: request.ID, ActorUserID: consumerID, AttemptSeq: 5,
-		Purpose: PurposeCharity, Candidate: keys[4].candidate, DonationKeyID: donationKeyIDs[4],
+		Purpose: PurposeCharity, Candidate: keys[4].charityCandidates[1], DonationKeyID: donationKeyIDs[4],
 	})
 	if err != nil {
 		t.Fatalf("claim undispatched charity attempt: %v", err)
@@ -232,7 +231,7 @@ func TestCapacityCallbacksRollbackTheirDomainMutations(t *testing.T) {
 		request := fixture.acceptCharity(consumerID, 2)
 		handle, err := fixture.service.Claim(context.Background(), ClaimInput{
 			RequestID: request.ID, ActorUserID: consumerID, AttemptSeq: 1,
-			Purpose: PurposeCharity, Candidate: key.candidate, DonationKeyID: donationKeyID,
+			Purpose: PurposeCharity, Candidate: key.charityCandidates[1], DonationKeyID: donationKeyID,
 		})
 		if err != nil {
 			t.Fatalf("claim rollback release fixture: %v", err)
@@ -264,7 +263,7 @@ func TestCapacityCallbacksRollbackTheirDomainMutations(t *testing.T) {
 		request := fixture.acceptCharity(consumerID, 1)
 		handle, err := fixture.service.Claim(context.Background(), ClaimInput{
 			RequestID: request.ID, ActorUserID: consumerID, AttemptSeq: 1,
-			Purpose: PurposeCharity, Candidate: key.candidate, DonationKeyID: donationKeyID,
+			Purpose: PurposeCharity, Candidate: key.charityCandidates[1], DonationKeyID: donationKeyID,
 		})
 		if err != nil {
 			t.Fatalf("claim rollback attempt fixture: %v", err)
@@ -380,7 +379,7 @@ func TestCharityExpiryOrderingIsOwnedByClaimTransactionAdapter(t *testing.T) {
 	fixture.charity.mu.Unlock()
 	_, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: request.ID, ActorUserID: consumerID, AttemptSeq: 1,
-		Purpose: PurposeCharity, Candidate: key.candidate, DonationKeyID: donationKeyID,
+		Purpose: PurposeCharity, Candidate: key.charityCandidates[1], DonationKeyID: donationKeyID,
 	})
 	requireErrorIs(t, err, ErrNotFound)
 
@@ -390,7 +389,7 @@ func TestCharityExpiryOrderingIsOwnedByClaimTransactionAdapter(t *testing.T) {
 	fixture.charity.mu.Unlock()
 	handle, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: request.ID, ActorUserID: consumerID, AttemptSeq: 1,
-		Purpose: PurposeCharity, Candidate: key.candidate, DonationKeyID: donationKeyID,
+		Purpose: PurposeCharity, Candidate: key.charityCandidates[1], DonationKeyID: donationKeyID,
 	})
 	if err != nil {
 		t.Fatalf("claim before expiry: %v", err)
@@ -420,10 +419,10 @@ func TestDiscoveryClaimHasNoEconomicReservation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new discovery-only claim service: %v", err)
 	}
-	request, handle, err := service.ClaimDiscovery(context.Background(), DiscoveryClaimInput{
+	request, handle, err := service.ClaimDiscovery(context.Background(), fixture.discoveryInput(DiscoveryClaimInput{
 		ActorUserID: userID,
 		Candidate:   discoveryCandidate,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("claim discovery: %v", err)
 	}
@@ -483,10 +482,10 @@ FROM logical_requests WHERE id=?`, request.ID).Scan(&accounting, &reserved, &rem
 		t.Fatalf("complete discovery request: %v", err)
 	}
 	fixture.requireCallerMirror(request.ID, discoveryCaller, discoveryTerminal.TerminalAt)
-	recoveryRequest, recoveryHandle, err := service.ClaimDiscovery(context.Background(), DiscoveryClaimInput{
+	recoveryRequest, recoveryHandle, err := service.ClaimDiscovery(context.Background(), fixture.discoveryInput(DiscoveryClaimInput{
 		ActorUserID: userID,
 		Candidate:   discoveryCandidate,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("claim discovery recovery fixture: %v", err)
 	}
@@ -529,10 +528,10 @@ func TestDiscoveryRecoveryUsesAcceptedCallerProjectionAcrossCrashWindows(t *test
 		key := fixture.seedKey(userID, "discovery-recovery-"+label)
 		candidate := key.candidate
 		candidate.UpstreamModelID = ""
-		request, handle, err := fixture.service.ClaimDiscovery(ctx, DiscoveryClaimInput{
+		request, handle, err := fixture.service.ClaimDiscovery(ctx, fixture.discoveryInput(DiscoveryClaimInput{
 			ActorUserID: userID,
 			Candidate:   candidate,
-		})
+		}))
 		if err != nil {
 			t.Fatalf("claim discovery: %v", err)
 		}
@@ -722,14 +721,14 @@ func TestRecoveryReleasesClaimedAndConservativelyCommitsDispatched(t *testing.T)
 	claimedRequest := fixture.acceptSelf(userID, 1)
 	if _, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: claimedRequest.ID, ActorUserID: userID, AttemptSeq: 1,
-		Purpose: PurposeSelf, Candidate: key.candidate,
+		Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate,
 	}); err != nil {
 		t.Fatalf("create claimed recovery row: %v", err)
 	}
 	dispatchedRequest := fixture.acceptSelf(userID, 1)
 	dispatchedHandle, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: dispatchedRequest.ID, ActorUserID: userID, AttemptSeq: 1,
-		Purpose: PurposeSelf, Candidate: key.candidate,
+		Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate,
 	})
 	if err != nil {
 		t.Fatalf("create dispatched recovery claim: %v", err)
@@ -743,7 +742,7 @@ func TestRecoveryReleasesClaimedAndConservativelyCommitsDispatched(t *testing.T)
 	decryptFailureRequest := fixture.acceptSelf(userID, 1)
 	decryptFailureHandle, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: decryptFailureRequest.ID, ActorUserID: userID, AttemptSeq: 1,
-		Purpose: PurposeSelf, Candidate: key.candidate,
+		Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate,
 	})
 	if err != nil {
 		t.Fatalf("create decrypt-failure claim: %v", err)
@@ -835,7 +834,7 @@ func TestOrphanSecretCleanupBoundary(t *testing.T) {
 			request := fixture.acceptSelf(userID, 1)
 			handle, err := fixture.service.Claim(context.Background(), ClaimInput{
 				RequestID: request.ID, ActorUserID: userID, AttemptSeq: 1,
-				Purpose: PurposeSelf, Candidate: key.candidate,
+				Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate,
 			})
 			if err != nil {
 				t.Fatalf("claim orphan fixture: %v", err)
@@ -847,6 +846,11 @@ func TestOrphanSecretCleanupBoundary(t *testing.T) {
 			dispatch.Clear()
 			if _, err := fixture.db.Exec(`DELETE FROM endpoint_keys WHERE id=?`, key.keyID); err != nil {
 				t.Fatalf("delete orphaned key: %v", err)
+			}
+			// Removing an entry leaves its independently owned credential alive.
+			// This fixture also ends that credential to exercise secret retirement.
+			if _, err := fixture.db.Exec(`UPDATE credentials SET current_version_id=NULL,enabled=0,deleted_at=?,updated_at=?,revision=revision+1 WHERE id=?`, fixture.clock.Load(), fixture.clock.Load(), key.candidate.Authorization.CredentialID); err != nil {
+				t.Fatal(err)
 			}
 			maintenance, err := fixture.service.MaintainOrphanSecrets(context.Background(), 10)
 			if err != nil {
@@ -871,7 +875,7 @@ func TestOrphanSecretCleanupBoundary(t *testing.T) {
 			newRequest := fixture.acceptSelf(userID, 1)
 			_, err = fixture.service.Claim(context.Background(), ClaimInput{
 				RequestID: newRequest.ID, ActorUserID: userID, AttemptSeq: 1,
-				Purpose: PurposeSelf, Candidate: key.candidate,
+				Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate,
 			})
 			requireErrorIs(t, err, ErrNotFound)
 			fixture.clock.Store(orphanedAt + elapsed)
@@ -898,7 +902,7 @@ func TestCancellationRemainsIndependentCallerResult(t *testing.T) {
 	request := fixture.acceptSelf(userID, 1)
 	handle, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: request.ID, ActorUserID: userID, AttemptSeq: 1,
-		Purpose: PurposeSelf, Candidate: key.candidate,
+		Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate,
 	})
 	if err != nil {
 		t.Fatalf("claim cancellation fixture: %v", err)
@@ -941,7 +945,7 @@ func TestCompleteRequestRejectsReleaseAfterDispatch(t *testing.T) {
 	request := fixture.acceptSelf(userID, 1)
 	handle, err := fixture.service.Claim(context.Background(), ClaimInput{
 		RequestID: request.ID, ActorUserID: userID, AttemptSeq: 1,
-		Purpose: PurposeSelf, Candidate: key.candidate,
+		Purpose: PurposeSelf, PersonalModelID: key.modelID, Candidate: key.candidate,
 	})
 	if err != nil {
 		t.Fatalf("claim request: %v", err)

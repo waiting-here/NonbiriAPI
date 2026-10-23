@@ -52,6 +52,19 @@ function channel(
     category: 'subscription',
     connector_type: 'openai-compatible',
     base_url: 'https://api.example.test/v1',
+    entries: [
+      {
+        id: '1',
+        name: 'Primary',
+        connector_type: 'openai-compatible',
+        base_url: 'https://api.example.test/v1',
+        native_services: ['chat_completions', 'responses'],
+        rerank_format: '',
+        enabled: state === 'active',
+      },
+    ],
+    discovery_source: null,
+    model_mappings: [],
     enabled: state === 'active',
     state,
     revision: state === 'active' ? '3' : '4',
@@ -101,6 +114,21 @@ describe('administrator mainstream channels page', () => {
   it('uses URL page mode, remembers size, and resets page on a state change', async () => {
     const fetchMock = installJsonFetchFixtures([
       { method: 'GET', path: '/admin/api/session', body: session() },
+      {
+        method: 'GET',
+        path: '/admin/api/endpoint-create-options',
+        body: {
+          native_service_options: [
+            {
+              connector_type: 'openai-compatible',
+              configuration_type: 'openai-compatible',
+              native_services: ['chat_completions', 'responses'],
+              default_native_services: ['chat_completions'],
+              rerank_formats: [],
+            },
+          ],
+        },
+      },
       {
         method: 'GET',
         path: '/admin/api/mainstream-channels?state=active&page=1&page_size=20',
@@ -213,6 +241,21 @@ describe('administrator mainstream channels page', () => {
   it('restores filter and page after browser back navigation', async () => {
     installJsonFetchFixtures([
       { method: 'GET', path: '/admin/api/session', body: session() },
+      {
+        method: 'GET',
+        path: '/admin/api/endpoint-create-options',
+        body: {
+          native_service_options: [
+            {
+              connector_type: 'openai-compatible',
+              configuration_type: 'openai-compatible',
+              native_services: ['chat_completions', 'responses'],
+              default_native_services: ['chat_completions'],
+              rerank_formats: [],
+            },
+          ],
+        },
+      },
       {
         method: 'GET',
         path: '/admin/api/mainstream-channels?state=active&page=2&page_size=50',
@@ -377,6 +420,21 @@ describe('administrator mainstream channels page', () => {
   it.each([401, 403])('closes channel write entries after page %s', async (status) => {
     const fetchMock = installJsonFetchFixtures([
       { method: 'GET', path: '/admin/api/session', body: session() },
+      {
+        method: 'GET',
+        path: '/admin/api/endpoint-create-options',
+        body: {
+          native_service_options: [
+            {
+              connector_type: 'openai-compatible',
+              configuration_type: 'openai-compatible',
+              native_services: ['chat_completions', 'responses'],
+              default_native_services: ['chat_completions'],
+              rerank_formats: [],
+            },
+          ],
+        },
+      },
       {
         method: 'GET',
         path: '/admin/api/mainstream-channels?state=active&page=1&page_size=20',

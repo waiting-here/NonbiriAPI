@@ -1,18 +1,20 @@
 package adminapi
 
 // ReadPublicConfig allowlist tests: the unauthenticated /api/config
-// bootstrap must project only the frozen twelve fields and never operational,
+// bootstrap must project only the declared display fields and never operational,
 // rate-limit or Discord secrets — even when those are stored. Adding a key
 // to knownSiteConfig does not expose it; the concrete DTO is the boundary.
 
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
@@ -106,6 +108,8 @@ func TestReadPublicConfigProjectsOnlyAllowlist(t *testing.T) {
 	for _, kv := range []struct{ k, v string }{
 		{"legal_authoritative_locale", "zh"},
 		{"default_rpm_per_user", "999"},
+		{"default_light_rpm_per_user", "999"},
+		{"global_rpm_per_user", "999"},
 		{"global_rpm", "999"},
 		{"default_per_endpoint_concurrency", "999"},
 		{"egress_global_concurrency", "999"},
@@ -127,7 +131,7 @@ func TestReadPublicConfigProjectsOnlyAllowlist(t *testing.T) {
 		t.Fatalf("ReadPublicConfig: %v", err)
 	}
 
-	// Exactly the ten frozen DTO fields, nothing else.
+	// Exactly the declared DTO fields, nothing else.
 	encoded, err := json.Marshal(out)
 	if err != nil {
 		t.Fatalf("marshal public config: %v", err)
@@ -142,7 +146,7 @@ func TestReadPublicConfigProjectsOnlyAllowlist(t *testing.T) {
 	}
 	sort.Strings(keys)
 	want := []string{
-		"announcement_epoch",
+		"announcement_epoch", "artwork_r18_disabled",
 		"charity_donation_notice_en",
 		"charity_donation_notice_zh",
 		"legal_authoritative_locale",
@@ -305,6 +309,34 @@ func TestReadPublicConfigNilStoreYieldsDefaults(t *testing.T) {
 	}
 	if out.MaintenanceMode || !out.RegistrationOpen {
 		t.Fatalf("nil store toggles=%v want maintenance=false registration=true", out)
+	}
+	if !out.ArtworkR18Disabled {
+		t.Fatal("R-18 artwork must be disabled by default")
+	}
+}
+
+func TestPublicArtworkPolicyDefaultAndAdministratorUpdate(t *testing.T) {
+	store := openFreshGenerationTwoPublicConfigStore(t)
+	authorizer := &siteConfigTestFinalAuthorizer{}
+	repository := newSiteConfigTestRepository(t, store, authorizer)
+	initial, err := ReadPublicConfig(store)
+	if err != nil || !initial.ArtworkR18Disabled {
+		t.Fatalf("fresh artwork policy=%+v, err=%v", initial, err)
+	}
+	if _, err := siteConfigPatch(t, repository, KeyArtworkR18Disabled, `false`, "artwork-disable-off-0001"); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := ReadPublicConfig(store)
+	if err != nil || updated.ArtworkR18Disabled {
+		t.Fatalf("updated artwork policy=%+v, err=%v", updated, err)
+	}
+	authorizer.setError(authz.ErrForbidden)
+	if _, err := siteConfigPatch(t, repository, KeyArtworkR18Disabled, `true`, "artwork-disable-on-0001"); !errors.Is(err, ErrSiteConfigForbidden) {
+		t.Fatalf("non-admin artwork policy update=%v", err)
+	}
+	unchanged, err := ReadPublicConfig(store)
+	if err != nil || unchanged.ArtworkR18Disabled {
+		t.Fatalf("unauthorized change affected artwork policy: %+v, err=%v", unchanged, err)
 	}
 }
 

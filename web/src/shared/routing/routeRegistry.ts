@@ -105,6 +105,13 @@ export const USER_ROUTE_DESCRIPTORS = [
     labelKey: 'user.charity.nav',
   }),
   user({
+    id: 'endpoint-policies',
+    path: '/endpoint-policies',
+    access: 'user',
+    layout: 'wide',
+    registered: true,
+  }),
+  user({
     id: 'channel-binding-presets',
     path: '/charity/channel-presets',
     access: 'user',
@@ -479,6 +486,17 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     navGroup: 'content',
     icon: 'charity',
     labelKey: 'admin.charity.nav',
+  }),
+  admin({
+    id: 'admin-endpoint-policies',
+    path: '/endpoint-policies',
+    access: 'admin',
+    layout: 'wide',
+    registered: true,
+    nav: true,
+    navGroup: 'content',
+    icon: 'endpoints',
+    labelKey: 'common.endpointPolicies.title',
   }),
   admin({
     id: 'admin-channel-binding-presets',

@@ -72,7 +72,7 @@ func (s *Service) beginHandlingTx(ctx context.Context, role reviewerRole, userID
 
 func requireApprovedHandlingTx(ctx context.Context, tx *sql.Tx, donationID, now int64) error {
 	var active bool
-	if err := tx.QueryRowContext(ctx, `SELECT status='approved' AND `+logicallyActiveDonationSQL+` FROM donations d WHERE d.id=?`, now, donationID).Scan(&active); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT `+manageableDonationSQL+` FROM donations d WHERE d.id=?`, now, donationID).Scan(&active); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -113,7 +113,7 @@ func (s *Service) HandlingStewardPage(ctx context.Context, userID int64, filter 
 	if err != nil {
 		return empty, err
 	}
-	from := ` FROM donations d JOIN donation_handling h ON h.donation_id=d.id WHERE d.status='approved' AND ` + logicallyActiveDonationSQL
+	from := ` FROM donations d JOIN donation_handling h ON h.donation_id=d.id WHERE ` + manageableDonationSQL
 	args := []any{now}
 	if filter.Handling != "all" {
 		handling := filter.Handling
@@ -137,7 +137,7 @@ func (s *Service) HandlingStewardPage(ctx context.Context, userID int64, filter 
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT d.id,d.created_at,
 (SELECT COUNT(*) FROM donation_keys dk WHERE dk.donation_id=d.id),
-(SELECT COUNT(DISTINCT dk.id) FROM donation_keys dk JOIN charity_model_bindings b ON b.donation_key_id=dk.id WHERE dk.donation_id=d.id),
+(SELECT COUNT(DISTINCT dk.id) FROM donation_keys dk JOIN charity_binding_targets b ON b.donation_key_id=dk.id WHERE dk.donation_id=d.id),
 h.state,h.revision,h.processed_at,h.processed_by_role,h.closed_at,h.closed_reason`+from+` ORDER BY d.created_at DESC,d.id DESC LIMIT ? OFFSET ?`, append(args, page.Size, offset)...)
 	if err != nil {
 		return empty, fmt.Errorf("donation: read handling queue: %w", err)

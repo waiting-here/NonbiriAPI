@@ -51,3 +51,15 @@ done
 FOURTH_APPLICABLE=true FOURTH_RESULT=success check_third_child full true success
 FOURTH_APPLICABLE=false FOURTH_RESULT=skipped check_third_child routine true success
 printf 'Fixture-child failure propagation: passed\n'
+
+for result in failure cancelled skipped missing ''; do
+  if FIFTH_APPLICABLE=true FIFTH_RESULT=$result check_third_child full true success; then
+    printf 'Unexpected smoke-child success: %s\n' "$result" >&2
+    exit 1
+  fi
+done
+FIFTH_APPLICABLE=true FIFTH_RESULT=success check_third_child full true success
+FIFTH_APPLICABLE=false FIFTH_RESULT=skipped check_third_child routine true success
+if FIFTH_APPLICABLE=false FIFTH_RESULT=skipped check_third_child full true success; then exit 1; fi
+if FIFTH_APPLICABLE=false FIFTH_RESULT=success check_third_child routine true success; then exit 1; fi
+printf 'Smoke-child failure propagation: passed\n'

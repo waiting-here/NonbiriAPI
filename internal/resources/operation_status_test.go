@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	"net/http"
 	"reflect"
 	"strings"
@@ -141,7 +142,21 @@ func TestResourceOperationStatusDiscoveryTerminalFailureAndDeletion(t *testing.T
 				t.Fatalf("discovery replay = (%+v,%v)", replay, err)
 			}
 			if deleteUser {
-				if _, err := env.store.DB().Exec(`DELETE FROM users WHERE id=?`, user); err != nil {
+				tx, err := env.store.DB().Begin()
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer tx.Rollback()
+				if err := env.repository.PrepareLifecycleAccountDeletion(context.Background(), tx, user, resourceTestNow); err != nil {
+					t.Fatal(err)
+				}
+				if err := connectionstore.PrepareAccountDeletionTx(context.Background(), tx, user, resourceTestNow); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := tx.Exec(`DELETE FROM users WHERE id=?`, user); err != nil {
+					t.Fatal(err)
+				}
+				if err := tx.Commit(); err != nil {
 					t.Fatal(err)
 				}
 				if env.rowCount(t, `SELECT count(*) FROM resource_operation_status`) != 0 {

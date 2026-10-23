@@ -52,8 +52,12 @@ func TestMFAInvalidationClosesConnectionsAndPreservesCapture(t *testing.T) {
 	defer unregister()
 	limitsChanged := 0
 	fanout := &userSessionInvalidationFanout{debug: hub, connections: connections, limitsChanged: func(int64) { limitsChanged++ }}
+	fanout.UserLimitsChanged(7)
+	if stream.Err() != nil || decision.Trace.Context().Err() != nil || limitsChanged != 1 {
+		t.Fatal("limit change cancelled an existing connection or capture")
+	}
 	fanout.UserMFAChanged(7)
-	if stream.Err() == nil || decision.Trace.Context().Err() != nil || limitsChanged != 0 {
+	if stream.Err() == nil || decision.Trace.Context().Err() != nil || limitsChanged != 1 {
 		t.Fatal("MFA change crossed the browser connection boundary")
 	}
 	metadata, err = hub.Metadata(7)
@@ -61,7 +65,7 @@ func TestMFAInvalidationClosesConnectionsAndPreservesCapture(t *testing.T) {
 		t.Fatal(metadata, err)
 	}
 	fanout.UserSessionInvalidated(7)
-	if decision.Trace.Context().Err() == nil || limitsChanged != 1 {
+	if decision.Trace.Context().Err() == nil || limitsChanged != 2 {
 		t.Fatal("first-factor revocation did not stop capture")
 	}
 }

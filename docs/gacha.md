@@ -14,6 +14,20 @@ edits, does not open pools and does not reset collection, eligibility, pity or
 claim records. Published theme membership and accepted pool rules remain fixed.
 The rules and configuration contracts below are authoritative for both API and UI.
 
+## Artwork availability
+
+Administrators can use **Disable R-18 built-in artwork** in site settings. It is
+on by default. All currently bundled artwork is general; the shared artwork
+catalog supports separately classified cards, covers, illustrations and site
+appearances, including their thumbnails and animation layers.
+
+R-18 candidate tiles carry a visible label. When disabled, their artwork uses a
+safe substitute and cannot be newly selected as a background or cover. Card
+ownership, draw results, rewards and saved preferences remain intact. Enabling
+the artwork again restores saved choices. Allowed individual viewing and applied
+appearances have no persistent label or overlay. Direct artwork requests also
+obey the switch; already downloaded content cannot be recalled.
+
 ## Entry and admission
 
 Activity entrances are hidden by default. Administrators can show them from the activity settings. This display switch does not stop scheduled pools or disable the activity URL. The permanent pool, catalogue and mystery shop stay open. Limited pools have individual schedules. When entrances are enabled, the main banner appears below Cyber Loan under permanent activities. Each open limited pool also appears under limited activities, with its cover, featured cards and opening dates, and links directly to that pool. Draft, paused, future and ended pools have no entrance. Open **Activities → The Gacha Simulator**; administrators configure it from **Activity management**. Site login, account restrictions and maintenance still apply.
@@ -56,7 +70,7 @@ The first eleven themes each have five cards: ChatGPT, Claude, GLM, DeepSeek and
 | 逍遥游 · DeepSeek | SP | Limited |
 | 镜海相逢 · Gemini | SP | Limited |
 | 琥珀誓章 · Claude | SP | Limited |
-| 与你私奔 · Claude | SP | Limited |
+| 天光与共 · Claude | SP | Limited |
 | 偷心预告 · GLM | SP | Limited |
 
 The catalogue shows all 61 cards and collection status. Owned cards open a full illustration and show the first acquisition time. SSR and SP illustrations have a looping animation, pause control and static fallback. SP also animates its background in coordination with the character. N and R draws reveal automatically in order. SR, SSR and SP encounters wait for a click or the Continue button while their artwork keeps moving; SSR and SP use full-screen scenes. First-acquisition SSR/SP encounters cannot be skipped or closed until all their lines have appeared. Skip reaches the complete results once those encounters finish, without another request. Reduced motion retains the full static first encounter and its lines. Ten-pulls share one card board: five by two on desktop and four, four, two on phones. SR focuses within that board; SSR/SP charge before a full-screen close-up. New SP cards have a short prelude and a delayed second voice line; reunions use their own line. Results keep all ten cards visible and animate duplicate shard conversion. When enough tickets remain and the original pool is open, Draw again repeats the same quantity through the normal draw flow. Sound effects, music, supported-device vibration, card-back rarity hints and reduced motion have separate controls. Turning hints off keeps unrevealed backs identical. Pausing or hiding the page preserves remaining scene time. Owned-card appreciation includes bilingual character lines. Owning an SSR/SP card also unlocks both first-encounter and reunion replay, including cards acquired from the shop or a reward. Replays may be closed immediately and do not spend tickets or change collection, pity or shards.

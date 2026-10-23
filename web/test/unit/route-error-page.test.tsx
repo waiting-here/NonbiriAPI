@@ -17,6 +17,7 @@ const publicConfig = {
   legal_authoritative_locale: '',
   maintenance_mode: false,
   registration_open: true,
+  artwork_r18_disabled: true,
   announcement_epoch: 'b1e_AAAAAAAAAAAAAAAAAAAAAA',
 };
 
@@ -60,13 +61,19 @@ describe('route error recovery shell', () => {
     await renderWithProviders(<RouteErrorPage station="user" />, { station: 'user' });
 
     expect(screen.getByRole('heading', { name: 'Under maintenance' })).toBeInTheDocument();
-    expect(screen.getByText('The site is under maintenance and temporarily unavailable. Please check back later.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'The site is under maintenance and temporarily unavailable. Please check back later.',
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reload page' })).not.toBeInTheDocument();
     expect(document.querySelectorAll('.nb-public-shell')).toHaveLength(1);
   });
 
   test('keeps service_unavailable 503 in the retryable server-error state', async () => {
-    mockedRouteError.mockReturnValue(new ApiError('service_unavailable', 'raw unavailable detail', 503));
+    mockedRouteError.mockReturnValue(
+      new ApiError('service_unavailable', 'raw unavailable detail', 503),
+    );
     installJsonFetchFixtures([{ method: 'GET', path: '/api/config', body: publicConfig }]);
     await renderWithProviders(<RouteErrorPage station="user" />, { station: 'user' });
 

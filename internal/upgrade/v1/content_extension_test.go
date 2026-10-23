@@ -89,6 +89,7 @@ func TestStableContentUpgradePreservesSavedStateAndReopens(t *testing.T) {
 
 func TestStableContentUpgradeCancellationRollsBackBothChanges(t *testing.T) {
 	d := openSchema17DDLForTest(t)
+	beforeRows := gatewayRows(t, d)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	err := runGenerationTwoExtension(ctx, d, func(ctx context.Context, tx *sql.Tx) error {
@@ -101,10 +102,7 @@ func TestStableContentUpgradeCancellationRollsBackBothChanges(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	plan, err := storageSchema.plan(t.Context(), d)
-	if err != nil || len(plan.steps) != 9 || plan.steps[0].from != 17 || plan.steps[8].version != 26 {
-		t.Fatal("source not restored", err)
-	}
+	assertExactPublishedSource(t, d, 17, stableSchema17Manifest, beforeRows)
 	var count int
 	if err = d.QueryRow("SELECT count(*) FROM site_config WHERE key='game_fishing_milk_crab_chance_bps'").Scan(&count); err != nil || count != 0 {
 		t.Fatal("partial config committed", err)

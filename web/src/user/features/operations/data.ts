@@ -386,9 +386,16 @@ export interface CredentialReportInput {
     | 'openai-compatible'
     | 'anthropic-compatible'
     | 'ai-sdk-gateway-v3'
+    | 'ai-sdk-gateway-v4'
     | 'google-gemini'
     | 'openai-responses'
-    | 'openai-decisions';
+    | 'openai-decisions'
+    | 'cohere-rerank'
+    | 'jina-rerank'
+    | 'siliconflow-rerank'
+    | 'voyage-rerank'
+    | 'typesafe-systemone'
+    | 'openai-chat-completions';
   base_url: string;
   secret: string;
   note: string;

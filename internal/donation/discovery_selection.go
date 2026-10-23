@@ -3,6 +3,7 @@ package donation
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
 const discoverySelectionScope = "donation-model-discovery-selection"
@@ -114,6 +116,30 @@ func (s *Service) selectDiscoveries(ctx context.Context, role reviewerRole, user
 	if err != nil {
 		return empty, err
 	}
+	keys := make([]int64, 0, len(out.Items))
+	for _, item := range out.Items {
+		id, err := strconv.ParseInt(item.KeyID, 10, 64)
+		if err != nil {
+			return empty, ErrInvariant
+		}
+		keys = append(keys, id)
+	}
+	choices, err := readDiscoveryChoicesTx(ctx, tx, keys, now)
+	if err != nil {
+		return empty, err
+	}
+	usable := out.Items[:0]
+	for index, item := range out.Items {
+		_, err := chooseDiscoveryUse(choices[keys[index]], resources.ManagedDiscoverySelection{}, true)
+		if errors.Is(err, resources.ErrResourceLocked) || errors.Is(err, resources.ErrConflict) {
+			continue
+		}
+		if err != nil {
+			return empty, err
+		}
+		usable = append(usable, item)
+	}
+	out.Items = usable
 	after = ids[len(ids)-1]
 	if after < maximum {
 		next, err := db.EncodePaginationCursorWithDerivedKey(key, discoverySelectionScope, owner, uint64(started)+3600,

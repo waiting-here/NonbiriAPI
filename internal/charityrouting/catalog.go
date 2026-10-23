@@ -82,7 +82,7 @@ func (s *Service) Catalog(ctx context.Context, userID int64, filter CatalogFilte
 		return Catalog{}, ErrInvariant
 	}
 	var tokenReserveText sql.NullString
-	if err := tx.QueryRowContext(ctx, `SELECT CASE WHEN EXISTS(SELECT 1 FROM charity_models WHERE pricing_mode='per_token')
+	if err := tx.QueryRowContext(ctx, `SELECT CASE WHEN EXISTS(SELECT 1 FROM charity_models WHERE pricing_mode IN ('per_token','per_search_unit'))
 THEN (SELECT value FROM site_config WHERE key='charity_token_reserve_milli') ELSE '1' END`).Scan(&tokenReserveText); err != nil {
 		return Catalog{}, fmt.Errorf("charity routing: read catalog reserve: %w", err)
 	}

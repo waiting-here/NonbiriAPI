@@ -1,3 +1,5 @@
+import { supportsChatStoragePolicy } from '@shared/operations/connectorPolicy';
+import { normalizeCloudflareProxyMode, type CloudflareProxyMode } from '@shared/cloudflareProxy';
 import { CancelledError } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch, isMfaRequired, isNotFoundError } from '@shared/query/http';
@@ -70,6 +72,8 @@ export interface UpstreamModel {
 }
 
 export interface PlatformModel {
+  cloudflare_proxy_enabled: boolean;
+  cloudflare_proxy_mode: CloudflareProxyMode;
   id: string;
   provider: string;
   model: string;
@@ -375,7 +379,17 @@ function connectorType(value: unknown): Endpoint['connector_type'] {
   if (
     value === 'openai-compatible' ||
     value === 'anthropic-compatible' ||
-    value === 'ai-sdk-gateway-v3' || value === 'google-gemini' || value === 'openai-responses' || value === 'openai-decisions'
+    value === 'ai-sdk-gateway-v3' ||
+    value === 'ai-sdk-gateway-v4' ||
+    value === 'google-gemini' ||
+    value === 'openai-responses' ||
+    value === 'openai-decisions' ||
+    value === 'cohere-rerank' ||
+    value === 'jina-rerank' ||
+    value === 'siliconflow-rerank' ||
+    value === 'voyage-rerank' ||
+    value === 'typesafe-systemone' ||
+    value === 'openai-chat-completions'
   )
     return value;
   throw new ApiError('invalid_response', 'The server returned an invalid connector type.', 200);
@@ -509,7 +523,7 @@ export function normalizeEndpointKey(value: unknown, connectorTypeValue: string)
   const hasStorePolicy = Object.prototype.hasOwnProperty.call(record, 'force_store_false');
   const rawStorePolicy = recordValue(record, 'force_store_false');
   let storePolicyValue: StorePolicy;
-  if (connector === 'openai-compatible') {
+  if (supportsChatStoragePolicy(connector)) {
     if (!hasStorePolicy || typeof rawStorePolicy !== 'boolean') {
       throw new ApiError('invalid_response', 'The server returned an invalid store policy.', 200);
     }
@@ -569,6 +583,13 @@ export function normalizeUpstreamModel(value: unknown): UpstreamModel {
 export function normalizePlatformModel(value: unknown): PlatformModel {
   const record = requiredRecord(value, 'model');
   return {
+    cloudflare_proxy_enabled: requiredBoolean(
+      recordValue(record, 'cloudflare_proxy_enabled'),
+      'Cloudflare proxy setting',
+    ),
+    cloudflare_proxy_mode: normalizeCloudflareProxyMode(
+      recordValue(record, 'cloudflare_proxy_mode'),
+    ),
     id: requiredID(recordValue(record, 'id'), 'model id'),
     provider: requiredText(recordValue(record, 'provider'), 64, 'model provider'),
     model: requiredText(recordValue(record, 'model'), 64, 'model name'),
@@ -819,9 +840,12 @@ export function useUserSession<T = UserSessionResponse>(
       } catch (error) {
         // An MFA challenge pauses this account without replacing its mounted forms.
         if (
-          isMfaRequired(error) && previous && snapshot &&
+          isMfaRequired(error) &&
+          previous &&
+          snapshot &&
           stationSessionMatches(queryClient, 'steward', snapshot)
-        ) return previous;
+        )
+          return previous;
         failManagementSessionRequest(queryClient, 'steward', generation, error);
         throw error;
       }
@@ -949,6 +973,7 @@ export function useModelBindings(modelId: string | undefined, enabled = true) {
 }
 
 export interface UpdateModelInput {
+  cloudflare_proxy_enabled?: boolean;
   modelId: string;
   provider?: string;
   model?: string;
@@ -1391,7 +1416,7 @@ export function normalizeDonationKey(value: unknown, connectorTypeValue: string)
   const hasStorePolicy = Object.prototype.hasOwnProperty.call(record, 'force_store_false');
   const rawStorePolicy = recordValue(record, 'force_store_false');
   let storePolicyValue: StorePolicy;
-  if (connector === 'openai-compatible') {
+  if (supportsChatStoragePolicy(connector)) {
     if (!hasStorePolicy || typeof rawStorePolicy !== 'boolean') {
       throw new ApiError(
         'invalid_response',
@@ -1573,7 +1598,7 @@ export interface DonationPayload {
       note?: string;
       max_concurrency?: number;
       rpm_limit?: number;
-      /** OpenAI-compatible only; omitted for every other connector. */
+      /** Native Chat connectors only; omitted for other connector types. */
       force_store_false?: boolean;
     }>;
   };

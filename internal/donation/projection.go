@@ -110,7 +110,7 @@ func (s *Service) GetSteward(ctx context.Context, userID, donationID int64) (Ste
 	}
 	defer tx.Rollback()
 	if role == reviewerTrainee {
-		if err := requirePendingReviewTx(ctx, tx, donationID, now); err != nil {
+		if err := requirePendingUseReviewTx(ctx, tx, donationID, now); err != nil {
 			return StewardDonation{}, err
 		}
 	}
@@ -138,11 +138,15 @@ func (s *Service) GetSteward(ctx context.Context, userID, donationID int64) (Ste
 	if err != nil {
 		return StewardDonation{}, err
 	}
+	if role == reviewerTrainee {
+		keys, err := pendingReviewKeysTx(ctx, tx, []int64{donationID})
+		if err != nil {
+			return StewardDonation{}, err
+		}
+		value = pendingUseReviewProjection(value, keys)
+	}
 	if err := tx.Commit(); err != nil {
 		return StewardDonation{}, fmt.Errorf("donation: commit steward read: %w", err)
-	}
-	if role == reviewerTrainee {
-		value = traineeReviewProjection(value)
 	}
 	return stewardFromAdmin(value, userID), nil
 }
@@ -182,8 +186,12 @@ ORDER BY id LIMIT ?`, userID, afterID, now-terminalRetention, limit+1)
 		ids = ids[:limit]
 	}
 	items := make([]Donation, 0, len(ids))
+	summaries, err := readUseSummariesTx(ctx, tx, ids)
+	if err != nil {
+		return nil, 0, err
+	}
 	for _, id := range ids {
-		item, err := getOwnerDonationTx(ctx, tx, userID, id, now)
+		item, err := getOwnerDonationTx(ctx, tx, userID, id, now, summaries[id])
 		if err != nil {
 			return nil, 0, err
 		}
@@ -244,6 +252,10 @@ func (s *Service) listRole(ctx context.Context, userID int64, filter ManagementF
 	query := `SELECT d.id FROM donations d JOIN donation_handling h ON h.donation_id=d.id WHERE d.id>?
  AND (d.status IN ('pending','approved') OR d.terminal_at>?)`
 	args := []any{afterID, now - terminalRetention}
+	if reviewRole == reviewerTrainee {
+		query += ` AND ` + pendingUseReviewSQL
+		args = append(args, now)
+	}
 	query, args = appendManagementFilter(query, args, filter, now)
 	query += ` ORDER BY d.id LIMIT ?`
 	args = append(args, limit+1)
@@ -265,12 +277,25 @@ func (s *Service) listRole(ctx context.Context, userID int64, filter ManagementF
 		if _, err := materializeDonationExpiryTx(ctx, tx, id, now); err != nil {
 			return nil, 0, err
 		}
-		item, err := getAdminDonationTx(ctx, tx, id, now)
+	}
+	summaries, err := readUseSummariesTx(ctx, tx, ids)
+	if err != nil {
+		return nil, 0, err
+	}
+	var pendingKeys map[string]bool
+	if reviewRole == reviewerTrainee {
+		pendingKeys, err = pendingReviewKeysTx(ctx, tx, ids)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+	for _, id := range ids {
+		item, err := getAdminDonationTx(ctx, tx, id, now, summaries[id])
 		if err != nil {
 			return nil, 0, err
 		}
 		if reviewRole == reviewerTrainee {
-			item = traineeReviewProjection(item)
+			item = pendingUseReviewProjection(item, pendingKeys)
 		}
 		items = append(items, item)
 	}
@@ -344,8 +369,8 @@ func donationOrdinarilyVisibleTx(ctx context.Context, tx *sql.Tx, donationID, no
 	}
 }
 
-func getOwnerDonationTx(ctx context.Context, tx *sql.Tx, userID, donationID, now int64) (Donation, error) {
-	admin, err := getDonationProjectionTx(ctx, tx, donationID, now)
+func getOwnerDonationTx(ctx context.Context, tx *sql.Tx, userID, donationID, now int64, summary ...UseSummary) (Donation, error) {
+	admin, err := getDonationProjectionTx(ctx, tx, donationID, now, summary...)
 	if err != nil {
 		return Donation{}, err
 	}
@@ -356,18 +381,27 @@ func getOwnerDonationTx(ctx context.Context, tx *sql.Tx, userID, donationID, now
 	if err != nil {
 		return Donation{}, err
 	}
-	return Donation{OwnerHiddenAt: hidden, DiscordPublicThanks: admin.DiscordPublicThanks, ID: admin.ID, Status: admin.Status, Revision: admin.Revision, Description: admin.Description,
+	return Donation{UseSummary: admin.UseSummary, OwnerHiddenAt: hidden, DiscordPublicThanks: admin.DiscordPublicThanks, ID: admin.ID, Status: admin.Status, Revision: admin.Revision, Description: admin.Description,
 		ReviewResult: admin.ReviewResult, Keys: ownerKeys(admin.Keys), CreatedAt: admin.CreatedAt, UpdatedAt: admin.UpdatedAt}, nil
 }
 
-func getAdminDonationTx(ctx context.Context, tx *sql.Tx, donationID, now int64) (AdminDonation, error) {
-	return getDonationProjectionTx(ctx, tx, donationID, now)
+func getAdminDonationTx(ctx context.Context, tx *sql.Tx, donationID, now int64, summary ...UseSummary) (AdminDonation, error) {
+	return getDonationProjectionTx(ctx, tx, donationID, now, summary...)
 }
 
-func getDonationProjectionTx(ctx context.Context, tx *sql.Tx, donationID, now int64) (AdminDonation, error) {
+func getDonationProjectionTx(ctx context.Context, tx *sql.Tx, donationID, now int64, summary ...UseSummary) (AdminDonation, error) {
 	out, err := getDonationHeaderTx(ctx, tx, donationID)
 	if err != nil {
 		return AdminDonation{}, err
+	}
+	if len(summary) > 0 {
+		out.UseSummary = summary[0]
+	} else {
+		values, err := readUseSummariesTx(ctx, tx, []int64{donationID})
+		if err != nil {
+			return AdminDonation{}, err
+		}
+		out.UseSummary = values[donationID]
 	}
 	out.Keys, err = readDonationKeysTx(ctx, tx, donationID, out.Status, now)
 	return out, err
@@ -500,16 +534,17 @@ EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id),
 CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_concurrency,0) END,
 CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_rpm,0) END,
 k.revision,cooldown.rate_limited_until,COALESCE(sb.period,''),COALESCE(sb.source,''),sb.retry_at,sb.trial_claim_id IS NOT NULL,
-(SELECT COUNT(*) FROM charity_model_bindings b WHERE b.donation_key_id=dk.id),
-dk.key_body_review_hmac IS NOT NULL,COALESCE(rr.required,0),rr.revision
-FROM donation_keys dk
+(SELECT COUNT(DISTINCT binding_id) FROM charity_binding_targets b WHERE b.donation_key_id=dk.id),
+dk.key_body_review_hmac IS NOT NULL,COALESCE(rr.required,0),rr.revision,
+`+manageableKeySQL+`,CASE WHEN e.user_id=d.user_id THEN e.id END
+FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
 LEFT JOIN donation_key_review_requirements rr ON rr.hmac=dk.key_body_review_hmac
 LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
 LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
 LEFT JOIN endpoints e ON e.id=k.endpoint_id
 LEFT JOIN donation_key_cooldowns cooldown ON cooldown.donation_key_id=dk.id
  LEFT JOIN donation_key_backoffs sb ON sb.donation_key_id=dk.id
-WHERE `+where+` ORDER BY dk.id`, args...)
+WHERE `+where+` ORDER BY dk.id`, append([]any{now}, args...)...)
 	if err != nil {
 		return nil, fmt.Errorf("donation: read key projections: %w", err)
 	}
@@ -522,6 +557,7 @@ WHERE `+where+` ORDER BY dk.id`, args...)
 		var probing bool
 		var id int64
 		var endpointKeyID sql.NullInt64
+		var endpointID sql.NullInt64
 		var endpointEnabled, keyPhysicalEnabled, enabled, failureDisabled, suspended, member int
 		var priceLimit, callLimit, tokenLimit []byte
 		var priceUsed, priceReserved, callsUsed, callsReserved, tokensUsed, tokensReserved []byte
@@ -537,11 +573,15 @@ WHERE `+where+` ORDER BY dk.id`, args...)
 			&channelName, &channelCategory, &endpointEnabled, &keyPhysicalEnabled,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceReserved, &callsUsed, &callsReserved,
 			&tokensUsed, &tokensReserved, &item.TokenReserve, &enabled, &failureDisabled, &streak,
-			&generation, &item.FailureDisableThreshold, &item.SafeNote, &authorizedExpires, &expires, &ended, &suspended, &member, &item.MaxConcurrency, &item.MaxRPM, &item.KeyLimitsRevision, &item.RateLimitedUntil, &bperiod, &bsource, &until, &probing, &bindingCount, &item.Review.MaterialAvailable, &item.Review.Required, &reviewRevision); err != nil {
+			&generation, &item.FailureDisableThreshold, &item.SafeNote, &authorizedExpires, &expires, &ended, &suspended, &member, &item.MaxConcurrency, &item.MaxRPM, &item.KeyLimitsRevision, &item.RateLimitedUntil, &bperiod, &bsource, &until, &probing, &bindingCount, &item.Review.MaterialAvailable, &item.Review.Required, &reviewRevision, &item.CanManage, &endpointID); err != nil {
 			return nil, fmt.Errorf("donation: scan key projection: %w", err)
 		}
 		item.Projection = smartbackoff.DecodeProjection(bperiod, bsource, until, probing, now)
 		item.ID = strconv.FormatInt(id, 10)
+		if endpointID.Valid {
+			value := strconv.FormatInt(endpointID.Int64, 10)
+			item.OwnerEndpointID = &value
+		}
 		item.BindingCount = strconv.FormatInt(bindingCount, 10)
 		if reviewRevision.Valid {
 			value := strconv.FormatInt(reviewRevision.Int64, 10)
@@ -674,6 +714,7 @@ func stewardFromAdmin(value AdminDonation, _ int64) StewardDonation {
 		owner = &copy
 	}
 	return StewardDonation{
+		UseSummary:          value.UseSummary,
 		DiscordPublicThanks: value.DiscordPublicThanks,
 		ID:                  value.ID, Status: value.Status, Revision: value.Revision, Description: value.Description,
 		ReviewResult: value.ReviewResult, Keys: stewardKeys(value.Keys),
@@ -707,6 +748,7 @@ func ownerKey(value AdminDonationKey) DonationKey {
 		Name:          value.SafeSource.Name,
 	}
 	return DonationKey{
+		EndpointID:              value.OwnerEndpointID,
 		Projection:              value.Projection,
 		TokenBreakdown:          value.TokenBreakdown,
 		Review:                  value.Review,

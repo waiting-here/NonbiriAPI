@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/waiting-here/NonbiriAPI/internal/artwork"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
@@ -68,21 +69,38 @@ func PickSite(raw string, configured ...string) Site {
 // stale SPA bundle from a previous binary never shadows a redeploy.
 // Content-hashed JavaScript and CSS can be cached across visits.
 func SPAHandler(site Site) http.Handler {
+	return spaHandlerForSite(site, nil)
+}
+
+func spaHandlerForSite(site Site, disabled func() bool) http.Handler {
 	fsys := siteFS(site)
 	if fsys == nil {
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			httperr.WriteError(w, httperr.New(httperr.CodeInternal, "site is not configured"))
 		})
 	}
-	return spaHandler(fsys)
+	return spaHandlerWithArtworkPolicy(fsys, artwork.Default(), disabled)
 }
 
 func spaHandler(fsys fs.FS) http.Handler {
+	return spaHandlerWithArtworkPolicy(fsys, artwork.Default(), nil)
+}
+
+func spaHandlerWithArtworkPolicy(fsys fs.FS, catalog *artwork.Catalog, disabled func() bool) http.Handler {
 	fileServer := http.FileServer(http.FS(fsys))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clean := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
 		if clean == "" || clean == "." {
 			clean = "index.html"
+		}
+		if relative, ok := strings.CutPrefix(clean, "assets/gacha/"); ok {
+			if rating, known := catalog.AssetRating(relative); (!known && artworkImagePath(relative)) || rating == artwork.R18 {
+				w.Header().Set("Cache-Control", "no-store")
+				if !known || disabled == nil || disabled() {
+					http.Error(w, "artwork unavailable", http.StatusForbidden)
+					return
+				}
+			}
 		}
 		if _, err := fs.Stat(fsys, clean); err != nil {
 			observability.MarkResponseCategory(r.Context(), "spa_fallback")
@@ -96,6 +114,15 @@ func spaHandler(fsys fs.FS) http.Handler {
 		}
 		fileServer.ServeHTTP(w, r)
 	})
+}
+
+func artworkImagePath(relative string) bool {
+	switch strings.ToLower(path.Ext(relative)) {
+	case ".webp", ".png", ".jpg", ".jpeg", ".gif", ".avif", ".svg", ".bmp":
+		return true
+	default:
+		return false
+	}
 }
 
 // serveIndexNoStore writes the index.html with no-store headers. Used for both
@@ -117,9 +144,16 @@ func serveIndexNoStore(w http.ResponseWriter, fsys fs.FS) {
 // context is authoritative; the host matcher is retained for direct tests and
 // other safe compositions.
 func NewMultiHandler(configured ...string) http.Handler {
-	admin := SPAHandler(SiteAdmin)
-	user := SPAHandler(SiteUser)
+	return NewMultiHandlerWithArtworkPolicy(nil, configured...)
+}
 
+// NewMultiHandlerWithArtworkPolicy checks the current policy before serving rated
+// assets on either station. A nil policy keeps rated artwork disabled.
+func NewMultiHandlerWithArtworkPolicy(disabled func() bool, configured ...string) http.Handler {
+	return newMultiHandler(spaHandlerForSite(SiteAdmin, disabled), spaHandlerForSite(SiteUser, disabled), configured...)
+}
+
+func newMultiHandler(admin, user http.Handler, configured ...string) http.Handler {
 	var matcher host.Matcher
 	matcherReady := len(configured) == 2
 	if matcherReady {

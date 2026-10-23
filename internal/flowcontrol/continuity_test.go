@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
@@ -44,9 +45,24 @@ func TestRPMDeletionRecoveryKeepsOriginalWindowAndResetsOnlyLimits(t *testing.T)
 		return id
 	}
 	user := insert()
+	defaults, err := store.GetUserAdmissionLimits(ctx, user)
+	if err != nil || defaults.ConcurrencyLimit != 5 || defaults.LightConcurrencyLimit != 15 || defaults.RPMLimitSet || defaults.LightRPMLimitSet || defaults.GlobalRPMLimitSet {
+		t.Fatalf("live defaults: %+v %v", defaults, err)
+	}
+	if _, err := store.DB().Exec("UPDATE users SET rpm_limit=7,light_rpm_limit=8,global_rpm_limit=9,concurrency_limit=2,light_concurrency_limit=3 WHERE id=?", user); err != nil {
+		t.Fatal(err)
+	}
+	live, err := DBUserLimitResolver(store)(ctx, user)
+	if err != nil || live.RPMLimit != 7 || !live.RPMLimitSet || live.LightRPMLimit != 8 || !live.LightRPMLimitSet || live.GlobalRPMLimit != 9 || !live.GlobalRPMLimitSet || live.ConcurrencyLimit != 2 || live.LightConcurrencyLimit != 3 {
+		t.Fatalf("live overrides: %+v %v", live, err)
+	}
+	if _, err := store.DB().Exec("UPDATE users SET rpm_limit=NULL,light_rpm_limit=NULL,global_rpm_limit=NULL,concurrency_limit=NULL,light_concurrency_limit=NULL WHERE id=?", user); err != nil {
+		t.Fatal(err)
+	}
 	clock := newFakeClock()
 	config := testRPMConfig()
 	config.MaxKeyBytes = 64
+	config.GlobalLimit, config.PerUserLimit = 8, 4
 	newController := func() *Controller {
 		c, err := newWithClock(Config{RPM: config, Continuity: identities}, clock)
 		if err != nil {
@@ -56,8 +72,12 @@ func TestRPMDeletionRecoveryKeepsOriginalWindowAndResetsOnlyLimits(t *testing.T)
 		return c
 	}
 	controller := newController()
-	for i := range 2 {
-		r, _, err := controller.AdmitModel(ctx, user, i == 0)
+	for i := range 4 {
+		operation := contract.OperationChatCompletions
+		if i >= 2 {
+			operation = contract.OperationEmbeddings
+		}
+		r, _, err := controller.AdmitOperation(ctx, user, operation, i%2 == 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -106,16 +126,19 @@ func TestRPMDeletionRecoveryKeepsOriginalWindowAndResetsOnlyLimits(t *testing.T)
 			t.Fatal(err)
 		}
 		_, facts, err := c.limiter.SnapshotUser(key)
-		if err != nil || len(facts) != 2 {
+		if err != nil || len(facts) != 4 {
 			t.Fatal("restored facts", facts, err)
 		}
-		classified := 0
+		classified, light := 0, 0
 		for _, fact := range facts {
+			if fact.Light {
+				light++
+			}
 			if fact.Charity {
 				classified++
 			}
 		}
-		if classified != 1 {
+		if classified != 2 || light != 2 {
 			t.Fatal("charity classification lost or inferred for personal request", facts)
 		}
 	}

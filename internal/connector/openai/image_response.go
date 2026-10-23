@@ -173,21 +173,9 @@ func projectImageUsage(raw []byte) json.RawMessage {
 }
 
 func imageUsage(raw []byte) Usage {
-	if len(raw) == 0 || isJSONNull(raw) {
-		return Usage{}
+	usage, root := simpleTokenUsage(raw)
+	if root != nil {
+		normalizeModalitySides(&usage, root["input_tokens_details"], root["output_tokens_details"], textModality|imageModality, textModality|imageModality, nil, nil)
 	}
-	fields, ok := borrowedObjectFields(raw)
-	if !ok {
-		return Usage{}
-	}
-	root := fieldsByName(fields)
-	var input, output, total int64
-	if !decodeNonNegativeInt(root["input_tokens"], &input) || !decodeNonNegativeInt(root["output_tokens"], &output) || !decodeNonNegativeInt(root["total_tokens"], &total) {
-		return Usage{}
-	}
-	sum, ok := addChecked(input, output)
-	if !ok {
-		return Usage{TotalMismatch: true}
-	}
-	return Usage{Present: true, UncachedInputTokens: input, OutputTokens: output, TotalMismatch: sum != total}
+	return usage
 }

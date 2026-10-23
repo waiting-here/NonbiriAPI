@@ -15,8 +15,8 @@ import (
 func hostileInsertChannelFixture(t *testing.T, db *sql.DB, id string, enabled int) {
 	t.Helper()
 	hostileMustExec(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at)
-VALUES(?,?,'subscription','openai-compatible','https://channel.example/v1',?,'active',1,0,0)`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at)
+VALUES(?,?,'subscription',?,'active',1,0,0)`,
 		id, "channel-"+id[len(id)-3:], enabled)
 }
 
@@ -69,68 +69,66 @@ func TestGenerationTwoHostileMainstreamChannelMatrices(t *testing.T) {
 
 	// OID boundaries and closed sets.
 	hostileMustFail(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at)
-VALUES(?,?,'subscription','openai-compatible','https://channel.example/v1',1,'active',1,0,0)`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at)
+VALUES(?,?,'subscription',1,'active',1,0,0)`,
 		hostileBadOID("mch_"), "bad-oid")
 	hostileMustFail(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at)
-VALUES(?,?,'subscription','openai-compatible','https://channel.example/v1',1,'active',1,0,0)`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at)
+VALUES(?,?,'subscription',1,'active',1,0,0)`,
 		hostileOID("rpc_"), "wrong-prefix")
 	hostileMustFail(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at)
-VALUES(?,?,'other','openai-compatible','https://channel.example/v1',1,'active',1,0,0)`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at)
+VALUES(?,?,'other',1,'active',1,0,0)`,
 		valid, "bad-category")
+	hostileMustExec(t, db, "INSERT INTO mainstream_channel_entries(channel_id,ord,connector_type,canonical_base_url,native_service_mask) VALUES(?,0,'openai-compatible','https://channel.example/v1',49)", valid)
+	hostileMustFail(t, db, "INSERT INTO mainstream_channel_entries(channel_id,ord,connector_type,canonical_base_url,native_service_mask) VALUES(?,1,'unknown-connector','https://channel.example/v1',49)", valid)
 	hostileMustFail(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at)
-VALUES(?,?,'subscription','unknown-connector','https://channel.example/v1',1,'active',1,0,0)`,
-		valid, "bad-connector")
-	hostileMustFail(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at)
-VALUES(?,?,'subscription','openai-compatible','https://channel.example/v1',1,'retiring',1,0,0)`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at)
+VALUES(?,?,'subscription',1,'retiring',1,0,0)`,
 		valid, "bad-state")
 	hostileMustFail(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at)
-VALUES(?,?,'subscription','openai-compatible','https://channel.example/v1',1,'active',0,0,0)`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at)
+VALUES(?,?,'subscription',1,'active',0,0,0)`,
 		valid, "zero-revision")
 	hostileMustFail(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at)
-VALUES(?,?,'subscription','openai-compatible','https://channel.example/v1',1,'active','1',0,0)`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at)
+VALUES(?,?,'subscription',1,'active','1',0,0)`,
 		valid, "text-revision")
 	hostileMustFail(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at)
-VALUES(?,'','subscription','openai-compatible','https://channel.example/v1',1,'active',1,0,0)`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at)
+VALUES(?,'','subscription',1,'active',1,0,0)`,
 		valid, "empty-name")
 	hostileMustFail(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at)
-VALUES(?,?,'subscription','openai-compatible','https://channel.example/v1',1,'active',1,0,0)`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at)
+VALUES(?,?,'subscription',1,'active',1,0,0)`,
 		valid, strings.Repeat("界", 129))
 	hostileMustExec(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at)
-VALUES(?,?,'subscription','openai-compatible','https://channel.example/v1',1,'active',1,0,0)`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at)
+VALUES(?,?,'subscription',1,'active',1,0,0)`,
 		hostileOIDVariant("mch_", 'B', 'Q'), strings.Repeat("界", 128))
 	hostileMustFail(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at)
-VALUES(?,?,'subscription','openai-compatible','https://channel.example/v1',1,'active',1,'0','0')`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at)
+VALUES(?,?,'subscription',1,'active',1,'0','0')`,
 		valid, "text-timestamps")
 
 	// state/retired_at matrix: retired rows are disabled, carry retired_at,
 	// and can never recover or be re-enabled.
 	hostileMustFail(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at,retired_at)
-VALUES(?,?,'subscription','openai-compatible','https://channel.example/v1',1,'retired',1,0,0,NULL)`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at,retired_at)
+VALUES(?,?,'subscription',1,'retired',1,0,0,NULL)`,
 		valid, "retired-null-time")
 	hostileMustFail(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at,retired_at)
-VALUES(?,?,'subscription','openai-compatible','https://channel.example/v1',1,'retired',1,0,0,0)`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at,retired_at)
+VALUES(?,?,'subscription',1,'retired',1,0,0,0)`,
 		valid, "retired-enabled")
 	hostileMustFail(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at,retired_at)
-VALUES(?,?,'subscription','openai-compatible','https://channel.example/v1',1,'active',1,0,0,0)`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at,retired_at)
+VALUES(?,?,'subscription',1,'active',1,0,0,0)`,
 		valid, "active-with-retired-at")
 	retiredID := hostileOIDVariant("mch_", 'C', 'Q')
 	hostileMustExec(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at,retired_at)
-VALUES(?,?,'subscription','openai-compatible','https://channel.example/v1',0,'retired',1,0,0,10)`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at,retired_at)
+VALUES(?,?,'subscription',0,'retired',1,0,0,10)`,
 		retiredID, "retired")
 	hostileMustFail(t, db, `UPDATE mainstream_channels SET state='active',updated_at=11 WHERE id=?`, retiredID)
 	hostileMustFail(t, db, `UPDATE mainstream_channels SET enabled=1,updated_at=11 WHERE id=?`, retiredID)
@@ -145,15 +143,15 @@ VALUES(?,?,'subscription','openai-compatible','https://channel.example/v1',0,'re
 		hostileInsertChannelFixture(t, db, hostileOIDVariant("mch_", byte('a'+i%26), tails[i/26]), 1)
 	}
 	hostileMustFail(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at)
-VALUES(?,?,'subscription','openai-compatible','https://channel.example/v1',1,'active',1,0,0)`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at)
+VALUES(?,?,'subscription',1,'active',1,0,0)`,
 		hostileOIDVariant("mch_", 'Z', 'Q'), "insert-limit-exceeded")
 	// A disabled channel row never counts toward the cap and cannot be
 	// enabled while the cap is already full.
 	disabledID := hostileOIDVariant("mch_", '-', 'Q')
 	hostileMustExec(t, db, `
-INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at)
-VALUES(?,?,'api_platform','anthropic-compatible','https://platform.example/v1',0,'active',1,0,0)`,
+INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at)
+VALUES(?,?,'api_platform',0,'active',1,0,0)`,
 		disabledID, "disabled-below-cap")
 	hostileMustFail(t, db, `UPDATE mainstream_channels SET enabled=1,updated_at=2 WHERE id=?`, disabledID)
 	// Retiring one active channel frees exactly one slot again.
@@ -181,36 +179,36 @@ func TestGenerationTwoHostileEndpointChannelSnapshotMatrix(t *testing.T) {
 
 	// All-or-none snapshot insertion and closed boundaries.
 	hostileMustFail(t, db, `
-INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,
+INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,native_service_mask,capability_origin,
  mainstream_channel_id,mainstream_channel_revision,mainstream_channel_category,created_at,updated_at)
-VALUES(?,'openai-compatible','https://main.example/v1','',1,1,?,1,'subscription',0,0)`,
-		userID, channelID, "partial-no-name")
+VALUES(?,'openai-compatible','https://main.example/v1','',1,1,49,'legacy',?,1,'subscription',0,0)`,
+		userID, channelID)
 	hostileMustFail(t, db, `
-INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,
+INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,native_service_mask,capability_origin,
  mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,created_at,updated_at)
-VALUES(?,'openai-compatible','https://main.example/v1','',1,1,?,1,'name',0,0)`,
-		userID, channelID, "partial-no-category")
+VALUES(?,'openai-compatible','https://main.example/v1','',1,1,49,'legacy',?,1,'name',0,0)`,
+		userID, channelID)
 	hostileMustFail(t, db, `
-INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,
+INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,native_service_mask,capability_origin,
  mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category,created_at,updated_at)
-VALUES(?,'openai-compatible','https://main.example/v1','',1,1,?,1,'name','other',0,0)`,
-		userID, channelID, "bad-category")
+VALUES(?,'openai-compatible','https://main.example/v1','',1,1,49,'legacy',?,1,'name','other',0,0)`,
+		userID, channelID)
 	hostileMustFail(t, db, `
-INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,
+INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,native_service_mask,capability_origin,
  mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category,created_at,updated_at)
-VALUES(?,'openai-compatible','https://main.example/v1','',1,1,?,0,'name','subscription',0,0)`,
-		userID, channelID, "zero-revision")
+VALUES(?,'openai-compatible','https://main.example/v1','',1,1,49,'legacy',?,0,'name','subscription',0,0)`,
+		userID, channelID)
 	hostileMustFail(t, db, `
-INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,
+INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,native_service_mask,capability_origin,
  mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category,created_at,updated_at)
-VALUES(?,'openai-compatible','https://main.example/v1','',1,1,?,?,?,'subscription',0,0)`,
+VALUES(?,'openai-compatible','https://main.example/v1','',1,1,49,'legacy',?,?,?,'subscription',0,0)`,
 		userID, hostileBadOID("mch_"), 1, "bad-channel-oid")
 
 	// Canonical mainstream snapshot.
 	hostileMustExec(t, db, `
-INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,
+INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,native_service_mask,capability_origin,
  mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category,created_at,updated_at)
-VALUES(?,'openai-compatible','https://channel.example/v1','',1,1,?,1,'name','subscription',0,0)`,
+VALUES(?,'openai-compatible','https://channel.example/v1','',1,1,49,'legacy',?,1,'name','subscription',0,0)`,
 		userID, channelID)
 	endpointID := hostileNextPK64(t, db, "endpoints") - 1
 

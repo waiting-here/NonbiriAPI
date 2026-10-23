@@ -162,7 +162,7 @@ func readEndpointKeySnapshotTx(
 SELECT k.id,e.user_id,u.discord_id,
  CASE WHEN u.guild_nick<>'' THEN u.guild_nick ELSE u.username END,
  e.connector_type,e.base_url,k.display_head,k.display_tail,k.secret_fingerprint
-FROM endpoint_keys k
+FROM endpoint_key_current_credentials k
 JOIN endpoints e ON e.id=k.endpoint_id
 JOIN users u ON u.id=e.user_id
 WHERE k.id=? AND e.user_id=?`, endpointKeyID, ownerUserID).Scan(

@@ -14,6 +14,11 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
+type adaptationConfigurationView struct {
+	requestadaptation.ConfigurationProjection
+	Effective *requestadaptation.ConfigurationProjection `json:"effective,omitempty"`
+}
+
 type adaptationView struct {
 	requestadaptation.Projection
 	Effective *requestadaptation.Projection `json:"effective,omitempty"`
@@ -26,17 +31,21 @@ func (s *Service) ReserveForOutput(ctx context.Context, modelID, currentReserve,
 	if outputFloor == 0 {
 		return currentReserve, nil
 	}
-	var mode string
+	var mode, contextPricing string
 	var unit int64
-	if err := s.db.QueryRowContext(ctx, `SELECT pricing_mode,output_user_price FROM charity_models WHERE id=? AND enabled=1`, modelID).Scan(&mode, &unit); errors.Is(err, sql.ErrNoRows) {
+	if err := s.db.QueryRowContext(ctx, `SELECT pricing_mode,output_user_price,context_pricing FROM charity_models WHERE id=? AND enabled=1`, modelID).Scan(&mode, &unit, &contextPricing); errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNotFound
 	} else if err != nil {
 		return 0, ErrUnavailable
 	}
-	if mode == "per_request" {
+	if mode == "per_request" || mode == "per_search_unit" {
 		return currentReserve, nil
 	}
 	if mode != "per_token" {
+		return 0, ErrInvariant
+	}
+	unit, err := charityreserve.OutputUnitPrice(unit, contextPricing)
+	if err != nil {
 		return 0, ErrInvariant
 	}
 	reserve, err := charityreserve.WithOutputFloor(currentReserve, unit, outputFloor)
@@ -93,32 +102,57 @@ func (s *Service) adaptationViewTx(ctx context.Context, tx *sql.Tx, modelID, bin
 	return view, nil
 }
 
-func (s *Service) GetAdaptation(ctx context.Context, role roleKind, actorID, modelID, bindingID int64) (adaptationView, error) {
+func (s *Service) adaptationConfigurationViewTx(ctx context.Context, tx *sql.Tx, modelID, bindingID int64) (adaptationConfigurationView, error) {
+	ref := requestadaptation.Ref{Scope: requestadaptation.ScopeCharityModel, ID: modelID}
+	if bindingID > 0 {
+		ref = requestadaptation.Ref{Scope: requestadaptation.ScopeBinding, ID: bindingID}
+	}
+	current, err := s.adaptations.LoadTx(ctx, tx, ref)
+	if err != nil {
+		return adaptationConfigurationView{}, routingAdaptationError(err)
+	}
+	defer current.Clear()
+	view := adaptationConfigurationView{ConfigurationProjection: current.ConfigurationProjection()}
+	if bindingID > 0 {
+		model, err := s.adaptations.LoadTx(ctx, tx, requestadaptation.Ref{Scope: requestadaptation.ScopeCharityModel, ID: modelID})
+		if err != nil {
+			return adaptationConfigurationView{}, routingAdaptationError(err)
+		}
+		defer model.Clear()
+		effective := requestadaptation.Effective(model, current)
+		projection := effective.ConfigurationProjection()
+		effective.Clear()
+		view.Effective = &projection
+	}
+	return view, nil
+}
+
+func (s *Service) GetAdaptation(ctx context.Context, role roleKind, actorID, modelID, bindingID int64) (adaptationConfigurationView, error) {
 	if s == nil || s.adaptations == nil || ctx == nil || modelID <= 0 || bindingID < 0 {
-		return adaptationView{}, ErrInvalidRequest
+		return adaptationConfigurationView{}, ErrInvalidRequest
 	}
 	tx, scope, err := s.beginManagementTx(ctx, role, actorID, modelID, false, true)
 	if err != nil {
-		return adaptationView{}, err
+		return adaptationConfigurationView{}, err
 	}
 	defer tx.Rollback()
 	if scope.Trainee {
-		return adaptationView{}, ErrForbidden
+		return adaptationConfigurationView{}, ErrForbidden
 	}
 	if _, err := readStoredModelTx(ctx, tx, modelID); err != nil {
-		return adaptationView{}, err
+		return adaptationConfigurationView{}, err
 	}
 	if bindingID > 0 {
 		if err := requireBindingTx(ctx, tx, modelID, bindingID); err != nil {
-			return adaptationView{}, err
+			return adaptationConfigurationView{}, err
 		}
 	}
-	view, err := s.adaptationViewTx(ctx, tx, modelID, bindingID)
+	view, err := s.adaptationConfigurationViewTx(ctx, tx, modelID, bindingID)
 	if err != nil {
-		return adaptationView{}, err
+		return adaptationConfigurationView{}, err
 	}
 	if err := tx.Commit(); err != nil {
-		return adaptationView{}, ErrUnavailable
+		return adaptationConfigurationView{}, ErrUnavailable
 	}
 	return view, nil
 }

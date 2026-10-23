@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
@@ -68,8 +69,8 @@ func TestEndpointBrowseFollowsCurrentMainstreamChannels(t *testing.T) {
 		want         []string
 	}{
 		{"category change", `category='api_platform'`, []string{"api_platform"}},
-		{"connector mismatch", `connector_type='anthropic-compatible'`, nil},
-		{"connector restored", `connector_type='openai-compatible'`, []string{"api_platform"}},
+		{"connector mismatch", `connector_type='anthropic-compatible',native_service_mask=65536`, nil},
+		{"connector restored", `connector_type='openai-compatible',native_service_mask=49`, []string{"api_platform"}},
 		{"address changed", `canonical_base_url='https://other.example/v1'`, nil},
 		{"address restored", `canonical_base_url='https://example.com/v1'`, []string{"api_platform"}},
 		{"disabled", `enabled=0`, nil},
@@ -77,7 +78,11 @@ func TestEndpointBrowseFollowsCurrentMainstreamChannels(t *testing.T) {
 		{"retired", `state='retired',enabled=0,retired_at=1700000000`, nil},
 	} {
 		t.Run(step.name, func(t *testing.T) {
-			if _, err := env.store.DB().Exec(`UPDATE mainstream_channels SET `+step.update+` WHERE id=?`, channel.ID); err != nil {
+			table, key := "mainstream_channels", "id"
+			if strings.HasPrefix(step.update, "connector_type=") || strings.HasPrefix(step.update, "canonical_base_url=") {
+				table, key = "mainstream_channel_entries", "channel_id"
+			}
+			if _, err := env.store.DB().Exec("UPDATE "+table+" SET "+step.update+" WHERE "+key+"=?", channel.ID); err != nil {
 				t.Fatal(err)
 			}
 			assertCategories(t, step.want...)

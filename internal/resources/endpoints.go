@@ -40,6 +40,9 @@ func validateEndpointSecretPlaintext(value []byte) bool {
 }
 
 type endpointRow struct {
+	connectionID              sql.NullInt64
+	nativeServiceMask         int64
+	rerankFormat              connectorcontract.RerankFormat
 	id                        int64
 	connectorType             string
 	baseURL                   string
@@ -60,6 +63,15 @@ func (row endpointRow) dto() (Endpoint, error) {
 	if err != nil || row.enabled < 0 || row.enabled > 1 || row.revision < 1 || row.keyCount < 0 {
 		return Endpoint{}, ErrUnavailable
 	}
+	connectionID, err := optionalDecimal(row.connectionID)
+	if err != nil {
+		return Endpoint{}, err
+	}
+	services, err := connectorcontract.NativeServicesFromMask(row.nativeServiceMask)
+	kind := connectorcontract.Type(row.connectorType)
+	if err != nil || connectorcontract.ValidateNativeServices(kind, services, row.rerankFormat) != nil {
+		return Endpoint{}, ErrUnavailable
+	}
 	var origin EndpointOrigin
 	fields := []bool{row.mainstreamChannelID.Valid, row.mainstreamChannelRevision.Valid, row.mainstreamChannelName.Valid, row.mainstreamChannelCategory.Valid}
 	if fields[0] || fields[1] || fields[2] || fields[3] {
@@ -73,6 +85,7 @@ func (row endpointRow) dto() (Endpoint, error) {
 		origin = EndpointOrigin{Kind: "custom"}
 	}
 	return Endpoint{
+		ConnectionID: connectionID, ConfigurationType: string(kind.ConfigurationType()), NativeServices: services.Services(), RerankFormat: row.rerankFormat,
 		ID: id, ConnectorType: row.connectorType, BaseURL: row.baseURL, Origin: origin, Note: row.note,
 		Enabled: row.enabled == 1, Revision: strconv.FormatInt(row.revision, 10),
 		KeyCount: strconv.FormatInt(row.keyCount, 10), CreatedAt: row.createdAt, UpdatedAt: row.updatedAt,
@@ -83,7 +96,8 @@ func scanEndpoint(scanner interface{ Scan(...any) error }) (Endpoint, error) {
 	var row endpointRow
 	if err := scanner.Scan(&row.id, &row.connectorType, &row.baseURL, &row.note, &row.enabled,
 		&row.revision, &row.keyCount, &row.createdAt, &row.updatedAt,
-		&row.mainstreamChannelID, &row.mainstreamChannelRevision, &row.mainstreamChannelName, &row.mainstreamChannelCategory); err != nil {
+		&row.mainstreamChannelID, &row.mainstreamChannelRevision, &row.mainstreamChannelName, &row.mainstreamChannelCategory,
+		&row.connectionID, &row.nativeServiceMask, &row.rerankFormat); err != nil {
 		return Endpoint{}, err
 	}
 	return row.dto()
@@ -113,7 +127,8 @@ func (r *Repository) ListEndpoints(ctx context.Context, userID int64, limit int,
 SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
        (SELECT count(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id),
        e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
-       e.mainstream_channel_name,e.mainstream_channel_category
+       e.mainstream_channel_name,e.mainstream_channel_category,
+       e.connection_id,e.native_service_mask,e.rerank_format
 FROM endpoints e
 WHERE e.user_id=?
   AND (?=0 OR e.updated_at<? OR (e.updated_at=? AND e.id<?))
@@ -158,7 +173,8 @@ func (r *Repository) GetEndpoint(ctx context.Context, userID, endpointID int64) 
 SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
        (SELECT count(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id),
        e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
-       e.mainstream_channel_name,e.mainstream_channel_category
+       e.mainstream_channel_name,e.mainstream_channel_category,
+       e.connection_id,e.native_service_mask,e.rerank_format
 FROM endpoints e WHERE e.id=? AND e.user_id=?`, endpointID, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Endpoint{}, ErrNotFound
@@ -211,13 +227,14 @@ func (r *Repository) CreateEndpoint(ctx context.Context, userID int64, mutation 
 }
 
 func (r *Repository) validateCreateEndpoint(input CreateEndpointInput) (string, string, error) {
-	if !validateNote(input.Note) || (input.Source != "custom" && input.Source != "mainstream") {
+	if !validateNote(input.Note) || (input.Source != "custom" && input.Source != "mainstream") || input.ConnectionID < 0 ||
+		input.ChannelEntryID < 0 || input.ChannelRevision < 0 || (input.ChannelEntryID == 0) != (input.ChannelRevision == 0) {
 		return "", "", ErrInvalidRequest
 	}
 	canonicalURL := ""
 	connectorType := input.ConnectorType
 	if input.Source == "custom" {
-		if input.ChannelID != "" || input.ConnectorType == "" || input.BaseURL == "" {
+		if input.ChannelID != "" || input.ChannelEntryID != 0 || input.ConnectorType == "" || input.BaseURL == "" {
 			return "", "", ErrInvalidRequest
 		}
 		validatedType, err := r.connectors.MustValidate(connectorcontract.Type(input.ConnectorType))
@@ -227,6 +244,9 @@ func (r *Repository) validateCreateEndpoint(input CreateEndpointInput) (string, 
 		canonicalURL, err = r.baseURLs.ValidateBaseURL(input.BaseURL)
 		if err != nil || canonicalURL == "" || len(canonicalURL) > 4096 {
 			return "", "", ErrInvalidRequest
+		}
+		if _, err := endpointServiceSelection(validatedType, input.NativeServices, input.RerankFormat); err != nil {
+			return "", "", err
 		}
 	} else if input.ChannelID == "" || input.ConnectorType != "" || input.BaseURL != "" || !validMainstreamChannelID(input.ChannelID) {
 		return "", "", ErrInvalidRequest
@@ -270,9 +290,32 @@ func (r *Repository) CreateEndpointInTransaction(ctx context.Context, tx *sql.Tx
 		if item.State != mainstreamChannelStateActive || !item.Enabled {
 			return Endpoint{}, ErrConflict
 		}
+		if input.ChannelRevision != 0 && input.ChannelRevision != row.revision {
+			return Endpoint{}, ErrConflict
+		}
 		canonicalURL = item.BaseURL
 		connectorType = item.ConnectorType
+		entryID := input.ChannelEntryID
+		if entryID == 0 {
+			if err := tx.QueryRowContext(ctx, `SELECT entry_id FROM mainstream_channel_primary_entries WHERE channel_id=?`, item.ID).Scan(&entryID); err != nil {
+				return Endpoint{}, ErrUnavailable
+			}
+		}
+		{
+			entry, err := getMainstreamEntryTx(ctx, tx, item.ID, entryID)
+			if err != nil {
+				return Endpoint{}, err
+			}
+			if !entry.Enabled {
+				return Endpoint{}, ErrConflict
+			}
+			canonicalURL, connectorType = entry.BaseURL, entry.ConnectorType
+		}
 		channelID, channelRevision, channelName, channelCategory = item.ID, row.revision, item.Name, item.Category
+	}
+	services, err := endpointServiceSelection(connectorcontract.Type(connectorType), input.NativeServices, input.RerankFormat)
+	if err != nil {
+		return Endpoint{}, err
 	}
 	var endpointLimit sql.NullInt64
 	if err := tx.QueryRowContext(ctx, `SELECT endpoint_limit FROM users WHERE id=? AND is_admin=0`, userID).Scan(&endpointLimit); errors.Is(err, sql.ErrNoRows) {
@@ -295,9 +338,23 @@ func (r *Repository) CreateEndpointInTransaction(ctx context.Context, tx *sql.Tx
 	if count >= effectiveLimit {
 		return Endpoint{}, ErrResourceLimit
 	}
+	connectionID := input.ConnectionID
+	if connectionID == 0 {
+		name, _ := channelName.(string)
+		connectionID, err = createConnectionTx(ctx, tx, userID, ConnectionInput{Name: defaultConnectionName(canonicalURL, name)}, now)
+	} else {
+		err = requireConnectionTx(ctx, tx, userID, connectionID)
+	}
+	if err != nil {
+		return Endpoint{}, err
+	}
+	origin := "legacy"
+	if input.NativeServices != nil {
+		origin = "user"
+	}
 	result, err := tx.ExecContext(ctx, `
-INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category,created_at,updated_at)
-VALUES(?,?,?,?,?,1,?,?,?,?,?,?)`, userID, connectorType, canonicalURL, input.Note, boolInt(input.Enabled), channelID, channelRevision, channelName, channelCategory, now, now)
+INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category,created_at,updated_at,connection_id,native_service_mask,rerank_format,capability_origin)
+VALUES(?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?)`, userID, connectorType, canonicalURL, input.Note, boolInt(input.Enabled), channelID, channelRevision, channelName, channelCategory, now, now, connectionID, services.Mask(), input.RerankFormat, origin)
 	if err != nil {
 		return Endpoint{}, fmt.Errorf("resources: create endpoint: %w", err)
 	}
@@ -314,7 +371,8 @@ VALUES(?,?,?,?,?,1,?,?,?,?,?,?)`, userID, connectorType, canonicalURL, input.Not
 
 func (r *Repository) PatchEndpoint(ctx context.Context, userID, endpointID int64, mutation ControlMutation, input PatchEndpointInput) (MutationResult[Endpoint], error) {
 	if r == nil || userID <= 0 || endpointID <= 0 || mutation.Route != routeEndpoint || mutation.Method != http.MethodPatch || !mutationPathIDs(mutation, endpointID) || mutation.Query != "" ||
-		(input.Note == nil && input.Enabled == nil) || input.ExpectedRevision < 1 || (input.Note != nil && !validateNote(*input.Note)) {
+		(input.Note == nil && input.Enabled == nil && input.ConnectionID == nil && input.NativeServices == nil && input.RerankFormat == nil) || input.ExpectedRevision < 1 ||
+		(input.Note != nil && !validateNote(*input.Note)) || (input.ConnectionID != nil && *input.ConnectionID <= 0) {
 		return MutationResult[Endpoint]{}, ErrInvalidRequest
 	}
 	now, err := r.nowUnix()
@@ -356,6 +414,25 @@ func (r *Repository) PatchEndpoint(ctx context.Context, userID, endpointID int64
 	if input.Enabled != nil {
 		enabled = *input.Enabled
 	}
+	connectionID, format := current.ConnectionID, current.RerankFormat
+	if input.ConnectionID != nil {
+		if err := requireConnectionTx(ctx, tx, userID, *input.ConnectionID); err != nil {
+			return MutationResult[Endpoint]{}, err
+		}
+		value := strconv.FormatInt(*input.ConnectionID, 10)
+		connectionID = &value
+	}
+	if input.RerankFormat != nil {
+		format = *input.RerankFormat
+	}
+	selected := &current.NativeServices
+	if input.NativeServices != nil {
+		selected = input.NativeServices
+	}
+	services, err := endpointServiceSelection(connectorcontract.Type(current.ConnectorType), selected, format)
+	if err != nil {
+		return MutationResult[Endpoint]{}, err
+	}
 	if !current.Enabled && enabled {
 		incompatible, err := endpointEnableConflictsWithFlattenTx(ctx, tx, userID, endpointID)
 		if err != nil {
@@ -366,7 +443,7 @@ func (r *Repository) PatchEndpoint(ctx context.Context, userID, endpointID int64
 		}
 	}
 	var affectedModels []bindingRevisionTarget
-	if current.Enabled != enabled {
+	if current.Enabled != enabled || input.NativeServices != nil || input.RerankFormat != nil {
 		keyIDs, err := verifiedEndpointKeyIDsTx(ctx, tx, userID, endpointID)
 		if err != nil {
 			return MutationResult[Endpoint]{}, err
@@ -377,8 +454,10 @@ func (r *Repository) PatchEndpoint(ctx context.Context, userID, endpointID int64
 		}
 	}
 	result, err := tx.ExecContext(ctx, `
-UPDATE endpoints SET note=?,enabled=?,revision=revision+1,updated_at=?
-WHERE id=? AND user_id=? AND revision=?`, note, boolInt(enabled), now, endpointID, userID, input.ExpectedRevision)
+UPDATE endpoints SET note=?,enabled=?,revision=revision+1,updated_at=?,connection_id=?,native_service_mask=?,rerank_format=?,
+capability_origin=CASE WHEN ? THEN 'user' ELSE capability_origin END
+WHERE id=? AND user_id=? AND revision=?`, note, boolInt(enabled), now, connectionID, services.Mask(), format,
+		input.NativeServices != nil || input.RerankFormat != nil, endpointID, userID, input.ExpectedRevision)
 	if err != nil {
 		return MutationResult[Endpoint]{}, fmt.Errorf("resources: patch endpoint: %w", err)
 	}
@@ -424,61 +503,7 @@ func (r *Repository) DeleteEndpoint(ctx context.Context, userID, endpointID int6
 	if decision.Kind == idempotency.Replay {
 		return replayMutation[struct{}](decision)
 	}
-	current, err := getEndpointTx(ctx, tx, userID, endpointID)
-	if err != nil {
-		return MutationResult[struct{}]{}, err
-	}
-	currentRevision, _ := strconv.ParseInt(current.Revision, 10, 64)
-	if currentRevision != expectedRevision {
-		return MutationResult[struct{}]{}, ErrConflict
-	}
-	locked, err := endpointLockedTx(ctx, tx, endpointID)
-	if err != nil {
-		return MutationResult[struct{}]{}, err
-	}
-	if locked {
-		return MutationResult[struct{}]{}, ErrResourceLocked
-	}
-	refs, err := endpointSecretRefsTx(ctx, tx, endpointID)
-	if err != nil {
-		return MutationResult[struct{}]{}, err
-	}
-	keyIDs, err := verifiedEndpointKeyIDsTx(ctx, tx, userID, endpointID)
-	if err != nil {
-		return MutationResult[struct{}]{}, err
-	}
-	models, err := bindingRevisionTargetsForKeysTx(ctx, tx, userID, keyIDs)
-	if err != nil {
-		return MutationResult[struct{}]{}, err
-	}
-	if err := validateBindingRevisionTargets(models); err != nil {
-		return MutationResult[struct{}]{}, err
-	}
-	if err := r.projection.PrepareEndpointDeletion(ctx, tx, userID, endpointID, now); err != nil {
-		return MutationResult[struct{}]{}, fmt.Errorf("resources: prepare endpoint projection deletion: %w", err)
-	}
-	if len(keyIDs) > 0 {
-		if err := r.keyDeletion.PrepareEndpointKeyDeletion(ctx, tx, userID, keyIDs, now); err != nil {
-			return MutationResult[struct{}]{}, fmt.Errorf("resources: prepare endpoint key deletion: %w", err)
-		}
-	}
-	if err := advanceBindingRevisionsForDeletionTx(ctx, tx, userID, models, now); err != nil {
-		return MutationResult[struct{}]{}, err
-	}
-	result, err := tx.ExecContext(ctx, `DELETE FROM endpoints WHERE id=? AND user_id=? AND revision=?`, endpointID, userID, expectedRevision)
-	if err != nil {
-		return MutationResult[struct{}]{}, fmt.Errorf("resources: delete endpoint: %w", err)
-	}
-	deleted, _ := result.RowsAffected()
-	if deleted != 1 {
-		return MutationResult[struct{}]{}, ErrConflict
-	}
-	for _, ref := range refs {
-		if err := r.secrets.MarkEndpointSecretOrphaned(ctx, tx, ref, now); err != nil {
-			return MutationResult[struct{}]{}, fmt.Errorf("resources: orphan endpoint secret: %w", err)
-		}
-	}
-	if err := r.reconcileRoutingTargetsTx(ctx, tx, userID, models); err != nil {
+	if err := r.deleteEndpointInTransaction(ctx, tx, userID, endpointID, expectedRevision, now); err != nil {
 		return MutationResult[struct{}]{}, err
 	}
 	out, err := finishEmptyMutation(ctx, tx, decision, http.StatusNoContent)
@@ -491,12 +516,74 @@ func (r *Repository) DeleteEndpoint(ctx context.Context, userID, endpointID int6
 	return out, nil
 }
 
+func (r *Repository) deleteEndpointInTransaction(ctx context.Context, tx *sql.Tx, userID, endpointID, expectedRevision, now int64) error {
+	current, err := getEndpointTx(ctx, tx, userID, endpointID)
+	if err != nil {
+		return err
+	}
+	currentRevision, _ := strconv.ParseInt(current.Revision, 10, 64)
+	if currentRevision != expectedRevision {
+		return ErrConflict
+	}
+	locked, err := endpointLockedTx(ctx, tx, endpointID)
+	if err != nil {
+		return err
+	}
+	if locked {
+		return ErrResourceLocked
+	}
+	refs, err := endpointSecretRefsTx(ctx, tx, endpointID)
+	if err != nil {
+		return err
+	}
+	keyIDs, err := verifiedEndpointKeyIDsTx(ctx, tx, userID, endpointID)
+	if err != nil {
+		return err
+	}
+	models, err := bindingRevisionTargetsForKeysTx(ctx, tx, userID, keyIDs)
+	if err != nil {
+		return err
+	}
+	if err := validateBindingRevisionTargets(models); err != nil {
+		return err
+	}
+	if err := r.projection.PrepareEndpointDeletion(ctx, tx, userID, endpointID, now); err != nil {
+		return fmt.Errorf("resources: prepare endpoint projection deletion: %w", err)
+	}
+	if len(keyIDs) > 0 {
+		if err := r.keyDeletion.PrepareEndpointKeyDeletion(ctx, tx, userID, keyIDs, now); err != nil {
+			return fmt.Errorf("resources: prepare endpoint key deletion: %w", err)
+		}
+	}
+	if err := advanceBindingRevisionsForDeletionTx(ctx, tx, userID, models, now); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM endpoints WHERE id=? AND user_id=? AND revision=?`, endpointID, userID, expectedRevision)
+	if err != nil {
+		return fmt.Errorf("resources: delete endpoint: %w", err)
+	}
+	deleted, _ := result.RowsAffected()
+	if deleted != 1 {
+		return ErrConflict
+	}
+	for _, ref := range refs {
+		if err := r.secrets.MarkEndpointSecretOrphaned(ctx, tx, ref, now); err != nil {
+			return fmt.Errorf("resources: orphan endpoint secret: %w", err)
+		}
+	}
+	if err := r.reconcileRoutingTargetsTx(ctx, tx, userID, models); err != nil {
+		return err
+	}
+	return nil
+}
+
 func getEndpointTx(ctx context.Context, tx *sql.Tx, userID, endpointID int64) (Endpoint, error) {
 	item, err := scanEndpoint(tx.QueryRowContext(ctx, `
 SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
        (SELECT count(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id),
        e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
-       e.mainstream_channel_name,e.mainstream_channel_category
+       e.mainstream_channel_name,e.mainstream_channel_category,
+       e.connection_id,e.native_service_mask,e.rerank_format
 FROM endpoints e WHERE e.id=? AND e.user_id=?`, endpointID, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Endpoint{}, ErrNotFound
@@ -511,13 +598,13 @@ func endpointEnableConflictsWithFlattenTx(ctx context.Context, tx *sql.Tx, userI
 	var incompatible int
 	if err := tx.QueryRowContext(ctx, `
 SELECT EXISTS(
- SELECT 1 FROM model_bindings b
+ SELECT 1 FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id
  JOIN models m ON m.id=b.model_id
- JOIN endpoint_keys k ON k.id=b.endpoint_key_id
+ JOIN endpoint_keys k ON k.id=t.endpoint_key_id
  JOIN endpoints e ON e.id=k.endpoint_id
  WHERE e.id=? AND e.user_id=? AND m.user_id=?
-   AND e.connector_type<>? AND k.enabled=1 AND m.flatten_tool_calls=1
-)`, endpointID, userID, userID, string(connectorcontract.TypeOpenAICompatible)).Scan(&incompatible); err != nil {
+   AND e.connector_type NOT IN (?,?) AND k.enabled=1 AND m.flatten_tool_calls=1
+)`, endpointID, userID, userID, string(connectorcontract.TypeOpenAICompatible), string(connectorcontract.TypeOpenAIChatCompletions)).Scan(&incompatible); err != nil {
 		return false, fmt.Errorf("resources: validate endpoint flatten restoration: %w", err)
 	}
 	return incompatible == 1, nil
@@ -545,7 +632,7 @@ SELECT EXISTS(SELECT 1 FROM endpoint_key_suspensions WHERE endpoint_key_id=?)`, 
 }
 
 func endpointSecretRefsTx(ctx context.Context, tx *sql.Tx, endpointID int64) ([]int64, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT secret_ref_id FROM endpoint_keys WHERE endpoint_id=? ORDER BY id`, endpointID)
+	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT secret_ref_id FROM endpoint_key_current_credentials WHERE endpoint_id=? AND secret_ref_id IS NOT NULL ORDER BY secret_ref_id`, endpointID)
 	if err != nil {
 		return nil, fmt.Errorf("resources: list endpoint secret references: %w", err)
 	}
@@ -608,9 +695,9 @@ func bindingRevisionTargetsForKeysTx(ctx context.Context, tx *sql.Tx, userID int
 	}
 	rows, err := tx.QueryContext(ctx, `
 SELECT DISTINCT m.id,m.binding_revision
-FROM model_bindings b
+FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id
 JOIN models m ON m.id=b.model_id
-WHERE m.user_id=? AND b.endpoint_key_id IN (`+placeholders+`)
+WHERE m.user_id=? AND t.endpoint_key_id IN (`+placeholders+`)
 ORDER BY m.id`, arguments...)
 	if err != nil {
 		return nil, fmt.Errorf("resources: list deletion-affected models: %w", err)
@@ -663,10 +750,13 @@ WHERE id=? AND user_id=? AND binding_revision=?`, now, target.modelID, userID, t
 }
 
 type endpointKeyRow struct {
-	id, endpointID, revision, createdAt, updatedAt int64
-	maxConcurrency, maxRPM                         int64
-	displayHead, displayTail, note                 string
-	enabled, forceStoreFalse, suspended            int
+	credentialAvailable                                               bool
+	credentialID, credentialVersion, grantRevision, nativeServiceMask int64
+	discoverySourceID                                                 sql.NullInt64
+	id, endpointID, revision, createdAt, updatedAt                    int64
+	maxConcurrency, maxRPM                                            int64
+	displayHead, displayTail, note                                    string
+	enabled, forceStoreFalse, suspended                               int
 }
 
 func (row endpointKeyRow) dto() (EndpointKey, error) {
@@ -678,11 +768,21 @@ func (row endpointKeyRow) dto() (EndpointKey, error) {
 	if err != nil || row.revision < 1 || row.enabled < 0 || row.enabled > 1 || row.forceStoreFalse < 0 || row.forceStoreFalse > 1 || row.suspended < 0 || row.suspended > 1 {
 		return EndpointKey{}, ErrUnavailable
 	}
+	services, err := connectorcontract.NativeServicesFromMask(row.nativeServiceMask)
+	if err != nil || services.Empty() || row.credentialID <= 0 || row.credentialVersion <= 0 || row.grantRevision <= 0 {
+		return EndpointKey{}, ErrUnavailable
+	}
+	sourceID, err := optionalDecimal(row.discoverySourceID)
+	if err != nil {
+		return EndpointKey{}, err
+	}
 	state := "none"
 	if row.suspended == 1 {
 		state = "security_processing"
 	}
 	return EndpointKey{
+		CredentialAvailable: row.credentialAvailable, CredentialID: strconv.FormatInt(row.credentialID, 10), CredentialVersion: strconv.FormatInt(row.credentialVersion, 10),
+		GrantRevision: strconv.FormatInt(row.grantRevision, 10), NativeServices: services.Services(), DiscoverySourceID: sourceID,
 		ID: id, EndpointID: endpointID, DisplayHead: row.displayHead, DisplayTail: row.displayTail,
 		Note: row.note, Enabled: row.enabled == 1, ForceStoreFalse: row.forceStoreFalse == 1,
 		MaxConcurrency: row.maxConcurrency, MaxRPM: row.maxRPM,
@@ -694,7 +794,7 @@ func (row endpointKeyRow) dto() (EndpointKey, error) {
 func scanEndpointKey(scanner interface{ Scan(...any) error }) (EndpointKey, error) {
 	var row endpointKeyRow
 	if err := scanner.Scan(&row.id, &row.endpointID, &row.displayHead, &row.displayTail, &row.note,
-		&row.enabled, &row.forceStoreFalse, &row.suspended, &row.revision, &row.createdAt, &row.updatedAt, &row.maxConcurrency, &row.maxRPM); err != nil {
+		&row.enabled, &row.forceStoreFalse, &row.suspended, &row.revision, &row.createdAt, &row.updatedAt, &row.maxConcurrency, &row.maxRPM, &row.credentialID, &row.credentialVersion, &row.grantRevision, &row.nativeServiceMask, &row.discoverySourceID, &row.credentialAvailable); err != nil {
 		return EndpointKey{}, err
 	}
 	return row.dto()
@@ -703,9 +803,12 @@ func scanEndpointKey(scanner interface{ Scan(...any) error }) (EndpointKey, erro
 const endpointKeySelect = `
 SELECT k.id,k.endpoint_id,k.display_head,k.display_tail,k.note,k.enabled,k.force_store_false,
        EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id),
-       k.revision,k.created_at,k.updated_at,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)
-FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id
-LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id`
+       k.revision,k.created_at,k.updated_at,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),
+       k.credential_id,k.credential_version,k.grant_revision,k.native_service_mask,ks.source_id,
+ EXISTS(SELECT 1 FROM credentials cr JOIN credential_versions cv ON cv.credential_id=cr.id AND cv.id=k.credential_version_id JOIN endpoint_key_secrets s ON s.id=cv.secret_ref_id WHERE cr.id=k.credential_id AND cr.deleted_at IS NULL AND cr.enabled=1 AND cv.enabled=1 AND s.orphaned_at IS NULL)
+FROM endpoint_key_current_credentials k JOIN endpoints e ON e.id=k.endpoint_id
+LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
+LEFT JOIN endpoint_key_discovery_sources ks ON ks.endpoint_key_id=k.id`
 
 func (r *Repository) ListEndpointKeys(ctx context.Context, userID, endpointID int64, limit int, cursor string) (Page[EndpointKey], error) {
 	limit = normalizePageLimit(limit)
@@ -820,7 +923,7 @@ func (r *Repository) CreateEndpointKey(ctx context.Context, userID, endpointID i
 }
 
 func validCreateEndpointKey(input CreateEndpointKeyInput) bool {
-	return input.OwnershipConfirmed && validateEndpointSecretPlaintext(input.Secret) && validateNote(input.Note) &&
+	return input.OwnershipConfirmed && ((input.CredentialID == 0 && validateEndpointSecretPlaintext(input.Secret)) || (input.CredentialID > 0 && len(input.Secret) == 0)) && validateNote(input.Note) &&
 		validKeyLimit(input.MaxConcurrency) && validKeyLimit(input.MaxRPM)
 }
 
@@ -843,7 +946,7 @@ func (r *Repository) CreateEndpointKeyInTransaction(ctx context.Context, tx *sql
 	if err != nil {
 		return EndpointKey{}, err
 	}
-	if input.ForceStoreFalse && endpoint.ConnectorType != string(connectorcontract.TypeOpenAICompatible) {
+	if input.ForceStoreFalse && !connectorcontract.Type(endpoint.ConnectorType).NativeChatCompletions() {
 		return EndpointKey{}, ErrInvalidRequest
 	}
 	locked, err := endpointLockedTx(ctx, tx, endpointID)
@@ -864,34 +967,36 @@ func (r *Repository) CreateEndpointKeyInTransaction(ctx context.Context, tx *sql
 	if keyCount >= keyLimit {
 		return EndpointKey{}, ErrResourceLimit
 	}
-	stored, err := r.secrets.WriteEndpointSecret(ctx, tx, SecretWriteInput{
-		CanonicalBaseURL: endpoint.BaseURL, ConnectorType: endpoint.ConnectorType,
-		Plaintext: plaintext, CreatedAt: now,
-	})
+	services, err := keyServiceSelection(endpoint, input.NativeServices)
 	if err != nil {
-		return EndpointKey{}, fmt.Errorf("resources: store endpoint secret: %w", err)
+		return EndpointKey{}, err
 	}
-	if stored.RefID <= 0 || len(stored.DisplayHead) > 16 || len(stored.DisplayTail) > 16 {
-		return EndpointKey{}, ErrUnavailable
+	credentialID, versionID, fingerprint, err := r.resolveKeyCredentialTx(ctx, tx, userID, endpoint, input, now)
+	if err != nil {
+		return EndpointKey{}, err
+	}
+	grantID, err := nextConnectionIdentityTx(ctx, tx, "endpoint_key_grant_revisions")
+	if err != nil {
+		return EndpointKey{}, err
 	}
 	result, err := tx.ExecContext(ctx, `
-INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at)
-VALUES(?,?,?,?,?,?,?,?,1,?,?)`, endpointID, stored.RefID, stored.Fingerprint[:], stored.DisplayHead, stored.DisplayTail,
-		input.Note, boolInt(input.Enabled), boolInt(input.ForceStoreFalse), now, now)
+INSERT INTO endpoint_keys(endpoint_id,current_grant_revision_id,note,enabled,force_store_false,revision,created_at,updated_at)
+VALUES(?,?,?,?,?,1,?,?)`, endpointID, grantID, input.Note, boolInt(input.Enabled), boolInt(input.ForceStoreFalse), now, now)
 	if err != nil {
 		return EndpointKey{}, fmt.Errorf("resources: create endpoint key: %w", err)
 	}
 	keyID, err := result.LastInsertId()
 	if err != nil {
-		return EndpointKey{}, fmt.Errorf("resources: create endpoint key identity: %w", err)
+		return EndpointKey{}, err
+	}
+	if err := insertKeyGrantTx(ctx, tx, grantID, keyID, endpointID, userID, credentialID, versionID, 1, services, endpoint.RerankFormat, fingerprint, now); err != nil {
+		return EndpointKey{}, err
+	}
+	if err := initializeKeySourceTx(ctx, tx, userID, keyID, credentialID, versionID, endpoint, input.DiscoverySourceID, now); err != nil {
+		return EndpointKey{}, err
 	}
 	if err := writeKeyLimitsTx(ctx, tx, keyID, input.MaxConcurrency, input.MaxRPM); err != nil {
 		return EndpointKey{}, err
-	}
-	if _, err := tx.ExecContext(ctx, `
-INSERT INTO model_discovery_evidence(endpoint_key_id,state,revision,safe_class,safe_diag,fetched_count)
-VALUES(?,'unknown',1,'none','',0)`, keyID); err != nil {
-		return EndpointKey{}, fmt.Errorf("resources: initialize discovery evidence: %w", err)
 	}
 	if err := r.keyCreation.ProtectNewEndpointKey(ctx, tx, userID, keyID, now); err != nil {
 		return EndpointKey{}, fmt.Errorf("resources: protect new endpoint key: %w", err)
@@ -913,8 +1018,8 @@ VALUES(?,'unknown',1,'none','',0)`, keyID); err != nil {
 
 func (r *Repository) PatchEndpointKey(ctx context.Context, userID, endpointID, keyID int64, mutation ControlMutation, input PatchEndpointKeyInput) (MutationResult[EndpointKey], error) {
 	if r == nil || userID <= 0 || endpointID <= 0 || keyID <= 0 || mutation.Route != routeEndpointKey || mutation.Method != http.MethodPatch || !mutationPathIDs(mutation, endpointID, keyID) || mutation.Query != "" ||
-		(input.Note == nil && input.Enabled == nil && input.ForceStoreFalse == nil && input.MaxConcurrency == nil && input.MaxRPM == nil) || input.ExpectedRevision < 1 || (input.Note != nil && !validateNote(*input.Note)) ||
-		(input.MaxConcurrency != nil && !validKeyLimit(*input.MaxConcurrency)) || (input.MaxRPM != nil && !validKeyLimit(*input.MaxRPM)) {
+		(input.Note == nil && input.Enabled == nil && input.ForceStoreFalse == nil && input.MaxConcurrency == nil && input.MaxRPM == nil && input.CredentialID == nil && input.NativeServices == nil && input.DiscoverySourceID == nil) || input.ExpectedRevision < 1 || (input.Note != nil && !validateNote(*input.Note)) ||
+		(input.MaxConcurrency != nil && !validKeyLimit(*input.MaxConcurrency)) || (input.MaxRPM != nil && !validKeyLimit(*input.MaxRPM)) || (input.CredentialID != nil && *input.CredentialID <= 0) {
 		return MutationResult[EndpointKey]{}, ErrInvalidRequest
 	}
 	now, err := r.nowUnix()
@@ -942,7 +1047,7 @@ func (r *Repository) PatchEndpointKey(ctx context.Context, userID, endpointID, k
 	if err != nil {
 		return MutationResult[EndpointKey]{}, err
 	}
-	if input.ForceStoreFalse != nil && *input.ForceStoreFalse && endpoint.ConnectorType != string(connectorcontract.TypeOpenAICompatible) {
+	if input.ForceStoreFalse != nil && *input.ForceStoreFalse && !connectorcontract.Type(endpoint.ConnectorType).NativeChatCompletions() {
 		return MutationResult[EndpointKey]{}, ErrInvalidRequest
 	}
 	currentRevision, _ := strconv.ParseInt(current.Revision, 10, 64)
@@ -979,11 +1084,14 @@ func (r *Repository) PatchEndpointKey(ctx context.Context, userID, endpointID, k
 		}
 	}
 	var affectedModels []bindingRevisionTarget
-	if current.Enabled != enabled {
+	if current.Enabled != enabled || input.CredentialID != nil || input.NativeServices != nil {
 		affectedModels, err = bindingRevisionTargetsForKeysTx(ctx, tx, userID, []int64{keyID})
 		if err != nil {
 			return MutationResult[EndpointKey]{}, err
 		}
+	}
+	if err := r.updateKeyAuthorizationTx(ctx, tx, userID, endpointID, keyID, endpoint, current, input, now); err != nil {
+		return MutationResult[EndpointKey]{}, err
 	}
 	result, err := tx.ExecContext(ctx, `
 UPDATE endpoint_keys SET note=?,enabled=?,force_store_false=?,revision=revision+1,updated_at=?
@@ -1052,8 +1160,8 @@ func (r *Repository) DeleteEndpointKey(ctx context.Context, userID, endpointID, 
 	if current.SuspensionState != "none" {
 		return MutationResult[struct{}]{}, ErrResourceLocked
 	}
-	var secretRef int64
-	if err := tx.QueryRowContext(ctx, `SELECT secret_ref_id FROM endpoint_keys WHERE id=? AND endpoint_id=?`, keyID, endpointID).Scan(&secretRef); err != nil {
+	var secretRef sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT secret_ref_id FROM endpoint_key_current_credentials WHERE id=? AND endpoint_id=?`, keyID, endpointID).Scan(&secretRef); err != nil {
 		return MutationResult[struct{}]{}, ErrNotFound
 	}
 	models, err := bindingRevisionTargetsForKeysTx(ctx, tx, userID, []int64{keyID})
@@ -1080,8 +1188,10 @@ func (r *Repository) DeleteEndpointKey(ctx context.Context, userID, endpointID, 
 	if deleted != 1 {
 		return MutationResult[struct{}]{}, ErrConflict
 	}
-	if err := r.secrets.MarkEndpointSecretOrphaned(ctx, tx, secretRef, now); err != nil {
-		return MutationResult[struct{}]{}, fmt.Errorf("resources: orphan endpoint secret: %w", err)
+	if secretRef.Valid {
+		if err := r.secrets.MarkEndpointSecretOrphaned(ctx, tx, secretRef.Int64, now); err != nil {
+			return MutationResult[struct{}]{}, fmt.Errorf("resources: orphan endpoint secret: %w", err)
+		}
 	}
 	if err := r.reconcileRoutingTargetsTx(ctx, tx, userID, models); err != nil {
 		return MutationResult[struct{}]{}, err
@@ -1111,13 +1221,13 @@ func endpointKeyEnableConflictsWithFlattenTx(ctx context.Context, tx *sql.Tx, us
 	var incompatible int
 	if err := tx.QueryRowContext(ctx, `
 SELECT EXISTS(
- SELECT 1 FROM model_bindings b
+ SELECT 1 FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id
  JOIN models m ON m.id=b.model_id
- JOIN endpoint_keys k ON k.id=b.endpoint_key_id
+ JOIN endpoint_keys k ON k.id=t.endpoint_key_id
  JOIN endpoints e ON e.id=k.endpoint_id
  WHERE e.id=? AND e.user_id=? AND m.user_id=? AND k.id=?
-   AND e.connector_type<>? AND e.enabled=1 AND m.flatten_tool_calls=1
-)`, endpointID, userID, userID, keyID, string(connectorcontract.TypeOpenAICompatible)).Scan(&incompatible); err != nil {
+   AND e.connector_type NOT IN (?,?) AND e.enabled=1 AND m.flatten_tool_calls=1
+)`, endpointID, userID, userID, keyID, string(connectorcontract.TypeOpenAICompatible), string(connectorcontract.TypeOpenAIChatCompletions)).Scan(&incompatible); err != nil {
 		return false, fmt.Errorf("resources: validate endpoint key flatten restoration: %w", err)
 	}
 	return incompatible == 1, nil

@@ -98,6 +98,9 @@ for (const scenario of [
             endpoint_limit: body.endpoint_limit,
             rpm_limit: body.rpm_limit,
             concurrency_limit: body.concurrency_limit,
+            light_rpm_limit: body.light_rpm_limit,
+            light_concurrency_limit: body.light_concurrency_limit,
+            global_rpm_limit: body.global_rpm_limit,
             revision: '2',
           });
         }
@@ -125,6 +128,9 @@ for (const scenario of [
       endpoint_limit: '99',
       rpm_limit: null,
       concurrency_limit: '999',
+      global_rpm_limit: null,
+      light_rpm_limit: null,
+      light_concurrency_limit: null,
       expected_revision: '1',
     });
     if (station === 'user') {

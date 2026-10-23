@@ -91,6 +91,11 @@ function endpointSummary(endpoint: CoreEndpoint): EndpointSummary {
 
 function keySummary(key: CoreEndpointKey): EndpointKeySummary {
   return {
+    nativeServices: key.native_services,
+    credentialId: key.credential_id,
+    credentialVersion: key.credential_version,
+    grantRevision: key.grant_revision,
+    discoverySourceId: key.discovery_source_id,
     id: key.id,
     endpointId: key.endpoint_id,
     displayHead: key.display_head,
@@ -559,6 +564,15 @@ export function DonationResourcePicker({
           choice.key.revision === fresh.key.revision)
       ) {
         return choice;
+      }
+      const grantChanged =
+        choice.key.credentialId !== fresh.key.credentialId ||
+        choice.key.credentialVersion !== fresh.key.credentialVersion ||
+        choice.key.grantRevision !== fresh.key.grantRevision;
+      if (grantChanged) {
+        if (choice.snapshotStale && choice.eligibility === fresh.eligibility) return choice;
+        changed = true;
+        return { ...choice, eligibility: fresh.eligibility, snapshotStale: true };
       }
       changed = true;
       // Keep parent-owned fields (such as expiry details) while refreshing

@@ -51,16 +51,22 @@ func replayScopedBindings(ctx context.Context, tx *sql.Tx, decision idempotency.
 		return result, err
 	}
 	for _, binding := range result.Value.Bindings {
-		donationID, err := strconv.ParseInt(binding.DonationID, 10, 64)
-		if err != nil {
-			return resources.MutationResult[AdminBindings]{}, ErrInvariant
+		targets := binding.Targets
+		if len(targets) == 0 {
+			targets = []BindingTarget{{DonationID: binding.DonationID, DonationKeyID: binding.DonationKeyID}}
 		}
-		keyID, err := strconv.ParseInt(binding.DonationKeyID, 10, 64)
-		if err != nil {
-			return resources.MutationResult[AdminBindings]{}, ErrInvariant
-		}
-		if err := scope.RequireKey(ctx, tx, donationID, keyID, now, false); err != nil {
-			return resources.MutationResult[AdminBindings]{}, managementScopeError(err)
+		for _, target := range targets {
+			donationID, err := strconv.ParseInt(target.DonationID, 10, 64)
+			if err != nil {
+				return resources.MutationResult[AdminBindings]{}, ErrInvariant
+			}
+			keyID, err := strconv.ParseInt(target.DonationKeyID, 10, 64)
+			if err != nil {
+				return resources.MutationResult[AdminBindings]{}, ErrInvariant
+			}
+			if err := scope.RequireKey(ctx, tx, donationID, keyID, now, false); err != nil {
+				return resources.MutationResult[AdminBindings]{}, managementScopeError(err)
+			}
 		}
 	}
 	return result, nil

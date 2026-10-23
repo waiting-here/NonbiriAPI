@@ -53,6 +53,7 @@ func TestBindingKeyStateFiltersPreserveBaseAndMatchMenus(t *testing.T) {
 			exec(`UPDATE donation_keys SET output_token_limit_mag=nbi_u128(0),input_token_reserve=1,output_token_reserve=1 WHERE id=?`, kid)
 		case "pending":
 			exec(`UPDATE donations SET status='pending',reviewed_by_role='' WHERE id=?`, did)
+			exec(`UPDATE donation_uses SET current_approved_revision_id=NULL,revision=revision+1 WHERE donation_key_id=?`, kid)
 		case "expired":
 			exec(`UPDATE donation_keys SET expires_at=? WHERE id=?`, e.clock.Load(), kid)
 		case "ended":
@@ -137,7 +138,7 @@ func TestTraineeCandidateStateFiltersScopeBothUnionBranches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	exec(`INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at) VALUES(?,'Example','subscription','openai-compatible','https://example.test/v1',1,'active',1,?,?)`, channel, routingTestNow, routingTestNow)
+	seedRoutingChannel(t, e, channel, "Example", "https://example.test/v1")
 	mainDonation, mainKey, _ := e.seedCandidateWithConnector(t, owner, "main", "shared-auto", connectorcontract.TypeOpenAICompatible, channel)
 	_, customKey, _ := e.seedCandidate(t, owner, 'x', "private-auto")
 	for _, kid := range []int64{mainKey, customKey} {

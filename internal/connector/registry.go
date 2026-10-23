@@ -32,6 +32,7 @@ type AttemptInput struct {
 	Embedding    *openai.EmbeddingRequest
 	Image        *openai.ImageRequest
 	Decision     *openai.DecisionRequest
+	Inference    *openai.InferenceRequest
 	Policy       connectorcontract.AttemptPolicy
 	Sink         ResponseSink
 	Observer     *SafeObserver
@@ -40,6 +41,9 @@ type AttemptInput struct {
 }
 
 func (input AttemptInput) validOperation() bool {
+	if input.Inference != nil {
+		return input.Operation == input.Inference.Operation() && input.Ingress == nil && input.Embedding == nil && input.Image == nil && input.Decision == nil
+	}
 	if input.Operation == connectorcontract.OperationDecisions {
 		return input.Decision != nil && input.Ingress == nil && input.Embedding == nil && input.Image == nil
 	}
@@ -101,13 +105,18 @@ type Dependencies struct {
 type Constructor func(Dependencies) Connector
 
 type Descriptor struct {
-	Type              connectorcontract.Type
-	Capabilities      connectorcontract.CapabilitySet
-	New               Constructor
-	Discoverer        ModelDiscoverer
-	Supports          func(*openai.ChatRequest) bool
-	SupportsEmbedding func(*openai.EmbeddingRequest) bool
-	CheckTarget       func(connectorcontract.Target, *openai.ChatRequest, connectorcontract.AttemptPolicy) error
+	Type                 connectorcontract.Type
+	Capabilities         connectorcontract.CapabilitySet
+	New                  Constructor
+	Discoverer           ModelDiscoverer
+	Supports             func(*openai.ChatRequest) bool
+	SupportsEmbedding    func(*openai.EmbeddingRequest) bool
+	CheckTarget          func(connectorcontract.Target, *openai.ChatRequest, connectorcontract.AttemptPolicy) error
+	SupportsImage        func(*openai.ImageRequest) bool
+	SupportsInference    func(*openai.InferenceRequest) bool
+	CheckEmbeddingTarget func(connectorcontract.Target, *openai.EmbeddingRequest, connectorcontract.AttemptPolicy) error
+	CheckImageTarget     func(connectorcontract.Target, *openai.ImageRequest, connectorcontract.AttemptPolicy) error
+	CheckInferenceTarget func(connectorcontract.Target, *openai.InferenceRequest, connectorcontract.AttemptPolicy) error
 }
 
 type Registry struct {
@@ -150,7 +159,7 @@ func NewDefaultRegistry() *Registry {
 }
 
 func NewDefaultRegistryWithGatewayModels(models gatewaypolicy.Config) *Registry {
-	registry, err := NewRegistry(openAIDescriptor(), anthropicDescriptor(), gatewayDescriptorWithModels(models), decisionsDescriptor(), translatingDescriptor(connectorcontract.TypeGoogleGemini), translatingDescriptor(connectorcontract.TypeOpenAIResponses))
+	registry, err := NewRegistry(systemOneDescriptor(), chatOnlyDescriptor(), rerankDescriptor(connectorcontract.TypeCohereRerank), rerankDescriptor(connectorcontract.TypeJinaRerank), rerankDescriptor(connectorcontract.TypeSiliconFlowRerank), rerankDescriptor(connectorcontract.TypeVoyageRerank), openAIDescriptor(), anthropicDescriptor(), gatewayDescriptorForType(connectorcontract.TypeAISDKGatewayV3, models), gatewayDescriptorForType(connectorcontract.TypeAISDKGatewayV4, models), decisionsDescriptor(), translatingDescriptor(connectorcontract.TypeGoogleGemini), translatingDescriptor(connectorcontract.TypeOpenAIResponses))
 	if err != nil {
 		panic(err)
 	}
@@ -189,7 +198,7 @@ func (r *Registry) SupportsOperationRequest(t connectorcontract.Type, operation 
 	}
 	descriptor, ok := r.Descriptor(t)
 	if operation == connectorcontract.OperationImagesGenerations {
-		return ok && descriptor.Capabilities.Has(connectorcontract.CapabilityImagesGenerations)
+		return ok && descriptor.Capabilities.Has(connectorcontract.CapabilityImagesGenerations) && (descriptor.SupportsImage == nil || descriptor.SupportsImage(input.Image))
 	}
 	return ok && descriptor.Capabilities.Has(connectorcontract.CapabilityEmbeddings) && (descriptor.SupportsEmbedding == nil || descriptor.SupportsEmbedding(embedding))
 }
@@ -275,6 +284,27 @@ func openAIDescriptor() Descriptor {
 	}
 }
 
+func chatOnlyDescriptor() Descriptor {
+	d := openAIDescriptor()
+	d.Type = connectorcontract.TypeOpenAIChatCompletions
+	d.Capabilities = chatOnlyCapabilities()
+	d.Discoverer = openai.ModelDiscoverer{ConnectorType: d.Type}
+	base := d.New
+	d.New = func(dependencies Dependencies) Connector {
+		instance, ok := base(dependencies).(*openAIConnector)
+		if !ok {
+			return nil
+		}
+		instance.kind = connectorcontract.TypeOpenAIChatCompletions
+		return instance
+	}
+	return d
+}
+
+func chatOnlyCapabilities() connectorcontract.CapabilitySet {
+	return openAICapabilities()&^(inferenceCapabilities(connectorcontract.TypeOpenAICompatible)|connectorcontract.CapabilitySet(connectorcontract.CapabilityEmbeddings|connectorcontract.CapabilityImagesGenerations)) | connectorcontract.CapabilitySet(connectorcontract.CapabilityResponses)
+}
+
 func anthropicDescriptor() Descriptor {
 	return Descriptor{
 		Type:         connectorcontract.TypeAnthropicCompatible,
@@ -300,29 +330,38 @@ func anthropicDescriptor() Descriptor {
 
 type openAIConnector struct {
 	driver OpenAIDriver
+	kind   connectorcontract.Type
 }
 
-func (*openAIConnector) Type() connectorcontract.Type {
+func (c *openAIConnector) Type() connectorcontract.Type {
+	if c.kind != "" {
+		return c.kind
+	}
 	return connectorcontract.TypeOpenAICompatible
 }
 
-func (*openAIConnector) Capabilities() connectorcontract.CapabilitySet { return openAICapabilities() }
+func (c *openAIConnector) Capabilities() connectorcontract.CapabilitySet {
+	if c.Type() == connectorcontract.TypeOpenAIChatCompletions {
+		return chatOnlyCapabilities()
+	}
+	return openAICapabilities()
+}
 
 func openAICapabilities() connectorcontract.CapabilitySet {
-	return connectorcontract.CapabilitySet(
-		connectorcontract.CapabilityText |
-			connectorcontract.CapabilitySystem |
-			connectorcontract.CapabilityDeveloper |
-			connectorcontract.CapabilityImages |
-			connectorcontract.CapabilityTools |
-			connectorcontract.CapabilityToolChoice |
-			connectorcontract.CapabilityParallelTools |
-			connectorcontract.CapabilityStream |
-			connectorcontract.CapabilitySampling |
-			connectorcontract.CapabilityUnknownOpenAIFields |
-			connectorcontract.CapabilityReasoningEffort |
-			connectorcontract.CapabilityStorage | connectorcontract.CapabilityPromptCache |
-			connectorcontract.CapabilityEmbeddings | connectorcontract.CapabilityImagesGenerations |
+	return inferenceCapabilities(connectorcontract.TypeOpenAICompatible) | connectorcontract.CapabilitySet(
+		connectorcontract.CapabilityText|
+			connectorcontract.CapabilitySystem|
+			connectorcontract.CapabilityDeveloper|
+			connectorcontract.CapabilityImages|
+			connectorcontract.CapabilityTools|
+			connectorcontract.CapabilityToolChoice|
+			connectorcontract.CapabilityParallelTools|
+			connectorcontract.CapabilityStream|
+			connectorcontract.CapabilitySampling|
+			connectorcontract.CapabilityUnknownOpenAIFields|
+			connectorcontract.CapabilityReasoningEffort|
+			connectorcontract.CapabilityStorage|connectorcontract.CapabilityPromptCache|
+			connectorcontract.CapabilityEmbeddings|connectorcontract.CapabilityImagesGenerations|
 			connectorcontract.CapabilityModelDiscovery,
 	)
 }
@@ -333,6 +372,14 @@ func (c *openAIConnector) Attempt(ctx context.Context, input AttemptInput) conne
 		if input.Credential != nil {
 			input.Credential.Clear()
 		}
+		return result
+	}
+	if input.Inference != nil {
+		driver, _ := c.driver.(inferenceDriver)
+		return attemptInference(ctx, input, c.Type(), driver)
+	}
+	if c.Type() == connectorcontract.TypeOpenAIChatCompletions && input.Operation != connectorcontract.OperationChatCompletions {
+		input.Credential.Clear()
 		return result
 	}
 	if input.Operation == connectorcontract.OperationEmbeddings {
@@ -530,8 +577,33 @@ func (r *Registry) CheckTargetRequest(target connectorcontract.Target, operation
 			return reject("protocol preflight", "request cannot be represented by this connector")
 		}
 	}
+	var targetError error
+	switch operation {
+	case connectorcontract.OperationEmbeddings:
+		if descriptor.Capabilities.Has(connectorcontract.CapabilityEmbeddings) && descriptor.CheckEmbeddingTarget != nil {
+			targetError = descriptor.CheckEmbeddingTarget(target, embedding, policy)
+		} else {
+			break
+		}
+		return normalizePreflightError(targetError)
+	case connectorcontract.OperationImagesGenerations:
+		if descriptor.Capabilities.Has(connectorcontract.CapabilityImagesGenerations) && descriptor.CheckImageTarget != nil {
+			targetError = descriptor.CheckImageTarget(target, input.Image, policy)
+		} else {
+			break
+		}
+		return normalizePreflightError(targetError)
+	}
 	if !r.SupportsOperationRequest(target.Type(), operation, chat, embedding, images...) {
 		return reject("protocol preflight", "request cannot be represented by this connector")
 	}
 	return nil
+}
+
+func normalizePreflightError(err error) error {
+	var rejected *connectorcontract.RequestRejection
+	if err == nil || errors.As(err, &rejected) {
+		return err
+	}
+	return &connectorcontract.RequestRejection{Stage: "protocol preflight", Field: "request", Reason: "request cannot be represented by this connector"}
 }

@@ -32,23 +32,17 @@ JOIN donation_keys dk ON dk.donation_id=d.id
 JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
 JOIN endpoint_keys k ON k.id=m.endpoint_key_id
 LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
-WHERE cm.id=? AND d.status='approved' AND d.user_id IS NOT NULL
+WHERE cm.id=? AND d.status IN ('pending','approved') AND d.terminal_at IS NULL AND d.user_id IS NOT NULL
 AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?)
-AND (EXISTS(SELECT 1 FROM model_pair_catalog pc WHERE pc.endpoint_key_id=k.id
+AND EXISTS(SELECT 1 FROM donation_uses u WHERE u.donation_key_id=dk.id AND u.current_approved_revision_id IS NOT NULL)
+AND EXISTS(SELECT 1 FROM charity_model_catalog pc WHERE pc.donation_key_id=dk.id
  AND (pc.automatic_supports>0 OR pc.manual_supports>0)
- AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=cm.id
-  AND b.donation_key_id=dk.id AND b.upstream_model_id=pc.normalized_model_id))
- OR EXISTS(SELECT 1 FROM donation_key_manual_models dm WHERE dm.donation_key_id=dk.id
- AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=cm.id
- AND b.donation_key_id=dk.id AND b.upstream_model_id=dm.normalized_model_id)))`
+ ` + candidateUnboundPredicate + `)`
 
 func bindingSourceSelection(modelID, now int64, keyState string, includeBound ...bool) (string, []any) {
 	from := bindingSourceFrom
 	if len(includeBound) > 0 && includeBound[0] {
-		from = strings.ReplaceAll(from, `AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=cm.id
-  AND b.donation_key_id=dk.id AND b.upstream_model_id=pc.normalized_model_id)`, "")
-		from = strings.ReplaceAll(from, `AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=cm.id
- AND b.donation_key_id=dk.id AND b.upstream_model_id=dm.normalized_model_id)`, "")
+		from = strings.ReplaceAll(from, candidateUnboundPredicate, "")
 	}
 	args := []any{modelID, now}
 	if donationstate.Filtered(keyState) {

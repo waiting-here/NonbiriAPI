@@ -1,7 +1,7 @@
 # Data Lifecycle Checklist (Generation 2 export / delete / retention / privacy)
 
-> Status: **v1.0.6 contract** — this checklist describes the
-> release's export, deletion, retention, and privacy boundary. Source publication does
+> Status: **v1.1.0 source contract** — this checklist describes the
+> version's export, deletion, retention, and privacy boundary. Source publication does
 > not itself upgrade an instance; deployment status is specific to each operator.
 >
 > Canonical DDL: `internal/db/generation_two.sql`, embedded by `internal/db/schema.go`, plus registered extension schemas; manifest: `internal/db/schema_manifest.go`;
@@ -12,7 +12,79 @@ family. The registered routes, export builder, deletion coordinator, retention w
 and bilingual privacy text are covered by their implementation and contract tests.
 Schema presence alone never creates a route or expands a response.
 
-Current account export format 24 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v24.json`; SQLite `user_version` remains 2 and the current storage schema is 26. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+Personal-model `cloudflare_proxy_enabled` belongs to the owner's model, is
+included in account export 29, and is deleted with that model or account.
+Charity-model preferences are shared platform configuration and excluded from
+personal exports. The read-only deployment mode is not persisted per account.
+Worker and legacy gateway tokens remain private deployment configuration and
+never enter account exports. Routing preferences do not extend log retention.
+
+Current account export format 29 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v29.json`; SQLite `user_version` remains 2 and the current storage schema is 33. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+
+## Connections and versioned authorization
+
+Account export 29 includes owned connection groups, safe credential/version
+metadata, current endpoint grants, model targets, independent discovery sources
+and donation-use approval snapshots. Credential ciphertext, secret references,
+fingerprints, review HMACs and internal authorization rows are excluded. Export
+joins retain owner boundaries even when a credential is explicitly used across
+several connection groups. Internal numeric identities are not substitutes for
+public credential versions or grant revisions.
+
+Current grants, approved/pending uses, explicitly shared source revisions and
+active claims keep the exact material they need. Deleting an entry does not
+implicitly delete an independent credential. Credential/group/account deletion
+revokes the corresponding authorization through the existing deletion transaction.
+Late discovery completion cannot restore removed grants or deleted accounts.
+Claim completion releases its active authorization after settlement and safe
+attempt facts have been recorded. Unreferenced versions and encrypted material
+use the common retirement and retention path.
+
+Per-service health follows the owned donation use and credential version. Safe
+current approved health is exported with that use; dispatch sequence markers,
+backoff receipts and request-attempt service facts remain internal and follow
+existing claim/request retention. Existing budgets, review history, legal holds
+and deidentified late-settlement obligations retain their original boundaries.
+Mainstream entries, directory suggestions and model mappings are shared operator
+configuration and are excluded from personal exports.
+
+## Direct inference usage and admission
+
+Every registered model operation uses the existing request, claim, reservation,
+export and deletion lifecycle. Multipart files and binary/media responses are
+bounded request-time data, not persistent file or conversation resources.
+This version adds no WebSocket/Realtime store, background job or batch resource.
+
+`request_attempts`, `request_logs` and `charity_reservations` add bounded
+`usage_details` JSON (at most 4,096 bytes). It contains standard modality and
+search-unit facts plus, where settled, the caller pricing decision. Separate
+`donation_usage_reservations.pricing_details` JSON (at most 2,048 bytes) records
+the reward decision for replay. Empty historical metadata remains readable and
+does not imply a zero report. Counts, valid/unknown status and closed reasons
+are normalized before persistence; no request body or arbitrary provider field
+is retained. These columns follow their parent rows' existing cascade,
+deidentification, late-settlement and retention rules.
+
+Authorized request-log projections and JSON/CSV exports may show exact
+`search_units`, modality counts and caller pricing/fallback fields. They do not
+reveal donor reward decisions to ordinary users. Account export adds only a
+safe `charity.usage_details` aggregate with available search units and modality
+counts/reasons. Aggregation requires complete compatible reports on each side;
+missing classification or units cannot become known zero. Per-model pricing,
+donor decisions, request identities and physical source identifiers are absent.
+
+The account's five nullable inference overrides and effective values are part
+of its user export. New light/global overrides cascade with the user; they do
+not restore after deletion or re-registration. Shared site defaults remain
+operator configuration. Light/heavy pools retain the existing account-retirement
+and late-release boundary. Durable RPM windows preserve their expiry rather
+than resetting when a configuration value changes.
+
+Risk-minute records add nullable `saturation_micros_millis`, a bounded integral
+of the larger light/heavy pool utilization. Existing null records use the old
+occupancy/limit calculation; a new zero means observed idle. Actual occupancy
+and peak fields still count requests. This adds no risk category, export access
+or retention period; risk records retain their existing deletion/privacy rules.
 
 `channel_charity_binding_presets` and `channel_charity_binding_mappings` contain
 shared channel configuration without donor or operator identity. They are excluded
@@ -23,11 +95,11 @@ role-scoped control receipts and retention. No additional personal audit history
 is created.
 
 Optional deployment routes send selected upstream requests, provider credentials
-and responses through Cloudflare AI Gateway. The gateway token is deployment
+and responses through a Cloudflare Worker or a legacy AI Gateway. Proxy tokens are deployment
 configuration, excluded from database records, exports and diagnostics. Routed
 responses are checked for known credential reflections before header and error
-capture; direct responses retain the existing diagnostic contract. Gateway logging,
-cache, extra retries and billing fallback are disabled for these routes. Operators
+capture; direct responses retain the existing diagnostic contract. Proxy logging,
+cache and extra retries are disabled; legacy gateway billing fallback is also disabled. Operators
 must disclose the intermediary and maintain its settings; these controls do not
 guarantee end-to-end zero retention.
 
@@ -45,7 +117,7 @@ messages; offline credential verification checks the encrypted MFA material.
 
 Donated keys include the current U128 failure-disable threshold in owner, management and safe export projections. It follows the parent key/donation lifecycle and adds no retention window. Policy edits add no-secret donation review facts, retained under the existing donation-review policy; account deletion removes actor links. A zero threshold preserves error counting but never disables a key for errors. Expiry, withdrawal, bans, manual switches and quota limits remain effective.
 
-Gateway v3 adds a default-off site setting for cost attribution. The optional pseudonym is computed per user and final gateway origin from the deployment key and is never stored as a new identity table, exported, or shown in diagnostics. Debug records only whether it was sent. The receiving gateway can link requests in that scope; ordinary request content and provider retention retain their existing boundaries. Gateway model controls are administrator-managed database configuration. Updates preserve existing credentials, counters, generations, error-disablement and configured legal overrides. Explicit store control rejects by default; a verified OpenAI profile forwards it, while administrator-enabled `omit_false` deliberately omits the control. Neither policy guarantees zero retention across upstream intermediaries.
+Gateway v3/v4 share a default-off site setting for text, image generation, embedding and rerank cost attribution. The optional pseudonym is computed per user and final gateway origin from the deployment key and is never stored as a new identity table, exported, or shown in diagnostics. Debug records only whether it was sent. The receiving gateway can link requests in that scope; ordinary request content and provider retention retain their existing boundaries. Gateway model controls are administrator-managed database configuration. Updates preserve existing credentials, counters, generations, error-disablement and configured legal overrides. Explicit store control rejects by default; a verified OpenAI profile forwards it, while administrator-enabled `omit_false` deliberately omits the control. Neither policy guarantees zero retention across upstream intermediaries.
 
 Credit history, ledger exports and administrator transaction detail expose only the
 last 30 days of operations. Six-hour maintenance compacts older entries into per-account
@@ -94,7 +166,7 @@ Completed sliding aggregates remain for at most 35 actual days; reset retains it
 
 For every table/column, answer all four. A missing answer is an acceptance gap.
 
-1. **Export** — Include the owner's safe slice in the version 20 account export, or record
+1. **Export** — Include the owner's safe slice in the version 28 account export, or record
    an explicit policy exclusion. Never export secrets/ciphertext, CallerKey plaintext
    or verifier, report/device fingerprints, dispatch/idempotency/worker material,
    Debug bodies, device tokens, raw IP, raw upstream data, or another participant's
@@ -125,7 +197,7 @@ state is cleared immediately on 401/403, demotion, ban, logout, or session repla
 
 ## New diagnostic, governance and activity families
 
-The service does not actively persist request bodies or successful response bodies. The restricted original-error store can nevertheless contain upstream-echoed input, prompts or credentials. It captures HTTP-decoded entity/error-event bytes, with a 1 MiB event limit and explicit truncation, unavailable and capacity states. Ordinary retention is 30 days. The default 1 GiB payload budget is configurable from 1 MiB to 64 GiB, includes held bodies, and omits new bodies instead of evicting unexpired ones. It does not include SQLite or backup overhead. JSON/text/base64 views remain untrusted text/bytes and require current administrator or L5/L6 session authority in the read transaction. Authorized administrator and L6 log views and downloads preserve complete saved text and bytes, including IP addresses; L5 upstream error payloads and error-text projections replace IPv4 with `[redacted]`, including decoded binary payloads before base64 encoding, copying and downloading. Source IPs, endpoint addresses, IPv6 and stored originals remain unchanged; capture byte counts still describe the original. Ordinary user display protection remains. This does not expand collection, retention or the fields a role may access. Editable endpoint/IP-rule values and normal model output retain their values.
+The service does not actively persist request bodies or successful response bodies. The restricted original-error store can nevertheless contain upstream-echoed input, prompts or credentials. It captures HTTP-decoded entity/error-event bytes, with a 1 MiB event limit and explicit truncation, unavailable and capacity states. Ordinary retention is 30 days. The default 1 GiB payload budget is configurable from 1 MiB to 64 GiB, includes held bodies, and omits new bodies instead of evicting unexpired ones. It does not include SQLite or backup overhead. JSON/text/base64 views remain untrusted text/bytes and require current administrator or L5/L6 session authority in the read transaction. Authorized administrator and L6 log views and downloads preserve complete saved text and bytes, including IP addresses; L5 upstream error payloads and error-text projections replace IPv4 with `[redacted]`, including decoded binary payloads before base64 encoding, copying and downloading. Diagnostic text and error bodies additionally redact non-mainstream endpoint DNS identifiers; ordinary user request-log fields use the same endpoint-based projection across list/detail/export. A complete endpoint address and connector match in the current active, enabled mainstream channel registry exempts the DNS projection, including historical requests. Disabling or retiring the channel removes that exemption. Separately displayed level-5 source IPs and endpoint addresses, IPv6 and stored originals remain unchanged; capture byte counts still describe the original. Ordinary user display protection remains. This does not expand collection, retention or the fields a role may access. Editable endpoint/IP-rule values and normal model output retain their values.
 
 | Canonical family | Export | Deletion and late work | Retention and privacy |
 | --- | --- | --- | --- |
@@ -152,6 +224,8 @@ Economy reports read the immutable ledger separately for each asset. They distin
 | `game_checkins`; `game_onboarding_completions`; `game_onboarding_holds` | Export the user's game check-ins and once-only completion markers; include safe reward-hold IDs, game/task keys and creation times, but exclude internal capacity facts. | All rows cascade on account deletion after in-flight economic settlement. Completion and reward are one transaction; late callbacks cannot restore a marker or wallet. | Check-ins and completion markers remain for account lifetime. Holds exist only for accepted pending games and are consumed or released on settlement/cancellation, never age-purged independently. | No board, hidden funding or cross-user identity. Components: check-in, game onboarding, ledger capacity and lifecycle coordinator. |
 | `charity_models`; `charity_model_routing`; `charity_model_bindings`; `charity_model_stats`; `charity_model_outcomes`; `charity_model_token_reserves` | Management-plane configuration, the fixed outcome ring, and the sparse model-level Token reserve override are excluded from ordinary account export. | `created_by_user_id` is de-identified/SET NULL; model deletion cascades routing settings, bindings, stats, outcomes, and its sparse Token reserve override. A missing reserve row inherits the global setting. No donor identity is reconstructed from the public configuration. | Current-generation configuration; each model's stats/outcomes are a fixed 100-slot ring and do not become an event history. | Server-set model/pricing/reserve values only; no request content, secret, or donor identity. Components: charity configuration, resource catalog, and lifecycle coordinator. |
 | `idempotency_records`; `logical_requests`; `dispatch_claims`; `request_logs`; `request_attempts`; `worker_checkpoints`; `accepted_operations` | Only the user's safe request-log slice is exportable. Idempotency keys/hashes, claims, attempts, worker/checkpoint data, and operation headers are internal and excluded. | Deletion blocks new claims and converges in-flight work in the same authority. Shared accepted work either receives the approved de-identified handoff or deletion fails atomically. Late callbacks are conditional no-ops. Terminal claims clear `secret_ref_id`; request/attempt rows retain only safe snapshots. | Idempotency is a fixed 24-hour window. Terminal request logs and attempts are retained 30 days. Claim ciphertext references are cleared at terminal and orphaned ciphertext is removed within one hour. Worker/checkpoint technical rows clear after terminal; non-terminal work is bounded by protocol/ledger deadlines. | This family stores safe metadata, original caller mode, actually applied automatic-action categories and bounded diagnostic codes, not request/response bodies or configured secrets; original upstream failures use the separately restricted store above. Components: operation/worker primitives, claim/attempt service, safe log projection, and lifecycle coordinator. |
+| `global_pressure_state`; `global_pressure_samples` | Anonymous site-wide observation counters; excluded from personal exports. Administrator/L5/L6 browser sessions may read the aggregate. | No account or request links; account deletion does not change these aggregates. | At most 1,441 minute samples approximate 24 hours; observation start and all-time maxima persist without a fixed expiry. Restart restores saved state; unflushed observations can be lost. | Integers only, without identities, request bodies or per-request history. A five-second sampler and periodic batch persistence add no request-level writes or request-log scans. |
+| `dispatch_caller_parameter_errors` | Internal completion proof, excluded from account exports and public diagnostics. | Cascades with its parent claim. Account deletion deidentifies the claim through the existing handoff; the proof cannot restore account links. | Follows the parent claim with no independent age-based expiry; request-log or diagnostic cleanup does not set its deadline. | Only claim reference, HTTP 400/422 and a recognized code; no parameter name/value, message, request body or user identity. Created atomically with a verified neutral completion. |
 | `credit_accounts`; `credit_capacity`; `credit_operations`; `credit_entries`; `credit_compaction`; `credit_opening_balances`; `shared_pools`; `welfare_claims`; `thursday_periods`; `thursday_participants` | Export the user's own wallet/operation/claim and Thursday contribution/result slice only. Capacity, complete pool balances, and other users' ledger entries are excluded. | Account deletion first settles all four user wallets to their matching asset's `external`, removes user-facing accounts, and SET NULLs surviving ledger references without rewriting economic facts. Welfare/Thursday settlement and participant de-identification use the same writer/CAS boundary; late callbacks cannot resurrect an account. | Ledger detail lasts 30 days, with the pending/held exceptions and minimal domain receipts described above. Account baselines and non-personal audit totals preserve conservation. Pool, period and domain settlement facts keep their existing lifecycle; welfare claims follow account lifetime and Thursday facts run through the period/generation close. | Decimal-safe projections only; no cross-user identity, full pool distribution, or free-form secret/reason leakage. Components: ledger/capacity, activities/pools, and lifecycle coordinator. |
 | `announcements`; `announcement_audits` | Not part of ordinary account export. Admin views receive only the role-allowed projection; audit rows never restore deleted content. | Permanent announcement deletion removes content immediately. Audit actor references are de-identified/SET NULL while action facts remain under their policy. Announcement epoch is never reused within a generation and changes on destructive fresh. | Content follows announcement state until withdrawal/expiry or permanent delete. Minimum action facts retain 365 days; identifiable actor data is removed after 90 days. A valid legal hold can extend only the exact approved aggregate and its end+400-day metadata window. | Rendered Markdown/text is bounded and sink-sanitized; audit reason is bounded and contains no secret. Components: announcement lifecycle, admin projection, retention, and legal-hold coordinator. |
 | `donations`; `donation_keys`; `donation_key_memberships`; `donation_reviews`; `charity_reservations`; `donation_usage_reservations` | Donor export contains safe donation/key metadata, review history, limits, authorized/effective expiry, safe custom/mainstream source, and reward summaries. A consumer export contains its own reservation summary but no donation-key id/base URL; claims, source key IDs, report fingerprints, and ciphertext are never exported. | Donor deletion removes claims first and atomically transitions pending/approved work to the existing deleted path, clearing private identity/content while preserving approved safe facts. Each key expires independently; only the last live key ends the donation root. In-flight reservations converge before account cascade; terminal donor/key/model references are NULLed/de-identified as required. | Terminal donation safety records and terminal reservations are retained 400 days. A terminal donation key keeps its irreversible report fingerprint only until `ended_at + 90d`; this clock is not extended by legal hold. Non-terminal reservations are settled rather than age-removed. Claim-level usage follows the exact-once terminal lifecycle and cannot keep a deleted secret routable. | No donor identity in consumer projections, no note/secret/ciphertext/raw upstream, and only bounded model/price/source snapshots. Components: donation/charity, claims, ledger, and lifecycle coordinator. |
@@ -190,7 +264,7 @@ Each collection is limited to 10,000 entries and the entire JSON to 16 MiB. The 
 
 | Family | Export / authority | Deletion, late work and retention |
 | --- | --- | --- |
-| Request origin identity, source facts and diagnostic bodies | Original known account/Discord IDs and deleted/unknown flags are administrator/L5/L6 log management data, excluded from owner export. L5 error-body IPv4 projection also applies to retained deleted-user logs; expired held-log reads remain administrator/L6-only. | Self/admin/inactivity deletion deidentifies current ownership but keeps logs and necessary source facts to their original completion-plus-30-day deadline or hold. True source retirement invalidates scan references/coverage. A re-registered identity gains no old-log access. Unknown historical identity is not inferred. |
+| Request origin identity, source facts and diagnostic bodies | Original known account/Discord IDs and deleted/unknown flags are administrator/L5/L6 log management data, excluded from owner export. L5 error-body IPv4 and non-mainstream DNS projections also apply to retained deleted-user logs; expired held-log reads remain administrator/L6-only. | Self/admin/inactivity deletion deidentifies current ownership but keeps logs and necessary source facts to their original completion-plus-30-day deadline or hold. True source retirement invalidates scan references/coverage. A re-registered identity gains no old-log access. Unknown historical identity is not inferred. |
 | Temporary denied-sign-in grants | Verified identity can read only current restriction reasons, with no operator identity or login authority. | Irreversible cookie material lasts five minutes; lifted restrictions vanish on read. No private export or account resurrection. |
 | Stable renewed-review material / requirements | Matching hashes, actor history and secret material are management/internal only, never returned or exported. | Minimal secret-text requirement and revision records survive account/application deletion without automatic expiry. Approval clears only explicitly enabled members at the current review revision. Restores preserve the stable encrypted instance key. |
 | Donation-member manual candidates | Safe owned-donation export and authorized managed catalog only; not the donor's personal catalog. | Member unlink/end/account retirement removes personal association through the donation lifecycle. Discovery never replaces managed manual entries; metadata cannot restore dispatch eligibility. |
@@ -238,6 +312,8 @@ Personal and charity `model_types` contain only enabled operation names. Persona
 
 Public image-generation prompts remain in bounded request memory and may appear in the owner's explicitly opened, bounded Debug memory trace. Generated base64 images, URLs and revised prompts are returned to the caller without server-side download or persistent storage and are excluded from request logs, alerts, account exports and Debug outcomes. Invalid HTTP 200 image bodies are not retained as raw diagnostics; explicit upstream errors remain subject to the restricted original-error exception. The image request kinds use existing request retention, account deletion, anonymization and terminal accounting rules.
 
+Account deletion validates settled request/claim history in shared scans and detaches the account links in a batch. Naturally expired request logs do not block this step. In-progress requests retain their existing settlement handoff; accounting, safe retained log snapshots and the all-or-nothing deletion transaction are preserved.
+
 ## Operator snapshot and destructive-fresh boundary
 
 Complete operator snapshots are outside the account-export contract. They may contain
@@ -247,7 +323,7 @@ manifest, and checksums. Snapshot retention/deletion is operator-controlled and 
 be disclosed by the instance policy; the service does not promise per-user erasure inside
 historical snapshots.
 
-Normal v1.0.6 startup accepts fresh storage or current schema 26; exact schema 16–25 structures use the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion preserves accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies the exact source and restore requirements.
+Normal v1.1.0 startup accepts fresh storage or current schema 33; exact schema 16–26 structures use the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion preserves accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies the exact source and restore requirements.
 
 Starting fresh from an unsupported version uses a separate empty path and resets active application state. A complete old recovery set remains sensitive until its retention purpose ends. Never combine an old binary with a newer database or restore a stale snapshot over newly accepted data automatically.
 
@@ -286,13 +362,13 @@ AI callbacks, cancellation, financial settlement, memory extraction and deletion
 
 `gacha_settings`, `gacha_pools` and `gacha_presets` are administrator configuration. `gacha_config_events` preserves revisions and clears deleted actor links. Public state omits drafts. Configuration history also determines whether limited-card themes have ever opened; the entry display switch is stored in the existing settings JSON. The activity collects no device identifiers, IP addresses, prompts, upstream keys or private image uploads.
 
-`user_appearance` stores the selected site cosmetic, remembered Heartfelt moments artwork key and update time. Available cosmetics and artwork derive from card ownership, theme completion and pool opening history; no duplicate unlock ledger is needed. Export includes the selection, remembered artwork and unlocked designs; the derived artwork eligibility list is omitted. Account deletion removes the row in the same transaction as collection data. Reading appearance grants no activity rewards. The browser retains light/dark/system and sound/motion/vibration preferences; the server remains authoritative for cosmetic access.
+`user_appearance` stores the selected site cosmetic, remembered Heartfelt moments artwork key and update time. Available cosmetics and artwork derive from card ownership, theme completion and pool opening history; no duplicate unlock ledger is needed. Export includes the selection, remembered artwork and unlocked designs; the derived artwork eligibility list is omitted. Account deletion removes the row in the same transaction as collection data. Reading appearance grants no activity rewards. The browser retains light/dark/system, appearance intensity and sound/motion/vibration preferences; the server remains authoritative for cosmetic access. Appearance intensity has three choices (`vivid`, `balanced`, `focus`). Without a saved intensity it follows the system reduced-transparency preference; a manual choice takes priority, including for the current session when browser storage is unavailable. These browser preferences are excluded from the server account export.
 
 ## Managed upstream session headers
 
-`charity_header_sessions` and `charity_header_uses` hold temporary upstream correlation values, excluded from account-content exports, public configuration and logs. Charity consumption remains in its existing aggregate. User/model deletion cascades both tables; completion updates only surviving matching values and cannot recreate deleted data.
+`personal_header_sessions`, `personal_header_uses`, `charity_header_sessions` and `charity_header_uses` hold temporary upstream correlation values in separate personal/charity scopes. Values are excluded from account-content exports, public configuration, logs and raw error diagnostics. Personal models' saved `session_headers` configuration (`name,idle_seconds,format`) is included in export 29 and deleted with the model/account. Shared charity-model configuration is excluded; charity consumption remains in its existing aggregate. User/model deletion cascades the cache/use tables; completion updates only surviving matching values and cannot recreate deleted data.
 
-Active logical requests retain their value. Sent completion extends the configured idle lifetime, default 300 seconds; expired inactive values use bounded cleanup. Startup recovery releases unfinished uses. These values are never authentication credentials. Configuration uses existing model-management authority. See [managed headers](charity-session-headers.md).
+Active logical requests retain their value for internal retries. Zero idle lifetime creates a new value for each logical request without a uniqueness guarantee or cross-request reuse. With a positive lifetime, sent completion extends the configured idle period, default 300 seconds; expired inactive values use bounded cleanup. Startup recovery releases unfinished uses. These values are never authentication credentials. Owners configure personal models; administrator/level-6 authority configures charity models. Level-5 permissions do not expand. See [managed headers](charity-session-headers.md).
 
 ### Selected-account IP audits
 
@@ -309,7 +385,7 @@ Reward receipts are included in current account exports under `rewards`. They co
 ## Shared pricing, owner history and header facts
 
 Smart backoff runs automatically for charity calls. Current safe state is included
-in account export 24 and authorized key projections. Runtime state contains a
+in account export 29 and authorized key projections. Runtime state contains a
 limited reason, source and retry time; it does not copy raw upstream errors.
 The current episode follows the donated key; internal trial and classification
 facts follow the claim.
@@ -321,8 +397,9 @@ and rule fields are removed from replay responses without repeating the mutation
 
 | Family | Access and export | Deletion, retention and late work |
 | --- | --- | --- |
-| `donation_key_backoffs` | Owner and authorized management may read safe current state, also included in account export 24. Internal generation, episode and trial identifiers are excluded. There is no per-key recognition configuration. | Current state cascades with the key. Schema 26 discards old profiles and supplemental-rule text while preserving active recovery facts. Account deletion removes the state. |
-| `dispatch_smart_backoff_facts` | Internal per-claim recovery identity, trial ownership, HTTP acceptance and finite quota classification; no raw error or copied rule text and no personal export. | Claim deletion cascades; key deletion clears its key reference. Existing request retention and holds apply. Generation and episode checks prevent late results from changing a newer episode. Historical supplemental-rule classifications remain valid recovery facts after configuration removal. |
+| `donation_key_backoffs` | Owner and authorized management may read safe current state, also included in account export 29. Internal generation, episode and trial identifiers are excluded. There is no per-key recognition configuration. | Current state cascades with the key. Schema 26 discards old profiles and supplemental-rule text while preserving active recovery facts. Account deletion removes the state. |
+| `endpoint_backoff_policies` | Platform configuration readable and writable by administrators and current level-6 stewards; exact connector/base identity, revision and at most eight rules. No personal export or account identifier. | Retained with platform configuration and complete deployment backups. Clearing rules keeps the revision; account deletion does not delete shared endpoint policy. |
+| `dispatch_smart_backoff_facts` | Internal per-claim recovery identity, trial ownership, HTTP acceptance, finite quota classification and bounded endpoint rule snapshot/revision/matched index; no raw error and no personal export. | Claim deletion cascades; key deletion clears its key reference. Existing request retention and holds apply. Generation and episode checks prevent late results from changing a newer episode. Historical supplemental-rule classifications remain valid recovery facts after configuration removal. |
 | `charity_price_templates` and `charity_price_template_audits` | Shared price/reward/reserve/context/fixed and recurring discount settings; administrator maintenance and enabled-only L6 session reads. No L5/CallerKey access or personal export. Applying copies values, never links a model to future changes. | Templates persist until deleted; safe audits expire after 90 days and actor deletion sets identity null. No credentials or caller content. |
 | `donation_owner_preferences` | Owner-only nullable `owner_hidden_at` is included for every owned donation in account exports, including hidden history. Management does not receive it. | Cascades with user/donation deletion. Hide/restore does not delete records, change the donation revision or reset its 400-day terminal clock. Resumable batches use fixed time and ID boundaries and expire after one hour. |
 | `donation_key_cooldowns` and `dispatch_retry_after_observations` | Safe owner/authorized key projections expose `rate_limited_until`; raw observations are internal. No header body or secret is exported. | Cooldown follows the donation key; observations follow the claim. Atomic writes preserve the latest valid deadline. Neither can recreate a retired key, claim or account. Elapsed deadlines stop limiting immediately. |

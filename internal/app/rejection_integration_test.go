@@ -3,6 +3,7 @@ package app
 import (
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -15,11 +16,24 @@ func TestAuthenticatedPrehandlerFactsHaveOneIdentityAndZeroCharge(t *testing.T) 
 		t.Fatal(err)
 	}
 	ids := map[string]bool{}
-	for _, tc := range []struct{ method, path, body, route string }{
+	cases := []struct{ method, path, body, route string }{
 		{"POST", "/v1/embeddings", `{"model":"provider/self"}`, "openai_embeddings"},
 		{"POST", "/v1/chat/completions", `{"messages":[]}`, "openai_chat_completions"},
 		{"GET", "/v1/models?unexpected=1", "", "model_discovery"},
-	} {
+		{"POST", "/v1/responses", `{}`, "openai_responses"},
+		{"POST", "/v1/responses/compact", `{}`, "openai_responses_compact"},
+		{"POST", "/v1/responses/input_tokens", `{}`, "openai_responses_input_tokens"},
+		{"POST", "/v1/completions", `{}`, "openai_completions"},
+		{"POST", "/v1/images/edits", `{}`, "openai_images_edits"},
+		{"POST", "/v1/images/variations", `{}`, "openai_images_variations"},
+		{"POST", "/v1/audio/speech", `{}`, "openai_audio_speech"},
+		{"POST", "/v1/audio/transcriptions", `{}`, "openai_audio_transcriptions"},
+		{"POST", "/v1/audio/translations", `{}`, "openai_audio_translations"},
+		{"POST", "/v1/moderations", `{}`, "openai_moderations"},
+		{"POST", "/v1/rerank", `{}`, "openai_rerank"},
+		{"POST", "/v1/systemone", `{}`, "openai_systemone"},
+	}
+	for _, tc := range cases {
 		r, err := http.NewRequest(tc.method, f.server.URL+tc.path, strings.NewReader(tc.body))
 		if err != nil {
 			t.Fatal(err)
@@ -53,7 +67,7 @@ func TestAuthenticatedPrehandlerFactsHaveOneIdentityAndZeroCharge(t *testing.T) 
 		t.Fatal(err)
 	}
 	count, err := db.DecodeU128(total)
-	if err != nil || count.Big().String() != "3" {
+	if err != nil || count.Big().String() != strconv.Itoa(len(cases)) {
 		t.Fatal("request count", count, err)
 	}
 	for _, tc := range []struct{ method, path, key string }{{"GET", "/v1/models", "invalid"}, {"PUT", "/v1/embeddings", f.caller}, {"POST", "/v1/unknown", f.caller}} {
@@ -71,7 +85,7 @@ func TestAuthenticatedPrehandlerFactsHaveOneIdentityAndZeroCharge(t *testing.T) 
 		}
 	}
 	var logs int
-	if err := f.store.DB().QueryRow(`SELECT count(*) FROM request_logs`).Scan(&logs); err != nil || logs != 3 {
+	if err := f.store.DB().QueryRow(`SELECT count(*) FROM request_logs`).Scan(&logs); err != nil || logs != len(cases) {
 		t.Fatal("unattributable request counted", logs, err)
 	}
 }

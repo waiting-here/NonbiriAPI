@@ -1,6 +1,7 @@
 package forward
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"mime"
@@ -45,7 +46,11 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 	switch request.URL.Path {
 	case "/v1/models":
 		handler.models(writer, request, userID)
-	case "/v1/chat/completions", "/v1/embeddings", "/v1/images/generations", "/v1/decisions":
+	default:
+		if strings.HasPrefix(request.URL.Path, "/v1/models/") {
+			handler.models(writer, request, userID)
+			return
+		}
 		requestattempt.Stage(request.Context(), "preflight", "")
 		handler.chat(writer, request, userID)
 	}
@@ -69,6 +74,18 @@ func (handler *Handler) models(writer http.ResponseWriter, request *http.Request
 		}
 		return
 	}
+	if strings.HasPrefix(request.URL.Path, "/v1/models/") {
+		name := strings.TrimPrefix(request.URL.Path, "/v1/models/")
+		for _, model := range models.Data {
+			if model.ID == name {
+				writer.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(writer).Encode(model)
+				return
+			}
+		}
+		writeFailure(writer, platformFailure(httperr.CodeNotFound, "model not found"))
+		return
+	}
 	writeModelList(writer, models)
 }
 
@@ -86,7 +103,7 @@ func (handler *Handler) chat(writer http.ResponseWriter, request *http.Request, 
 		writeFailure(writer, *p.failure)
 		return
 	}
-	decoded, filtered, charity, err := handler.service.decodeEnvelope(request.Context(), userID, p.body, p.envelope, requestkind.OperationForPath(request.URL.Path))
+	decoded, filtered, charity, err := handler.service.decodeEnvelope(request.Context(), userID, p.body, p.envelope, requestkind.OperationForPath(request.URL.Path), p.multipart)
 
 	if err != nil {
 		if request.Context().Err() == nil {
@@ -97,6 +114,9 @@ func (handler *Handler) chat(writer http.ResponseWriter, request *http.Request, 
 	defer decoded.Clear()
 	defer clear(filtered)
 	requestattempt.Model(request.Context(), decoded.Model)
+	if decoded.inference != nil {
+		decoded.inference.SetOptionHeaders(request.Header)
+	}
 	handler.service.execute(request.Context(), writer, userID, decoded, filtered, p.mediaType, request.Header.Get("Accept-Language"), request.Header)
 }
 
@@ -112,6 +132,9 @@ func validateChatMedia(request *http.Request) (string, bool) {
 		return "", false
 	}
 	mediaType, parameters, err := mime.ParseMediaType(values[0])
+	if err == nil && mediaType == "multipart/form-data" && openai.SupportsInferenceMultipart(requestkind.OperationForPath(request.URL.Path)) && parameters["boundary"] != "" {
+		return values[0], true
+	}
 	if err != nil || !strings.EqualFold(mediaType, "application/json") {
 		return "", false
 	}

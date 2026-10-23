@@ -91,7 +91,10 @@ func (adapter *AccountResources) ExportIdentity(
 			RPMLimit: identity.RPMLimit, EffectiveRPMLimit: identity.EffectiveRPMLimit,
 			ConcurrencyLimit:          identity.ConcurrencyLimit,
 			EffectiveConcurrencyLimit: identity.EffectiveConcurrencyLimit,
-			GameBalance:               identity.GameBalance, Balance: identity.Balance, DonationCredit: identity.DonationCredit,
+			LightRPMLimit:             identity.LightRPMLimit, EffectiveLightRPMLimit: identity.EffectiveLightRPMLimit,
+			LightConcurrencyLimit: identity.LightConcurrencyLimit, EffectiveLightConcurrencyLimit: identity.EffectiveLightConcurrencyLimit,
+			GlobalRPMLimit: identity.GlobalRPMLimit, EffectiveGlobalRPMLimit: identity.EffectiveGlobalRPMLimit,
+			GameBalance: identity.GameBalance, Balance: identity.Balance, DonationCredit: identity.DonationCredit,
 			DonationCreditAchievedAt: cloneInt64(identity.DonationCreditAchievedAt),
 			EffectiveLevel:           identity.EffectiveLevel, LevelDisplayName: identity.LevelDisplayName,
 			GameProfilePublic: identity.GameProfilePublic, CharityProfilePublic: identity.CharityProfilePublic, CreatedAt: identity.CreatedAt, UpdatedAt: identity.UpdatedAt,
@@ -128,6 +131,7 @@ func (adapter *AccountResources) ExportResources(
 	for _, endpoint := range slice.Endpoints {
 		item := lifecycle.EndpointExport{
 			ID: endpoint.ID, ConnectorType: endpoint.ConnectorType, BaseURL: endpoint.BaseURL,
+			ConnectionID: endpoint.ConnectionID, NativeServices: append([]string{}, endpoint.NativeServices...), RerankFormat: endpoint.RerankFormat,
 			Origin: lifecycle.EndpointOriginExport{
 				Kind: endpoint.Origin.Kind, ChannelID: endpoint.Origin.ChannelID, Name: endpoint.Origin.Name,
 			},
@@ -137,6 +141,7 @@ func (adapter *AccountResources) ExportResources(
 		for _, key := range endpoint.Keys {
 			item.Keys = append(item.Keys, lifecycle.EndpointKeyExport{
 				ID: key.ID, DisplayHead: key.DisplayHead, DisplayTail: key.DisplayTail, Note: key.Note,
+				CredentialID: key.CredentialID, CredentialVersion: key.CredentialVersion, GrantRevision: key.GrantRevision, NativeServices: append([]string{}, key.NativeServices...), DiscoverySourceID: key.DiscoverySourceID,
 				Enabled: key.Enabled, ForceStoreFalse: key.ForceStoreFalse,
 				MaxConcurrency: key.MaxConcurrency, MaxRPM: key.MaxRPM,
 				SuspensionState: key.SuspensionState, CreatedAt: key.CreatedAt, UpdatedAt: key.UpdatedAt,
@@ -166,11 +171,15 @@ func (adapter *AccountResources) ExportResources(
 	models := make([]lifecycle.ModelExport, 0, len(slice.Models))
 	for _, model := range slice.Models {
 		item := lifecycle.ModelExport{
-			RolePolicy: model.RolePolicy.Clone(),
-			ID:         model.ID, Provider: model.Provider, Model: model.Model, FullName: model.FullName,
+			SessionHeaders: make([]lifecycle.SessionHeaderExport, 0, len(model.SessionHeaders)),
+			RolePolicy:     model.RolePolicy.Clone(),
+			ID:             model.ID, Provider: model.Provider, Model: model.Model, FullName: model.FullName,
 			RouteStrategy: model.RouteStrategy, SilentRetry: model.SilentRetry,
-			ModelTypes: model.ModelTypes.Clone(), TransportRule: model.TransportRule, FlattenToolCalls: model.FlattenToolCalls, CreatedAt: model.CreatedAt, UpdatedAt: model.UpdatedAt,
+			ModelTypes: model.ModelTypes.Clone(), TransportRule: model.TransportRule, CloudflareProxyEnabled: model.CloudflareProxyEnabled, FlattenToolCalls: model.FlattenToolCalls, CreatedAt: model.CreatedAt, UpdatedAt: model.UpdatedAt,
 			Bindings: make([]lifecycle.BindingExport, 0, len(model.Bindings)),
+		}
+		for _, header := range model.SessionHeaders {
+			item.SessionHeaders = append(item.SessionHeaders, lifecycle.SessionHeaderExport{Name: header.Name, IdleSeconds: header.IdleSeconds, Format: header.Format})
 		}
 		for _, binding := range model.Bindings {
 			item.Bindings = append(item.Bindings, lifecycle.BindingExport{

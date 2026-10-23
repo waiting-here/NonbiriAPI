@@ -2,21 +2,33 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { Button } from '@shared/components/ui/Button';
+import { Segmented } from '@shared/components/ui/Segmented';
 import { Icon } from '@shared/components/Icon';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
-import { defaultMoment, momentByKey } from './moments';
+import { useTheme } from '@shared/theme/useTheme';
+import type { AppearanceIntensity } from '@shared/theme/context';
+import { defaultMoment, momentByKey, momentArtworkKeys } from './moments';
+import { ArtworkImage, ArtworkBadge, ArtworkUnavailable } from '@shared/artwork/ArtworkImage';
+import { useArtworkPolicy } from '@shared/artwork/context';
 import { appearances, useOptionalAppearance } from './context';
 
 export function AppearanceButton() {
   const { t, i18n } = useTranslation();
   const appearance = useOptionalAppearance();
+  const policy = useArtworkPolicy();
   const [open, setOpen] = useState(false);
   const [choice, setChoice] = useState('default');
   const [error, setError] = useState<unknown>(null);
+  const { intensity, setIntensity } = useTheme();
   if (!appearance) return null;
   const english = i18n.language.startsWith('en');
-  const available = appearance.state.unlocked.includes(choice);
+  const moment = momentByKey.get(appearance.state.moment ?? '') ?? defaultMoment;
+  const keys = (id: string) =>
+    id === 'heart-moment'
+      ? ['appearance:' + id, ...momentArtworkKeys(moment)]
+      : ['appearance:' + id];
+  const available = appearance.state.unlocked.includes(choice) && policy.allowed(keys(choice));
   return (
     <div className="nb-appearance-control">
       <Button
@@ -46,6 +58,22 @@ export function AppearanceButton() {
         }}
       >
         <ThemeToggle />
+        <div className="nb-appearance-intensity">
+          <span id="nb-appearance-intensity-hint" className="nb-small nb-muted">
+            {t('user.appearance.intensityHint')}
+          </span>
+          <Segmented<AppearanceIntensity>
+            label={t('user.appearance.intensity')}
+            describedBy="nb-appearance-intensity-hint"
+            value={intensity}
+            onChange={setIntensity}
+            options={[
+              { value: 'vivid', label: t('user.appearance.intensityVivid') },
+              { value: 'balanced', label: t('user.appearance.intensityBalanced') },
+              { value: 'focus', label: t('user.appearance.intensityFocus') },
+            ]}
+          />
+        </div>
         {appearance.pending ? <LoadingState /> : null}
         {appearance.error ? (
           <ErrorState error={appearance.error} onRetry={appearance.refresh} />
@@ -70,29 +98,38 @@ export function AppearanceButton() {
                   className="nb-appearance-option"
                   data-selected={choice === item.id}
                   data-locked={!unlocked}
+                  data-unavailable={!policy.allowed(keys(item.id))}
                 >
                   <input
                     type="radio"
                     name="appearance"
                     value={item.id}
                     checked={choice === item.id}
-                    disabled={!unlocked || appearance.saving}
+                    disabled={!unlocked || appearance.saving || !policy.allowed(keys(item.id))}
                     onChange={() => setChoice(item.id)}
                   />
                   <span className="nb-appearance-option__image" data-design={item.id}>
                     {'light' in item && (
                       <>
-                        <img
+                        <ArtworkImage
+                          artworkKey={keys(item.id)}
                           className="nb-appearance-light"
                           src={item.light}
                           alt=""
                           loading="lazy"
                         />
-                        <img className="nb-appearance-dark" src={item.dark} alt="" loading="lazy" />
+                        <ArtworkImage
+                          artworkKey={keys(item.id)}
+                          className="nb-appearance-dark"
+                          src={item.dark}
+                          alt=""
+                          loading="lazy"
+                        />
                       </>
                     )}
                     {item.id === 'heart-moment' && (
-                      <img
+                      <ArtworkImage
+                        artworkKey={keys(item.id)}
                         src={
                           (momentByKey.get(appearance.state.moment ?? '') ?? defaultMoment).thumb
                         }
@@ -104,6 +141,8 @@ export function AppearanceButton() {
                   </span>
                   <span className="nb-appearance-option__copy">
                     <strong>{english ? item.name_en : item.name}</strong>
+                    <ArtworkBadge artworkKey={keys(item.id)} />
+                    <ArtworkUnavailable artworkKey={keys(item.id)} />
                     <span>{english ? item.description_en : item.description}</span>
                     <small>
                       {unlocked

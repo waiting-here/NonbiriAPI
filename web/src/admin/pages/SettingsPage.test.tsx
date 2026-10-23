@@ -75,6 +75,34 @@ beforeEach(() => {
 });
 
 describe('site settings discovery and saving', () => {
+  it('discovers and saves the light charity default from the backend catalog', async () => {
+    bundle.values = { default_light_rpm_per_user: 30 };
+    bundle.catalog = [
+      {
+        ...entry(
+          'default_light_rpm_per_user',
+          'limits',
+          pair('Light charity requests per minute per user', '单用户每分钟轻型公益请求上限'),
+        ),
+        raw_default: 30,
+        effective_fallback: 30,
+        maximum: 4096,
+        unit: pair('requests/minute', '次/分钟'),
+      },
+    ];
+    const view = await renderWithProviders(<SettingsPage />, { station: 'admin', role: 'admin' });
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture' } });
+    const input = await screen.findByLabelText('Light charity requests per minute per user');
+    await view.user.clear(input);
+    await view.user.type(input, '45');
+    await view.user.click(screen.getByRole('button', { name: 'Save all changes' }));
+    await waitFor(() => expect(api.patchSiteSettings).toHaveBeenCalledTimes(1));
+    expect(api.patchSiteSettings.mock.calls[0][0]).toEqual({
+      expected_revision: '1',
+      values: { default_light_rpm_per_user: 45 },
+    });
+  });
+
   it('restores a default in the draft and saves only through the save bar', async () => {
     const view = await renderWithProviders(<SettingsPage />, { station: 'admin', role: 'admin' });
     view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture' } });

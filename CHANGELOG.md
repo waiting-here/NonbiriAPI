@@ -4,6 +4,155 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.1.0 — 2026-10-22
+
+### Added
+
+- R-18 built-in artwork is disabled by default through an administrator control, with
+  shared classification for cards, covers, illustrations, appearances and their
+  derived assets. Candidate lists label rated artwork while allowed individual
+  views remain unobstructed. Disabling preserves collection and saved choices.
+- Service connections with shared versioned credentials, independent model
+  directories and multi-service entries. OpenAI-compatible and Gateway entries
+  explicitly select native services; model bindings retain ordered alternative
+  targets without multiplying retry slots or budgets.
+- Per-service donation approval, with pending replacements alongside older
+  approved versions. Credential rotation and explicitly added services require
+  review while preserving the existing donated-key budget and consumption.
+- Multi-entry mainstream presets with independent discovery suggestions and
+  per-model entry mappings, shared by personal setup and donation workflows.
+- Custom-entry address suggestions list all matching available mainstream entries.
+  Explicit adoption selects one entry and compatible services while preserving
+  the custom draft.
+- Administrator and strictly higher-level steward CallerKey revocation from user
+  details, with generation checks and replay receipts that preserve later
+  replacements.
+- Direct HTTP/SSE Responses, legacy completions, image editing/variation, audio,
+  moderation and rerank operations, plus exact model lookup. Persistent resource
+  APIs and all WebSocket/Realtime/WebRTC interfaces remain outside this version.
+- Dedicated Chat and System One connectors and explicit Cohere, Jina, SiliconFlow
+  and Voyage rerank adapters. System One remains separate from Decisions.
+- Explicit AI SDK Gateway v3/v4 text, image generation, embeddings and rerank
+  support, with complete native base URLs and no automatic version switching.
+  Both versions support float/base64 embeddings; v4 adds common reasoning and
+  embedding dimensions. Image output defaults to base64, and standard rerank
+  responses retain unknown usage instead of inventing token counts. The existing
+  default-off cost-attribution setting applies to all four services in both
+  versions.
+- Search-unit pricing and independent input/output modality prices for caller
+  charges, donor rewards and long-context tiers, with standard-usage validation
+  and aggregate-price fallback per side.
+- Separate light/heavy charity RPM windows and user concurrency pools shared by
+  personal and charity calls. Light defaults are 30 RPM and 15 concurrent calls;
+  existing heavy defaults remain 60 RPM and 5 concurrent calls. Administrators
+  and strictly higher-level stewards may adjust all five nullable user inference
+  limits, including the global user RPM override.
+
+- Per-model Cloudflare forwarding with a generic authenticated Worker, without
+  per-upstream mappings. Personal models default to enabled and charity models
+  to disabled, including existing models after upgrade. Legacy AI Gateway
+  configuration remains compatible when no Worker is configured.
+- Endpoint-level supplemental backoff rules shared by all charity keys at the
+  same connector and complete base URL. Administrators and level-6 stewards can
+  configure ordered exact error codes or literal message fragments, including
+  provider-specific credit exhaustion responses.
+- Read-only management visibility into the egress routes actually loaded by the
+  process, without gateway secrets or private gateway paths.
+- Documented Google AI Studio and Vertex AI OpenAI-compatible routing, with
+  isolated regional/global path, authentication and streaming coverage.
+
+- Managed session headers for personal models, with the same settings fields as
+  charity models. Both support UUID v4, hex and OpenCode session/message/part
+  formats. Zero idle lifetime generates a value per logical request and keeps
+  it for internal retries, without guaranteeing uniqueness.
+- Anonymous global concurrency/RPM observations for administrator and level-5/6
+  log pages, sampled every five seconds and refreshed every 15 foreground seconds.
+  Minute samples approximate 24-hour peaks; observation start and all-time maxima
+  survive restart. No request-log scan or extra per-request write is added.
+- Three appearance intensities with immediate browser preferences, system-following
+  theme/reduced-transparency defaults and manual-choice precedence.
+- Refined Shared Daylight, A Notice to Steal Your Heart and Across the Mirror Sea
+  SP scenery, lighting and motion, with dedicated responsive wallpapers and matching
+  static fallbacks. Shared Daylight is the new title for Run Away with You.
+
+### Changed
+
+- Align Decisions with its generally available request format: up to 400 questions,
+  text/image/JSON question content, structured JSON evidence in user messages and
+  2–10 score levels. Preserve native JSON types, cache usage and configured pricing.
+- Reduce CI transfer and setup work with compact station artifacts, shared browser
+  fixtures and a dedicated race build cache. Schedule slower Go packages and
+  balance race tests using measured durations while preserving complete coverage.
+- Route preflight and snapshots use the existing read pool. Request-adaptation
+  reads release database connections before decoding, and charity snapshots reuse
+  each physical key's quota result within the same transaction. Configuration
+  depth validation avoids building a second generic JSON tree, and keys without
+  current recurring rules skip an empty epoch query. Dispatch still revalidates
+  live limits before reserving resources.
+- Backoff policy edits affect future dispatches while in-flight requests retain
+  their rule snapshot. Existing waits, trial ownership and failure streaks are
+  preserved.
+- Chat and Responses share a model service selection, with explicit upstream
+  protocol choice and bounded conversion in both directions. Other model
+  services retain independent multi-selection.
+- Storage schema 33 adds connection, credential-version, discovery and service
+  authorization relationships, while preserving direct-inference, admission,
+  managed-header and pressure changes. Only published schema 16–26 sources are
+  accepted by the offline converter. Account export 29 includes safe owned
+  connection metadata and donation uses; secret material, generated headers,
+  internal authorizations and shared charity configuration remain excluded.
+- Model settings and request adaptation have consistent entry points and header/body
+  groups across personal and charity editors, with separate saves and existing
+  permissions.
+- Authorized adaptation configuration reads expose saved unprotected fixed-header
+  and body values. Any response-protection marker hides the whole saved item;
+  mutation receipts, replay storage and safe exports retain their value-free shape.
+- Short charity-request errors explain the minimum-length requirement in both
+  interface languages, preserving their status, code, counts and accounting.
+- Strictly verified original caller-parameter errors leave a donated key's failure
+  streak unchanged, without clearing it. HTTP 400/422, generic error types and
+  message wording alone never establish this result; errors, diagnostics and
+  accounting retain their existing behavior.
+- Batch settled request/claim validation and account-link detachment during
+  account deletion, and index related account and game history to avoid scanning
+  unrelated records while preserving active settlement and transaction rollback.
+- Load binding details only for the selected page or bounded preview, retaining
+  current authorization and deterministic ordering for large key directories.
+- Token output reservations account for enabled user modality and long-context
+  output rates. Request charges aggregate precise usage before rounding;
+  frozen discounts, replay and conservative unknown-usage behavior remain.
+
+### Fixed
+
+- Account deletion succeeds after related terminal request logs have naturally expired.
+- Account downloads accept export versions 11–29 and preserve saved personal
+  managed-header settings, while retaining identity and attachment-version checks.
+- Improve glass-surface readability, management back controls and centered
+  workbench widths on desktop and mobile. Focus-mode background viewing restores
+  the selected reading surface on return; manual intensity choices remain effective
+  when browser preference storage is unavailable.
+
+- Preserve connection search, page size and return position across nested settings.
+  Keep page controls, long model names and preset details readable on narrow screens.
+- Keep sequential setup actions disabled until the preceding save and refresh settle.
+- Keep donation review navigation fresh after returning from key binding to the list.
+- Keep the charity page available when a usage-priced model has no configured credit reserve.
+- Update Vite to 8.3.3 to address development-server editor-launch vulnerabilities.
+- Credible standard usage survives unsuccessful Gateway finishes, including
+  reasoning-only output. Failed generations remain failed, with diagnostics
+  distinguishing unsuccessful termination from malformed protocol structure.
+- Request accounting, logs and lifecycle projections recognize the complete
+  registered inference route set. Split concurrency observations retain each
+  pool's saturation for existing risk thresholds.
+
+- Worker failures, including connection errors and unconfirmed Cloudflare edge
+  responses, do not increase donated-key failure counts or trigger key backoff.
+- Non-mainstream endpoint DNS identifiers are redacted in ordinary user request
+  logs and in level-5 upstream error details, with current mainstream-address
+  exemptions and complete administrator/level-6 diagnostics.
+- Workflow browser coverage now has an explicit isolated suite selected by the
+  shared local and CI verification plan.
+
 ## 1.0.6 — 2026-10-20
 
 ### Added

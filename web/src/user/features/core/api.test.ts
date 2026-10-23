@@ -256,10 +256,34 @@ describe('core API wire contract', () => {
       {
         id: channelID,
         name: 'Main channel',
+        revision: '1',
         connector_type: 'openai-compatible',
         base_url: 'https://example.com/v1',
       },
     ]);
+  });
+
+  it('encodes an optional mainstream matching address and preserves cancellation', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      jsonResponse(
+        {
+          base_connector_types: ['openai-compatible'],
+          mainstream_channels: [],
+          matching_mainstream_entries: [],
+        },
+        200,
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new AbortController();
+    await expect(
+      getEndpointCreateOptions(controller.signal, 'HTTPS://EXAMPLE.COM:443/api//v1'),
+    ).resolves.toMatchObject({ matching_mainstream_entries: [] });
+    const [input, init] = fetchMock.mock.calls[0]!;
+    const url = new URL(String(input), 'https://app.example');
+    expect(url.pathname).toBe('/api/endpoint-create-options');
+    expect([...url.searchParams]).toEqual([['match_base_url', 'HTTPS://EXAMPLE.COM:443/api//v1']]);
+    expect(init?.signal).toBe(controller.signal);
   });
 
   it('requires CallerKey generation evidence and never adds an idempotency header to plaintext generation', async () => {
@@ -419,8 +443,13 @@ describe('core API wire contract', () => {
       unknown
     >;
     const entries = canonical.entries as Array<Record<string, unknown>>;
+    const affected = canonical.affected_models as Array<{ model: Record<string, unknown> }>;
     const accepted = {
       ...canonical,
+      affected_models: affected.map((entry) => ({
+        ...entry,
+        model: { ...entry.model, session_headers: [] },
+      })),
       entries: [{ ...entries[0], pair_revision: '3' }],
     };
     const missingReplacement = { ...accepted, affected_models: [] };

@@ -23,17 +23,30 @@ const (
 	TypeOpenAICompatible    Type = "openai-compatible"
 	TypeAnthropicCompatible Type = "anthropic-compatible"
 	TypeAISDKGatewayV3      Type = "ai-sdk-gateway-v3"
+	TypeAISDKGatewayV4      Type = "ai-sdk-gateway-v4"
 	TypeGoogleGemini        Type = "google-gemini"
 	TypeOpenAIResponses     Type = "openai-responses"
 	TypeOpenAIDecisions     Type = "openai-decisions"
 )
 
+// NativeChatCompletions identifies protocols that forward Chat Completions
+// without converting its storage or tool fields to another wire format.
+func (t Type) NativeChatCompletions() bool {
+	return t == TypeOpenAICompatible || t == TypeOpenAIChatCompletions
+}
+
+// AISDKGateway identifies the explicitly versioned Gateway protocols.
+func (t Type) AISDKGateway() bool {
+	return t == TypeAISDKGatewayV3 || t == TypeAISDKGatewayV4
+}
+
 // Valid identifies protocol types supported by persisted connector records.
 // Execution still requires a descriptor from the process registry.
 func (t Type) Valid() bool {
 	switch t {
-	case TypeOpenAICompatible, TypeAnthropicCompatible, TypeAISDKGatewayV3,
-		TypeGoogleGemini, TypeOpenAIResponses, TypeOpenAIDecisions:
+	case TypeOpenAICompatible, TypeAnthropicCompatible, TypeAISDKGatewayV3, TypeAISDKGatewayV4,
+		TypeGoogleGemini, TypeOpenAIResponses, TypeOpenAIDecisions,
+		TypeCohereRerank, TypeJinaRerank, TypeSiliconFlowRerank, TypeVoyageRerank, TypeOpenAIChatCompletions, TypeTypeSafeSystemOne:
 		return true
 	default:
 		return false
@@ -51,7 +64,12 @@ const (
 )
 
 func (o Operation) Valid() bool {
-	return o == OperationChatCompletions || o == OperationEmbeddings || o == OperationImagesGenerations || o == OperationDecisions
+	for _, operation := range AllOperations() {
+		if o == operation {
+			return true
+		}
+	}
+	return false
 }
 
 // Capability is one fidelity guarantee made by a connector descriptor.
@@ -91,7 +109,7 @@ const KnownCapabilities = CapabilityText |
 	CapabilityImagesGenerations |
 	CapabilityEmbeddings |
 	CapabilityReasoningEffort |
-	CapabilityStorage | CapabilityPromptCache | CapabilityDecisions
+	CapabilityStorage | CapabilityPromptCache | CapabilityDecisions | inferenceCapabilities
 
 // CapabilitySet is an immutable bit set in a registry descriptor.
 type CapabilitySet uint64
@@ -127,7 +145,10 @@ type Usage struct {
 	// TotalMismatch records a comparable upstream total that disagreed with
 	// independently validated buckets. It remains meaningful when Present is
 	// false because another usage defect made the buckets unbillable.
-	TotalMismatch bool
+	TotalMismatch      bool
+	Modalities         ModalityUsage
+	SearchUnitsMicros  int64
+	SearchUnitsPresent bool
 }
 
 // AttemptResult contains only bounded metadata. Diagnostic is a locally
@@ -262,8 +283,9 @@ type StreamEvent struct {
 // DiscoveredModel is the connector-neutral cache input returned by an
 // optional ModelDiscoverer. Sorting and persistence remain fetch-owned.
 type DiscoveredModel struct {
-	ID       string
-	Provider string
+	NativeServices NativeServiceSet
+	ID             string
+	Provider       string
 }
 
 // DiscoveryInput transfers one fetch-owned, already revalidated target and

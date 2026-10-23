@@ -9,7 +9,7 @@ func TestChannelBindingPresetConstraintsAndDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hostileMustExec(t, database, `INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at) VALUES(?,'test','subscription','openai-compatible','https://example.test/v1',1,'active',1,0,0)`, id)
+	hostileMustExec(t, database, `INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at) VALUES(?,'test','subscription',1,'active',1,0,0)`, id)
 	hostileMustExec(t, database, `INSERT INTO channel_charity_binding_presets(channel_id,revision) VALUES(?,1)`, id)
 	hostileMustExec(t, database, `INSERT INTO channel_charity_binding_mappings(channel_id,ord,upstream_model_id,charity_model_id) VALUES(?,0,'exact',999)`, id)
 	hostileMustFail(t, database, `INSERT INTO channel_charity_binding_mappings(channel_id,ord,upstream_model_id,charity_model_id) VALUES(?,16,'overflow',999)`, id)

@@ -14,6 +14,8 @@ type Observation struct {
 	RequestID                          string
 	RPMLimit, ConcurrencyLimit, Active int
 	Reason                             string
+	HeavyActive, LightActive           int
+	HeavyLimit, LightLimit             int
 }
 
 // Observer performs only bounded, nonblocking memory work. Admission locks
@@ -71,12 +73,28 @@ func (l *userConcurrencyLimiter) observeBoundary(event string, userID int64) {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if event == "limits_changed" {
+		if userID > 0 {
+			if state := l.users[userID]; state != nil {
+				state.heavyLimit, state.lightLimit = 0, 0
+			}
+		} else {
+			for _, state := range l.users {
+				state.heavyLimit, state.lightLimit = 0, 0
+			}
+		}
+	}
 	if l.observer != nil {
 		l.observer.Observe(Observation{Event: event, At: l.now(), UserID: userID})
 	}
 }
 func (l *userConcurrencyLimiter) observeLocked(event string, userID int64, requestID string, limit, active int) {
 	if l.observer != nil {
-		l.observer.Observe(Observation{Event: event, At: l.now(), UserID: userID, RequestID: requestID, ConcurrencyLimit: limit, Active: active})
+		value := Observation{Event: event, At: l.now(), UserID: userID, RequestID: requestID, ConcurrencyLimit: limit, Active: active}
+		if state := l.users[userID]; state != nil {
+			value.HeavyActive, value.LightActive = state.active-state.lightActive, state.lightActive
+			value.HeavyLimit, value.LightLimit = state.heavyLimit, state.lightLimit
+		}
+		l.observer.Observe(value)
 	}
 }

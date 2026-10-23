@@ -213,6 +213,8 @@ function installBindingNavigation(
     pricing: { mode: 'per_request', user_price: '1', donor_reward: '0' },
     discount: { enabled: false, percent: 0, start_at: null, end_at: null },
     transport_rule: 'passthrough',
+    cloudflare_proxy_enabled: false,
+    cloudflare_proxy_mode: 'direct',
     flatten_tool_calls: false,
     revision: '1',
     binding_revision: '1',
@@ -258,6 +260,82 @@ function installBindingNavigation(
 afterEach(() => vi.unstubAllGlobals());
 
 describe('managed donation page integration', () => {
+  it.each(['admin', 'steward'] as const)(
+    'returns from a key binding to a fresh %s review while retaining the donation queue',
+    async (role) => {
+      install(false, role, 11);
+      const root = role === 'admin' ? '/admin/api' : '/api/steward';
+      const previousFetch = globalThis.fetch;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn<typeof fetch>(async (input, init) => {
+          const url = new URL(String(input), 'http://admin.test');
+          if (url.pathname === `${root}/donations`) {
+            const current = summary(donation(false, 11));
+            return json(
+              page(
+                [
+                  ...Array.from({ length: 10 }, (_, index) => ({
+                    ...current,
+                    id: String(index + 100),
+                    description: `Other donation ${index + 1}`,
+                  })),
+                  current,
+                ],
+                url,
+              ),
+            );
+          }
+          if (url.pathname.endsWith('/binding-options')) return json(page([], url));
+          return previousFetch(input, init);
+        }),
+      );
+      const view = await renderWithProviders(
+        <>
+          <CharityManagement frame={role} accountId="review-account" />
+          <Probe />
+        </>,
+        {
+          station: role === 'admin' ? 'admin' : 'user',
+          role: role === 'admin' ? 'admin' : 'level6',
+          route:
+            '/charity?charity_section=donations&handling=pending&q=Shared&donation_status=approved' +
+            '&donations_page=2&donations_page_size=10&donation_id=7&donation_key=21' +
+            '&donation_keys_page=2&donation_keys_page_size=10&binding_donation=7&binding_key=21&keep=other',
+        },
+      );
+      await screen.findByRole('heading', { name: 'Add service connections' });
+      await view.user.click(screen.getByRole('button', { name: 'Return to list' }));
+      const params = new URLSearchParams(screen.getByTestId('url').textContent ?? '');
+      for (const name of [
+        'donation_id',
+        'donation_key',
+        'donation_keys_page',
+        'donation_keys_page_size',
+        'binding_donation',
+        'binding_key',
+        'binding_target',
+      ])
+        expect(params.has(name), name).toBe(false);
+      expect(Object.fromEntries(params)).toMatchObject({
+        handling: 'pending',
+        q: 'Shared',
+        donation_status: 'approved',
+        donations_page: '2',
+        donations_page_size: '10',
+        keep: 'other',
+      });
+      await view.user.click(await screen.findByRole('button', { name: 'Review' }));
+      expect(await screen.findByRole('heading', { name: 'Donation review' })).toBeVisible();
+      expect(
+        screen.queryByRole('heading', { name: 'Add service connections' }),
+      ).not.toBeInTheDocument();
+      await view.user.click(screen.getByText('Browser back', { exact: true }));
+      await view.user.click(screen.getByText('Browser back', { exact: true }));
+      expect(await screen.findByRole('heading', { name: 'Add service connections' })).toBeVisible();
+    },
+  );
+
   it('clears only workflow parameters on account and role changes even when only new parameters remain', async () => {
     const newParameters =
       'source_key_state=disabled&handling_donation=7&handling_view=all&handling_page=3&handling_page_size=50&model_workspace=new&binding_donation=7&binding_key=21&binding_target=1&keep=other';
@@ -488,6 +566,8 @@ describe('managed donation page integration', () => {
       pricing: { mode: 'per_request', user_price: '1', donor_reward: '0' },
       discount: { enabled: false, percent: 0, start_at: null, end_at: null },
       transport_rule: 'passthrough',
+      cloudflare_proxy_enabled: false,
+      cloudflare_proxy_mode: 'direct',
       flatten_tool_calls: false,
       revision: '1',
       binding_revision: '0',

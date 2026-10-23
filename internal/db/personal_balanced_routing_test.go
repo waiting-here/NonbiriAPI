@@ -15,13 +15,13 @@ func TestPersonalBalancedRoutingPreservesModelsAndBindings(t *testing.T) {
 (user_id,provider,model,full_name,route_strategy,revision,binding_revision,model_types,created_at,updated_at)
 VALUES(?,'provider','model','provider/model','random',5,7,6,2,3)`, user))
 	hostileMustExec(t, database, `INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,manual_supports,updated_at) VALUES(?,'upstream',1,0)`, key)
-	binding := hostileMustLastID(t, hostileMustExec(t, database, `INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,'upstream',3,2,3)`, model, key))
+	binding := hostileInsertBinding(t, database, false, 0, model, key, "upstream", 3, 2, 3)
 	hostileMustExec(t, database, "UPDATE sqlite_sequence SET seq=1000 WHERE name='models'")
 	for range 2 {
 		var strategy, upstream string
 		var mask, revision, bindingRevision, created, updated, bindingID, order, sequence int64
-		if err := database.QueryRow(`SELECT m.route_strategy,m.model_types,m.revision,m.binding_revision,m.created_at,m.updated_at,b.id,b.ord,b.upstream_model_id
-FROM models m JOIN model_bindings b ON b.model_id=m.id WHERE m.id=?`, model).
+		if err := database.QueryRow(`SELECT m.route_strategy,m.model_types,m.revision,m.binding_revision,m.created_at,m.updated_at,b.id,b.ord,target.upstream_model_id
+FROM models m JOIN model_bindings b ON b.model_id=m.id JOIN model_binding_primary_targets target ON target.binding_id=b.id WHERE m.id=?`, model).
 			Scan(&strategy, &mask, &revision, &bindingRevision, &created, &updated, &bindingID, &order, &upstream); err != nil ||
 			strategy != "random" || mask != 6 || revision != 5 || bindingRevision != 7 || created != 2 || updated != 3 || bindingID != binding || order != 3 || upstream != "upstream" {
 			t.Fatal("model or binding changed during upgrade", strategy, mask, revision, bindingRevision, created, updated, bindingID, order, upstream, err)

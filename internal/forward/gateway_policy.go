@@ -3,7 +3,6 @@ package forward
 import (
 	"context"
 
-	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 )
 
@@ -17,7 +16,7 @@ func (s *Service) freezeGatewayModels(ctx context.Context, plan *executionPlan) 
 	}
 	targets := []gatewaypolicy.Target{}
 	for _, c := range plan.candidates {
-		if c.ConnectorType == contract.TypeAISDKGatewayV3 {
+		if c.ConnectorType.AISDKGateway() {
 			targets = append(targets, gatewaypolicy.Target{BaseURL: c.CanonicalBaseURL, Model: c.UpstreamModelID})
 		}
 	}
@@ -30,7 +29,7 @@ func (s *Service) freezeGatewayModels(ctx context.Context, plan *executionPlan) 
 	}
 	for i := range plan.candidates {
 		c := &plan.candidates[i]
-		if c.ConnectorType == contract.TypeAISDKGatewayV3 {
+		if c.ConnectorType.AISDKGateway() {
 			model := models[gatewaypolicy.Target{BaseURL: c.CanonicalBaseURL, Model: c.UpstreamModelID}]
 			c.Policy.GatewayModel = &model
 		}

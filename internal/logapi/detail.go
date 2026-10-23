@@ -47,8 +47,13 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 	if err != nil || !utf8.ValidString(model) || len(model) > 512 {
 		return nil, ErrInvariant
 	}
-	switch RouteKind(record.routeKind) {
-	case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages, RouteOpenAIDecisions, RouteDiscovery:
+	sources, err := readLogPrivacySources(ctx, reader, []int64{record.rowID}, 0)
+	if err != nil {
+		return nil, err
+	}
+	redactor := requestDNSRedactor(sources[record.rowID])
+	switch kind := RouteKind(record.routeKind); {
+	case kind.IsSelf() || kind == RouteDiscovery:
 		row := UserSelfLogRow{
 			RejectionFields: rejectionFields(record), ID: record.id, RouteKind: RouteKind(record.routeKind),
 			CallerResultClass: resultClassPointer(record.callerResultClass),
@@ -60,13 +65,14 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 		if err != nil {
 			return nil, err
 		}
+		row = redactUserLogRow(row, redactor).(UserSelfLogRow)
+		redactUserLogAttempts(attempts.Data, sources[record.rowID])
 		metadata := attempts.Pagination
 		attempts.Pagination = nil
 		return UserSelfLogDetail{Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
-	case RouteCharityChat, RouteCharityEmbeddings, RouteCharityImages, RouteCharityDecisions:
-		// Charity detail deliberately returns before constructing or querying an
-		// attempt projection. Its response shape and size are independent of the
-		// number of physical candidates/retries.
+	case kind.IsCharity():
+		// Endpoint metadata is used only to redact existing display text. Charity
+		// detail never constructs an attempt DTO or exposes candidate counts.
 		if !record.callerResultClass.Valid {
 			return nil, ErrConflict
 		}
@@ -76,6 +82,7 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 			CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 			StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage, Model: model,
 		}
+		row = redactUserLogRow(row, redactor).(UserCharityLogRow)
 		return UserCharityLogDetail{
 			Request: row, CallerSafeResult: CallerSafeResult{Class: ResultClass(record.callerResultClass.String)},
 		}, nil
@@ -225,9 +232,15 @@ func (repository *Repository) GetSteward(
 		return StewardLogDetail{}, err
 	}
 	if redact {
+		sources, err := readLogPrivacySources(ctx, tx, []int64{record.rowID}, 0)
+		if err != nil {
+			return StewardLogDetail{}, err
+		}
 		for i := range attempts.Data {
 			attempts.Data[i].Diag = redactUpstreamText(attempts.Data[i].Diag)
 			attempts.Data[i].UpstreamCode = redactUpstreamText(attempts.Data[i].UpstreamCode)
+			redactor := attemptDNSRedactor(sources[record.rowID], attempts.Data[i].AttemptSeq, attempts.Data[i].EndpointBaseURL)
+			attempts.Data[i].Diag = redactDNSPointer(attempts.Data[i].Diag, redactor)
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -254,6 +267,7 @@ type attemptRecord struct {
 	output             int64
 	usageUnknown       int
 	usageTotalMismatch int
+	usageDetails       string
 	startedAt          int64
 	completedAt        int64
 }
@@ -261,13 +275,13 @@ type attemptRecord struct {
 const attemptColumns = `a.attempt_seq,a.result_kind,a.endpoint_key_id_snapshot,a.canonical_base_url,
 a.connector_type,a.upstream_model_id,a.upstream_status,a.upstream_code,a.diag,
 a.input_tokens,a.cache_write_input_tokens,a.cache_read_input_tokens,a.output_tokens,
-a.usage_unknown,a.usage_total_mismatch,a.started_at,a.completed_at`
+a.usage_unknown,a.usage_total_mismatch,a.started_at,a.completed_at,a.usage_details`
 
 // Claim identity is the only link to the donation used by this attempt. Deleted
 // claims or resources leave both navigation IDs absent; snapshots cannot restore them.
 const managementAttemptTargetColumns = `d.id,CASE WHEN d.id IS NOT NULL THEN dk.id END`
 const managementAttemptTargetJoin = ` JOIN request_logs l ON l.id=a.request_log_id
-LEFT JOIN dispatch_claims dc ON dc.id=a.claim_id AND dc.logical_request_id=l.logical_request_id AND dc.attempt_seq=a.attempt_seq AND dc.purpose='charity' AND l.route_kind IN ('charity_chat_completions','charity_embeddings','charity_images_generations','charity_decisions')
+LEFT JOIN dispatch_claims dc ON dc.id=a.claim_id AND dc.logical_request_id=l.logical_request_id AND dc.attempt_seq=a.attempt_seq AND dc.purpose='charity' AND l.route_kind IN ` + charityRouteKindsSQL + `
 LEFT JOIN donation_keys dk ON dk.id=dc.donation_key_id
 LEFT JOIN donations d ON d.id=dk.donation_id `
 
@@ -277,7 +291,7 @@ func scanAttempt(scanner rowScanner, extra ...any) (attemptRecord, error) {
 		&record.sequence, &record.resultKind, &record.endpointKeyID, &record.baseURL,
 		&record.connectorType, &record.upstreamModel, &record.statusCode, &record.upstreamCode, &record.diag,
 		&record.uncached, &record.cacheWrite, &record.cacheRead, &record.output,
-		&record.usageUnknown, &record.usageTotalMismatch, &record.startedAt, &record.completedAt,
+		&record.usageUnknown, &record.usageTotalMismatch, &record.startedAt, &record.completedAt, &record.usageDetails,
 	}
 	targets = append(targets, extra...)
 	if err := scanner.Scan(targets...); err != nil {
@@ -361,7 +375,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 			more = true
 			continue
 		}
-		usage, usageErr := zeroUsage(record.uncached, record.cacheWrite, record.cacheRead, record.output, record.usageUnknown != 0)
+		usage, usageErr := zeroUsage(record.uncached, record.cacheWrite, record.cacheRead, record.output, record.usageUnknown != 0, record.usageDetails)
 		if usageErr != nil {
 			return Page[UserSelfLogAttempt]{}, usageErr
 		}
@@ -437,7 +451,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 			more = true
 			continue
 		}
-		usage, usageErr := zeroUsage(record.uncached, record.cacheWrite, record.cacheRead, record.output, record.usageUnknown != 0)
+		usage, usageErr := zeroUsage(record.uncached, record.cacheWrite, record.cacheRead, record.output, record.usageUnknown != 0, record.usageDetails)
 		if usageErr != nil {
 			return Page[AdminLogAttempt]{}, usageErr
 		}
@@ -519,7 +533,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 			more = true
 			continue
 		}
-		usage, usageErr := zeroUsage(record.uncached, record.cacheWrite, record.cacheRead, record.output, record.usageUnknown != 0)
+		usage, usageErr := zeroUsage(record.uncached, record.cacheWrite, record.cacheRead, record.output, record.usageUnknown != 0, record.usageDetails)
 		if usageErr != nil {
 			return Page[StewardLogAttempt]{}, usageErr
 		}

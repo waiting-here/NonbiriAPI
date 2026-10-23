@@ -1,6 +1,7 @@
 package upstreamerror
 
 import (
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"strings"
 	"testing"
 )
@@ -29,5 +30,24 @@ func TestSmartBackoffOnlyClassifiesCompleteErrorObjects(t *testing.T) {
 		if value := ctx.Parse([]byte(body)); value.Backoff().Valid() {
 			t.Fatalf("unproven classification for input %.100s", body)
 		}
+	}
+}
+
+func TestEndpointRulesRequireCompleteStructuredCharityError(t *testing.T) {
+	ctx := testContext("opaque-secret")
+	ctx.CharityCall = true
+	ctx.Rules = []smartbackoff.Rule{{Kind: "code", Value: "insufficient_credits", Period: "auto"}}
+	body := `{"error":{"code":"insufficient_credits","message":"Insufficient credits","type":"billing_error"}}`
+	if got := ctx.Parse([]byte(body)).Backoff(); got.Source != "custom_rule" || got.Period != "unknown" || got.RuleIndex != 1 {
+		t.Fatal(got)
+	}
+	for _, value := range []string{`{"code":"insufficient_credits","message":"Insufficient credits"}`, `{"error":"insufficient_credits"}`, body[:len(body)-1], body + ` {}`, `{"error":{"code":"insufficient_credits","code":"other"}}`, `{"error":{"code":"insufficient_credits","message":"` + strings.Repeat("x", MaxBodyBytes) + `"}}`} {
+		if ctx.Parse([]byte(value)).Backoff().Valid() {
+			t.Fatal("invalid envelope classified")
+		}
+	}
+	ctx.CharityCall = false
+	if ctx.Parse([]byte(body)).Backoff().Valid() {
+		t.Fatal("non-charity classified")
 	}
 }

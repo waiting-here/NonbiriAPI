@@ -21,7 +21,7 @@ func annotateBindingCandidates(ctx context.Context, tx *sql.Tx, items []AdminBin
 	for i := range items {
 		item := &items[i]
 		item.BindingMarkers = BindingMarkers{OtherBindingCount: "0", OtherBindings: []BindingMarkerTarget{}}
-		rows, err := tx.QueryContext(ctx, `SELECT b.id,b.charity_model_id,cm.full_name FROM charity_model_bindings b JOIN charity_models cm ON cm.id=b.charity_model_id WHERE b.donation_key_id=? AND b.upstream_model_id=? AND (?=0 OR cm.is_mainstream=1) ORDER BY cm.full_name,cm.id`, item.DonationKeyID, item.UpstreamModelID, trainee)
+		rows, err := tx.QueryContext(ctx, `SELECT DISTINCT b.id,b.charity_model_id,cm.full_name FROM charity_model_bindings b JOIN charity_binding_targets t ON t.binding_id=b.id JOIN charity_models cm ON cm.id=b.charity_model_id WHERE t.donation_key_id=? AND t.upstream_model_id=? AND (?=0 OR cm.is_mainstream=1) ORDER BY cm.full_name,cm.id`, item.DonationKeyID, item.UpstreamModelID, trainee)
 		if err != nil {
 			return err
 		}

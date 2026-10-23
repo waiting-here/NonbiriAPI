@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -195,8 +197,28 @@ func TestDonationReviewLegacyBackfillOriginalSources(t *testing.T) {
 	future := seedSecret(4, "future-body", url, kind, at+40)
 	sameBody := seedSecret(5, "original-body", "https://other.example.test", kind, at)
 	user := execID(`INSERT INTO users(donation_credit_mag,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,created_at,updated_at) VALUES(zeroblob(16),zeroblob(16),zeroblob(16),zeroblob(16),zeroblob(16),zeroblob(16),zeroblob(16),zeroblob(16),?,?)`, at, at)
-	endpoint := execID(`INSERT INTO endpoints(user_id,connector_type,base_url,created_at,updated_at) VALUES(?,?,?,?,?)`, user, kind, url, at, at)
-	physical := execID(`INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,created_at,updated_at) VALUES(?,?,zeroblob(32),?,?)`, endpoint, current, at, at+20)
+	tx, err := store.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint, err := testseed.InsertEndpointTx(ctx, tx, testseed.EndpointInput{OwnerUserID: user, Type: connectorcontract.Type(kind), BaseURL: url, At: at})
+	if err != nil {
+		tx.Rollback()
+		t.Fatal(err)
+	}
+	key, err := testseed.InsertEndpointKeyTx(ctx, tx, testseed.KeyInput{EndpointID: endpoint, SecretRefID: current, Fingerprint: make([]byte, 32), At: at})
+	if err == nil {
+		_, err = tx.ExecContext(ctx, "UPDATE endpoint_keys SET updated_at=? WHERE id=?", at+20, key.KeyID)
+	}
+	if err == nil {
+		err = tx.Commit()
+	} else {
+		tx.Rollback()
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	physical := key.KeyID
 	donation := execID(`INSERT INTO donations(user_id,status,revision,created_at,updated_at) VALUES(?,'pending',1,?,?)`, user, at, at)
 	seedMember := func(body, address, connector string, created int64, active bool, known bool) int64 {
 		t.Helper()
@@ -244,7 +266,7 @@ VALUES(?,?,?,?,?,?,zeroblob(16),zeroblob(16),zeroblob(16),zeroblob(16),zeroblob(
 		return nil
 	}
 	// An existing requirement must be copied into newly proven snapshots.
-	tx, err := store.DB().BeginTx(ctx, nil)
+	tx, err = store.DB().BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,5 +1,6 @@
 import { cards, themes } from '../activities/gacha/catalog';
 import type { Card } from '../activities/gacha/types';
+import { artworkCovers, artworkCatalog } from '@shared/artwork/catalog';
 
 export interface MomentArtwork {
   key: string;
@@ -10,22 +11,11 @@ export interface MomentArtwork {
   thumb: string;
   card?: Card;
 }
+export const momentArtworkKeys = (item: MomentArtwork): string[] =>
+  artworkCatalog.momentKeys(item.key);
 
-const covers = [
-  ['permanent', '永续智能', 'Perpetual intelligence'],
-  ['entry', '真·抽卡模拟器', 'The Gacha Simulator'],
-  ['h', '万象化身', 'Myriad forms'],
-  ['i', '夏夜花火', 'Summer fireworks'],
-  ['j', '童话剧场', 'Fairytale theatre'],
-  ['l', '星月神话', 'A Myth of Moon and Stars'],
-  ['m', '逍遥游', 'Wandering Free'],
-  ['n', '镜海相逢', 'Across the Mirror Sea'],
-  ['o', '琥珀誓章', 'Amber Vow'],
-  ['p', '与你私奔', 'Run Away with You'],
-  ['q', '偷心预告', 'A Notice to Steal Your Heart'],
-];
 export const momentArtworks: MomentArtwork[] = [
-  ...covers.map(([id, name, nameEN]) => ({
+  ...artworkCovers.map(({ id, name, name_en: nameEN }) => ({
     key: 'cover:' + id,
     kind: 'cover' as const,
     name,
@@ -51,5 +41,5 @@ export const momentArtworks: MomentArtwork[] = [
     thumb: theme.art,
   })),
 ];
-export const defaultMoment = momentArtworks[0];
+export const defaultMoment = momentArtworks.find((item) => item.key === 'cover:permanent')!;
 export const momentByKey = new Map(momentArtworks.map((item) => [item.key, item]));

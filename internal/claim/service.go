@@ -248,6 +248,7 @@ VALUES(?,?,? ,?,'accepted',1,'none',0,'user',?,?)`,
 		return Request{}, Handle{}, err
 	}
 	handle, err := s.claimTx(ctx, tx, claimID, at, ClaimInput{
+		discovery:   &input,
 		RequestID:   requestID,
 		ActorUserID: input.ActorUserID,
 		AttemptSeq:  1,
@@ -312,37 +313,23 @@ SELECT 1 FROM dispatch_claims WHERE logical_request_id=? AND attempt_seq=?)`,
 		return Handle{}, ErrConflict
 	}
 
-	var target targetRow
-	var orphanedAt sql.NullInt64
-	var suspended int
-	if err := tx.QueryRowContext(ctx, `SELECT e.id,e.user_id,e.connector_type,e.base_url,e.enabled,
-k.secret_ref_id,k.enabled,k.force_store_false,s.connector_type,s.canonical_base_url,s.orphaned_at,
-EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id)
-FROM endpoint_keys k
-JOIN endpoints e ON e.id=k.endpoint_id
-JOIN endpoint_key_secrets s ON s.id=k.secret_ref_id
-WHERE k.id=?`, input.Candidate.EndpointKeyID).Scan(
-		&target.endpointID, &target.ownerUserID, &target.endpointConnector, &target.endpointBaseURL,
-		&target.endpointEnabled, &target.secretRefID, &target.keyEnabled, &target.forceStoreFalse,
-		&target.secretConnector, &target.secretBaseURL, &orphanedAt, &suspended); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return Handle{}, ErrNotFound
+	// Authorization is the current self grant or the exact approved use, never
+	// the historical destination stored beside encrypted credential bytes.
+	var target authorizedTarget
+	var targetErr error
+	if input.Purpose == PurposeDiscovery {
+		if input.discovery == nil {
+			return Handle{}, ErrInvalidInput
 		}
-		return Handle{}, fmt.Errorf("claim: revalidate endpoint key: %w", err)
+		target, targetErr = resolveDiscoveryTargetTx(ctx, tx, *input.discovery)
+	} else {
+		target, targetErr = resolveInferenceTargetTx(ctx, tx, input, RouteKind(routeText).Operation())
 	}
-	if target.endpointID != input.Candidate.EndpointID || target.endpointEnabled != 1 || target.keyEnabled != 1 ||
-		orphanedAt.Valid || suspended != 0 || target.endpointConnector != target.secretConnector ||
-		target.endpointBaseURL != target.secretBaseURL || target.secretConnector != string(input.Candidate.ConnectorType) ||
-		target.secretBaseURL != input.Candidate.CanonicalBaseURL {
+	if targetErr != nil {
+		return Handle{}, targetErr
+	}
+	if RouteKind(routeText).Operation() == connectorcontract.OperationChatCompletions && target.forceStoreFalse != input.Candidate.Policy.ForceStoreFalse {
 		return Handle{}, ErrNotFound
-	}
-	if input.Purpose != PurposeCharity && target.ownerUserID != input.ActorUserID {
-		return Handle{}, ErrNotFound
-	}
-	if input.PersonalModelID > 0 {
-		if err := validatePersonalBindingTx(ctx, tx, input); err != nil {
-			return Handle{}, err
-		}
 	}
 
 	reservation := CharityReservation{}
@@ -356,12 +343,13 @@ WHERE k.id=?`, input.Candidate.EndpointKeyID).Scan(
 		}
 		var err error
 		reservation, err = s.charity.Claim(ctx, tx, CharityClaimInput{
+			Authorization:    input.Candidate.Authorization,
 			RequestID:        input.RequestID,
 			ClaimID:          claimID,
 			ActorUserID:      input.ActorUserID,
 			AttemptSeq:       input.AttemptSeq,
 			DonationKeyID:    input.DonationKeyID,
-			EndpointID:       target.endpointID,
+			EndpointID:       target.grant.EndpointID,
 			EndpointKeyID:    input.Candidate.EndpointKeyID,
 			UpstreamModelID:  input.Candidate.UpstreamModelID,
 			ClaimedAt:        at,
@@ -378,29 +366,45 @@ WHERE k.id=?`, input.Candidate.EndpointKeyID).Scan(
 		streakGeneration = reservation.StreakGeneration
 		donorState = RewardPending
 	}
-	if err := checkKeyLimitsTx(ctx, tx, input.Candidate.EndpointKeyID, at, input.Purpose); err != nil {
-		return Handle{}, err
+	if input.Candidate.EndpointKeyID > 0 {
+		if err := checkKeyLimitsTx(ctx, tx, input.Candidate.EndpointKeyID, at, input.Purpose); err != nil {
+			return Handle{}, err
+		}
+	}
+	var endpointKeyID any
+	if input.Candidate.EndpointKeyID > 0 {
+		endpointKeyID = input.Candidate.EndpointKeyID
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO dispatch_claims(
 id,logical_request_id,attempt_seq,purpose,endpoint_key_id,secret_ref_id,donation_key_id,
 streak_generation,claim_now,state,frozen_price_milli,frozen_reward_milli,receiver_user_id,
 reserved_price_milli,reserved_calls,reserved_tokens,donor_reward_state,reserved_input_tokens,reserved_output_tokens)
 VALUES(?,?,?,?,?,?,?,?,?,'claimed',?,?,?,?,?,?,?,?,?)`,
-		claimID, input.RequestID, input.AttemptSeq, input.Purpose, input.Candidate.EndpointKeyID,
-		target.secretRefID, donationKey, streakGeneration, at, reservation.FrozenPriceMilli,
+		claimID, input.RequestID, input.AttemptSeq, input.Purpose, endpointKeyID,
+		target.grant.SecretRefID, donationKey, streakGeneration, at, reservation.FrozenPriceMilli,
 		reservation.FrozenRewardMilli, receiverUser, reservation.ReservedPriceMilli,
 		reservation.ReservedCalls, reservation.ReservedTokens, donorState, reservation.ReservedInputTokens, reservation.ReservedOutputTokens); err != nil {
 		return Handle{}, fmt.Errorf("claim: persist dispatch claim: %w", err)
 	}
+	if input.Purpose == PurposeDiscovery {
+		if err := persistDiscoveryTargetTx(ctx, tx, claimID, *input.discovery, target); err != nil {
+			return Handle{}, err
+		}
+	} else if err := persistInferenceTargetTx(ctx, tx, claimID, input, target); err != nil {
+		return Handle{}, err
+	}
 	if input.Purpose == PurposeCharity {
+		if err := reserveServiceHealthTx(ctx, tx, claimID, at); err != nil {
+			return Handle{}, err
+		}
 		if err := donationquota.Reserve(ctx, tx, claimID, at); err != nil {
 			return Handle{}, fmt.Errorf("claim: reserve recurring limits: %w", err)
 		}
-		if err := reserveCharityDispatchTx(ctx, tx, claimID, input, target.secretRefID, target.secretBaseURL, at); err != nil {
+		if err := reserveCharityDispatchTx(ctx, tx, claimID, input, target.grant.SecretRefID, target.grant.CanonicalBaseURL, at); err != nil {
 			return Handle{}, err
 		}
 	} else if input.PersonalModelID > 0 {
-		if err := reservePersonalDispatchTx(ctx, tx, claimID, input, target.secretRefID, target.secretBaseURL, at); err != nil {
+		if err := reservePersonalDispatchTx(ctx, tx, claimID, input, target.grant.SecretRefID, target.grant.CanonicalBaseURL, at); err != nil {
 			return Handle{}, err
 		}
 	}
@@ -413,12 +417,12 @@ WHERE id=? AND state='accepted'`, input.RequestID); err != nil {
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE request_logs
 SET endpoint_key_id=?,upstream_model_id=?,endpoint_base_url=?
-WHERE logical_request_id=?`, input.Candidate.EndpointKeyID, input.Candidate.UpstreamModelID,
-		target.secretBaseURL, input.RequestID); err != nil {
+WHERE logical_request_id=?`, endpointKeyID, input.Candidate.UpstreamModelID,
+		target.grant.CanonicalBaseURL, input.RequestID); err != nil {
 		return Handle{}, fmt.Errorf("claim: freeze request log target: %w", err)
 	}
 	candidate := input.Candidate
-	candidate.Policy.ForceStoreFalse = target.forceStoreFalse == 1
+	candidate.Policy.ForceStoreFalse = RouteKind(routeText).Operation() == connectorcontract.OperationChatCompletions && target.forceStoreFalse
 	return Handle{
 		claimID:       claimID,
 		requestID:     input.RequestID,
@@ -467,10 +471,11 @@ func (s *Service) TakeForDispatch(ctx context.Context, handle Handle) (*Dispatch
 		callerID      sql.NullInt64
 	)
 	if err := tx.QueryRowContext(ctx, `SELECT c.state,c.logical_request_id,c.attempt_seq,c.purpose,
-s.context_id,s.encrypted_secret,s.connector_type,s.canonical_base_url,
+s.context_id,s.encrypted_secret,t.wire_type,t.canonical_base_url,
 COALESCE(l.upstream_model_id,''),lr.route_kind,lr.user_id
 FROM dispatch_claims c
 JOIN endpoint_key_secrets s ON s.id=c.secret_ref_id
+JOIN dispatch_claim_targets t ON t.claim_id=c.id
 LEFT JOIN request_logs l ON l.logical_request_id=c.logical_request_id
 JOIN logical_requests lr ON lr.id=c.logical_request_id
 WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purposeText,
@@ -501,6 +506,23 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 		clear(contextID)
 		clear(encrypted)
 		return nil, ErrInvariant
+	}
+	if err := RevalidateDispatchTargetTx(ctx, tx, handle.claimID, at); err != nil {
+		clear(contextID)
+		clear(encrypted)
+		return nil, err
+	}
+	if RouteKind(requestRoute).Operation() == connectorcontract.OperationChatCompletions {
+		var forceStoreFalse bool
+		err := tx.QueryRowContext(ctx, `SELECT force_store_false FROM endpoint_keys WHERE id=?`, handle.candidate.EndpointKeyID).Scan(&forceStoreFalse)
+		if err != nil || forceStoreFalse != handle.candidate.Policy.ForceStoreFalse {
+			clear(contextID)
+			clear(encrypted)
+			if err != nil {
+				return nil, authorizationError(err)
+			}
+			return nil, ErrNotFound
+		}
 	}
 	var managedHeaders http.Header
 	backoff := smartbackoff.Dispatch{}
@@ -552,6 +574,12 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 		}
 	} else if handle.purpose == PurposeSelf || handle.purpose == PurposeDebugLive {
 		if err := markPersonalDispatchTx(ctx, tx, handle.claimID, at); err != nil {
+			clear(contextID)
+			clear(encrypted)
+			return nil, err
+		}
+		managedHeaders, err = personalSessionHeadersTx(ctx, tx, handle.claimID, requestID, callerID.Int64, at)
+		if err != nil {
 			clear(contextID)
 			clear(encrypted)
 			return nil, err
@@ -613,19 +641,6 @@ SET state='dispatched',dispatched_at=? WHERE id=? AND state='claimed'`, at, hand
 		dispatchedAt: at,
 		credential:   credential,
 	}, nil
-}
-
-type targetRow struct {
-	endpointID        int64
-	ownerUserID       int64
-	endpointConnector string
-	endpointBaseURL   string
-	endpointEnabled   int
-	secretRefID       int64
-	keyEnabled        int
-	forceStoreFalse   int
-	secretConnector   string
-	secretBaseURL     string
 }
 
 func (s *Service) ensureRequestLogTx(ctx context.Context, tx *sql.Tx, requestID string) error {
@@ -701,10 +716,10 @@ func validAcceptInput(input AcceptInput) bool {
 		!validBoundedText(input.ModelSnapshot, MaxModelSnapshotBytes, true) {
 		return false
 	}
-	switch input.Route {
-	case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteOpenAIImages, RouteOpenAIDecisions:
+	switch {
+	case input.Route.IsSelf():
 		return input.CharityModelID == 0 && input.CharityDecisionNow == nil && input.OutputTokenFloor == 0
-	case RouteCharityChat, RouteCharityEmbeddings, RouteCharityImages, RouteCharityDecisions:
+	case input.Route.IsCharity():
 		return input.CharityModelID > 0 && input.CharityDecisionNow != nil &&
 			*input.CharityDecisionNow >= 0 && *input.CharityDecisionNow <= maxUnixSecond
 	default:
@@ -752,7 +767,9 @@ func validCandidate(candidate Candidate) bool {
 }
 
 func validDiscoveryCandidate(candidate Candidate) bool {
-	return validCandidateIdentity(candidate) && candidate.UpstreamModelID == ""
+	return candidate.EndpointID >= 0 && candidate.EndpointKeyID >= 0 &&
+		(candidate.EndpointID == 0) == (candidate.EndpointKeyID == 0) && candidate.ConnectorType.Valid() &&
+		len(candidate.CanonicalBaseURL) > 0 && len(candidate.CanonicalBaseURL) <= MaxBaseURLBytes && candidate.UpstreamModelID == ""
 }
 
 func validCandidateIdentity(candidate Candidate) bool {

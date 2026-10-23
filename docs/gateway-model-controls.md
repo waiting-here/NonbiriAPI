@@ -1,6 +1,6 @@
 # Gateway model controls
 
-`ai-sdk-gateway-v3` uses the `LanguageModelV3` wire protocol. Gateway implementations can use different provider adapters and model settings. A successful HTTP response alone does not prove that a provider honored an option.
+`ai-sdk-gateway-v3` and `ai-sdk-gateway-v4` select their respective native wire protocols explicitly. Both support text, image generation, embeddings and rerank; see the [paths, headers and service boundaries](api-contract.md#24-native-ai-sdk-gateway-v3v4-compatibility). The declarations below govern text-model controls; they do not enable unmapped image, embedding or rerank provider options. Gateway implementations can use different provider adapters and model settings. A successful HTTP response alone does not prove that a provider honored an option.
 
 ## Output budgets
 
@@ -46,7 +46,9 @@ Replace the example with evidence for the actual gateway, provider implementatio
 
 ## Reasoning
 
-The caller sends `reasoning_effort`. Its value must belong to both the profile vocabulary and that model's configured `efforts`. An unsupported value rejects explicitly. It never becomes a token budget or falls back to another effort.
+The caller sends `reasoning_effort`. In v3 its value must belong to both the profile vocabulary and that model's configured `efforts`. An unsupported value rejects explicitly. It never becomes a token budget or falls back to another effort.
+
+In v4, supported `none`, `minimal`, `low`, `medium`, `high`, `xhigh` and `max` values map to the common `reasoning` field. A configured profile still restricts allowed levels; absent one, no provider identity is guessed. Explicit storage and cache controls still require a verified exact-target policy. Native extensions cannot conflict with the common or provider reasoning fields. The table describes the v3 provider-specific effort mappings; configured profile limits remain active in v4.
 
 | Adapter | Profile vocabulary | Native provider options |
 | --- | --- | --- |
@@ -100,6 +102,6 @@ Candidate checks use the final adapted request. A compatible candidate can remai
 
 ## Provider warnings and stream diagnostics
 
-Valid v3 `unsupported`, `compatibility`, and `other` warnings do not fail an otherwise valid generation. A model may ignore an optional sampling setting and still return a complete response. This applies to streamed and non-streamed requests. Warning text is not forwarded to callers. See the [AI SDK settings guide](https://ai-sdk.dev/docs/ai-sdk-core/settings) and [v3 warning definition](https://github.com/vercel/ai/blob/main/packages/provider/src/shared/v3/shared-v3-warning.ts).
+Valid supported v3/v4 `unsupported`, `compatibility`, `other` and recognized `deprecated` warnings do not fail an otherwise valid generation. A model may ignore an optional sampling setting and still return a complete response. This applies to streamed and non-streamed requests. Warning text is not forwarded to callers. See the [AI SDK settings guide](https://ai-sdk.dev/docs/ai-sdk-core/settings) and [v3 warning definition](https://github.com/vercel/ai/blob/main/packages/provider/src/shared/v3/shared-v3-warning.ts).
 
 Malformed warnings, invalid event order, unfinished text or tool blocks, and missing finish events still fail. A locally rejected stream records its reason, stream state, and at most 64 KiB of the rejected event in the existing private upstream diagnostic store. Completed content chunks are not collected as a transcript. Administrators and authorized level-5/6 stewards can inspect these details through request logs. Level-5 error details redact IPv4 addresses; ordinary callers keep the existing safe error response. Older failures without captured events cannot gain their original details retroactively.

@@ -18,6 +18,8 @@ const keyMetadata = {
   generation: '1',
 };
 const model = {
+  cloudflare_proxy_enabled: false,
+  cloudflare_proxy_mode: 'legacy',
   model_types: ['chat_completions', 'embeddings'],
   id: '7',
   provider: 'my',

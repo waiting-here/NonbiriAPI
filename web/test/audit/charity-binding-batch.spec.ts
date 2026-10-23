@@ -274,6 +274,114 @@ test('key binding collects multiple targets, shows exact existing bindings, and 
   }
 });
 
+test('completed key binding returns to the donation list and reopens a fresh review', async ({
+  browser,
+}, info) => {
+  const state = fixture(),
+    data = state.management;
+  for (const role of ['admin', 6] as const) {
+    const context = await session(browser, role),
+      origin = role === 'admin' ? state.admin_url : state.user_url,
+      prefix = role === 'admin' ? '/admin/api' : '/api/steward',
+      keyIndex = role === 'admin' ? 0 : 1;
+    try {
+      const page = await context.newPage();
+      const path = role === 'admin' ? '/charity?' : '/steward?tab=charity&';
+      await page.goto(
+        origin +
+          path +
+          'charity_section=donations&handling=pending&donation_status=approved' +
+          '&q=Binding%20preset%20browser%20donation&donations_page=1&donations_page_size=10',
+      );
+      await page
+        .getByRole('button', { name: common.common.operations.charity.openReview, exact: true })
+        .click();
+      await expect(
+        page.getByRole('heading', { name: common.common.donationReview.title, exact: true }),
+      ).toBeVisible();
+      await page
+        .getByRole('button', { name: common.common.connections.modelsAndBindings, exact: true })
+        .nth(keyIndex)
+        .click();
+      await expect(page).toHaveURL(
+        new RegExp(`binding_key=${data.binding_key_ids[keyIndex]}(?:&|$)`),
+      );
+      await searchModels(page, 'binding-browser/target-4');
+      await page
+        .getByRole('row')
+        .filter({ hasText: '[公益]binding-browser/target-4' })
+        .getByRole('button', { name: batch.chooseUpstream, exact: true })
+        .click();
+      await page.getByRole('checkbox', { name: /binding-up-4/ }).check();
+      await page
+        .getByRole('button', {
+          name: common.common.workflow.addCount.replace('{{count}}', '1'),
+          exact: true,
+        })
+        .click();
+      await expect(page.getByRole('region', { name: batch.results })).toContainText(
+        batch.status.added,
+      );
+      const saved = await read(
+        context,
+        origin,
+        `${prefix}/charity-models/${data.binding_model_ids[4]}/bindings`,
+      );
+      expect(
+        saved.bindings.some(
+          (binding: { donation_key_id: string; upstream_model_id: string }) =>
+            binding.donation_key_id === data.binding_key_ids[keyIndex] &&
+            binding.upstream_model_id === 'binding-up-4',
+        ),
+      ).toBe(true);
+      await page
+        .getByRole('button', { name: common.common.operations.charity.returnToList, exact: true })
+        .click();
+      const params = new URL(page.url()).searchParams;
+      for (const name of ['donation_id', 'binding_donation', 'binding_key', 'binding_target'])
+        expect(params.has(name), name).toBe(false);
+      expect(Object.fromEntries(params)).toMatchObject({
+        handling: 'pending',
+        donation_status: 'approved',
+        q: 'Binding preset browser donation',
+        donations_page: '1',
+        donations_page_size: '10',
+      });
+      await page
+        .getByRole('button', { name: common.common.operations.charity.openReview, exact: true })
+        .click();
+      await expect(
+        page.getByRole('heading', { name: common.common.donationReview.title, exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole('heading', { name: common.common.workflow.addConnections, exact: true }),
+      ).toHaveCount(0);
+      await page.reload();
+      await expect(
+        page.getByRole('heading', { name: common.common.donationReview.title, exact: true }),
+      ).toBeVisible();
+      await visuals(page, info, `review-return-${role}`, () =>
+        page
+          .getByRole('heading', { name: common.common.donationReview.title, exact: true })
+          .scrollIntoViewIfNeeded(),
+      );
+      await page
+        .getByRole('button', { name: common.common.connections.modelsAndBindings, exact: true })
+        .nth(keyIndex)
+        .click();
+      await page
+        .getByRole('button', { name: common.common.workflow.returnDonation, exact: true })
+        .click();
+      await expect(
+        page.getByRole('heading', { name: common.common.donationReview.title, exact: true }),
+      ).toBeVisible();
+      expect(new URL(page.url()).searchParams.get('donation_id')).toBe(data.binding_donation_id);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
 test('administrator and level 6 configure channel presets and apply missing or repeated items without stopping other keys', async ({
   browser,
 }, info) => {

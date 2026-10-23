@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
@@ -155,7 +156,7 @@ func TestPersonalReadBudgetAndBulkBodyBudget(t *testing.T) {
 	defer tx.Rollback()
 	note := strings.Repeat("😀", 1024)
 	for i := 0; i < 100; i++ {
-		_, err = tx.Exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at) VALUES(?,'openai-compatible',?,?,1,1,?,?)`, f.userID, fmt.Sprintf("https://endpoint-%d.example.test/v1", i), note, f.clock.Load(), f.clock.Load())
+		_, err = tx.Exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,native_service_mask,capability_origin,created_at,updated_at) VALUES(?,'openai-compatible',?,?,1,1,1,'legacy',?,?)`, f.userID, fmt.Sprintf("https://endpoint-%d.example.test/v1", i), note, f.clock.Load(), f.clock.Load())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -209,13 +210,13 @@ func TestPersonalCapacityRejectsOnlyNewRegistrationAndFixedWindowReuse(t *testin
 func TestPersonalOwnerEndpointBodyIsolationAndDeletePreventsResume(t *testing.T) {
 	f := newPersonalFixture(t)
 	key := f.key(t, "k")
-	otherEndpoint := f.exec(t, `INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at) VALUES(?,'openai-compatible','https://other.example.test/v1','',1,1,?,?)`, f.userID, f.clock.Load(), f.clock.Load())
+	otherEndpoint := f.exec(t, `INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,native_service_mask,capability_origin,created_at,updated_at) VALUES(?,'openai-compatible','https://other.example.test/v1','',1,1,1,'legacy',?,?)`, f.userID, f.clock.Load(), f.clock.Load())
 	other := decodeBatch(t, f.request(f.ctx, "POST", fmt.Sprintf("%sendpoints/%d/keys/batch-import", PersonalPrefix, otherEndpoint), strings.Repeat("j", 22), f.importBody("fixture-upstream-k")), 200)
 	if other.Results[0].Outcome != "created" || other.Results[0].EndpointKeyID == key {
 		t.Fatal("body dedup crossed endpoint ownership")
 	}
 	foreign := f.user(t, "foreign", 1)
-	foreignEndpoint := f.exec(t, `INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at) VALUES(?,'openai-compatible','https://foreign.example.test/v1','',1,1,?,?)`, foreign, f.clock.Load(), f.clock.Load())
+	foreignEndpoint := f.exec(t, `INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,native_service_mask,capability_origin,created_at,updated_at) VALUES(?,'openai-compatible','https://foreign.example.test/v1','',1,1,1,'legacy',?,?)`, foreign, f.clock.Load(), f.clock.Load())
 	if w := f.request(f.ctx, "GET", fmt.Sprintf("%sendpoints/%d/keys/%s", PersonalPrefix, foreignEndpoint, key), "", ""); w.Code != 404 {
 		t.Fatal("parent mismatch accepted")
 	}
@@ -225,6 +226,9 @@ func TestPersonalOwnerEndpointBodyIsolationAndDeletePreventsResume(t *testing.T)
 	}
 	defer tx.Rollback()
 	if _, err = f.service.PrepareDelete(f.ctx, tx, lifecycle.DeleteRequest{UserID: f.userID, DecisionNow: f.clock.Load()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := testseed.PrepareConnectionDeletionTx(f.ctx, tx, f.userID, f.clock.Load()); err != nil {
 		t.Fatal(err)
 	}
 	_, err = tx.Exec(`DELETE FROM users WHERE id=?`, f.userID)

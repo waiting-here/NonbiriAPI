@@ -47,9 +47,10 @@ type KeyModelBinding struct {
 // become ineligible. Availability reuses the public charity routing predicate.
 const keyModelFrom = ` FROM charity_model_bindings rb
 JOIN charity_models cm ON cm.id=rb.charity_model_id
-JOIN donation_keys rk ON rk.id=rb.donation_key_id
+JOIN charity_binding_targets rt ON rt.binding_id=rb.id AND NOT EXISTS(SELECT 1 FROM charity_binding_targets earlier WHERE earlier.binding_id=rt.binding_id AND earlier.donation_key_id=rt.donation_key_id AND earlier.ord<rt.ord)
+JOIN donation_keys rk ON rk.id=rt.donation_key_id
 JOIN donations rd ON rd.id=rk.donation_id
-LEFT JOIN endpoint_keys pk ON pk.id=rb.endpoint_key_id
+LEFT JOIN endpoint_keys pk ON pk.id=rk.endpoint_key_id
 LEFT JOIN endpoints pe ON pe.id=pk.endpoint_id
 CROSS JOIN (SELECT ? AS decision_now,? AS token_reserve,? AS charity_enabled) cx
 WHERE rk.donation_id=? AND rk.id=?`
@@ -58,12 +59,13 @@ func keyModelStateSQL() string {
 	return `CASE
 WHEN rk.ended_at IS NOT NULL THEN 'ended'
 WHEN (rk.expires_at IS NOT NULL AND rk.expires_at<=cx.decision_now) OR rd.status='expired' THEN 'expired'
-WHEN rd.status<>'approved' THEN 'pending'
+WHEN rd.terminal_at IS NOT NULL OR rd.status NOT IN ('pending','approved') THEN 'ended'
+WHEN rd.status='pending' AND NOT EXISTS(SELECT 1 FROM donation_uses u WHERE u.donation_key_id=rk.id AND u.current_approved_revision_id IS NOT NULL) THEN 'pending'
 WHEN cx.charity_enabled=0 THEN 'feature_disabled'
 WHEN cm.enabled=0 THEN 'model_disabled'
 WHEN rk.enabled=0 OR pk.enabled=0 OR pe.enabled=0 THEN 'disabled'
-WHEN rk.failure_disabled=1 OR EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=rb.endpoint_key_id) THEN 'suspended'
-WHEN ` + catalogAvailableBindingSQL("rb.id") + ` THEN 'available'
+WHEN rk.failure_disabled=1 OR EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=rk.endpoint_key_id) THEN 'suspended'
+WHEN ` + catalogAvailableBindingSQL("rb.id", "rk.id") + ` THEN 'available'
 ELSE 'unavailable' END`
 }
 
@@ -100,7 +102,7 @@ func (s *Service) keyModelPages(ctx context.Context, role roleKind, actorID, don
 				return models, bindings, err
 			}
 		}
-		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM charity_model_bindings WHERE charity_model_id=? AND donation_key_id=?)`, modelID, keyID).Scan(&exists); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM charity_model_bindings b JOIN charity_binding_targets t ON t.binding_id=b.id WHERE b.charity_model_id=? AND t.donation_key_id=?)`, modelID, keyID).Scan(&exists); err != nil {
 			return models, bindings, err
 		}
 		if !exists {
@@ -130,7 +132,7 @@ func (s *Service) keyModelPages(ctx context.Context, role roleKind, actorID, don
 	selection := `SELECT cm.id,cm.full_name,cm.enabled,COUNT(*),SUM(CASE WHEN (` + keyModelStateSQL() + `)='available' THEN 1 ELSE 0 END)` + from + ` GROUP BY cm.id,cm.full_name,cm.enabled`
 	order := "cm.full_name,cm.id"
 	if modelID != 0 {
-		selection = `SELECT rb.id,rb.upstream_model_id,rb.ord,` + keyModelStateSQL() + from + ` AND cm.id=?`
+		selection = `SELECT rb.id,rt.upstream_model_id,rb.ord,` + keyModelStateSQL() + from + ` AND cm.id=?`
 		args = append(args, modelID)
 		order = "rb.ord,rb.id"
 	}

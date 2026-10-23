@@ -168,6 +168,12 @@ const coreBaseUser = {
   effective_rpm_limit: '60',
   concurrency_limit: null,
   effective_concurrency_limit: '5',
+  global_rpm_limit: null,
+  effective_global_rpm_limit: '60',
+  light_rpm_limit: null,
+  effective_light_rpm_limit: '30',
+  light_concurrency_limit: null,
+  effective_light_concurrency_limit: '15',
   balance: '1',
   game_balance: '0',
   donation_credit: '2',
@@ -851,7 +857,7 @@ describe('authoritative site-config frontend', () => {
 });
 
 describe('admin per-user limit explanations', () => {
-  test('states the built-in concurrency default and independent gate composition', async () => {
+  test('states light and heavy concurrency defaults and independent gate composition', async () => {
     const adminUser = {
       id: '7',
       username: 'fixture-user',
@@ -871,6 +877,12 @@ describe('admin per-user limit explanations', () => {
       effective_rpm_limit: '60',
       concurrency_limit: null,
       effective_concurrency_limit: '5',
+      global_rpm_limit: null,
+      effective_global_rpm_limit: '60',
+      light_rpm_limit: null,
+      effective_light_rpm_limit: '30',
+      light_concurrency_limit: null,
+      effective_light_concurrency_limit: '15',
       lang: 'en',
       balance: '0',
       game_balance: '0',
@@ -916,19 +928,21 @@ describe('admin per-user limit explanations', () => {
     await screen.findByRole('columnheader', { name: 'Username' });
     const row = (await screen.findByRole('button', { name: 'fixture-user' })).closest('tr');
     expect(row).not.toBeNull();
-    const cells = within(row!).getAllByRole('cell');
-    expect(cells[0]).toHaveTextContent('fixture-user');
-    expect(cells[0]).toHaveTextContent('#7');
-    expect(cells[0]).toHaveTextContent('1234…6789');
+    const identity = within(row!).getByRole('button', { name: 'fixture-user' }).closest('td');
+    expect(identity).toHaveTextContent('fixture-user');
+    expect(identity).toHaveTextContent('#7');
+    expect(identity).toHaveTextContent('1234…6789');
     await rendered.user.click(within(row!).getByRole('button', { name: 'fixture-user' }));
     await rendered.user.click(await screen.findByRole('button', { name: 'Copy Discord ID' }));
     expect(await navigator.clipboard.readText()).toBe('1234567890123456789');
     await rendered.user.click(screen.getByRole('tab', { name: /Limits/ }));
-    const note = await screen.findByText(/default per-user concurrency is 5/i);
-    expect(note).toHaveTextContent(/site, endpoint and key limits also apply/i);
+    expect(screen.getByLabelText('Heavy concurrency')).toHaveAccessibleDescription(/currently 5/i);
+    expect(screen.getByLabelText('Light concurrency')).toHaveAccessibleDescription(/currently 15/i);
+    const note = await screen.findByText(/other inference is heavy/i);
+    expect(note).toHaveTextContent(/site, endpoint and key limits still apply/i);
     await rendered.i18n.changeLanguage('zh');
-    expect(await screen.findByText(/单用户并发默认为 5/)).toHaveTextContent(
-      /全站、端点和密钥的限制/,
+    expect(await screen.findByText(/两类公益请求分别计算 RPM/)).toHaveTextContent(
+      /全站、端点和密钥限制仍然适用/,
     );
   });
 });
@@ -1480,6 +1494,8 @@ function platformModelFixture(id: unknown, overrides: Record<string, unknown> = 
     route_strategy: 'ordered',
     silent_retry: false,
     transport_rule: 'passthrough',
+    cloudflare_proxy_enabled: false,
+    cloudflare_proxy_mode: 'direct',
     flatten_tool_calls: false,
     binding_count: 0,
     created_at: 1,
@@ -1496,6 +1512,8 @@ function charityModelFixture(id: unknown, overrides: Record<string, unknown> = {
     full_name: 'Fixture model',
     enabled: true,
     transport_rule: 'passthrough',
+    cloudflare_proxy_enabled: false,
+    cloudflare_proxy_mode: 'direct',
     flatten_tool_calls: false,
     pricing_mode: 'per_request',
     prices: completePrices(),
@@ -1518,6 +1536,12 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
       effective_endpoint_limit: '4',
       effective_rpm_limit: '60',
       effective_concurrency_limit: '5',
+      global_rpm_limit: null,
+      effective_global_rpm_limit: '60',
+      light_rpm_limit: null,
+      effective_light_rpm_limit: '30',
+      light_concurrency_limit: null,
+      effective_light_concurrency_limit: '15',
     });
     const admin = normalizeAdminUser({
       id: 7,
@@ -1546,9 +1570,11 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
   });
 
   test('projects policy ownership fields and preserves strict donation limits and amounts', () => {
-    expect(
-      normalizeEndpointKey(endpointKeyFixture(1, true), 'openai-compatible').force_store_false,
-    ).toBe(true);
+    for (const connector of ['openai-compatible', 'openai-chat-completions']) {
+      expect(normalizeEndpointKey(endpointKeyFixture(1, true), connector).force_store_false).toBe(
+        true,
+      );
+    }
     expect(
       normalizePlatformModel(platformModelFixture(2, { flatten_tool_calls: true }))
         .flatten_tool_calls,
@@ -1568,12 +1594,14 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
       enabled: true,
       force_store_false: true,
     };
-    expect(normalizeDonationKey(keyFixture, 'openai-compatible')).toMatchObject({
-      max_concurrency: 100_000,
-      rpm_limit: 4_096,
-      credits_usage_cap_milli: '9007199254740993',
-      force_store_false: true,
-    });
+    for (const connector of ['openai-compatible', 'openai-chat-completions']) {
+      expect(normalizeDonationKey(keyFixture, connector)).toMatchObject({
+        max_concurrency: 100_000,
+        rpm_limit: 4_096,
+        credits_usage_cap_milli: '9007199254740993',
+        force_store_false: true,
+      });
+    }
     expect(normalizeManagementDonationKey(keyFixture).force_store_false).toBe(true);
     expect(() => normalizeEndpointKey(endpointKeyFixture(1, 1), 'openai-compatible')).toThrow(
       /store policy/i,

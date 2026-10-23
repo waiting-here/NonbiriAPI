@@ -58,20 +58,31 @@ const (
 // the caller's transaction. Ownership checks and commit remain with the
 // resource repository.
 func (r *Runtime) WriteEndpointSecret(ctx context.Context, tx *sql.Tx, input resources.SecretWriteInput) (resources.StoredSecret, error) {
+	return r.writeCredentialSecret(ctx, tx, input, true)
+}
+
+// WriteCredentialSecret creates one body without inventing an authorized
+// endpoint. Explicit grants and discovery sources authorize its later use.
+func (r *Runtime) WriteCredentialSecret(ctx context.Context, tx *sql.Tx, plaintext []byte, createdAt int64) (resources.StoredSecret, error) {
+	return r.writeCredentialSecret(ctx, tx, resources.SecretWriteInput{Plaintext: plaintext, CreatedAt: createdAt}, false)
+}
+
+func (r *Runtime) writeCredentialSecret(ctx context.Context, tx *sql.Tx, input resources.SecretWriteInput, hasOrigin bool) (resources.StoredSecret, error) {
 	defer clear(input.Plaintext)
 	if err := r.begin(); err != nil {
 		return resources.StoredSecret{}, err
 	}
 	defer r.end()
-	if ctx == nil || tx == nil || !r.validDecisionSecond(input.CreatedAt) ||
-		!validConnectorType(input.ConnectorType) || !validBaseURLText(input.CanonicalBaseURL) ||
-		!validCredential(input.Plaintext) {
+	if ctx == nil || tx == nil || !r.validDecisionSecond(input.CreatedAt) || !validCredential(input.Plaintext) {
 		return resources.StoredSecret{}, ErrInvalidInput
 	}
 	if ctx.Err() != nil {
 		return resources.StoredSecret{}, ErrInterrupted
 	}
-	if !r.canonicalBaseURL(input.CanonicalBaseURL) {
+	if hasOrigin && (!validConnectorType(input.ConnectorType) || !validBaseURLText(input.CanonicalBaseURL) || !r.canonicalBaseURL(input.CanonicalBaseURL)) {
+		return resources.StoredSecret{}, ErrInvalidInput
+	}
+	if !hasOrigin && (input.ConnectorType != "" || input.CanonicalBaseURL != "") {
 		return resources.StoredSecret{}, ErrInvalidInput
 	}
 
@@ -91,7 +102,12 @@ func (r *Runtime) WriteEndpointSecret(ctx context.Context, tx *sql.Tx, input res
 	rowContextID := credentialContext.ContextID()
 	defer clear(rowContextID)
 
-	fingerprint := r.fingerprint(input.ConnectorType, input.CanonicalBaseURL, input.Plaintext)
+	var fingerprint [sha256.Size]byte
+	var originType, originURL any
+	if hasOrigin {
+		fingerprint = r.fingerprint(input.ConnectorType, input.CanonicalBaseURL, input.Plaintext)
+		originType, originURL = input.ConnectorType, input.CanonicalBaseURL
+	}
 	head, tail := displayFragments(input.Plaintext)
 	ciphertext, err := r.vault.SealForGenerationTwoContext(input.Plaintext, credentialContext)
 	if err != nil {
@@ -100,7 +116,7 @@ func (r *Runtime) WriteEndpointSecret(ctx context.Context, tx *sql.Tx, input res
 	defer func() { ciphertext = "" }()
 	result, err := tx.ExecContext(ctx, `INSERT INTO endpoint_key_secrets(
 context_id,canonical_base_url,connector_type,encrypted_secret,created_at,orphaned_at)
-VALUES(?,?,?,?,?,NULL)`, rowContextID, input.CanonicalBaseURL, input.ConnectorType, ciphertext, input.CreatedAt)
+VALUES(?,?,?,?,?,NULL)`, rowContextID, originURL, originType, ciphertext, input.CreatedAt)
 	if err != nil {
 		return resources.StoredSecret{}, ErrUnavailable
 	}
@@ -119,6 +135,37 @@ VALUES(?,?,?,?,?,NULL)`, rowContextID, input.CanonicalBaseURL, input.ConnectorTy
 	}, nil
 }
 
+func (r *Runtime) FingerprintEndpointSecret(ctx context.Context, tx *sql.Tx, refID int64, connectorType, canonicalBaseURL string) ([32]byte, error) {
+	if err := r.begin(); err != nil {
+		return [32]byte{}, err
+	}
+	defer r.end()
+	if ctx == nil || tx == nil || refID <= 0 || !validConnectorType(connectorType) ||
+		!validBaseURLText(canonicalBaseURL) || !r.canonicalBaseURL(canonicalBaseURL) {
+		return [32]byte{}, ErrInvalidInput
+	}
+	var contextID []byte
+	var ciphertext string
+	if err := tx.QueryRowContext(ctx, `SELECT context_id,encrypted_secret FROM endpoint_key_secrets WHERE id=? AND orphaned_at IS NULL`, refID).Scan(&contextID, &ciphertext); err != nil {
+		return [32]byte{}, ErrUnavailable
+	}
+	defer clear(contextID)
+	credentialContext, err := secret.NewGenerationTwoEndpointKeyContext(contextID)
+	if err != nil {
+		return [32]byte{}, ErrUnavailable
+	}
+	plaintext, err := r.vault.OpenForGenerationTwoContext(ciphertext, credentialContext)
+	ciphertext = ""
+	if err != nil {
+		return [32]byte{}, ErrUnavailable
+	}
+	defer clear(plaintext)
+	if ctx.Err() != nil {
+		return [32]byte{}, ErrInterrupted
+	}
+	return r.fingerprint(connectorType, canonicalBaseURL, plaintext), nil
+}
+
 // MarkEndpointSecretOrphaned performs the only allowed orphan transition. A
 // still-referenced or already-marked row is an idempotent no-op.
 func (r *Runtime) MarkEndpointSecretOrphaned(ctx context.Context, tx *sql.Tx, refID, at int64) error {
@@ -134,9 +181,7 @@ func (r *Runtime) MarkEndpointSecretOrphaned(ctx context.Context, tx *sql.Tx, re
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE endpoint_key_secrets SET orphaned_at=?
 WHERE id=? AND orphaned_at IS NULL
-AND NOT EXISTS(SELECT 1 FROM endpoint_keys k WHERE k.secret_ref_id=endpoint_key_secrets.id)
-AND NOT EXISTS(SELECT 1 FROM dispatch_claims c WHERE c.secret_ref_id=endpoint_key_secrets.id
-               AND c.state IN ('claimed','dispatched'))`, at, refID); err != nil {
+AND NOT EXISTS(SELECT 1 FROM secret_live_references live WHERE live.secret_ref_id=endpoint_key_secrets.id)`, at, refID); err != nil {
 		if ctx.Err() != nil {
 			return ErrInterrupted
 		}

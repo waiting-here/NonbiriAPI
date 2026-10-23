@@ -18,7 +18,7 @@ export interface CharityPriceTableProps {
   compact?: boolean;
   longContext?: { inputThreshold: string; rows: CharityPriceRow[] };
   contextPenalty?: { inputThreshold: string; fineMilli: string };
-  mode: 'per_request' | 'per_token';
+  mode: 'per_request' | 'per_token' | 'per_search_unit';
   rows: CharityPriceRow[];
   serverNow: number;
   effectiveDiscount: EffectiveDiscount;
@@ -119,7 +119,7 @@ export function CharityPriceTable({
     return (
       <div className="charity-prices-compact">
         <dl>
-          {rows.map((row) => (
+          {(compact ? rows.slice(0, 4) : rows).map((row) => (
             <div key={row.label}>
               <dt>{row.compactLabel ?? row.label}</dt>
               <dd>
@@ -133,6 +133,7 @@ export function CharityPriceTable({
             </div>
           ))}
         </dl>
+        {rows.length > 4 && <p className="nb-sub">{t('common.modalityPricing.available')}</p>}
         {longContext && (
           <p className="nb-sub">{t('common.operations.charity.context.longAvailable')}</p>
         )}
@@ -240,7 +241,13 @@ export function CharityPriceTable({
         <p className="nb-sub">{t('common.operations.charity.context.usageHelp')}</p>
       )}
       <p className="muted charity-price-note">
-        {t(mode === 'per_token' ? 'user.charity.tokenUnit' : 'user.charity.requestUnit')}{' '}
+        {t(
+          mode === 'per_search_unit'
+            ? 'common.modalityPricing.searchUnit'
+            : mode === 'per_token'
+              ? 'user.charity.tokenUnit'
+              : 'user.charity.requestUnit',
+        )}{' '}
         {t('user.charity.billingHelp')}
       </p>
     </div>

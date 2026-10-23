@@ -60,7 +60,7 @@ func (r *Repository) validEndpointPageFilters(f EndpointPageFilters) bool {
 
 const endpointPageState = `CASE WHEN e.enabled=0 THEN 'endpoint_disabled'
 WHEN NOT EXISTS(SELECT 1 FROM endpoint_keys k WHERE k.endpoint_id=e.id) THEN 'no_keys'
-WHEN NOT EXISTS(SELECT 1 FROM endpoint_keys k WHERE k.endpoint_id=e.id AND k.enabled=1
+WHEN NOT EXISTS(SELECT 1 FROM endpoint_keys k JOIN self_grant_availability a ON a.endpoint_key_id=k.id AND a.native_service_mask>0 WHERE k.endpoint_id=e.id
  AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)) THEN 'no_usable_key'
 ELSE 'available' END`
 
@@ -114,8 +114,8 @@ func modelPageQuery(userID int64, f ModelPageFilters) (string, []any) {
 	query, args := modelSelect+` WHERE m.user_id=?`, []any{userID}
 	if q := strings.TrimSpace(f.Query); q != "" {
 		query += ` AND (instr(lower(m.full_name),lower(?))>0 OR EXISTS(SELECT 1
-FROM model_bindings b JOIN endpoint_keys k ON k.id=b.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id
-WHERE b.model_id=m.id AND e.user_id=m.user_id AND instr(lower(b.upstream_model_id),lower(?))>0))`
+FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id JOIN endpoint_keys k ON k.id=t.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id
+WHERE b.model_id=m.id AND e.user_id=m.user_id AND instr(lower(t.upstream_model_id),lower(?))>0))`
 		args = append(args, q, q)
 	}
 	if f.Provider != "" {
@@ -126,9 +126,9 @@ WHERE b.model_id=m.id AND e.user_id=m.user_id AND instr(lower(b.upstream_model_i
 		query += ` AND m.route_strategy=?`
 		args = append(args, f.RouteStrategy)
 	}
-	const anyBinding = `EXISTS(SELECT 1 FROM model_bindings b WHERE b.model_id=m.id)`
+	const anyBinding = `EXISTS(SELECT 1 FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id WHERE b.model_id=m.id)`
 	// Correlate the outer model while reusing the browse eligibility expression.
-	available := `EXISTS(SELECT 1 FROM model_bindings b JOIN endpoint_keys k ON k.id=b.endpoint_key_id
+	available := `EXISTS(SELECT 1 FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id JOIN endpoint_keys k ON k.id=t.endpoint_key_id
 JOIN endpoints e ON e.id=k.endpoint_id WHERE b.model_id=m.id AND e.user_id=m.user_id AND (` + ownedBindingState + `)='available')`
 	switch f.ConnectionState {
 	case "available":

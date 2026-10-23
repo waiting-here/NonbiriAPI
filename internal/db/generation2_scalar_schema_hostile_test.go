@@ -73,6 +73,7 @@ VALUES(?,?,101,'self',0,'released',0,'not_applicable','neutral','platform')`, ho
 	hostileMustFail(t, db, `UPDATE endpoint_keys SET revision=0 WHERE id=?`, keyID)
 	hostileMustFail(t, db, `UPDATE endpoint_keys SET updated_at=? WHERE id=?`, hostileTimeMax+1, keyID)
 	hostileMustExec(t, db, `DELETE FROM endpoint_keys WHERE id=?`, keyID)
+	hostileRetireCredential(t, db, secretID, hostileTimeMax)
 	hostileMustExec(t, db, `UPDATE endpoint_key_secrets SET orphaned_at=? WHERE id=?`, hostileTimeMax, secretID)
 	// Once an orphan timestamp is recorded it is a terminal claim-first fact:
 	// it may not be rewritten to a different non-NULL timestamp.
@@ -301,7 +302,6 @@ func TestGenerationTwoHostilePK64PositiveIDs(t *testing.T) {
 	secretID := hostileInsertSecret(t, db, "https://pk64.example/v1", 0)
 	endpointKeyID := hostileInsertEndpointKey(t, db, endpointID, secretID)
 	pkEndpointID := hostileInsertEndpoint(t, db, userID, "https://pk64-key.example/v1")
-	pkSecretID := hostileInsertSecret(t, db, "https://pk64-key.example/v1", 1)
 
 	// Build one complete catalog/model/charity graph so that every negative
 	// primary-key assertion reaches the PK64 contract rather than a missing-FK
@@ -310,8 +310,8 @@ func TestGenerationTwoHostilePK64PositiveIDs(t *testing.T) {
 	hostileMustExec(t, db, `
 	INSERT INTO model_catalog_entries(
 	 id,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,
-	 source_revision,created_at,updated_at
-	) VALUES(?,?,'manual','upstream','upstream','provider',1,0,0)`, catalogEntryID, endpointKeyID)
+	 source_revision,native_service_mask,created_at,updated_at
+	) VALUES(?,?,'manual','upstream','upstream','provider',1,0,0,0)`, catalogEntryID, endpointKeyID)
 	hostileMustExec(t, db, `
 INSERT INTO model_pair_catalog(
  endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,
@@ -325,7 +325,7 @@ INSERT INTO charity_models(
  provider,model,full_name,enabled,pricing_mode,revision,binding_revision,created_at,updated_at
 ) VALUES('provider','model','[公益]provider/model',1,'per_request',1,0,0,0)`))
 	donationID := hostileInsertDonation(t, db, userID)
-	donationKeyID := hostileInsertDonationKey(t, db, donationID, endpointKeyID)
+	hostileInsertDonationKey(t, db, donationID, endpointKeyID)
 	pkDonationID := hostileInsertDonation(t, db, userID)
 	reportID := hostileOIDVariant("rpc_", 'P', 'Q')
 	hostileInsertReportCase(t, db, reportID, hostileBlob32(91), "pending_review", "complete", 0)
@@ -341,34 +341,26 @@ INSERT INTO charity_models(
 		args  []any
 	}{
 		{
-			"endpoint-keys",
-			`INSERT INTO endpoint_keys(
- id,endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,
- enabled,force_store_false,revision,created_at,updated_at
-) VALUES(? ,? ,? ,? ,'head','tail','',1,0,1,0,0)`,
-			[]any{pkEndpointID, pkSecretID, hostileBlob32(101)},
-		},
-		{
 			"model-catalog-entries",
 			`INSERT INTO model_catalog_entries(
  id,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,
- source_revision,created_at,updated_at
-) VALUES(? ,? ,'manual','pk64-upstream','pk64-upstream','provider',1,0,0)`,
+ source_revision,native_service_mask,created_at,updated_at
+) VALUES(? ,? ,'manual','pk64-upstream','pk64-upstream','provider',1,0,0,0)`,
 			[]any{endpointKeyID},
 		},
 		{
 			"model-bindings",
 			`INSERT INTO model_bindings(
- id,model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at
-) VALUES(? ,? ,? ,'upstream',1,0,0)`,
-			[]any{modelID, endpointKeyID},
+ id,model_id,ord,created_at,updated_at
+) VALUES(? ,? ,1,0,0)`,
+			[]any{modelID},
 		},
 		{
 			"charity-model-bindings",
 			`INSERT INTO charity_model_bindings(
- id,charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at
-) VALUES(? ,? ,? ,? ,'upstream',1,0,0)`,
-			[]any{charityModelID, donationKeyID, endpointKeyID},
+ id,charity_model_id,ord,created_at,updated_at
+) VALUES(? ,? ,1,0,0)`,
+			[]any{charityModelID},
 		},
 		{
 			"credit-accounts",
@@ -457,6 +449,25 @@ INSERT INTO charity_models(
 	// not expressible by a DEFAULT.  Seed them before the table loops.
 	hostileInsertOperation(t, db, hostileOIDVariant("op_", 'W', 'Q'), 91, "welfare_claim", "operation", hostileOIDVariant("op_", 'W', 'Q'))
 	hostileInsertLegalHold(t, db, hostileOIDVariant("lgh_", 'P', 'Q'), "report_case", reportID, adminID)
+
+	t.Run("endpoint-keys", func(t *testing.T) {
+		// The key/grant cycle is deferred until commit. Check key scalar rejection
+		// inside this transaction, so no missing grant can mask a PK failure.
+		tx, err := db.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback()
+		query := "INSERT INTO endpoint_keys(id,endpoint_id,current_grant_revision_id,created_at,updated_at) VALUES(?,?,9223372036854775807,0,0)"
+		for _, id := range []int64{0, -1} {
+			if _, err := tx.Exec(query, id, pkEndpointID); err == nil {
+				t.Fatalf("invalid key ID accepted: %d", id)
+			}
+		}
+		if _, err := tx.Exec(query, 9223372036854775806, pkEndpointID); err != nil {
+			t.Fatalf("positive key staging rejected before deferred grant commit: %v", err)
+		}
+	})
 
 	for _, tc := range pkCases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -12,11 +12,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
+	"github.com/waiting-here/NonbiriAPI/internal/routing"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
+	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
 const (
@@ -131,6 +134,7 @@ const (
 // revalidates its physical endpoint and key identity; it never expands the
 // accepted request's attempt limit or chooses a replacement candidate.
 type Candidate struct {
+	Authorization    routing.TargetAuthorization
 	EndpointID       int64
 	EndpointKeyID    int64
 	ConnectorType    connectorcontract.Type
@@ -172,6 +176,7 @@ type Request struct {
 }
 
 type ClaimInput struct {
+	discovery        *DiscoveryClaimInput
 	RequestID        string
 	ActorUserID      int64
 	AttemptSeq       int
@@ -205,12 +210,13 @@ type Handle struct {
 	discoveryAuthorize func(context.Context, *sql.Tx) error
 }
 
-func (h Handle) ClaimID() string      { return h.claimID }
-func (h Handle) RequestID() string    { return h.requestID }
-func (h Handle) AttemptSeq() int      { return h.attemptSeq }
-func (h Handle) Purpose() Purpose     { return h.purpose }
-func (h Handle) EndpointKeyID() int64 { return h.candidate.EndpointKeyID }
-func (h Handle) DonationKeyID() int64 { return h.donationKeyID }
+func (h Handle) ClaimID() string                            { return h.claimID }
+func (h Handle) RequestID() string                          { return h.requestID }
+func (h Handle) AttemptSeq() int                            { return h.attemptSeq }
+func (h Handle) Purpose() Purpose                           { return h.purpose }
+func (h Handle) EndpointKeyID() int64                       { return h.candidate.EndpointKeyID }
+func (h Handle) DonationKeyID() int64                       { return h.donationKeyID }
+func (h Handle) Authorization() routing.TargetAuthorization { return h.candidate.Authorization }
 func (h Handle) Target() connectorcontract.Target {
 	return connectorcontract.NewTarget(h.candidate.ConnectorType, h.candidate.CanonicalBaseURL, h.candidate.UpstreamModelID)
 }
@@ -237,6 +243,13 @@ type Dispatch struct {
 }
 
 func (d *Dispatch) IsBackoffTrial() bool { return d != nil && d.backoff.Trial }
+
+func (d *Dispatch) BackoffRules() []smartbackoff.Rule {
+	if d == nil {
+		return nil
+	}
+	return append([]smartbackoff.Rule(nil), d.backoff.Rules...)
+}
 
 func (d *Dispatch) Handle() Handle {
 	if d == nil {
@@ -305,6 +318,7 @@ func (*Dispatch) LogValue() slog.Value {
 }
 
 type AttemptOutcome struct {
+	CallerFault       upstreamerror.CallerFault
 	Backoff           smartbackoff.Classification
 	StreakDisposition connectorcontract.StreakDisposition
 	FailureOrigin     connectorcontract.FailureOrigin
@@ -349,8 +363,13 @@ type CompleteRequestInput struct {
 }
 
 type DiscoveryClaimInput struct {
-	ActorUserID int64
-	Candidate   Candidate
+	ActorUserID           int64
+	Candidate             Candidate
+	Source                connectionstore.SourceAuthorizationRef
+	SourceRevisionID      int64
+	CredentialVersionID   int64
+	UseApprovedRevisionID int64
+	OperationID           string
 	// Authorize is a trusted delegated-discovery guard, not caller-controlled input.
 	Authorize func(context.Context, *sql.Tx) error
 }
@@ -475,6 +494,7 @@ type CharityAcceptance struct {
 }
 
 type CharityClaimInput struct {
+	Authorization    routing.TargetAuthorization
 	RequestID        string
 	ClaimID          string
 	ActorUserID      int64
@@ -535,8 +555,9 @@ type CharityAttemptInput struct {
 }
 
 type CharityActual struct {
-	PriceMilli  int64
-	RewardMilli int64
+	PriceMilli     int64
+	RewardMilli    int64
+	PricingDetails string
 }
 
 type CharityAttemptCompletion struct {

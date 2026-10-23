@@ -1,0 +1,145 @@
+.nb-artwork-placeholder {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--nb-space-2);
+  width: 100%;
+  height: 100%;
+  min-height: 8rem;
+  padding: var(--nb-space-4);
+  background: var(--nb-color-surface-muted);
+  color: var(--nb-color-text-muted);
+  text-align: center;
+  overflow: hidden;
+}
+.nb-artwork-placeholder > svg {
+  width: 2rem;
+  height: 2rem;
+}
+.nb-artwork-placeholder > strong {
+  font-size: var(--nb-font-size-sm);
+}
+.nb-artwork-placeholder > small,
+.nb-artwork-unavailable {
+  font-size: var(--nb-font-size-xs);
+  color: var(--nb-color-text-muted);
+}
+.nb-artwork-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: var(--nb-space-1) var(--nb-space-2);
+  border-radius: var(--nb-radius-sm);
+  background: var(--nb-color-warning-soft);
+  color: var(--nb-color-warning);
+  font-size: var(--nb-font-size-xs);
+  font-weight: var(--nb-font-weight-bold);
+  white-space: nowrap;
+}
+.gacha-card > .nb-artwork-badge {
+  position: absolute;
+  top: var(--nb-space-10);
+  right: var(--nb-space-2);
+  z-index: 2;
+}
+.gacha-theme__members .nb-artwork-placeholder,
+.gacha-character-picker .nb-artwork-placeholder {
+  min-height: 0;
+  padding: var(--nb-space-1);
+}
+.gacha-theme__members .nb-artwork-placeholder > :not(svg),
+.gacha-character-picker .nb-artwork-placeholder > :not(svg) {
+  display: none;
+}
+
+.gacha-theme__image > .nb-artwork-placeholder {
+  background: var(--nb-color-surface-muted);
+  color: var(--nb-color-text-muted);
+}
+.gacha-theme__image > .nb-artwork-placeholder strong {
+  font-size: var(--nb-font-size-sm);
+  letter-spacing: normal;
+  font-weight: var(--nb-font-weight-semibold);
+}
+.gacha-theme__members button > .nb-artwork-badge,
+.gacha-character-picker button > .nb-artwork-badge,
+.gacha-draw-front > .nb-artwork-badge,
+.gacha-hero-card > .nb-artwork-badge {
+  position: absolute;
+  top: var(--nb-space-1);
+  right: var(--nb-space-1);
+  z-index: 2;
+}
+.gacha-theme__members button > .nb-artwork-badge,
+.gacha-character-picker button > .nb-artwork-badge {
+  top: auto;
+  bottom: 0;
+  right: 0;
+  padding: 0 var(--nb-space-1);
+}
+.gacha-character-picker button {
+  position: relative;
+}
+.gacha-draw-front > .nb-artwork-badge {
+  top: var(--nb-space-8);
+}
+.nb-moment-option > .nb-artwork-placeholder {
+  height: 9rem;
+  min-height: 0;
+}
+.nb-moment-option > .nb-artwork-badge {
+  font-size: var(--nb-font-size-xs);
+}
+.nb-appearance-option__copy > .nb-artwork-badge {
+  color: var(--nb-color-warning);
+  font-size: var(--nb-font-size-xs);
+}
+.nb-appearance-option__copy > .nb-artwork-unavailable {
+  color: var(--nb-color-text-muted);
+}
+.nb-moment-option[data-unavailable='true'],
+.nb-appearance-option[data-unavailable='true'] {
+  background: var(--nb-color-surface-muted);
+  border-color: var(--nb-color-border);
+  cursor: default;
+}
+.nb-appearance-option__image .nb-artwork-placeholder {
+  min-height: 6rem;
+  padding: var(--nb-space-2);
+}
+.nb-appearance-option__image .nb-artwork-placeholder strong {
+  display: none;
+}
+.nb-artwork-placeholder.nb-appearance-dark {
+  display: none;
+}
+[data-theme='dark'] .nb-artwork-placeholder.nb-appearance-light {
+  display: none;
+}
+[data-theme='dark'] .nb-artwork-placeholder.nb-appearance-dark {
+  display: grid;
+}
+.gacha-admin-covers .nb-artwork-placeholder {
+  height: 6rem;
+  min-height: 0;
+}
+.gacha-admin-roster .nb-artwork-placeholder {
+  min-height: 6rem;
+}
+.gacha-admin-pools > article > .nb-artwork-placeholder {
+  width: 10rem;
+  min-height: 6rem;
+}
+
+.gacha-theme__members button > .nb-artwork-badge {
+  top: 0;
+  bottom: auto;
+}
+.gacha-theme__members .nb-artwork-placeholder > .nb-icon {
+  position: static;
+  width: 1rem;
+  height: 1rem;
+  background: none;
+  color: inherit;
+  border-radius: 0;
+}

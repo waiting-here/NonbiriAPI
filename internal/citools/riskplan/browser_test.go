@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -47,7 +49,7 @@ func TestBrowserUnknownSharedAndDeletedInputsKeepFullCoverage(t *testing.T) {
 		if err := selectBrowserPlan(&plan); err != nil {
 			t.Fatal(err)
 		}
-		if len(plan.Browser.Specs) != 5 || len(plan.Browser.Suites) != 5 || len(plan.Browser.matrix()) != 4 || !plan.Browser.Engine {
+		if len(plan.Browser.Specs) != 5 || !slices.Equal(plan.Browser.Suites, []string{"audit", "fatfish", "lakenotes", "management", "picturebook", "proxy", "workflow"}) || len(plan.Browser.matrix()) != 4 || !plan.Browser.Engine {
 			t.Fatalf("incomplete fallback for %s: %+v", path, plan)
 		}
 	}
@@ -187,5 +189,107 @@ func TestBrowserFeatureDirectoriesSelectTheirContracts(t *testing.T) {
 		if !slices.Equal(plan.Browser.Specs, want) || !slices.Equal(plan.Browser.Suites, []string{test.suite}) || plan.Browser.Engine != test.engine {
 			t.Fatalf("feature scope %s: %+v", test.path, plan.Browser)
 		}
+	}
+}
+
+func TestBrowserWorkflowFixtureAlwaysSelectsItsRunnableSuite(t *testing.T) {
+	browserCatalogFixture(t)
+	for _, path := range []string{"web/test/audit/workflow.spec.ts", "internal/app/workflow_browser_integration_test.go", "web/playwright.workflow.config.ts"} {
+		plan := verificationPlan{Mode: "routine", Changed: []string{path}}
+		if err := selectBrowserPlan(&plan); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(plan.Browser.Suites, "workflow") {
+			t.Fatalf("workflow suite omitted for %s: %+v", path, plan.Browser)
+		}
+		found := false
+		for _, job := range plan.Browser.matrix() {
+			found = found || job.Name == "management"
+		}
+		if !found {
+			t.Fatalf("workflow suite has no runner for %s", path)
+		}
+	}
+}
+
+func TestBrowserProxyFixtureAlwaysSelectsItsRunnableSuite(t *testing.T) {
+	browserCatalogFixture(t)
+	for _, path := range []string{"web/test/audit/model-cloudflare.spec.ts", "web/test/audit/endpoint-policies.spec.ts", "internal/app/endpoint_policies_browser_integration_test.go", "web/playwright.proxy.config.ts"} {
+		plan := verificationPlan{Mode: "routine", Changed: []string{path}}
+		if err := selectBrowserPlan(&plan); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(plan.Browser.Suites, "proxy") {
+			t.Fatalf("proxy suite omitted for %s: %+v", path, plan.Browser)
+		}
+		found := false
+		for _, job := range plan.Browser.matrix() {
+			found = found || job.Name == "management"
+		}
+		if !found {
+			t.Fatalf("proxy suite has no runner for %s", path)
+		}
+	}
+}
+
+func TestBrowserJobOutputPartitions(t *testing.T) {
+	cases := []struct {
+		name               string
+		plan               browserPlan
+		smoke, integration []string
+	}{
+		{"none", browserPlan{}, nil, nil},
+		{"engine", browserPlan{Engine: true}, []string{"smoke-1"}, nil},
+		{"one spec", browserPlan{Specs: []string{"test/e2e/one.spec.ts"}}, []string{"smoke-1"}, nil},
+		{"lake", browserPlan{Suites: []string{"lakenotes"}}, nil, []string{"content"}},
+		{"full", browserPlan{Specs: []string{"one", "two"}, Suites: browserSuites, Engine: true}, []string{"smoke-1", "smoke-2"}, []string{"content", "management"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "outputs")
+			if err := writeJobOutputs(path, verificationPlan{Mode: "routine", Browser: tc.plan}); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			outputs := map[string]string{}
+			for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+				key, value, ok := strings.Cut(line, "=")
+				if !ok {
+					t.Fatalf("invalid output: %q", line)
+				}
+				if _, duplicate := outputs[key]; duplicate {
+					t.Fatalf("duplicate output: %s", key)
+				}
+				outputs[key] = value
+			}
+			for _, group := range []struct {
+				key      string
+				expected []string
+			}{
+				{"browser_smoke", tc.smoke}, {"browser_integration", tc.integration},
+			} {
+				wantFlag := "false"
+				if len(group.expected) > 0 {
+					wantFlag = "true"
+				}
+				if outputs[group.key] != wantFlag {
+					t.Fatalf("%s = %s, want %s", group.key, outputs[group.key], wantFlag)
+				}
+				var jobs []browserJob
+				if err := json.Unmarshal([]byte(outputs[group.key+"_matrix"]), &jobs); err != nil {
+					t.Fatal(err)
+				}
+				var names []string
+				for _, job := range jobs {
+					names = append(names, job.Name)
+				}
+				if !slices.Equal(names, group.expected) {
+					t.Fatalf("%s = %v, want %v", group.key, names, group.expected)
+				}
+			}
+		})
 	}
 }

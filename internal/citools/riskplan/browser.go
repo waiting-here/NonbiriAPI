@@ -24,10 +24,10 @@ var browserFamilies = []browserFamily{
 	{[]string{"internal/fatfish/", "web/src/user/features/fatfish/", "web/public/assets/fatfish/", "web/test/fatfish/", "web/test/fatfish-assets/", "web/test/fatfish-engine/"}, []string{"fatfish-", "game-experience", "desktop-game-layout"}, []string{"fatfish"}, true},
 	{[]string{"internal/lakenotes/", "web/src/user/activities/lake-notes/", "web/public/assets/lake-notes/"}, []string{"lake-", "game-experience", "desktop-game-layout"}, []string{"lakenotes"}, false},
 	{[]string{"internal/imageactivity/", "web/src/user/features/picturebook/", "web/test/picturebook/"}, []string{"image-", "game-experience", "user-polish"}, []string{"picturebook"}, false},
-	{[]string{"internal/riskaudit/", "internal/clientguard/", "web/test/audit/"}, []string{"audit-", "client-scans", "penalties"}, []string{"audit", "management"}, false},
+	{[]string{"internal/riskaudit/", "internal/clientguard/", "web/test/audit/"}, []string{"audit-", "client-scans", "penalties"}, []string{"audit", "management", "workflow", "proxy"}, false},
 }
 
-var browserSuites = []string{"picturebook", "audit", "management", "fatfish", "lakenotes"}
+var browserSuites = []string{"picturebook", "audit", "management", "workflow", "proxy", "fatfish", "lakenotes"}
 
 type browserPlan struct {
 	Specs  []string `json:"specs"`
@@ -55,14 +55,24 @@ func (p browserPlan) matrix() []browserJob {
 		name   string
 		suites []string
 	}{
-		{"content", []string{"picturebook", "fatfish"}},
-		{"management", []string{"audit", "management", "lakenotes"}},
+		{"content", []string{"picturebook", "fatfish", "lakenotes"}},
+		{"management", []string{"audit", "management", "workflow", "proxy"}},
 	} {
 		for _, suite := range group.suites {
 			if slices.Contains(p.Suites, suite) {
 				jobs = append(jobs, browserJob{Name: group.name, Kind: "integration"})
 				break
 			}
+		}
+	}
+	return jobs
+}
+
+func (p browserPlan) matrixFor(kind string) []browserJob {
+	jobs := []browserJob{}
+	for _, job := range p.matrix() {
+		if job.Kind == kind {
+			jobs = append(jobs, job)
 		}
 	}
 	return jobs

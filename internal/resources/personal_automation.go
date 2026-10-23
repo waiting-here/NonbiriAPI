@@ -18,7 +18,7 @@ type AutomationMutation struct {
 // not create or enable resources. The automation owner authorizes the transaction.
 func (r *Repository) AutomationTargetInTransaction(ctx context.Context, tx *sql.Tx, userID, targetID int64, model bool) error {
 	if model {
-		_, err := getModelTx(ctx, tx, userID, targetID)
+		_, err := r.getModelTx(ctx, tx, userID, targetID)
 		return err
 	}
 	_, err := getEndpointTx(ctx, tx, userID, targetID)
@@ -41,7 +41,7 @@ func (r *Repository) ImportEndpointKeyInTransaction(ctx context.Context, tx *sql
 	if !ok {
 		return AutomationMutation{}, ErrUnavailable
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT id,secret_ref_id FROM endpoint_keys WHERE endpoint_id=? ORDER BY id`, endpointID)
+	rows, err := tx.QueryContext(ctx, `SELECT id,secret_ref_id FROM endpoint_key_current_credentials WHERE endpoint_id=? ORDER BY id`, endpointID)
 	if err != nil {
 		return AutomationMutation{}, err
 	}
@@ -79,11 +79,11 @@ func (r *Repository) ImportEndpointKeyInTransaction(ctx context.Context, tx *sql
 // ExistingAutomationBindingInTransaction checks live ownership before confirming
 // an existing tuple, including disabled or no-longer-callable connections.
 func (r *Repository) ExistingAutomationBindingInTransaction(ctx context.Context, tx *sql.Tx, userID, modelID, keyID int64, upstream string) (AutomationMutation, int64, error) {
-	if _, err := getModelTx(ctx, tx, userID, modelID); err != nil {
+	if _, err := r.getModelTx(ctx, tx, userID, modelID); err != nil {
 		return AutomationMutation{}, 0, err
 	}
 	var endpointID int64
-	err := tx.QueryRowContext(ctx, `SELECT e.id FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id WHERE k.id=? AND e.user_id=?`, keyID, userID).Scan(&endpointID)
+	err := tx.QueryRowContext(ctx, `SELECT e.id FROM endpoint_key_current_credentials k JOIN endpoints e ON e.id=k.endpoint_id WHERE k.id=? AND e.user_id=?`, keyID, userID).Scan(&endpointID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AutomationMutation{}, 0, ErrNotFound
 	}
@@ -91,7 +91,7 @@ func (r *Repository) ExistingAutomationBindingInTransaction(ctx context.Context,
 		return AutomationMutation{}, 0, err
 	}
 	var id int64
-	err = tx.QueryRowContext(ctx, `SELECT id FROM model_bindings WHERE model_id=? AND endpoint_key_id=? AND upstream_model_id=?`, modelID, keyID, upstream).Scan(&id)
+	err = tx.QueryRowContext(ctx, `SELECT b.id FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id WHERE b.model_id=? AND t.endpoint_key_id=? AND t.upstream_model_id=?`, modelID, keyID, upstream).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AutomationMutation{}, endpointID, nil
 	}
@@ -143,7 +143,10 @@ func (r *Repository) AppendAutomationBindingInTransaction(ctx context.Context, t
 			return AutomationMutation{}, err
 		}
 	}
-	count, _ := strconv.ParseInt(model.BindingCount, 10, 64)
+	count, err := countTx(ctx, tx, `SELECT count(*) FROM model_binding_targets t JOIN model_bindings b ON b.id=t.binding_id WHERE b.model_id=?`, modelID)
+	if err != nil {
+		return AutomationMutation{}, err
+	}
 	limit, err := readSiteLimitTx(ctx, tx, "default_binding_limit", 1, 10000)
 	if err != nil {
 		return AutomationMutation{}, err
@@ -162,12 +165,19 @@ func (r *Repository) AppendAutomationBindingInTransaction(ctx context.Context, t
 	if err != nil {
 		return AutomationMutation{}, err
 	}
-	result, err := tx.ExecContext(ctx, `INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,?,?,?,?)`, modelID, keyID, upstream, tail, now, now)
+	result, err := tx.ExecContext(ctx, `INSERT INTO model_bindings(model_id,ord,created_at,updated_at) VALUES(?,?,?,?)`, modelID, tail, now, now)
 	if err != nil {
 		return AutomationMutation{}, conflictOrError("append automation binding", err)
 	}
 	id, err := result.LastInsertId()
 	if err != nil {
+		return AutomationMutation{}, err
+	}
+	groups, _, err := normalizeBindingGroupsTx(ctx, tx, userID, []BindingSelection{{EndpointKeyID: keyID, UpstreamModelID: upstream}})
+	if err != nil {
+		return AutomationMutation{}, err
+	}
+	if err := insertBindingTargetTx(ctx, tx, userID, modelID, id, groups[0][0], 0, now); err != nil {
 		return AutomationMutation{}, err
 	}
 	revision, _ := strconv.ParseInt(model.BindingRevision, 10, 64)
@@ -206,7 +216,7 @@ func automationBindingSourceTx(ctx context.Context, tx *sql.Tx, userID, modelID,
 	if key.SuspensionState != "none" {
 		return Model{}, ErrResourceLocked
 	}
-	if model.FlattenToolCalls && endpoint.ConnectorType != string(connectorcontract.TypeOpenAICompatible) {
+	if model.FlattenToolCalls && !connectorcontract.Type(endpoint.ConnectorType).NativeChatCompletions() {
 		return Model{}, ErrInvalidRequest
 	}
 	return model, nil

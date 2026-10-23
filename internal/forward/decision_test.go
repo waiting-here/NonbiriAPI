@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -52,7 +53,7 @@ func TestDecisionsAuditOriginalInputBeforeAdaptationAndIncompatibleModel(t *test
 		if charity {
 			model = "[公益]care/model"
 		}
-		body := `{"model":"` + model + `","input":"x","questions":[{"type":"predicate","instructions":"x"}]}`
+		body := `{"model":"` + model + `","input":[{"role":"user","content":[{"type":"input_json","data":{"text":"original evidence"}}]}],"questions":[{"type":"predicate","instructions":[{"type":"input_text","text":"Compare"},{"type":"input_image","image_url":"https://example.com/a.png"}]}]}`
 		request, err := openai.DecodeDecisionRequest(strings.NewReader(body), 0)
 		if err != nil {
 			t.Fatal(err)
@@ -64,6 +65,70 @@ func TestDecisionsAuditOriginalInputBeforeAdaptationAndIncompatibleModel(t *test
 		if writer.Code != 403 || guard.calls != 1 || len(f.claims.accepts) != 0 || f.openAI.calls != 0 || f.personal.snapCalls+f.charity.snapCalls != 0 {
 			t.Fatalf("order status=%d guard=%d claims=%v", writer.Code, guard.calls, f.claims.events)
 		}
+	}
+}
+
+func TestDecisionsAdaptationRevalidatesNativeParts(t *testing.T) {
+	const body = `{"model":"provider/model","input":[{"role":"user","content":[{"type":"input_json","data":{"n":9007199254740993,"f":1.0000000000000001,"e":1e999}}]}],"questions":[{"type":"predicate","instructions":[{"type":"input_image","image_url":"https://example.com/a.png"},{"type":"input_json","data":{"reference":true}}]}]}`
+	request, err := decodeRequest(strings.NewReader(body), contract.OperationDecisions, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer request.Clear()
+	for _, tc := range []struct {
+		name, path, value string
+		accepted          bool
+	}{
+		{"cache", "/prompt_cache_options", `{"mode":"explicit","ttl":"30m"}`, true},
+		{"unsupported_ttl", "/prompt_cache_options", `{"mode":"explicit","ttl":"12h"}`, false},
+		{"unknown_field", "/vendor", `{"data":{}}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := requestadaptation.Empty(requestadaptation.ScopeEndpoint)
+			doc.BodyForced.Values[tc.path] = json.RawMessage(tc.value)
+			doc.BodyForced.Values["/prompt_cache_key"] = json.RawMessage(`"protected-cache"`)
+			doc.BodyForced.SensitivePaths = map[string][]string{"/prompt_cache_key": {""}}
+			if err := requestadaptation.ValidateDocument(doc, requestadaptation.ScopeEndpoint); err != nil {
+				t.Fatal(err)
+			}
+			prepared, err := prepareAdaptedAttempt(request, contract.TypeOpenAIDecisions, doc, nil)
+			if (err == nil) != tc.accepted {
+				t.Fatalf("prepared=%t, want=%t: %v", err == nil, tc.accepted, err)
+			}
+			if prepared == nil {
+				return
+			}
+			defer prepared.clear()
+			logical, err := prepared.request.decision.LogicalBody()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer clear(logical)
+			var original, adapted map[string]json.RawMessage
+			if json.Unmarshal([]byte(body), &original) != nil || json.Unmarshal(logical, &adapted) != nil {
+				t.Fatal("logical body invalid")
+			}
+			for _, field := range []string{"input", "questions"} {
+				var before, after any
+				first := json.NewDecoder(strings.NewReader(string(original[field])))
+				first.UseNumber()
+				second := json.NewDecoder(strings.NewReader(string(adapted[field])))
+				second.UseNumber()
+				if first.Decode(&before) != nil || second.Decode(&after) != nil || !reflect.DeepEqual(before, after) {
+					t.Fatalf("native %s changed during cache adaptation", field)
+				}
+			}
+			var policy contract.AttemptPolicy
+			cleanup := prepared.applyPolicy(&policy)
+			defer cleanup()
+			secrets, err := requestadaptation.SentSecrets(policy.ResponseSecrets, policy.AdditionalHeaders, logical)
+			if err != nil || len(secrets) != 1 || string(secrets[0]) != "protected-cache" {
+				t.Fatalf("adapted secret provenance missing: %v", err)
+			}
+		})
+	}
+	if _, exists := request.decision.RawField("prompt_cache_key"); exists {
+		t.Fatal("adaptation changed the original request")
 	}
 }
 

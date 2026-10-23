@@ -10,9 +10,17 @@ export interface CharityCapabilityTokenPrices {
   output: string;
 }
 
-export type CharityBasePricing =
+export interface CharityModalityPricing {
+  inputEnabled: boolean;
+  outputEnabled: boolean;
+  text?: CharityCapabilityTokenPrices;
+  image?: CharityCapabilityTokenPrices;
+  audio?: CharityCapabilityTokenPrices;
+  video?: CharityCapabilityTokenPrices;
+}
+export type CharityBasePricing = (
   | {
-      mode: 'per_request';
+      mode: 'per_request' | 'per_search_unit';
       userPriceMilli: string;
       discountedUserPriceMilli: string;
       currentUserPriceMilli: string;
@@ -22,7 +30,12 @@ export type CharityBasePricing =
       userPricesMilli: CharityCapabilityTokenPrices;
       discountedUserPricesMilli: CharityCapabilityTokenPrices;
       currentUserPricesMilli: CharityCapabilityTokenPrices;
-    };
+    }
+) & {
+  userModalitiesMilli?: CharityModalityPricing;
+  discountedUserModalitiesMilli?: CharityModalityPricing;
+  currentUserModalitiesMilli?: CharityModalityPricing;
+};
 
 export type CharityCapabilityPricing = CharityBasePricing & {
   longContext?: CharityBasePricing & { inputThreshold: string };
@@ -130,6 +143,7 @@ export interface EndpointOriginMainstream {
 export type EndpointOrigin = EndpointOriginCustom | EndpointOriginMainstream;
 
 export interface DonationKey {
+  endpointId?: string | null;
   inputTokenReserve?: string | null;
   outputTokenReserve?: string | null;
   breakdownStartedAt?: number;
@@ -158,6 +172,7 @@ export interface DonationReviewResult {
 }
 
 export interface Donation {
+  useSummary?: import('@shared/operations/donationUses').UseSummary;
   ownerHiddenAt?: number | null;
   discordPublicThanks?: boolean | null;
   id: string;
@@ -189,6 +204,11 @@ export interface EndpointSummary {
 }
 
 export interface EndpointKeySummary {
+  nativeServices?: import('@shared/nativeServices').NativeService[];
+  credentialId?: string;
+  credentialVersion?: string;
+  grantRevision?: string;
+  discoverySourceId?: string | null;
   id: string;
   endpointId: string;
   displayHead: string;
@@ -207,6 +227,7 @@ export interface EndpointKeySummary {
 export type EndpointKeyEligibility = 'eligible' | 'already_donated' | 'security_processing';
 
 export interface EndpointKeyChoice {
+  snapshotStale?: boolean;
   endpoint: EndpointSummary;
   key: EndpointKeySummary;
   eligibility: EndpointKeyEligibility;

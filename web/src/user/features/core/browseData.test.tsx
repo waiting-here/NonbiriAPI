@@ -77,6 +77,8 @@ const OLD_MODEL = {
   route_strategy: 'ordered',
   silent_retry: true,
   transport_rule: 'passthrough',
+  cloudflare_proxy_enabled: false,
+  cloudflare_proxy_mode: 'direct',
   flatten_tool_calls: false,
   revision: '5',
   binding_revision: '6',

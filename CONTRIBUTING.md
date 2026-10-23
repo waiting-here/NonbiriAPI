@@ -57,10 +57,22 @@ bash scripts/check-risk.sh --mode full
 
 `check-go.sh` remains the full build/vet/test entry, `check-upgrade.sh` checks
 populated conversion, and `race-check.sh` runs the concurrency-risk catalog.
+Ordinary tests start slower packages first using `scripts/go-test-timings.json`;
+the complete live package list, build/vet coverage and test flags are unchanged.
 CI retains the required `Go checks` and `Web checks` summaries. Browser smoke
-runs in two whole-spec shards with one worker each; real-backend suites run in
-two isolated groups, sharing only the immutable compiled fixture and station
-build. Every selected child must succeed, including fixture preparation.
+runs in two whole-spec shards with one browser worker per runner, preserving
+headroom for image decoding and animation. Real-backend suites also use one
+worker in each of two isolated groups. Smoke starts after the station build
+without waiting for the backend fixture. Every selected child must succeed,
+including fixture preparation and both browser groups.
+
+Station artifacts carry generated files and the complete build manifests.
+Consumers restore unchanged public files from the same checkout and verify their
+manifest hashes. Integration groups use the compiled fixture's embedded stations
+without downloading a second copy. Go jobs omit unused public assets from their
+checkout; browser builds and fixtures retain complete production assets.
+The race preparation job warms a separate Go module and build cache for its
+workers. Go validates compiled inputs, and race tests always run with `-count=1`.
 
 The complete race gate derives its package and test catalog from the checked-out
 source. `scripts/race-timings.json` only balances work across the sixteen CI
@@ -70,7 +82,7 @@ that only exercise constraints may copy a validated schema image into a private
 database, provided mutations and cleanup cannot affect another test.
 
 Each CI run records queue/setup/build/test times and runner-minutes separately.
-Race logs and browser JSON measurements are retained for three days. To refresh
+Ordinary Go logs, race logs and browser JSON measurements are retained for three days. To refresh
 balancing hints from downloaded measurements:
 
 ```sh

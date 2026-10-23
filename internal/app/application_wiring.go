@@ -177,7 +177,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 
 	outbound := options.Egress
 	if outbound == nil {
-		outbound, err = egress.NewStack(egress.StackOptions{CloudflareRoutes: cfg.CloudflareRoutes})
+		outbound, err = egress.NewStack(egress.StackOptions{CloudflareRoutes: cfg.CloudflareRoutes, CloudflareWorker: cfg.CloudflareWorker})
 		if err != nil {
 			_ = elevationManager.Close()
 			return nil, fmt.Errorf("create egress stack: %w", err)
@@ -265,9 +265,14 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		return nil, fmt.Errorf("create audit runtime: %w", err)
 	}
 	audits.outbound = outbound
+	artworkPolicy, err := loadArtworkPolicy(startupContext, store)
+	if err != nil {
+		return nil, fmt.Errorf("load artwork policy: %w", err)
+	}
 	adminConfigRepository, err := adminapi.NewSiteConfigRepository(adminapi.SiteConfigRepositoryOptions{
 		Store: store, FinalAuthorizer: roleAuthorizer,
 		Committed: func(change adminapi.SiteConfigCommit) {
+			artworkPolicy.committed(change)
 			audits.configurationChanged(change)
 			for _, key := range change.Keys {
 				if strings.HasPrefix(key, "mfa_required_level_") {
@@ -381,7 +386,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create report repository: %w", err)
 	}
-	adaptations, err := requestadaptation.New(requestadaptation.Config{DB: store.DB(), Codec: vault, KeyDeriver: vault})
+	adaptations, err := requestadaptation.New(requestadaptation.Config{DB: store.DB(), ReadDB: store.ReadDB(), Codec: vault, KeyDeriver: vault})
 	if err != nil {
 		return nil, fmt.Errorf("create request adaptation store: %w", err)
 	}
@@ -407,6 +412,8 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	charityRoutingService, err := charityrouting.New(charityrouting.Config{
 		Adaptations:   adaptations,
 		Store:         store,
+		Connectors:    connectorRegistry,
+		BaseURLs:      outbound,
 		RoleAuth:      roleAuthorizer,
 		DonationState: donationService,
 		CursorKeys:    vault,
@@ -617,7 +624,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, err
 	}
-	mux, err := generationTwoMux(cfg, store, authRuntime, forwardRuntime.handler, automationHandler)
+	mux, err := generationTwoMux(cfg, store, authRuntime, forwardRuntime.handler, artworkPolicy.disabled, automationHandler)
 	if err != nil {
 		return nil, err
 	}

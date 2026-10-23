@@ -40,6 +40,10 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		{http.MethodGet, routeAdminBindingPresets, api.adminBindingPresets},
 		{http.MethodGet, routeAdminBindingPreset, api.adminBindingPreset},
 		{http.MethodPut, routeAdminBindingPreset, api.adminSaveBindingPreset},
+		{http.MethodGet, routeAdminEndpointBackoffPolicies, api.adminEndpointBackoffPolicies},
+		{http.MethodGet, routeAdminEndpointBackoffOptions, api.adminEndpointBackoffOptions},
+		{http.MethodGet, routeAdminEndpointBackoffPolicy, api.adminEndpointBackoffPolicy},
+		{http.MethodPut, routeAdminEndpointBackoffPolicy, api.adminSaveEndpointBackoffPolicy},
 		{http.MethodGet, routeAdminPriceTemplates, api.listAdminPriceTemplates},
 		{http.MethodGet, routeAdminPriceTemplate, api.getAdminPriceTemplate},
 		{http.MethodPost, routeAdminPriceTemplates, api.mutateAdminPriceTemplate},
@@ -63,6 +67,7 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		{http.MethodPost, routeAdminBindingBatch, api.addAdminBindings},
 		{http.MethodPost, routeAdminBindingReceipt, api.addAdminBindingsReceipt},
 		{http.MethodPut, routeAdminBindingOrder, api.orderAdminBindings},
+		{http.MethodPut, routeAdminBindingTargets, api.putAdminBindingTargets},
 		{http.MethodDelete, routeAdminBinding, api.deleteAdminBinding},
 		{http.MethodGet, routeAdminBindingAdaptation, api.getAdminBindingAdaptation},
 		{http.MethodPut, routeAdminBindingAdaptation, api.putAdminBindingAdaptation},
@@ -90,6 +95,10 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodGet, routeStewardBindingPresets, api.stewardBindingPresets},
 		{http.MethodGet, routeStewardBindingPreset, api.stewardBindingPreset},
 		{http.MethodPut, routeStewardBindingPreset, api.stewardSaveBindingPreset},
+		{http.MethodGet, routeStewardEndpointBackoffPolicies, api.stewardEndpointBackoffPolicies},
+		{http.MethodGet, routeStewardEndpointBackoffOptions, api.stewardEndpointBackoffOptions},
+		{http.MethodGet, routeStewardEndpointBackoffPolicy, api.stewardEndpointBackoffPolicy},
+		{http.MethodPut, routeStewardEndpointBackoffPolicy, api.stewardSaveEndpointBackoffPolicy},
 		{http.MethodGet, routeStewardPriceTemplates, api.listStewardPriceTemplates},
 		{http.MethodGet, routeStewardPriceTemplate, api.getStewardPriceTemplate},
 		{http.MethodGet, routeStewardModels, api.listStewardModels},
@@ -109,6 +118,7 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodPost, routeStewardBindingBatch, api.addStewardBindings},
 		{http.MethodPost, routeStewardBindingReceipt, api.addStewardBindingsReceipt},
 		{http.MethodPut, routeStewardBindingOrder, api.orderStewardBindings},
+		{http.MethodPut, routeStewardBindingTargets, api.putStewardBindingTargets},
 		{http.MethodDelete, routeStewardBinding, api.deleteStewardBinding},
 		{http.MethodGet, routeStewardBindingAdaptation, api.getStewardBindingAdaptation},
 	}
@@ -285,13 +295,15 @@ type tokenPricesWire struct {
 }
 
 type pricingWire struct {
-	LongContext    nullableField[longContextWire]    `json:"long_context"`
-	ContextPenalty nullableField[contextPenaltyWire] `json:"context_penalty"`
-	Mode           requiredField[string]             `json:"mode"`
-	UserPrice      requiredField[string]             `json:"user_price"`
-	DonorReward    requiredField[string]             `json:"donor_reward"`
-	UserPrices     requiredField[tokenPricesWire]    `json:"user_prices"`
-	DonorRewards   requiredField[tokenPricesWire]    `json:"donor_rewards"`
+	UserModalities  nullableField[modalityPricingWire] `json:"user_modalities"`
+	DonorModalities nullableField[modalityPricingWire] `json:"donor_modalities"`
+	LongContext     nullableField[longContextWire]     `json:"long_context"`
+	ContextPenalty  nullableField[contextPenaltyWire]  `json:"context_penalty"`
+	Mode            requiredField[string]              `json:"mode"`
+	UserPrice       requiredField[string]              `json:"user_price"`
+	DonorReward     requiredField[string]              `json:"donor_reward"`
+	UserPrices      requiredField[tokenPricesWire]     `json:"user_prices"`
+	DonorRewards    requiredField[tokenPricesWire]     `json:"donor_rewards"`
 }
 
 func parseTokenPrices(wire tokenPricesWire) (*TokenPricesInput, map[string]any, error) {
@@ -312,7 +324,7 @@ func parsePricing(wire pricingWire) (PricingInput, map[string]any, error) {
 	input := PricingInput{Mode: wire.Mode.Value}
 	canonical := map[string]any{"mode": wire.Mode.Value}
 	switch wire.Mode.Value {
-	case "per_request":
+	case "per_request", "per_search_unit":
 		if !wire.UserPrice.Set || !wire.DonorReward.Set || wire.UserPrices.Set || wire.DonorRewards.Set {
 			return PricingInput{}, nil, ErrInvalidRequest
 		}
@@ -359,24 +371,25 @@ func parseDiscount(wire discountWire) (DiscountInput, map[string]any, error) {
 }
 
 type modelCreateWire struct {
-	RecurringDiscount     requiredField[charitydiscount.Config] `json:"recurring_discount"`
-	SessionHeaders        requiredField[[]sessionheader.Config] `json:"session_headers"`
-	ModelTypes            requiredField[modeltype.Set]          `json:"model_types"`
-	TransportRule         requiredField[transportpolicy.Rule]   `json:"transport_rule"`
-	RolePolicy            requiredField[rolepolicy.Policy]      `json:"role_policy"`
-	IsMainstream          requiredField[bool]                   `json:"is_mainstream"`
-	ExcludedRequestFields requiredField[[]string]               `json:"excluded_request_fields"`
-	TokenReserveCredits   nullableField[string]                 `json:"token_reserve_credits"`
-	AllowedLevels         requiredField[[]int]                  `json:"allowed_levels"`
-	PublicDescription     requiredField[string]                 `json:"public_description"`
-	RouteStrategy         requiredField[string]                 `json:"route_strategy"`
-	AffinityTTLSeconds    requiredField[int]                    `json:"affinity_ttl_seconds"`
-	Provider              requiredField[string]                 `json:"provider"`
-	Model                 requiredField[string]                 `json:"model"`
-	Enabled               requiredField[bool]                   `json:"enabled"`
-	Pricing               requiredField[pricingWire]            `json:"pricing"`
-	Discount              requiredField[discountWire]           `json:"discount"`
-	FlattenToolCalls      requiredField[bool]                   `json:"flatten_tool_calls"`
+	CloudflareProxyEnabled requiredField[bool]                   `json:"cloudflare_proxy_enabled"`
+	RecurringDiscount      requiredField[charitydiscount.Config] `json:"recurring_discount"`
+	SessionHeaders         requiredField[[]sessionheader.Config] `json:"session_headers"`
+	ModelTypes             requiredField[modeltype.Set]          `json:"model_types"`
+	TransportRule          requiredField[transportpolicy.Rule]   `json:"transport_rule"`
+	RolePolicy             requiredField[rolepolicy.Policy]      `json:"role_policy"`
+	IsMainstream           requiredField[bool]                   `json:"is_mainstream"`
+	ExcludedRequestFields  requiredField[[]string]               `json:"excluded_request_fields"`
+	TokenReserveCredits    nullableField[string]                 `json:"token_reserve_credits"`
+	AllowedLevels          requiredField[[]int]                  `json:"allowed_levels"`
+	PublicDescription      requiredField[string]                 `json:"public_description"`
+	RouteStrategy          requiredField[string]                 `json:"route_strategy"`
+	AffinityTTLSeconds     requiredField[int]                    `json:"affinity_ttl_seconds"`
+	Provider               requiredField[string]                 `json:"provider"`
+	Model                  requiredField[string]                 `json:"model"`
+	Enabled                requiredField[bool]                   `json:"enabled"`
+	Pricing                requiredField[pricingWire]            `json:"pricing"`
+	Discount               requiredField[discountWire]           `json:"discount"`
+	FlattenToolCalls       requiredField[bool]                   `json:"flatten_tool_calls"`
 }
 
 func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error) {
@@ -391,10 +404,13 @@ func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error)
 	if err != nil {
 		return ModelCreate{}, nil, err
 	}
-	input := ModelCreate{Provider: wire.Provider.Value, Model: wire.Model.Value, Enabled: wire.Enabled.Value,
+	input := ModelCreate{CloudflareProxyEnabled: wire.CloudflareProxyEnabled.Value, Provider: wire.Provider.Value, Model: wire.Model.Value, Enabled: wire.Enabled.Value,
 		Pricing: pricing, Discount: discount, FlattenToolCalls: wire.FlattenToolCalls.Value}
 	canonical := map[string]any{"provider": input.Provider, "model": input.Model, "enabled": input.Enabled,
 		"pricing": pricingJSON, "discount": discountJSON, "flatten_tool_calls": input.FlattenToolCalls}
+	if wire.CloudflareProxyEnabled.Set {
+		canonical["cloudflare_proxy_enabled"] = input.CloudflareProxyEnabled
+	}
 	if wire.RecurringDiscount.Set {
 		value := wire.RecurringDiscount.Value
 		input.RecurringDiscount = &value
@@ -550,25 +566,26 @@ func parseDiscountPatch(wire discountPatchWire) (*DiscountPatchInput, map[string
 }
 
 type modelPatchWire struct {
-	RecurringDiscount     requiredField[charitydiscount.Config] `json:"recurring_discount"`
-	SessionHeaders        requiredField[[]sessionheader.Config] `json:"session_headers"`
-	ModelTypes            requiredField[modeltype.Set]          `json:"model_types"`
-	TransportRule         requiredField[transportpolicy.Rule]   `json:"transport_rule"`
-	RolePolicy            requiredField[rolepolicy.Policy]      `json:"role_policy"`
-	IsMainstream          requiredField[bool]                   `json:"is_mainstream"`
-	ExcludedRequestFields requiredField[[]string]               `json:"excluded_request_fields"`
-	TokenReserveCredits   nullableField[string]                 `json:"token_reserve_credits"`
-	AllowedLevels         requiredField[[]int]                  `json:"allowed_levels"`
-	PublicDescription     requiredField[string]                 `json:"public_description"`
-	RouteStrategy         requiredField[string]                 `json:"route_strategy"`
-	AffinityTTLSeconds    requiredField[int]                    `json:"affinity_ttl_seconds"`
-	ExpectedRevision      requiredField[string]                 `json:"expected_revision"`
-	Provider              requiredField[string]                 `json:"provider"`
-	Model                 requiredField[string]                 `json:"model"`
-	Enabled               requiredField[bool]                   `json:"enabled"`
-	Pricing               requiredField[pricingWire]            `json:"pricing"`
-	Discount              requiredField[discountPatchWire]      `json:"discount"`
-	FlattenToolCalls      requiredField[bool]                   `json:"flatten_tool_calls"`
+	CloudflareProxyEnabled requiredField[bool]                   `json:"cloudflare_proxy_enabled"`
+	RecurringDiscount      requiredField[charitydiscount.Config] `json:"recurring_discount"`
+	SessionHeaders         requiredField[[]sessionheader.Config] `json:"session_headers"`
+	ModelTypes             requiredField[modeltype.Set]          `json:"model_types"`
+	TransportRule          requiredField[transportpolicy.Rule]   `json:"transport_rule"`
+	RolePolicy             requiredField[rolepolicy.Policy]      `json:"role_policy"`
+	IsMainstream           requiredField[bool]                   `json:"is_mainstream"`
+	ExcludedRequestFields  requiredField[[]string]               `json:"excluded_request_fields"`
+	TokenReserveCredits    nullableField[string]                 `json:"token_reserve_credits"`
+	AllowedLevels          requiredField[[]int]                  `json:"allowed_levels"`
+	PublicDescription      requiredField[string]                 `json:"public_description"`
+	RouteStrategy          requiredField[string]                 `json:"route_strategy"`
+	AffinityTTLSeconds     requiredField[int]                    `json:"affinity_ttl_seconds"`
+	ExpectedRevision       requiredField[string]                 `json:"expected_revision"`
+	Provider               requiredField[string]                 `json:"provider"`
+	Model                  requiredField[string]                 `json:"model"`
+	Enabled                requiredField[bool]                   `json:"enabled"`
+	Pricing                requiredField[pricingWire]            `json:"pricing"`
+	Discount               requiredField[discountPatchWire]      `json:"discount"`
+	FlattenToolCalls       requiredField[bool]                   `json:"flatten_tool_calls"`
 }
 
 func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
@@ -682,6 +699,10 @@ func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
 		}
 		input.TransportRule = &wire.TransportRule.Value
 		canonical["transport_rule"] = wire.TransportRule.Value
+	}
+	if wire.CloudflareProxyEnabled.Set {
+		input.CloudflareProxyEnabled = &wire.CloudflareProxyEnabled.Value
+		canonical["cloudflare_proxy_enabled"] = wire.CloudflareProxyEnabled.Value
 	}
 	if wire.FlattenToolCalls.Set {
 		input.FlattenToolCalls = &wire.FlattenToolCalls.Value

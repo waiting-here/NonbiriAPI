@@ -22,9 +22,14 @@ const page = {
 };
 
 describe('personal model request adaptation', () => {
-  it.each([false, true])(
-    'loads once on expansion and derives Gateway controls from all bindings (mixed=%s)',
-    async (mixed) => {
+  it.each([
+    [false, 'ai-sdk-gateway-v3', 'ai-sdk-gateway-v3'],
+    [false, 'ai-sdk-gateway-v4', 'ai-sdk-gateway-v4'],
+    [false, 'ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'],
+    [true, 'ai-sdk-gateway-v4', 'openai-compatible'],
+  ] as const)(
+    'loads once on expansion and derives Gateway controls (mixed=%s, %s / %s)',
+    async (mixed, firstConnector, secondConnector) => {
       const reads: string[] = [];
       const writes: Record<string, unknown>[] = [];
       vi.stubGlobal(
@@ -59,7 +64,7 @@ describe('personal model request adaptation', () => {
                 id,
                 endpoint_key_id: id,
                 endpoint_base_url: 'https://example.test',
-                connector_type: mixed && id === '2' ? 'openai-compatible' : 'ai-sdk-gateway-v3',
+                connector_type: id === '1' ? firstConnector : secondConnector,
                 endpoint_note: '',
                 endpoint_key_display_head: '',
                 endpoint_key_display_tail: '',
@@ -86,9 +91,9 @@ describe('personal model request adaptation', () => {
         expect(reads.filter((path) => path.endsWith('/bindings'))).toHaveLength(1),
       );
       expect(reads.some((path) => path.endsWith('/request-adaptation'))).toBe(false);
-      const advanced = screen.getByText('Advanced behavior', { selector: 'strong' });
+      const advanced = screen.getByText('Request adaptation', { selector: 'strong' });
       await view.user.click(advanced);
-      await screen.findByRole('button', { name: 'Save request rewriting' });
+      await screen.findByRole('button', { name: 'Save request adaptation' });
       if (mixed) {
         expect(screen.queryByLabelText('Automatic cache default')).not.toBeInTheDocument();
       } else {
@@ -97,7 +102,7 @@ describe('personal model request adaptation', () => {
         await view.user.click(advanced);
         await view.user.click(advanced);
         expect(cache).toHaveValue('1h');
-        await view.user.click(screen.getByRole('button', { name: 'Save request rewriting' }));
+        await view.user.click(screen.getByRole('button', { name: 'Save request adaptation' }));
         await waitFor(() => expect(writes).toHaveLength(1));
         expect(writes[0].body_defaults).toEqual({
           mode: 'replace',
@@ -106,7 +111,11 @@ describe('personal model request adaptation', () => {
           },
         });
       }
-      expect(reads.filter((path) => path.endsWith('/request-adaptation'))).toHaveLength(1);
+      await waitFor(() =>
+        expect(reads.filter((path) => path.endsWith('/request-adaptation'))).toHaveLength(
+          mixed ? 1 : 2,
+        ),
+      );
       expect(reads.filter((path) => path.endsWith('/bindings'))).toHaveLength(1);
     },
   );

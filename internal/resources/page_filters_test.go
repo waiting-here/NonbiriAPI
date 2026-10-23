@@ -26,8 +26,8 @@ func TestFilteredModelsSearchAllBindingsBeforePagingAndMatchBrowseState(t *testi
 		{ModelPageFilters{}, 45},
 		{ModelPageFilters{Query: " MANUAL "}, 11},
 		{ModelPageFilters{Query: "MANUAL", Provider: "logical", ConnectionState: "available", RouteStrategy: "ordered"}, 11},
-		{ModelPageFilters{Query: "model-", ConnectionState: "available"}, 22},
-		{ModelPageFilters{ConnectionState: "unavailable"}, 22},
+		{ModelPageFilters{Query: "model-", ConnectionState: "available"}, 44},
+		{ModelPageFilters{ConnectionState: "unavailable"}, 0},
 		{ModelPageFilters{ConnectionState: "unconfigured"}, 1},
 		{ModelPageFilters{Provider: "Logical"}, 0},
 		{ModelPageFilters{Query: "%"}, 0},
@@ -55,7 +55,31 @@ func TestFilteredModelsSearchAllBindingsBeforePagingAndMatchBrowseState(t *testi
 		}
 	}
 	// Multiple matching connections cannot duplicate a model or its count.
-	if _, err := env.store.DB().Exec(`INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) SELECT model_id,endpoint_key_id,'automatic',1,created_at,updated_at FROM model_bindings WHERE upstream_model_id='manual'`); err != nil {
+	tx, err := env.store.DB().Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query(`SELECT DISTINCT b.model_id FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id WHERE t.upstream_model_id='manual'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var modelIDs []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		modelIDs = append(modelIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	rows.Close()
+	for _, id := range modelIDs {
+		seedResourceBindingTx(t, tx, id, resourceTestID(t, key.ID), "automatic", 1)
+	}
+	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	out, err := env.repository.FilterModelsPage(ctx, owner, ModelPageFilters{Query: "automatic"}, pagination.Default())

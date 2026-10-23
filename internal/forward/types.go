@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/routing"
 	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
@@ -48,33 +49,35 @@ type CallerKeyResolver interface {
 
 // PersonalPreflight contains candidate-free owner-scoped logical facts.
 type PersonalPreflight struct {
-	ModelTypes       modeltype.Set
-	TransportRule    transportpolicy.Rule
-	RolePolicy       rolepolicy.Policy
-	ModelID          int64
-	OwnerUserID      int64
-	Provider         string
-	Model            string
-	FullName         string
-	RouteStrategy    string
-	SilentRetry      bool
-	FlattenToolCalls bool
-	Revision         int64
-	BindingRevision  int64
+	CloudflareProxyEnabled bool
+	ModelTypes             modeltype.Set
+	TransportRule          transportpolicy.Rule
+	RolePolicy             rolepolicy.Policy
+	ModelID                int64
+	OwnerUserID            int64
+	Provider               string
+	Model                  string
+	FullName               string
+	RouteStrategy          string
+	SilentRetry            bool
+	FlattenToolCalls       bool
+	Revision               int64
+	BindingRevision        int64
 }
 
 // CharityPreflight contains candidate-free charity policy and price facts.
 type CharityPreflight struct {
-	ModelTypes       modeltype.Set
-	TransportRule    transportpolicy.Rule
-	RolePolicy       rolepolicy.Policy
-	Revision         int64
-	ModelID          int64
-	Provider         string
-	Model            string
-	FullName         string
-	FlattenToolCalls bool
-	ReservedMilli    int64
+	CloudflareProxyEnabled bool
+	ModelTypes             modeltype.Set
+	TransportRule          transportpolicy.Rule
+	RolePolicy             rolepolicy.Policy
+	Revision               int64
+	ModelID                int64
+	Provider               string
+	Model                  string
+	FullName               string
+	FlattenToolCalls       bool
+	ReservedMilli          int64
 }
 
 // CharityRequestPolicy contains no physical candidates or credentials.
@@ -92,16 +95,22 @@ type CharityRequestPolicy struct {
 // RouteCandidate is one credential-free physical candidate frozen before
 // request acceptance. Its routine formatting is always redacted.
 type RouteCandidate struct {
-	BindingID        int64
-	EndpointID       int64
-	EndpointKeyID    int64
-	DonationKeyID    int64
-	ConnectorType    connectorcontract.Type
-	CanonicalBaseURL string
-	UpstreamModelID  string
-	Policy           connectorcontract.AttemptPolicy
-	Order            int
-	prepared         *preparedAttempt
+	Authorization     routing.TargetAuthorization
+	NativeServices    connectorcontract.NativeServiceSet
+	NativeMatch       bool
+	TargetOrder       int
+	WeightDenominator int64
+	BindingID         int64
+	EndpointID        int64
+	EndpointKeyID     int64
+	DonationKeyID     int64
+	ConnectorType     connectorcontract.Type
+	CanonicalBaseURL  string
+	UpstreamModelID   string
+	Policy            connectorcontract.AttemptPolicy
+	Order             int
+	prepared          *preparedAttempt
+	preparationError  error
 }
 
 func (RouteCandidate) String() string   { return "[redacted forward candidate]" }
@@ -144,7 +153,8 @@ type CharityRouter interface {
 	PreflightEmbedding(context.Context, int64, string, *openai.EmbeddingRequest, int64) (CharityPreflight, error)
 	PreflightImage(context.Context, int64, string, *openai.ImageRequest, int64) (CharityPreflight, error)
 	PreflightDecision(context.Context, int64, string, *openai.DecisionRequest, int64) (CharityPreflight, error)
-	Snapshot(context.Context, int64, int64, int64, []connectorcontract.Type) (CharitySnapshot, error)
+	Snapshot(context.Context, int64, int64, int64, []connectorcontract.Type, connectorcontract.Operation) (CharitySnapshot, error)
+	OrderSelected([]RouteCandidate, string) ([]RouteCandidate, error)
 	ReserveForOutput(context.Context, int64, int64, int64) (int64, error)
 	ListAvailableModels(context.Context, int64, int64, int) ([]ListedModel, error)
 }

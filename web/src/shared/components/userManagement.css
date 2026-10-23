@@ -30,8 +30,21 @@
 .user-management .nb-table {
   table-layout: fixed;
 }
-.user-management .nb-table th:first-child {
-  width: 40%;
+.user-management .nb-table th:has(.user-list-selection-heading) {
+  width: var(--nb-space-16);
+}
+.user-management .nb-table :is(th:has(.user-list-selection-heading), td:has(.user-list-selection)) {
+  padding-inline: var(--nb-space-2);
+  text-align: center;
+}
+.user-management .nb-table th:has(.user-list-level-heading) {
+  width: 16%;
+}
+.user-management .nb-table th:has(.user-list-status-heading) {
+  width: 20%;
+}
+.user-management .nb-table th:has(.user-list-balance-heading) {
+  width: 24%;
 }
 .user-list-identity {
   display: grid;
@@ -41,10 +54,19 @@
 .user-list-identity > span {
   color: var(--nb-color-text-muted);
   font-size: var(--nb-font-size-xs);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
 }
 .user-list-name {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--nb-space-10);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border: 0;
   padding: 0;
   background: transparent;
@@ -52,7 +74,6 @@
   font: inherit;
   font-weight: var(--nb-font-weight-medium);
   text-align: start;
-  overflow-wrap: anywhere;
   cursor: pointer;
 }
 .user-list-name:focus-visible {
@@ -65,6 +86,25 @@
 }
 .user-authority > [hidden] {
   display: none;
+}
+/* Detail header: a small leading back link, then the title. */
+.user-authority__head {
+  display: grid;
+  justify-items: start;
+  gap: var(--nb-space-1);
+  margin-bottom: var(--nb-space-3);
+}
+.user-authority__head h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.user-authority__back.nb-btn {
+  width: auto;
+  min-width: var(--nb-space-10);
+  min-height: var(--nb-space-10);
+  margin-inline-start: calc(-1 * var(--nb-space-2));
+  padding: var(--nb-space-1) var(--nb-space-2);
+  font-size: var(--nb-font-size-sm);
 }
 .user-authority .ops-field-grid {
   gap: var(--nb-space-4);
@@ -148,26 +188,48 @@
   }
 }
 
-.user-management .nb-table th:nth-child(2) {
-  width: 12%;
-}
-.user-management .nb-table th:nth-child(3),
-.user-management .nb-table th:nth-child(4) {
-  width: 24%;
+.user-list-level {
+  white-space: nowrap;
 }
 .user-management .nb-table .status-badge {
   max-width: 100%;
+  padding-inline: var(--nb-space-1);
+  gap: var(--nb-space-1);
   white-space: normal;
+  overflow-wrap: normal;
 }
-@media (width < 48rem) {
-  .user-management .nb-table td:nth-child(2) {
+.user-list-balance-heading {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (width <= 48rem) {
+  .user-management .nb-table td:has(.user-list-selection) {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    padding: 0;
+  }
+  .user-management .nb-table td:has(.user-list-selection)::before {
+    display: none;
+  }
+  .user-management .nb-table td:has(.user-list-identity) {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .user-management .nb-table td:has(.user-list-level) {
     grid-column: 1;
     grid-row: 2;
   }
-  .user-management .nb-table td:nth-child(4) {
+  .user-management .nb-table td[data-cell='status'] {
     grid-column: 2;
     grid-row: 2;
     justify-self: end;
+  }
+  .user-management .nb-table td:has(.user-list-balance) {
+    grid-column: 1 / -1;
+    grid-row: 3;
   }
   .user-management .nb-table td[data-cell='meta']::before {
     min-width: 0;
@@ -177,19 +239,17 @@
   }
 }
 
-@media (width < 48rem) {
-  .user-management .user-list-name {
-    display: block;
-    width: 100%;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
+.user-limit-batch-fields {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
 }
 
-@media (width < 48rem), (pointer: coarse) {
-  .user-management .user-list-name {
-    min-height: 2.5rem;
-  }
+.user-limit-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--nb-space-10);
+  min-height: var(--nb-space-10);
 }

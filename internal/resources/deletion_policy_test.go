@@ -76,7 +76,7 @@ VALUES(?,'approved',1,?,?)`, userID, resourceTestNow, resourceTestNow)
 	generation := make([]byte, 16)
 	generation[15] = 1
 	var reportFingerprint []byte
-	if err := environment.store.DB().QueryRow(`SELECT secret_fingerprint FROM endpoint_keys WHERE id=?`, endpointKeyID).Scan(&reportFingerprint); err != nil {
+	if err := environment.store.DB().QueryRow(`SELECT secret_fingerprint FROM endpoint_key_current_credentials WHERE id=?`, endpointKeyID).Scan(&reportFingerprint); err != nil {
 		t.Fatalf("read deletion-test endpoint-key fingerprint: %v", err)
 	}
 	result, err = environment.store.DB().Exec(`
@@ -109,7 +109,7 @@ func terminateDeletionTestMemberships(
 	now int64,
 ) error {
 	for _, keyID := range keyIDs {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM charity_model_bindings WHERE endpoint_key_id=?`, keyID); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM charity_model_bindings WHERE id IN (SELECT binding_id FROM charity_binding_targets WHERE donation_key_id IN (SELECT id FROM donation_keys WHERE endpoint_key_id=?))`, keyID); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM donation_key_memberships WHERE endpoint_key_id=?`, keyID); err != nil {

@@ -18,7 +18,9 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
@@ -57,6 +59,10 @@ func newEmbeddingHTTPFixtureWithConfig(t *testing.T, configure func(*db.Store, s
 }
 
 func newModelHTTPFixture(t *testing.T, configure func(*db.Store, string), connectorType string, custom ...http.HandlerFunc) *embeddingHTTPFixture {
+	return newModelHTTPFixtureWithEgress(t, configure, connectorType, nil, custom...)
+}
+
+func newModelHTTPFixtureWithEgress(t *testing.T, configure func(*db.Store, string), connectorType string, configureEgress func(*egress.StackOptions, string) string, custom ...http.HandlerFunc) *embeddingHTTPFixture {
 	t.Helper()
 	f := &embeddingHTTPFixture{}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -133,8 +139,13 @@ func newModelHTTPFixture(t *testing.T, configure func(*db.Store, string), connec
 	}
 	t.Cleanup(func() { _ = f.store.Close() })
 	cfg := auditConfig()
+	base := upstream.URL + "/v1"
+	egressOptions := egress.StackOptions{AllowedOrigins: []string{upstream.URL}, RequestTimeout: 5 * time.Second}
+	if configureEgress != nil {
+		base = configureEgress(&egressOptions, base)
+	}
 	if configure != nil {
-		configure(f.store, upstream.URL+"/v1")
+		configure(f.store, base)
 	}
 	f.app, err = buildApplication(context.Background(), cfg, f.store, vault)
 	if err != nil {
@@ -154,8 +165,8 @@ func newModelHTTPFixture(t *testing.T, configure func(*db.Store, string), connec
 	if err := f.store.DB().QueryRow(`SELECT user_id FROM caller_keys WHERE generation=1`).Scan(&f.userID); err != nil {
 		t.Fatal(err)
 	}
-	f.seedModels(t, vault, upstream.URL+"/v1", connectorType)
-	stack, err := egress.NewStack(egress.StackOptions{AllowedOrigins: []string{upstream.URL}, RequestTimeout: 5 * time.Second})
+	f.seedModels(t, vault, base, connectorType)
+	stack, err := egress.NewStack(egressOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,8 +261,25 @@ func (f *embeddingHTTPFixture) seedModels(t *testing.T, vault *secret.Vault, bas
 	f.exec(t, `UPDATE site_config SET value='1' WHERE key IN ('charity_enabled','donation_accept_enabled')`)
 	f.exec(t, `UPDATE site_config SET value='1000' WHERE key='charity_min_chars'`)
 	f.exec(t, `INSERT INTO site_config(key,value,updated_at) VALUES('charity_token_reserve_milli','100',?) ON CONFLICT(key) DO UPDATE SET value='100',updated_at=excluded.updated_at`, now)
+	kind := connectorcontract.Type(connectorType)
+	services, err := connectorcontract.LegacyNativeServices(kind)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// This multi-service fixture explicitly authorizes the inference operations
+	// exercised below; dedicated Responses/Decisions entries retain their native route.
+	if kind == connectorcontract.TypeOpenAICompatible || kind == connectorcontract.TypeAISDKGatewayV3 || kind == connectorcontract.TypeAISDKGatewayV4 {
+		services, err = connectorcontract.SupportedNativeServices(kind)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	var format connectorcontract.RerankFormat
+	if kind == connectorcontract.TypeOpenAICompatible {
+		format = connectorcontract.RerankFormatGeneric
+	}
 	for index, user := range []int64{f.userID, f.donorID} {
-		endpoint := f.exec(t, `INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at) VALUES(?,'`+connectorType+`',?,'fixture endpoint',1,1,?,?)`, user, base, now, now)
+		endpoint := appFixtureEndpoint(t, f.store, testseed.EndpointInput{OwnerUserID: user, Type: kind, BaseURL: base, Note: "fixture endpoint", NativeServices: services, RerankFormat: format, At: now})
 		contextID, fingerprint := make([]byte, 16), make([]byte, 32)
 		contextID[15] = byte(index + 1)
 		fingerprint[31] = byte(index + 1)
@@ -264,23 +292,24 @@ func (f *embeddingHTTPFixture) seedModels(t *testing.T, vault *secret.Vault, bas
 			t.Fatal(err)
 		}
 		secretID := f.exec(t, `INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at) VALUES(?,?,'`+connectorType+`',?,?)`, contextID, base, envelope, now)
-		key := f.exec(t, `INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at) VALUES(?,?,?,'head','tail','fixture key',1,1,1,?,?)`, endpoint, secretID, fingerprint, now, now)
-		f.exec(t, `INSERT INTO model_discovery_evidence(endpoint_key_id,state,revision,safe_class,safe_diag,fetched_count) VALUES(?,'unknown',1,'none','',0)`, key)
-		f.exec(t, `INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,'private-model',0,1,0,1,?)`, key, now)
+		key := appFixtureKey(t, f.store, testseed.KeyInput{EndpointID: endpoint, SecretRefID: secretID, Fingerprint: fingerprint, DisplayHead: "head", DisplayTail: "tail", Note: "fixture key", NativeServices: services, ForceStoreFalse: true, At: now}, vault).KeyID
+		appFixtureManualModel(t, f.store, key, "private-model", now)
 		if index == 0 {
 			model := f.exec(t, `INSERT INTO models(user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision,model_types,created_at,updated_at) VALUES(?,'provider','self','provider/self','ordered',0,1,1,1,3,?,?)`, user, now, now)
-			f.exec(t, `INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,'private-model',0,?,?)`, model, key, now, now)
+			appFixtureBinding(t, f.store, testseed.BindingInput{ModelID: model, KeyID: key, UpstreamModelID: "private-model", NativeServices: services, At: now}, false)
 			continue
 		}
 		f.keyID = key
 		donation := f.exec(t, `INSERT INTO donations(user_id,status,revision,description,review_note,reviewed_by_role,created_at,updated_at) VALUES(?,'approved',1,'fixture donation','','admin',?,?)`, user, now, now)
 		donationKey := f.exec(t, `INSERT INTO donation_keys(donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,token_reserve,enabled,failure_streak,streak_generation,next_claim_seq,next_fold_seq,safe_note,created_at,updated_at,source_endpoint_key_id,report_fingerprint) VALUES(?,?,'head','tail',?,'`+connectorType+`',?,?,?,?,?,?,5,1,?,?,?,?,'fixture',?,?,?,?)`, donation, key, base, zero, zero, zero, zero, zero, zero, zero, one, one, one, now, now, key, fingerprint)
 		f.exec(t, `INSERT INTO donation_key_memberships(endpoint_key_id,donation_key_id,donation_id,created_at) VALUES(?,?,?,?)`, key, donationKey, donation, now)
+		appFixtureApprovedUses(t, f.store, donationKey, now)
+		appFixtureDonationManualModel(t, f.store, donationKey, "private-model", now)
 		for _, mode := range []string{"per_request", "per_token"} {
 			model := f.exec(t, `INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,request_user_price,request_donor_reward,uncached_user_price,uncached_donor_reward,discount_percent,discount_enabled,flatten_tool_calls,revision,binding_revision,model_types,created_at,updated_at) VALUES('provider',?,?,1,?,3000,1250,4000000,2000000,80,1,1,1,1,3,?,?)`, mode, "[公益]provider/"+mode, mode, now, now)
 			f.exec(t, `INSERT INTO charity_model_access(model_id,allowed_level_mask,public_description) VALUES(?,31,'')`, model)
 			f.exec(t, `INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) VALUES(?,1,300)`, model)
-			f.exec(t, `INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,?,'private-model',0,?,?)`, model, donationKey, key, now, now)
+			appFixtureBinding(t, f.store, testseed.BindingInput{ModelID: model, KeyID: donationKey, UpstreamModelID: "private-model", NativeServices: services, At: now}, true)
 		}
 	}
 }

@@ -48,7 +48,9 @@ export function CharityRolePolicyForm({
     if (lost) onCapabilityLoss?.();
   }, [lost, onCapabilityLoss]);
   if (lost) return <p role="alert">{t('common.operations.charity.accessLost')}</p>;
-  if (!model.model_types.includes('chat_completions')) {
+  if (!(
+    model.model_types.includes('chat_completions') || model.model_types.includes('responses')
+  )) {
     return (
       <Card>
         <h3>{model.full_name}</h3>

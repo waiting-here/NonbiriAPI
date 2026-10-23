@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { numberedResponse } from './numbered-fixtures';
+import { mockConnectionResources } from './connection-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
   assertNoSensitiveBrowserPersistence,
+  assertWorkbenchWidth,
   assertResponsiveOperationTables,
   collectConsoleViolations,
   useNarrowReducedMotion as configureNarrowReducedMotion,
@@ -49,6 +51,12 @@ const user = {
   effective_rpm_limit: '60',
   concurrency_limit: null,
   effective_concurrency_limit: '5',
+  global_rpm_limit: null,
+  effective_global_rpm_limit: '60',
+  light_rpm_limit: null,
+  effective_light_rpm_limit: '30',
+  light_concurrency_limit: null,
+  effective_light_concurrency_limit: '15',
   balance: '1000',
   game_balance: '0',
   donation_credit: '2000',
@@ -148,6 +156,8 @@ const currentCharityModel = {
   pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
   discount: { enabled: false, percent: 100, start_at: null, end_at: null },
   transport_rule: 'passthrough',
+  cloudflare_proxy_enabled: false,
+  cloudflare_proxy_mode: 'direct',
   flatten_tool_calls: false,
   revision: '1',
   binding_revision: '0',
@@ -367,19 +377,7 @@ test('reachable user home keeps level state but removes the implementation hint'
   await expect(page.getByText(/This page computes nothing/i)).toHaveCount(0);
   for (const width of [320, 390, 1440, 1935]) {
     await page.setViewportSize({ width, height: 1000 });
-    const layout = await page.locator('.core-page').evaluate((element) => {
-      const main = element.closest('main')!;
-      const outer = main.getBoundingClientRect();
-      const inner = element.getBoundingClientRect();
-      const style = getComputedStyle(main);
-      return {
-        width: inner.width,
-        available: outer.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
-        overflow: document.documentElement.scrollWidth > innerWidth,
-      };
-    });
-    expect(layout.overflow).toBe(false);
-    expect(layout.width).toBeGreaterThanOrEqual(layout.available - 2);
+    await assertWorkbenchWidth(page, '.core-page');
   }
   await page.setViewportSize({ width: 390, height: 844 });
   const endpointLink = page.getByRole('link', { name: 'Add my service', exact: true });
@@ -443,6 +441,8 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
   const guard = await prepare(context, page, 'user', 'user', 'en', 'dark');
   const endpoint = {
     id: '1',
+    connection_id: '1',
+    native_services: ['chat_completions', 'responses'],
     connector_type: 'openai-compatible',
     base_url: 'https://upstream.test/v1',
     origin: { kind: 'custom' },
@@ -453,12 +453,7 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
     created_at: 1_700_000_000,
     updated_at: 1_700_000_001,
   };
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/endpoints?page=1&page_size=20',
-    body: numberedResponse([endpoint], '1', 20),
-  });
+  await mockConnectionResources(page, () => [endpoint]);
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
@@ -512,8 +507,12 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
   });
 
   await page.goto(`${USER_ORIGIN}/endpoints`);
-  await expect(page.getByRole('heading', { name: 'My services' })).toBeVisible();
-  await page.getByRole('link', { name: 'Manage' }).click();
+  await expect(page.getByRole('heading', { name: 'Service connections' })).toBeVisible();
+  await page.getByRole('link', { name: 'Manage', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Browser connection', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('link', { name: 'Manage entry', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'primary', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'More actions · key note', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Edit note and limits', exact: true }).click();

@@ -138,8 +138,6 @@ CREATE TABLE mainstream_channels (
  id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='mch_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  name TEXT NOT NULL CHECK(typeof(name)='text' AND length(name) BETWEEN 1 AND 128),
  category TEXT NOT NULL CHECK(category IN ('subscription','api_platform')),
- connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','google-gemini','openai-responses','openai-decisions')),
- canonical_base_url TEXT NOT NULL CHECK(typeof(canonical_base_url)='text' AND length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096),
  enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
  state TEXT NOT NULL CHECK(state IN ('active','retired')),
  revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807),
@@ -201,8 +199,12 @@ CREATE INDEX idx_checkins_operation ON checkins(operation_id);
 CREATE TABLE endpoints (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','google-gemini','openai-responses','openai-decisions')),
+ connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','ai-sdk-gateway-v4','google-gemini','openai-responses','openai-decisions','cohere-rerank','jina-rerank','siliconflow-rerank','voyage-rerank','openai-chat-completions','typesafe-systemone')),
  base_url TEXT NOT NULL,
+ connection_id INTEGER,
+ native_service_mask INTEGER NOT NULL CHECK(typeof(native_service_mask)='integer' AND native_service_mask BETWEEN 1 AND 524287),
+ rerank_format TEXT NOT NULL DEFAULT '' CHECK(rerank_format IN ('','generic','cohere','jina','voyage','siliconflow')),
+ capability_origin TEXT NOT NULL CHECK(capability_origin IN ('legacy','user')),
  note TEXT NOT NULL DEFAULT '',
  enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
  revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807),
@@ -214,6 +216,8 @@ CREATE TABLE endpoints (
  created_at INTEGER NOT NULL,
  updated_at INTEGER NOT NULL,
  UNIQUE(id,user_id),
+ FOREIGN KEY(connection_id,user_id) REFERENCES service_connections(id,user_id) DEFERRABLE INITIALLY DEFERRED,
+ CHECK((native_service_mask&(CASE connector_type WHEN 'openai-compatible' THEN 32767 WHEN 'openai-chat-completions' THEN 32767 WHEN 'openai-responses' THEN 32767 WHEN 'openai-decisions' THEN 32767 WHEN 'anthropic-compatible' THEN 65536 WHEN 'google-gemini' THEN 131072 WHEN 'ai-sdk-gateway-v3' THEN 278576 WHEN 'ai-sdk-gateway-v4' THEN 278576 WHEN 'typesafe-systemone' THEN 32768 ELSE 16384 END))=native_service_mask), CHECK((connector_type IN ('openai-compatible','openai-chat-completions','openai-responses','openai-decisions') AND ((native_service_mask&16384)=0 OR rerank_format<>'')) OR (connector_type IN ('cohere-rerank','jina-rerank','voyage-rerank','siliconflow-rerank') AND rerank_format IN ('',replace(connector_type,'-rerank',''))) OR (connector_type NOT IN ('openai-compatible','openai-chat-completions','openai-responses','openai-decisions','cohere-rerank','jina-rerank','voyage-rerank','siliconflow-rerank') AND rerank_format='')),
  CHECK((mainstream_channel_id IS NULL AND mainstream_channel_revision IS NULL AND mainstream_channel_name IS NULL AND mainstream_channel_category IS NULL)
    OR (mainstream_channel_id IS NOT NULL AND mainstream_channel_revision IS NOT NULL AND mainstream_channel_name IS NOT NULL AND mainstream_channel_category IS NOT NULL))
 );
@@ -231,35 +235,25 @@ BEGIN SELECT RAISE(ABORT,'endpoint channel provenance is immutable'); END;
 CREATE TABLE endpoint_key_secrets (
  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
  context_id BLOB NOT NULL UNIQUE CHECK(typeof(context_id)='blob' AND length(context_id)=16),
- canonical_base_url TEXT NOT NULL CHECK(typeof(canonical_base_url)='text' AND length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096),
- connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','google-gemini','openai-responses','openai-decisions')),
+ canonical_base_url TEXT CHECK(canonical_base_url IS NULL OR (typeof(canonical_base_url)='text' AND length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096)),
+ connector_type TEXT CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','ai-sdk-gateway-v4','google-gemini','openai-responses','openai-decisions','cohere-rerank','jina-rerank','siliconflow-rerank','voyage-rerank','openai-chat-completions','typesafe-systemone')),
  encrypted_secret TEXT NOT NULL CHECK(typeof(encrypted_secret)='text' AND length(CAST(encrypted_secret AS BLOB)) BETWEEN 1 AND 131072),
  created_at INTEGER NOT NULL,
  orphaned_at INTEGER CHECK(orphaned_at IS NULL OR orphaned_at BETWEEN 0 AND 253402300799)
-, key_body_review_hmac BLOB CHECK(key_body_review_hmac IS NULL OR (typeof(key_body_review_hmac)='blob' AND length(key_body_review_hmac)=32)));
+, key_body_review_hmac BLOB CHECK(key_body_review_hmac IS NULL OR (typeof(key_body_review_hmac)='blob' AND length(key_body_review_hmac)=32)), CHECK((canonical_base_url IS NULL)=(connector_type IS NULL)));
 CREATE INDEX idx_endpoint_key_secrets_orphaned ON endpoint_key_secrets(orphaned_at,id) WHERE orphaned_at IS NOT NULL;
 CREATE TABLE endpoint_keys (
  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
  endpoint_id INTEGER NOT NULL REFERENCES endpoints(id) ON DELETE CASCADE,
- secret_ref_id INTEGER NOT NULL UNIQUE REFERENCES endpoint_key_secrets(id) ON DELETE RESTRICT,
- secret_fingerprint BLOB NOT NULL CHECK(typeof(secret_fingerprint)='blob' AND length(secret_fingerprint)=32),
- display_head TEXT NOT NULL DEFAULT '',
- display_tail TEXT NOT NULL DEFAULT '',
- note TEXT NOT NULL DEFAULT '',
- enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
- force_store_false INTEGER NOT NULL DEFAULT 0 CHECK(force_store_false IN (0,1)),
- revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807),
- created_at INTEGER NOT NULL,
- updated_at INTEGER NOT NULL,
+ current_grant_revision_id INTEGER NOT NULL,
+ note TEXT NOT NULL DEFAULT '' CHECK(length(note) BETWEEN 0 AND 1024 AND instr(note,char(0))=0), enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)), force_store_false INTEGER NOT NULL DEFAULT 0 CHECK(force_store_false IN (0,1)), revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799),
  UNIQUE(id,endpoint_id),
- CHECK(typeof(display_head)='text' AND typeof(display_tail)='text' AND typeof(note)='text'
-   AND length(CAST(display_head AS BLOB)) BETWEEN 0 AND 16
-   AND length(CAST(display_tail AS BLOB)) BETWEEN 0 AND 16
-   AND length(note) BETWEEN 0 AND 1024
-   AND display_head NOT GLOB '*[^ -~]*' AND display_tail NOT GLOB '*[^ -~]*')
-);
+ FOREIGN KEY(id,current_grant_revision_id) REFERENCES endpoint_key_grant_revisions(endpoint_key_id,id) DEFERRABLE INITIALLY DEFERRED,
+ CHECK(updated_at>=created_at)
+) STRICT;
 CREATE INDEX idx_endpoint_keys_owner_cursor ON endpoint_keys(endpoint_id,updated_at,id);
-CREATE INDEX idx_endpoint_keys_fingerprint ON endpoint_keys(secret_fingerprint);
+
 CREATE TABLE endpoint_key_suspensions (
  endpoint_key_id INTEGER NOT NULL REFERENCES endpoint_keys(id) ON DELETE CASCADE,
  reason_type TEXT NOT NULL CHECK(reason_type='report_case'),
@@ -268,28 +262,15 @@ CREATE TABLE endpoint_key_suspensions (
  PRIMARY KEY(endpoint_key_id,reason_type,report_case_id)
 );
 CREATE INDEX idx_endpoint_key_suspensions_reason ON endpoint_key_suspensions(endpoint_key_id,reason_type);
-CREATE TABLE model_discovery_evidence (
- endpoint_key_id INTEGER PRIMARY KEY REFERENCES endpoint_keys(id) ON DELETE CASCADE,
- state TEXT NOT NULL CHECK(state IN ('unknown','checking','succeeded','failed')),
- revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807),
- operation_hash BLOB CHECK(operation_hash IS NULL OR (typeof(operation_hash)='blob' AND length(operation_hash)=32)),
- safe_class TEXT NOT NULL DEFAULT 'none' CHECK(safe_class IN ('auth','rate_limit','timeout','protocol','transport','interrupted','region','unavailable','none')),
- safe_diag TEXT NOT NULL DEFAULT '' CHECK(typeof(safe_diag)='text' AND length(CAST(safe_diag AS BLOB))<=4096),
- started_at INTEGER,
- completed_at INTEGER,
- fetched_count INTEGER NOT NULL DEFAULT 0 CHECK(fetched_count BETWEEN 0 AND 10000),
- CHECK((state='unknown' AND operation_hash IS NULL AND safe_class='none' AND safe_diag='' AND started_at IS NULL AND completed_at IS NULL AND fetched_count=0)
-   OR (state='checking' AND operation_hash IS NOT NULL AND safe_class='none' AND started_at IS NOT NULL AND completed_at IS NULL)
-   OR (state='succeeded' AND operation_hash IS NULL AND safe_class='none' AND completed_at IS NOT NULL)
-   OR (state='failed' AND operation_hash IS NULL AND safe_class IN ('auth','rate_limit','timeout','protocol','transport','interrupted','region','unavailable') AND completed_at IS NOT NULL)),
- CHECK(started_at IS NULL OR started_at BETWEEN 0 AND 253402300799),
- CHECK(completed_at IS NULL OR completed_at BETWEEN 0 AND 253402300799),
- CHECK(started_at IS NULL OR completed_at IS NULL OR completed_at>=started_at)
-);
-CREATE INDEX idx_model_discovery_due ON model_discovery_evidence(state,started_at,endpoint_key_id);
+
+
 CREATE TABLE model_catalog_entries (
  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
- endpoint_key_id INTEGER NOT NULL REFERENCES endpoint_keys(id) ON DELETE CASCADE,
+ endpoint_key_id INTEGER REFERENCES endpoint_keys(id) ON DELETE CASCADE,
+ discovery_run_id INTEGER REFERENCES discovery_runs(id) ON DELETE CASCADE,
+ native_service_mask INTEGER NOT NULL CHECK(native_service_mask BETWEEN 0 AND 524287),
+ evidence_source TEXT NOT NULL DEFAULT 'unknown' CHECK(evidence_source IN ('unknown','metadata','preset','user','legacy')),
+ evidence_revision INTEGER CHECK(evidence_revision IS NULL OR evidence_revision>0),
  source_type TEXT NOT NULL CHECK(source_type IN ('automatic','manual')),
  source_identity TEXT NOT NULL CHECK((source_type='manual' AND source_identity=normalized_model_id) OR (source_type='automatic'
    AND typeof(source_identity)='text' AND instr(source_identity,':')>1
@@ -312,8 +293,9 @@ CREATE TABLE model_catalog_entries (
  created_at INTEGER NOT NULL,
  updated_at INTEGER NOT NULL,
  UNIQUE(endpoint_key_id,source_type,source_identity),
- UNIQUE(id,endpoint_key_id)
-);
+ UNIQUE(id,endpoint_key_id),
+ CHECK((source_type='manual' AND endpoint_key_id IS NOT NULL AND discovery_run_id IS NULL) OR (source_type='automatic' AND endpoint_key_id IS NULL AND discovery_run_id IS NOT NULL))
+) STRICT;
 CREATE INDEX idx_model_catalog_pair_model ON model_catalog_entries(endpoint_key_id,normalized_model_id,source_type);
 CREATE TABLE model_pair_catalog (
  endpoint_key_id INTEGER NOT NULL REFERENCES endpoint_keys(id) ON DELETE CASCADE,
@@ -338,7 +320,7 @@ CREATE TABLE models (
  revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807),
  binding_revision INTEGER NOT NULL DEFAULT 0 CHECK(binding_revision BETWEEN 0 AND 9223372036854775807),
  created_at INTEGER NOT NULL,
- updated_at INTEGER NOT NULL, role_policy TEXT NOT NULL DEFAULT '{"default_action":"native","rules":{}}' CHECK(typeof(role_policy)='text' AND length(CAST(role_policy AS BLOB))<=8192 AND json_valid(role_policy) AND json_type(role_policy)='object' AND COALESCE(json_type(role_policy,'$.default_action'),'')='text' AND json_extract(role_policy,'$.default_action') IN ('native','passthrough','system','user','assistant','reject') AND COALESCE(json_type(role_policy,'$.rules'),'')='object'), transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream')), model_types INTEGER NOT NULL DEFAULT 1 CHECK(typeof(model_types)='integer' AND model_types BETWEEN 1 AND 15),
+ updated_at INTEGER NOT NULL, role_policy TEXT NOT NULL DEFAULT '{"default_action":"native","rules":{}}' CHECK(typeof(role_policy)='text' AND length(CAST(role_policy AS BLOB))<=8192 AND json_valid(role_policy) AND json_type(role_policy)='object' AND COALESCE(json_type(role_policy,'$.default_action'),'')='text' AND json_extract(role_policy,'$.default_action') IN ('native','passthrough','system','user','assistant','reject') AND COALESCE(json_type(role_policy,'$.rules'),'')='object'), transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream')), model_types INTEGER NOT NULL DEFAULT 1 CHECK(typeof(model_types)='integer' AND model_types BETWEEN 1 AND 65535),
  UNIQUE(user_id,full_name), UNIQUE(id,user_id), CHECK(full_name=provider||'/'||model)
 );
 CREATE INDEX idx_models_user ON models(user_id);
@@ -346,25 +328,21 @@ CREATE INDEX idx_models_user_fullname ON models(user_id,full_name);
 CREATE TABLE model_bindings (
  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
  model_id INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
- endpoint_key_id INTEGER NOT NULL,
- upstream_model_id TEXT NOT NULL,
- ord INTEGER NOT NULL DEFAULT 0 CHECK(ord BETWEEN 0 AND 511),
- created_at INTEGER NOT NULL,
- updated_at INTEGER NOT NULL,
- UNIQUE(model_id,endpoint_key_id,upstream_model_id), UNIQUE(model_id,ord),
- FOREIGN KEY(endpoint_key_id,upstream_model_id) REFERENCES model_pair_catalog(endpoint_key_id,normalized_model_id) ON DELETE CASCADE
-);
+ ord INTEGER NOT NULL CHECK(ord BETWEEN 0 AND 511),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799),
+ UNIQUE(model_id,ord), CHECK(updated_at>=created_at)
+) STRICT;
 CREATE INDEX idx_model_bindings_model ON model_bindings(model_id,ord,id);
 CREATE TABLE charity_models (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  provider TEXT NOT NULL, model TEXT NOT NULL, full_name TEXT NOT NULL UNIQUE,
- enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)), pricing_mode TEXT NOT NULL CHECK(pricing_mode IN ('per_request','per_token')),
+ enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)), pricing_mode TEXT NOT NULL CHECK(pricing_mode IN ('per_request','per_token','per_search_unit')),
  request_user_price INTEGER NOT NULL DEFAULT 0 CHECK(request_user_price BETWEEN 0 AND 9000000000000000), request_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(request_donor_reward BETWEEN 0 AND 9000000000000000),
  uncached_user_price INTEGER NOT NULL DEFAULT 0 CHECK(uncached_user_price BETWEEN 0 AND 9000000000000000), cache_write_user_price INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_user_price BETWEEN 0 AND 9000000000000000), cache_read_user_price INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_user_price BETWEEN 0 AND 9000000000000000), output_user_price INTEGER NOT NULL DEFAULT 0 CHECK(output_user_price BETWEEN 0 AND 9000000000000000),
  uncached_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(uncached_donor_reward BETWEEN 0 AND 9000000000000000), cache_write_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_donor_reward BETWEEN 0 AND 9000000000000000), cache_read_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_donor_reward BETWEEN 0 AND 9000000000000000), output_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(output_donor_reward BETWEEN 0 AND 9000000000000000),
  discount_percent INTEGER NOT NULL DEFAULT 100 CHECK(discount_percent BETWEEN 0 AND 100), discount_start_at INTEGER, discount_end_at INTEGER, discount_enabled INTEGER NOT NULL DEFAULT 0 CHECK(discount_enabled IN (0,1)), flatten_tool_calls INTEGER NOT NULL DEFAULT 0 CHECK(flatten_tool_calls IN (0,1)), created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
  revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807), binding_revision INTEGER NOT NULL DEFAULT 0 CHECK(binding_revision BETWEEN 0 AND 9223372036854775807), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, is_mainstream INTEGER NOT NULL DEFAULT 0 CHECK(is_mainstream IN (0,1)), excluded_request_fields TEXT NOT NULL DEFAULT '[]'
- CHECK(json_valid(excluded_request_fields) AND json_type(excluded_request_fields)='array' AND length(excluded_request_fields)<=2200), role_policy TEXT NOT NULL DEFAULT '{"default_action":"native","rules":{}}' CHECK(typeof(role_policy)='text' AND length(CAST(role_policy AS BLOB))<=8192 AND json_valid(role_policy) AND json_type(role_policy)='object' AND COALESCE(json_type(role_policy,'$.default_action'),'')='text' AND json_extract(role_policy,'$.default_action') IN ('native','passthrough','system','user','assistant','reject') AND COALESCE(json_type(role_policy,'$.rules'),'')='object'), transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream')), model_types INTEGER NOT NULL DEFAULT 1 CHECK(typeof(model_types)='integer' AND model_types BETWEEN 1 AND 15), context_pricing TEXT NOT NULL DEFAULT '{}' CHECK(length(context_pricing)<=2048 AND json_valid(context_pricing) AND json_type(context_pricing)='object'), session_headers TEXT NOT NULL DEFAULT '[]' CHECK(length(session_headers)<=4096 AND json_valid(session_headers) AND json_type(session_headers)='array'), recurring_discount TEXT NOT NULL DEFAULT '{"enabled":false,"time_zone":"UTC","default_percent":100,"periods":[]}' CHECK(json_valid(recurring_discount) AND json_type(recurring_discount)='object' AND length(CAST(recurring_discount AS BLOB))<=4096),
+ CHECK(json_valid(excluded_request_fields) AND json_type(excluded_request_fields)='array' AND length(excluded_request_fields)<=2200), role_policy TEXT NOT NULL DEFAULT '{"default_action":"native","rules":{}}' CHECK(typeof(role_policy)='text' AND length(CAST(role_policy AS BLOB))<=8192 AND json_valid(role_policy) AND json_type(role_policy)='object' AND COALESCE(json_type(role_policy,'$.default_action'),'')='text' AND json_extract(role_policy,'$.default_action') IN ('native','passthrough','system','user','assistant','reject') AND COALESCE(json_type(role_policy,'$.rules'),'')='object'), transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream')), model_types INTEGER NOT NULL DEFAULT 1 CHECK(typeof(model_types)='integer' AND model_types BETWEEN 1 AND 65535), context_pricing TEXT NOT NULL DEFAULT '{}' CHECK(length(context_pricing)<=8192 AND json_valid(context_pricing) AND json_type(context_pricing)='object'), session_headers TEXT NOT NULL DEFAULT '[]' CHECK(length(session_headers)<=4096 AND json_valid(session_headers) AND json_type(session_headers)='array'), recurring_discount TEXT NOT NULL DEFAULT '{"enabled":false,"time_zone":"UTC","default_percent":100,"periods":[]}' CHECK(json_valid(recurring_discount) AND json_type(recurring_discount)='object' AND length(CAST(recurring_discount AS BLOB))<=4096),
  CHECK(full_name='[公益]'||provider||'/'||model), CHECK(discount_end_at IS NULL OR discount_start_at IS NULL OR discount_end_at>=discount_start_at)
 );
 CREATE TABLE donation_keys (
@@ -372,7 +350,7 @@ CREATE TABLE donation_keys (
  donation_id INTEGER NOT NULL REFERENCES donations(id) ON DELETE CASCADE,
  endpoint_key_id INTEGER REFERENCES endpoint_keys(id) ON DELETE SET NULL,
  display_head TEXT NOT NULL DEFAULT '', display_tail TEXT NOT NULL DEFAULT '', canonical_base_url TEXT NOT NULL DEFAULT '',
- connector_type TEXT NOT NULL DEFAULT 'openai-compatible' CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','google-gemini','openai-responses','openai-decisions')),
+ connector_type TEXT NOT NULL DEFAULT 'openai-compatible' CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','ai-sdk-gateway-v4','google-gemini','openai-responses','openai-decisions','cohere-rerank','jina-rerank','siliconflow-rerank','voyage-rerank','openai-chat-completions','typesafe-systemone')),
  price_limit_mag BLOB CHECK(price_limit_mag IS NULL OR (typeof(price_limit_mag)='blob' AND length(price_limit_mag)=16)), call_limit_mag BLOB CHECK(call_limit_mag IS NULL OR (typeof(call_limit_mag)='blob' AND length(call_limit_mag)=16)), token_limit_mag BLOB CHECK(token_limit_mag IS NULL OR (typeof(token_limit_mag)='blob' AND length(token_limit_mag)=16)),
  price_used_mag BLOB NOT NULL CHECK(typeof(price_used_mag)='blob' AND length(price_used_mag)=16), price_reserved_mag BLOB NOT NULL CHECK(typeof(price_reserved_mag)='blob' AND length(price_reserved_mag)=16), calls_used BLOB NOT NULL CHECK(typeof(calls_used)='blob' AND length(calls_used)=16), calls_reserved BLOB NOT NULL CHECK(typeof(calls_reserved)='blob' AND length(calls_reserved)=16), tokens_used BLOB NOT NULL CHECK(typeof(tokens_used)='blob' AND length(tokens_used)=16), tokens_reserved BLOB NOT NULL CHECK(typeof(tokens_reserved)='blob' AND length(tokens_reserved)=16),
  token_reserve INTEGER NOT NULL DEFAULT 0 CHECK(token_reserve BETWEEN 0 AND 2147483647), enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)), failure_disabled INTEGER NOT NULL DEFAULT 0 CHECK(failure_disabled IN (0,1)), failure_streak BLOB NOT NULL CHECK(typeof(failure_streak)='blob' AND length(failure_streak)=16), streak_generation BLOB NOT NULL CHECK(typeof(streak_generation)='blob' AND length(streak_generation)=16 AND hex(streak_generation)<>'00000000000000000000000000000000'), next_claim_seq BLOB NOT NULL CHECK(typeof(next_claim_seq)='blob' AND length(next_claim_seq)=16), next_fold_seq BLOB NOT NULL CHECK(typeof(next_fold_seq)='blob' AND length(next_fold_seq)=16 AND hex(next_fold_seq)<=hex(next_claim_seq)), safe_note TEXT NOT NULL DEFAULT '', ended_reason TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, ended_at INTEGER,
@@ -443,9 +421,12 @@ WHEN NEW.report_fingerprint IS NOT OLD.report_fingerprint AND NOT (
  AND NEW.updated_at>=OLD.report_match_until)
 BEGIN SELECT RAISE(ABORT,'donation key report fingerprint mutation is not allowed'); END;
 CREATE TABLE charity_model_bindings (
- id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), charity_model_id INTEGER NOT NULL REFERENCES charity_models(id) ON DELETE CASCADE, donation_key_id INTEGER NOT NULL REFERENCES donation_keys(id) ON DELETE CASCADE, endpoint_key_id INTEGER NOT NULL, upstream_model_id TEXT NOT NULL, ord INTEGER NOT NULL DEFAULT 0 CHECK(ord BETWEEN 0 AND 511), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
- UNIQUE(charity_model_id,donation_key_id,upstream_model_id), UNIQUE(charity_model_id,ord), FOREIGN KEY(endpoint_key_id) REFERENCES endpoint_keys(id) ON DELETE CASCADE
-);
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ charity_model_id INTEGER NOT NULL REFERENCES charity_models(id) ON DELETE CASCADE,
+ ord INTEGER NOT NULL CHECK(ord BETWEEN 0 AND 511),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799),
+ UNIQUE(charity_model_id,ord), CHECK(updated_at>=created_at)
+) STRICT;
 CREATE INDEX idx_charity_bindings_model ON charity_model_bindings(charity_model_id,ord,id);
 CREATE TABLE charity_model_stats (model_id INTEGER PRIMARY KEY REFERENCES charity_models(id) ON DELETE CASCADE, next_slot INTEGER NOT NULL DEFAULT 0 CHECK(next_slot BETWEEN 0 AND 99), sample_count INTEGER NOT NULL DEFAULT 0 CHECK(sample_count BETWEEN 0 AND 100), success_count INTEGER NOT NULL DEFAULT 0 CHECK(success_count BETWEEN 0 AND 100)) STRICT;
 CREATE TABLE charity_model_outcomes (model_id INTEGER NOT NULL REFERENCES charity_models(id) ON DELETE CASCADE, slot INTEGER NOT NULL CHECK(slot BETWEEN 0 AND 99), success INTEGER NOT NULL CHECK(success IN (0,1)), created_at INTEGER NOT NULL, PRIMARY KEY(model_id,slot));
@@ -456,7 +437,7 @@ CREATE INDEX idx_idempotency_expiry ON idempotency_records(expires_at);
 CREATE TABLE logical_requests (
  id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='req_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
- route_kind TEXT NOT NULL CHECK(route_kind IN ('openai_chat_completions','charity_chat_completions','model_discovery','openai_embeddings','charity_embeddings','openai_images_generations','charity_images_generations','openai_decisions','charity_decisions')),
+ route_kind TEXT NOT NULL CHECK(route_kind IN ('openai_chat_completions','charity_chat_completions','model_discovery','openai_embeddings','charity_embeddings','openai_images_generations','charity_images_generations','openai_decisions','charity_decisions','openai_responses','charity_responses','openai_responses_compact','charity_responses_compact','openai_responses_input_tokens','charity_responses_input_tokens','openai_completions','charity_completions','openai_images_edits','charity_images_edits','openai_images_variations','charity_images_variations','openai_audio_speech','charity_audio_speech','openai_audio_transcriptions','charity_audio_transcriptions','openai_audio_translations','charity_audio_translations','openai_moderations','charity_moderations','openai_rerank','charity_rerank','openai_systemone','charity_systemone')),
  model_snapshot TEXT NOT NULL DEFAULT '' CHECK(typeof(model_snapshot)='text' AND length(CAST(model_snapshot AS BLOB))<=512),
  state TEXT NOT NULL CHECK(state IN ('accepted','running','terminal')),
  attempt_limit INTEGER NOT NULL CHECK(attempt_limit BETWEEN 1 AND 100),
@@ -468,7 +449,7 @@ CREATE TABLE logical_requests (
  settlement_destination TEXT NOT NULL CHECK(settlement_destination IN ('user','external')),
  ledger_rows_remaining BLOB NOT NULL CHECK(typeof(ledger_rows_remaining)='blob' AND length(ledger_rows_remaining)=16),
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
- terminal_at INTEGER CHECK(terminal_at IS NULL OR terminal_at BETWEEN 0 AND 253402300799), rejection_stage TEXT CHECK(rejection_stage IS NULL OR rejection_stage IN ('authorization','flow','preflight')), rejection_reason TEXT CHECK(rejection_reason IS NULL OR rejection_reason IN ('unauthorized','forbidden','charity_suspended','feature_disabled','maintenance','invalid_request','not_found','unbound_model','insufficient_credits','user_rpm','global_rpm','shared_rpm','concurrency','content_too_short','payload_too_large','resource_limit_exceeded','service_unavailable')), request_method TEXT CHECK(request_method IS NULL OR request_method IN ('GET','POST')), request_path TEXT CHECK(request_path IS NULL OR request_path IN ('/v1/models','/v1/chat/completions','/v1/embeddings','/v1/images/generations','/v1/decisions')),
+ terminal_at INTEGER CHECK(terminal_at IS NULL OR terminal_at BETWEEN 0 AND 253402300799), rejection_stage TEXT CHECK(rejection_stage IS NULL OR rejection_stage IN ('authorization','flow','preflight')), rejection_reason TEXT CHECK(rejection_reason IS NULL OR rejection_reason IN ('unauthorized','forbidden','charity_suspended','feature_disabled','maintenance','invalid_request','not_found','unbound_model','insufficient_credits','user_rpm','global_rpm','shared_rpm','concurrency','content_too_short','payload_too_large','resource_limit_exceeded','service_unavailable')), request_method TEXT CHECK(request_method IS NULL OR request_method IN ('GET','POST')), request_path TEXT CHECK(request_path IS NULL OR request_path IN ('/v1/models','/v1/chat/completions','/v1/embeddings','/v1/images/generations','/v1/decisions','/v1/responses','/v1/responses/compact','/v1/responses/input_tokens','/v1/completions','/v1/images/edits','/v1/images/variations','/v1/audio/speech','/v1/audio/transcriptions','/v1/audio/translations','/v1/moderations','/v1/rerank','/v1/systemone')),
  CHECK((state<>'terminal' AND caller_result_class IS NULL AND caller_status IS NULL AND caller_error_code IS NULL AND terminal_at IS NULL) OR
        (state='terminal' AND caller_result_class IS NOT NULL AND terminal_at IS NOT NULL AND terminal_at>=created_at AND
         ((caller_result_class='success' AND caller_status BETWEEN 200 AND 399 AND caller_error_code IS NULL) OR
@@ -528,7 +509,7 @@ CREATE TABLE request_logs (
  model TEXT NOT NULL DEFAULT '' CHECK(typeof(model)='text' AND length(CAST(model AS BLOB))<=512),
  endpoint_key_id INTEGER REFERENCES endpoint_keys(id) ON DELETE SET NULL,
  upstream_model_id TEXT NOT NULL DEFAULT '' CHECK(typeof(upstream_model_id)='text' AND length(upstream_model_id)<=512),
- route_kind TEXT NOT NULL DEFAULT 'openai_chat_completions' CHECK(route_kind IN ('openai_chat_completions','charity_chat_completions','model_discovery','openai_embeddings','charity_embeddings','openai_images_generations','charity_images_generations','openai_decisions','charity_decisions')),
+ route_kind TEXT NOT NULL DEFAULT 'openai_chat_completions' CHECK(route_kind IN ('openai_chat_completions','charity_chat_completions','model_discovery','openai_embeddings','charity_embeddings','openai_images_generations','charity_images_generations','openai_decisions','charity_decisions','openai_responses','charity_responses','openai_responses_compact','charity_responses_compact','openai_responses_input_tokens','charity_responses_input_tokens','openai_completions','charity_completions','openai_images_edits','charity_images_edits','openai_images_variations','charity_images_variations','openai_audio_speech','charity_audio_speech','openai_audio_transcriptions','charity_audio_transcriptions','openai_audio_translations','charity_audio_translations','openai_moderations','charity_moderations','openai_rerank','charity_rerank','openai_systemone','charity_systemone')),
  endpoint_base_url TEXT NOT NULL DEFAULT '' CHECK(typeof(endpoint_base_url)='text' AND length(CAST(endpoint_base_url AS BLOB))<=4096),
  caller_result_class TEXT CHECK(caller_result_class IS NULL OR caller_result_class IN ('success','failed','cancelled')),
  caller_status INTEGER CHECK(caller_status IS NULL OR caller_status BETWEEN 100 AND 599),
@@ -546,7 +527,7 @@ CREATE TABLE request_logs (
  error_source TEXT NOT NULL DEFAULT 'platform' CHECK(error_source IN ('platform','upstream')),
  error_code TEXT NOT NULL DEFAULT '' CHECK(typeof(error_code)='text' AND length(CAST(error_code AS BLOB))<=64 AND error_code NOT GLOB '*[^a-z0-9_]*'),
  error_diag TEXT NOT NULL DEFAULT '' CHECK(typeof(error_diag)='text' AND length(CAST(error_diag AS BLOB))<=4096),
- legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)), rejection_stage TEXT CHECK(rejection_stage IS NULL OR rejection_stage IN ('authorization','flow','preflight')), rejection_reason TEXT CHECK(rejection_reason IS NULL OR rejection_reason IN ('unauthorized','forbidden','charity_suspended','feature_disabled','maintenance','invalid_request','not_found','unbound_model','insufficient_credits','user_rpm','global_rpm','shared_rpm','concurrency','content_too_short','payload_too_large','resource_limit_exceeded','service_unavailable')), request_method TEXT CHECK(request_method IS NULL OR request_method IN ('GET','POST')), request_path TEXT CHECK(request_path IS NULL OR request_path IN ('/v1/models','/v1/chat/completions','/v1/embeddings','/v1/images/generations','/v1/decisions')), usage_total_mismatch INTEGER NOT NULL DEFAULT 0
+ legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)), rejection_stage TEXT CHECK(rejection_stage IS NULL OR rejection_stage IN ('authorization','flow','preflight')), rejection_reason TEXT CHECK(rejection_reason IS NULL OR rejection_reason IN ('unauthorized','forbidden','charity_suspended','feature_disabled','maintenance','invalid_request','not_found','unbound_model','insufficient_credits','user_rpm','global_rpm','shared_rpm','concurrency','content_too_short','payload_too_large','resource_limit_exceeded','service_unavailable')), request_method TEXT CHECK(request_method IS NULL OR request_method IN ('GET','POST')), request_path TEXT CHECK(request_path IS NULL OR request_path IN ('/v1/models','/v1/chat/completions','/v1/embeddings','/v1/images/generations','/v1/decisions','/v1/responses','/v1/responses/compact','/v1/responses/input_tokens','/v1/completions','/v1/images/edits','/v1/images/variations','/v1/audio/speech','/v1/audio/transcriptions','/v1/audio/translations','/v1/moderations','/v1/rerank','/v1/systemone')), usage_total_mismatch INTEGER NOT NULL DEFAULT 0
  CHECK(typeof(usage_total_mismatch)='integer' AND usage_total_mismatch IN (0,1)), origin_user_id INTEGER CHECK(origin_user_id IS NULL OR (typeof(origin_user_id)='integer' AND origin_user_id>0)), origin_discord_id TEXT CHECK(origin_discord_id IS NULL OR (typeof(origin_discord_id)='text' AND length(origin_discord_id) BETWEEN 1 AND 20 AND origin_discord_id NOT GLOB '*[^0-9]*' AND substr(origin_discord_id,1,1) BETWEEN '1' AND '9')), requested_streaming INTEGER CHECK(requested_streaming IN (0,1)), automatic_actions INTEGER CHECK(automatic_actions IS NULL OR (typeof(automatic_actions)='integer' AND automatic_actions BETWEEN 0 AND 63)),
  CHECK((caller_result_class IS NULL AND caller_status IS NULL AND caller_error_code IS NULL AND completed_at IS NULL AND status_code=0 AND error_code='') OR
        (caller_result_class='success' AND caller_status BETWEEN 200 AND 399 AND caller_error_code IS NULL AND completed_at IS NOT NULL) OR
@@ -556,14 +537,14 @@ CREATE TABLE request_logs (
 );
 CREATE INDEX idx_request_logs_user_started ON request_logs(user_id,started_at,id);
 CREATE TABLE request_attempts (
- claim_id TEXT NOT NULL PRIMARY KEY CHECK(length(claim_id)=26 AND substr(claim_id,1,4)='clm_' AND substr(claim_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(claim_id,-1,1) IN ('A','Q','g','w')), request_log_id INTEGER NOT NULL REFERENCES request_logs(id) ON DELETE CASCADE, attempt_seq INTEGER NOT NULL CHECK(attempt_seq BETWEEN 1 AND 100), endpoint_id_snapshot INTEGER, endpoint_key_id_snapshot INTEGER, connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','google-gemini','openai-responses','openai-decisions')), canonical_base_url TEXT NOT NULL CHECK(typeof(canonical_base_url)='text' AND length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096), upstream_model_id TEXT NOT NULL CHECK(typeof(upstream_model_id)='text' AND length(upstream_model_id) BETWEEN 0 AND 512), result_kind TEXT NOT NULL CHECK(result_kind IN ('response','synthetic')), upstream_status INTEGER CHECK(upstream_status IS NULL OR upstream_status BETWEEN 100 AND 599), upstream_code TEXT, diag TEXT, input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(input_tokens>=0), cache_write_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_input_tokens>=0), cache_read_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_input_tokens>=0), output_tokens INTEGER NOT NULL DEFAULT 0 CHECK(output_tokens>=0), usage_unknown INTEGER NOT NULL DEFAULT 0 CHECK(usage_unknown IN (0,1)), started_at INTEGER NOT NULL CHECK(started_at BETWEEN 0 AND 253402300799), completed_at INTEGER NOT NULL CHECK(completed_at BETWEEN 0 AND 253402300799 AND completed_at>=started_at), usage_total_mismatch INTEGER NOT NULL DEFAULT 0
+ claim_id TEXT NOT NULL PRIMARY KEY CHECK(length(claim_id)=26 AND substr(claim_id,1,4)='clm_' AND substr(claim_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(claim_id,-1,1) IN ('A','Q','g','w')), request_log_id INTEGER NOT NULL REFERENCES request_logs(id) ON DELETE CASCADE, attempt_seq INTEGER NOT NULL CHECK(attempt_seq BETWEEN 1 AND 100), endpoint_id_snapshot INTEGER, endpoint_key_id_snapshot INTEGER, connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','ai-sdk-gateway-v4','google-gemini','openai-responses','openai-decisions','cohere-rerank','jina-rerank','siliconflow-rerank','voyage-rerank','openai-chat-completions','typesafe-systemone')), canonical_base_url TEXT NOT NULL CHECK(typeof(canonical_base_url)='text' AND length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096), upstream_model_id TEXT NOT NULL CHECK(typeof(upstream_model_id)='text' AND length(upstream_model_id) BETWEEN 0 AND 512), result_kind TEXT NOT NULL CHECK(result_kind IN ('response','synthetic')), upstream_status INTEGER CHECK(upstream_status IS NULL OR upstream_status BETWEEN 100 AND 599), upstream_code TEXT, diag TEXT, input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(input_tokens>=0), cache_write_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_input_tokens>=0), cache_read_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_input_tokens>=0), output_tokens INTEGER NOT NULL DEFAULT 0 CHECK(output_tokens>=0), usage_unknown INTEGER NOT NULL DEFAULT 0 CHECK(usage_unknown IN (0,1)), started_at INTEGER NOT NULL CHECK(started_at BETWEEN 0 AND 253402300799), completed_at INTEGER NOT NULL CHECK(completed_at BETWEEN 0 AND 253402300799 AND completed_at>=started_at), usage_total_mismatch INTEGER NOT NULL DEFAULT 0
  CHECK(typeof(usage_total_mismatch)='integer' AND usage_total_mismatch IN (0,1)), UNIQUE(request_log_id,attempt_seq), CHECK(upstream_code IS NULL OR (typeof(upstream_code)='text' AND length(CAST(upstream_code AS BLOB)) BETWEEN 1 AND 64 AND upstream_code NOT GLOB '*[^ -~]*')), CHECK(diag IS NULL OR (typeof(diag)='text' AND length(CAST(diag AS BLOB))<=4096))
 );
 CREATE INDEX idx_request_attempts_log_seq ON request_attempts(request_log_id,attempt_seq);
 CREATE INDEX idx_request_attempts_key_log ON request_attempts(endpoint_key_id_snapshot,request_log_id);
 CREATE INDEX idx_request_attempts_endpoint_log ON request_attempts(canonical_base_url,request_log_id);
 CREATE INDEX idx_request_attempts_model_log ON request_attempts(upstream_model_id,request_log_id);
-CREATE INDEX idx_request_logs_charity_model ON request_logs(route_kind,model,completed_at,id) WHERE route_kind IN ('charity_chat_completions','charity_embeddings','charity_images_generations','charity_decisions');
+CREATE INDEX idx_request_logs_charity_model ON request_logs(route_kind,model,completed_at,id) WHERE route_kind IN ('charity_chat_completions','charity_embeddings','charity_images_generations','charity_decisions','charity_responses','charity_responses_compact','charity_responses_input_tokens','charity_completions','charity_images_edits','charity_images_variations','charity_audio_speech','charity_audio_transcriptions','charity_audio_translations','charity_moderations','charity_rerank','charity_systemone');
 CREATE INDEX idx_request_attempts_started ON request_attempts(started_at);
 CREATE INDEX idx_request_attempts_retention ON request_attempts(completed_at,request_log_id,attempt_seq) WHERE completed_at IS NOT NULL;
 CREATE TABLE worker_checkpoints (worker_key TEXT NOT NULL PRIMARY KEY, cursor_text TEXT NOT NULL DEFAULT '', generation INTEGER NOT NULL CHECK(generation BETWEEN 0 AND 9223372036854775807), attempt_count INTEGER NOT NULL CHECK(attempt_count BETWEEN 0 AND 2147483647), next_attempt_at INTEGER NOT NULL CHECK(next_attempt_at BETWEEN 0 AND 253402300799), last_error_class TEXT NOT NULL DEFAULT '' CHECK(last_error_class IN ('','db_busy','internal_retryable','invariant_violation')), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799), last_success_at INTEGER CHECK(last_success_at IS NULL OR (typeof(last_success_at)='integer' AND last_success_at BETWEEN 0 AND 253402300799 AND last_success_at<=updated_at)));
@@ -736,18 +717,18 @@ CREATE TABLE donation_key_memberships (endpoint_key_id INTEGER PRIMARY KEY REFER
 CREATE INDEX idx_donation_memberships_donation ON donation_key_memberships(donation_id,endpoint_key_id);
 CREATE TABLE donation_reviews (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), donation_id INTEGER NOT NULL REFERENCES donations(id) ON DELETE CASCADE, submission_revision INTEGER NOT NULL DEFAULT 1 CHECK(submission_revision BETWEEN 1 AND 9223372036854775807), reviewer_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, reviewer_role TEXT NOT NULL DEFAULT '' CHECK(reviewer_role IN ('','admin','level5','level6','trainee5')), action TEXT NOT NULL CHECK(action IN ('approve','reject','withdraw','terminate','expire','enable','disable','limit_update','note_update','member_removed','failure_streak_reset','failure_policy_update','force_reject')), note TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
 CREATE INDEX idx_donation_reviews_donation ON donation_reviews(donation_id,id);
-CREATE TABLE charity_reservations (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), logical_request_id TEXT NOT NULL UNIQUE REFERENCES logical_requests(id) ON DELETE CASCADE CHECK(length(logical_request_id)=26 AND substr(logical_request_id,1,4)='req_' AND substr(logical_request_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(logical_request_id,-1,1) IN ('A','Q','g','w')), user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, charity_model_id INTEGER REFERENCES charity_models(id) ON DELETE SET NULL, model_snapshot TEXT NOT NULL DEFAULT '', state TEXT NOT NULL CHECK(state IN ('reserved','dispatched','committed','released')), pricing_mode TEXT NOT NULL CHECK(pricing_mode IN ('per_request','per_token')), discount_percent INTEGER NOT NULL CHECK(discount_percent BETWEEN 0 AND 100), request_user_price_milli INTEGER NOT NULL CHECK(request_user_price_milli BETWEEN 0 AND 9000000000000000), request_donor_reward_milli INTEGER NOT NULL CHECK(request_donor_reward_milli BETWEEN 0 AND 9000000000000000), uncached_user_price_milli INTEGER NOT NULL CHECK(uncached_user_price_milli BETWEEN 0 AND 9000000000000000), cache_write_user_price_milli INTEGER NOT NULL CHECK(cache_write_user_price_milli BETWEEN 0 AND 9000000000000000), cache_read_user_price_milli INTEGER NOT NULL CHECK(cache_read_user_price_milli BETWEEN 0 AND 9000000000000000), output_user_price_milli INTEGER NOT NULL CHECK(output_user_price_milli BETWEEN 0 AND 9000000000000000), uncached_donor_reward_milli INTEGER NOT NULL CHECK(uncached_donor_reward_milli BETWEEN 0 AND 9000000000000000), cache_write_donor_reward_milli INTEGER NOT NULL CHECK(cache_write_donor_reward_milli BETWEEN 0 AND 9000000000000000), cache_read_donor_reward_milli INTEGER NOT NULL CHECK(cache_read_donor_reward_milli BETWEEN 0 AND 9000000000000000), output_donor_reward_milli INTEGER NOT NULL CHECK(output_donor_reward_milli BETWEEN 0 AND 9000000000000000), token_reserve_milli INTEGER NOT NULL CHECK(token_reserve_milli>=0), user_reserved_milli INTEGER NOT NULL CHECK(user_reserved_milli>=0), original_charge_milli INTEGER NOT NULL CHECK(original_charge_milli>=0), user_charge_milli INTEGER NOT NULL CHECK(user_charge_milli>=0), donor_reward_total_mag BLOB NOT NULL CHECK(typeof(donor_reward_total_mag)='blob' AND length(donor_reward_total_mag)=16), usage_uncached_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(usage_uncached_input_tokens>=0), cache_write_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_input_tokens>=0), cache_read_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_input_tokens>=0), usage_output_tokens INTEGER NOT NULL DEFAULT 0 CHECK(usage_output_tokens>=0), usage_unknown INTEGER NOT NULL DEFAULT 0 CHECK(usage_unknown IN (0,1)), created_at INTEGER NOT NULL, dispatched_at INTEGER, finalized_at INTEGER, updated_at INTEGER NOT NULL, context_pricing TEXT NOT NULL DEFAULT '{}' CHECK(length(context_pricing)<=2048 AND json_valid(context_pricing) AND json_type(context_pricing)='object'));
+CREATE TABLE charity_reservations (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), logical_request_id TEXT NOT NULL UNIQUE REFERENCES logical_requests(id) ON DELETE CASCADE CHECK(length(logical_request_id)=26 AND substr(logical_request_id,1,4)='req_' AND substr(logical_request_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(logical_request_id,-1,1) IN ('A','Q','g','w')), user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, charity_model_id INTEGER REFERENCES charity_models(id) ON DELETE SET NULL, model_snapshot TEXT NOT NULL DEFAULT '', state TEXT NOT NULL CHECK(state IN ('reserved','dispatched','committed','released')), pricing_mode TEXT NOT NULL CHECK(pricing_mode IN ('per_request','per_token','per_search_unit')), discount_percent INTEGER NOT NULL CHECK(discount_percent BETWEEN 0 AND 100), request_user_price_milli INTEGER NOT NULL CHECK(request_user_price_milli BETWEEN 0 AND 9000000000000000), request_donor_reward_milli INTEGER NOT NULL CHECK(request_donor_reward_milli BETWEEN 0 AND 9000000000000000), uncached_user_price_milli INTEGER NOT NULL CHECK(uncached_user_price_milli BETWEEN 0 AND 9000000000000000), cache_write_user_price_milli INTEGER NOT NULL CHECK(cache_write_user_price_milli BETWEEN 0 AND 9000000000000000), cache_read_user_price_milli INTEGER NOT NULL CHECK(cache_read_user_price_milli BETWEEN 0 AND 9000000000000000), output_user_price_milli INTEGER NOT NULL CHECK(output_user_price_milli BETWEEN 0 AND 9000000000000000), uncached_donor_reward_milli INTEGER NOT NULL CHECK(uncached_donor_reward_milli BETWEEN 0 AND 9000000000000000), cache_write_donor_reward_milli INTEGER NOT NULL CHECK(cache_write_donor_reward_milli BETWEEN 0 AND 9000000000000000), cache_read_donor_reward_milli INTEGER NOT NULL CHECK(cache_read_donor_reward_milli BETWEEN 0 AND 9000000000000000), output_donor_reward_milli INTEGER NOT NULL CHECK(output_donor_reward_milli BETWEEN 0 AND 9000000000000000), token_reserve_milli INTEGER NOT NULL CHECK(token_reserve_milli>=0), user_reserved_milli INTEGER NOT NULL CHECK(user_reserved_milli>=0), original_charge_milli INTEGER NOT NULL CHECK(original_charge_milli>=0), user_charge_milli INTEGER NOT NULL CHECK(user_charge_milli>=0), donor_reward_total_mag BLOB NOT NULL CHECK(typeof(donor_reward_total_mag)='blob' AND length(donor_reward_total_mag)=16), usage_uncached_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(usage_uncached_input_tokens>=0), cache_write_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_input_tokens>=0), cache_read_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_input_tokens>=0), usage_output_tokens INTEGER NOT NULL DEFAULT 0 CHECK(usage_output_tokens>=0), usage_unknown INTEGER NOT NULL DEFAULT 0 CHECK(usage_unknown IN (0,1)), created_at INTEGER NOT NULL, dispatched_at INTEGER, finalized_at INTEGER, updated_at INTEGER NOT NULL, context_pricing TEXT NOT NULL DEFAULT '{}' CHECK(length(context_pricing)<=8192 AND json_valid(context_pricing) AND json_type(context_pricing)='object'));
 CREATE INDEX idx_charity_reservations_state ON charity_reservations(state,created_at,id);
 CREATE INDEX idx_charity_reservations_user ON charity_reservations(user_id,created_at,id);
 CREATE TABLE donation_usage_reservations (claim_id TEXT NOT NULL PRIMARY KEY CHECK(length(claim_id)=26 AND substr(claim_id,1,4)='clm_' AND substr(claim_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(claim_id,-1,1) IN ('A','Q','g','w')), donation_key_id INTEGER REFERENCES donation_keys(id) ON DELETE SET NULL, streak_generation BLOB NOT NULL CHECK(typeof(streak_generation)='blob' AND length(streak_generation)=16), claim_seq BLOB NOT NULL CHECK(typeof(claim_seq)='blob' AND length(claim_seq)=16), price_reserved_milli INTEGER NOT NULL CHECK(price_reserved_milli BETWEEN 0 AND 9000000000000000), price_actual_milli INTEGER CHECK(price_actual_milli IS NULL OR price_actual_milli BETWEEN 0 AND 9000000000000000), reward_actual_milli INTEGER CHECK(reward_actual_milli IS NULL OR reward_actual_milli BETWEEN 0 AND 9000000000000000), calls_reserved INTEGER NOT NULL CHECK(calls_reserved IN (0,1)), calls_actual INTEGER CHECK(calls_actual IS NULL OR calls_actual IN (0,1)), tokens_reserved INTEGER NOT NULL CHECK(tokens_reserved BETWEEN 0 AND 9223372036854775807), tokens_actual INTEGER CHECK(tokens_actual IS NULL OR tokens_actual BETWEEN 0 AND 9223372036854775807), protocol_success INTEGER CHECK(protocol_success IS NULL OR protocol_success IN (0,1)), usage_unknown INTEGER CHECK(usage_unknown IS NULL OR usage_unknown IN (0,1)), state TEXT NOT NULL CHECK(state IN ('reserved','committed','released')), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), finalized_at INTEGER CHECK(finalized_at IS NULL OR finalized_at BETWEEN 0 AND 253402300799), input_tokens_reserved INTEGER CHECK(input_tokens_reserved IS NULL OR (typeof(input_tokens_reserved)='integer' AND input_tokens_reserved>=0)), output_tokens_reserved INTEGER CHECK(output_tokens_reserved IS NULL OR (typeof(output_tokens_reserved)='integer' AND output_tokens_reserved>=0)), input_tokens_actual INTEGER CHECK(input_tokens_actual IS NULL OR (typeof(input_tokens_actual)='integer' AND input_tokens_actual>=0)), output_tokens_actual INTEGER CHECK(output_tokens_actual IS NULL OR (typeof(output_tokens_actual)='integer' AND output_tokens_actual>=0)), streak_disposition TEXT CHECK(streak_disposition IS NULL OR streak_disposition IN ('success','upstream_failure','neutral')), failure_origin TEXT CHECK(failure_origin IS NULL OR failure_origin IN ('none','upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','legacy_unknown','recovery_unknown')), UNIQUE(donation_key_id,streak_generation,claim_seq), CHECK((state='reserved' AND price_actual_milli IS NULL AND reward_actual_milli IS NULL AND calls_actual IS NULL AND tokens_actual IS NULL AND protocol_success IS NULL AND usage_unknown IS NULL AND finalized_at IS NULL) OR (state='committed' AND price_actual_milli IS NOT NULL AND reward_actual_milli IS NOT NULL AND calls_actual IS NOT NULL AND tokens_actual IS NOT NULL AND protocol_success IS NOT NULL AND usage_unknown IS NOT NULL AND finalized_at IS NOT NULL) OR (state='released' AND finalized_at IS NOT NULL AND ((price_actual_milli IS NULL AND reward_actual_milli IS NULL AND calls_actual IS NULL AND tokens_actual IS NULL AND protocol_success IS NULL AND usage_unknown IS NULL) OR (price_actual_milli IS NOT NULL AND reward_actual_milli IS NOT NULL AND calls_actual IS NOT NULL AND tokens_actual IS NOT NULL AND protocol_success IS NOT NULL AND usage_unknown IS NOT NULL)))));
 CREATE INDEX idx_donation_usage_key_state ON donation_usage_reservations(donation_key_id,state,claim_seq);
-CREATE TABLE report_cases (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='rpc_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), fingerprint BLOB NOT NULL CHECK(typeof(fingerprint)='blob' AND length(fingerprint)=32), connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','google-gemini','openai-responses','openai-decisions')), canonical_base_url TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('pending_indexing','pending_review','approved_processing','approved','rejected','expired')), progress_state TEXT NOT NULL CHECK(progress_state IN ('in_progress','complete')), material_version INTEGER NOT NULL CHECK(material_version BETWEEN 1 AND 9223372036854775807), target_version INTEGER NOT NULL CHECK(target_version BETWEEN 1 AND 9223372036854775807), deadline INTEGER NOT NULL, cursor_source TEXT CHECK(cursor_source IS NULL OR cursor_source IN ('endpoint','donation')), cursor_id INTEGER CHECK(cursor_id IS NULL OR (typeof(cursor_id)='integer' AND cursor_id BETWEEN 0 AND 9223372036854775807)), material_count INTEGER NOT NULL CHECK(material_count>=0), target_count INTEGER NOT NULL CHECK(target_count>=0), distinct_owner_count INTEGER NOT NULL CHECK(distinct_owner_count>=0), processed_target_count INTEGER NOT NULL DEFAULT 0 CHECK(processed_target_count>=0), deleted_target_count INTEGER NOT NULL DEFAULT 0 CHECK(deleted_target_count>=0), released_target_count INTEGER NOT NULL DEFAULT 0 CHECK(released_target_count>=0), decision_reason TEXT, decision_actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, decision_at INTEGER, retry_attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(retry_attempt_count>=0), next_retry_at INTEGER, last_error_class TEXT CHECK(last_error_class IS NULL OR last_error_class IN ('db_busy','internal_retryable','invariant_violation')), created_at INTEGER NOT NULL, terminal_at INTEGER, legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)), CHECK(processed_target_count<=target_count AND deleted_target_count<=target_count AND released_target_count<=target_count), CHECK((cursor_source IS NULL AND cursor_id IS NULL) OR (cursor_source IS NOT NULL AND cursor_id IS NOT NULL)), CHECK(cursor_id IS NULL OR cursor_id>0 OR cursor_source='donation'), CHECK(progress_state='in_progress' OR (cursor_source IS NULL AND cursor_id IS NULL)), CHECK((progress_state='in_progress' AND status IN ('pending_indexing','approved_processing')) OR (progress_state='complete' AND status IN ('pending_review','approved','rejected')) OR status='expired'));
+CREATE TABLE report_cases (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='rpc_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), fingerprint BLOB NOT NULL CHECK(typeof(fingerprint)='blob' AND length(fingerprint)=32), connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','ai-sdk-gateway-v4','google-gemini','openai-responses','openai-decisions','cohere-rerank','jina-rerank','siliconflow-rerank','voyage-rerank','openai-chat-completions','typesafe-systemone')), canonical_base_url TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('pending_indexing','pending_review','approved_processing','approved','rejected','expired')), progress_state TEXT NOT NULL CHECK(progress_state IN ('in_progress','complete')), material_version INTEGER NOT NULL CHECK(material_version BETWEEN 1 AND 9223372036854775807), target_version INTEGER NOT NULL CHECK(target_version BETWEEN 1 AND 9223372036854775807), deadline INTEGER NOT NULL, cursor_source TEXT CHECK(cursor_source IS NULL OR cursor_source IN ('endpoint','donation')), cursor_id INTEGER CHECK(cursor_id IS NULL OR (typeof(cursor_id)='integer' AND cursor_id BETWEEN 0 AND 9223372036854775807)), material_count INTEGER NOT NULL CHECK(material_count>=0), target_count INTEGER NOT NULL CHECK(target_count>=0), distinct_owner_count INTEGER NOT NULL CHECK(distinct_owner_count>=0), processed_target_count INTEGER NOT NULL DEFAULT 0 CHECK(processed_target_count>=0), deleted_target_count INTEGER NOT NULL DEFAULT 0 CHECK(deleted_target_count>=0), released_target_count INTEGER NOT NULL DEFAULT 0 CHECK(released_target_count>=0), decision_reason TEXT, decision_actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, decision_at INTEGER, retry_attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(retry_attempt_count>=0), next_retry_at INTEGER, last_error_class TEXT CHECK(last_error_class IS NULL OR last_error_class IN ('db_busy','internal_retryable','invariant_violation')), created_at INTEGER NOT NULL, terminal_at INTEGER, legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)), CHECK(processed_target_count<=target_count AND deleted_target_count<=target_count AND released_target_count<=target_count), CHECK((cursor_source IS NULL AND cursor_id IS NULL) OR (cursor_source IS NOT NULL AND cursor_id IS NOT NULL)), CHECK(cursor_id IS NULL OR cursor_id>0 OR cursor_source='donation'), CHECK(progress_state='in_progress' OR (cursor_source IS NULL AND cursor_id IS NULL)), CHECK((progress_state='in_progress' AND status IN ('pending_indexing','approved_processing')) OR (progress_state='complete' AND status IN ('pending_review','approved','rejected')) OR status='expired'));
 CREATE UNIQUE INDEX idx_report_cases_active_fingerprint ON report_cases(fingerprint) WHERE status IN ('pending_indexing','pending_review','approved_processing');
 CREATE INDEX idx_report_cases_status_deadline ON report_cases(status,deadline,id);
 CREATE INDEX idx_report_cases_retry ON report_cases(next_retry_at,id);
 CREATE TABLE report_materials (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), case_id TEXT NOT NULL REFERENCES report_cases(id) ON DELETE CASCADE CHECK(length(case_id)=26 AND substr(case_id,1,4)='rpc_' AND substr(case_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(case_id,-1,1) IN ('A','Q','g','w')), material_hash BLOB NOT NULL CHECK(typeof(material_hash)='blob' AND length(material_hash)=32), note_text TEXT NOT NULL DEFAULT '', reporter_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, reporter_discord_id TEXT CHECK(reporter_discord_id IS NULL OR (length(CAST(reporter_discord_id AS BLOB)) BETWEEN 1 AND 64 AND reporter_discord_id NOT GLOB '*[^ -~]*')), source_ip_envelope BLOB NOT NULL CHECK(typeof(source_ip_envelope)='blob' AND length(source_ip_envelope)=45), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), UNIQUE(case_id,material_hash));
 CREATE INDEX idx_report_materials_case ON report_materials(case_id,id);
-CREATE TABLE report_targets (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='rpt_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), case_id TEXT NOT NULL REFERENCES report_cases(id) ON DELETE CASCADE CHECK(length(case_id)=26 AND substr(case_id,1,4)='rpc_' AND substr(case_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(case_id,-1,1) IN ('A','Q','g','w')), target_seq INTEGER NOT NULL CHECK(target_seq BETWEEN 0 AND 9223372036854775807), endpoint_key_id INTEGER REFERENCES endpoint_keys(id) ON DELETE SET NULL, source_endpoint_key_id INTEGER NOT NULL CHECK(typeof(source_endpoint_key_id)='integer' AND source_endpoint_key_id>0), key_ref BLOB NOT NULL CHECK(typeof(key_ref)='blob' AND length(key_ref)=32), owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, owner_discord_id TEXT CHECK(owner_discord_id IS NULL OR (length(CAST(owner_discord_id AS BLOB)) BETWEEN 1 AND 64 AND owner_discord_id NOT GLOB '*[^ -~]*')), owner_display_name TEXT CHECK(owner_display_name IS NULL OR (typeof(owner_display_name)='text' AND length(CAST(owner_display_name AS BLOB))<=512)), connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','google-gemini','openai-responses','openai-decisions')), canonical_base_url TEXT NOT NULL CHECK(typeof(canonical_base_url)='text' AND length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096), key_display_head TEXT NOT NULL DEFAULT '' CHECK(length(CAST(key_display_head AS BLOB))<=16), key_display_tail TEXT NOT NULL DEFAULT '' CHECK(length(CAST(key_display_tail AS BLOB))<=16), state TEXT NOT NULL CHECK(state IN ('protected','deleted_by_owner','deleted_by_account','deleted_by_approval','released')), discovered_version INTEGER NOT NULL CHECK(discovered_version BETWEEN 1 AND 9223372036854775807), decided_version INTEGER CHECK(decided_version IS NULL OR decided_version BETWEEN 1 AND 9223372036854775807), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799), UNIQUE(case_id,key_ref), UNIQUE(case_id,target_seq));
+CREATE TABLE report_targets (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='rpt_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), case_id TEXT NOT NULL REFERENCES report_cases(id) ON DELETE CASCADE CHECK(length(case_id)=26 AND substr(case_id,1,4)='rpc_' AND substr(case_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(case_id,-1,1) IN ('A','Q','g','w')), target_seq INTEGER NOT NULL CHECK(target_seq BETWEEN 0 AND 9223372036854775807), endpoint_key_id INTEGER REFERENCES endpoint_keys(id) ON DELETE SET NULL, source_endpoint_key_id INTEGER NOT NULL CHECK(typeof(source_endpoint_key_id)='integer' AND source_endpoint_key_id>0), key_ref BLOB NOT NULL CHECK(typeof(key_ref)='blob' AND length(key_ref)=32), owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, owner_discord_id TEXT CHECK(owner_discord_id IS NULL OR (length(CAST(owner_discord_id AS BLOB)) BETWEEN 1 AND 64 AND owner_discord_id NOT GLOB '*[^ -~]*')), owner_display_name TEXT CHECK(owner_display_name IS NULL OR (typeof(owner_display_name)='text' AND length(CAST(owner_display_name AS BLOB))<=512)), connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','ai-sdk-gateway-v4','google-gemini','openai-responses','openai-decisions','cohere-rerank','jina-rerank','siliconflow-rerank','voyage-rerank','openai-chat-completions','typesafe-systemone')), canonical_base_url TEXT NOT NULL CHECK(typeof(canonical_base_url)='text' AND length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096), key_display_head TEXT NOT NULL DEFAULT '' CHECK(length(CAST(key_display_head AS BLOB))<=16), key_display_tail TEXT NOT NULL DEFAULT '' CHECK(length(CAST(key_display_tail AS BLOB))<=16), state TEXT NOT NULL CHECK(state IN ('protected','deleted_by_owner','deleted_by_account','deleted_by_approval','released')), discovered_version INTEGER NOT NULL CHECK(discovered_version BETWEEN 1 AND 9223372036854775807), decided_version INTEGER CHECK(decided_version IS NULL OR decided_version BETWEEN 1 AND 9223372036854775807), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799), UNIQUE(case_id,key_ref), UNIQUE(case_id,target_seq));
 CREATE INDEX idx_report_targets_case_state ON report_targets(case_id,state,target_seq,id);
 CREATE INDEX idx_report_targets_owner ON report_targets(owner_user_id,id);
 CREATE TRIGGER report_target_source_key_immutable BEFORE UPDATE OF source_endpoint_key_id ON report_targets
@@ -1067,12 +1048,8 @@ WHEN NEW.token_reserve_milli NOT BETWEEN 0 AND 2147483647
       OR (NEW.state='dispatched' AND NEW.dispatched_at IS NOT NULL AND NEW.finalized_at IS NULL)
       OR (NEW.state IN ('committed','released') AND NEW.finalized_at IS NOT NULL))
 BEGIN SELECT RAISE(ABORT,'charity reservation scalar/state invariant'); END;
-CREATE TRIGGER charity_binding_endpoint_guard BEFORE INSERT ON charity_model_bindings
-WHEN NOT EXISTS(SELECT 1 FROM donation_keys d WHERE d.id=NEW.donation_key_id AND d.endpoint_key_id=NEW.endpoint_key_id)
-BEGIN SELECT RAISE(ABORT,'charity binding endpoint mismatch'); END;
-CREATE TRIGGER charity_binding_endpoint_update_guard BEFORE UPDATE OF donation_key_id,endpoint_key_id ON charity_model_bindings
- WHEN NOT EXISTS(SELECT 1 FROM donation_keys d WHERE d.id=NEW.donation_key_id AND d.endpoint_key_id=NEW.endpoint_key_id)
- BEGIN SELECT RAISE(ABORT,'charity binding endpoint mismatch'); END;
+
+
 CREATE TRIGGER donation_key_membership_consistency_guard BEFORE INSERT ON donation_key_memberships
  WHEN NOT EXISTS(SELECT 1 FROM donation_keys d WHERE d.id=NEW.donation_key_id AND d.donation_id=NEW.donation_id AND d.endpoint_key_id=NEW.endpoint_key_id AND d.ended_at IS NULL)
  BEGIN SELECT RAISE(ABORT,'donation key membership identity mismatch'); END;
@@ -1455,18 +1432,9 @@ BEGIN
  UPDATE maintenance_events SET actor_user_id=NULL,actor_discord_id=NULL,actor_role=NULL WHERE actor_user_id=OLD.id;
  DELETE FROM user_deletion_markers WHERE user_id=OLD.id;
 END;
-CREATE TRIGGER endpoint_key_secrets_identity_immutable BEFORE UPDATE ON endpoint_key_secrets WHEN OLD.context_id<>NEW.context_id OR OLD.canonical_base_url<>NEW.canonical_base_url OR OLD.connector_type<>NEW.connector_type OR OLD.encrypted_secret<>NEW.encrypted_secret OR OLD.created_at<>NEW.created_at BEGIN SELECT RAISE(ABORT,'endpoint key secret identity is immutable'); END;
-CREATE TRIGGER endpoint_key_secrets_orphan_marker_guard BEFORE UPDATE OF orphaned_at ON endpoint_key_secrets
-WHEN (OLD.orphaned_at IS NOT NULL AND NEW.orphaned_at IS NOT OLD.orphaned_at)
- OR (OLD.orphaned_at IS NULL AND NEW.orphaned_at IS NOT NULL AND
-     (EXISTS(SELECT 1 FROM endpoint_keys WHERE secret_ref_id=OLD.id)
-      OR EXISTS(SELECT 1 FROM dispatch_claims WHERE secret_ref_id=OLD.id AND state IN ('claimed','dispatched'))))
-BEGIN SELECT RAISE(ABORT,'endpoint key secret orphan marker is invalid'); END;
-CREATE TRIGGER endpoint_key_secrets_orphan_delete_guard BEFORE DELETE ON endpoint_key_secrets
-WHEN OLD.orphaned_at IS NULL
- OR EXISTS(SELECT 1 FROM endpoint_keys WHERE secret_ref_id=OLD.id)
- OR EXISTS(SELECT 1 FROM dispatch_claims WHERE secret_ref_id=OLD.id AND state IN ('claimed','dispatched'))
-BEGIN SELECT RAISE(ABORT,'endpoint key secret is still referenced'); END;
+
+
+
 CREATE TRIGGER caller_keys_generation_guard BEFORE UPDATE ON caller_keys
 WHEN (NEW.generation<OLD.generation OR NEW.generation>OLD.generation+1)
  OR (NEW.generation=OLD.generation+1 AND NEW.key_hash IS OLD.key_hash)
@@ -1737,14 +1705,8 @@ BEGIN SELECT RAISE(ABORT,'endpoint suspension timestamp is outside UTC range'); 
 CREATE TRIGGER generation_two_endpoint_suspensions_time_update_guard BEFORE UPDATE ON endpoint_key_suspensions
 WHEN typeof(NEW.created_at)<>'integer' OR NEW.created_at NOT BETWEEN 0 AND 253402300799
 BEGIN SELECT RAISE(ABORT,'endpoint suspension timestamp is outside UTC range'); END;
-CREATE TRIGGER generation_two_discovery_time_guard BEFORE INSERT ON model_discovery_evidence
-WHEN (NEW.started_at IS NOT NULL AND (typeof(NEW.started_at)<>'integer' OR NEW.started_at NOT BETWEEN 0 AND 253402300799))
- OR (NEW.completed_at IS NOT NULL AND (typeof(NEW.completed_at)<>'integer' OR NEW.completed_at NOT BETWEEN 0 AND 253402300799))
-BEGIN SELECT RAISE(ABORT,'discovery timestamp is outside UTC range'); END;
-CREATE TRIGGER generation_two_discovery_time_update_guard BEFORE UPDATE ON model_discovery_evidence
-WHEN (NEW.started_at IS NOT NULL AND (typeof(NEW.started_at)<>'integer' OR NEW.started_at NOT BETWEEN 0 AND 253402300799))
- OR (NEW.completed_at IS NOT NULL AND (typeof(NEW.completed_at)<>'integer' OR NEW.completed_at NOT BETWEEN 0 AND 253402300799))
-BEGIN SELECT RAISE(ABORT,'discovery timestamp is outside UTC range'); END;
+
+
 CREATE TRIGGER generation_two_catalog_time_guard BEFORE INSERT ON model_catalog_entries
 WHEN typeof(NEW.created_at)<>'integer' OR NEW.created_at NOT BETWEEN 0 AND 253402300799
  OR typeof(NEW.updated_at)<>'integer' OR NEW.updated_at NOT BETWEEN 0 AND 253402300799
@@ -2427,24 +2389,8 @@ WHEN (NEW.user_id IS NOT NULL AND typeof(NEW.user_id)<>'integer')
  OR (NEW.key_created_at IS NOT NULL AND typeof(NEW.key_created_at)<>'integer')
  OR (NEW.updated_at IS NOT NULL AND typeof(NEW.updated_at)<>'integer')
 BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
-CREATE TRIGGER generation_two_integer_type_charity_model_bindings_insert_guard BEFORE INSERT ON charity_model_bindings
-WHEN (NEW.id IS NOT NULL AND typeof(NEW.id)<>'integer')
- OR (NEW.charity_model_id IS NOT NULL AND typeof(NEW.charity_model_id)<>'integer')
- OR (NEW.donation_key_id IS NOT NULL AND typeof(NEW.donation_key_id)<>'integer')
- OR (NEW.endpoint_key_id IS NOT NULL AND typeof(NEW.endpoint_key_id)<>'integer')
- OR (NEW.ord IS NOT NULL AND typeof(NEW.ord)<>'integer')
- OR (NEW.created_at IS NOT NULL AND typeof(NEW.created_at)<>'integer')
- OR (NEW.updated_at IS NOT NULL AND typeof(NEW.updated_at)<>'integer')
-BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
-CREATE TRIGGER generation_two_integer_type_charity_model_bindings_update_guard BEFORE UPDATE ON charity_model_bindings
-WHEN (NEW.id IS NOT NULL AND typeof(NEW.id)<>'integer')
- OR (NEW.charity_model_id IS NOT NULL AND typeof(NEW.charity_model_id)<>'integer')
- OR (NEW.donation_key_id IS NOT NULL AND typeof(NEW.donation_key_id)<>'integer')
- OR (NEW.endpoint_key_id IS NOT NULL AND typeof(NEW.endpoint_key_id)<>'integer')
- OR (NEW.ord IS NOT NULL AND typeof(NEW.ord)<>'integer')
- OR (NEW.created_at IS NOT NULL AND typeof(NEW.created_at)<>'integer')
- OR (NEW.updated_at IS NOT NULL AND typeof(NEW.updated_at)<>'integer')
-BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
+
+
 CREATE TRIGGER generation_two_integer_type_charity_model_outcomes_insert_guard BEFORE INSERT ON charity_model_outcomes
 WHEN (NEW.model_id IS NOT NULL AND typeof(NEW.model_id)<>'integer')
  OR (NEW.slot IS NOT NULL AND typeof(NEW.slot)<>'integer')
@@ -2803,26 +2749,8 @@ CREATE TRIGGER generation_two_integer_type_endpoint_key_suspensions_update_guard
 WHEN (NEW.endpoint_key_id IS NOT NULL AND typeof(NEW.endpoint_key_id)<>'integer')
  OR (NEW.created_at IS NOT NULL AND typeof(NEW.created_at)<>'integer')
 BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
-CREATE TRIGGER generation_two_integer_type_endpoint_keys_insert_guard BEFORE INSERT ON endpoint_keys
-WHEN (NEW.id IS NOT NULL AND typeof(NEW.id)<>'integer')
- OR (NEW.endpoint_id IS NOT NULL AND typeof(NEW.endpoint_id)<>'integer')
- OR (NEW.secret_ref_id IS NOT NULL AND typeof(NEW.secret_ref_id)<>'integer')
- OR (NEW.enabled IS NOT NULL AND typeof(NEW.enabled)<>'integer')
- OR (NEW.force_store_false IS NOT NULL AND typeof(NEW.force_store_false)<>'integer')
- OR (NEW.revision IS NOT NULL AND typeof(NEW.revision)<>'integer')
- OR (NEW.created_at IS NOT NULL AND typeof(NEW.created_at)<>'integer')
- OR (NEW.updated_at IS NOT NULL AND typeof(NEW.updated_at)<>'integer')
-BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
-CREATE TRIGGER generation_two_integer_type_endpoint_keys_update_guard BEFORE UPDATE ON endpoint_keys
-WHEN (NEW.id IS NOT NULL AND typeof(NEW.id)<>'integer')
- OR (NEW.endpoint_id IS NOT NULL AND typeof(NEW.endpoint_id)<>'integer')
- OR (NEW.secret_ref_id IS NOT NULL AND typeof(NEW.secret_ref_id)<>'integer')
- OR (NEW.enabled IS NOT NULL AND typeof(NEW.enabled)<>'integer')
- OR (NEW.force_store_false IS NOT NULL AND typeof(NEW.force_store_false)<>'integer')
- OR (NEW.revision IS NOT NULL AND typeof(NEW.revision)<>'integer')
- OR (NEW.created_at IS NOT NULL AND typeof(NEW.created_at)<>'integer')
- OR (NEW.updated_at IS NOT NULL AND typeof(NEW.updated_at)<>'integer')
-BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
+
+
 CREATE TRIGGER generation_two_integer_type_endpoints_insert_guard BEFORE INSERT ON endpoints
 WHEN (NEW.id IS NOT NULL AND typeof(NEW.id)<>'integer')
  OR (NEW.user_id IS NOT NULL AND typeof(NEW.user_id)<>'integer')
@@ -3217,22 +3145,8 @@ WHEN (NEW.id IS NOT NULL AND typeof(NEW.id)<>'integer')
  OR (NEW.revision IS NOT NULL AND typeof(NEW.revision)<>'integer')
  OR (NEW.changed_at IS NOT NULL AND typeof(NEW.changed_at)<>'integer')
 BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
-CREATE TRIGGER generation_two_integer_type_model_bindings_insert_guard BEFORE INSERT ON model_bindings
-WHEN (NEW.id IS NOT NULL AND typeof(NEW.id)<>'integer')
- OR (NEW.model_id IS NOT NULL AND typeof(NEW.model_id)<>'integer')
- OR (NEW.endpoint_key_id IS NOT NULL AND typeof(NEW.endpoint_key_id)<>'integer')
- OR (NEW.ord IS NOT NULL AND typeof(NEW.ord)<>'integer')
- OR (NEW.created_at IS NOT NULL AND typeof(NEW.created_at)<>'integer')
- OR (NEW.updated_at IS NOT NULL AND typeof(NEW.updated_at)<>'integer')
-BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
-CREATE TRIGGER generation_two_integer_type_model_bindings_update_guard BEFORE UPDATE ON model_bindings
-WHEN (NEW.id IS NOT NULL AND typeof(NEW.id)<>'integer')
- OR (NEW.model_id IS NOT NULL AND typeof(NEW.model_id)<>'integer')
- OR (NEW.endpoint_key_id IS NOT NULL AND typeof(NEW.endpoint_key_id)<>'integer')
- OR (NEW.ord IS NOT NULL AND typeof(NEW.ord)<>'integer')
- OR (NEW.created_at IS NOT NULL AND typeof(NEW.created_at)<>'integer')
- OR (NEW.updated_at IS NOT NULL AND typeof(NEW.updated_at)<>'integer')
-BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
+
+
 CREATE TRIGGER generation_two_integer_type_model_catalog_entries_insert_guard BEFORE INSERT ON model_catalog_entries
 WHEN (NEW.id IS NOT NULL AND typeof(NEW.id)<>'integer')
  OR (NEW.endpoint_key_id IS NOT NULL AND typeof(NEW.endpoint_key_id)<>'integer')
@@ -3247,20 +3161,8 @@ WHEN (NEW.id IS NOT NULL AND typeof(NEW.id)<>'integer')
  OR (NEW.created_at IS NOT NULL AND typeof(NEW.created_at)<>'integer')
  OR (NEW.updated_at IS NOT NULL AND typeof(NEW.updated_at)<>'integer')
 BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
-CREATE TRIGGER generation_two_integer_type_model_discovery_evidence_insert_guard BEFORE INSERT ON model_discovery_evidence
-WHEN (NEW.endpoint_key_id IS NOT NULL AND typeof(NEW.endpoint_key_id)<>'integer')
- OR (NEW.revision IS NOT NULL AND typeof(NEW.revision)<>'integer')
- OR (NEW.started_at IS NOT NULL AND typeof(NEW.started_at)<>'integer')
- OR (NEW.completed_at IS NOT NULL AND typeof(NEW.completed_at)<>'integer')
- OR (NEW.fetched_count IS NOT NULL AND typeof(NEW.fetched_count)<>'integer')
-BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
-CREATE TRIGGER generation_two_integer_type_model_discovery_evidence_update_guard BEFORE UPDATE ON model_discovery_evidence
-WHEN (NEW.endpoint_key_id IS NOT NULL AND typeof(NEW.endpoint_key_id)<>'integer')
- OR (NEW.revision IS NOT NULL AND typeof(NEW.revision)<>'integer')
- OR (NEW.started_at IS NOT NULL AND typeof(NEW.started_at)<>'integer')
- OR (NEW.completed_at IS NOT NULL AND typeof(NEW.completed_at)<>'integer')
- OR (NEW.fetched_count IS NOT NULL AND typeof(NEW.fetched_count)<>'integer')
-BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
+
+
 CREATE TRIGGER generation_two_integer_type_model_pair_catalog_insert_guard BEFORE INSERT ON model_pair_catalog
 WHEN (NEW.endpoint_key_id IS NOT NULL AND typeof(NEW.endpoint_key_id)<>'integer')
  OR (NEW.automatic_supports IS NOT NULL AND typeof(NEW.automatic_supports)<>'integer')
@@ -3868,11 +3770,11 @@ CREATE INDEX idx_endpoints_base_users ON endpoints(base_url,user_id,id);
 CREATE INDEX idx_shared_pools_created ON shared_pools(created_at,id);
 CREATE INDEX idx_request_logs_started ON request_logs(started_at,id);
 CREATE INDEX idx_models_user_updated ON models(user_id,updated_at,id);
-CREATE INDEX idx_model_bindings_key_browse ON model_bindings(endpoint_key_id,upstream_model_id,id);
+
 CREATE INDEX idx_model_catalog_key_source ON model_catalog_entries(endpoint_key_id,source_type,id);
 CREATE INDEX idx_mainstream_channels_updated ON mainstream_channels(updated_at,id);
 CREATE INDEX idx_donations_owner_page ON donations(user_id,id);
-CREATE INDEX idx_charity_bindings_key ON charity_model_bindings(donation_key_id,id);
+
 CREATE INDEX idx_donation_keys_source_page ON donation_keys(
  COALESCE(mainstream_channel_id,''),
  CASE WHEN mainstream_channel_id IS NULL THEN connector_type ELSE '' END,
@@ -4729,7 +4631,19 @@ WHEN (NEW.rejection_stage IS NULL AND (NEW.rejection_reason IS NOT NULL OR NEW.r
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/chat/completions' AND NEW.route_kind IN ('openai_chat_completions','charity_chat_completions'))
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/embeddings' AND NEW.route_kind IN ('openai_embeddings','charity_embeddings'))
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/images/generations' AND NEW.route_kind IN ('openai_images_generations','charity_images_generations'))
- OR (NEW.request_method='POST' AND NEW.request_path='/v1/decisions' AND NEW.route_kind IN ('openai_decisions','charity_decisions')))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/decisions' AND NEW.route_kind IN ('openai_decisions','charity_decisions'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/responses' AND NEW.route_kind IN ('openai_responses','charity_responses'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/responses/compact' AND NEW.route_kind IN ('openai_responses_compact','charity_responses_compact'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/responses/input_tokens' AND NEW.route_kind IN ('openai_responses_input_tokens','charity_responses_input_tokens'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/completions' AND NEW.route_kind IN ('openai_completions','charity_completions'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/images/edits' AND NEW.route_kind IN ('openai_images_edits','charity_images_edits'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/images/variations' AND NEW.route_kind IN ('openai_images_variations','charity_images_variations'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/audio/speech' AND NEW.route_kind IN ('openai_audio_speech','charity_audio_speech'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/audio/transcriptions' AND NEW.route_kind IN ('openai_audio_transcriptions','charity_audio_transcriptions'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/audio/translations' AND NEW.route_kind IN ('openai_audio_translations','charity_audio_translations'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/moderations' AND NEW.route_kind IN ('openai_moderations','charity_moderations'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/rerank' AND NEW.route_kind IN ('openai_rerank','charity_rerank'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/systemone' AND NEW.route_kind IN ('openai_systemone','charity_systemone')))
  OR NEW.caller_result_class IS NOT 'failed' OR NEW.state<>'terminal' OR NEW.accounting_state<>'none' OR NEW.account_reserved_milli<>0 OR NEW.ledger_rows_remaining<>X'00000000000000000000000000000000')) BEGIN SELECT RAISE(ABORT,'invalid pre-handler rejection'); END;
 CREATE TRIGGER logical_requests_rejection_update BEFORE UPDATE ON logical_requests
 WHEN (NEW.rejection_stage IS NULL AND (NEW.rejection_reason IS NOT NULL OR NEW.request_method IS NOT NULL OR NEW.request_path IS NOT NULL))
@@ -4738,7 +4652,19 @@ WHEN (NEW.rejection_stage IS NULL AND (NEW.rejection_reason IS NOT NULL OR NEW.r
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/chat/completions' AND NEW.route_kind IN ('openai_chat_completions','charity_chat_completions'))
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/embeddings' AND NEW.route_kind IN ('openai_embeddings','charity_embeddings'))
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/images/generations' AND NEW.route_kind IN ('openai_images_generations','charity_images_generations'))
- OR (NEW.request_method='POST' AND NEW.request_path='/v1/decisions' AND NEW.route_kind IN ('openai_decisions','charity_decisions')))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/decisions' AND NEW.route_kind IN ('openai_decisions','charity_decisions'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/responses' AND NEW.route_kind IN ('openai_responses','charity_responses'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/responses/compact' AND NEW.route_kind IN ('openai_responses_compact','charity_responses_compact'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/responses/input_tokens' AND NEW.route_kind IN ('openai_responses_input_tokens','charity_responses_input_tokens'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/completions' AND NEW.route_kind IN ('openai_completions','charity_completions'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/images/edits' AND NEW.route_kind IN ('openai_images_edits','charity_images_edits'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/images/variations' AND NEW.route_kind IN ('openai_images_variations','charity_images_variations'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/audio/speech' AND NEW.route_kind IN ('openai_audio_speech','charity_audio_speech'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/audio/transcriptions' AND NEW.route_kind IN ('openai_audio_transcriptions','charity_audio_transcriptions'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/audio/translations' AND NEW.route_kind IN ('openai_audio_translations','charity_audio_translations'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/moderations' AND NEW.route_kind IN ('openai_moderations','charity_moderations'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/rerank' AND NEW.route_kind IN ('openai_rerank','charity_rerank'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/systemone' AND NEW.route_kind IN ('openai_systemone','charity_systemone')))
  OR NEW.caller_result_class IS NOT 'failed' OR NEW.state<>'terminal' OR NEW.accounting_state<>'none' OR NEW.account_reserved_milli<>0 OR NEW.ledger_rows_remaining<>X'00000000000000000000000000000000')) BEGIN SELECT RAISE(ABORT,'invalid pre-handler rejection'); END;
 CREATE TRIGGER request_logs_rejection_insert BEFORE INSERT ON request_logs
 WHEN (NEW.rejection_stage IS NULL AND (NEW.rejection_reason IS NOT NULL OR NEW.request_method IS NOT NULL OR NEW.request_path IS NOT NULL))
@@ -4747,7 +4673,19 @@ WHEN (NEW.rejection_stage IS NULL AND (NEW.rejection_reason IS NOT NULL OR NEW.r
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/chat/completions' AND NEW.route_kind IN ('openai_chat_completions','charity_chat_completions'))
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/embeddings' AND NEW.route_kind IN ('openai_embeddings','charity_embeddings'))
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/images/generations' AND NEW.route_kind IN ('openai_images_generations','charity_images_generations'))
- OR (NEW.request_method='POST' AND NEW.request_path='/v1/decisions' AND NEW.route_kind IN ('openai_decisions','charity_decisions')))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/decisions' AND NEW.route_kind IN ('openai_decisions','charity_decisions'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/responses' AND NEW.route_kind IN ('openai_responses','charity_responses'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/responses/compact' AND NEW.route_kind IN ('openai_responses_compact','charity_responses_compact'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/responses/input_tokens' AND NEW.route_kind IN ('openai_responses_input_tokens','charity_responses_input_tokens'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/completions' AND NEW.route_kind IN ('openai_completions','charity_completions'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/images/edits' AND NEW.route_kind IN ('openai_images_edits','charity_images_edits'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/images/variations' AND NEW.route_kind IN ('openai_images_variations','charity_images_variations'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/audio/speech' AND NEW.route_kind IN ('openai_audio_speech','charity_audio_speech'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/audio/transcriptions' AND NEW.route_kind IN ('openai_audio_transcriptions','charity_audio_transcriptions'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/audio/translations' AND NEW.route_kind IN ('openai_audio_translations','charity_audio_translations'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/moderations' AND NEW.route_kind IN ('openai_moderations','charity_moderations'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/rerank' AND NEW.route_kind IN ('openai_rerank','charity_rerank'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/systemone' AND NEW.route_kind IN ('openai_systemone','charity_systemone')))
  OR NEW.caller_result_class IS NOT 'failed' OR NEW.attempt_count<>0 OR NEW.uncached_input_tokens<>0 OR NEW.cache_write_input_tokens<>0 OR NEW.cache_read_input_tokens<>0 OR NEW.output_tokens<>0 OR NEW.usage_unknown<>0
  OR NOT EXISTS(SELECT 1 FROM logical_requests r WHERE r.id=NEW.logical_request_id AND r.rejection_stage IS NEW.rejection_stage AND r.rejection_reason IS NEW.rejection_reason AND r.request_method IS NEW.request_method AND r.request_path IS NEW.request_path))) BEGIN SELECT RAISE(ABORT,'invalid pre-handler rejection'); END;
 CREATE TRIGGER request_logs_rejection_update BEFORE UPDATE ON request_logs
@@ -4757,7 +4695,19 @@ WHEN (NEW.rejection_stage IS NULL AND (NEW.rejection_reason IS NOT NULL OR NEW.r
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/chat/completions' AND NEW.route_kind IN ('openai_chat_completions','charity_chat_completions'))
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/embeddings' AND NEW.route_kind IN ('openai_embeddings','charity_embeddings'))
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/images/generations' AND NEW.route_kind IN ('openai_images_generations','charity_images_generations'))
- OR (NEW.request_method='POST' AND NEW.request_path='/v1/decisions' AND NEW.route_kind IN ('openai_decisions','charity_decisions')))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/decisions' AND NEW.route_kind IN ('openai_decisions','charity_decisions'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/responses' AND NEW.route_kind IN ('openai_responses','charity_responses'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/responses/compact' AND NEW.route_kind IN ('openai_responses_compact','charity_responses_compact'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/responses/input_tokens' AND NEW.route_kind IN ('openai_responses_input_tokens','charity_responses_input_tokens'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/completions' AND NEW.route_kind IN ('openai_completions','charity_completions'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/images/edits' AND NEW.route_kind IN ('openai_images_edits','charity_images_edits'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/images/variations' AND NEW.route_kind IN ('openai_images_variations','charity_images_variations'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/audio/speech' AND NEW.route_kind IN ('openai_audio_speech','charity_audio_speech'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/audio/transcriptions' AND NEW.route_kind IN ('openai_audio_transcriptions','charity_audio_transcriptions'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/audio/translations' AND NEW.route_kind IN ('openai_audio_translations','charity_audio_translations'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/moderations' AND NEW.route_kind IN ('openai_moderations','charity_moderations'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/rerank' AND NEW.route_kind IN ('openai_rerank','charity_rerank'))
+ OR (NEW.request_method='POST' AND NEW.request_path='/v1/systemone' AND NEW.route_kind IN ('openai_systemone','charity_systemone')))
  OR NEW.caller_result_class IS NOT 'failed' OR NEW.attempt_count<>0 OR NEW.uncached_input_tokens<>0 OR NEW.cache_write_input_tokens<>0 OR NEW.cache_read_input_tokens<>0 OR NEW.output_tokens<>0 OR NEW.usage_unknown<>0
  OR NOT EXISTS(SELECT 1 FROM logical_requests r WHERE r.id=NEW.logical_request_id AND r.rejection_stage IS NEW.rejection_stage AND r.rejection_reason IS NEW.rejection_reason AND r.request_method IS NEW.request_method AND r.request_path IS NEW.request_path))) BEGIN SELECT RAISE(ABORT,'invalid pre-handler rejection'); END;
 CREATE INDEX idx_request_logs_phase ON request_logs(user_id,rejection_stage,started_at,id);
@@ -6130,7 +6080,7 @@ CREATE TABLE resource_operation_status (
  actor_scope_hash BLOB NOT NULL CHECK(length(actor_scope_hash)=32),
  key_hash BLOB NOT NULL CHECK(length(key_hash)=32),
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- stage TEXT NOT NULL CHECK(stage IN ('endpoint','key','catalog_refresh','catalog_manual','model','binding_batch')),
+ stage TEXT NOT NULL CHECK(stage IN ('endpoint','key','catalog_refresh','catalog_manual','model','binding_batch','connection','credential','credential_version','discovery_source','source_refresh')),
  status TEXT NOT NULL CHECK(status IN ('recorded','in_progress')),
  result_json TEXT NOT NULL CHECK(json_valid(result_json) AND json_type(result_json)='object' AND length(CAST(result_json AS BLOB))<=16384),
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402214399),
@@ -6387,28 +6337,28 @@ WHEN NOT COALESCE((NEW.state IN ('reserved') AND NEW.streak_disposition IS NULL 
  OR (NEW.state IN ('committed','released') AND (
   (NEW.state='committed' AND NEW.streak_disposition='success' AND ((NEW.failure_origin='none' AND NEW.protocol_success=1) OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','recovery_unknown') AND NEW.protocol_success=0)))
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND COALESCE(NEW.protocol_success,0)=0)
-  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND (EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.claim_id AND r.http_status<>200) OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.claim_id AND sb.period IS NOT NULL AND sb.accepted_at IS NULL)))) AND COALESCE(NEW.protocol_success,0)=0))),0)
+  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin='upstream_response' AND EXISTS(SELECT 1 FROM dispatch_caller_parameter_errors ce WHERE ce.claim_id=NEW.claim_id)) OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND (EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.claim_id AND r.http_status<>200) OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.claim_id AND sb.period IS NOT NULL AND sb.accepted_at IS NULL)))) AND COALESCE(NEW.protocol_success,0)=0))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
 CREATE TRIGGER donation_usage_reservations_outcome_update_guard BEFORE UPDATE ON donation_usage_reservations
 WHEN NOT COALESCE((NEW.state IN ('reserved') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
  OR (NEW.state IN ('committed','released') AND (
   (NEW.state='committed' AND NEW.streak_disposition='success' AND ((NEW.failure_origin='none' AND NEW.protocol_success=1) OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','recovery_unknown') AND NEW.protocol_success=0)))
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND COALESCE(NEW.protocol_success,0)=0)
-  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND ((EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.claim_id AND r.http_status<>200) OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.claim_id AND sb.period IS NOT NULL AND sb.accepted_at IS NULL)) OR (OLD.streak_disposition='neutral' AND OLD.failure_origin=NEW.failure_origin)))) AND COALESCE(NEW.protocol_success,0)=0))),0)
+  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin='upstream_response' AND EXISTS(SELECT 1 FROM dispatch_caller_parameter_errors ce WHERE ce.claim_id=NEW.claim_id)) OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND ((EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.claim_id AND r.http_status<>200) OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.claim_id AND sb.period IS NOT NULL AND sb.accepted_at IS NULL)) OR (OLD.streak_disposition='neutral' AND OLD.failure_origin=NEW.failure_origin)))) AND COALESCE(NEW.protocol_success,0)=0))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
 CREATE TRIGGER dispatch_claims_outcome_insert_guard BEFORE INSERT ON dispatch_claims
 WHEN NOT COALESCE((NEW.state IN ('claimed','dispatched') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
  OR (NEW.state IN ('committed','released') AND (
   (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin IN ('none','upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','recovery_unknown'))
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout'))
-  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND (EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.id AND r.http_status<>200) OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.id AND sb.period IS NOT NULL AND sb.accepted_at IS NULL))))))),0)
+  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin='upstream_response' AND NEW.purpose='charity' AND EXISTS(SELECT 1 FROM dispatch_caller_parameter_errors ce JOIN request_attempts a ON a.claim_id=ce.claim_id WHERE ce.claim_id=NEW.id AND a.result_kind='response' AND a.upstream_status=ce.http_status AND a.upstream_code=ce.error_code)) OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND (EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.id AND r.http_status<>200) OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.id AND sb.period IS NOT NULL AND sb.accepted_at IS NULL))))))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
 CREATE TRIGGER dispatch_claims_outcome_update_guard BEFORE UPDATE ON dispatch_claims
 WHEN NOT COALESCE((NEW.state IN ('claimed','dispatched') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
  OR (NEW.state IN ('committed','released') AND (
   (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin IN ('none','upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','recovery_unknown'))
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout'))
-  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND ((EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.id AND r.http_status<>200) OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.id AND sb.period IS NOT NULL AND sb.accepted_at IS NULL)) OR (OLD.streak_disposition='neutral' AND OLD.failure_origin=NEW.failure_origin))))))),0)
+  OR (NEW.streak_disposition='neutral' AND (NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') OR (NEW.failure_origin='upstream_response' AND NEW.purpose='charity' AND EXISTS(SELECT 1 FROM dispatch_caller_parameter_errors ce JOIN request_attempts a ON a.claim_id=ce.claim_id WHERE ce.claim_id=NEW.id AND a.result_kind='response' AND a.upstream_status=ce.http_status AND a.upstream_code=ce.error_code)) OR (NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND ((EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.id AND r.http_status<>200) OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.id AND sb.period IS NOT NULL AND sb.accepted_at IS NULL)) OR (OLD.streak_disposition='neutral' AND OLD.failure_origin=NEW.failure_origin))))))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
 CREATE TRIGGER request_log_origin_capture AFTER INSERT ON request_logs
 WHEN NEW.user_id IS NOT NULL AND NEW.origin_user_id IS NULL
@@ -6541,7 +6491,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,26);
+INSERT INTO schema_state(id,version) VALUES(1,33);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -6852,8 +6802,8 @@ CREATE TABLE charity_header_sessions (
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  model_id INTEGER NOT NULL REFERENCES charity_models(id) ON DELETE CASCADE,
  name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 128),
- value TEXT NOT NULL CHECK(length(value) IN (32,36)),
- format TEXT NOT NULL CHECK(format IN ('uuid_v4','hex_32')),
+ value TEXT NOT NULL CHECK(length(value) IN (30,32,36)),
+ format TEXT NOT NULL CHECK(format IN ('uuid_v4','hex_32','opencode_session','opencode_message','opencode_part')),
  idle_seconds INTEGER NOT NULL CHECK(idle_seconds BETWEEN 1 AND 86400),
  expires_at INTEGER NOT NULL CHECK(expires_at BETWEEN 0 AND 253402387199),
  PRIMARY KEY(user_id,model_id,name)
@@ -6864,8 +6814,8 @@ CREATE TABLE charity_header_uses (
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  model_id INTEGER NOT NULL REFERENCES charity_models(id) ON DELETE CASCADE,
  name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 128),
- value TEXT NOT NULL CHECK(length(value) IN (32,36)),
- idle_seconds INTEGER NOT NULL CHECK(idle_seconds BETWEEN 1 AND 86400),
+ value TEXT NOT NULL CHECK(length(value) IN (30,32,36)),
+ idle_seconds INTEGER NOT NULL CHECK(idle_seconds BETWEEN 0 AND 86400),
  sent INTEGER NOT NULL DEFAULT 0 CHECK(sent IN (0,1)),
  PRIMARY KEY(logical_request_id,name)
 ) STRICT;
@@ -7059,3 +7009,776 @@ CREATE TABLE channel_charity_binding_mappings (
  PRIMARY KEY(channel_id,ord),
  UNIQUE(channel_id,upstream_model_id,charity_model_id)
 ) STRICT;
+
+CREATE TABLE endpoint_backoff_policies (
+ connector_type TEXT NOT NULL CHECK(length(connector_type) BETWEEN 1 AND 64),
+ base_url TEXT NOT NULL CHECK(length(base_url) BETWEEN 1 AND 4096),
+ revision INTEGER NOT NULL CHECK(revision>=1),
+ rules_json TEXT NOT NULL CHECK(length(CAST(rules_json AS BLOB))<=8192 AND json_valid(rules_json) AND json_type(rules_json)='array' AND json_array_length(rules_json)<=8),
+ PRIMARY KEY(connector_type,base_url)
+) STRICT;
+ALTER TABLE dispatch_smart_backoff_facts ADD COLUMN policy_revision INTEGER NOT NULL DEFAULT 0 CHECK(policy_revision>=0);
+ALTER TABLE dispatch_smart_backoff_facts ADD COLUMN rules_json TEXT NOT NULL DEFAULT '[]' CHECK(length(CAST(rules_json AS BLOB))<=8192 AND json_valid(rules_json) AND json_type(rules_json)='array' AND json_array_length(rules_json)<=8);
+ALTER TABLE dispatch_smart_backoff_facts ADD COLUMN rule_index INTEGER NOT NULL DEFAULT 0 CHECK(rule_index BETWEEN 0 AND 8);
+ALTER TABLE models ADD COLUMN cloudflare_proxy_enabled INTEGER NOT NULL DEFAULT 1 CHECK(cloudflare_proxy_enabled IN (0,1));
+ALTER TABLE charity_models ADD COLUMN cloudflare_proxy_enabled INTEGER NOT NULL DEFAULT 0 CHECK(cloudflare_proxy_enabled IN (0,1));
+
+ALTER TABLE request_attempts ADD COLUMN usage_details TEXT NOT NULL DEFAULT '{}' CHECK(typeof(usage_details)='text' AND length(CAST(usage_details AS BLOB))<=4096 AND json_valid(usage_details) AND json_type(usage_details)='object');
+ALTER TABLE donation_usage_reservations ADD COLUMN pricing_details TEXT NOT NULL DEFAULT '{}' CHECK(typeof(pricing_details)='text' AND length(CAST(pricing_details AS BLOB))<=2048 AND json_valid(pricing_details) AND json_type(pricing_details)='object');
+ALTER TABLE request_logs ADD COLUMN usage_details TEXT NOT NULL DEFAULT '{}' CHECK(typeof(usage_details)='text' AND length(CAST(usage_details AS BLOB))<=4096 AND json_valid(usage_details) AND json_type(usage_details)='object');
+ALTER TABLE charity_reservations ADD COLUMN usage_details TEXT NOT NULL DEFAULT '{}' CHECK(typeof(usage_details)='text' AND length(CAST(usage_details AS BLOB))<=4096 AND json_valid(usage_details) AND json_type(usage_details)='object');
+ALTER TABLE users ADD COLUMN light_rpm_limit INTEGER CHECK(light_rpm_limit IS NULL OR (typeof(light_rpm_limit)='integer' AND light_rpm_limit BETWEEN 1 AND 4096));
+ALTER TABLE users ADD COLUMN light_concurrency_limit INTEGER CHECK(light_concurrency_limit IS NULL OR (typeof(light_concurrency_limit)='integer' AND light_concurrency_limit BETWEEN 1 AND 100000));
+ALTER TABLE users ADD COLUMN global_rpm_limit INTEGER CHECK(global_rpm_limit IS NULL OR (typeof(global_rpm_limit)='integer' AND global_rpm_limit BETWEEN 1 AND 4096));
+ALTER TABLE risk_audit_minutes ADD COLUMN saturation_micros_millis INTEGER CHECK(saturation_micros_millis IS NULL OR (typeof(saturation_micros_millis)='integer' AND saturation_micros_millis BETWEEN 0 AND 60000000000));
+
+ALTER TABLE models ADD COLUMN session_headers TEXT NOT NULL DEFAULT '[]' CHECK(length(session_headers)<=4096 AND json_valid(session_headers) AND json_type(session_headers)='array');
+CREATE TABLE personal_header_sessions (
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ model_id INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+ name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 128),
+ value TEXT NOT NULL CHECK(length(value) IN (30,32,36)),
+ format TEXT NOT NULL CHECK(format IN ('uuid_v4','hex_32','opencode_session','opencode_message','opencode_part')),
+ idle_seconds INTEGER NOT NULL CHECK(idle_seconds BETWEEN 1 AND 86400),
+ expires_at INTEGER NOT NULL CHECK(expires_at BETWEEN 0 AND 253402387199),
+ PRIMARY KEY(user_id,model_id,name)
+) STRICT;
+CREATE INDEX idx_personal_header_expiry ON personal_header_sessions(expires_at);
+CREATE TABLE personal_header_uses (
+ logical_request_id TEXT NOT NULL REFERENCES logical_requests(id) ON DELETE CASCADE,
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ model_id INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+ name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 128),
+ value TEXT NOT NULL CHECK(length(value) IN (30,32,36)),
+ idle_seconds INTEGER NOT NULL CHECK(idle_seconds BETWEEN 0 AND 86400),
+ sent INTEGER NOT NULL DEFAULT 0 CHECK(sent IN (0,1)),
+ PRIMARY KEY(logical_request_id,name)
+) STRICT;
+CREATE INDEX idx_personal_header_active ON personal_header_uses(user_id,model_id,name,value);
+
+CREATE TABLE global_pressure_state (
+ id INTEGER PRIMARY KEY CHECK(id=1),
+ started_at INTEGER NOT NULL CHECK(started_at>0),
+ rpm_peak INTEGER NOT NULL CHECK(rpm_peak>=0),
+ concurrency_peak INTEGER NOT NULL CHECK(concurrency_peak>=0)
+) STRICT;
+CREATE TABLE global_pressure_samples (
+ observed_at INTEGER PRIMARY KEY CHECK(observed_at>0),
+ rpm INTEGER NOT NULL CHECK(rpm>=0),
+ concurrency INTEGER NOT NULL CHECK(concurrency>=0)
+) STRICT;
+
+CREATE TABLE dispatch_caller_parameter_errors (
+ claim_id TEXT PRIMARY KEY REFERENCES dispatch_claims(id) ON DELETE CASCADE,
+ http_status INTEGER NOT NULL CHECK(http_status IN (400,422)),
+ error_code TEXT NOT NULL CHECK(error_code IN ('invalid_value','invalid_type','unsupported_parameter','unsupported_value') OR (http_status=400 AND error_code='InvalidParameter'))
+) STRICT;
+CREATE TRIGGER dispatch_caller_parameter_errors_insert_guard BEFORE INSERT ON dispatch_caller_parameter_errors
+WHEN NOT EXISTS(SELECT 1 FROM dispatch_claims c WHERE c.id=NEW.claim_id AND c.purpose='charity' AND c.state='dispatched')
+ OR EXISTS(SELECT 1 FROM dispatch_response_starts r WHERE r.claim_id=NEW.claim_id)
+ OR EXISTS(SELECT 1 FROM dispatch_retry_after_observations r WHERE r.claim_id=NEW.claim_id AND r.http_status=200)
+ OR EXISTS(SELECT 1 FROM dispatch_smart_backoff_facts sb WHERE sb.claim_id=NEW.claim_id AND sb.accepted_at IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'invalid caller parameter error'); END;
+CREATE TRIGGER dispatch_caller_parameter_errors_update_guard BEFORE UPDATE ON dispatch_caller_parameter_errors
+BEGIN SELECT RAISE(ABORT,'caller parameter error is immutable'); END;
+
+CREATE TABLE service_connections (
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ name TEXT NOT NULL DEFAULT '' CHECK(length(name) BETWEEN 1 AND 128 AND instr(name,char(0))=0), note TEXT NOT NULL DEFAULT '' CHECK(length(note) BETWEEN 0 AND 1024 AND instr(note,char(0))=0), revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799),
+ UNIQUE(id,user_id), CHECK(updated_at>=created_at)
+) STRICT;
+CREATE INDEX idx_connections_owner ON service_connections(user_id,id);
+CREATE TABLE credentials (
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+ connection_id INTEGER,
+ note TEXT NOT NULL DEFAULT '' CHECK(length(note) BETWEEN 0 AND 1024 AND instr(note,char(0))=0), enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)), revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807),
+ current_version_id INTEGER,
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799),
+ deleted_at INTEGER CHECK(deleted_at IS NULL OR deleted_at BETWEEN 0 AND 253402300799),
+ UNIQUE(id,user_id),
+ FOREIGN KEY(connection_id,user_id) REFERENCES service_connections(id,user_id) DEFERRABLE INITIALLY DEFERRED,
+ FOREIGN KEY(id,current_version_id) REFERENCES credential_versions(credential_id,id) DEFERRABLE INITIALLY DEFERRED,
+ CHECK(updated_at>=created_at),
+ CHECK((deleted_at IS NULL AND user_id IS NOT NULL AND current_version_id IS NOT NULL)
+   OR (deleted_at IS NOT NULL AND enabled=0 AND current_version_id IS NULL AND connection_id IS NULL AND note=''))
+) STRICT;
+CREATE INDEX idx_credentials_owner ON credentials(user_id,id);
+CREATE INDEX idx_credentials_connection ON credentials(connection_id,id);
+CREATE TABLE credential_versions (
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ credential_id INTEGER NOT NULL REFERENCES credentials(id) ON DELETE CASCADE,
+ version INTEGER NOT NULL CHECK(version BETWEEN 1 AND 9223372036854775807),
+ secret_ref_id INTEGER UNIQUE REFERENCES endpoint_key_secrets(id) ON DELETE RESTRICT,
+ display_head TEXT NOT NULL DEFAULT '' CHECK(length(CAST(display_head AS BLOB))<=16 AND display_head NOT GLOB '*[^ -~]*'),
+ display_tail TEXT NOT NULL DEFAULT '' CHECK(length(CAST(display_tail AS BLOB))<=16 AND display_tail NOT GLOB '*[^ -~]*'),
+ enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)), revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
+ retired_at INTEGER CHECK(retired_at IS NULL OR retired_at BETWEEN 0 AND 253402300799),
+ UNIQUE(credential_id,version), UNIQUE(credential_id,id),
+ CHECK(secret_ref_id IS NOT NULL OR (display_head='' AND display_tail='')),
+ CHECK((secret_ref_id IS NOT NULL AND retired_at IS NULL) OR (secret_ref_id IS NULL AND retired_at IS NOT NULL))
+) STRICT;
+
+CREATE INDEX idx_endpoints_connection ON endpoints(connection_id,id);
+
+CREATE TABLE endpoint_key_grant_revisions (
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ endpoint_key_id INTEGER NOT NULL, endpoint_id INTEGER NOT NULL, owner_user_id INTEGER NOT NULL,
+ credential_id INTEGER NOT NULL, credential_version_id INTEGER NOT NULL,
+ grant_revision INTEGER NOT NULL CHECK(grant_revision BETWEEN 1 AND 9223372036854775807),
+ native_service_mask INTEGER NOT NULL CHECK(native_service_mask BETWEEN 1 AND 524287), rerank_format TEXT NOT NULL DEFAULT '' CHECK(rerank_format IN ('','generic','cohere','jina','voyage','siliconflow')),
+ report_fingerprint BLOB NOT NULL CHECK(length(report_fingerprint)=32),
+ origin TEXT NOT NULL CHECK(origin IN ('legacy','explicit')),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
+ UNIQUE(endpoint_key_id,grant_revision), UNIQUE(endpoint_key_id,id),
+ FOREIGN KEY(endpoint_key_id,endpoint_id) REFERENCES endpoint_keys(id,endpoint_id) ON DELETE CASCADE,
+ FOREIGN KEY(endpoint_id,owner_user_id) REFERENCES endpoints(id,user_id) ON DELETE CASCADE,
+ FOREIGN KEY(credential_id,owner_user_id) REFERENCES credentials(id,user_id) DEFERRABLE INITIALLY DEFERRED,
+ FOREIGN KEY(credential_id,credential_version_id) REFERENCES credential_versions(credential_id,id)
+) STRICT;
+CREATE INDEX idx_grants_credential_version ON endpoint_key_grant_revisions(credential_version_id,id);
+CREATE INDEX idx_grants_fingerprint ON endpoint_key_grant_revisions(report_fingerprint,endpoint_key_id,id);
+CREATE TABLE donation_uses (
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ donation_key_id INTEGER NOT NULL REFERENCES donation_keys(id) ON DELETE CASCADE,
+ native_service_bit INTEGER NOT NULL CHECK(native_service_bit BETWEEN 1 AND 262144 AND (native_service_bit&(native_service_bit-1))=0), enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)), discovery_enabled INTEGER NOT NULL DEFAULT 1 CHECK(discovery_enabled IN (0,1)), revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807),
+ current_approved_revision_id INTEGER, current_pending_revision_id INTEGER,
+ approved_state TEXT NOT NULL DEFAULT 'approved' CHECK(approved_state='approved'),
+ pending_state TEXT NOT NULL DEFAULT 'pending' CHECK(pending_state='pending'),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799),
+ UNIQUE(donation_key_id,native_service_bit),
+ FOREIGN KEY(id,current_approved_revision_id,approved_state) REFERENCES donation_use_revisions(use_id,id,review_state) DEFERRABLE INITIALLY DEFERRED,
+ FOREIGN KEY(id,current_pending_revision_id,pending_state) REFERENCES donation_use_revisions(use_id,id,review_state) DEFERRABLE INITIALLY DEFERRED,
+ CHECK(updated_at>=created_at)
+) STRICT;
+CREATE TABLE donation_use_revisions (
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ use_id INTEGER NOT NULL REFERENCES donation_uses(id) ON DELETE CASCADE,
+ use_revision INTEGER NOT NULL CHECK(use_revision BETWEEN 1 AND 9223372036854775807),
+ grant_revision_id INTEGER REFERENCES endpoint_key_grant_revisions(id) ON DELETE SET NULL,
+ discovery_source_revision_id INTEGER REFERENCES discovery_source_revisions(id) ON DELETE SET NULL,
+ source_grant_revision_id INTEGER NOT NULL CHECK(source_grant_revision_id>0),
+ source_discovery_revision_id INTEGER CHECK(source_discovery_revision_id IS NULL OR source_discovery_revision_id>0),
+ credential_id_snapshot INTEGER NOT NULL CHECK(credential_id_snapshot>0),
+ credential_version INTEGER NOT NULL CHECK(credential_version>0),
+ grant_revision INTEGER NOT NULL CHECK(grant_revision>0),
+ display_head TEXT NOT NULL DEFAULT '' CHECK(length(CAST(display_head AS BLOB))<=16 AND display_head NOT GLOB '*[^ -~]*'),
+ display_tail TEXT NOT NULL DEFAULT '' CHECK(length(CAST(display_tail AS BLOB))<=16 AND display_tail NOT GLOB '*[^ -~]*'),
+ report_fingerprint BLOB CHECK(report_fingerprint IS NULL OR length(report_fingerprint)=32),
+ key_body_review_hmac BLOB CHECK(key_body_review_hmac IS NULL OR length(key_body_review_hmac)=32),
+ origin TEXT NOT NULL CHECK(origin IN ('legacy','initial','rotation','reattachment','service_expansion')),
+ review_state TEXT NOT NULL CHECK(review_state IN ('pending','approved','rejected','cancelled','superseded')),
+ review_reason TEXT NOT NULL DEFAULT '' CHECK(length(review_reason) BETWEEN 0 AND 4096 AND instr(review_reason,char(0))=0),
+ reviewer_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+ reviewer_role TEXT CHECK(reviewer_role IS NULL OR reviewer_role IN ('admin','level5','level6','trainee5')),
+ review_requirement_revision INTEGER CHECK(review_requirement_revision IS NULL OR review_requirement_revision>0),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
+ reviewed_at INTEGER CHECK(reviewed_at IS NULL OR reviewed_at BETWEEN 0 AND 253402300799),
+ UNIQUE(use_id,use_revision), UNIQUE(use_id,id,review_state),
+ CHECK((review_state='pending' AND reviewed_at IS NULL) OR (review_state<>'pending' AND reviewed_at IS NOT NULL)),
+ CHECK(origin='legacy' OR key_body_review_hmac IS NOT NULL)
+) STRICT;
+CREATE INDEX idx_use_revisions_fingerprint ON donation_use_revisions(report_fingerprint,use_id,id) WHERE report_fingerprint IS NOT NULL;
+CREATE INDEX idx_use_revisions_pending_cleanup ON donation_use_revisions(use_id,id) WHERE report_fingerprint IS NOT NULL;
+CREATE INDEX idx_use_revisions_grant ON donation_use_revisions(grant_revision_id,id);
+CREATE INDEX idx_use_revisions_source ON donation_use_revisions(discovery_source_revision_id,id);
+CREATE INDEX idx_use_revisions_latest_result ON donation_use_revisions(use_id,use_revision DESC)
+ WHERE review_state IN ('rejected','cancelled','superseded');
+
+CREATE TABLE discovery_sources (
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ connection_id INTEGER, name TEXT NOT NULL DEFAULT '' CHECK(length(name) BETWEEN 0 AND 128 AND instr(name,char(0))=0), enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)), revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807),
+ current_revision_id INTEGER NOT NULL,
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799),
+ UNIQUE(id,user_id),
+ FOREIGN KEY(connection_id,user_id) REFERENCES service_connections(id,user_id) DEFERRABLE INITIALLY DEFERRED,
+ FOREIGN KEY(id,current_revision_id) REFERENCES discovery_source_revisions(source_id,id) DEFERRABLE INITIALLY DEFERRED,
+ CHECK(updated_at>=created_at)
+) STRICT;
+CREATE INDEX idx_discovery_sources_owner ON discovery_sources(user_id,id);
+CREATE INDEX idx_discovery_sources_connection ON discovery_sources(connection_id,id);
+CREATE TABLE discovery_source_revisions (
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ source_id INTEGER NOT NULL, owner_user_id INTEGER NOT NULL,
+ source_revision INTEGER NOT NULL CHECK(source_revision>0),
+ credential_id INTEGER NOT NULL, credential_version_id INTEGER NOT NULL,
+ canonical_base_url TEXT NOT NULL CHECK(length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096),
+ list_format TEXT NOT NULL CHECK(list_format IN ('openai','anthropic','gemini','ai-sdk-gateway-v3','ai-sdk-gateway-v4')),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
+ UNIQUE(source_id,source_revision), UNIQUE(source_id,id),
+ FOREIGN KEY(source_id,owner_user_id) REFERENCES discovery_sources(id,user_id) ON DELETE CASCADE,
+ FOREIGN KEY(credential_id,owner_user_id) REFERENCES credentials(id,user_id) DEFERRABLE INITIALLY DEFERRED,
+ FOREIGN KEY(credential_id,credential_version_id) REFERENCES credential_versions(credential_id,id)
+) STRICT;
+CREATE INDEX idx_discovery_source_versions ON discovery_source_revisions(credential_version_id,id);
+CREATE TABLE endpoint_key_discovery_sources (
+ endpoint_key_id INTEGER PRIMARY KEY,
+ source_id INTEGER NOT NULL,
+ grant_revision_id INTEGER NOT NULL,
+ source_revision_id INTEGER NOT NULL,
+ credential_version_id INTEGER NOT NULL,
+ FOREIGN KEY(endpoint_key_id,grant_revision_id) REFERENCES endpoint_keys(id,current_grant_revision_id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+ FOREIGN KEY(source_id,source_revision_id) REFERENCES discovery_sources(id,current_revision_id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+ FOREIGN KEY(grant_revision_id,credential_version_id) REFERENCES endpoint_key_grant_revisions(id,credential_version_id) DEFERRABLE INITIALLY DEFERRED,
+ FOREIGN KEY(source_revision_id,credential_version_id) REFERENCES discovery_source_revisions(id,credential_version_id) DEFERRABLE INITIALLY DEFERRED
+) STRICT;
+CREATE INDEX idx_key_discovery_source ON endpoint_key_discovery_sources(source_id,endpoint_key_id);
+CREATE TABLE discovery_source_states (
+ source_revision_id INTEGER PRIMARY KEY REFERENCES discovery_source_revisions(id) ON DELETE CASCADE,
+ result_generation INTEGER NOT NULL DEFAULT 0 CHECK(result_generation BETWEEN 0 AND 9223372036854775807),
+ current_run_id INTEGER, last_successful_run_id INTEGER,
+ updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799),
+ FOREIGN KEY(source_revision_id,current_run_id) REFERENCES discovery_runs(source_revision_id,id) DEFERRABLE INITIALLY DEFERRED,
+ FOREIGN KEY(source_revision_id,last_successful_run_id) REFERENCES discovery_runs(source_revision_id,id) DEFERRABLE INITIALLY DEFERRED
+) STRICT;
+CREATE TABLE discovery_runs (
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ source_revision_id INTEGER REFERENCES discovery_source_revisions(id) ON DELETE SET NULL,
+ source_revision_snapshot INTEGER NOT NULL CHECK(source_revision_snapshot>0),
+ credential_version_id INTEGER REFERENCES credential_versions(id) ON DELETE SET NULL,
+ operation_id TEXT UNIQUE CHECK(operation_id IS NULL OR (length(operation_id)=25 AND substr(operation_id,1,3)='op_' AND substr(operation_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(operation_id,-1,1) IN ('A','Q','g','w'))),
+ operation_hash BLOB CHECK(operation_hash IS NULL OR length(operation_hash)=32),
+ result_generation INTEGER NOT NULL CHECK(result_generation>0),
+ authorization_kind TEXT NOT NULL CHECK(authorization_kind IN ('self','donation_use','legacy')),
+ authorization_use_id INTEGER, authorization_use_revision_id INTEGER,
+ state TEXT NOT NULL CHECK(state IN ('checking','succeeded','failed')),
+ safe_class TEXT NOT NULL DEFAULT 'none' CHECK(safe_class IN ('auth','rate_limit','timeout','protocol','transport','interrupted','region','unavailable','none')),
+ safe_diagnostic TEXT NOT NULL DEFAULT '' CHECK(length(CAST(safe_diagnostic AS BLOB))<=4096),
+ started_at INTEGER NOT NULL CHECK(started_at BETWEEN 0 AND 253402300799),
+ completed_at INTEGER CHECK(completed_at IS NULL OR completed_at BETWEEN 0 AND 253402300799),
+ model_count INTEGER NOT NULL DEFAULT 0 CHECK(model_count BETWEEN 0 AND 10000),
+ UNIQUE(source_revision_id,id), UNIQUE(source_revision_id,result_generation),
+ CHECK((authorization_kind='donation_use' AND authorization_use_id>0 AND authorization_use_revision_id>0)
+   OR (authorization_kind IN ('self','legacy') AND authorization_use_id IS NULL AND authorization_use_revision_id IS NULL)),
+ CHECK((state='checking' AND source_revision_id IS NOT NULL AND credential_version_id IS NOT NULL AND operation_id IS NOT NULL AND operation_hash IS NOT NULL AND completed_at IS NULL AND safe_class='none')
+   OR (state='succeeded' AND completed_at IS NOT NULL AND safe_class='none')
+   OR (state='failed' AND completed_at IS NOT NULL AND safe_class<>'none')),
+ CHECK(completed_at IS NULL OR completed_at>=started_at)
+) STRICT;
+CREATE INDEX idx_discovery_runs_active ON discovery_runs(state,started_at,id);
+CREATE INDEX idx_discovery_runs_version ON discovery_runs(credential_version_id,state,id);
+CREATE INDEX idx_discovery_runs_use ON discovery_runs(authorization_use_revision_id,state,id);
+
+CREATE UNIQUE INDEX idx_catalog_run_source ON model_catalog_entries(discovery_run_id,source_identity) WHERE discovery_run_id IS NOT NULL;
+CREATE INDEX idx_catalog_run_model ON model_catalog_entries(discovery_run_id,normalized_model_id,id);
+
+CREATE TABLE model_binding_targets (
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ binding_id INTEGER NOT NULL REFERENCES model_bindings(id) ON DELETE CASCADE,
+ endpoint_key_id INTEGER NOT NULL REFERENCES endpoint_keys(id) ON DELETE CASCADE,
+ upstream_model_id TEXT NOT NULL CHECK(length(upstream_model_id) BETWEEN 1 AND 512 AND instr(upstream_model_id,char(0))=0),
+ native_service_mask INTEGER NOT NULL CHECK(native_service_mask BETWEEN 1 AND 524287),
+ selection_origin TEXT NOT NULL CHECK(selection_origin IN ('legacy','user','reviewer','preset','metadata')),
+ selection_revision INTEGER CHECK(selection_revision IS NULL OR selection_revision>0),
+ ord INTEGER NOT NULL CHECK(ord BETWEEN 0 AND 511), revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799),
+ UNIQUE(binding_id,ord), UNIQUE(binding_id,endpoint_key_id,upstream_model_id),
+ CHECK(updated_at>=created_at)
+) STRICT;
+CREATE INDEX idx_model_binding_targets_key ON model_binding_targets(endpoint_key_id,upstream_model_id,id);
+CREATE VIEW model_binding_primary_targets AS
+ SELECT b.id AS binding_id,t.id AS target_id,t.endpoint_key_id,t.upstream_model_id,t.native_service_mask
+ FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id
+ WHERE t.ord=(SELECT MIN(first.ord) FROM model_binding_targets first WHERE first.binding_id=b.id);
+CREATE TRIGGER model_binding_targets_empty_root AFTER DELETE ON model_binding_targets
+WHEN NOT EXISTS(SELECT 1 FROM model_binding_targets WHERE binding_id=OLD.binding_id)
+BEGIN DELETE FROM model_bindings WHERE id=OLD.binding_id; END;
+
+CREATE TABLE charity_binding_targets (
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ binding_id INTEGER NOT NULL REFERENCES charity_model_bindings(id) ON DELETE CASCADE,
+ donation_key_id INTEGER NOT NULL REFERENCES donation_keys(id) ON DELETE CASCADE,
+ upstream_model_id TEXT NOT NULL CHECK(length(upstream_model_id) BETWEEN 1 AND 512 AND instr(upstream_model_id,char(0))=0),
+ native_service_mask INTEGER NOT NULL CHECK(native_service_mask BETWEEN 1 AND 524287),
+ selection_origin TEXT NOT NULL CHECK(selection_origin IN ('legacy','user','reviewer','preset','metadata')),
+ selection_revision INTEGER CHECK(selection_revision IS NULL OR selection_revision>0),
+ ord INTEGER NOT NULL CHECK(ord BETWEEN 0 AND 511), revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799),
+ UNIQUE(binding_id,ord), UNIQUE(binding_id,donation_key_id,upstream_model_id),
+ CHECK(updated_at>=created_at)
+) STRICT;
+CREATE INDEX idx_charity_binding_targets_key ON charity_binding_targets(donation_key_id,upstream_model_id,id);
+CREATE VIEW charity_binding_primary_targets AS
+ SELECT b.id AS binding_id,t.id AS target_id,t.donation_key_id,t.upstream_model_id,t.native_service_mask
+ FROM charity_model_bindings b JOIN charity_binding_targets t ON t.binding_id=b.id
+ WHERE t.ord=(SELECT MIN(first.ord) FROM charity_binding_targets first WHERE first.binding_id=b.id);
+CREATE TRIGGER charity_binding_targets_empty_root AFTER DELETE ON charity_binding_targets
+WHEN NOT EXISTS(SELECT 1 FROM charity_binding_targets WHERE binding_id=OLD.binding_id)
+BEGIN DELETE FROM charity_model_bindings WHERE id=OLD.binding_id; END;
+
+CREATE TRIGGER endpoint_key_charity_targets_delete BEFORE DELETE ON endpoint_keys BEGIN DELETE FROM charity_binding_targets WHERE donation_key_id IN(SELECT id FROM donation_keys WHERE endpoint_key_id=OLD.id); END;
+
+CREATE TABLE mainstream_channel_entries (
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ channel_id TEXT NOT NULL REFERENCES mainstream_channels(id) ON DELETE CASCADE,
+ ord INTEGER NOT NULL CHECK(ord BETWEEN 0 AND 31),
+ name TEXT NOT NULL DEFAULT '' CHECK(length(name) BETWEEN 0 AND 128 AND instr(name,char(0))=0),
+ connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','ai-sdk-gateway-v4','google-gemini','openai-responses','openai-decisions','cohere-rerank','jina-rerank','siliconflow-rerank','voyage-rerank','openai-chat-completions','typesafe-systemone')),
+ canonical_base_url TEXT NOT NULL CHECK(length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096),
+ native_service_mask INTEGER NOT NULL CHECK(native_service_mask BETWEEN 1 AND 524287), rerank_format TEXT NOT NULL DEFAULT '' CHECK(rerank_format IN ('','generic','cohere','jina','voyage','siliconflow')),
+ enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)), UNIQUE(channel_id,ord), UNIQUE(channel_id,id),
+ CHECK((native_service_mask&(CASE connector_type WHEN 'openai-compatible' THEN 32767 WHEN 'openai-chat-completions' THEN 32767 WHEN 'openai-responses' THEN 32767 WHEN 'openai-decisions' THEN 32767 WHEN 'anthropic-compatible' THEN 65536 WHEN 'google-gemini' THEN 131072 WHEN 'ai-sdk-gateway-v3' THEN 278576 WHEN 'ai-sdk-gateway-v4' THEN 278576 WHEN 'typesafe-systemone' THEN 32768 ELSE 16384 END))=native_service_mask), CHECK((connector_type IN ('openai-compatible','openai-chat-completions','openai-responses','openai-decisions') AND ((native_service_mask&16384)=0 OR rerank_format<>'')) OR (connector_type IN ('cohere-rerank','jina-rerank','voyage-rerank','siliconflow-rerank') AND rerank_format IN ('',replace(connector_type,'-rerank',''))) OR (connector_type NOT IN ('openai-compatible','openai-chat-completions','openai-responses','openai-decisions','cohere-rerank','jina-rerank','voyage-rerank','siliconflow-rerank') AND rerank_format=''))
+) STRICT;
+CREATE TABLE mainstream_channel_discovery_presets (
+ channel_id TEXT PRIMARY KEY REFERENCES mainstream_channels(id) ON DELETE CASCADE,
+ canonical_base_url TEXT NOT NULL CHECK(length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096),
+ list_format TEXT NOT NULL CHECK(list_format IN ('openai','anthropic','gemini','ai-sdk-gateway-v3','ai-sdk-gateway-v4'))
+) STRICT;
+CREATE TABLE mainstream_channel_model_mappings (
+ channel_id TEXT NOT NULL, model_id TEXT NOT NULL CHECK(length(model_id) BETWEEN 1 AND 512 AND instr(model_id,char(0))=0),
+ entry_id INTEGER NOT NULL,
+ upstream_model_id TEXT NOT NULL CHECK(length(upstream_model_id) BETWEEN 1 AND 512 AND instr(upstream_model_id,char(0))=0),
+ native_service_mask INTEGER NOT NULL CHECK(native_service_mask BETWEEN 1 AND 524287), ord INTEGER NOT NULL CHECK(ord BETWEEN 0 AND 31),
+ PRIMARY KEY(channel_id,model_id,entry_id),
+ FOREIGN KEY(channel_id,entry_id) REFERENCES mainstream_channel_entries(channel_id,id) ON DELETE CASCADE
+) STRICT;
+CREATE INDEX idx_mainstream_mappings_entry ON mainstream_channel_model_mappings(entry_id,model_id);
+CREATE VIEW mainstream_channel_primary_entries AS
+ SELECT channel_id,id AS entry_id,connector_type,canonical_base_url
+ FROM mainstream_channel_entries e
+ WHERE ord=(SELECT MIN(first.ord) FROM mainstream_channel_entries first WHERE first.channel_id=e.channel_id);
+
+CREATE TABLE donation_service_health (
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ use_id INTEGER NOT NULL REFERENCES donation_uses(id) ON DELETE CASCADE,
+ endpoint_key_id INTEGER NOT NULL REFERENCES endpoint_keys(id) ON DELETE CASCADE,
+ native_service_bit INTEGER NOT NULL CHECK(native_service_bit BETWEEN 1 AND 262144 AND (native_service_bit&(native_service_bit-1))=0),
+ credential_version_id INTEGER NOT NULL REFERENCES credential_versions(id),
+ streak_generation BLOB NOT NULL CHECK(length(streak_generation)=16 AND hex(streak_generation)<>'00000000000000000000000000000000'), failure_streak BLOB NOT NULL CHECK(length(failure_streak)=16), failure_disabled INTEGER NOT NULL DEFAULT 0 CHECK(failure_disabled IN (0,1)),
+ next_claim_seq BLOB NOT NULL CHECK(length(next_claim_seq)=16), next_fold_seq BLOB NOT NULL CHECK(length(next_fold_seq)=16),
+ retry_after_until INTEGER CHECK(retry_after_until IS NULL OR retry_after_until BETWEEN 0 AND 253402300799),
+ backoff_generation INTEGER NOT NULL CHECK(backoff_generation>=1),
+ backoff_episode INTEGER NOT NULL CHECK(backoff_episode>=0),
+ backoff_period TEXT CHECK(backoff_period IN ('unknown','five_hour','day','week','month')),
+ backoff_source TEXT CHECK(backoff_source IN ('builtin','custom_rule')),
+ backoff_stage INTEGER NOT NULL CHECK(backoff_stage BETWEEN 0 AND 2),
+ backoff_retry_at INTEGER CHECK(backoff_retry_at BETWEEN 0 AND 253402300799),
+ trial_claim_id TEXT REFERENCES dispatch_claims(id) ON DELETE SET NULL,
+ updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799),
+ UNIQUE(use_id,endpoint_key_id,native_service_bit,credential_version_id),
+ CHECK(hex(next_fold_seq)<=hex(next_claim_seq)),
+ CHECK((backoff_retry_at IS NULL AND backoff_period IS NULL AND backoff_source IS NULL AND trial_claim_id IS NULL)
+   OR (backoff_retry_at IS NOT NULL AND backoff_period IS NOT NULL AND backoff_source IS NOT NULL))
+) STRICT;
+CREATE INDEX idx_service_health_version ON donation_service_health(credential_version_id,id);
+CREATE INDEX idx_service_health_key ON donation_service_health(endpoint_key_id,id);
+CREATE UNIQUE INDEX idx_service_health_trial ON donation_service_health(trial_claim_id) WHERE trial_claim_id IS NOT NULL;
+CREATE TABLE dispatch_service_health (
+ claim_id TEXT PRIMARY KEY REFERENCES dispatch_claims(id) ON DELETE CASCADE,
+ health_id INTEGER REFERENCES donation_service_health(id) ON DELETE SET NULL,
+ health_id_snapshot INTEGER NOT NULL CHECK(health_id_snapshot>0),
+ streak_generation BLOB NOT NULL CHECK(length(streak_generation)=16 AND hex(streak_generation)<>'00000000000000000000000000000000'), claim_seq BLOB NOT NULL CHECK(length(claim_seq)=16),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
+ UNIQUE(health_id_snapshot,streak_generation,claim_seq)
+) STRICT;
+CREATE INDEX idx_dispatch_service_health_live ON dispatch_service_health(health_id,claim_id);
+CREATE TABLE dispatch_claim_targets (
+ claim_id TEXT PRIMARY KEY REFERENCES dispatch_claims(id) ON DELETE CASCADE,
+ authorization_kind TEXT NOT NULL CHECK(authorization_kind IN ('self','charity','discovery','legacy')),
+ owner_user_id INTEGER CHECK(owner_user_id IS NULL OR owner_user_id>0),
+ endpoint_key_id_snapshot INTEGER CHECK(endpoint_key_id_snapshot IS NULL OR endpoint_key_id_snapshot>0),
+ endpoint_id_snapshot INTEGER CHECK(endpoint_id_snapshot IS NULL OR endpoint_id_snapshot>0),
+ credential_id_snapshot INTEGER NOT NULL CHECK(credential_id_snapshot>0),
+ credential_version_id INTEGER NOT NULL REFERENCES credential_versions(id) ON DELETE RESTRICT,
+ credential_version INTEGER NOT NULL CHECK(credential_version>0),
+ grant_revision_id_snapshot INTEGER CHECK(grant_revision_id_snapshot IS NULL OR grant_revision_id_snapshot>0),
+ grant_revision INTEGER CHECK(grant_revision IS NULL OR grant_revision>0),
+ target_id_snapshot INTEGER CHECK(target_id_snapshot IS NULL OR target_id_snapshot>0),
+ target_revision INTEGER CHECK(target_revision IS NULL OR target_revision>0),
+ native_service_bit INTEGER CHECK(native_service_bit IS NULL OR (native_service_bit BETWEEN 1 AND 262144 AND (native_service_bit&(native_service_bit-1))=0)),
+ configured_type TEXT NOT NULL CHECK(configured_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','ai-sdk-gateway-v4','google-gemini','openai-responses','openai-decisions','cohere-rerank','jina-rerank','siliconflow-rerank','voyage-rerank','openai-chat-completions','typesafe-systemone')),
+ wire_type TEXT CHECK(wire_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','ai-sdk-gateway-v4','google-gemini','openai-responses','openai-decisions','cohere-rerank','jina-rerank','siliconflow-rerank','voyage-rerank','openai-chat-completions','typesafe-systemone')),
+ canonical_base_url TEXT NOT NULL CHECK(length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096),
+ upstream_model_id TEXT NOT NULL DEFAULT '' CHECK(length(upstream_model_id)<=512 AND instr(upstream_model_id,char(0))=0),
+ rerank_format TEXT NOT NULL DEFAULT '' CHECK(rerank_format IN ('','generic','cohere','jina','voyage','siliconflow')),
+ use_id_snapshot INTEGER CHECK(use_id_snapshot IS NULL OR use_id_snapshot>0),
+ use_revision_id_snapshot INTEGER CHECK(use_revision_id_snapshot IS NULL OR use_revision_id_snapshot>0),
+ source_revision_id_snapshot INTEGER CHECK(source_revision_id_snapshot IS NULL OR source_revision_id_snapshot>0),
+ operation_id TEXT CHECK(operation_id IS NULL OR (length(operation_id)=25 AND substr(operation_id,1,3)='op_' AND substr(operation_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(operation_id,-1,1) IN ('A','Q','g','w'))),
+ CHECK((grant_revision_id_snapshot IS NULL)=(grant_revision IS NULL)),
+ CHECK((target_id_snapshot IS NULL)=(target_revision IS NULL)),
+ CHECK((use_id_snapshot IS NULL)=(use_revision_id_snapshot IS NULL)),
+ CHECK(authorization_kind='legacy' OR (owner_user_id IS NOT NULL AND wire_type IS NOT NULL)),
+ CHECK((authorization_kind='legacy')
+   OR (authorization_kind IN ('self','charity') AND endpoint_key_id_snapshot IS NOT NULL AND endpoint_id_snapshot IS NOT NULL
+     AND grant_revision_id_snapshot IS NOT NULL AND native_service_bit IS NOT NULL AND length(upstream_model_id)>0
+     AND source_revision_id_snapshot IS NULL AND operation_id IS NULL
+     AND ((authorization_kind='self' AND use_id_snapshot IS NULL) OR (authorization_kind='charity' AND use_id_snapshot IS NOT NULL AND target_id_snapshot IS NOT NULL)))
+   OR (authorization_kind='discovery' AND source_revision_id_snapshot IS NOT NULL AND operation_id IS NOT NULL
+     AND native_service_bit IS NULL AND grant_revision_id_snapshot IS NULL AND target_id_snapshot IS NULL))
+) STRICT;
+CREATE INDEX idx_claim_targets_version ON dispatch_claim_targets(credential_version_id,claim_id);
+CREATE TABLE request_attempt_service_facts (
+ claim_id TEXT PRIMARY KEY REFERENCES request_attempts(claim_id) ON DELETE CASCADE,
+ credential_id_snapshot INTEGER NOT NULL CHECK(credential_id_snapshot>0),
+ credential_version INTEGER NOT NULL CHECK(credential_version>0),
+ grant_revision INTEGER CHECK(grant_revision IS NULL OR grant_revision>0),
+ target_revision INTEGER CHECK(target_revision IS NULL OR target_revision>0),
+ native_service_bit INTEGER CHECK(native_service_bit IS NULL OR (native_service_bit BETWEEN 1 AND 262144 AND (native_service_bit&(native_service_bit-1))=0)),
+ configured_type TEXT NOT NULL CHECK(configured_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','ai-sdk-gateway-v4','google-gemini','openai-responses','openai-decisions','cohere-rerank','jina-rerank','siliconflow-rerank','voyage-rerank','openai-chat-completions','typesafe-systemone')),
+ wire_type TEXT CHECK(wire_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3','ai-sdk-gateway-v4','google-gemini','openai-responses','openai-decisions','cohere-rerank','jina-rerank','siliconflow-rerank','voyage-rerank','openai-chat-completions','typesafe-systemone')),
+ rerank_format TEXT NOT NULL DEFAULT '' CHECK(rerank_format IN ('','generic','cohere','jina','voyage','siliconflow')),
+ use_id_snapshot INTEGER CHECK(use_id_snapshot IS NULL OR use_id_snapshot>0),
+ use_revision INTEGER CHECK(use_revision IS NULL OR use_revision>0),
+ CHECK((use_id_snapshot IS NULL)=(use_revision IS NULL))
+) STRICT;
+
+CREATE VIEW endpoint_grant_authorizations AS
+ SELECT g.owner_user_id,g.endpoint_id,g.endpoint_key_id,g.credential_id,g.credential_version_id,
+ v.version AS credential_version,g.id AS grant_revision_id,g.grant_revision,v.secret_ref_id,
+ e.connector_type AS configured_type,e.base_url AS canonical_base_url,
+ e.native_service_mask AS endpoint_native_service_mask,g.native_service_mask AS granted_native_service_mask,
+ (e.native_service_mask&g.native_service_mask&CASE WHEN e.connector_type IN ('openai-compatible','openai-chat-completions','openai-responses','openai-decisions') AND e.rerank_format<>g.rerank_format THEN 507903 ELSE 524287 END) AS effective_native_service_mask,g.rerank_format,e.rerank_format AS endpoint_rerank_format,
+ CASE WHEN k.id IS NOT NULL AND k.endpoint_id=g.endpoint_id AND e.id=g.endpoint_id AND e.user_id=g.owner_user_id AND c.id=g.credential_id AND c.user_id=g.owner_user_id AND v.id=g.credential_version_id AND v.credential_id=g.credential_id THEN 1 ELSE 0 END AS relationship_valid,
+ CASE WHEN k.id IS NOT NULL AND k.endpoint_id=g.endpoint_id AND e.id=g.endpoint_id AND e.user_id=g.owner_user_id AND c.id=g.credential_id AND c.user_id=g.owner_user_id AND v.id=g.credential_version_id AND v.credential_id=g.credential_id AND e.enabled=1 AND k.enabled=1 AND c.enabled=1 AND c.deleted_at IS NULL
+   AND v.enabled=1 AND s.id=v.secret_ref_id AND s.orphaned_at IS NULL AND (e.native_service_mask&g.native_service_mask&CASE WHEN e.connector_type IN ('openai-compatible','openai-chat-completions','openai-responses','openai-decisions') AND e.rerank_format<>g.rerank_format THEN 507903 ELSE 524287 END)<>0 THEN 1 ELSE 0 END AS available
+ FROM endpoint_key_grant_revisions g
+ LEFT JOIN endpoint_keys k ON k.id=g.endpoint_key_id
+ LEFT JOIN endpoints e ON e.id=g.endpoint_id
+ LEFT JOIN credentials c ON c.id=g.credential_id
+ LEFT JOIN credential_versions v ON v.id=g.credential_version_id
+ LEFT JOIN endpoint_key_secrets s ON s.id=v.secret_ref_id;
+CREATE VIEW endpoint_key_current_credentials AS
+ SELECT k.id,k.endpoint_id,k.current_grant_revision_id,k.note,k.enabled,k.force_store_false,k.revision,k.created_at,k.updated_at,
+ g.credential_id,g.credential_version_id,v.version AS credential_version,g.grant_revision,
+ g.native_service_mask,g.rerank_format,v.secret_ref_id,g.report_fingerprint AS secret_fingerprint,v.display_head,v.display_tail
+ FROM endpoint_keys k JOIN endpoint_key_grant_revisions g ON g.id=k.current_grant_revision_id AND g.endpoint_key_id=k.id
+ JOIN credential_versions v ON v.id=g.credential_version_id;
+CREATE VIEW self_grant_availability AS
+ SELECT k.id AS endpoint_key_id,a.owner_user_id,a.effective_native_service_mask AS native_service_mask
+ FROM endpoint_keys k JOIN endpoint_grant_authorizations a ON a.grant_revision_id=k.current_grant_revision_id
+ WHERE a.relationship_valid=1 AND a.available=1 AND a.endpoint_key_id=k.id;
+CREATE VIEW charity_use_availability AS
+ SELECT u.donation_key_id,u.id AS use_id,a.owner_user_id,u.native_service_bit,a.credential_version_id,a.grant_revision_id
+ FROM donation_uses u JOIN donation_use_revisions ur ON ur.id=u.current_approved_revision_id AND ur.use_id=u.id
+ JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donations d ON d.id=dk.donation_id
+ JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.donation_id=d.id AND m.endpoint_key_id=dk.endpoint_key_id
+ JOIN endpoint_grant_authorizations a ON a.grant_revision_id=ur.grant_revision_id
+ WHERE u.enabled=1 AND ur.review_state='approved' AND dk.ended_at IS NULL AND d.status IN ('pending','approved') AND d.terminal_at IS NULL
+ AND a.relationship_valid=1 AND a.available=1 AND a.owner_user_id=d.user_id AND a.endpoint_key_id=dk.endpoint_key_id
+ AND (a.effective_native_service_mask&u.native_service_bit)=u.native_service_bit
+ AND NOT EXISTS(SELECT 1 FROM donation_key_review_requirements rr WHERE rr.hmac=ur.key_body_review_hmac AND rr.required=1);
+CREATE VIEW discovery_source_authorizations AS
+ SELECT sr.owner_user_id,sr.source_id,sr.id AS source_revision_id,sr.source_revision,
+ sr.credential_id,sr.credential_version_id,v.version AS credential_version,v.secret_ref_id,sr.canonical_base_url,sr.list_format,
+ CASE WHEN ds.id=sr.source_id AND ds.user_id=sr.owner_user_id AND c.id=sr.credential_id AND c.user_id=sr.owner_user_id AND v.credential_id=sr.credential_id THEN 1 ELSE 0 END AS relationship_valid,
+ CASE WHEN ds.id=sr.source_id AND ds.user_id=sr.owner_user_id AND c.id=sr.credential_id AND c.user_id=sr.owner_user_id AND v.credential_id=sr.credential_id
+   AND ds.enabled=1 AND c.enabled=1 AND c.deleted_at IS NULL AND v.enabled=1 AND sec.id=v.secret_ref_id AND sec.orphaned_at IS NULL THEN 1 ELSE 0 END AS available
+ FROM discovery_source_revisions sr LEFT JOIN discovery_sources ds ON ds.id=sr.source_id
+ LEFT JOIN credentials c ON c.id=sr.credential_id LEFT JOIN credential_versions v ON v.id=sr.credential_version_id
+ LEFT JOIN endpoint_key_secrets sec ON sec.id=v.secret_ref_id;
+CREATE VIEW model_discovery_evidence AS
+ SELECT k.id AS endpoint_key_id,COALESCE(r.state,'unknown') AS state,MAX(COALESCE(st.result_generation,0),1) AS revision,
+ CASE WHEN r.state='checking' THEN r.operation_hash END AS operation_hash,COALESCE(r.safe_class,'none') AS safe_class,
+ COALESCE(r.safe_diagnostic,'') AS safe_diag,r.started_at,r.completed_at,COALESCE(r.model_count,0) AS fetched_count
+ FROM endpoint_keys k LEFT JOIN endpoint_key_discovery_sources a ON a.endpoint_key_id=k.id LEFT JOIN discovery_sources ds ON ds.id=a.source_id
+ LEFT JOIN discovery_source_states st ON st.source_revision_id=ds.current_revision_id
+ LEFT JOIN discovery_runs r ON r.id=st.current_run_id;
+CREATE VIEW endpoint_key_credential_evidence AS
+ WITH refs AS (
+ SELECT current_grant_revision_id AS grant_revision_id FROM endpoint_keys
+ UNION SELECT ur.grant_revision_id FROM donation_uses u JOIN donation_use_revisions ur
+ ON ur.use_id=u.id AND (ur.id=u.current_approved_revision_id OR ur.id=u.current_pending_revision_id)
+ WHERE ur.grant_revision_id IS NOT NULL)
+ SELECT g.owner_user_id,g.endpoint_id,g.endpoint_key_id,g.id AS grant_revision_id,g.credential_version_id,
+ g.report_fingerprint,s.key_body_review_hmac,v.display_head,v.display_tail
+ FROM refs JOIN endpoint_key_grant_revisions g ON g.id=refs.grant_revision_id
+ JOIN credential_versions v ON v.id=g.credential_version_id
+ LEFT JOIN endpoint_key_secrets s ON s.id=v.secret_ref_id
+ JOIN credentials c ON c.id=g.credential_id WHERE c.deleted_at IS NULL;
+CREATE VIEW credential_version_live_references AS
+ SELECT current_version_id AS credential_version_id FROM credentials WHERE deleted_at IS NULL AND current_version_id IS NOT NULL
+ UNION ALL SELECT g.credential_version_id FROM endpoint_keys k JOIN endpoint_key_grant_revisions g ON g.id=k.current_grant_revision_id JOIN credentials c ON c.id=g.credential_id WHERE c.deleted_at IS NULL
+ UNION ALL SELECT g.credential_version_id FROM donation_uses u JOIN donation_use_revisions ur
+ ON ur.use_id=u.id AND (ur.id=u.current_approved_revision_id OR ur.id=u.current_pending_revision_id)
+ JOIN endpoint_key_grant_revisions g ON g.id=ur.grant_revision_id
+ JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donations d ON d.id=dk.donation_id
+ JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id AND m.donation_id=d.id
+ WHERE dk.ended_at IS NULL AND d.terminal_at IS NULL AND d.status IN ('pending','approved')
+ UNION ALL SELECT sr.credential_version_id FROM discovery_sources ds JOIN discovery_source_revisions sr ON sr.id=ds.current_revision_id JOIN credentials c ON c.id=sr.credential_id WHERE c.deleted_at IS NULL
+ UNION ALL SELECT sr.credential_version_id FROM donation_uses u JOIN donation_use_revisions ur
+ ON ur.use_id=u.id AND (ur.id=u.current_approved_revision_id OR ur.id=u.current_pending_revision_id)
+ JOIN discovery_source_revisions sr ON sr.id=ur.discovery_source_revision_id
+ JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donations d ON d.id=dk.donation_id
+ JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id AND m.donation_id=d.id
+ WHERE u.discovery_enabled=1 AND dk.ended_at IS NULL AND d.terminal_at IS NULL AND d.status IN ('pending','approved')
+ UNION ALL SELECT credential_version_id FROM discovery_runs WHERE state='checking' AND credential_version_id IS NOT NULL
+ UNION ALL SELECT t.credential_version_id FROM dispatch_claim_targets t JOIN dispatch_claims c ON c.id=t.claim_id WHERE c.state IN ('claimed','dispatched');
+CREATE VIEW secret_live_references AS
+ SELECT v.secret_ref_id FROM credential_version_live_references r JOIN credential_versions v ON v.id=r.credential_version_id WHERE v.secret_ref_id IS NOT NULL
+ UNION ALL SELECT secret_ref_id FROM dispatch_claims WHERE secret_ref_id IS NOT NULL AND state IN ('claimed','dispatched');
+CREATE INDEX idx_credentials_current_version ON credentials(current_version_id);
+CREATE INDEX idx_keys_current_grant ON endpoint_keys(current_grant_revision_id);
+CREATE INDEX idx_sources_current_revision ON discovery_sources(current_revision_id);
+CREATE INDEX idx_uses_approved_revision ON donation_uses(current_approved_revision_id);
+CREATE INDEX idx_uses_pending_revision ON donation_uses(current_pending_revision_id);
+
+CREATE TRIGGER endpoint_key_secrets_identity_immutable BEFORE UPDATE ON endpoint_key_secrets
+WHEN OLD.context_id IS NOT NEW.context_id OR OLD.canonical_base_url IS NOT NEW.canonical_base_url OR OLD.connector_type IS NOT NEW.connector_type OR OLD.encrypted_secret IS NOT NEW.encrypted_secret OR OLD.created_at IS NOT NEW.created_at
+BEGIN SELECT RAISE(ABORT,'endpoint key secret identity is immutable'); END;
+
+CREATE TRIGGER endpoint_key_secrets_orphan_marker_guard BEFORE UPDATE OF orphaned_at ON endpoint_key_secrets
+WHEN (OLD.orphaned_at IS NOT NULL AND NEW.orphaned_at IS NOT OLD.orphaned_at) OR (OLD.orphaned_at IS NULL AND NEW.orphaned_at IS NOT NULL AND EXISTS(SELECT 1 FROM secret_live_references WHERE secret_ref_id=OLD.id))
+BEGIN SELECT RAISE(ABORT,'endpoint key secret orphan marker is invalid'); END;
+
+CREATE TRIGGER endpoint_key_secrets_orphan_delete_guard BEFORE DELETE ON endpoint_key_secrets
+WHEN OLD.orphaned_at IS NULL OR EXISTS(SELECT 1 FROM secret_live_references WHERE secret_ref_id=OLD.id)
+BEGIN SELECT RAISE(ABORT,'endpoint key secret is still referenced'); END;
+
+CREATE TRIGGER credential_version_identity_guard BEFORE UPDATE ON credential_versions
+WHEN NEW.id IS NOT OLD.id OR NEW.credential_id IS NOT OLD.credential_id OR NEW.version IS NOT OLD.version OR ((NEW.display_head IS NOT OLD.display_head OR NEW.display_tail IS NOT OLD.display_tail) AND NOT (OLD.secret_ref_id IS NOT NULL AND NEW.secret_ref_id IS NULL AND NEW.display_head='' AND NEW.display_tail='')) OR NEW.created_at IS NOT OLD.created_at OR (OLD.secret_ref_id IS NULL AND NEW.secret_ref_id IS NOT NULL) OR (OLD.secret_ref_id IS NOT NULL AND NEW.secret_ref_id IS NOT NULL AND NEW.secret_ref_id<>OLD.secret_ref_id) OR (OLD.retired_at IS NOT NULL AND NEW.retired_at IS NOT OLD.retired_at)
+BEGIN SELECT RAISE(ABORT,'credential version identity is immutable'); END;
+
+CREATE TRIGGER credential_version_secret_insert_guard BEFORE INSERT ON credential_versions
+WHEN NEW.secret_ref_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM endpoint_key_secrets WHERE id=NEW.secret_ref_id AND orphaned_at IS NULL)
+BEGIN SELECT RAISE(ABORT,'credential secret is unavailable'); END;
+
+CREATE TRIGGER credential_version_retirement_guard BEFORE UPDATE OF secret_ref_id ON credential_versions
+WHEN OLD.secret_ref_id IS NOT NULL AND NEW.secret_ref_id IS NULL AND (EXISTS(SELECT 1 FROM credential_version_live_references WHERE credential_version_id=OLD.id) OR EXISTS(SELECT 1 FROM secret_live_references WHERE secret_ref_id=OLD.secret_ref_id))
+BEGIN SELECT RAISE(ABORT,'credential version is still referenced'); END;
+
+CREATE TRIGGER credential_version_delete_guard BEFORE DELETE ON credential_versions
+WHEN OLD.secret_ref_id IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'credential version must retire its secret first'); END;
+
+CREATE TRIGGER credential_owner_guard BEFORE UPDATE OF user_id ON credentials
+WHEN NEW.user_id IS NOT OLD.user_id AND NOT (NEW.user_id IS NULL AND NEW.deleted_at IS NOT NULL AND NEW.current_version_id IS NULL)
+BEGIN SELECT RAISE(ABORT,'credential owner is immutable'); END;
+
+CREATE TRIGGER credential_deleted_guard BEFORE UPDATE ON credentials
+WHEN OLD.deleted_at IS NOT NULL AND (NEW.deleted_at IS NOT OLD.deleted_at OR NEW.current_version_id IS NOT NULL OR NEW.connection_id IS NOT NULL OR NEW.enabled<>0)
+BEGIN SELECT RAISE(ABORT,'deleted credential is terminal'); END;
+
+CREATE TRIGGER endpoint_grant_immutable BEFORE UPDATE ON endpoint_key_grant_revisions
+BEGIN SELECT RAISE(ABORT,'endpoint grant revision is immutable'); END;
+
+CREATE TRIGGER discovery_source_revision_immutable BEFORE UPDATE ON discovery_source_revisions
+BEGIN SELECT RAISE(ABORT,'discovery source revision is immutable'); END;
+
+CREATE TRIGGER endpoint_grant_service_guard BEFORE INSERT ON endpoint_key_grant_revisions
+WHEN NOT EXISTS(SELECT 1 FROM endpoints e WHERE e.id=NEW.endpoint_id AND (NEW.native_service_mask&(CASE e.connector_type WHEN 'openai-compatible' THEN 32767 WHEN 'openai-chat-completions' THEN 32767 WHEN 'openai-responses' THEN 32767 WHEN 'openai-decisions' THEN 32767 WHEN 'anthropic-compatible' THEN 65536 WHEN 'google-gemini' THEN 131072 WHEN 'ai-sdk-gateway-v3' THEN 278576 WHEN 'ai-sdk-gateway-v4' THEN 278576 WHEN 'typesafe-systemone' THEN 32768 ELSE 16384 END))=NEW.native_service_mask AND ((e.connector_type IN ('openai-compatible','openai-chat-completions','openai-responses','openai-decisions') AND ((NEW.native_service_mask&16384)=0 OR NEW.rerank_format<>'')) OR (e.connector_type IN ('cohere-rerank','jina-rerank','voyage-rerank','siliconflow-rerank') AND NEW.rerank_format IN ('',replace(e.connector_type,'-rerank',''))) OR (e.connector_type NOT IN ('openai-compatible','openai-chat-completions','openai-responses','openai-decisions','cohere-rerank','jina-rerank','voyage-rerank','siliconflow-rerank') AND NEW.rerank_format='')))
+BEGIN SELECT RAISE(ABORT,'grant service is incompatible with the endpoint'); END;
+
+CREATE TRIGGER key_discovery_source_owner_insert BEFORE INSERT ON endpoint_key_discovery_sources
+WHEN NOT EXISTS(SELECT 1 FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id JOIN endpoint_key_grant_revisions g ON g.id=k.current_grant_revision_id JOIN discovery_sources s ON s.user_id=e.user_id JOIN discovery_source_revisions sr ON sr.id=s.current_revision_id WHERE k.id=NEW.endpoint_key_id AND s.id=NEW.source_id AND g.credential_version_id=sr.credential_version_id AND NEW.grant_revision_id=g.id AND NEW.source_revision_id=sr.id AND NEW.credential_version_id=g.credential_version_id)
+BEGIN SELECT RAISE(ABORT,'discovery source owner mismatch'); END;
+
+CREATE TRIGGER key_discovery_source_owner_update BEFORE UPDATE OF endpoint_key_id,source_id ON endpoint_key_discovery_sources
+WHEN NOT EXISTS(SELECT 1 FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id JOIN endpoint_key_grant_revisions g ON g.id=k.current_grant_revision_id JOIN discovery_sources s ON s.user_id=e.user_id JOIN discovery_source_revisions sr ON sr.id=s.current_revision_id WHERE k.id=NEW.endpoint_key_id AND s.id=NEW.source_id AND g.credential_version_id=sr.credential_version_id AND NEW.grant_revision_id=g.id AND NEW.source_revision_id=sr.id AND NEW.credential_version_id=g.credential_version_id)
+BEGIN SELECT RAISE(ABORT,'discovery source owner mismatch'); END;
+
+CREATE TRIGGER donation_use_identity_guard BEFORE UPDATE OF donation_key_id,native_service_bit ON donation_uses
+WHEN NEW.donation_key_id<>OLD.donation_key_id OR NEW.native_service_bit<>OLD.native_service_bit
+BEGIN SELECT RAISE(ABORT,'donation use identity is immutable'); END;
+
+CREATE TRIGGER donation_use_pointer_revision_guard BEFORE UPDATE ON donation_uses
+WHEN (NEW.current_approved_revision_id IS NOT OLD.current_approved_revision_id OR NEW.current_pending_revision_id IS NOT OLD.current_pending_revision_id OR NEW.enabled<>OLD.enabled OR NEW.discovery_enabled<>OLD.discovery_enabled) AND (OLD.revision=9223372036854775807 OR NEW.revision<>OLD.revision+1)
+BEGIN SELECT RAISE(ABORT,'donation use changes require a revision'); END;
+
+CREATE TRIGGER donation_use_revision_origin_guard BEFORE INSERT ON donation_use_revisions
+WHEN NEW.origin<>'legacy' AND (NEW.review_state<>'pending' OR NEW.grant_revision_id IS NULL OR NOT EXISTS(SELECT 1 FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donations d ON d.id=dk.donation_id JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id AND m.donation_id=d.id JOIN endpoint_key_grant_revisions g ON g.id=NEW.grant_revision_id JOIN credential_versions v ON v.id=g.credential_version_id JOIN endpoint_key_secrets s ON s.id=v.secret_ref_id WHERE u.id=NEW.use_id AND g.endpoint_key_id=dk.endpoint_key_id AND g.owner_user_id=d.user_id AND dk.ended_at IS NULL AND d.terminal_at IS NULL AND d.status IN ('pending','approved') AND (g.native_service_mask&u.native_service_bit)=u.native_service_bit AND g.id=NEW.source_grant_revision_id AND g.credential_id=NEW.credential_id_snapshot AND v.version=NEW.credential_version AND g.grant_revision=NEW.grant_revision AND v.display_head=NEW.display_head AND v.display_tail=NEW.display_tail AND g.report_fingerprint=NEW.report_fingerprint AND s.key_body_review_hmac=NEW.key_body_review_hmac))
+BEGIN SELECT RAISE(ABORT,'pending use does not match its authorized version'); END;
+
+CREATE TRIGGER donation_use_source_guard BEFORE INSERT ON donation_use_revisions
+WHEN NEW.discovery_source_revision_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM endpoint_key_grant_revisions g JOIN discovery_source_revisions sr ON sr.credential_version_id=g.credential_version_id AND sr.credential_id=g.credential_id AND sr.owner_user_id=g.owner_user_id WHERE g.id=NEW.grant_revision_id AND sr.id=NEW.discovery_source_revision_id AND sr.id=NEW.source_discovery_revision_id)
+BEGIN SELECT RAISE(ABORT,'use discovery source version mismatch'); END;
+
+CREATE TRIGGER donation_use_revision_identity_guard BEFORE UPDATE ON donation_use_revisions
+WHEN NEW.id IS NOT OLD.id OR NEW.use_id IS NOT OLD.use_id OR NEW.use_revision IS NOT OLD.use_revision OR NEW.source_grant_revision_id IS NOT OLD.source_grant_revision_id OR NEW.source_discovery_revision_id IS NOT OLD.source_discovery_revision_id OR NEW.credential_id_snapshot IS NOT OLD.credential_id_snapshot OR NEW.credential_version IS NOT OLD.credential_version OR NEW.grant_revision IS NOT OLD.grant_revision OR NEW.display_head IS NOT OLD.display_head OR NEW.display_tail IS NOT OLD.display_tail OR NEW.key_body_review_hmac IS NOT OLD.key_body_review_hmac OR NEW.origin IS NOT OLD.origin OR NEW.created_at IS NOT OLD.created_at OR (NEW.grant_revision_id IS NOT OLD.grant_revision_id AND NOT (NEW.grant_revision_id IS NULL AND NOT EXISTS(SELECT 1 FROM endpoint_key_grant_revisions WHERE id=OLD.grant_revision_id))) OR (NEW.discovery_source_revision_id IS NOT OLD.discovery_source_revision_id AND NOT (NEW.discovery_source_revision_id IS NULL AND NOT EXISTS(SELECT 1 FROM discovery_source_revisions WHERE id=OLD.discovery_source_revision_id)))
+BEGIN SELECT RAISE(ABORT,'use revision identity is immutable'); END;
+
+CREATE TRIGGER donation_use_revision_fingerprint_insert_guard BEFORE INSERT ON donation_use_revisions
+WHEN NEW.report_fingerprint IS NULL
+BEGIN SELECT RAISE(ABORT,'new use revision requires a fingerprint'); END;
+
+CREATE TRIGGER donation_use_revision_fingerprint_retention_guard BEFORE UPDATE OF report_fingerprint ON donation_use_revisions
+WHEN NEW.report_fingerprint IS NOT OLD.report_fingerprint AND NOT (NEW.report_fingerprint IS NULL AND OLD.report_fingerprint IS NOT NULL AND EXISTS(SELECT 1 FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id WHERE u.id=OLD.use_id AND dk.report_fingerprint IS NULL AND u.current_approved_revision_id IS NOT OLD.id AND u.current_pending_revision_id IS NOT OLD.id))
+BEGIN SELECT RAISE(ABORT,'use fingerprint retention is invalid'); END;
+
+CREATE TRIGGER donation_use_current_fingerprint_insert BEFORE  INSERT ON donation_uses
+WHEN EXISTS(SELECT 1 FROM donation_use_revisions ur WHERE ur.use_id=NEW.id AND (ur.id=NEW.current_approved_revision_id OR ur.id=NEW.current_pending_revision_id) AND ur.report_fingerprint IS NULL)
+BEGIN SELECT RAISE(ABORT,'current use requires a fingerprint'); END;
+
+CREATE TRIGGER donation_use_current_fingerprint_update BEFORE  UPDATE OF current_approved_revision_id,current_pending_revision_id ON donation_uses
+WHEN EXISTS(SELECT 1 FROM donation_use_revisions ur WHERE ur.use_id=NEW.id AND (ur.id=NEW.current_approved_revision_id OR ur.id=NEW.current_pending_revision_id) AND ur.report_fingerprint IS NULL)
+BEGIN SELECT RAISE(ABORT,'current use requires a fingerprint'); END;
+
+CREATE TRIGGER donation_use_revision_decision_guard BEFORE UPDATE ON donation_use_revisions
+WHEN (OLD.review_state<>'pending' AND (NEW.review_state<>OLD.review_state OR NEW.review_reason<>OLD.review_reason OR NEW.reviewed_at IS NOT OLD.reviewed_at OR NEW.reviewer_role IS NOT OLD.reviewer_role OR NEW.review_requirement_revision IS NOT OLD.review_requirement_revision)) OR (NEW.reviewer_user_id IS NOT OLD.reviewer_user_id AND OLD.review_state<>'pending' AND NOT (NEW.reviewer_user_id IS NULL AND NOT EXISTS(SELECT 1 FROM users WHERE id=OLD.reviewer_user_id)))
+BEGIN SELECT RAISE(ABORT,'completed use review is immutable'); END;
+
+CREATE TRIGGER discovery_run_version_guard BEFORE INSERT ON discovery_runs
+WHEN NEW.authorization_kind<>'legacy' AND NOT EXISTS(SELECT 1 FROM discovery_source_authorizations a WHERE a.source_revision_id=NEW.source_revision_id AND a.source_revision=NEW.source_revision_snapshot AND a.credential_version_id=NEW.credential_version_id AND a.available=1 AND ((NEW.authorization_kind='self' AND EXISTS(SELECT 1 FROM discovery_sources ds WHERE ds.id=a.source_id AND ds.current_revision_id=a.source_revision_id)) OR (NEW.authorization_kind='donation_use' AND EXISTS(SELECT 1 FROM donation_uses u JOIN donation_use_revisions ur ON ur.id=u.current_approved_revision_id AND ur.use_id=u.id JOIN charity_use_availability av ON av.use_id=u.id WHERE u.id=NEW.authorization_use_id AND ur.id=NEW.authorization_use_revision_id AND ur.discovery_source_revision_id=a.source_revision_id AND u.discovery_enabled=1 AND av.credential_version_id=a.credential_version_id))))
+BEGIN SELECT RAISE(ABORT,'discovery run authorization mismatch'); END;
+
+CREATE TRIGGER discovery_run_identity_guard BEFORE UPDATE ON discovery_runs
+WHEN NEW.id IS NOT OLD.id OR NEW.source_revision_snapshot IS NOT OLD.source_revision_snapshot OR NEW.operation_id IS NOT OLD.operation_id OR NEW.operation_hash IS NOT OLD.operation_hash OR NEW.result_generation IS NOT OLD.result_generation OR NEW.authorization_kind IS NOT OLD.authorization_kind OR NEW.authorization_use_id IS NOT OLD.authorization_use_id OR NEW.authorization_use_revision_id IS NOT OLD.authorization_use_revision_id OR NEW.started_at IS NOT OLD.started_at OR (NEW.source_revision_id IS NOT OLD.source_revision_id AND NOT (NEW.source_revision_id IS NULL AND NEW.state<>'checking' AND NOT EXISTS(SELECT 1 FROM discovery_source_revisions WHERE id=OLD.source_revision_id))) OR (NEW.credential_version_id IS NOT OLD.credential_version_id AND NOT (NEW.credential_version_id IS NULL AND NEW.state<>'checking' AND NOT EXISTS(SELECT 1 FROM credential_versions WHERE id=OLD.credential_version_id))) OR (OLD.state<>'checking' AND (NEW.state<>OLD.state OR NEW.completed_at IS NOT OLD.completed_at OR NEW.safe_class<>OLD.safe_class OR NEW.safe_diagnostic<>OLD.safe_diagnostic OR NEW.model_count<>OLD.model_count))
+BEGIN SELECT RAISE(ABORT,'discovery run identity is immutable'); END;
+
+CREATE UNIQUE INDEX idx_discovery_one_active ON discovery_runs(source_revision_id) WHERE state='checking';
+
+CREATE TRIGGER model_target_owner_insert BEFORE INSERT ON model_binding_targets
+WHEN NOT EXISTS(SELECT 1 FROM model_bindings b JOIN models m ON m.id=b.model_id JOIN endpoint_keys k ON k.id=NEW.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id WHERE b.id=NEW.binding_id AND m.user_id=e.user_id AND (NEW.native_service_mask&e.native_service_mask)=NEW.native_service_mask)
+BEGIN SELECT RAISE(ABORT,'model target owner or service mismatch'); END;
+
+CREATE TRIGGER model_target_owner_update BEFORE UPDATE OF binding_id,endpoint_key_id,native_service_mask ON model_binding_targets
+WHEN NOT EXISTS(SELECT 1 FROM model_bindings b JOIN models m ON m.id=b.model_id JOIN endpoint_keys k ON k.id=NEW.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id WHERE b.id=NEW.binding_id AND m.user_id=e.user_id AND (NEW.native_service_mask&e.native_service_mask)=NEW.native_service_mask)
+BEGIN SELECT RAISE(ABORT,'model target owner or service mismatch'); END;
+
+CREATE TRIGGER charity_target_use_insert BEFORE INSERT ON charity_binding_targets
+WHEN NOT EXISTS(SELECT 1 FROM donation_keys dk JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id AND m.donation_id=dk.donation_id JOIN donations d ON d.id=dk.donation_id WHERE dk.id=NEW.donation_key_id AND dk.ended_at IS NULL AND d.terminal_at IS NULL AND d.status IN ('pending','approved') AND (NEW.native_service_mask&COALESCE((SELECT SUM(native_service_bit) FROM donation_uses u WHERE u.donation_key_id=dk.id AND (u.current_approved_revision_id IS NOT NULL OR u.current_pending_revision_id IS NOT NULL)),0))=NEW.native_service_mask)
+BEGIN SELECT RAISE(ABORT,'charity target has no shared service'); END;
+
+CREATE TRIGGER charity_target_use_update BEFORE UPDATE OF binding_id,donation_key_id,native_service_mask ON charity_binding_targets
+WHEN NOT EXISTS(SELECT 1 FROM donation_keys dk JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id AND m.donation_id=dk.donation_id JOIN donations d ON d.id=dk.donation_id WHERE dk.id=NEW.donation_key_id AND dk.ended_at IS NULL AND d.terminal_at IS NULL AND d.status IN ('pending','approved') AND (NEW.native_service_mask&COALESCE((SELECT SUM(native_service_bit) FROM donation_uses u WHERE u.donation_key_id=dk.id AND (u.current_approved_revision_id IS NOT NULL OR u.current_pending_revision_id IS NOT NULL)),0))=NEW.native_service_mask)
+BEGIN SELECT RAISE(ABORT,'charity target has no shared service'); END;
+
+CREATE TRIGGER mainstream_mapping_service_insert BEFORE INSERT ON mainstream_channel_model_mappings
+WHEN NOT EXISTS(SELECT 1 FROM mainstream_channel_entries e WHERE e.channel_id=NEW.channel_id AND e.id=NEW.entry_id AND (NEW.native_service_mask&e.native_service_mask)=NEW.native_service_mask)
+BEGIN SELECT RAISE(ABORT,'mainstream mapping service mismatch'); END;
+
+CREATE TRIGGER mainstream_mapping_service_update BEFORE UPDATE OF channel_id,entry_id,native_service_mask ON mainstream_channel_model_mappings
+WHEN NOT EXISTS(SELECT 1 FROM mainstream_channel_entries e WHERE e.channel_id=NEW.channel_id AND e.id=NEW.entry_id AND (NEW.native_service_mask&e.native_service_mask)=NEW.native_service_mask)
+BEGIN SELECT RAISE(ABORT,'mainstream mapping service mismatch'); END;
+
+CREATE TRIGGER mainstream_entry_mapping_guard BEFORE UPDATE OF native_service_mask ON mainstream_channel_entries
+WHEN EXISTS(SELECT 1 FROM mainstream_channel_model_mappings m WHERE m.entry_id=OLD.id AND (m.native_service_mask&NEW.native_service_mask)<>m.native_service_mask)
+BEGIN SELECT RAISE(ABORT,'mainstream mapping exceeds entry services'); END;
+
+CREATE TRIGGER service_health_scope_guard BEFORE INSERT ON donation_service_health
+WHEN NOT EXISTS(SELECT 1 FROM donation_uses u JOIN charity_use_availability a ON a.use_id=u.id JOIN donation_keys dk ON dk.id=u.donation_key_id WHERE u.id=NEW.use_id AND dk.endpoint_key_id=NEW.endpoint_key_id AND a.native_service_bit=NEW.native_service_bit AND a.credential_version_id=NEW.credential_version_id)
+BEGIN SELECT RAISE(ABORT,'service health scope mismatch'); END;
+
+CREATE TRIGGER service_health_identity_guard BEFORE UPDATE ON donation_service_health
+WHEN NEW.id<>OLD.id OR NEW.use_id<>OLD.use_id OR NEW.endpoint_key_id<>OLD.endpoint_key_id OR NEW.native_service_bit<>OLD.native_service_bit OR NEW.credential_version_id<>OLD.credential_version_id
+BEGIN SELECT RAISE(ABORT,'service health identity is immutable'); END;
+
+CREATE TRIGGER dispatch_service_health_origin_guard BEFORE INSERT ON dispatch_service_health
+WHEN NEW.health_id IS NULL OR NEW.health_id<>NEW.health_id_snapshot OR NOT EXISTS(SELECT 1 FROM dispatch_claims c JOIN dispatch_claim_targets t ON t.claim_id=c.id JOIN donation_service_health h ON h.id=NEW.health_id JOIN donation_uses u ON u.id=h.use_id JOIN donation_usage_reservations r ON r.claim_id=c.id WHERE c.id=NEW.claim_id AND c.purpose='charity' AND c.state='claimed' AND t.authorization_kind='charity' AND t.use_id_snapshot=h.use_id AND t.endpoint_key_id_snapshot=h.endpoint_key_id AND t.credential_version_id=h.credential_version_id AND t.native_service_bit=h.native_service_bit AND u.donation_key_id=c.donation_key_id AND r.donation_key_id=c.donation_key_id AND NEW.streak_generation=h.streak_generation AND hex(NEW.claim_seq)<hex(h.next_claim_seq))
+BEGIN SELECT RAISE(ABORT,'service health claim origin mismatch'); END;
+
+CREATE TRIGGER dispatch_service_health_identity_guard BEFORE UPDATE ON dispatch_service_health
+WHEN NEW.claim_id<>OLD.claim_id OR NEW.health_id_snapshot<>OLD.health_id_snapshot OR NEW.streak_generation<>OLD.streak_generation OR NEW.claim_seq<>OLD.claim_seq OR NEW.created_at<>OLD.created_at OR (NEW.health_id IS NOT OLD.health_id AND NOT (NEW.health_id IS NULL AND NOT EXISTS(SELECT 1 FROM donation_service_health WHERE id=OLD.health_id)))
+BEGIN SELECT RAISE(ABORT,'service health claim origin is immutable'); END;
+
+CREATE TRIGGER dispatch_service_health_fold_guard BEFORE DELETE ON dispatch_service_health
+WHEN EXISTS(SELECT 1 FROM donation_usage_reservations r JOIN donation_keys dk ON dk.id=r.donation_key_id WHERE r.claim_id=OLD.claim_id AND r.streak_generation=dk.streak_generation AND hex(r.claim_seq)>=hex(dk.next_fold_seq))
+BEGIN SELECT RAISE(ABORT,'legacy cursor has not passed service health origin'); END;
+
+CREATE TRIGGER dispatch_claim_target_identity_guard BEFORE UPDATE ON dispatch_claim_targets
+BEGIN SELECT RAISE(ABORT,'claim authorization snapshot is immutable'); END;
+
+CREATE TRIGGER dispatch_claim_target_secret_guard BEFORE INSERT ON dispatch_claim_targets
+WHEN NOT EXISTS(SELECT 1 FROM dispatch_claims c JOIN credential_versions v ON v.secret_ref_id=c.secret_ref_id WHERE c.id=NEW.claim_id AND c.state IN ('claimed','dispatched') AND v.id=NEW.credential_version_id AND v.credential_id=NEW.credential_id_snapshot AND v.version=NEW.credential_version AND (NEW.authorization_kind='legacy' OR (c.state='claimed' AND ((NEW.authorization_kind='self' AND c.purpose IN ('self','debug_live')) OR (NEW.authorization_kind='charity' AND c.purpose='charity') OR (NEW.authorization_kind='discovery' AND c.purpose='discovery'))))) OR (NEW.authorization_kind='self' AND NEW.target_id_snapshot IS NULL AND NOT EXISTS(SELECT 1 FROM dispatch_claims WHERE id=NEW.claim_id AND purpose='debug_live'))
+BEGIN SELECT RAISE(ABORT,'claim authorization secret or purpose mismatch'); END;
+
+CREATE TRIGGER dispatch_claim_target_release_guard BEFORE DELETE ON dispatch_claim_targets
+WHEN EXISTS(SELECT 1 FROM dispatch_claims WHERE id=OLD.claim_id AND state NOT IN ('committed','released'))
+BEGIN SELECT RAISE(ABORT,'active claim authorization cannot be released'); END;
+
+CREATE TRIGGER attempt_service_facts_identity_guard BEFORE UPDATE ON request_attempt_service_facts
+BEGIN SELECT RAISE(ABORT,'attempt service facts are immutable'); END;
+
+ALTER TABLE dispatch_smart_backoff_facts ADD COLUMN health_id_snapshot INTEGER CHECK(health_id_snapshot IS NULL OR health_id_snapshot>0);
+
+CREATE TRIGGER backoff_health_snapshot_guard BEFORE UPDATE OF health_id_snapshot ON dispatch_smart_backoff_facts
+WHEN NEW.health_id_snapshot IS NOT OLD.health_id_snapshot
+BEGIN SELECT RAISE(ABORT,'backoff health scope is immutable'); END;
+
+CREATE TRIGGER backoff_health_scope_guard BEFORE INSERT ON dispatch_smart_backoff_facts
+WHEN NEW.health_id_snapshot IS NOT NULL AND NOT EXISTS(SELECT 1 FROM dispatch_service_health h WHERE h.claim_id=NEW.claim_id AND h.health_id_snapshot=NEW.health_id_snapshot)
+BEGIN SELECT RAISE(ABORT,'backoff service health scope mismatch'); END;
+
+CREATE TRIGGER credential_current_version_guard BEFORE UPDATE OF current_version_id ON credentials
+WHEN NEW.current_version_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM credential_versions v JOIN endpoint_key_secrets s ON s.id=v.secret_ref_id WHERE v.id=NEW.current_version_id AND v.credential_id=NEW.id AND v.retired_at IS NULL AND s.orphaned_at IS NULL)
+BEGIN SELECT RAISE(ABORT,'current credential version has no secret'); END;
+
+CREATE TRIGGER credential_current_version_insert_guard BEFORE INSERT ON credential_versions
+WHEN NEW.secret_ref_id IS NULL AND EXISTS(SELECT 1 FROM credentials WHERE id=NEW.credential_id AND current_version_id=NEW.id)
+BEGIN SELECT RAISE(ABORT,'current credential version has no secret'); END;
+
+CREATE TRIGGER key_current_grant_guard BEFORE UPDATE OF current_grant_revision_id ON endpoint_keys
+WHEN NOT EXISTS(SELECT 1 FROM endpoint_key_grant_revisions g JOIN credential_versions v ON v.id=g.credential_version_id JOIN endpoint_key_secrets s ON s.id=v.secret_ref_id JOIN credentials c ON c.id=v.credential_id AND c.deleted_at IS NULL WHERE g.id=NEW.current_grant_revision_id AND g.endpoint_key_id=NEW.id AND v.retired_at IS NULL AND s.orphaned_at IS NULL)
+BEGIN SELECT RAISE(ABORT,'current grant has no secret'); END;
+
+CREATE TRIGGER endpoint_grant_secret_guard BEFORE INSERT ON endpoint_key_grant_revisions
+WHEN NOT EXISTS(SELECT 1 FROM credential_versions v JOIN endpoint_key_secrets s ON s.id=v.secret_ref_id JOIN credentials c ON c.id=v.credential_id AND c.deleted_at IS NULL WHERE v.id=NEW.credential_version_id AND v.credential_id=NEW.credential_id AND v.retired_at IS NULL AND s.orphaned_at IS NULL)
+BEGIN SELECT RAISE(ABORT,'grant version has no secret'); END;
+
+CREATE TRIGGER source_revision_secret_guard BEFORE INSERT ON discovery_source_revisions
+WHEN NOT EXISTS(SELECT 1 FROM credential_versions v JOIN endpoint_key_secrets s ON s.id=v.secret_ref_id JOIN credentials c ON c.id=v.credential_id AND c.deleted_at IS NULL WHERE v.id=NEW.credential_version_id AND v.credential_id=NEW.credential_id AND v.retired_at IS NULL AND s.orphaned_at IS NULL)
+BEGIN SELECT RAISE(ABORT,'discovery source version has no secret'); END;
+
+CREATE TRIGGER source_current_revision_guard BEFORE UPDATE OF current_revision_id ON discovery_sources
+WHEN NOT EXISTS(SELECT 1 FROM discovery_source_revisions sr JOIN credential_versions v ON v.id=sr.credential_version_id JOIN endpoint_key_secrets s ON s.id=v.secret_ref_id JOIN credentials c ON c.id=v.credential_id AND c.deleted_at IS NULL WHERE sr.id=NEW.current_revision_id AND sr.source_id=NEW.id AND v.retired_at IS NULL AND s.orphaned_at IS NULL)
+BEGIN SELECT RAISE(ABORT,'current source revision has no secret'); END;
+
+CREATE TRIGGER model_bindings_parent_guard BEFORE UPDATE OF model_id ON model_bindings
+WHEN NEW.model_id<>OLD.model_id
+BEGIN SELECT RAISE(ABORT,'binding parent is immutable'); END;
+
+CREATE TRIGGER charity_model_bindings_parent_guard BEFORE UPDATE OF charity_model_id ON charity_model_bindings
+WHEN NEW.charity_model_id<>OLD.charity_model_id
+BEGIN SELECT RAISE(ABORT,'binding parent is immutable'); END;
+
+CREATE UNIQUE INDEX idx_keys_current_grant_pair ON endpoint_keys(id,current_grant_revision_id);
+CREATE UNIQUE INDEX idx_sources_current_revision_pair ON discovery_sources(id,current_revision_id);
+CREATE UNIQUE INDEX idx_grants_version_pair ON endpoint_key_grant_revisions(id,credential_version_id);
+CREATE UNIQUE INDEX idx_source_revisions_version_pair ON discovery_source_revisions(id,credential_version_id);
+CREATE INDEX idx_key_sources_grant ON endpoint_key_discovery_sources(grant_revision_id,credential_version_id);
+CREATE INDEX idx_key_sources_revision ON endpoint_key_discovery_sources(source_revision_id,credential_version_id);
+CREATE INDEX idx_grants_endpoint_owner ON endpoint_key_grant_revisions(endpoint_id,owner_user_id);
+CREATE INDEX idx_grants_credential_owner ON endpoint_key_grant_revisions(credential_id,owner_user_id);
+CREATE INDEX idx_source_revisions_credential_owner ON discovery_source_revisions(credential_id,owner_user_id);
+CREATE INDEX idx_use_reviews_actor ON donation_use_revisions(reviewer_user_id,id);
+CREATE TRIGGER key_discovery_mapping_current AFTER UPDATE OF current_grant_revision_id ON endpoint_keys
+WHEN NEW.current_grant_revision_id<>OLD.current_grant_revision_id
+BEGIN
+ UPDATE endpoint_key_discovery_sources SET grant_revision_id=NEW.current_grant_revision_id,
+ credential_version_id=(SELECT credential_version_id FROM endpoint_key_grant_revisions WHERE id=NEW.current_grant_revision_id)
+ WHERE endpoint_key_id=NEW.id;
+END;
+CREATE TRIGGER source_discovery_mapping_current AFTER UPDATE OF current_revision_id ON discovery_sources
+WHEN NEW.current_revision_id<>OLD.current_revision_id
+BEGIN UPDATE endpoint_key_discovery_sources SET source_revision_id=NEW.current_revision_id WHERE source_id=NEW.id; END;
+
+CREATE VIEW endpoint_key_catalog_entries AS
+ SELECT c.id,c.endpoint_key_id,c.source_type,c.source_identity,c.normalized_model_id,c.provider,c.source_revision,c.created_at,c.updated_at,c.discovery_run_id,c.native_service_mask,c.evidence_source,c.evidence_revision
+ FROM model_catalog_entries c WHERE c.source_type='manual'
+ UNION ALL
+ SELECT c.id,m.endpoint_key_id,c.source_type,c.source_identity,c.normalized_model_id,c.provider,c.source_revision,c.created_at,c.updated_at,c.discovery_run_id,c.native_service_mask,c.evidence_source,c.evidence_revision
+ FROM endpoint_key_discovery_sources m
+ JOIN discovery_sources s ON s.id=m.source_id
+ JOIN discovery_source_states st ON st.source_revision_id=s.current_revision_id
+ JOIN model_catalog_entries c ON c.discovery_run_id=st.last_successful_run_id AND c.source_type='automatic';
+
+CREATE VIEW charity_model_catalog AS
+ WITH automatic_entries AS (
+  SELECT DISTINCT u.donation_key_id,c.id,c.normalized_model_id,r.result_generation
+  FROM donation_uses u
+  JOIN donation_use_revisions ur ON ur.id=u.current_approved_revision_id AND ur.use_id=u.id AND ur.review_state='approved'
+  JOIN discovery_source_states st ON st.source_revision_id=ur.discovery_source_revision_id
+  JOIN discovery_runs r ON r.id=st.last_successful_run_id AND r.source_revision_id=ur.discovery_source_revision_id AND r.state='succeeded'
+  JOIN model_catalog_entries c ON c.discovery_run_id=r.id AND c.source_type='automatic'
+ ), supports AS (
+  SELECT donation_key_id,normalized_model_id,count(*) AS automatic_supports,0 AS manual_supports,max(result_generation) AS automatic_revision
+  FROM automatic_entries GROUP BY donation_key_id,normalized_model_id
+  UNION ALL
+  SELECT donation_key_id,normalized_model_id,0,1,0 FROM donation_key_manual_models
+ )
+ SELECT donation_key_id,normalized_model_id,sum(automatic_supports) AS automatic_supports,sum(manual_supports) AS manual_supports,max(automatic_revision) AS automatic_revision
+ FROM supports GROUP BY donation_key_id,normalized_model_id;
+
+-- Locate account history without scanning unrelated users during retirement.
+CREATE INDEX idx_accepted_operations_actor ON accepted_operations(actor_user_id) WHERE actor_user_id IS NOT NULL;
+CREATE INDEX idx_dispatch_claims_receiver ON dispatch_claims(receiver_user_id) WHERE receiver_user_id IS NOT NULL;
+CREATE INDEX idx_credit_operations_actor ON credit_operations(actor_user_id) WHERE actor_user_id IS NOT NULL;
+CREATE INDEX idx_credit_operations_donation_user ON credit_operations(donation_credit_user_id) WHERE donation_credit_user_id IS NOT NULL;
+CREATE INDEX idx_charity_dispatch_receipts_user ON charity_dispatch_receipts(user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX idx_resource_operation_status_user ON resource_operation_status(user_id);
+CREATE INDEX idx_lake_notes_cast_user ON lake_notes_casts(user_id);
+CREATE INDEX idx_rps_summary_seats_user ON game_rps_summary_seats(user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX idx_rps_pending_results_session ON game_rps_pending_results(session_id_text);

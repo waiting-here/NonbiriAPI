@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -30,18 +31,26 @@ func TestModelBrowseBatchKeepsPerModelPreviewOrderAndOwnerScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, name := range []string{"automatic", "stale", "unsupported"} {
-		if _, err := tx.Exec(`INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,?,?,?,?)`, modelID, keyID, name, i+2, resourceTestNow, resourceTestNow); err != nil {
-			t.Fatal(err)
-		}
+		seedResourceBindingTx(t, tx, modelID, keyID, name, i+2)
 	}
-	// A hostile binding sorts before every owned binding and is otherwise
-	// available. It must affect neither preview slots nor availability counts.
-	if _, err := tx.Exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,manual_supports,updated_at) VALUES(?,'foreign',1,?)`, foreignKeyID, resourceTestNow); err != nil {
+	// A foreign key cannot be attached to an owned model, even through storage.
+	if _, err := tx.Exec("SAVEPOINT foreign_target"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec(`INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,'foreign',0,?,?)`, modelID, foreignKeyID, resourceTestNow, resourceTestNow); err != nil {
+	if _, err := testseed.InsertModelBindingTx(context.Background(), tx, testseed.BindingInput{ModelID: modelID, KeyID: foreignKeyID, UpstreamModelID: "foreign", At: resourceTestNow}); err == nil {
+		t.Fatal("cross-owner target accepted")
+	}
+	if _, err := tx.Exec("ROLLBACK TO foreign_target"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := tx.Exec("RELEASE foreign_target"); err != nil {
+		t.Fatal(err)
+	}
+	var foreignModelID int64
+	if err := tx.QueryRow("SELECT id FROM models WHERE user_id=?", other).Scan(&foreignModelID); err != nil {
+		t.Fatal(err)
+	}
+	seedResourceBindingTx(t, tx, foreignModelID, foreignKeyID, "foreign", 0)
 	if _, err := tx.Exec(`DELETE FROM model_bindings WHERE model_id IN (SELECT id FROM models WHERE user_id=? AND model='model-00001')`, owner); err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +69,7 @@ func TestModelBrowseBatchKeepsPerModelPreviewOrderAndOwnerScope(t *testing.T) {
 		t.Fatalf("empty summary=%+v", empty)
 	}
 	got := page.Data[2].Browse
-	if got == nil || got.AvailableBindingCount != "2" || len(got.Preview) != 3 {
+	if got == nil || got.AvailableBindingCount != "4" || len(got.Preview) != 3 {
 		t.Fatalf("bounded summary=%+v", got)
 	}
 	for i, name := range []string{"manual", "automatic", "stale"} {
@@ -68,7 +77,7 @@ func TestModelBrowseBatchKeepsPerModelPreviewOrderAndOwnerScope(t *testing.T) {
 			t.Fatalf("preview %d=%+v", i, got.Preview[i])
 		}
 	}
-	if got.Preview[2].State != "unsupported" {
-		t.Fatalf("stale support became available: %+v", got.Preview[2])
+	if got.Preview[2].State != "available" {
+		t.Fatalf("saved target lost authority after catalog expiration: %+v", got.Preview[2])
 	}
 }

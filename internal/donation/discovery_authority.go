@@ -5,12 +5,13 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
 // This predicate matches the donation key's configured available state. It
 // does not require existing model bindings or spend any donation quota.
-const discoveryEligibleSQL = `d.status='approved' AND dk.ended_reason IS NULL
+const discoveryEligibleSQL = `d.status IN ('pending','approved') AND d.terminal_at IS NULL AND dk.ended_reason IS NULL
  AND (dk.expires_at IS NULL OR dk.expires_at>?)
  AND dk.enabled=1 AND dk.failure_disabled=0 AND k.enabled=1 AND e.enabled=1
  AND EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id AND m.endpoint_key_id=k.id)
@@ -26,7 +27,7 @@ const discoveryTargetFromSQL = ` FROM donation_keys dk JOIN donations d ON d.id=
  JOIN endpoint_keys k ON k.id=dk.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id
  JOIN users u ON u.id=e.user_id AND u.id=d.user_id`
 
-func (s *Service) AuthorizeManagedDiscovery(ctx context.Context, tx *sql.Tx, role string, actorID, donationID, donationKeyID int64, requireEligible bool) (resources.ManagedDiscoveryTarget, error) {
+func (s *Service) AuthorizeManagedDiscovery(ctx context.Context, tx *sql.Tx, role string, actorID, donationID, donationKeyID int64, selection resources.ManagedDiscoverySelection, requireEligible bool) (resources.ManagedDiscoveryTarget, error) {
 	var target resources.ManagedDiscoveryTarget
 	if s == nil || tx == nil || nilDependency(s.roleAuth) || actorID <= 0 || donationID <= 0 || donationKeyID <= 0 {
 		return target, resources.ErrInvalidRequest
@@ -57,6 +58,29 @@ func (s *Service) AuthorizeManagedDiscovery(ctx context.Context, tx *sql.Tx, rol
 	if requireEligible && !eligible {
 		return target, resources.ErrResourceLocked
 	}
+	if selection.UseID < 0 || selection.ExpectedRevision < 0 || selection.UseID == 0 && selection.ExpectedRevision != 0 {
+		return target, resources.ErrInvalidRequest
+	}
+	choices, err := readDiscoveryChoicesTx(ctx, tx, []int64{donationKeyID}, now)
+	if err != nil {
+		return target, discoveryResourceError(connectionError(err))
+	}
+	if selection.UseID == 0 && !eligible {
+		return target, resources.ErrResourceLocked
+	}
+	selected, err := chooseDiscoveryUse(choices[donationKeyID], selection, requireEligible || selection.UseID == 0)
+	if err != nil {
+		return target, err
+	}
+	use := selected.Use
+	source, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: target.OwnerUserID, SourceID: selected.SourceID, Purpose: connectionstore.SourceCharity, DonationUseID: use.UseID})
+	if errors.Is(err, connectionstore.ErrNotFound) || errors.Is(err, connectionstore.ErrUnavailable) {
+		return target, resources.ErrResourceLocked
+	}
+	if err != nil {
+		return target, resources.ErrUnavailable
+	}
+	target.UseID, target.UseRevision, target.SourceID, target.SourceRevisionID, target.CredentialVersionID, target.ApprovedRevisionID = use.UseID, use.UseRevision, source.SourceID, source.SourceRevisionID, source.CredentialVersionID, use.ApprovedRevisionID
 	return target, nil
 }
 

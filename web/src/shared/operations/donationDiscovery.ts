@@ -1,4 +1,4 @@
-import { decoded, idempotentOptions } from './api';
+import { decoded, idempotentOptions, queryPath } from './api';
 import { charityScopePath } from './charityScope';
 import {
   array,
@@ -13,6 +13,8 @@ import {
 import type { CharityRole } from './charity';
 
 export interface DiscoveryRef {
+  use_id?: string;
+  expected_revision?: string;
   donation_id: string;
   key_id: string;
 }
@@ -148,7 +150,13 @@ export function startDonationDiscovery(
       if (evidence.state !== 'checking') invalidResponse('accepted discovery state');
       return evidence;
     },
-    idempotentOptions(key, { method: 'POST', signal: AbortSignal.timeout(10000) }),
+    idempotentOptions(key, {
+      method: 'POST',
+      ...(item.use_id
+        ? { json: { use_id: item.use_id, expected_revision: item.expected_revision } }
+        : {}),
+      signal: AbortSignal.timeout(10000),
+    }),
   );
 }
 
@@ -158,7 +166,13 @@ export function readDonationDiscovery(
   modelID?: string,
 ): Promise<DiscoveryEvidence> {
   return decoded(
-    charityScopePath(`${path(role, item)}/discovery`, modelID),
+    charityScopePath(
+      queryPath(`${path(role, item)}/discovery`, {
+        use_id: item.use_id,
+        expected_revision: item.expected_revision,
+      }),
+      modelID,
+    ),
     normalizeManagedDiscovery,
     {
       signal: AbortSignal.timeout(10000),

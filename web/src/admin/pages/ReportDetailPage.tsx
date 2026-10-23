@@ -1,3 +1,4 @@
+import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -342,7 +343,9 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
               <dt>{t('admin.reports.detail.progress')}</dt>
               <dd>{progressLabels[detail.data.progress_state]}</dd>
               <dt>{t('admin.reports.detail.connector')}</dt>
-              <dd>{detail.data.connector_type}</dd>
+              <dd>
+                <GatewayConnectorLabel value={detail.data.connector_type} />
+              </dd>
               <dt>{t('admin.reports.detail.canonicalUrl')}</dt>
               <dd>{detail.data.canonical_base_url}</dd>
               <dt>{t('admin.reports.detail.materialTargetRevision')}</dt>
@@ -477,7 +480,7 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
                           className="ops-cell-wide"
                           data-label={t('admin.reports.detail.endpoint')}
                         >
-                          {target.endpoint.connector_type}
+                          <GatewayConnectorLabel value={target.endpoint.connector_type} />
                           <br />
                           {target.endpoint.canonical_base_url}
                         </td>

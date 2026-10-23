@@ -61,13 +61,11 @@ func TestTraineeKeyScopeAllowsUnboundMainstreamAndOnlyBoundCustom(t *testing.T) 
 	if _, err := e.service.KeyStewardSession(ctx, trainee, customID, customKey); !errors.Is(err, ErrNotFound) {
 		t.Fatal("unbound custom key exposed", err)
 	}
-	if _, err := e.store.DB().Exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,manual_supports,updated_at) VALUES(?,'upstream',1,?)`, customPhysical, donationTestNow); err != nil {
+	if _, err := e.store.DB().Exec(`INSERT INTO donation_key_manual_models(donation_key_id,normalized_model_id,display_name,revision,created_at,updated_at) SELECT donation_key_id,'upstream','upstream',1,?2,?2 FROM donation_key_memberships WHERE endpoint_key_id=?1`, customPhysical, donationTestNow); err != nil {
 		t.Fatal(err)
 	}
 	for _, modelID := range []int64{model, other} {
-		if _, err := e.store.DB().Exec(`INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,?,'upstream',0,?,?)`, modelID, customKey, customPhysical, donationTestNow, donationTestNow); err != nil {
-			t.Fatal(err)
-		}
+		e.seedBinding(t, modelID, customKey, "upstream", 0)
 	}
 	bound, err := e.service.KeyStewardSession(ctx, trainee, customID, customKey)
 	if err != nil || bound.BindingCount != "2" || len(bound.VisibleModels) != 1 || bound.VisibleModels[0].ModelID != fmt.Sprint(model) {

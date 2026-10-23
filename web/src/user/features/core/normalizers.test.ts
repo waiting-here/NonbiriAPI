@@ -31,6 +31,27 @@ function jsonFixture(path: string): unknown {
 }
 
 describe('core wire normalizers', () => {
+  it.each(['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)(
+    'preserves %s and the complete native base URL',
+    (connector_type) => {
+      const endpoint = jsonFixture('internal/resources/testdata/endpoint.json') as Record<
+        string,
+        unknown
+      >;
+      const base_url = 'https://gateway.example.test/custom/native';
+      expect(normalizeEndpoint({ ...endpoint, connector_type, base_url })).toMatchObject({
+        connector_type,
+        base_url,
+      });
+      expect(
+        normalizeEndpointCreateOptions({
+          base_connector_types: [connector_type],
+          mainstream_channels: [],
+        }).base_connector_types,
+      ).toEqual([connector_type]);
+    },
+  );
+
   it('preserves the optional server role policy in models and affected-model projections', () => {
     const raw = jsonFixture('internal/resources/testdata/manual_update.json') as {
       affected_models: { model: Record<string, unknown> }[];
@@ -123,6 +144,14 @@ describe('core wire normalizers', () => {
     expect(endpoint.origin).toEqual({ kind: 'custom' });
     expect(key).toMatchObject({ id: '21', endpoint_id: '11', revision: '4' });
     expect(user.user.usage.total_requests).toBe('340282366920938463463374607431768211455');
+    expect(user.user).toMatchObject({
+      global_rpm_limit: null,
+      effective_global_rpm_limit: '60',
+      light_rpm_limit: null,
+      effective_light_rpm_limit: '30',
+      light_concurrency_limit: null,
+      effective_light_concurrency_limit: '15',
+    });
   });
 
   it('decodes home check-in fields without numeric conversion', () => {

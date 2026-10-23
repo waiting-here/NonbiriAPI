@@ -66,9 +66,10 @@ type bindingKey struct {
 	valid          bool
 }
 type bindingHead struct {
-	revision int64
-	count    int
-	added    bool
+	revision    int64
+	count       int
+	targetCount int
+	added       bool
 }
 
 func parseBindingTargets(input []KeyBindingTarget) ([]bindingTarget, error) {
@@ -105,14 +106,15 @@ func donationBindingRevision(ctx context.Context, tx *sql.Tx, id int64) (int64, 
 	var revision int64
 	var status string
 	var owner sql.NullInt64
-	err := tx.QueryRowContext(ctx, `SELECT revision,status,user_id FROM donations WHERE id=?`, id).Scan(&revision, &status, &owner)
+	var terminal sql.NullInt64
+	err := tx.QueryRowContext(ctx, `SELECT revision,status,user_id,terminal_at FROM donations WHERE id=?`, id).Scan(&revision, &status, &owner, &terminal)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNotFound
 	}
 	if err != nil {
 		return 0, err
 	}
-	if status != "approved" || !owner.Valid {
+	if status != "approved" && status != "pending" || terminal.Valid || !owner.Valid {
 		return 0, ErrConflict
 	}
 	return revision, nil
@@ -121,7 +123,8 @@ func readBindingKeys(ctx context.Context, tx *sql.Tx, donationID, keyID, now int
 	rows, err := tx.QueryContext(ctx, `SELECT dk.id,COALESCE(dk.endpoint_key_id,0),
  dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?) AND EXISTS(
  SELECT 1 FROM donation_key_memberships m JOIN endpoint_keys k ON k.id=m.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id JOIN donations d ON d.id=m.donation_id
- WHERE m.donation_key_id=dk.id AND m.donation_id=dk.donation_id AND m.endpoint_key_id=dk.endpoint_key_id AND e.user_id=d.user_id),
+ WHERE m.donation_key_id=dk.id AND m.donation_id=dk.donation_id AND m.endpoint_key_id=dk.endpoint_key_id AND e.user_id=d.user_id)
+ AND EXISTS(SELECT 1 FROM charity_use_availability av WHERE av.donation_key_id=dk.id),
  COALESCE(dk.mainstream_channel_id,''),dk.connector_type,dk.canonical_base_url
  FROM donation_keys dk WHERE dk.donation_id=? AND (?=0 OR dk.id=?) ORDER BY dk.id`, now, donationID, keyID, keyID)
 	if err != nil {
@@ -228,7 +231,7 @@ func applyBindingMatrix(ctx context.Context, tx *sql.Tx, targets []bindingTarget
 			continue
 		}
 		var head bindingHead
-		err := tx.QueryRowContext(ctx, `SELECT binding_revision,(SELECT COUNT(*) FROM charity_model_bindings WHERE charity_model_id=cm.id) FROM charity_models cm WHERE id=?`, target.modelID).Scan(&head.revision, &head.count)
+		err := tx.QueryRowContext(ctx, `SELECT binding_revision,(SELECT COUNT(*) FROM charity_model_bindings WHERE charity_model_id=cm.id),(SELECT COUNT(*) FROM charity_binding_targets t JOIN charity_model_bindings b ON b.id=t.binding_id WHERE b.charity_model_id=cm.id) FROM charity_models cm WHERE id=?`, target.modelID).Scan(&head.revision, &head.count, &head.targetCount)
 		if errors.Is(err, sql.ErrNoRows) {
 			heads[target.modelID] = nil
 			continue
@@ -250,7 +253,7 @@ func applyBindingMatrix(ctx context.Context, tx *sql.Tx, targets []bindingTarget
 			head := heads[target.modelID]
 			if key.valid && head != nil {
 				var exists bool
-				if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM charity_model_bindings WHERE charity_model_id=? AND donation_key_id=? AND upstream_model_id=?)`, target.modelID, key.id, target.upstream).Scan(&exists); err != nil {
+				if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM charity_model_bindings b JOIN charity_binding_targets t ON t.binding_id=b.id WHERE b.charity_model_id=? AND t.donation_key_id=? AND t.upstream_model_id=?)`, target.modelID, key.id, target.upstream).Scan(&exists); err != nil {
 					return out, err
 				}
 				switch {
@@ -258,18 +261,27 @@ func applyBindingMatrix(ctx context.Context, tx *sql.Tx, targets []bindingTarget
 					status = "already_bound"
 				default:
 					var supported bool
-					if err := tx.QueryRowContext(ctx, `SELECT `+charityscope.SupportSQL("?", "?", "?"), key.physicalID, target.upstream, key.id, target.upstream).Scan(&supported); err != nil {
+					if err := tx.QueryRowContext(ctx, `SELECT `+charityscope.SupportSQL("?", "?", "?"), key.id, target.upstream).Scan(&supported); err != nil {
 						return out, err
 					}
 					if !supported {
 						status = "missing_model"
-					} else if head.count >= maxBindingBatch {
+					} else if head.targetCount >= maxBindingBatch {
 						status = "capacity_exceeded"
 					} else {
-						if _, err := tx.ExecContext(ctx, `INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`, target.modelID, key.id, key.physicalID, target.upstream, head.count, now, now); err != nil {
+						values := []validatedTarget{{keyID: key.id, upstream: target.upstream, legacy: true}}
+						if err := validateTargetsTx(ctx, tx, charityscope.Scope{}, target.modelID, values, now); err != nil {
+							if errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalidRequest) {
+								row.Results[index] = "invalid_resource"
+								continue
+							}
+							return out, err
+						}
+						if _, err := insertBindingGroupTx(ctx, tx, target.modelID, head.count, values, now); err != nil {
 							return out, err
 						}
 						head.count++
+						head.targetCount++
 						head.added = true
 						added++
 						status = "added"

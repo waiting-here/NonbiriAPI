@@ -1,3 +1,4 @@
+import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -120,7 +121,9 @@ function GroupSource({ group }: { group: AdminCharityGroup }) {
       <h3>{label}</h3>
       <dl className="ops-kv">
         <dt>{t('admin.charity.group.connector')}</dt>
-        <dd>{group.source.connector_type}</dd>
+        <dd>
+          <GatewayConnectorLabel value={group.source.connector_type} />
+        </dd>
         <dt>{t('admin.charity.group.baseUrl')}</dt>
         <dd className="ops-wrap">{group.source.base_url}</dd>
         {group.source.kind === 'mainstream' ? (

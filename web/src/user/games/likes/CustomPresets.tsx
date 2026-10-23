@@ -273,7 +273,7 @@ function AccountCustomPresets({
           </button>
         </div>
       )}
-      {operation.isPending && <p role="status">{text('likes.saving')}</p>}
+      {operation.outcome === 'pending' && <p role="status">{text('likes.saving')}</p>}
       {operation.isSuccess && <p role="status">{text('likes.presetSaved')}</p>}
       {operation.outcome === 'conflict' && (
         <p role="alert">{text('likes.customPresetsChangedElsewhereCheckTheRefreshed')}</p>

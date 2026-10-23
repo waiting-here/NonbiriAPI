@@ -39,9 +39,9 @@ const (
 )
 
 type projectionConfig struct {
-	endpointDefault, rpmDefault, concurrencyDefault int64
-	thresholds                                      [5]int64
-	display                                         [7]string
+	endpointDefault, rpmDefault, lightRPMDefault, globalRPMDefault, concurrencyDefault int64
+	thresholds                                                                         [5]int64
+	display                                                                            [7]string
 }
 
 type userRow struct {
@@ -51,6 +51,7 @@ type userRow struct {
 	isBanned, gamePublic                                       int
 	bannedUntil, charityUntil                                  sql.NullInt64
 	endpointLimit, rpmLimit, concurrencyLimit                  sql.NullInt64
+	lightRPMLimit, lightConcurrencyLimit, globalRPMLimit       sql.NullInt64
 	donation                                                   []byte
 	manualLevel                                                sql.NullInt64
 	autoLevel                                                  int
@@ -79,7 +80,7 @@ func rollbackUnlessDone(tx *sql.Tx, done *bool) {
 }
 
 func readProjectionConfig(ctx context.Context, tx *sql.Tx) (projectionConfig, error) {
-	var config projectionConfig
+	config := projectionConfig{concurrencyDefault: db.DefaultUserConcurrencyLimit}
 	uints := []struct {
 		key      string
 		min, max int64
@@ -87,7 +88,8 @@ func readProjectionConfig(ctx context.Context, tx *sql.Tx) (projectionConfig, er
 	}{
 		{"default_endpoint_limit", 0, 10000, &config.endpointDefault},
 		{"default_rpm_per_user", 1, db.MaxUserRPMLimit, &config.rpmDefault},
-		{"default_per_endpoint_concurrency", 1, db.MaxUserConcurrencyLimit, &config.concurrencyDefault},
+		{"default_light_rpm_per_user", 1, db.MaxUserRPMLimit, &config.lightRPMDefault},
+		{"global_rpm_per_user", 1, db.MaxUserRPMLimit, &config.globalRPMDefault},
 	}
 	for level := 2; level <= 4; level++ {
 		uints = append(uints, struct {
@@ -128,13 +130,13 @@ SELECT id,discord_id,username,avatar,guild_nick,guild_avatar_url,is_banned,banne
  charity_suspended_until,endpoint_limit,rpm_limit,concurrency_limit,game_profile_public,
  donation_credit_mag,level,auto_level,total_requests,total_uncached_input_tokens,
  total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,
- total_unknown_usage_requests,revision,lang,created_at,updated_at,discord_gate_policy
+ total_unknown_usage_requests,revision,lang,created_at,updated_at,discord_gate_policy,light_rpm_limit,light_concurrency_limit,global_rpm_limit
 FROM users WHERE id=? AND is_admin=0`, userID).Scan(
 		&row.id, &row.discordID, &row.username, &row.avatar, &row.guildNick, &row.guildAvatarURL,
 		&row.isBanned, &row.bannedReason, &row.bannedUntil, &row.charityUntil, &row.endpointLimit,
 		&row.rpmLimit, &row.concurrencyLimit, &row.gamePublic, &row.donation, &row.manualLevel,
 		&row.autoLevel, &row.requests, &row.uncached, &row.cacheWrite, &row.cacheRead, &row.output,
-		&row.unknown, &row.revision, &row.lang, &row.createdAt, &row.updatedAt, &row.discordGatePolicy,
+		&row.unknown, &row.revision, &row.lang, &row.createdAt, &row.updatedAt, &row.discordGatePolicy, &row.lightRPMLimit, &row.lightConcurrencyLimit, &row.globalRPMLimit,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return userRow{}, ErrNotFound
@@ -233,6 +235,9 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 		EndpointLimit:         nullableIntString(row.endpointLimit), EffectiveEndpointLimit: effectiveLimit(row.endpointLimit, config.endpointDefault),
 		RPMLimit: nullableIntString(row.rpmLimit), EffectiveRPMLimit: effectiveLimit(row.rpmLimit, config.rpmDefault),
 		ConcurrencyLimit: nullableIntString(row.concurrencyLimit), EffectiveConcurrencyLimit: effectiveLimit(row.concurrencyLimit, config.concurrencyDefault),
+		LightRPMLimit: nullableIntString(row.lightRPMLimit), EffectiveLightRPMLimit: effectiveLimit(row.lightRPMLimit, config.lightRPMDefault),
+		LightConcurrencyLimit: nullableIntString(row.lightConcurrencyLimit), EffectiveLightConcurrencyLimit: effectiveLimit(row.lightConcurrencyLimit, db.DefaultUserLightConcurrencyLimit),
+		GlobalRPMLimit: nullableIntString(row.globalRPMLimit), EffectiveGlobalRPMLimit: effectiveLimit(row.globalRPMLimit, config.globalRPMDefault),
 		Lang: row.lang, Balance: formatMilliPoints(wallet.Balance.Big()), GameBalance: formatMilliPoints(gameWallet.Balance.Big()), DonationCredit: formatMilliPoints(donation.Big()),
 		Level:             AdminUserLevel{Manual: manual, Automatic: automatic, Effective: effective, DisplayName: config.display[effective]},
 		GameProfilePublic: row.gamePublic == 1, Revision: revision.Decimal(), Usage: usage,
@@ -752,7 +757,7 @@ func (service *Service) profile(ctx context.Context, adminID, userID int64, role
 		}
 		defer release()
 	}
-	tx, row, decision, err := service.beginUserMutation(ctx, adminID, userID, role, control, now, false)
+	tx, row, decision, err := service.beginUserMutationAccess(ctx, adminID, userID, role, control, now, false, input.limitsOnly())
 	if err != nil {
 		return MutationResult[AdminUser]{}, err
 	}
@@ -787,6 +792,9 @@ UPDATE users SET
  endpoint_limit=CASE WHEN ? THEN ? ELSE endpoint_limit END,
  rpm_limit=CASE WHEN ? THEN ? ELSE rpm_limit END,
  concurrency_limit=CASE WHEN ? THEN ? ELSE concurrency_limit END,
+ light_rpm_limit=CASE WHEN ? THEN ? ELSE light_rpm_limit END,
+ light_concurrency_limit=CASE WHEN ? THEN ? ELSE light_concurrency_limit END,
+ global_rpm_limit=CASE WHEN ? THEN ? ELSE global_rpm_limit END,
  lang=CASE WHEN ? THEN ? ELSE lang END,
  level=CASE WHEN ? THEN ? ELSE level END,
  discord_gate_policy=CASE WHEN ? THEN ? ELSE discord_gate_policy END,
@@ -795,6 +803,9 @@ WHERE id=? AND is_admin=0 AND revision=?`,
 		input.EndpointLimitSet, nullableIntValue(input.EndpointLimit),
 		input.RPMLimitSet, nullableIntValue(input.RPMLimit),
 		input.ConcurrencySet, nullableIntValue(input.Concurrency),
+		input.LightRPMLimitSet, nullableIntValue(input.LightRPMLimit),
+		input.LightConcurrencySet, nullableIntValue(input.LightConcurrency),
+		input.GlobalRPMLimitSet, nullableIntValue(input.GlobalRPMLimit),
 		input.LangSet, input.Lang, input.LevelSet, nullableIntValueFromInt(input.Level),
 		input.DiscordGatePolicySet, input.DiscordGatePolicy,
 		db.EncodeU128(next), now, userID, row.revision)
@@ -832,6 +843,10 @@ WHERE id=? AND is_admin=0 AND revision=?`,
 	done = true
 	if input.LevelSet {
 		service.invalidator.InvalidateUserAuthority(userID)
+	} else if input.RPMLimitSet || input.ConcurrencySet || input.LightRPMLimitSet || input.LightConcurrencySet || input.GlobalRPMLimitSet {
+		if notifier, ok := service.invalidator.(interface{ UserLimitsChanged(int64) }); ok {
+			notifier.UserLimitsChanged(userID)
+		}
 	}
 	return mutationResult, nil
 }

@@ -6,6 +6,7 @@ varying vec2 uv;
 uniform sampler2D scenery,art,closed,lids,shadow;
 uniform vec4 view,heroBox,leftEye,rightEye;
 uniform float time,blink,night,characterOnly,backgroundOnly,polish,mirrorFlow;
+uniform float characterPlate,reflectionPlate,lightPlate,independentBackground;
 const float TAU=6.28318530718;
 float feather(vec2 p,vec2 c,vec2 r){return 1.-smoothstep(.45,1.,length((p-c)/r));}
 float noiseHash(vec2 p){
@@ -34,10 +35,27 @@ float waterMask(vec2 p){
 }
 ${eyelidShader}
 ${mirrorSeaOptics}
+vec3 touchLight(vec2 offset){
+  float phase=TAU*time/17.6;
+  vec2 d=offset*vec2(1.77778,1.);
+  float distanceFromHand=length(d);
+  vec3 light=vec3(0.);
+  for(int i=0;i<2;i++){
+    float age=fract(time/8.8+float(i)*.5);
+    float ring=(1.-smoothstep(.0005,.0018,abs(distanceFromHand-(.003+age*.052))))*pow(sin(age*3.14159),2.)*.26;
+    light+=vec3(.34,.21,.45)*ring;
+  }
+  if(polish>.5)light+=vec3(.17,.12,.24)*exp(-dot(d,d)/.002)*(.42+.08*sin(phase));
+  return light;
+}
 vec4 sea(vec2 p){
   float phase=TAU*time/17.6;
   float water=waterMask(p);
   vec2 refraction=mirrorFlow>.5 ? mirrorCurrent(p) : vec2(0.);
+  // Cloud and garden motion stays within the existing distant glass interiors.
+  refraction+=vec2(.0012*sin(phase*.5),.0004*cos(phase*.5))*glassMask(p,cloudGlass);
+  refraction+=vec2(.0008*sin(phase+.7),0.)*glassMask(p,gardenGlass)
+    *feather(p,vec2(.079,.245),vec2(.026,.084));
   vec4 color;
   if(water>0.){
     float depth=clamp((p.y-.50)*2.,0.,1.);
@@ -61,29 +79,27 @@ vec4 sea(vec2 p){
   vec2 drops=vec2(p.x*990.,p.y*135.-phase*7.);
   float streak=pow(max(0.,sin(drops.x)),26.)*pow(max(0.,sin(drops.y+sin(floor(drops.x))*8.)),12.);
   color.rgb+=vec3(.35,.45,.62)*streak*rain*.22;
-  float cloud=feather(p,vec2(.887,.235),vec2(.026,.078));
-  color.rgb+=vec3(.10,.12,.16)*cloud*(.5+.5*sin(phase));
-  // The ripple answers the raised fingertips and remains behind the character.
+  float stone=feather(p,vec2(.738,.883),vec2(.16,.11));
+  float reflectedLight=smoothstep(.45,.9,dot(color.rgb,vec3(.2126,.7152,.0722)));
+  color.rgb+=prism(.15-phase/TAU*.5)*stone*reflectedLight*.035*(.5+.5*sin(phase*.5+.5));
   vec2 touch=heroBox.xy+heroBox.zw*vec2(.145,.128);
-  float distanceFromHand=length((p-touch)*vec2(1.77778,1.));
-  for(int i=0;i<2;i++){
-    float age=fract(time/8.8+float(i)*.5);
-    float ring=(1.-smoothstep(.0005,.0018,abs(distanceFromHand-(.003+age*.052))))*pow(sin(age*3.14159),2.)*.26;
-    color.rgb+=vec3(.34,.21,.45)*ring;
-  }
   if(polish>.5){
     // Keep the mirror and sea readable while reserving the brightest values for her face.
     float value=dot(color.rgb,vec3(.2126,.7152,.0722));
     color.rgb=mix(vec3(value),color.rgb,.87)*.89;
-    vec2 d=(p-touch)*vec2(1.77778,1.);
-    color.rgb+=vec3(.17,.12,.24)*exp(-dot(d,d)/.002)*(.42+.08*sin(phase));
   }
   if(mirrorFlow>.5)color.rgb=mirrorOptics(color.rgb,p);
+  if(independentBackground<.5){
+    if(mirrorFlow>.5)color.rgb=centralEcho(color.rgb,p);
+    color.rgb+=touchLight(p-touch);
+  }
   return color;
 }
 void main(){
+  if(reflectionPlate>.5){gl_FragColor=centralEchoLayer(uv);return;}
+  if(lightPlate>.5){gl_FragColor=vec4(touchLight((uv-.5)*vec2(.16,.2844448)),1.);return;}
   vec2 p=view.xy+uv*view.zw;
-  vec4 background=characterOnly>.5 ? vec4(0.) : sea(p);
+  vec4 background=max(characterOnly,characterPlate)>.5 ? vec4(0.) : sea(p);
   if(backgroundOnly>.5){gl_FragColor=background;return;}
   vec2 q=(p-heroBox.xy)/heroBox.zw;
   if(q.x<0. || q.x>1. || q.y<0. || q.y>1.){gl_FragColor=background;return;}
@@ -117,5 +133,10 @@ void main(){
   }
   hero.rgb*=mix(vec3(1.),vec3(.80,.82,.95),night);
   if(characterOnly>.5){gl_FragColor=hero;return;}
+  if(characterPlate>.5){
+    float alpha=hero.a+contact.a*(1.-hero.a);
+    vec3 color=hero.rgb*hero.a+contact.rgb*contact.a*(1.-hero.a);
+    gl_FragColor=vec4(alpha>0. ? color/alpha : vec3(0.),alpha);return;
+  }
   gl_FragColor=vec4(mix(background.rgb,hero.rgb,hero.a),1.);
 }`;

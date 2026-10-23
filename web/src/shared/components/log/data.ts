@@ -30,7 +30,33 @@ export type LogRole = 'user' | 'admin' | 'steward';
 export type LogRouteKind = ModelCallRoute | 'model_discovery';
 export type LogResultClass = 'success' | 'failed' | 'cancelled';
 
+export const USAGE_FALLBACKS = [
+  'missing_details',
+  'invalid_details',
+  'incomplete_details',
+  'unknown_modality',
+  'cache_details_missing',
+  'total_mismatch',
+  'reasoning_details_missing',
+  'missing_price',
+] as const;
+export type UsageFallback = (typeof USAGE_FALLBACKS)[number];
+export type ModalityCounts = Record<'text' | 'image' | 'audio' | 'video', string>;
 export interface LogUsage {
+  search_units?: string;
+  modalities?: {
+    input?: Record<'uncached_input' | 'cache_write_input' | 'cache_read_input', ModalityCounts>;
+    output?: ModalityCounts;
+    input_fallback?: UsageFallback;
+    output_fallback?: UsageFallback;
+  };
+  pricing?: {
+    mode: 'per_token' | 'per_request' | 'per_search_unit';
+    input_mode?: 'aggregate' | 'modality';
+    output_mode?: 'aggregate' | 'modality';
+    input_fallback?: UsageFallback;
+    output_fallback?: UsageFallback;
+  };
   uncached_input_tokens: string;
   cache_write_input_tokens: string;
   cache_read_input_tokens: string;
@@ -68,6 +94,18 @@ interface LogRowCommon {
     | '/v1/embeddings'
     | '/v1/images/generations'
     | '/v1/decisions'
+    | '/v1/responses'
+    | '/v1/responses/compact'
+    | '/v1/responses/input_tokens'
+    | '/v1/completions'
+    | '/v1/images/edits'
+    | '/v1/images/variations'
+    | '/v1/audio/speech'
+    | '/v1/audio/transcriptions'
+    | '/v1/audio/translations'
+    | '/v1/moderations'
+    | '/v1/rerank'
+    | '/v1/systemone'
     | null;
   id: string;
   route_kind: LogRouteKind;
@@ -82,12 +120,7 @@ interface LogRowCommon {
 export interface UserSelfLogRow extends LogRowCommon {
   role: 'user';
   kind: 'self';
-  route_kind:
-    | 'openai_chat_completions'
-    | 'openai_embeddings'
-    | 'openai_images_generations'
-    | 'openai_decisions'
-    | 'model_discovery';
+  route_kind: Extract<ModelCallRoute, `openai_${string}`> | 'model_discovery';
   model: string;
   attempt_count: string;
 }
@@ -95,11 +128,7 @@ export interface UserSelfLogRow extends LogRowCommon {
 export interface UserCharityLogRow extends LogRowCommon {
   role: 'user';
   kind: 'charity';
-  route_kind:
-    | 'charity_chat_completions'
-    | 'charity_embeddings'
-    | 'charity_images_generations'
-    | 'charity_decisions';
+  route_kind: Extract<ModelCallRoute, `charity_${string}`>;
   model: string;
 }
 
@@ -143,9 +172,16 @@ interface LogAttemptCommon {
     | 'openai-compatible'
     | 'anthropic-compatible'
     | 'ai-sdk-gateway-v3'
+    | 'ai-sdk-gateway-v4'
     | 'google-gemini'
     | 'openai-responses'
-    | 'openai-decisions';
+    | 'openai-decisions'
+    | 'cohere-rerank'
+    | 'jina-rerank'
+    | 'siliconflow-rerank'
+    | 'voyage-rerank'
+    | 'typesafe-systemone'
+    | 'openai-chat-completions';
   upstream_model_id: string;
   status_code: number | null;
   upstream_code: string | null;
@@ -252,10 +288,22 @@ export function normalizeLogUsage(value: unknown): LogUsage {
       'total_tokens',
       'usage_unknown',
       'charge',
+      'search_units',
+      'modalities',
+      'pricing',
     ],
     'log usage',
+    [
+      'uncached_input_tokens',
+      'cache_write_input_tokens',
+      'cache_read_input_tokens',
+      'output_tokens',
+      'total_tokens',
+      'usage_unknown',
+      'charge',
+    ],
   );
-  const result = {
+  const result: LogUsage = {
     uncached_input_tokens: decimal(root.uncached_input_tokens, 'uncached input tokens'),
     cache_write_input_tokens: decimal(root.cache_write_input_tokens, 'cache-write input tokens'),
     cache_read_input_tokens: decimal(root.cache_read_input_tokens, 'cache-read input tokens'),
@@ -264,6 +312,66 @@ export function normalizeLogUsage(value: unknown): LogUsage {
     usage_unknown: boolean(root.usage_unknown, 'usage unknown marker'),
     charge: amount(root.charge, 'log charge', false),
   };
+  if (root.search_units != null) {
+    const units = string(root.search_units, 'search units');
+    if (!/^(0|[1-9][0-9]*)(\.[0-9]{1,6})?$/.test(units)) invalidResponse('search units');
+    result.search_units = units;
+  }
+  const counts = (raw: unknown): ModalityCounts => {
+    const v = record(raw, ['text', 'image', 'audio', 'video'], 'modality counts');
+    return {
+      text: decimal(v.text, 'text tokens'),
+      image: decimal(v.image, 'image tokens'),
+      audio: decimal(v.audio, 'audio tokens'),
+      video: decimal(v.video, 'video tokens'),
+    };
+  };
+  if (root.modalities != null) {
+    const v = record(
+      root.modalities,
+      ['input', 'output', 'input_fallback', 'output_fallback'],
+      'usage modalities',
+      [],
+    );
+    const m: NonNullable<LogUsage['modalities']> = {};
+    if (v.input != null) {
+      const input = record(
+        v.input,
+        ['uncached_input', 'cache_write_input', 'cache_read_input'],
+        'input modalities',
+      );
+      m.input = {
+        uncached_input: counts(input.uncached_input),
+        cache_write_input: counts(input.cache_write_input),
+        cache_read_input: counts(input.cache_read_input),
+      };
+    }
+    if (v.output != null) m.output = counts(v.output);
+    for (const side of ['input_fallback', 'output_fallback'] as const)
+      if (v[side] != null) m[side] = oneOf(v[side], USAGE_FALLBACKS, 'usage fallback');
+    result.modalities = m;
+  }
+  if (root.pricing != null) {
+    const v = record(
+      root.pricing,
+      ['mode', 'input_mode', 'output_mode', 'input_fallback', 'output_fallback'],
+      'usage pricing',
+      ['mode'],
+    );
+    const p: NonNullable<LogUsage['pricing']> = {
+      mode: oneOf(
+        v.mode,
+        ['per_token', 'per_request', 'per_search_unit'] as const,
+        'usage pricing mode',
+      ),
+    };
+    for (const side of ['input_mode', 'output_mode'] as const)
+      if (v[side] != null)
+        p[side] = oneOf(v[side], ['aggregate', 'modality'] as const, 'pricing side');
+    for (const side of ['input_fallback', 'output_fallback'] as const)
+      if (v[side] != null) p[side] = oneOf(v[side], USAGE_FALLBACKS, 'pricing fallback');
+    result.pricing = p;
+  }
   const sum =
     BigInt(result.uncached_input_tokens) +
     BigInt(result.cache_write_input_tokens) +
@@ -327,6 +435,18 @@ function rejection(root: WireRecord) {
       '/v1/embeddings',
       '/v1/images/generations',
       '/v1/decisions',
+      '/v1/responses',
+      '/v1/responses/compact',
+      '/v1/responses/input_tokens',
+      '/v1/completions',
+      '/v1/images/edits',
+      '/v1/images/variations',
+      '/v1/audio/speech',
+      '/v1/audio/transcriptions',
+      '/v1/audio/translations',
+      '/v1/moderations',
+      '/v1/rerank',
+      '/v1/systemone',
     ] as const,
     'request path',
   );
@@ -349,7 +469,7 @@ function rejection(root: WireRecord) {
   };
 }
 
-function commonRow(root: WireRecord): LogRowCommon {
+function commonRow(root: WireRecord, redactedDisplay = false): LogRowCommon {
   const resultClass =
     root.caller_result_class === null
       ? null
@@ -359,7 +479,10 @@ function commonRow(root: WireRecord): LogRowCommon {
     min: 1,
     ascii: true,
   });
-  if (callerErrorCode !== null && !/^[a-z0-9_]+$/.test(callerErrorCode))
+  const codeForValidation = redactedDisplay
+    ? callerErrorCode?.replaceAll('[redacted]', 'redacted')
+    : callerErrorCode;
+  if (codeForValidation != null && !/^[a-z0-9_]+$/.test(codeForValidation))
     invalidResponse('caller error code');
   const startedAt = unixSecond(root.started_at, 'log start time');
   const completedAt = nullableUnixSecond(root.completed_at, 'log completion time');
@@ -410,7 +533,7 @@ export function normalizeUserLogRow(value: unknown): UserLogRow {
     ...REQUIRED_ROW_FIELDS,
     'model',
   ]);
-  const common = commonRow(probe);
+  const common = commonRow(probe, true);
   const model = string(probe.model, 'logical model');
   if (isCharityRoute(common.route_kind)) {
     if (Object.prototype.hasOwnProperty.call(probe, 'attempt_count'))
@@ -544,23 +667,26 @@ export function normalizeStewardLogRow(value: unknown): StewardLogRow {
   };
 }
 
-function commonAttempt(root: WireRecord): LogAttemptCommon {
+function commonAttempt(root: WireRecord, redactedDisplay = false): LogAttemptCommon {
   const endpointBaseURL = string(root.endpoint_base_url, 'endpoint base URL', { min: 1 });
-  let parsed: URL;
-  try {
-    parsed = new URL(endpointBaseURL);
-  } catch {
-    return invalidResponse('endpoint base URL');
-  }
-  if (
-    !['http:', 'https:'].includes(parsed.protocol) ||
-    !parsed.hostname ||
-    parsed.username ||
-    parsed.password ||
-    parsed.search ||
-    parsed.hash
-  ) {
-    invalidResponse('endpoint base URL');
+  // Personal log addresses are display text and can contain privacy placeholders.
+  if (!redactedDisplay) {
+    let parsed: URL;
+    try {
+      parsed = new URL(endpointBaseURL);
+    } catch {
+      return invalidResponse('endpoint base URL');
+    }
+    if (
+      !['http:', 'https:'].includes(parsed.protocol) ||
+      !parsed.hostname ||
+      parsed.username ||
+      parsed.password ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      invalidResponse('endpoint base URL');
+    }
   }
   const resultKind = oneOf(
     root.result_kind,
@@ -583,9 +709,16 @@ function commonAttempt(root: WireRecord): LogAttemptCommon {
         'openai-compatible',
         'anthropic-compatible',
         'ai-sdk-gateway-v3',
+        'ai-sdk-gateway-v4',
         'google-gemini',
         'openai-responses',
         'openai-decisions',
+        'cohere-rerank',
+        'jina-rerank',
+        'siliconflow-rerank',
+        'voyage-rerank',
+        'typesafe-systemone',
+        'openai-chat-completions',
       ] as const,
       'connector type',
     ),
@@ -602,7 +735,7 @@ function commonAttempt(root: WireRecord): LogAttemptCommon {
 export function normalizeUserLogAttempt(value: unknown): UserLogAttempt {
   const root = record(value, [...ATTEMPT_FIELDS, 'endpoint_note', 'key_note'], 'user log attempt');
   return {
-    ...commonAttempt(root),
+    ...commonAttempt(root, true),
     role: 'user',
     endpoint_note: string(root.endpoint_note, 'endpoint note', { multiline: true }),
     key_note: string(root.key_note, 'key note', { multiline: true }),

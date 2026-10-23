@@ -188,7 +188,7 @@ function LazyErrorBody({
     }
   }
   return body ? (
-    <RawErrorViewer body={body} />
+    <RawErrorViewer body={body} domainPrivacy />
   ) : (
     <>
       <button
@@ -204,7 +204,13 @@ function LazyErrorBody({
   );
 }
 
-export function RawErrorViewer({ body }: { body: ErrorBody }) {
+export function RawErrorViewer({
+  body,
+  domainPrivacy = false,
+}: {
+  body: ErrorBody;
+  domainPrivacy?: boolean;
+}) {
   const { t } = useTranslation();
   const decoded = useMemo(() => {
     try {
@@ -279,7 +285,15 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
   if (!decoded) return <p role="alert">{t('common.diagnostics.couldNotLoadTheErrorBody')}</p>;
   return (
     <div className="request-diagnostics">
-      {body.ipv4_redacted && <p role="status">{t('common.diagnostics.ipv4Redacted')}</p>}
+      {body.ipv4_redacted && (
+        <p role="status">
+          {t(
+            domainPrivacy
+              ? 'common.diagnostics.logPrivacyRedacted'
+              : 'common.diagnostics.ipv4Redacted',
+          )}
+        </p>
+      )}
       {synthetic && (
         <p role="status">{t('common.diagnostics.thisIsASafeDiagnosticSummaryGenerated')}</p>
       )}

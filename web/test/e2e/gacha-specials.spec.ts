@@ -119,20 +119,55 @@ for (const theme of ['light', 'dark'])
             still.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0),
           )
           .toBe(true);
-        await page.emulateMedia({ reducedMotion: 'no-preference' });
-        if (appearance === 'amber') {
-          const character = page.locator('.nb-amber-still-character');
+        if (
+          appearance === 'amber' ||
+          appearance === 'elopement' ||
+          appearance === 'heart-thief' ||
+          appearance === 'mirrorsea'
+        ) {
+          const character = page.locator(
+            appearance === 'amber'
+              ? '.nb-amber-still-character'
+              : appearance === 'mirrorsea'
+                ? '.nb-mirror-still-character'
+                : '.nb-romance-still-character',
+          );
           await expect
             .poll(() =>
               character.evaluate(
-                (image: HTMLImageElement) => image.complete && image.naturalWidth === 1037,
+                (image: HTMLImageElement, expectedWidth: number) =>
+                  image.complete &&
+                  (expectedWidth ? image.naturalWidth === expectedWidth : image.naturalWidth > 0),
+                appearance === 'amber'
+                  ? 1037
+                  : appearance === 'elopement'
+                    ? 1024
+                    : appearance === 'heart-thief'
+                      ? 1086
+                      : 0,
               ),
             )
             .toBe(true);
           const bounds = await character.boundingBox();
           expect(bounds!.y).toBeGreaterThan(68);
-          expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(width === 390 ? 844 : 900);
+          const contentRatio = appearance === 'heart-thief' ? 1448 / 1488 : 1;
+          expect(bounds!.y + bounds!.height * contentRatio).toBeLessThanOrEqual(
+            width === 390 ? 844 : 900,
+          );
+          if (appearance === 'mirrorsea') {
+            for (const selector of ['.nb-mirror-still-reflection img', '.nb-mirror-still-light'])
+              await expect
+                .poll(() =>
+                  page
+                    .locator(selector)
+                    .evaluate(
+                      (image: HTMLImageElement) => image.complete && image.naturalWidth > 0,
+                    ),
+                )
+                .toBe(true);
+          }
         }
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
         await expect(page.locator('.nb-appearance-backdrop')).toHaveAttribute(
           'data-ready',
           'true',

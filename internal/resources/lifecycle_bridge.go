@@ -82,8 +82,8 @@ func modelsUsingKeyPairsTx(
 	}
 	rows, err := tx.QueryContext(ctx, `
 SELECT DISTINCT m.id
-FROM model_bindings b JOIN models m ON m.id=b.model_id
-WHERE m.user_id=? AND b.endpoint_key_id=? AND b.upstream_model_id IN (`+placeholders+`)
+FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id JOIN models m ON m.id=b.model_id
+WHERE m.user_id=? AND t.endpoint_key_id=? AND t.upstream_model_id IN (`+placeholders+`)
 ORDER BY m.id`, arguments...)
 	if err != nil {
 		return nil, fmt.Errorf("resources: list catalog-affected models: %w", err)
@@ -109,7 +109,7 @@ ORDER BY m.id`, arguments...)
 func (r *Repository) reconcileDiscoveryKeyTx(ctx context.Context, tx *sql.Tx, endpointKeyID int64) error {
 	var ownerUserID int64
 	if err := tx.QueryRowContext(ctx, `
-SELECT e.user_id FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id WHERE k.id=?`, endpointKeyID).Scan(&ownerUserID); err != nil {
+SELECT e.user_id FROM endpoint_key_current_credentials k JOIN endpoints e ON e.id=k.endpoint_id WHERE k.id=?`, endpointKeyID).Scan(&ownerUserID); err != nil {
 		if err == sql.ErrNoRows {
 			return ErrNotFound
 		}
@@ -138,10 +138,11 @@ func (r *Repository) DeleteEndpointKeyForReport(
 		decisionNow < 0 || decisionNow > maxUnixSecond {
 		return ErrInvalidRequest
 	}
-	var endpointID, secretRef int64
+	var endpointID int64
+	var secretRef sql.NullInt64
 	if err := tx.QueryRowContext(ctx, `
 SELECT k.endpoint_id,k.secret_ref_id
-FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id
+FROM endpoint_key_current_credentials k JOIN endpoints e ON e.id=k.endpoint_id
 WHERE k.id=? AND e.user_id=?`, endpointKeyID, ownerUserID).Scan(&endpointID, &secretRef); err != nil {
 		if err == sql.ErrNoRows {
 			return ErrNotFound
@@ -175,8 +176,10 @@ WHERE k.id=? AND e.user_id=?`, endpointKeyID, ownerUserID).Scan(&endpointID, &se
 	if deleted != 1 {
 		return ErrConflict
 	}
-	if err := r.secrets.MarkEndpointSecretOrphaned(ctx, tx, secretRef, decisionNow); err != nil {
-		return fmt.Errorf("resources: orphan approved endpoint secret: %w", err)
+	if secretRef.Valid {
+		if err := r.secrets.MarkEndpointSecretOrphaned(ctx, tx, secretRef.Int64, decisionNow); err != nil {
+			return fmt.Errorf("resources: orphan approved endpoint secret: %w", err)
+		}
 	}
 	return r.reconcileRoutingTargetsTx(ctx, tx, ownerUserID, targets)
 }

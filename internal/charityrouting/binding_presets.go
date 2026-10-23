@@ -54,7 +54,7 @@ type BindingPresetInput struct {
 	Mappings                []BindingPresetPair `json:"mappings"`
 }
 
-const presetChannelSelect = `SELECT c.id,c.name,c.connector_type,c.canonical_base_url,c.enabled,c.state,c.revision,COALESCE(p.revision,0),(SELECT COUNT(*) FROM channel_charity_binding_mappings WHERE channel_id=c.id) FROM mainstream_channels c LEFT JOIN channel_charity_binding_presets p ON p.channel_id=c.id`
+const presetChannelSelect = `SELECT c.id,c.name,e.connector_type,e.canonical_base_url,c.enabled,c.state,c.revision,COALESCE(p.revision,0),(SELECT COUNT(*) FROM channel_charity_binding_mappings WHERE channel_id=c.id) FROM mainstream_channels c JOIN mainstream_channel_primary_entries e ON e.channel_id=c.id LEFT JOIN channel_charity_binding_presets p ON p.channel_id=c.id`
 
 func scanPresetChannel(scan func(...any) error) (BindingPresetChannel, error) {
 	var out BindingPresetChannel

@@ -9,9 +9,9 @@ import (
 
 func TestPublicAPICORSHTTP(t *testing.T) {
 	f := newEmbeddingHTTPFixture(t)
-	for _, path := range []string{"/v1/models", "/v1/chat/completions", "/v1/embeddings"} {
+	for _, path := range []string{"/v1/models", "/v1/models/provider%2Fself", "/v1/chat/completions", "/v1/embeddings", "/v1/responses", "/v1/responses/compact", "/v1/responses/input_tokens", "/v1/completions", "/v1/images/generations", "/v1/images/edits", "/v1/images/variations", "/v1/audio/speech", "/v1/audio/transcriptions", "/v1/audio/translations", "/v1/moderations", "/v1/rerank", "/v1/systemone"} {
 		method := http.MethodPost
-		if path == "/v1/models" {
+		if strings.HasPrefix(path, "/v1/models") {
 			method = http.MethodGet
 		}
 		r, err := http.NewRequest(http.MethodOptions, f.server.URL+path, nil)

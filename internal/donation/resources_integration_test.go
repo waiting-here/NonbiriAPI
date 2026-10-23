@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -36,14 +38,11 @@ func (bulkDeletionSecretWriter) MarkEndpointSecretOrphaned(
 	tx *sql.Tx,
 	refID, decisionNow int64,
 ) error {
-	result, err := tx.ExecContext(ctx, `UPDATE endpoint_key_secrets
-SET orphaned_at=? WHERE id=? AND orphaned_at IS NULL`, decisionNow, refID)
+	_, err := tx.ExecContext(ctx, `UPDATE endpoint_key_secrets
+SET orphaned_at=? WHERE id=? AND orphaned_at IS NULL
+AND NOT EXISTS(SELECT 1 FROM secret_live_references WHERE secret_ref_id=endpoint_key_secrets.id)`, decisionNow, refID)
 	if err != nil {
 		return err
-	}
-	updated, err := result.RowsAffected()
-	if err != nil || updated != 1 {
-		return errors.New("secret orphan CAS failed")
 	}
 	return nil
 }
@@ -180,7 +179,7 @@ WHERE key='default_endpoint_key_limit'`); err != nil {
 		t.Fatalf("DeleteEndpoint = %#v, %v", deleted, err)
 	}
 
-	var endpointCount, endpointKeyCount, memberships, bindings, orphaned int
+	var endpointCount, endpointKeyCount, memberships, bindings, orphaned, currentCredentials int
 	for _, check := range []struct {
 		query  string
 		args   []any
@@ -191,14 +190,15 @@ WHERE key='default_endpoint_key_limit'`); err != nil {
 		{`SELECT COUNT(*) FROM donation_key_memberships WHERE donation_id=?`, []any{donationID}, &memberships},
 		{`SELECT COUNT(*) FROM charity_model_bindings WHERE charity_model_id=?`, []any{charityModelID}, &bindings},
 		{`SELECT COUNT(*) FROM endpoint_key_secrets WHERE orphaned_at=?`, []any{donationTestNow}, &orphaned},
+		{`SELECT COUNT(*) FROM credentials c JOIN credential_versions v ON v.id=c.current_version_id JOIN endpoint_key_secrets s ON s.id=v.secret_ref_id WHERE c.user_id=? AND c.deleted_at IS NULL AND s.orphaned_at IS NULL`, []any{owner}, &currentCredentials},
 	} {
 		if err := environment.store.DB().QueryRow(check.query, check.args...).Scan(check.target); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if endpointCount != 0 || endpointKeyCount != 0 || memberships != 0 || bindings != 0 || orphaned != 101 {
-		t.Fatalf("post-delete counts endpoint=%d keys=%d memberships=%d bindings=%d orphaned=%d",
-			endpointCount, endpointKeyCount, memberships, bindings, orphaned)
+	if endpointCount != 0 || endpointKeyCount != 0 || memberships != 0 || bindings != 0 || orphaned != 0 || currentCredentials != 101 {
+		t.Fatalf("post-delete counts endpoint=%d keys=%d memberships=%d bindings=%d orphaned=%d credentials=%d",
+			endpointCount, endpointKeyCount, memberships, bindings, orphaned, currentCredentials)
 	}
 	var status string
 	var revision, bindingRevision int64
@@ -241,13 +241,7 @@ func seedBulkDeletionEndpoint(
 			_ = tx.Rollback()
 		}
 	}()
-	result, err := tx.Exec(`INSERT INTO endpoints(
-user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,'openai-compatible','https://bulk.example.test/v1','',1,1,?,?)`, owner, donationTestNow, donationTestNow)
-	if err != nil {
-		t.Fatal(err)
-	}
-	endpointID, err := result.LastInsertId()
+	endpointID, err := testseed.InsertEndpointTx(context.Background(), tx, testseed.EndpointInput{OwnerUserID: owner, Type: contract.TypeOpenAICompatible, BaseURL: "https://bulk.example.test/v1", At: donationTestNow})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +257,7 @@ VALUES(?,'openai-compatible','https://bulk.example.test/v1','',1,1,?,?)`, owner,
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err = tx.Exec(`INSERT INTO endpoint_key_secrets(
+		result, err := tx.Exec(`INSERT INTO endpoint_key_secrets(
 context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
 VALUES(?,'https://bulk.example.test/v1','openai-compatible',?,?)`, contextID, encoded, donationTestNow)
 		if err != nil {
@@ -275,18 +269,11 @@ VALUES(?,'https://bulk.example.test/v1','openai-compatible',?,?)`, contextID, en
 		}
 		fingerprint := make([]byte, 32)
 		fingerprint[30], fingerprint[31] = byte(index>>8), byte(index)
-		result, err = tx.Exec(`INSERT INTO endpoint_keys(
-endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,
-revision,created_at,updated_at) VALUES(?,?,?,'head','tail','',1,0,1,?,?)`,
-			endpointID, secretID, fingerprint, donationTestNow, donationTestNow)
-		if err != nil {
-			t.Fatalf("seed endpoint key %d: %v", index, err)
-		}
-		keyID, err := result.LastInsertId()
+		key, err := testseed.InsertEndpointKeyTx(context.Background(), tx, testseed.KeyInput{EndpointID: endpointID, SecretRefID: secretID, Fingerprint: fingerprint, DisplayHead: "head", DisplayTail: "tail", At: donationTestNow})
 		if err != nil {
 			t.Fatal(err)
 		}
-		keyIDs = append(keyIDs, keyID)
+		keyIDs = append(keyIDs, key.KeyID)
 	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
@@ -316,17 +303,11 @@ VALUES('fixture','bulk','[公益]fixture/bulk',1,'per_request',7,?,?)`, donation
 	}
 	for index := range donationKeyIDs {
 		upstream := fmt.Sprintf("fixture/bulk-%d", index)
-		if _, err := environment.store.DB().Exec(`INSERT INTO model_pair_catalog(
-endpoint_key_id,normalized_model_id,manual_supports,pair_revision,updated_at) VALUES(?,?,1,1,?)`,
+		if _, err := environment.store.DB().Exec(`INSERT INTO donation_key_manual_models(donation_key_id,normalized_model_id,display_name,revision,created_at,updated_at) SELECT donation_key_id,?2,?2,1,?3,?3 FROM donation_key_memberships WHERE endpoint_key_id=?1`,
 			endpointKeyIDs[index], upstream, donationTestNow); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := environment.store.DB().Exec(`INSERT INTO charity_model_bindings(
-charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
-VALUES(?,?,?,?,?,?,?)`, modelID, donationKeyIDs[index], endpointKeyIDs[index], upstream, index,
-			donationTestNow, donationTestNow); err != nil {
-			t.Fatal(err)
-		}
+		environment.seedBinding(t, modelID, donationKeyIDs[index], upstream, index)
 	}
 	return modelID
 }

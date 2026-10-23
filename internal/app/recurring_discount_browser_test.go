@@ -7,10 +7,8 @@ func seedRecurringDiscountBrowser(t *testing.T, f *imageBrowserFixture, now int6
 	owner := f.users[0].Cookie
 	endpoint := f.call("POST", "/api/endpoints", map[string]any{"source": "mainstream", "channel_id": channel, "note": "Recurring prices", "enabled": true}, owner, false)["id"].(string)
 	physical := f.call("POST", "/api/endpoints/"+endpoint+"/keys", map[string]any{"secret": "synthetic-recurring-discount", "note": "Recurring prices", "enabled": true, "force_store_false": false, "ownership_confirmed": true}, owner, false)["id"].(string)
-	if _, err := f.store.DB().Exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,'recurring-upstream',1,0,1,1,?)`, physical, now); err != nil {
-		t.Fatal(err)
-	}
-	donation := f.call("POST", "/api/donations", map[string]any{"description": "Recurring price examples", "discord_public_thanks": false, "ownership_authorized": true, "keys": []map[string]any{{"endpoint_key_id": physical, "expires_at": nil}}}, owner, false)
+	donated := appFixtureSharedCatalog(t, f.store, physical, []string{"recurring-upstream"}, now)
+	donation := f.call("POST", "/api/donations", map[string]any{"description": "Recurring price examples", "discord_public_thanks": false, "ownership_authorized": true, "keys": []map[string]any{donated}}, owner, false)
 	var key string
 	if err := f.store.DB().QueryRow("SELECT CAST(id AS TEXT) FROM donation_keys WHERE donation_id=? AND endpoint_key_id=?", donation["id"], physical).Scan(&key); err != nil {
 		t.Fatal(err)

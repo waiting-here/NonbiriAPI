@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/artwork"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -21,6 +22,7 @@ import (
 )
 
 type Config struct {
+	Artwork  *artwork.Catalog
 	Database *sql.DB
 	Users    limitedactivities.UserAuthorizer
 	Admins   limitedactivities.AdminAuthorizer
@@ -37,6 +39,9 @@ type Service struct {
 func New(c Config) (*Service, error) {
 	if c.Database == nil || c.Users == nil || c.Admins == nil || c.Gate == nil || c.Keys == nil {
 		return nil, ErrInvalid
+	}
+	if c.Artwork == nil {
+		c.Artwork = artwork.Default()
 	}
 	if c.Now == nil {
 		c.Now = time.Now

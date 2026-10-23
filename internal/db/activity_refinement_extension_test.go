@@ -16,14 +16,15 @@ func seedBindingOrderFixture(t *testing.T, database *sql.DB, count int) (int64, 
 	key := hostileInsertEndpointKey(t, database, endpoint, secret)
 	donation := hostileInsertDonation(t, database, user)
 	donationKey := hostileInsertDonationKey(t, database, donation, key)
+	hostileSeedApprovedUses(t, database, donationKey)
 	personal := hostileMustLastID(t, hostileMustExec(t, database, `INSERT INTO models(user_id,provider,model,full_name,revision,binding_revision,created_at,updated_at) VALUES(?,'provider','model','provider/model',1,7,2,3)`, user))
 	charity := hostileMustLastID(t, hostileMustExec(t, database, `INSERT INTO charity_models(provider,model,full_name,pricing_mode,revision,binding_revision,created_at,updated_at) VALUES('provider','model','[公益]provider/model','per_request',1,11,2,3)`))
 	ids := make([]int64, count)
 	for i := range count {
 		id, upstream := int64(i+1), fmt.Sprintf("upstream-%03d", i)
 		hostileMustExec(t, database, `INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,?,0,1,0,1,0)`, key, upstream)
-		hostileMustExec(t, database, `INSERT INTO model_bindings(id,model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,?,?,?,4,5)`, id, personal, key, upstream, i)
-		hostileMustExec(t, database, `INSERT INTO charity_model_bindings(id,charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,?,?,?,?,4,5)`, id, charity, donationKey, key, upstream, i)
+		hostileInsertBinding(t, database, false, id, personal, key, upstream, i, 4, 5)
+		hostileInsertBinding(t, database, true, id, charity, donationKey, upstream, i, 4, 5)
 		hostileMustExec(t, database, `INSERT INTO request_adaptations(id,scope,binding_id,revision,secret_context,secret_ciphertext,structure_json,updated_at) VALUES(?,'binding',?,7,zeroblob(16),'cipher-sentinel','{}',6)`, id, id)
 		ids[i] = id
 	}

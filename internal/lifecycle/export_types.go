@@ -14,6 +14,7 @@ import (
 // field is explicit so a future database or domain DTO field cannot silently
 // enter a personal export.
 type ExportDocument struct {
+	ConnectionExportCollections
 	GovernanceExport
 	InteractionExport
 	Checkins            []CheckinExport                 `json:"checkins"`
@@ -50,33 +51,39 @@ type ExportDocument struct {
 }
 
 type UserExport struct {
-	ID                        string  `json:"id"`
-	Username                  string  `json:"username"`
-	Avatar                    *string `json:"avatar"`
-	AvatarURL                 *string `json:"avatar_url"`
-	GuildNick                 *string `json:"guild_nick"`
-	GuildAvatarURL            *string `json:"guild_avatar_url"`
-	Lang                      string  `json:"lang"`
-	DiscordGatePolicy         string  `json:"discord_gate_policy"`
-	IsBanned                  bool    `json:"is_banned"`
-	BannedUntil               *int64  `json:"banned_until"`
-	CharitySuspendedUntil     *int64  `json:"charity_suspended_until"`
-	EndpointLimit             *string `json:"endpoint_limit"`
-	EffectiveEndpointLimit    string  `json:"effective_endpoint_limit"`
-	RPMLimit                  *string `json:"rpm_limit"`
-	EffectiveRPMLimit         string  `json:"effective_rpm_limit"`
-	ConcurrencyLimit          *string `json:"concurrency_limit"`
-	EffectiveConcurrencyLimit string  `json:"effective_concurrency_limit"`
-	GameBalance               string  `json:"game_balance"`
-	Balance                   string  `json:"balance"`
-	DonationCredit            string  `json:"donation_credit"`
-	DonationCreditAchievedAt  *int64  `json:"donation_credit_achieved_at"`
-	EffectiveLevel            int     `json:"effective_level"`
-	LevelDisplayName          string  `json:"level_display_name"`
-	GameProfilePublic         bool    `json:"game_profile_public"`
-	CharityProfilePublic      bool    `json:"charity_profile_public"`
-	CreatedAt                 int64   `json:"created_at"`
-	UpdatedAt                 int64   `json:"updated_at"`
+	ID                             string  `json:"id"`
+	Username                       string  `json:"username"`
+	Avatar                         *string `json:"avatar"`
+	AvatarURL                      *string `json:"avatar_url"`
+	GuildNick                      *string `json:"guild_nick"`
+	GuildAvatarURL                 *string `json:"guild_avatar_url"`
+	Lang                           string  `json:"lang"`
+	DiscordGatePolicy              string  `json:"discord_gate_policy"`
+	IsBanned                       bool    `json:"is_banned"`
+	BannedUntil                    *int64  `json:"banned_until"`
+	CharitySuspendedUntil          *int64  `json:"charity_suspended_until"`
+	EndpointLimit                  *string `json:"endpoint_limit"`
+	EffectiveEndpointLimit         string  `json:"effective_endpoint_limit"`
+	RPMLimit                       *string `json:"rpm_limit"`
+	EffectiveRPMLimit              string  `json:"effective_rpm_limit"`
+	ConcurrencyLimit               *string `json:"concurrency_limit"`
+	EffectiveConcurrencyLimit      string  `json:"effective_concurrency_limit"`
+	LightRPMLimit                  *string `json:"light_rpm_limit"`
+	EffectiveLightRPMLimit         string  `json:"effective_light_rpm_limit"`
+	LightConcurrencyLimit          *string `json:"light_concurrency_limit"`
+	EffectiveLightConcurrencyLimit string  `json:"effective_light_concurrency_limit"`
+	GlobalRPMLimit                 *string `json:"global_rpm_limit"`
+	EffectiveGlobalRPMLimit        string  `json:"effective_global_rpm_limit"`
+	GameBalance                    string  `json:"game_balance"`
+	Balance                        string  `json:"balance"`
+	DonationCredit                 string  `json:"donation_credit"`
+	DonationCreditAchievedAt       *int64  `json:"donation_credit_achieved_at"`
+	EffectiveLevel                 int     `json:"effective_level"`
+	LevelDisplayName               string  `json:"level_display_name"`
+	GameProfilePublic              bool    `json:"game_profile_public"`
+	CharityProfilePublic           bool    `json:"charity_profile_public"`
+	CreatedAt                      int64   `json:"created_at"`
+	UpdatedAt                      int64   `json:"updated_at"`
 }
 
 type UsageExport struct {
@@ -99,15 +106,18 @@ type LogSummaryExport struct {
 }
 
 type EndpointExport struct {
-	ID            string               `json:"id"`
-	ConnectorType string               `json:"connector_type"`
-	BaseURL       string               `json:"base_url"`
-	Origin        EndpointOriginExport `json:"origin"`
-	Note          string               `json:"note"`
-	Enabled       bool                 `json:"enabled"`
-	CreatedAt     int64                `json:"created_at"`
-	UpdatedAt     int64                `json:"updated_at"`
-	Keys          []EndpointKeyExport  `json:"keys"`
+	ConnectionID   *string              `json:"connection_id"`
+	NativeServices []string             `json:"native_services"`
+	RerankFormat   string               `json:"rerank_format"`
+	ID             string               `json:"id"`
+	ConnectorType  string               `json:"connector_type"`
+	BaseURL        string               `json:"base_url"`
+	Origin         EndpointOriginExport `json:"origin"`
+	Note           string               `json:"note"`
+	Enabled        bool                 `json:"enabled"`
+	CreatedAt      int64                `json:"created_at"`
+	UpdatedAt      int64                `json:"updated_at"`
+	Keys           []EndpointKeyExport  `json:"keys"`
 }
 
 type EndpointOriginExport struct {
@@ -117,17 +127,22 @@ type EndpointOriginExport struct {
 }
 
 type EndpointKeyExport struct {
-	ID              string `json:"id"`
-	DisplayHead     string `json:"display_head"`
-	DisplayTail     string `json:"display_tail"`
-	Note            string `json:"note"`
-	Enabled         bool   `json:"enabled"`
-	ForceStoreFalse bool   `json:"force_store_false"`
-	MaxConcurrency  int64  `json:"max_concurrency"`
-	MaxRPM          int64  `json:"max_rpm"`
-	SuspensionState string `json:"suspension_state"`
-	CreatedAt       int64  `json:"created_at"`
-	UpdatedAt       int64  `json:"updated_at"`
+	CredentialID      string   `json:"credential_id"`
+	CredentialVersion string   `json:"credential_version"`
+	GrantRevision     string   `json:"grant_revision"`
+	NativeServices    []string `json:"native_services"`
+	DiscoverySourceID *string  `json:"discovery_source_id"`
+	ID                string   `json:"id"`
+	DisplayHead       string   `json:"display_head"`
+	DisplayTail       string   `json:"display_tail"`
+	Note              string   `json:"note"`
+	Enabled           bool     `json:"enabled"`
+	ForceStoreFalse   bool     `json:"force_store_false"`
+	MaxConcurrency    int64    `json:"max_concurrency"`
+	MaxRPM            int64    `json:"max_rpm"`
+	SuspensionState   string   `json:"suspension_state"`
+	CreatedAt         int64    `json:"created_at"`
+	UpdatedAt         int64    `json:"updated_at"`
 }
 
 type DiscoveryEvidenceExport struct {
@@ -155,20 +170,28 @@ type CatalogPairExport struct {
 	ManualEntries    []CatalogEntryExport    `json:"manual_entries"`
 }
 
+type SessionHeaderExport struct {
+	Name        string `json:"name"`
+	IdleSeconds int    `json:"idle_seconds"`
+	Format      string `json:"format"`
+}
+
 type ModelExport struct {
-	ModelTypes       modeltype.Set        `json:"model_types"`
-	TransportRule    transportpolicy.Rule `json:"transport_rule"`
-	RolePolicy       rolepolicy.Policy    `json:"role_policy"`
-	ID               string               `json:"id"`
-	Provider         string               `json:"provider"`
-	Model            string               `json:"model"`
-	FullName         string               `json:"full_name"`
-	RouteStrategy    string               `json:"route_strategy"`
-	SilentRetry      bool                 `json:"silent_retry"`
-	FlattenToolCalls bool                 `json:"flatten_tool_calls"`
-	CreatedAt        int64                `json:"created_at"`
-	UpdatedAt        int64                `json:"updated_at"`
-	Bindings         []BindingExport      `json:"bindings"`
+	SessionHeaders         []SessionHeaderExport `json:"session_headers"`
+	CloudflareProxyEnabled bool                  `json:"cloudflare_proxy_enabled"`
+	ModelTypes             modeltype.Set         `json:"model_types"`
+	TransportRule          transportpolicy.Rule  `json:"transport_rule"`
+	RolePolicy             rolepolicy.Policy     `json:"role_policy"`
+	ID                     string                `json:"id"`
+	Provider               string                `json:"provider"`
+	Model                  string                `json:"model"`
+	FullName               string                `json:"full_name"`
+	RouteStrategy          string                `json:"route_strategy"`
+	SilentRetry            bool                  `json:"silent_retry"`
+	FlattenToolCalls       bool                  `json:"flatten_tool_calls"`
+	CreatedAt              int64                 `json:"created_at"`
+	UpdatedAt              int64                 `json:"updated_at"`
+	Bindings               []BindingExport       `json:"bindings"`
 }
 
 type BindingExport struct {
@@ -341,16 +364,42 @@ type DonationUsageExport struct {
 }
 
 type CharityExport struct {
-	RequestCount      string `json:"request_count"`
-	OriginalCharge    string `json:"original_charge"`
-	Charged           string `json:"charged"`
-	Saved             string `json:"saved"`
-	DonorReward       string `json:"donor_reward"`
-	UncachedInput     string `json:"uncached_input_tokens"`
-	CacheWriteInput   string `json:"cache_write_input_tokens"`
-	CacheReadInput    string `json:"cache_read_input_tokens"`
-	Output            string `json:"output_tokens"`
-	UsageUnknownCount string `json:"usage_unknown_count"`
+	UsageDetails      *UsageDetailsExport `json:"usage_details,omitempty"`
+	RequestCount      string              `json:"request_count"`
+	OriginalCharge    string              `json:"original_charge"`
+	Charged           string              `json:"charged"`
+	Saved             string              `json:"saved"`
+	DonorReward       string              `json:"donor_reward"`
+	UncachedInput     string              `json:"uncached_input_tokens"`
+	CacheWriteInput   string              `json:"cache_write_input_tokens"`
+	CacheReadInput    string              `json:"cache_read_input_tokens"`
+	Output            string              `json:"output_tokens"`
+	UsageUnknownCount string              `json:"usage_unknown_count"`
+}
+
+type UsageDetailsExport struct {
+	SearchUnits *string              `json:"search_units,omitempty"`
+	Modalities  *ModalityUsageExport `json:"modalities,omitempty"`
+}
+
+type ModalityTokensExport struct {
+	Text  string `json:"text"`
+	Image string `json:"image"`
+	Audio string `json:"audio"`
+	Video string `json:"video"`
+}
+
+type ModalityInputExport struct {
+	UncachedInput   ModalityTokensExport `json:"uncached_input"`
+	CacheWriteInput ModalityTokensExport `json:"cache_write_input"`
+	CacheReadInput  ModalityTokensExport `json:"cache_read_input"`
+}
+
+type ModalityUsageExport struct {
+	Input          *ModalityInputExport  `json:"input,omitempty"`
+	Output         *ModalityTokensExport `json:"output,omitempty"`
+	InputFallback  string                `json:"input_fallback,omitempty"`
+	OutputFallback string                `json:"output_fallback,omitempty"`
 }
 
 type FishingExport struct {
