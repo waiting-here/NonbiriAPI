@@ -15,7 +15,9 @@ import './preview.css';
 const query = new URLSearchParams(location.search);
 const language = query.get('lang');
 if (language === 'zh' || language === 'en') void i18n.changeLanguage(language);
-const scene = entryById[query.get('scene') ?? ''];
+const requestedScene = entryById[query.get('scene') ?? ''];
+const scene =
+  requestedScene?.kind === 'tomorrow' && requestedScene.refined ? undefined : requestedScene;
 if (scene)
   document.documentElement.dataset.theme = query.get('theme') === 'dark' ? 'dark' : 'light';
 document.documentElement.lang = query.get('lang') === 'en' ? 'en' : 'zh-CN';

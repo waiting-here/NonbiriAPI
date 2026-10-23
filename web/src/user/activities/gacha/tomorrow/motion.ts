@@ -74,7 +74,7 @@ const environment = [
   ],
 ] as const;
 
-export function regionWeight(x: number, y: number, polygon: readonly Point[]) {
+export function regionWeight(x: number, y: number, polygon: readonly Point[], feather = 18) {
   let inside = false,
     distance = Infinity;
   let a = polygon[polygon.length - 1];
@@ -87,10 +87,10 @@ export function regionWeight(x: number, y: number, polygon: readonly Point[]) {
     distance = Math.min(distance, Math.hypot(x - a[0] - dx * t, y - a[1] - dy * t));
     a = b;
   }
-  const t = Math.min(1, distance / 18);
+  const t = Math.min(1, distance / feather);
   return inside ? t * t * (3 - 2 * t) : 0;
 }
-function mask(
+export function mask(
   width: number,
   height: number,
   sourceWidth: number,

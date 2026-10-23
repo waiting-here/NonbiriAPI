@@ -3,7 +3,7 @@ import { Button } from '@shared/components/ui/Button';
 import { Field } from '@shared/components/ui/Field';
 import { Segmented } from '@shared/components/ui/Segmented';
 import { highResolutionArt } from '../user/activities/gacha/art-resolution';
-import { tomorrowAssets } from '../user/activities/gacha/tomorrow/assets';
+import { tomorrowAssets, refinedTomorrowAssets } from '../user/activities/gacha/tomorrow/assets';
 import { previewControlMessage, previewReadyMessage } from './controls';
 import {
   appearanceArt,
@@ -43,6 +43,8 @@ export function ReviewPanel({
   const [line, setLine] = useState('0');
   const t = (zh: string, en: string) => (english ? en : zh);
   const name = entryName(entry, english);
+  const portraitStudy = entry.kind === 'tomorrow' && entry.refined;
+  const assets = portraitStudy ? refinedTomorrowAssets : tomorrowAssets;
   const scene =
     '?scene=' +
     encodeURIComponent(entry.id) +
@@ -69,21 +71,25 @@ export function ReviewPanel({
     return () => window.removeEventListener('message', receive);
   }, [sendControl]);
   const src = view === 'cover' ? entry.cover : entry.illustration;
-  const files = [
-    [t('完整卡面', 'Card'), entry.art],
-    [t('奖池封面', 'Pool cover'), entry.cover],
-    [t('单人插画', 'Illustration'), entry.illustration],
-    [
-      entry.kind === 'tomorrow'
-        ? t('浅色装扮', 'Light appearance')
-        : t('浅色背景', 'Light scenery'),
-      appearanceArt(entry, false),
-    ],
-    [
-      entry.kind === 'tomorrow' ? t('深色装扮', 'Dark appearance') : t('深色背景', 'Dark scenery'),
-      appearanceArt(entry, true),
-    ],
-  ];
+  const files = portraitStudy
+    ? [[t('完整卡面', 'Card'), entry.art]]
+    : [
+        [t('完整卡面', 'Card'), entry.art],
+        [t('奖池封面', 'Pool cover'), entry.cover],
+        [t('单人插画', 'Illustration'), entry.illustration],
+        [
+          entry.kind === 'tomorrow'
+            ? t('浅色装扮', 'Light appearance')
+            : t('浅色背景', 'Light scenery'),
+          appearanceArt(entry, false),
+        ],
+        [
+          entry.kind === 'tomorrow'
+            ? t('深色装扮', 'Dark appearance')
+            : t('深色背景', 'Dark scenery'),
+          appearanceArt(entry, true),
+        ],
+      ];
   return (
     <section className="sp-review__entry" aria-label={name}>
       <div className="sp-review__entry-head">
@@ -93,7 +99,11 @@ export function ReviewPanel({
               {entries.map((item) => (
                 <option key={item.id} value={item.id}>
                   {entryName(item, english)}
-                  {item.kind === 'tomorrow' ? t(' · 新候选', ' · New candidate') : ''}
+                  {item.kind === 'tomorrow'
+                    ? item.refined
+                      ? t(' · 精修试作', ' · Refined study')
+                      : t(' · 初版', ' · First version')
+                    : ''}
                 </option>
               ))}
             </select>
@@ -101,12 +111,28 @@ export function ReviewPanel({
         </Field>
         <p>
           <span className={'sp-review__badge' + (entry.kind === 'tomorrow' ? ' is-candidate' : '')}>
-            {entry.kind === 'tomorrow' ? t('新候选', 'New candidate') : t('已发布', 'Published')}
+            {entry.kind === 'tomorrow'
+              ? portraitStudy
+                ? t('精修试作', 'Refined study')
+                : t('初版', 'First version')
+              : t('已发布', 'Published')}
           </span>
           <span>{english ? entry.noteEN : entry.note}</span>
         </p>
       </div>
-      {view === 'card' ? (
+      {portraitStudy && view !== 'card' && view !== 'materials' ? (
+        <div className="sp-review__materials">
+          <p>
+            {t(
+              '本轮先精修晨光竖卡。封面、插画与明暗装扮仍可在初版中查看。',
+              'This study refines the daylight portrait. The cover, illustration and appearances remain available in the first version.',
+            )}
+          </p>
+          <Button onClick={() => setEntry('tomorrow')}>
+            {t('查看初版的这项素材', 'View this material in the first version')}
+          </Button>
+        </div>
+      ) : view === 'card' ? (
         <>
           <button
             className="sp-review__card"
@@ -129,6 +155,14 @@ export function ReviewPanel({
               {t('放大查看', 'Inspect card')}
             </Button>
           </div>
+          {portraitStudy && (
+            <p className="sp-review__note">
+              {t(
+                '晨光竖卡试作 · 切换明暗只改变预览界面；其他成品尚未同步精修。',
+                'Daylight portrait study · The theme switch changes the review interface; other formats have not been refined yet.',
+              )}
+            </p>
+          )}
           {entry.kind === 'tomorrow' && (
             <div className="sp-review__dialogue">
               <p>{introduction[english ? 1 : 0]}</p>
@@ -193,11 +227,18 @@ export function ReviewPanel({
               </a>
               <strong>{t('源图层', 'Source layers')}</strong>
               {[
-                [t('人物', 'Character'), tomorrowAssets.hero],
-                [t('闭眼校准图', 'Closed-eye registration'), tomorrowAssets.closed],
-                [t('晨光背景', 'Morning scenery'), tomorrowAssets.backgroundLight],
-                [t('蓝调背景', 'Evening scenery'), tomorrowAssets.backgroundDark],
-                [t('云朵伙伴', 'Cloud companion'), tomorrowAssets.cloud],
+                [t('人物', 'Character'), assets.hero],
+                [
+                  portraitStudy
+                    ? t('闭眼与微笑差分', 'Blink and smile details')
+                    : t('闭眼校准图', 'Closed-eye registration'),
+                  assets.closed,
+                ],
+                [t('晨光背景', 'Morning scenery'), assets.backgroundLight],
+                ...(!portraitStudy
+                  ? [[t('蓝调背景', 'Evening scenery'), assets.backgroundDark]]
+                  : []),
+                [t('云朵伙伴', 'Cloud companion'), assets.cloud],
               ].map(([label, url]) => (
                 <a key={label} href={url} target="_blank" rel="noreferrer">
                   {label}

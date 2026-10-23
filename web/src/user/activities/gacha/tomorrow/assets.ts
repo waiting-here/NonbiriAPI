@@ -12,3 +12,12 @@ export const tomorrowAssets = {
   backgroundDark: base + 'background-dark.webp',
   cloud: base + 'cloud.webp',
 };
+
+/** Portrait study; other formats retain the previous composition. */
+export const refinedTomorrowAssets = {
+  ...tomorrowAssets,
+  card: base + 'refined/card.webp',
+  hero: base + 'refined/hero.webp',
+  closed: base + 'refined/closed.webp',
+  backgroundLight: base + 'refined/background-light.webp',
+};

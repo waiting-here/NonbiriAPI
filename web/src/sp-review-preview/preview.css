@@ -287,6 +287,10 @@ img.sp-review__painting {
     padding: var(--nb-space-5);
   }
 }
+.sp-review__entry > .sp-review__note {
+  margin-inline: var(--nb-space-5);
+}
+
 @media (width < 40rem) {
   .sp-review__pair {
     grid-template-columns: minmax(0, 1fr);

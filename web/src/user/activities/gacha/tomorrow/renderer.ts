@@ -1,11 +1,15 @@
 import { blinkAt, eyelidProfileWidth, PaintCadence } from '@shared/animation/illustration';
-import { tomorrowAssets } from './assets';
+import { tomorrowAssets, refinedTomorrowAssets } from './assets';
 import { tomorrowEyelids } from './eyelids';
 import { tomorrowLayout, type TomorrowVariant } from './layout';
 import { tomorrowShader } from './shader';
 import { motionMasks } from './motion';
+import { refinedEyelids } from './refined-eyelids';
+import { refinedMotionMasks } from './refined-motion';
+import { refinedShader } from './refined-shader';
 
 export type TomorrowOptions = {
+  refined?: boolean;
   variant?: TomorrowVariant;
   dark?: boolean;
   landscape?: boolean;
@@ -50,14 +54,17 @@ function loadImage(src: string, signal?: AbortSignal) {
 
 export async function renderTomorrow(canvas: HTMLCanvasElement, options: TomorrowOptions = {}) {
   if (options.signal?.aborted) return () => {};
+  const refined = options.refined && (options.variant ?? 'card') === 'card';
+  const assets = refined ? refinedTomorrowAssets : tomorrowAssets;
+  const eyelids = refined ? refinedEyelids : tomorrowEyelids;
   const [background, hero, closed, cloud] = await Promise.all([
     loadImage(
-      options.dark ? tomorrowAssets.backgroundDark : tomorrowAssets.backgroundLight,
+      options.dark && !refined ? assets.backgroundDark : assets.backgroundLight,
       options.signal,
     ),
-    loadImage(tomorrowAssets.hero, options.signal),
-    loadImage(tomorrowAssets.closed, options.signal),
-    loadImage(tomorrowAssets.cloud, options.signal),
+    loadImage(assets.hero, options.signal),
+    loadImage(assets.closed, options.signal),
+    loadImage(assets.cloud, options.signal),
   ]);
   if (options.signal?.aborted) return () => {};
   const context = canvas.getContext('2d');
@@ -107,7 +114,7 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
         gl.VERTEX_SHADER,
         'attribute vec2 a;varying vec2 uv;void main(){uv=a;gl_Position=vec4(a.x*2.-1.,1.-a.y*2.,0.,1.);}',
       ],
-      [gl.FRAGMENT_SHADER, tomorrowShader],
+      [gl.FRAGMENT_SHADER, refined ? refinedShader : tomorrowShader],
     ] as const) {
       const shader = gl.createShader(type);
       if (!shader) throw new Error('renderer-unavailable');
@@ -152,17 +159,19 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
           0,
           gl.RGBA,
           gl.UNSIGNED_BYTE,
-          new Uint8Array(tomorrowEyelids.flatMap((p) => p.rows.flat())),
+          new Uint8Array(eyelids.flatMap((p) => p.rows.flat())),
         );
       gl.uniform1i(uniform(['scenery', 'art', 'closed', 'lids', 'companion'][index]), index);
     }
-    const masks = motionMasks();
-    for (const [index, [name, mask]] of [
+    const masks = refined ? refinedMotionMasks() : motionMasks();
+    const bindings: [string, typeof masks.hero][] = [
       ['rig', masks.hero],
       ['environment', masks.environment],
-    ].entries()) {
+    ];
+    if (refined) bindings.push(['pose', refinedMotionMasks().pose]);
+    for (const [index, [name, mask]] of bindings.entries()) {
       const texture = gl.createTexture();
-      if (!texture || typeof mask === 'string') throw new Error('renderer-unavailable');
+      if (!texture) throw new Error('renderer-unavailable');
       textures.push(texture);
       gl.activeTexture(gl.TEXTURE5 + index);
       gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -183,9 +192,9 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
       );
       gl.uniform1i(uniform(String(name)), 5 + index);
     }
-    gl.uniform4fv(uniform('leftEye'), tomorrowEyelids[0].bounds);
+    gl.uniform4fv(uniform('leftEye'), eyelids[0].bounds);
     gl.uniform1f(uniform('cloudFront'), (options.variant ?? 'card') === 'card' ? 1 : 0);
-    gl.uniform4fv(uniform('rightEye'), tomorrowEyelids[1].bounds);
+    gl.uniform4fv(uniform('rightEye'), eyelids[1].bounds);
     for (const [key, value] of Object.entries({
       night: options.dark,
       characterOnly: options.characterOnly,
@@ -213,7 +222,7 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
     gl!.viewport(0, 0, layer.width, layer.height);
     const layout = options.characterPlate
       ? { view: [0, 0, 1, 1], hero: [0, 0, 1, 1], cloud: [0, 0, 0, 0] }
-      : tomorrowLayout(canvas.width, canvas.height, options.variant ?? 'card');
+      : tomorrowLayout(canvas.width, canvas.height, options.variant ?? 'card', refined);
     gl!.uniform4fv(uniform('view'), layout.view);
     gl!.uniform4fv(uniform('heroBox'), layout.hero);
     gl!.uniform4fv(uniform('cloudBox'), layout.cloud);

@@ -1,0 +1,17 @@
+{
+  "title": "Tomorrow, Still Unwritten",
+  "format": "daylight portrait study",
+  "rating": "general",
+  "nativeSources": {
+    "scenery": [1672, 941],
+    "character": [1024, 1536],
+    "expression": [1024, 1536]
+  },
+  "exports": {
+    "card": [1280, 1920],
+    "thumbnail": [320, 480],
+    "largeCard": [2560, 3840]
+  },
+  "largeOutput": "resampled",
+  "license": "AGPL-3.0 to the extent rights apply"
+}

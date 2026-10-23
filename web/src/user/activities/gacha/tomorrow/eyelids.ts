@@ -8,11 +8,12 @@ function curve(points: Point[], x: number) {
   }
   return points[points.length - 1][1];
 }
-function profile(
+export function profile(
   box: [number, number, number, number],
   top: Point[],
   bottom: Point[],
   shut: Point[],
+  coverageTop?: Point[],
 ): EyelidProfile {
   const [x, y, width, height] = box;
   const channel = (value: number) =>
@@ -24,7 +25,12 @@ function profile(
     const a = curve(top, px),
       b = curve(bottom, px),
       c = curve(shut, px);
-    opened.push(channel(a - 2), channel(Math.max(b + 3, c + 6)), channel(a), channel(a + 5.5));
+    opened.push(
+      channel(coverageTop ? curve(coverageTop, px) : a - 2),
+      channel(Math.max(b + 3, c + 6)),
+      channel(a),
+      channel(a + 5.5),
+    );
     const edge = Math.max(0, Math.min(1, (px - top[0][0]) / 2, (top[top.length - 1][0] - px) / 2));
     closed.push(channel(c - 2.5), channel(c + 4), Math.round(edge * 255), 0);
   }

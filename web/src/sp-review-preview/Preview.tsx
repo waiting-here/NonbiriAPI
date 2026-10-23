@@ -33,8 +33,8 @@ export function Preview() {
   const dark = useDarkMode();
   const reduced = useReducedMotion();
   const english = i18n.language.startsWith('en');
-  const [left, setLeft] = useState(() => selected('left', 'tomorrow'));
-  const [right, setRight] = useState(() => selected('right', 'l-chatgpt'));
+  const [left, setLeft] = useState(() => selected('left', 'tomorrow-refined'));
+  const [right, setRight] = useState(() => selected('right', 'tomorrow'));
   const [view, setView] = useState<View>(initialView);
   const [mode, setMode] = useState<Mode>(() =>
     new URLSearchParams(location.search).get('motion') === '0' ? 'still' : 'motion',
@@ -71,8 +71,8 @@ export function Preview() {
         <PageHeader
           title={t('SP 成品对照', 'SP artwork review')}
           description={t(
-            '未命名的明天：卡面、插画、封面与明暗装扮。',
-            'Tomorrow, Still Unwritten: card, illustration, cover and appearances.',
+            '未命名的明天：精修竖卡、初版与已发布 SP 对照。',
+            'Tomorrow, Still Unwritten: compare the refined portrait, first version and published SP cards.',
           )}
           actions={
             <>
@@ -87,6 +87,28 @@ export function Preview() {
       <main className="sp-review__main">
         <div className="sp-review__toolbar">
           <div className="sp-review__actions" aria-label={t('快速对照', 'Comparison presets')}>
+            <Button
+              size="sm"
+              onClick={() => {
+                setLeft('tomorrow-refined');
+                setRight('tomorrow');
+                setView('card');
+                setTheme('light');
+              }}
+            >
+              {t('精修 / 初版', 'Refined / First version')}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setLeft('tomorrow-refined');
+                setRight('l-chatgpt');
+                setView('card');
+                setTheme('light');
+              }}
+            >
+              {t('精修 / 星月', 'Refined / Moon & Stars')}
+            </Button>
             <Button
               size="sm"
               onClick={() => {

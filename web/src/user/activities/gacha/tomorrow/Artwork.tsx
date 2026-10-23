@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { tomorrowAssets } from './assets';
+import { tomorrowAssets, refinedTomorrowAssets } from './assets';
 import { tomorrowLayout, type Box, type TomorrowVariant } from './layout';
 import { renderTomorrow } from './renderer';
 import './artwork.css';
 
 type Props = {
+  refined?: boolean;
   variant: TomorrowVariant;
   dark?: boolean;
   animated?: boolean;
@@ -20,6 +21,7 @@ const boxStyle = (box: Box): CSSProperties => ({
 });
 
 export function TomorrowArtwork({
+  refined = false,
   variant,
   dark = false,
   animated = true,
@@ -27,6 +29,9 @@ export function TomorrowArtwork({
   className = '',
   highResolution = false,
 }: Props) {
+  const portraitStudy = refined && variant === 'card';
+  const assets = portraitStudy ? refinedTomorrowAssets : tomorrowAssets;
+  const sceneDark = portraitStudy ? false : dark;
   const root = useRef<HTMLDivElement>(null),
     canvas = useRef<HTMLCanvasElement>(null),
     pause = useRef(paused);
@@ -64,8 +69,9 @@ export function TomorrowArtwork({
     const controller = new AbortController();
     let stop: (() => void) | undefined;
     renderTomorrow(canvas.current, {
+      refined: portraitStudy,
       variant,
-      dark,
+      dark: sceneDark,
       highResolution: effectiveHigh,
       landscape: variant !== 'card',
       ambient: variant === 'appearance',
@@ -87,8 +93,8 @@ export function TomorrowArtwork({
       stop?.();
       setReady(false);
     };
-  }, [variant, dark, animated, reduced, effectiveHigh]);
-  const layout = tomorrowLayout(size.width, size.height, variant);
+  }, [variant, sceneDark, animated, reduced, effectiveHigh, portraitStudy]);
+  const layout = tomorrowLayout(size.width, size.height, variant, portraitStudy);
   const background: Box = [
     -layout.view[0] / layout.view[2],
     -layout.view[1] / layout.view[3],
@@ -96,11 +102,7 @@ export function TomorrowArtwork({
     1 / layout.view[3],
   ];
   const still =
-    variant === 'card'
-      ? tomorrowAssets.card
-      : variant === 'cover'
-        ? tomorrowAssets.cover
-        : tomorrowAssets.illustration;
+    variant === 'card' ? assets.card : variant === 'cover' ? assets.cover : assets.illustration;
   return (
     <div
       ref={root}
@@ -108,7 +110,7 @@ export function TomorrowArtwork({
       role="img"
       aria-label="未命名的明天 · ChatGPT / Tomorrow, Still Unwritten · ChatGPT"
     >
-      {variant === 'appearance' || dark ? (
+      {variant === 'appearance' || (dark && !portraitStudy) ? (
         <div className="tomorrow-art__still">
           <img
             src={dark ? tomorrowAssets.backgroundDark : tomorrowAssets.backgroundLight}

@@ -2,7 +2,12 @@ export type TomorrowVariant = 'card' | 'cover' | 'illustration' | 'appearance';
 export type Box = [number, number, number, number];
 
 /** All placements use the complete source plate, including its transparent margins. */
-export function tomorrowLayout(width: number, height: number, variant: TomorrowVariant) {
+export function tomorrowLayout(
+  width: number,
+  height: number,
+  variant: TomorrowVariant,
+  refined = false,
+) {
   const aspect = width / height;
   const sourceAspect = 1672 / 941;
   const viewWidth = Math.min(1, aspect / sourceAspect);
@@ -12,9 +17,9 @@ export function tomorrowLayout(width: number, height: number, variant: TomorrowV
     top = 0.025,
     center = 0.69;
   if (variant === 'card') {
-    heroHeight = 1.45;
-    top = 0.01;
-    center = 0.5;
+    heroHeight = refined ? 1.35 : 1.45;
+    top = refined ? 0.015 : 0.01;
+    center = refined ? 0.495 : 0.5;
   }
   if (variant === 'cover') {
     heroHeight = 1.8;
@@ -40,6 +45,12 @@ export function tomorrowLayout(width: number, height: number, variant: TomorrowV
     cloud[1] = 0.255;
     cloud[2] = 0.25;
     cloud[3] = (0.25 * aspect) / 1.4;
+    if (refined) {
+      cloud[0] = 0.025;
+      cloud[1] = 0.278;
+      cloud[2] = 0.22;
+      cloud[3] = (0.22 * aspect) / (512 / 402);
+    }
   }
   return { view, hero, cloud };
 }

@@ -1,7 +1,7 @@
 import { cardById, themeById } from '../user/activities/gacha/catalog';
 import type { Card } from '../user/activities/gacha/types';
 import type { SpecialTheme } from '../user/activities/gacha/special-scenes';
-import { tomorrowAssets } from '../user/activities/gacha/tomorrow/assets';
+import { tomorrowAssets, refinedTomorrowAssets } from '../user/activities/gacha/tomorrow/assets';
 
 export type PreviewVariant = 'card' | 'cover' | 'illustration' | 'appearance';
 export type View = PreviewVariant | 'materials';
@@ -19,7 +19,10 @@ type EntryDetails = {
   noteEN: string;
 };
 export type Entry = EntryDetails &
-  ({ kind: 'tomorrow' } | { kind: 'published'; card: Card; appearance: PublishedAppearance });
+  (
+    | { kind: 'tomorrow'; refined?: boolean }
+    | { kind: 'published'; card: Card; appearance: PublishedAppearance }
+  );
 
 export const tomorrow: Entry = {
   id: 'tomorrow',
@@ -32,6 +35,14 @@ export const tomorrow: Entry = {
   illustration: tomorrowAssets.illustration,
   note: '把昨天放进背包，向还没有答案的明天出发。',
   noteEN: 'Pack a little of yesterday, and step into a tomorrow still full of questions.',
+};
+export const refinedTomorrow: Entry = {
+  ...tomorrow,
+  id: 'tomorrow-refined',
+  kind: 'tomorrow',
+  refined: true,
+  art: refinedTomorrowAssets.card,
+  thumb: '/assets/gacha/tomorrow/refined/thumb.webp',
 };
 const published = (id: string): Entry => {
   const card = cardById[id];
@@ -52,6 +63,7 @@ const published = (id: string): Entry => {
   };
 };
 export const entries: Entry[] = [
+  refinedTomorrow,
   tomorrow,
   ...['l-chatgpt', 'm-deepseek', 'n-gemini', 'o-claude', 'p-claude', 'q-glm'].map(published),
 ];

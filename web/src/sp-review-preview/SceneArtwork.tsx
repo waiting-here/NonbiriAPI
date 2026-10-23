@@ -25,6 +25,7 @@ export function SceneArtwork({
   if (entry.kind === 'tomorrow')
     return (
       <TomorrowArtwork
+        refined={entry.refined}
         variant={variant}
         dark={dark}
         animated={animated}
