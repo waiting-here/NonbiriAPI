@@ -390,7 +390,7 @@ func getAdminDonationTx(ctx context.Context, tx *sql.Tx, donationID, now int64, 
 }
 
 func getDonationProjectionTx(ctx context.Context, tx *sql.Tx, donationID, now int64, summary ...UseSummary) (AdminDonation, error) {
-	out, err := getDonationHeaderTx(ctx, tx, donationID)
+	out, err := getDonationHeaderTx(ctx, tx, donationID, now)
 	if err != nil {
 		return AdminDonation{}, err
 	}
@@ -408,7 +408,7 @@ func getDonationProjectionTx(ctx context.Context, tx *sql.Tx, donationID, now in
 }
 
 // Header reads deliberately avoid loading a donation's complete key collection.
-func getDonationHeaderTx(ctx context.Context, tx *sql.Tx, donationID int64) (AdminDonation, error) {
+func getDonationHeaderTx(ctx context.Context, tx *sql.Tx, donationID, now int64) (AdminDonation, error) {
 	var out AdminDonation
 	var id, revision int64
 	var userID, reviewedBy sql.NullInt64
@@ -417,16 +417,19 @@ func getDonationHeaderTx(ctx context.Context, tx *sql.Tx, donationID int64) (Adm
 	var reviewedAt sql.NullInt64
 	var reviewRole, reviewNote string
 	var thanks sql.NullBool
-	var unknown bool
+	var unknown, approved bool
 	var lastAction string
 	err := tx.QueryRowContext(ctx, `SELECT d.id,d.status,d.revision,d.description,d.review_note,
 d.reviewed_by_user_id,d.reviewed_by_role,d.reviewed_at,d.created_at,d.updated_at,
 d.user_id,u.discord_id,COALESCE(u.username,''),COALESCE(u.guild_nick,''),d.discord_public_thanks,d.first_approval_origin,
-EXISTS(SELECT 1 FROM donation_keys dk WHERE dk.donation_id=d.id AND dk.key_body_review_hmac IS NULL),
+(EXISTS(SELECT 1 FROM donation_keys dk WHERE dk.donation_id=d.id AND dk.key_body_review_hmac IS NULL)
+ OR EXISTS(SELECT 1 FROM donation_keys dk JOIN donation_uses u ON u.donation_key_id=dk.id
+ JOIN donation_use_revisions ur ON ur.use_id=u.id AND (ur.id=u.current_approved_revision_id OR ur.id=u.current_pending_revision_id)
+ WHERE dk.donation_id=d.id AND ur.key_body_review_hmac IS NULL)),`+manageableDonationSQL+`,
 COALESCE((SELECT action FROM donation_reviews dr WHERE dr.donation_id=d.id ORDER BY dr.id DESC LIMIT 1),'')
-FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).Scan(
+FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, now, donationID).Scan(
 		&id, &out.Status, &revision, &out.Description, &reviewNote, &reviewedBy, &reviewRole,
-		&reviewedAt, &out.CreatedAt, &out.UpdatedAt, &userID, &discordID, &username, &guildNick, &thanks, &out.FirstApprovalOrigin, &unknown, &lastAction)
+		&reviewedAt, &out.CreatedAt, &out.UpdatedAt, &userID, &discordID, &username, &guildNick, &thanks, &out.FirstApprovalOrigin, &unknown, &approved, &lastAction)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AdminDonation{}, ErrNotFound
 	}
@@ -434,18 +437,15 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).
 		return AdminDonation{}, fmt.Errorf("donation: read projection: %w", err)
 	}
 	out.ID = strconv.FormatInt(id, 10)
-	// A normal rejection is only reachable from pending; it has no first approval.
-	if out.Status == "pending" || lastAction == "reject" {
+	// A pending submission without approved uses has no first approval.
+	if out.Status == "pending" && !approved || lastAction == "reject" {
 		out.FirstApprovalOrigin = "none"
 	}
-	out.CanForceReject = out.Status == "approved" && !unknown
+	out.CanForceReject = approved && !unknown
 	if !out.CanForceReject {
 		reason := "not_approved"
-		if unknown {
+		if approved && unknown {
 			reason = "review_material_unavailable"
-		}
-		if out.Status != "approved" {
-			reason = "not_approved"
 		}
 		out.ForceRejectUnavailableReason = &reason
 	}

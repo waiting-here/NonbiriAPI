@@ -534,7 +534,8 @@ func (s *Service) review(
 func (s *Service) reviewDonationTx(ctx context.Context, tx *sql.Tx, donationID, actorID int64, role string, input ReviewInput, now int64) error {
 	var status string
 	var revision int64
-	if err := tx.QueryRowContext(ctx, `SELECT status,revision FROM donations WHERE id=?`, donationID).Scan(&status, &revision); errors.Is(err, sql.ErrNoRows) {
+	var approved bool
+	if err := tx.QueryRowContext(ctx, `SELECT d.status,d.revision,`+manageableDonationSQL+` FROM donations d WHERE d.id=?`, now, donationID).Scan(&status, &revision, &approved); errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	} else if err != nil {
 		return fmt.Errorf("donation: read review state: %w", err)
@@ -542,9 +543,13 @@ func (s *Service) reviewDonationTx(ctx context.Context, tx *sql.Tx, donationID, 
 	if revision != input.ExpectedRevision || status != "pending" && !(status == "approved" && (input.Decision == "approve" || input.Decision == "force_reject")) {
 		return ErrConflict
 	}
+	// Whole-submission review must not replace or revoke approvals made per use.
+	if status == "pending" && approved && input.Decision != "force_reject" {
+		return ErrConflict
+	}
 	if input.Decision == "reject" || input.Decision == "force_reject" {
 		if input.Decision == "force_reject" {
-			if status != "approved" {
+			if !approved {
 				return ErrConflict
 			}
 			if err := s.reviewMaterial.RequireDonation(ctx, tx, donationID, time.Unix(now, 0)); err != nil {
