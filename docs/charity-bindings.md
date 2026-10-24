@@ -18,9 +18,9 @@ key, approves a donation, refreshes discovery or changes saved model pricing.
 Use the administrator prefix `/admin/api` or steward prefix `/api/steward`.
 These are authenticated browser-session routes, with the existing CSRF,
 `Idempotency-Key`, current-role and revision requirements. They are not CallerKey
-automation routes. Stewards require `charity.presets` for preset reads/edits,
-and both `charity.presets` and `charity.manage` for preset application or
-key-to-model batch binding. Current model/source scope is checked for every
+automation routes. Stewards require `charity.manage` for ordinary binding options
+and key-to-model batch binding. Preset reads/edits require `charity.presets`;
+applying a preset requires both grants. Current model/source scope is checked for every
 target and key. See [steward permissions](steward-permissions.md).
 
 IDs, revisions and counts below are canonical decimal strings, except opaque

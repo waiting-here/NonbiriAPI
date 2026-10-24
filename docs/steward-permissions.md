@@ -92,7 +92,7 @@ There are 48 independent boolean permissions.
 | `charity.model_settings` | Edit non-price model settings; read request-adaptation configuration | false |
 | `charity.pricing` | Edit pricing, discounts, recurring discounts and token reserve | false |
 | `charity.non_mainstream` | Use non-mainstream charity model targets | false |
-| `charity.presets` | Read/update binding presets and batch key bindings | false |
+| `charity.presets` | Read/update/apply channel binding presets | false |
 | `charity.backoff` | Read/update endpoint backoff policy | false |
 | `charity.price_templates.read` | Read price templates | false |
 | `logs.read` | Request log list/detail/export | true |
@@ -133,9 +133,9 @@ Permissions remain independent when an operation has several effects:
 
 - Adding an existing account to the blacklist also requires `users.ban` and
   `users.ban_permanent`; replacing its active ban also needs `users.unban`.
-- Applying a binding preset or a key-to-model batch requires both
-  `charity.presets` and `charity.manage`. Preset reads and edits require
-  `charity.presets`.
+- Ordinary binding options and key-to-model batch bindings require `charity.manage`.
+  Applying a channel binding preset requires both `charity.presets` and
+  `charity.manage`. Preset reads and edits require `charity.presets`.
 - Creating and approving a donation through automation requires
   `automation`, `donations.manage_keys` and `donations.review`.
   Automated binding discovery also requires `donations.discover` and the

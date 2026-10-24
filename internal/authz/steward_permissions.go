@@ -305,8 +305,10 @@ func StewardRoutePermission(method, path string) string {
 		return "maintenance.enable"
 	case strings.HasPrefix(p, "egress/"):
 		return "egress.read"
-	case strings.Contains(p, "binding-preset"), strings.Contains(p, "binding-options"), strings.HasPrefix(p, "donations/") && strings.HasSuffix(p, "/bindings/batch"), strings.HasSuffix(p, "/bindings/apply-preset"):
+	case strings.Contains(p, "binding-preset"), strings.HasSuffix(p, "/bindings/apply-preset"):
 		return "charity.presets"
+	case strings.Contains(p, "binding-options"), strings.HasPrefix(p, "donations/") && strings.HasSuffix(p, "/bindings/batch"):
+		return "charity.manage"
 	case strings.Contains(p, "backoff"):
 		return "charity.backoff"
 	case strings.Contains(p, "price-template"):
