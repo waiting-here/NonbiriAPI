@@ -261,7 +261,7 @@ func applyBindingMatrix(ctx context.Context, tx *sql.Tx, targets []bindingTarget
 					status = "already_bound"
 				default:
 					var supported bool
-					if err := tx.QueryRowContext(ctx, `SELECT `+charityscope.SupportSQL("?", "?", "?"), key.id, target.upstream).Scan(&supported); err != nil {
+					if err := tx.QueryRowContext(ctx, catalogSupportQuery(), key.id, target.upstream).Scan(&supported); err != nil {
 						return out, err
 					}
 					if !supported {

@@ -543,18 +543,7 @@ func readAdminBindingsTx(ctx context.Context, tx *sql.Tx, modelID int64) (AdminB
 		return AdminBindings{}, fmt.Errorf("charity routing: read bindings revision: %w", err)
 	}
 	out.BindingRevision = strconv.FormatInt(revision, 10)
-	rows, err := tx.QueryContext(ctx, `SELECT b.id,b.ord,dk.id,d.id,dk.connector_type,dk.canonical_base_url,
-dk.display_head,dk.display_tail,t.upstream_model_id,COALESCE(pc.automatic_supports,0),COALESCE(pc.manual_supports,0),COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),gm.policy_json,
-t.id,t.revision,t.native_service_mask,k.endpoint_id
-FROM charity_model_bindings b
-JOIN charity_binding_targets t ON t.binding_id=b.id
-JOIN donation_keys dk ON dk.id=t.donation_key_id
-JOIN donations d ON d.id=dk.donation_id
-LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
-LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
-LEFT JOIN charity_model_catalog pc ON pc.donation_key_id=dk.id AND pc.normalized_model_id=t.upstream_model_id
-LEFT JOIN gateway_model_capabilities gm ON dk.connector_type IN ('ai-sdk-gateway-v3','ai-sdk-gateway-v4') AND gm.base_url=rtrim(dk.canonical_base_url,'/') AND gm.model=t.upstream_model_id
-WHERE b.charity_model_id=? ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, maxBindingBatch+1)
+	rows, err := tx.QueryContext(ctx, adminBindingsQuery(), modelID, maxBindingBatch+1)
 	if err != nil {
 		return AdminBindings{}, fmt.Errorf("charity routing: read bindings: %w", err)
 	}
