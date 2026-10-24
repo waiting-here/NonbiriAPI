@@ -2130,10 +2130,9 @@ it.each(['approve', 'reject'] as const)(
       user: { ...stewardSession.user, effective_level: 5 },
     });
     await view.user.click(await screen.findByText('Chat completions', { exact: true }));
-    await view.user.click(screen.getByRole('checkbox', { name: 'Select use for review' }));
     await view.user.click(
       screen.getByRole('button', {
-        name: decision === 'approve' ? 'Approve selected uses' : 'Reject selected uses',
+        name: decision === 'approve' ? 'Approve pending content' : 'Return pending content',
       }),
     );
     await waitFor(() => expect(writes).toBe(1));

@@ -1640,7 +1640,9 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(await screen.findByRole('button', { name: 'Choose keys…' }));
     await rendered.user.click(await screen.findByRole('button', { name: /^primary/ }));
     await rendered.user.click(await screen.findByRole('checkbox', { name: /sk-a…tail/ }));
-    await rendered.user.click(await screen.findByRole('checkbox', { name: 'Chat completions' }));
+    expect(await screen.findByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Embeddings' })).toBeChecked();
+    await rendered.user.click(screen.getByRole('checkbox', { name: 'Embeddings' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Done' }));
     await rendered.user.type(screen.getByLabelText('Donation description'), 'fixture donation');
     await rendered.user.click(
@@ -1927,7 +1929,7 @@ describe('experimental policy and charity controls', () => {
     );
   });
 
-  test('keeps pending-header maintenance scoped to the approved key after per-use review and returns from bindings without reopening terminal keys', async () => {
+  test('keeps maintenance scoped to the approved key after a partial review result and returns from bindings without reopening terminal keys', async () => {
     let approved = false;
     let donation: Omit<ManagedDonationFixture, 'keys'> & {
       keys: (ManagedKeyFixture & { can_manage: boolean })[];
@@ -1998,13 +2000,22 @@ describe('experimental policy and charity controls', () => {
           zones: ['America/Indianapolis', 'UTC'],
         });
       if (path === '/admin/api/donations/9/uses/review' && method === 'POST') {
+        expect(JSON.parse(String(init?.body)).items).toMatchObject([
+          { use_id: '20', decision: 'approve' },
+          { use_id: '21', decision: 'approve' },
+        ]);
         approved = true;
         donation = {
           ...donation,
           keys: donation.keys.map((key) => ({ ...key, can_manage: key.id === '6' })),
           use_summary: { total: '2', pending: '1', approved: '1' },
         };
-        return jsonResponse({ results: [{ use_id: '20', ok: true }] });
+        return jsonResponse({
+          results: [
+            { use_id: '20', ok: true },
+            { use_id: '21', ok: false, error: { code: 'conflict', message: 'Use changed' } },
+          ],
+        });
       }
       if (path === '/admin/api/donations/9/keys/6' && method === 'PATCH') {
         const body = JSON.parse(String(init?.body));
@@ -2017,8 +2028,16 @@ describe('experimental policy and charity controls', () => {
         };
         return jsonResponse(donation);
       }
-      if (path === '/admin/api/donations/9/uses')
-        return jsonResponse(managementNumberedPage(uses()));
+      if (path === '/admin/api/donations/9/uses') {
+        const page = managementNumberedPage(uses());
+        return jsonResponse({
+          ...page,
+          pagination: {
+            ...page.pagination,
+            page_size: Number(url.searchParams.get('page_size') ?? 20),
+          },
+        });
+      }
       if (path === '/admin/api/donations/9/keys/6/binding-options')
         return jsonResponse(
           managementNumberedPage([
@@ -2055,13 +2074,7 @@ describe('experimental policy and charity controls', () => {
     await screen.findByText('Chat completions', { exact: true });
     expect(screen.queryByRole('button', { name: 'Models and bindings' })).toBeNull();
     await view.user.click(screen.getByText('Chat completions', { exact: true }));
-    await view.user.click(
-      within(screen.getByText('Chat completions', { exact: true }).closest('.nb-fold')!).getByRole(
-        'checkbox',
-        { name: 'Select use for review' },
-      ),
-    );
-    await view.user.click(screen.getByRole('button', { name: 'Approve selected uses' }));
+    await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
     const manage = await screen.findByRole('button', { name: 'Models and bindings' });
     expect(screen.getAllByRole('button', { name: 'Models and bindings' })).toHaveLength(1);
     expect(donation.status).toBe('pending');
