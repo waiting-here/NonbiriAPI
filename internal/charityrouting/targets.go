@@ -181,7 +181,7 @@ func validateTargetsTx(ctx context.Context, tx *sql.Tx, scope charityscope.Scope
 		}
 		if target.legacy {
 			var exists bool
-			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM charity_model_catalog WHERE donation_key_id=? AND normalized_model_id=? AND (automatic_supports>0 OR manual_supports>0))`, target.keyID, target.upstream).Scan(&exists); err != nil {
+			if err := tx.QueryRowContext(ctx, catalogSupportQuery(), target.keyID, target.upstream).Scan(&exists); err != nil {
 				return err
 			}
 			if !exists {
