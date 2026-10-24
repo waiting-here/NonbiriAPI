@@ -546,27 +546,26 @@ test('level 5 keeps its allowed manual targets and cannot open channel presets',
     data = state.management,
     context = await session(browser, 5);
   try {
-    const models = await read(
+    const options = await read(
       context,
       state.user_url,
-      '/api/steward/charity-models?q=binding-browser&page=1&page_size=20',
-    );
-    expect(models.data.map((row: { id: string }) => row.id)).toContain(data.binding_model_ids[0]);
-    expect(models.data.map((row: { id: string }) => row.id)).not.toContain(
-      data.binding_model_ids[5],
-    );
-    for (const path of [
       '/api/steward/donations/' +
         data.binding_donation_id +
         '/keys/' +
         data.binding_key_ids[0] +
         '/binding-options?q=binding-browser&page=1&page_size=20',
-      '/api/steward/charity-binding-presets?page=1&page_size=20',
-    ]) {
-      const denied = await context.request.get(state.user_url + path);
-      expect(denied.status()).toBe(403);
-      expect((await denied.json()).error.code).toBe('steward_permission_denied');
-    }
+    );
+    expect(options.data.map((row: { charity_model_id: string }) => row.charity_model_id)).toContain(
+      data.binding_model_ids[0],
+    );
+    expect(
+      options.data.map((row: { charity_model_id: string }) => row.charity_model_id),
+    ).not.toContain(data.binding_model_ids[5]);
+    const denied = await context.request.get(
+      state.user_url + '/api/steward/charity-binding-presets?page=1&page_size=20',
+    );
+    expect(denied.status()).toBe(403);
+    expect((await denied.json()).error.code).toBe('steward_permission_denied');
     const page = await context.newPage();
     await page.goto(
       state.user_url +

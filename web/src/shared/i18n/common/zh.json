@@ -2775,7 +2775,7 @@
         "charity_pricing": "调整公益模型定价与优惠",
         "charity_manage": "管理角色策略、绑定与密钥目录",
         "charity_non_mainstream": "操作非主流公益模型目标",
-        "charity_presets": "管理绑定预设与批量绑定",
+        "charity_presets": "管理渠道绑定预设",
         "charity_backoff": "管理端点智能退避",
         "charity_price_templates_read": "查看价格模板",
         "logs_read": "查看与导出请求日志",

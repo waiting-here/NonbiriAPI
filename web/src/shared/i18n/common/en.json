@@ -2775,7 +2775,7 @@
         "charity_pricing": "Adjust charity pricing and discounts",
         "charity_manage": "Manage role policies, bindings and key catalogs",
         "charity_non_mainstream": "Manage non-mainstream charity model targets",
-        "charity_presets": "Manage binding presets and batch bindings",
+        "charity_presets": "Manage channel binding presets",
         "charity_backoff": "Manage endpoint backoff policies",
         "charity_price_templates_read": "View price templates",
         "logs_read": "View and export request logs",

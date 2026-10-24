@@ -177,7 +177,7 @@ func newAutomationFixture(t *testing.T) *automationFixture {
 	}
 	t.Cleanup(func() { _ = bridge.Close() })
 	roles := &roleFinalTxAuthorizer{authorizer: f.app.authorizer}
-	repository, err := resources.New(resources.Config{Store: f.store, Connectors: connector.NewDefaultRegistry(), BaseURLs: stack, Secrets: bridge, KeyDeletion: f.app.charity, KeyCreation: f.app.reports, Projection: f.app.issues.Sources(), DiscoveryRail: bridge, DiscoveryWorker: f.app.discoveryWorker, CursorKeys: vault, FinalAuth: f.app.authRuntime, AdminFinalAuth: roles})
+	repository, err := resources.New(resources.Config{Store: f.store, Connectors: connector.NewDefaultRegistry(), BaseURLs: stack, Secrets: bridge, KeyDeletion: f.app.charity, KeyCreation: f.app.reports, Projection: f.app.issues.Sources(), DiscoveryRail: bridge, DiscoveryWorker: f.app.discoveryWorker, ManagedDiscovery: f.app.donations, CursorKeys: vault, FinalAuth: f.app.authRuntime, AdminFinalAuth: roles})
 	if err != nil {
 		t.Fatal(err)
 	}
