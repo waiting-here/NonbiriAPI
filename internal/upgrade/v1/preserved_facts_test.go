@@ -3,6 +3,7 @@ package v1
 import (
 	"database/sql"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -92,5 +93,32 @@ func assertExactPublishedSource(t *testing.T, database *sql.DB, version int, man
 		if step.from > 26 && step.from != 33 && step.from != 34 && step.from != 35 || step.version > 26 && step.version != 33 && step.version != 34 && step.version != 35 && step.version != 36 {
 			t.Fatalf("unreleased intermediate schema became a supported source: %+v", step)
 		}
+	}
+}
+
+func logFactDifferences[V any](t *testing.T, database *sql.DB, before, after map[string]V) {
+	t.Helper()
+	var changed []string
+	for table, original := range before {
+		current, exists := after[table]
+		if !exists || !reflect.DeepEqual(original, current) {
+			changed = append(changed, table)
+		}
+	}
+	sort.Strings(changed)
+	t.Logf("changed or missing original table facts: %v", changed)
+	var added []string
+	for table := range after {
+		if _, exists := before[table]; !exists {
+			added = append(added, table)
+		}
+	}
+	sort.Strings(added)
+	for _, table := range added {
+		var count int
+		if err := database.QueryRow("SELECT COUNT(*) FROM " + quoteSQLiteIdentifier(table)).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("destination-only table %s has %d rows", table, count)
 	}
 }

@@ -278,6 +278,7 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 				}
 			}
 			if len(beforeFacts) != len(afterFacts) {
+				logFactDifferences(t, store.DB(), beforeFacts, afterFacts)
 				t.Fatal("unrelated table set changed")
 			}
 			var headerBudget string

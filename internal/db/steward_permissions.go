@@ -9,7 +9,7 @@ const StewardPermissionsSQL = `CREATE TABLE steward_permissions (
  donation_scope TEXT NOT NULL DEFAULT 'standard' CHECK(donation_scope IN ('none','standard','enhanced','full')),
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
  updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN created_at AND 253402300799)
-);
+) STRICT;
 CREATE TABLE steward_permission_audits (
  id INTEGER PRIMARY KEY,
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -19,7 +19,7 @@ CREATE TABLE steward_permission_audits (
  previous_policy TEXT NOT NULL CHECK(length(CAST(previous_policy AS BLOB))<=12288 AND json_valid(previous_policy)),
  next_policy TEXT NOT NULL CHECK(length(CAST(next_policy AS BLOB))<=12288 AND json_valid(next_policy)),
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799)
-);
+) STRICT;
 CREATE INDEX idx_steward_permission_audits_user ON steward_permission_audits(user_id,id);
 CREATE INDEX idx_steward_permission_audits_actor ON steward_permission_audits(actor_user_id,id);
 CREATE INDEX idx_steward_permission_audits_retention ON steward_permission_audits(created_at,id);
