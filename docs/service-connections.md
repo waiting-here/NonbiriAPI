@@ -100,10 +100,13 @@ old secret or the provider was previously approved.
 
 A donation shares explicitly selected services and permits administrators and
 authorized stewards to fetch their model directories for review and maintenance.
-There is no separate directory-sharing consent. Reviewers approve or reject each
-use. A use may have both an approved version and a pending replacement;
-partial rejection does not withdraw the still-approved version. The parent
-status alone therefore does not describe every service's availability.
+There is no separate directory-sharing consent. Reviewers approve or return the
+pending content for the donation, or for a key opened explicitly. Use details
+remain available for inspection; choosing the services a charity model uses
+belongs to model configuration. A use may have both an approved version and a
+pending replacement. Returning the replacement does not withdraw the approved
+version. The parent status alone therefore does not describe every service's
+availability.
 
 Donors submit the keys and services they want to share. Administrators or authorized
 stewards then name and bind the charity models. If model discovery is unavailable,

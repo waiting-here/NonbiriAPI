@@ -873,7 +873,7 @@ test('additional services stay pending with their old budget and use-only traine
       approved: '0',
       rejected: '3',
       withdrawn: '0',
-      review_status: 'mixed',
+      review_status: 'rejected',
     });
     expect(ended.keys).toHaveLength(1);
     const endedMember = ended.keys.find((row) => row.id === member.id)!;

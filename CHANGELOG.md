@@ -10,8 +10,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 - Add per-account level-5 steward permissions with 48 actions, six numeric limits,
   four donation scopes, revisioned updates and live revocation. Preserve default
-  workflows, actual
-  actor hierarchy and administrator-only operations; include own policy and
+  workflows, actual actor hierarchy and administrator-only operations; include own policy and
   retained change history in account export.
 - Add shared endpoint and endpoint-policy management for level-6 stewards and
   explicitly authorized level-5 accounts. Add User-built gateway, Steward-built
@@ -26,16 +25,26 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Accept legitimate mixed donation states in the frontend, including a pending
+  parent with approved services and a service awaiting a replacement. Keep valid
+  donation history readable instead of rejecting the complete response.
 - Combine service setup into one form with recoverable save stages and direct
   continuation to personal models or donation. Retain key/service context after
   approval and continue into authorized charity-model configuration. Preserve
   explicitly selected native services in key-to-model batch bindings.
+- Review pending donation content with one approval or return action and an
+  optional note. Choose service subsets when configuring charity bindings.
+  Preserve previous approvals, partial results and recovery after an unknown
+  response; avoid stale catalog queries reporting a successful review as failed.
+- Move donation-source browsing to read-only database snapshots and calculate
+  tagged donation scope once per candidate, reducing contention with writes.
 - Limit charity binding, candidate and preset catalog checks to selected
   donation keys, avoiding repeated aggregation of unrelated catalogs inside
   write transactions while preserving scope, replay and atomicity.
 - Keep browser and steward time contexts in separate caches and preserve date
   initialization when other fields change, so valid charity model forms remain
-  submittable.
+  submittable. Unchanged or empty discount dates do not require a configured
+  site time zone.
 - Identify upgraded connections by their original endpoint note or hostname,
   show endpoint context in lists and search all owned entry URLs and notes.
   Clarify donation model setup and the separate System One protocol selection.
