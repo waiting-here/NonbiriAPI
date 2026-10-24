@@ -60,6 +60,7 @@ type Config struct {
 type Service struct {
 	reviewMaterial *secret.DonationReview
 	db             *sql.DB
+	readDB         *sql.DB
 	ownerAuth      OwnerFinalTxAuthorizer
 	roleAuth       RoleFinalTxAuthorizer
 	heldRead       AdminHeldReadAuthorizer
@@ -74,7 +75,7 @@ func New(config Config) (*Service, error) {
 	if config.Now == nil {
 		config.Now = time.Now
 	}
-	return &Service{db: config.Store.DB(), ownerAuth: config.OwnerAuth, roleAuth: config.RoleAuth,
+	return &Service{db: config.Store.DB(), readDB: config.Store.ReadDB(), ownerAuth: config.OwnerAuth, roleAuth: config.RoleAuth,
 		cursorKeys: config.CursorKeys, now: config.Now, reviewMaterial: config.Review}, nil
 }
 
