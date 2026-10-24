@@ -1,4 +1,4 @@
-import type { AppearancePort } from '../user/appearance/context';
+import { appearances, type AppearancePort } from '../user/appearance/context';
 import { cards, cardById, themes, tierOf, themeById } from '../user/activities/gacha/catalog';
 import {
   defaultRules,
@@ -15,6 +15,8 @@ import type {
   Pool,
   Snapshot,
 } from '../user/activities/gacha/types';
+
+const appearanceIDs = appearances.map((item) => item.id);
 
 interface Saved {
   appearance?: string;
@@ -361,16 +363,7 @@ function appearanceState() {
   return {
     selected: unlocked.includes(memory.appearance ?? '') ? memory.appearance! : 'default',
     unlocked,
-    visible: [
-      'default',
-      'heart-moment',
-      'celestial',
-      'wandering',
-      'amber',
-      'elopement',
-      'heart-thief',
-      'mirrorsea',
-    ],
+    visible: appearanceIDs,
     moment: memory.moment ?? 'cover:permanent',
     moments: [
       'cover:permanent',
@@ -405,14 +398,7 @@ export const localAppearancePort: AppearancePort = {
 };
 
 const requestedAppearance = new URLSearchParams(location.search).get('appearance') ?? 'celestial';
-let previewAppearance = [
-  'celestial',
-  'wandering',
-  'amber',
-  'elopement',
-  'heart-thief',
-  'mirrorsea',
-].includes(requestedAppearance)
+let previewAppearance = appearanceIDs.includes(requestedAppearance)
   ? requestedAppearance
   : 'celestial';
 export const appearancePreviewPort: AppearancePort = {
@@ -420,24 +406,14 @@ export const appearancePreviewPort: AppearancePort = {
   async load() {
     return {
       selected: previewAppearance,
-      unlocked: [
-        'default',
-        'heart-moment',
-        'celestial',
-        'wandering',
-        'amber',
-        'elopement',
-        'heart-thief',
-        'mirrorsea',
-      ],
+      unlocked: appearanceIDs,
       moment: 'cover:permanent',
       moments: ['cover:permanent'],
       updated_at: null,
     };
   },
   async select(selected) {
-    if (!['default', 'heart-moment', 'celestial', 'wandering', 'amber'].includes(selected))
-      throw new Error('appearance-locked');
+    if (!appearanceIDs.includes(selected)) throw new Error('appearance-locked');
     previewAppearance = selected;
     return this.load();
   },

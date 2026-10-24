@@ -86,6 +86,7 @@ const published = (id: string): Entry => {
   };
 };
 export const entries: Entry[] = [
+  published('r-chatgpt'),
   walkingTomorrow,
   turnBackTomorrow,
   refinedTomorrow,

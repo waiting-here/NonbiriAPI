@@ -83,7 +83,15 @@ function PublishedBackdrop({
   const src = appearanceArt(entry, dark);
   return (
     <>
-      {appearance === 'amber' ? (
+      {appearance === 'tomorrow' ? (
+        <TomorrowArtwork
+          walking
+          variant="appearance"
+          dark={dark}
+          animated={false}
+          className="nb-tomorrow-still"
+        />
+      ) : appearance === 'amber' ? (
         <AmberStill dark={dark} />
       ) : appearance === 'mirrorsea' ? (
         <MirrorSeaStill dark={dark} />

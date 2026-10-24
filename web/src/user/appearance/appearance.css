@@ -5,7 +5,8 @@ html:is(
   [data-appearance='mirrorsea'],
   [data-appearance='amber'],
   [data-appearance='elopement'],
-  [data-appearance='heart-thief']
+  [data-appearance='heart-thief'],
+  [data-appearance='tomorrow']
 ) {
   background: var(--nb-color-bg);
 }
@@ -16,7 +17,8 @@ html:is(
     [data-appearance='mirrorsea'],
     [data-appearance='amber'],
     [data-appearance='elopement'],
-    [data-appearance='heart-thief']
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
   )
   body {
   background: transparent;
@@ -38,7 +40,8 @@ html:is(
     [data-appearance='mirrorsea'],
     [data-appearance='amber'],
     [data-appearance='elopement'],
-    [data-appearance='heart-thief']
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
   )
   .nb-user-shell,
 html[data-appearance='celestial'] .gacha-preview,
@@ -48,7 +51,8 @@ html:is(
     [data-appearance='mirrorsea'],
     [data-appearance='amber'],
     [data-appearance='elopement'],
-    [data-appearance='heart-thief']
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
   )
   .gacha-preview {
   background: transparent;
@@ -60,7 +64,8 @@ html:is(
     [data-appearance='mirrorsea'],
     [data-appearance='amber'],
     [data-appearance='elopement'],
-    [data-appearance='heart-thief']
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
   )
   .nb-user-header {
   background: var(--nb-color-surface);
@@ -160,7 +165,8 @@ html:is(
     [data-appearance='mirrorsea'],
     [data-appearance='amber'],
     [data-appearance='elopement'],
-    [data-appearance='heart-thief']
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
   )
   .nb-page-header {
   background: var(--nb-color-surface);
@@ -179,7 +185,8 @@ html:is(
       [data-appearance='mirrorsea'],
       [data-appearance='amber'],
       [data-appearance='elopement'],
-      [data-appearance='heart-thief']
+      [data-appearance='heart-thief'],
+      [data-appearance='tomorrow']
     )
     .nb-user-header {
     backdrop-filter: none;
@@ -193,7 +200,8 @@ html:is(
     [data-appearance='mirrorsea'],
     [data-appearance='amber'],
     [data-appearance='elopement'],
-    [data-appearance='heart-thief']
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
   )
   :is(.nb-tabs, .nb-user-shell__footer) {
   background: var(--nb-color-surface);
@@ -205,7 +213,8 @@ html:is(
     [data-appearance='mirrorsea'],
     [data-appearance='amber'],
     [data-appearance='elopement'],
-    [data-appearance='heart-thief']
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
   )
   .nb-tabs {
   padding-inline: var(--nb-space-3);
@@ -283,7 +292,8 @@ html:is(
     [data-appearance='mirrorsea'],
     [data-appearance='amber'],
     [data-appearance='elopement'],
-    [data-appearance='heart-thief']
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
   )
   :is(
     .nb-panel,
@@ -317,7 +327,8 @@ html:is(
     [data-appearance='mirrorsea'],
     [data-appearance='amber'],
     [data-appearance='elopement'],
-    [data-appearance='heart-thief']
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
   )
   :is(.nb-list:not(:empty), .nb-table-wrap, .table-wrap) {
   border: 1px solid var(--nb-appearance-glass-line);
@@ -331,7 +342,8 @@ html:is(
     [data-appearance='mirrorsea'],
     [data-appearance='amber'],
     [data-appearance='elopement'],
-    [data-appearance='heart-thief']
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
   )
   .nb-list:not(:empty) {
   padding-inline: var(--nb-space-4);
@@ -344,7 +356,8 @@ html:is(
     [data-appearance='mirrorsea'],
     [data-appearance='amber'],
     [data-appearance='elopement'],
-    [data-appearance='heart-thief']
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
   )
   :is(.nb-filter, .nb-pager, .economy-owner-filters, .core-resource-filters, form.ops-toolbar) {
   padding: var(--nb-space-3) var(--nb-space-4);
@@ -361,7 +374,8 @@ html:is(
     [data-appearance='mirrorsea'],
     [data-appearance='amber'],
     [data-appearance='elopement'],
-    [data-appearance='heart-thief']
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
   )
   :is(
     .nb-panel,
@@ -393,7 +407,8 @@ html:is(
     [data-appearance='mirrorsea'],
     [data-appearance='amber'],
     [data-appearance='elopement'],
-    [data-appearance='heart-thief']
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
   )
   :is(.nb-panel__head, .nb-panel__foot) {
   border-color: var(--nb-appearance-glass-divider);
@@ -405,7 +420,8 @@ html:is(
     [data-appearance='mirrorsea'],
     [data-appearance='amber'],
     [data-appearance='elopement'],
-    [data-appearance='heart-thief']
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
   )
   .nb-panel--danger {
   border-color: var(--nb-color-danger);
@@ -418,7 +434,8 @@ html:is(
       [data-appearance='mirrorsea'],
       [data-appearance='amber'],
       [data-appearance='elopement'],
-      [data-appearance='heart-thief']
+      [data-appearance='heart-thief'],
+      [data-appearance='tomorrow']
     )
     :is(
       .nb-panel,
@@ -448,7 +465,8 @@ html:is(
     [data-appearance='mirrorsea'],
     [data-appearance='amber'],
     [data-appearance='elopement'],
-    [data-appearance='heart-thief']
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
   )
   :is(
     :is(.page, .nb-page) > :is(h2, .field-help, .time-context-notice),
@@ -493,4 +511,22 @@ html[data-background-view='true'] .nb-toast-viewport {
   .nb-background-view-trigger > span {
     display: none;
   }
+}
+
+.nb-tomorrow-still.tomorrow-art {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: -1;
+}
+
+html[data-appearance='tomorrow'][data-theme='light'] .gacha-app {
+  --g-muted: #354b40;
+  --nb-color-accent: #164c3b;
+  --nb-color-accent-hover: #103a2f;
+}
+html[data-appearance='tomorrow'] .gacha-reward-dot {
+  color: #182d25;
 }

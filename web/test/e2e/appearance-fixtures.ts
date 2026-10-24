@@ -11,6 +11,7 @@ export const ALL_APPEARANCES = [
   'amber',
   'elopement',
   'heart-thief',
+  'tomorrow',
 ];
 
 const now = 1_800_000_000;

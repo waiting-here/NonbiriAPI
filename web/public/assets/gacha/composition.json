@@ -80,7 +80,8 @@
     "n-gemini": "motion/n-gemini/hero.webp",
     "o-claude": "motion/o-claude/hero.webp",
     "p-claude": "motion/p-claude/hero.webp",
-    "q-glm": "motion/q-glm/hero.webp"
+    "q-glm": "motion/q-glm/hero.webp",
+    "r-chatgpt": "motion/r-chatgpt/hero.webp"
   },
   "cards": {
     "a-chatgpt": {
@@ -775,6 +776,67 @@
           1448
         ],
         "character_high_method": "native plates shared by both display qualities"
+      }
+    },
+    "r-chatgpt": {
+      "source": "registered-motion-layers",
+      "background": "backgrounds/r.webp",
+      "character": "motion/r-chatgpt/hero.webp",
+      "scene": "tomorrow",
+      "inputs": [
+        "motion/r-chatgpt/background-light.webp",
+        "motion/r-chatgpt/background-dark.webp",
+        "motion/r-chatgpt/hero.webp",
+        "motion/r-chatgpt/body.webp",
+        "motion/r-chatgpt/pendant.webp",
+        "motion/r-chatgpt/closed.webp",
+        "motion/r-chatgpt/cloud.webp",
+        "motion/r-chatgpt/hero-dark.webp"
+      ],
+      "moment_layers": {
+        "background": "daylight scenery",
+        "character": "complete transparent source plate; same placement as animated character",
+        "standard": [
+          1024,
+          1536
+        ],
+        "high_resolution": [
+          2560,
+          3840
+        ]
+      },
+      "appearance_layers": {
+        "background": "motion/r-chatgpt/background-{light,dark}.webp",
+        "layout": "responsive source plate placement shared by static and animated appearance",
+        "character_light": "motion/r-chatgpt/hero.webp",
+        "character_dark": "motion/r-chatgpt/hero-dark.webp"
+      },
+      "resolution": {
+        "background_native": [
+          1672,
+          941
+        ],
+        "character_native": [
+          1024,
+          1536
+        ],
+        "card_standard": [
+          1280,
+          1920
+        ],
+        "card_high": [
+          2560,
+          3840
+        ],
+        "landscape_standard": [
+          1920,
+          1080
+        ],
+        "landscape_high": [
+          3840,
+          2160
+        ],
+        "high_method": "resampling; no additional native detail"
       }
     }
   },

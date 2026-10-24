@@ -252,8 +252,8 @@ export function Preview() {
       </main>
       <footer className="sp-review__footer">
         {t(
-          '本地候选预览 · 新卡尚未加入正式奖池 · 六张已发布 SP 可选作对照',
-          'Local candidate preview · No new live pool · Six published SP cards available for comparison',
+          '本地成品预览 · 新卡已接入，奖池待开放 · 六张已发布 SP 可选作对照',
+          'Local artwork preview · The new card is integrated and awaits scheduling · Six published SP cards available for comparison',
         )}
       </footer>
       {inspect && (

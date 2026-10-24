@@ -41,7 +41,10 @@ for (const theme of ['light', 'dark'])
       await mockRoleSession(page, 'user', 'user');
       await mockPublicConfig(page, 'user');
       const state = gachaSnapshot();
-      state.visible_themes = ['g', 'n', 'o', 'p', 'q'];
+      state.visible_themes = [
+        'g',
+        ...Object.keys(specialCards).map((id) => cards.find((card) => card.id === id)!.theme),
+      ];
       for (const id of Object.keys(specialCards))
         state.owned[id] = { at: state.server_time, source: 'shop' };
       await page.route('**/api/events', (route) =>
@@ -109,10 +112,18 @@ for (const theme of ['light', 'dark'])
       for (const [id, appearance] of Object.entries(specialCards)) {
         selected = appearance!;
         await page.reload();
-        const still = page.locator('.nb-appearance-still');
+        const still = page
+          .locator(
+            appearance === 'tomorrow'
+              ? '.nb-tomorrow-still .tomorrow-art__still img'
+              : '.nb-appearance-still',
+          )
+          .first();
         await expect(still).toHaveAttribute(
           'src',
-          `/assets/gacha/appearances/${appearance}-${theme}.webp`,
+          appearance === 'tomorrow'
+            ? `/assets/gacha/motion/r-chatgpt/background-${theme}.webp`
+            : `/assets/gacha/appearances/${appearance}-${theme}.webp`,
         );
         await expect
           .poll(() =>

@@ -137,7 +137,9 @@ export function ReviewPanel({
                   : portraitStudy
                     ? t('伸手精修', 'Refined reaching pose')
                     : t('初版', 'First version')
-              : t('已发布', 'Published')}
+              : entry.id === 'r-chatgpt'
+                ? t('已接入 · 待开放', 'Integrated · not scheduled')
+                : t('已发布', 'Published')}
           </span>
           <span>{english ? entry.noteEN : entry.note}</span>
         </p>

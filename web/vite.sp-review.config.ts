@@ -29,12 +29,13 @@ export default defineConfig({
             'o-claude',
             'p-claude',
             'q-glm',
+            'r-chatgpt',
           ]) {
             copy(prefix + 'cards/' + id + '.webp');
             copy(prefix + 'motion/' + id);
             if (!prefix) copy('thumbs/' + id + '.webp');
           }
-          for (const id of ['l', 'm', 'n', 'o', 'p', 'q'])
+          for (const id of ['l', 'm', 'n', 'o', 'p', 'q', 'r'])
             for (const type of ['covers', 'groups']) copy(prefix + type + '/' + id + '.webp');
           copy(prefix + 'appearances');
           copy(prefix + 'tomorrow');

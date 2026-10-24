@@ -6,6 +6,12 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## Unreleased
 
+### Added
+
+- Add the single-card ChatGPT SP theme “Tomorrow, Still Unwritten”, with an
+  unpublished limited-pool template, animated card, cover, collection illustration
+  and unlockable light/dark site appearance. Its artwork is classified as general.
+
 ### Fixed
 
 - Keep browser and steward time contexts in separate caches and preserve date

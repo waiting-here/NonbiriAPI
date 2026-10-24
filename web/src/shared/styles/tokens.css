@@ -319,7 +319,8 @@
   [data-appearance='mirrorsea'],
   [data-appearance='amber'],
   [data-appearance='elopement'],
-  [data-appearance='heart-thief']
+  [data-appearance='heart-thief'],
+  [data-appearance='tomorrow']
 ) {
   --nb-appearance-glass-edge: color-mix(
     in srgb,
@@ -342,7 +343,8 @@
     [data-appearance='mirrorsea'],
     [data-appearance='amber'],
     [data-appearance='elopement'],
-    [data-appearance='heart-thief']
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
   )[data-theme='dark'] {
   --nb-appearance-glass-edge: color-mix(
     in srgb,
@@ -541,4 +543,39 @@
   --nb-color-accent-quiet: #24263f;
   --nb-color-accent-contrast: #191b3d;
   --nb-elevation-1: 0 3px 16px #05061040;
+}
+
+:root[data-appearance='tomorrow'] {
+  --nb-color-bg: #f2f6ee;
+  --nb-color-surface: #f7fbf5;
+  --nb-color-surface-raised: #ffffff;
+  --nb-color-surface-muted: #e5efe5;
+  --nb-color-surface-alt: #eef5eb;
+  --nb-color-text: #193b32;
+  --nb-color-text-muted: #355c50;
+  --nb-color-text-subtle: #3e6256;
+  --nb-color-border: #a7c5b8;
+  --nb-color-border-strong: #698f80;
+  --nb-color-accent: #1b6553;
+  --nb-color-accent-hover: #125342;
+  --nb-color-accent-soft: #dcefe3;
+  --nb-color-accent-quiet: #edf7ed;
+  --nb-color-accent-contrast: #ffffff;
+}
+:root[data-appearance='tomorrow'][data-theme='dark'] {
+  --nb-color-bg: #111e28;
+  --nb-color-surface: #1b2b34;
+  --nb-color-surface-raised: #22363d;
+  --nb-color-surface-muted: #243940;
+  --nb-color-surface-alt: #20343d;
+  --nb-color-text: #edf8f2;
+  --nb-color-text-muted: #aecbc5;
+  --nb-color-text-subtle: #91b8af;
+  --nb-color-border: #54716f;
+  --nb-color-border-strong: #7b9d96;
+  --nb-color-accent: #8fe1c9;
+  --nb-color-accent-hover: #b8f0df;
+  --nb-color-accent-soft: #254c49;
+  --nb-color-accent-quiet: #1b3c39;
+  --nb-color-accent-contrast: #0a2c23;
 }

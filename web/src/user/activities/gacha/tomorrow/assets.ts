@@ -28,18 +28,20 @@ export const turnBackTomorrowAssets = {
   hero: base + 'turn-back/hero.webp',
 };
 
+const adopted = '/assets/gacha/';
 export const walkingTomorrowAssets = {
-  ...tomorrowAssets,
-  card: base + 'walking/card.webp',
-  cover: base + 'walking/cover.webp',
-  illustration: base + 'walking/illustration.webp',
-  light: base + 'walking/appearance-light.webp',
-  dark: base + 'walking/appearance-dark.webp',
-  thumb: base + 'walking/thumb.webp',
-  hero: base + 'walking/hero.webp',
-  heroDark: base + 'walking/hero-dark.webp',
-  closed: base + 'walking/closed.webp',
-  body: base + 'walking/body.webp',
-  pendant: base + 'walking/pendant.webp',
-  backgroundLight: refinedTomorrowAssets.backgroundLight,
+  card: adopted + 'cards/r-chatgpt.webp',
+  cover: adopted + 'covers/r.webp',
+  illustration: adopted + 'groups/r.webp',
+  light: adopted + 'appearances/tomorrow-light.webp',
+  dark: adopted + 'appearances/tomorrow-dark.webp',
+  thumb: adopted + 'thumbs/r-chatgpt.webp',
+  hero: adopted + 'motion/r-chatgpt/hero.webp',
+  heroDark: adopted + 'motion/r-chatgpt/hero-dark.webp',
+  closed: adopted + 'motion/r-chatgpt/closed.webp',
+  body: adopted + 'motion/r-chatgpt/body.webp',
+  pendant: adopted + 'motion/r-chatgpt/pendant.webp',
+  backgroundLight: adopted + 'motion/r-chatgpt/background-light.webp',
+  backgroundDark: adopted + 'motion/r-chatgpt/background-dark.webp',
+  cloud: adopted + 'motion/r-chatgpt/cloud.webp',
 };
