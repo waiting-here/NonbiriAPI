@@ -294,9 +294,23 @@ test('approve a fixed key, page 240 targets and bind 144 cross-page selections w
     expect(
       partial.keys.find((key: { id: string }) => key.id === data.pending_key_id).can_manage,
     ).toBe(true);
-    await page
-      .getByRole('button', { name: common.common.connections.modelsAndBindings, exact: true })
-      .click();
+    await page.getByRole('button', { name: connections.configureReviewedUse, exact: true }).click();
+    await expect(page).toHaveURL(
+      (url) =>
+        url.searchParams.get('donation_id') === data.pending_donation_id &&
+        url.searchParams.get('binding_key') === data.pending_key_id &&
+        url.searchParams.get('binding_use') === chat.id &&
+        url.searchParams.get('binding_service') === 'chat_completions',
+    );
+    await expect(
+      page.getByText(
+        connections.reviewedServiceDefault.replace(
+          '{{service}}',
+          common.common.modelTypes.chat_completions,
+        ),
+        { exact: true },
+      ),
+    ).toBeVisible();
     const search = page.getByPlaceholder(workflow.modelSearch);
     await search.fill('workflow');
     await search.press('Enter');
@@ -379,6 +393,13 @@ test('approve a fixed key, page 240 targets and bind 144 cross-page selections w
     await page.getByRole('button', { name: 'Add 144 connections', exact: true }).click();
     const response = await receipt;
     expect(response.status()).toBe(200);
+    const submitted = response.request().postDataJSON() as {
+      targets: { native_services: string[] }[];
+    };
+    expect(submitted.targets).toHaveLength(144);
+    expect(submitted.targets.map((target) => target.native_services)).toEqual(
+      Array.from({ length: 144 }, () => ['chat_completions']),
+    );
     expect(await response.json()).toEqual({
       items: [
         {
@@ -398,6 +419,10 @@ test('approve a fixed key, page 240 targets and bind 144 cross-page selections w
       `/admin/api/charity-models/${data.models[0]}/bindings`,
     );
     expect(saved.bindings).toHaveLength(144);
+    for (const binding of saved.bindings)
+      expect(binding.targets).toEqual([
+        expect.objectContaining({ native_services: ['chat_completions'] }),
+      ]);
     expect(
       new Set(saved.bindings.map((entry: { upstream_model_id: string }) => entry.upstream_model_id))
         .size,
@@ -998,7 +1023,7 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
     await expect(page.getByRole('button', { name: workflow.newModel, exact: true })).toHaveCount(0);
     await expect(
       page.getByRole('button', { name: workflow.openPriceReference, exact: true }),
-    ).toHaveCount(0);
+    ).toBeVisible();
     const denied = await context.request.get(
       state.user_url + '/api/steward/charity-price-templates?page=1&page_size=20',
     );
@@ -1065,7 +1090,8 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
     const keyPath = `/api/steward/donations/${paused.donation_id}/keys/${pausedID}`;
     const scopePath = `${keyPath}?charity_model_id=${data.models[0]}`;
     const unscoped = await context.request.get(state.user_url + keyPath);
-    expect(unscoped.status()).toBe(404);
+    expect(unscoped.status()).toBe(403);
+    expect((await unscoped.json()).error.code).toBe('steward_permission_denied');
     const before = await read(context, state.user_url, scopePath);
     expect(before).toMatchObject({
       key_id: pausedID,
@@ -1422,6 +1448,18 @@ test('level 5 reviews independent pending sources, retains receipts after refres
         page.getByText(common.common.pendingReviews.noLongerPending, { exact: true }),
       ).toBeVisible();
       await expect(page.getByText(savedText, { exact: true })).toBeVisible();
+      const result = page.getByRole('status').filter({ hasText: savedText });
+      await expect(result).toContainText(common.common.modelTypes.chat_completions);
+      await expect(result).toContainText(
+        pending.pending!.display_head + '…' + pending.pending!.display_tail,
+      );
+      await expect(
+        page.getByRole('button', { name: connections.configureReviewedUse, exact: true }),
+      ).toHaveCount(0);
+      if (decision === 'approve')
+        await expect(
+          page.getByText(connections.reviewConfigurationDenied, { exact: true }),
+        ).toBeVisible();
       await expect(
         page.getByRole('button', {
           name: decision === 'approve' ? connections.approveSelected : connections.rejectSelected,
