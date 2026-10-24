@@ -50,6 +50,7 @@ func TestServiceMetadataConversionPreservesPopulatedSource(t *testing.T) {
 	}
 	defer store.Close()
 	if after := allIndexSourceFacts(t, store.DB(), columns); !reflect.DeepEqual(before, after) {
+		logFactDifferences(t, store.DB(), before, after)
 		t.Fatal("metadata conversion changed saved facts")
 	}
 	for _, failure := range []string{"region", "unavailable", "unknown"} {
@@ -86,6 +87,7 @@ func TestServiceMetadataConversionPreservesPopulatedSource(t *testing.T) {
 		})
 	}
 	if after := allIndexSourceFacts(t, store.DB(), columns); !reflect.DeepEqual(before, after) {
+		logFactDifferences(t, store.DB(), before, after)
 		t.Fatal("discovery class probes changed the original saved facts")
 	}
 	mustExec(t, store.DB(), `INSERT INTO admin_endpoint_tags(base_url,tag) VALUES(?,'noncommercial_gateway')`, base)

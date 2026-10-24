@@ -22,8 +22,8 @@ func TestSchemaInfoDoesNotLoadEnvironmentOrOpenDatabase(t *testing.T) {
 	if descriptor.FormatVersion != 1 || descriptor.SchemaVersion != db.CurrentSchemaVersion || descriptor.MinimumSchemaVersion != db.MinimumSchemaVersion || descriptor.ManifestHash == "" {
 		t.Fatal(descriptor)
 	}
-	if len(descriptor.OfflineConversions) != 0 || len(descriptor.SourceSchemaVersions) != 2 || descriptor.SourceSchemaVersions[0] != 33 || descriptor.SourceSchemaVersions[1] != 34 || len(descriptor.SourceManifestHashes) != 2 || descriptor.SourceManifestHashes[0] != db.Schema33ManifestHash || descriptor.SourceManifestHashes[1] != db.Schema34ManifestHash {
-		t.Fatal("offline conversion metadata", descriptor.OfflineConversions)
+	if len(descriptor.OfflineConversions) != 0 || len(descriptor.SourceSchemaVersions) != 3 || descriptor.SourceSchemaVersions[0] != 33 || descriptor.SourceSchemaVersions[1] != 34 || descriptor.SourceSchemaVersions[2] != 35 || len(descriptor.SourceManifestHashes) != 3 || descriptor.SourceManifestHashes[0] != db.Schema33ManifestHash || descriptor.SourceManifestHashes[1] != db.Schema34ManifestHash || descriptor.SourceManifestHashes[2] != db.Schema35ManifestHash {
+		t.Fatal("schema compatibility metadata", descriptor)
 	}
 }
 
