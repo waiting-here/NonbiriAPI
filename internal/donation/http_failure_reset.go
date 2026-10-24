@@ -121,12 +121,18 @@ type failureSelectionWire struct {
 	Handling     requiredField[string] `json:"handling"`
 	Idle         requiredField[string] `json:"idle"`
 	KeyState     requiredField[string] `json:"key_state"`
+	UserID       requiredField[string] `json:"user_id"`
+	DiscordID    requiredField[string] `json:"discord_id"`
 }
 
 func parseFailureSelection(w failureSelectionWire) (failureSelection, error) {
 	out := failureSelection{View: w.View.Value, SourceKey: w.SourceKey.Value,
 		Management: ManagementFilter{Status: w.Status.Value, ReviewStatus: w.ReviewStatus.Value, Query: w.Query.Value, Handling: w.Handling.Value},
 		Source:     SourceFilter{Query: w.Query.Value, Scope: w.Scope.Value, Handling: w.Handling.Value, Idle: w.Idle.Value, KeyState: w.KeyState.Value}}
+	out.Management.UserID, out.Management.DiscordID = w.UserID.Value, w.DiscordID.Value
+	if w.UserID.Set && w.UserID.Value == "" || w.DiscordID.Set && w.DiscordID.Value == "" || out.View != "donations" && (w.UserID.Set || w.DiscordID.Set) {
+		return out, ErrInvalidRequest
+	}
 	switch out.View {
 	case "donations":
 		if w.DonationID.Set || w.SourceKey.Set || w.Scope.Set || w.Idle.Set || w.KeyState.Set || !validManagementFilter(out.Management) {

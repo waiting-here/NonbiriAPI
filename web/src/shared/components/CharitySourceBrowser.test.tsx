@@ -231,7 +231,28 @@ function currentSearch(): string {
 }
 
 describe('CharitySourceBrowser', () => {
-  it('reads the default active source page and opens a real source-key page', async () => {
+  it('resets source scope and key status to all through the visible reset control', async () => {
+    const { requests } = installFetch();
+    const view = await renderWithProviders(
+      <BrowserHarness role="admin" accountId="admin:reset" enabled onOpenDonation={vi.fn()} />,
+      {
+        station: 'admin',
+        role: 'admin',
+        locale: 'en',
+        route: '/charity?source_scope=active&source_key_state=available',
+      },
+    );
+    await screen.findByRole('button', { name: /Custom endpoint: https:\/\/source-0/ });
+    await view.user.click(screen.getByRole('button', { name: 'Reset' }));
+    await waitFor(() => {
+      const latest = requests
+        .filter((url) => url.pathname === '/admin/api/donation-sources')
+        .at(-1)!;
+      expect(latest.searchParams.get('scope')).toBe('all');
+      expect(latest.searchParams.get('key_state')).toBe('all');
+    });
+  });
+  it('reads all source and key states by default and opens a real source-key page', async () => {
     const { requests } = installFetch();
     const onOpenDonation = vi.fn();
     const view = await renderWithProviders(
@@ -245,16 +266,16 @@ describe('CharitySourceBrowser', () => {
     const sourceRequest = requests.find(
       (request) => request.pathname === '/admin/api/donation-sources',
     );
-    expect(sourceRequest?.searchParams.get('scope')).toBe('active');
-    expect(sourceRequest?.searchParams.get('key_state')).toBe('available');
+    expect(sourceRequest?.searchParams.get('scope')).toBe('all');
+    expect(sourceRequest?.searchParams.get('key_state')).toBe('all');
     expect(sourceRequest?.searchParams.get('page')).toBe('1');
     expect(sourceRequest?.searchParams.get('page_size')).toBe('20');
     expect(sourceRequest?.searchParams.has('limit')).toBe(false);
 
     await chooseSource(view, view.container);
     const keyRequest = requests.find((request) => request.pathname.endsWith('/keys'));
-    expect(keyRequest?.searchParams.get('scope')).toBe('active');
-    expect(keyRequest?.searchParams.get('key_state')).toBe('available');
+    expect(keyRequest?.searchParams.get('scope')).toBe('all');
+    expect(keyRequest?.searchParams.get('key_state')).toBe('all');
     expect(keyRequest?.searchParams.get('page')).toBe('1');
     expect(keyRequest?.searchParams.get('page_size')).toBe('20');
     expect(within(keyPane(view.container)).queryByText('safe note')).not.toBeInTheDocument();

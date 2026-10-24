@@ -131,6 +131,76 @@ function jsonResponse(value: unknown, status = 200): Response {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('owner donation numbered-page normalizers', () => {
+  it.each([
+    {
+      total: '2',
+      approved: '2',
+      pending: '0',
+      rejected: '0',
+      withdrawn: '0',
+      review_status: 'approved',
+    },
+    {
+      total: '1',
+      approved: '1',
+      pending: '1',
+      rejected: '0',
+      withdrawn: '0',
+      review_status: 'approved_pending',
+    },
+  ])('accepts the confirmed live pending lifecycle with $review_status uses', (useSummary) => {
+    const payload = page([
+      summary({
+        state_counts: { ...summary().state_counts, pending: '0', available: '1' },
+        use_summary: useSummary,
+      }),
+    ]);
+    const result = normalizeOwnerDonationsPage(payload, { view: 'current' }, '1', 20).data[0]!;
+    expect(result.status).toBe('pending');
+    expect(result.reviewResult).toBeNull();
+    expect(result.stateCounts.available).toBe('1');
+    expect(result.useSummary).toEqual(useSummary);
+  });
+  it.each(['available', 'rate_limited', 'disabled', 'suspended', 'exhausted'] as const)(
+    'accepts %s keys approved through individual uses while the lifecycle remains pending',
+    (state) => {
+      const reviewed = summary({
+        state_counts: { ...summary().state_counts, pending: '0', [state]: '1' },
+        use_summary: {
+          total: '2',
+          pending: '1',
+          approved: '1',
+          rejected: '0',
+          withdrawn: '0',
+          review_status: 'approved_pending',
+        },
+      });
+      expect(
+        normalizeOwnerDonationsPage(
+          page([reviewed]),
+          { review_status: 'approved_pending' },
+          '1',
+          20,
+        ).data[0]?.status,
+      ).toBe('pending');
+      expect(() =>
+        normalizeOwnerDonationsPage(page([{ ...reviewed, use_summary: undefined }]), {}, '1', 20),
+      ).toThrow(ApiError);
+      expect(() =>
+        normalizeOwnerDonationsPage(
+          page([
+            {
+              ...reviewed,
+              use_summary: { total: '2', pending: '2', approved: '0', review_status: 'pending' },
+            },
+          ]),
+          {},
+          '1',
+          20,
+        ),
+      ).toThrow(ApiError);
+    },
+  );
   it('projects the exact owner summary fields into economy camelCase DTOs', () => {
     const result = normalizeOwnerDonationsPage(page([summary()]), {}, '1', 20);
 

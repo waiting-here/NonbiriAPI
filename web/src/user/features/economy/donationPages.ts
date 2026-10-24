@@ -296,6 +296,7 @@ function validateSummaryState(
   reviewResult: DonationReviewResult | null,
   keyCount: string,
   stateCounts: OwnerDonationStateCounts,
+  useSummary: UseSummary | undefined,
   label: string,
 ): void {
   const total = BigInt(keyCount);
@@ -307,9 +308,16 @@ function validateSummaryState(
     invalidResponse(`${label} terminal state`);
   }
   if (status === 'pending') {
-    // The backend keeps the header pending while any key is logically live,
-    // but its per-key projection may already contain expired or ended keys.
-    if (reviewResult !== null || pending === 0n || pending + terminal !== total) {
+    // A live key can leave pending after an individual use is approved while
+    // the donation lifecycle stays pending. Each such key needs an approved use.
+    const approvedUses = BigInt(useSummary?.approved ?? '0');
+    const reviewedLiveKeys = total - pending - terminal;
+    if (
+      reviewResult !== null ||
+      terminal === total ||
+      reviewedLiveKeys > approvedUses ||
+      (approvedUses === 0n && pending === 0n)
+    ) {
       invalidResponse(`${label} pending state`);
     }
     return;
@@ -376,7 +384,7 @@ function normalizeOwnerDonation(
     invalidResponse(`${label} source count`);
   }
   const sources = normalizeSources(root.sources, sourceCount, `${label} sources`);
-  validateSummaryState(status, reviewResult, keyCount, stateCounts, label);
+  validateSummaryState(status, reviewResult, keyCount, stateCounts, summary, label);
   return {
     ...(root.use_summary === undefined
       ? {}

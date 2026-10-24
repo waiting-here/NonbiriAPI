@@ -91,7 +91,7 @@ function sourceBrowserKeys(
   role: DonationPageRole,
   accountId: string,
   modelID?: string,
-  keyState: KeyState = 'available',
+  keyState: KeyState = 'all',
 ) {
   const root = [...charityKeys.root(role), 'source-browser', accountId, modelID ?? ''] as const;
   return {
@@ -186,7 +186,7 @@ function readScopeParameter(searchParams: URLSearchParams): {
   if (values.length === 1 && (values[0] === 'active' || values[0] === 'all')) {
     return { value: values[0], needsNormalization: false };
   }
-  return { value: 'active', needsNormalization: true };
+  return { value: 'all', needsNormalization: true };
 }
 
 function readEnumParameter<T extends string>(
@@ -516,7 +516,7 @@ export function CharitySourceBrowser({
   const rawKeyState = singleParameter(searchParams, 'source_key_state');
   const keyState: KeyState = KEY_STATES.includes(rawKeyState as KeyState)
     ? (rawKeyState as KeyState)
-    : 'available';
+    : 'all';
   const handling = readEnumParameter(searchParams, HANDLING_PARAM, ['pending'] as const);
   const idle = readEnumParameter(searchParams, IDLE_PARAM, ['yes', 'no'] as const);
   const rawSourceKey = singleParameter(searchParams, SOURCE_KEY_PARAM) ?? '';
@@ -956,6 +956,31 @@ export function CharitySourceBrowser({
               </option>
             </select>
           </label>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => {
+              setSourceSearchDraft('');
+              setKeySearchDraft('');
+              setSearchParams((current) => {
+                const next = new URLSearchParams(current);
+                for (const name of [
+                  SOURCE_QUERY_PARAM,
+                  KEY_QUERY_PARAM,
+                  HANDLING_PARAM,
+                  IDLE_PARAM,
+                ])
+                  next.delete(name);
+                next.set(SCOPE_PARAM, 'all');
+                next.set('source_key_state', 'all');
+                next.set(SOURCE_PAGE_PARAM, '1');
+                next.set(SOURCE_KEYS_PAGE_PARAM, '1');
+                return next;
+              });
+            }}
+          >
+            {t('common.resetFilter')}
+          </Button>
         </form>
       </div>
       {sourceBusy && sourcePage ? <LoadingState label={t('common.loading')} /> : null}

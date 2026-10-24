@@ -49,6 +49,8 @@ export interface ManagedDonationPageFilters {
   review_status?: DonationDisplayStatus | '';
   handling?: DonationHandlingState | '';
   q?: string;
+  user_id?: string;
+  discord_id?: string;
 }
 
 export interface DonationSourcePageFilters {
@@ -170,6 +172,7 @@ export interface StewardDonationPageItem extends DonationPageCommon {
 }
 
 export interface ManagedDonationKeySummary extends ManagedDonationKey {
+  maintenance_scope_required?: boolean;
   donation_note?: string;
   approval_note?: string | null;
   visible_models?: {
@@ -264,6 +267,7 @@ const DONATION_KEY_FIELDS = [
 ] as const;
 
 const KEY_SUMMARY_FIELDS = [
+  'maintenance_scope_required',
   'can_manage',
   'donation_note',
   'approval_note',
@@ -308,7 +312,7 @@ function queryText(value: unknown, label: string): string {
 function donationFilters(value: unknown): Required<ManagedDonationPageFilters> {
   const root = exactRecord(
     value,
-    ['status', 'review_status', 'handling', 'q'],
+    ['status', 'review_status', 'handling', 'q', 'user_id', 'discord_id'],
     'donation page filters',
     [],
   );
@@ -337,7 +341,16 @@ function donationFilters(value: unknown): Required<ManagedDonationPageFilters> {
           ['', ...DONATION_DISPLAY_STATUSES],
           'donation review status filter',
         );
-  return { status, review_status, handling, q };
+  const user_id =
+    root.user_id === undefined || root.user_id === ''
+      ? ''
+      : decimalID(root.user_id, 'donor user id');
+  const discord_id =
+    root.discord_id === undefined
+      ? ''
+      : string(root.discord_id, 'donor Discord id', { ascii: true });
+  if (discord_id && !/^[1-9][0-9]{0,19}$/.test(discord_id)) invalidResponse('donor Discord id');
+  return { status, review_status, handling, q, user_id, discord_id };
 }
 
 interface NormalizedSourceFilters {
@@ -598,6 +611,7 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
       (field) =>
         ![
           'can_manage',
+          'maintenance_scope_required',
           'review',
           'key_limits_revision',
           'rate_limited_until',
@@ -671,6 +685,14 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
   }
   return {
     ...key,
+    ...(root.maintenance_scope_required === undefined
+      ? {}
+      : {
+          maintenance_scope_required: boolean(
+            root.maintenance_scope_required,
+            `${label} maintenance scope`,
+          ),
+        }),
     donation_note:
       root.donation_note === undefined
         ? ''
@@ -910,6 +932,8 @@ export function getManagedDonationsPage(
       review_status: normalizedFilters.review_status || undefined,
       handling: normalizedFilters.handling || undefined,
       q: normalizedFilters.q || undefined,
+      user_id: normalizedFilters.user_id || undefined,
+      discord_id: normalizedFilters.discord_id || undefined,
       page,
       page_size: pageSize,
     }),

@@ -156,6 +156,9 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 		tx, scope, err = s.beginScopedTx(ctx, role, userID, true)
 	}
 	if err != nil {
+		if role == reviewerSteward && charityscope.ModelID(ctx) == 0 && errors.Is(err, charityscope.ErrModelRequired) {
+			return s.reviewKeysPage(ctx, userID, donationID, page)
+		}
 		return empty, err
 	}
 	defer tx.Rollback()

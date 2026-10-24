@@ -187,7 +187,19 @@ function TargetEditor({
       const saved = confirmed
         ? await getManagedBindings(role, model.id, context.signal)
         : undefined;
-      await client.invalidateQueries({ queryKey: charityKeys.root(role) }, { throwOnError: true });
+      const bindingsKey = [...charityKeys.bindings(role, model.id), accountId] as const;
+      // Reuse this authoritative read while refreshing dependent lists and counts.
+      if (saved) context.commit(() => client.setQueryData(bindingsKey, saved));
+      await client.invalidateQueries(
+        {
+          queryKey: charityKeys.root(role),
+          predicate: ({ queryKey }) =>
+            !saved ||
+            queryKey.length !== bindingsKey.length ||
+            bindingsKey.some((part, index) => queryKey[index] !== part),
+        },
+        { throwOnError: true },
+      );
       if (saved) {
         context.commit(() => {
           setExpected(saved.binding_revision);

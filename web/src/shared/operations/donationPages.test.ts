@@ -22,6 +22,39 @@ const CHANNEL_ID = `mch_${'A'.repeat(21)}Q`;
 const LARGE_AMOUNT = '170141183460469231731687303715884105.727';
 const U128_MAX = '340282366920938463463374607431768211455';
 
+it('sends exact site and Discord donor filters together with the current review filters', async () => {
+  const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+    jsonResponse({
+      data: [],
+      next_cursor: null,
+      pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+    }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  await getManagedDonationsPage(
+    'admin',
+    {
+      user_id: '7',
+      discord_id: '840000000000000001',
+      review_status: 'pending',
+      handling: 'pending',
+      q: 'description',
+    },
+    '1',
+    10,
+  );
+  const url = new URL(String(fetchMock.mock.calls[0]![0]), 'https://example.test');
+  expect(Object.fromEntries(url.searchParams)).toMatchObject({
+    user_id: '7',
+    discord_id: '840000000000000001',
+    review_status: 'pending',
+    handling: 'pending',
+    q: 'description',
+    page: '1',
+    page_size: '10',
+  });
+});
+
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
     status,
