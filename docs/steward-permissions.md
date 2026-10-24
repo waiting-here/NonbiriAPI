@@ -2,7 +2,7 @@
 
 Administrators and level-6 stewards can configure each level-5 steward separately.
 An unconfigured level-5 account keeps the defaults below. Granting every action
-enables available level-6 workflows while preserving actual level 5. Permissions
+and full donation scope enables available level-6 workflows while preserving actual level 5. Permissions
 do not promote an account or change administrator-only operations.
 
 ## Live authority and account hierarchy
@@ -33,18 +33,20 @@ Browser sessions use either prefix:
 
 Only an administrator or actual level-6 steward can target a current level-5
 account. GET accepts no query or body and returns
-`{revision,permissions,limits}`. PUT accepts no query, requires the usual
+`{revision,donation_scope,permissions,limits}`. PUT accepts no query, requires the usual
 `Idempotency-Key`, and replaces the complete policy with
-`{expected_revision,permissions,limits}`. It returns the updated policy.
-Every boolean and limit listed below is required. Unknown or missing keys,
+`{expected_revision,donation_scope,permissions,limits}`. It returns the updated policy.
+The scope, every boolean and every limit listed below are required. Unknown or
+missing keys,
 null values and noncanonical or out-of-range limits are rejected. Revision is
 a canonical decimal string; `"0"` means no stored policy. A stale revision or
 conflicting idempotency request returns 409. Reuse the identical request and key
 when the result is unknown.
 
 `GET /api/me` includes `user.steward_permissions` with this complete shape.
-Level 6 receives all actions and maximum limits; levels 1–4 receive false actions
-and zero limits. Stored settings survive a level change but apply only while
+Level 6 receives all actions, maximum limits and full donation scope; levels 1–4
+receive false actions, zero limits and no donation scope. Stored settings survive
+a level change but apply only while
 the account is level 5. Permission changes do not replace browser sessions.
 
 Missing grants and configured numeric-bound violations return HTTP 403 with
@@ -54,7 +56,7 @@ their existing distinct errors.
 
 ## Actions and defaults
 
-There are 46 independent boolean permissions.
+There are 48 independent boolean permissions.
 
 | Permission | Allows | Level-5 default |
 |---|---|---|
@@ -72,10 +74,12 @@ There are 46 independent boolean permissions.
 | `users.loans.read` | Read loans | true |
 | `users.penalties.read` | Read penalties/evidence | true |
 | `users.donations.read` | Read complete target donation history | true |
+| `endpoints.read` | Read endpoint overview and related users | false |
+| `endpoints.tags` | Update endpoint tags | false |
 | `blacklist.read` | Read blacklist/events | false |
 | `blacklist.add` | Add blacklist entry | false |
 | `donations.review` | Review pending donations/uses | true |
-| `donations.read_all` | Full donation list/detail and identity projection | false |
+| `donations.read_all` | Full donor/reviewer identity and physical-key projection | false |
 | `donations.force_reject` | Force reject approved donation | false |
 | `donations.handle` | Handling queue and processed marker | true |
 | `donations.manage_keys` | Manage donated keys/failure/quotas | true |
@@ -87,7 +91,7 @@ There are 46 independent boolean permissions.
 | `charity.delete` | Delete charity models | false |
 | `charity.model_settings` | Edit non-price model settings; read request-adaptation configuration | false |
 | `charity.pricing` | Edit pricing, discounts, recurring discounts and token reserve | false |
-| `charity.non_mainstream` | Manage sources/models outside existing mainstream scope | false |
+| `charity.non_mainstream` | Use non-mainstream charity model targets | false |
 | `charity.presets` | Read/update binding presets and batch key bindings | false |
 | `charity.backoff` | Read/update endpoint backoff policy | false |
 | `charity.price_templates.read` | Read price templates | false |
@@ -141,12 +145,57 @@ Permissions remain independent when an operation has several effects:
   `charity.pricing`; other editable settings require
   `charity.model_settings`. Creation uses `charity.create`.
 
-Without `charity.non_mainstream`, model and key management retain the default
-mainstream scope and required model context. Existing non-mainstream keys already
-bound to an authorized mainstream model retain that scoped management path.
-Granting wider source scope does not reveal private donor identity:
-`donations.read_all` controls that projection independently. Revoking a read
-or write action is effective even when wider source scope remains enabled.
+## Donation scope and endpoint access
+
+`donation_scope` is required and accepts one of four values. The permission editor
+presents these as four labeled slider positions. Scope never grants an action by
+itself.
+
+| Value | Donation resources available with the relevant action |
+| --- | --- |
+| `none` | No steward donation browsing, handling or mutations. |
+| `standard` | Pending review, the existing safe handling queue, and maintenance within a mainstream charity model. This is the level-5 default. |
+| `enhanced` | Standard scope plus the entire donation when any of its endpoints has any management tag. Tagged donations need no model selector for direct maintenance. |
+| `full` | The level-6 donation resource scope. This is the level-6 default. |
+
+A tag matches the canonical endpoint URL saved on a donation key. One matching
+endpoint includes every key in that donation. Removing the last matching tag
+immediately removes the enhanced-only scope; final writes, retries and background
+completion recheck current tags and policy. Predicates run before list counts and
+pagination. Missing action grants return `steward_permission_denied`; resources
+outside the current range retain their not-found behavior.
+
+`donations.read_all` only controls identity and physical-key fields within an
+already authorized resource. It does not widen donation scope. The independent
+`users.donations.read` grant permits safe retained target-user history even when
+scope is `none`, without key controls or credentials. `charity.non_mainstream`
+only expands eligible charity model targets; binding still needs both an eligible
+model and an eligible donated source. Standard maintenance retains existing
+non-mainstream keys already bound to an authorized mainstream model, but does not
+allow newly binding those sources after removal.
+
+Successful approve/reject receipts remain replayable for the same actor and input
+after the final pending use is resolved. The current action and non-none scope are
+still required, and identity fields use the current `read_all` grant. Force
+rejection and maintenance retries require current resource scope. Deleted-binding
+receipts retain only the original source references needed for that recheck; a
+still-mainstream original model may anchor its completed standard-scope retry.
+Historical deletion receipts without source references require full scope.
+
+Level 6 can use the shared endpoint and endpoint-policy pages. Level 5 receives
+neither endpoint action by default. `endpoints.read` allows
+`GET /api/steward/overview/endpoints` and
+`GET /api/steward/overview/endpoints/users`;
+`endpoints.tags` allows `PATCH /api/steward/overview/endpoints/tags`.
+The payloads, filters and pagination match the administrator routes.
+`charity.backoff` controls endpoint-backoff options, policy reads and updates;
+`egress.read` independently allows reading loaded Cloudflare route configuration.
+There is no route-configuration write API.
+
+Endpoint tags support any combination of `abusive_third_party`,
+`community_charity`, `noncommercial_gateway`, `user_gateway` (User-built gateway),
+`steward_gateway` (Steward-built gateway) and `invalid_entry` (Incorrect entry).
+Existing tags remain valid. Tags do not grant credential access or inference use.
 
 Without `logs.unredacted`, level-5 upstream diagnostic text retains IPv4 and
 non-mainstream DNS redaction; separately authorized source IP and resource
@@ -157,7 +206,8 @@ management or expand ordinary list/export retention.
 
 ## Storage, export and deletion
 
-Schema 36 stores one policy per account and a separate change audit. Policies
+Schema 36 stores one policy, including donation scope, per account and a separate
+change audit. Scope shares the same revision, CAS and idempotency rules. Policies
 persist until account deletion. Audits contain previous/next policies, revisions,
 time and the editor reference; bounded retention cleanup removes entries at
 90 days. Target-account deletion cascades to its policy and audit history;
@@ -165,7 +215,8 @@ deleting an editor clears that editor reference without deleting another
 account's history. Audit labels retain the actual acting level.
 
 Account export 30 includes the owner's `steward_permissions` with
-`effective`, nullable `stored` and retained `history`. Each history entry
+`effective`, nullable `stored` and retained `history`, including donation scope.
+Each history entry
 contains `previous,next,created_at`; editor identities are excluded. Existing
 export size/collection limits apply. See [database upgrades](database-upgrades.md)
 and [data lifecycle](data-lifecycle-checklist.md).

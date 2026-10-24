@@ -2,8 +2,8 @@
 
 Authorized managers can see existing connections while choosing donated keys.
 From a key's management page, collect several exact upstream-model and charity-model
-pairs and submit them together. Selections remain available while changing target
-models or pages. A connection already present on the selected charity model is
+pairs, choose the services for each target and submit them together. Selections
+remain available while changing target models or pages. A connection already present on the selected charity model is
 marked and cannot be selected again.
 
 Administrators and stewards with `charity.presets` also have a separate **Channel presets** view.
@@ -29,11 +29,38 @@ channel IDs. Pagination uses the existing numbered-page envelope.
 | Method and suffix | Request or response |
 | --- | --- |
 | `GET /donations/{id}/keys/{keyId}/binding-options` | `q,page,page_size`; `{data:[{charity_model_id,full_name,enabled,binding_revision}],pagination,next_cursor:null}` |
-| `POST /donations/{id}/keys/{keyId}/bindings/batch` | `{expected_donation_revision,targets:[{charity_model_id,expected_binding_revision,upstream_model_id}]}`; at most 256 distinct pairs within a 256 KiB request |
+| `POST /donations/{id}/keys/{keyId}/bindings/batch` | `{expected_donation_revision,targets:[{charity_model_id,expected_binding_revision,upstream_model_id,native_services?}]}`; at most 256 distinct pairs within a 256 KiB request |
 | `GET /charity-binding-presets` | `q,page,page_size,state=active\|retired\|all`; channel page with `channel_id,name,connector_type,base_url,enabled,state,channel_revision,preset_revision,mapping_count` |
 | `GET /charity-binding-presets/{channelId}` | `{channel_id,channel_revision,preset_revision,mappings:[{upstream_model_id,charity_model_id,full_name,binding_revision}]}` |
 | `PUT /charity-binding-presets/{channelId}` | `{expected_channel_revision,expected_preset_revision,mappings:[{upstream_model_id,charity_model_id}]}`; at most 16 distinct pairs |
 | `POST /donations/{id}/bindings/apply-preset` | `{channel_id,expected_channel_revision,expected_preset_revision,expected_donation_revision,models:[{charity_model_id,expected_binding_revision}]}` |
+
+Each key-to-model batch target may include `native_services`. Omission or
+`null` preserves the existing connector default; an explicit empty list or an
+unknown service rejects the request. Explicit services must be an approved-use
+subset compatible with the target model and are saved exactly. Changing that
+subset with the same idempotency key returns 409. This optional field belongs to
+the browser key-to-model batch, not the separate automation model-bindings API.
+
+For example, a target can retain only an approved text service:
+
+```json
+{
+  "expected_donation_revision": "3",
+  "targets": [{
+    "charity_model_id": "7",
+    "expected_binding_revision": "2",
+    "upstream_model_id": "upstream-model",
+    "native_services": ["chat_completions"]
+  }]
+}
+```
+
+After approving a service use, reviewers with current maintenance permission can
+continue from the result to charity-model configuration with the same donation,
+key and service selected. They can adjust the selection before saving. Reviewers
+without maintenance permission receive an explanation instead of an unavailable
+operation.
 
 An unconfigured preset has revision `"0"`; its first save produces `"1"`.
 Saving `mappings:[]` clears it and advances the revision. Preset detail includes

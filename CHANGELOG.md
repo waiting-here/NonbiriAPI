@@ -8,10 +8,15 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
-- Add per-account level-5 steward permissions with 46 actions, six numeric limits,
-  revisioned updates and live revocation. Preserve default workflows, actual
+- Add per-account level-5 steward permissions with 48 actions, six numeric limits,
+  four donation scopes, revisioned updates and live revocation. Preserve default
+  workflows, actual
   actor hierarchy and administrator-only operations; include own policy and
   retained change history in account export.
+- Add shared endpoint and endpoint-policy management for level-6 stewards and
+  explicitly authorized level-5 accounts. Add User-built gateway, Steward-built
+  gateway and Incorrect entry tags; enhanced donation scope includes donations
+  with any tagged endpoint while identity visibility remains independent.
 - Add exact donor account/Discord ID filters and complete retained donation
   history in user management, including owner-hidden records through a safe
   projection. Default source browsers to all retained sources.
@@ -21,6 +26,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Combine service setup into one form with recoverable save stages and direct
+  continuation to personal models or donation. Retain key/service context after
+  approval and continue into authorized charity-model configuration. Preserve
+  explicitly selected native services in key-to-model batch bindings.
 - Limit charity binding, candidate and preset catalog checks to selected
   donation keys, avoiding repeated aggregation of unrelated catalogs inside
   write transactions while preserving scope, replay and atomicity.
@@ -63,10 +72,12 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 - Fresh storage uses schema 36. Exact published schema 33–35 databases receive
   atomic startup upgrades: history indexes and donation catalog authorization
-  changes where needed, then steward permission tables and audit-role changes.
+  changes where needed, then steward permission/scope tables, expanded endpoint
+  tags and audit-role changes.
   The risk-rule/automatic-ban and blacklist audit tables are rebuilt with their
   rows, history, indexes and constraints preserved so actions record actual
-  level-5 identities. The separate schema 16–26 converter targets schema 36;
+  level-5 identities. Endpoint-tag rows and indexes survive the expanded tag
+  constraint. The separate schema 16–26 converter targets schema 36;
   account export uses format 30.
 
 ### Security

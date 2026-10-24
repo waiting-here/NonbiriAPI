@@ -7,7 +7,8 @@ published schema **33–35** manifests. These receive atomic upgrades during
 startup, before request handling and unfinished-work recovery. Schema 33 sources
 first receive history indexes; schema 34 sources receive the donation catalog
 authorization trigger/view changes. The final step from schema 35 adds steward
-permissions and rebuilds the affected audit tables while preserving their data.
+permissions, donation scope and the expanded endpoint tags, and rebuilds the
+affected audit tables while preserving their data.
 Allow index creation and audit-table copying to finish. Cancellation or failure
 rolls back the upgrade. No external conversion is needed for these sources.
 
@@ -37,10 +38,12 @@ descriptors instead of parsing Go source or deriving versions from array lengths
 
 Schema 36 adds per-account `steward_permissions` and revisioned
 `steward_permission_audits`. Existing level-5 accounts keep their legacy default
-permissions until explicitly configured. Audits use bounded 90-day cleanup;
+permissions and standard donation scope until explicitly configured. Scope shares
+the policy revision, CAS and audit. Audits use bounded 90-day cleanup;
 target-account deletion cascades, while editor deletion clears its actor reference.
 Account export 30 adds the owner's effective/stored policy and retained policy
-history without editor identities.
+history without editor identities. Effective, stored and retained historical
+policies include donation scope.
 
 The same atomic step rebuilds `risk_client_rules`, `client_rule_auto_bans`,
 `discord_blacklist_origins` and `discord_blacklist_events` to admit actual
@@ -51,6 +54,12 @@ the dependent automatic-ban table is rebuilt with its parent. The blacklist
 parent and original reason remain unchanged. Retained-read audit guards accept
 actual levels 5 and 6 after live domain authorization. These changes do not
 reclassify historical actions or grant permission by their stored role label.
+
+The same schema-36 transaction rebuilds `admin_endpoint_tags` with its original
+rows, primary key and tag/base-URL index preserved. Its closed tag set adds
+`user_gateway`, `steward_gateway` and `invalid_entry`; existing classifications
+are not rewritten. Fresh schema and the offline conversion chain use the same
+definitions. No intermediate unpublished schema-36 layout is an accepted source.
 
 Schema 35 updates the model-discovery authorization trigger and catalog view so valid pending
 and approved donations can fetch catalogs without separate sharing consent.
