@@ -119,7 +119,7 @@ function TargetEditor({
       getManagedBindingCandidatesPage(
         role,
         model.id,
-        { q: query },
+        { q: query, include_bound: true, key_state: 'all' },
         pager.page,
         pager.pageSize,
         signal,
@@ -213,7 +213,14 @@ function TargetEditor({
             {index + 1}. {row.label} · {row.upstream_model_id}
           </legend>
           <NativeServicesField
-            options={row.options}
+            options={Array.from(
+              new Set([
+                ...row.options,
+                ...row.native_services,
+                ...(candidates.data?.data.find((candidate) => identity(candidate) === identity(row))
+                  ?.native_services ?? []),
+              ]),
+            )}
             value={row.native_services}
             onChange={(native_services) =>
               setTargets((previous) =>

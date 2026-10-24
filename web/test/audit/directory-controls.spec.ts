@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { expect, test, type Browser, type BrowserContext } from '@playwright/test';
 import commonEn from '../../src/shared/i18n/common/en.json' with { type: 'json' };
 import adminEn from '../../src/admin/i18n/en.json' with { type: 'json' };
-import adminZh from '../../src/admin/i18n/zh.json' with { type: 'json' };
+import commonZh from '../../src/shared/i18n/common/zh.json' with { type: 'json' };
 
 test('user browses current charity snapshots with search, pagination and committed changes', async ({
   browser,
@@ -160,7 +160,9 @@ test('administrator submits endpoint search, resets it and pages actual shared m
     const page = await admin.newPage();
     await page.goto(state.admin_url + '/endpoints');
     const search = page.getByRole('search');
-    await search.getByLabel(adminEn.admin.endpoints.searchAria).fill('directory.example.test');
+    await search
+      .getByLabel(commonEn.management.endpoints.searchAria)
+      .fill('directory.example.test');
     await search.getByRole('button', { name: commonEn.common.applyFilter, exact: true }).click();
     await expect(page.locator('.ops-table tbody tr')).toHaveCount(1);
     expect(
@@ -178,7 +180,7 @@ test('administrator submits endpoint search, resets it and pages actual shared m
         new URL(response.url()).searchParams.get('page_size') === '20',
     );
     await page
-      .getByRole('button', { name: adminEn.admin.endpoints.showUsers, exact: true })
+      .getByRole('button', { name: commonEn.management.endpoints.showUsers, exact: true })
       .click();
     const members = page.locator('.ops-table .ops-table');
     await expect(members.locator('tbody tr')).toHaveCount(2);
@@ -196,7 +198,7 @@ test('administrator submits endpoint search, resets it and pages actual shared m
       ].sort(),
     );
     await search.getByRole('button', { name: commonEn.common.resetFilter, exact: true }).click();
-    await expect(search.getByLabel(adminEn.admin.endpoints.searchAria)).toHaveValue('');
+    await expect(search.getByLabel(commonEn.management.endpoints.searchAria)).toHaveValue('');
     await expect(members).toHaveCount(0);
     expect(new URL(page.url()).searchParams.has('q')).toBe(false);
     await expect(
@@ -228,7 +230,7 @@ test('administrator labels and filters non-commercial aggregation gateways in bo
   }
   for (const locale of ['en', 'zh'] as const) {
     const context = await session(browser, 'admin', locale);
-    const words = (locale === 'en' ? adminEn : adminZh).admin.endpoints;
+    const words = (locale === 'en' ? commonEn : commonZh).management.endpoints;
     try {
       const page = await context.newPage();
       await page.goto(state.admin_url + '/endpoints?q=gateway-classification.example.test');
@@ -250,7 +252,7 @@ test('administrator labels and filters non-commercial aggregation gateways in bo
         .getByRole('combobox', { name: words.tags })
         .selectOption('noncommercial_gateway');
       await expect(page.locator('.ops-table tbody tr')).toHaveCount(1);
-      await expect(page.locator('.ops-table tbody')).toContainText(words.noncommercial_gateway);
+      await expect(page.locator('.ops-table tbody')).toContainText(words.tag.noncommercial_gateway);
       expect(new URL(page.url()).searchParams.get('tag')).toBe('noncommercial_gateway');
       if (process.env.NONBIRI_VISUAL_DIR) {
         for (const theme of ['light', 'dark'])

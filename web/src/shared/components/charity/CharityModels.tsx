@@ -1,4 +1,5 @@
 import { CharityTargets } from './CharityTargets';
+import { StewardPermissionNotice } from '../StewardPermissionNotice';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { isAISDKGateway } from '@shared/operations/connectorPolicy';
 import { CloudflareProxyField } from '../CloudflareProxyField';
@@ -31,6 +32,7 @@ import {
   Field,
   FilterBar,
   Fold,
+  Note,
   Panel,
   PanelBody,
   PanelFoot,
@@ -1228,6 +1230,7 @@ export function ModelsPanel({
   renderKeyManager,
   role,
   accountId,
+  canRead = true,
   onCapabilityLoss,
 }: {
   renderScopedKeys: (props: {
@@ -1238,6 +1241,7 @@ export function ModelsPanel({
   renderKeyManager: (props: CharityPickerKeyManagerProps) => ReactNode;
   role: CharityRole;
   accountId: string;
+  canRead?: boolean;
   onCapabilityLoss?: () => void;
 }) {
   const { t } = useTranslation();
@@ -1256,6 +1260,7 @@ export function ModelsPanel({
   const managedKey = selectedID(params, 'managed_key');
   const managingKey = Boolean(selectedId && managedDonation && managedKey);
   const creating = oneParam(params, 'model_workspace') === 'new' && !selectedId;
+  const [createdNotice, setCreatedNotice] = useState('');
   const [draft, setDraft] = useState({ query, text: query });
   const queryDraft = draft.query === query ? draft.text : query;
   const setQueryDraft = (text: string) => setDraft({ query, text });
@@ -1348,7 +1353,7 @@ export function ModelsPanel({
     queryFn: ({ signal }) =>
       getManagedCharityModelsPage(role, query, enabled, pager.page, pager.pageSize, signal),
     retry: false,
-    enabled: !selectedId && !creating,
+    enabled: canRead && !selectedId && !creating,
     placeholderData: (previous, previousQuery) =>
       samePageFamily(previousQuery?.queryKey, listKey) ? previous : undefined,
   });
@@ -1356,7 +1361,7 @@ export function ModelsPanel({
     queryKey: [...charityKeys.root(role), 'model-detail', accountId, selectedId],
     queryFn: ({ signal }) => getManagedCharityModel(role, selectedId, signal),
     retry: false,
-    enabled: Boolean(selectedId),
+    enabled: canRead && Boolean(selectedId),
   });
   const selected = detail.data;
   const navigationReady = selectedId
@@ -1433,15 +1438,24 @@ export function ModelsPanel({
           ) : undefined
         }
       />
+      {createdNotice ? (
+        <Note tone="ok">
+          {t('common.outcome.saved')} · {createdNotice}
+        </Note>
+      ) : null}
       {creating ? (
         <ModelForm
           role={role}
           refresh={refresh}
           onCapabilityLoss={onCapabilityLoss}
-          onCreated={(model) => setSelected(model.id)}
+          onCreated={(model) => {
+            if (!canRead) setCreatedNotice(model.full_name);
+            setSelected(canRead ? model.id : '');
+          }}
         />
       ) : null}
-      {!selectedId && !creating ? (
+      {!canRead && !creating ? <StewardPermissionNotice /> : null}
+      {canRead && !selectedId && !creating ? (
         <Card>
           <FilterBar
             activeCount={[query, enabled].filter(Boolean).length}
@@ -1588,7 +1602,7 @@ export function ModelsPanel({
           ) : null}
         </Card>
       ) : null}
-      {selectedId ? (
+      {canRead && selectedId ? (
         <div className="ops-stack ops-detail-target" ref={detailRef} tabIndex={-1}>
           {detail.isPending ? (
             <LoadingState />

@@ -7,6 +7,7 @@ import { useAdminSession } from '../../admin/data';
 import { useUserSession } from '../../user/data';
 import { CharityManagement } from './CharityManagement';
 import { CharityRolePolicyForm } from './CharityRolePolicyForm';
+import { defaultStewardPermissions } from '@shared/operations/stewardPermissions';
 
 function jsonResponse(value: unknown): Response {
   return new Response(JSON.stringify(value), {
@@ -114,6 +115,58 @@ function SessionBackedManagement({ frame }: { frame: 'admin' | 'steward' }) {
     />
   ) : null;
 }
+
+describe('independent donation and model grants', () => {
+  it('opens tagged-source maintenance without granting non-mainstream model access', async () => {
+    const policy = { ...defaultStewardPermissions(5), donation_scope: 'enhanced' as const };
+    const reads: URL[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input) => {
+        const url = new URL(String(input), 'https://example.test');
+        reads.push(url);
+        if (url.pathname === '/api/steward/donation-sources')
+          return jsonResponse(numberedPage([], url));
+        throw new Error('Unexpected read: ' + url.pathname);
+      }),
+    );
+    await renderWithProviders(
+      <CharityManagement frame="steward" accountId="1" actorLevel={5} permissions={policy} />,
+      { station: 'user', role: 'level5', route: '/steward?charity_section=sources' },
+    );
+    await waitFor(() =>
+      expect(reads.some((url) => url.pathname.endsWith('/donation-sources'))).toBe(true),
+    );
+    expect(reads[0]!.searchParams.get('scope')).toBe('all');
+    expect(reads[0]!.searchParams.get('key_state')).toBe('all');
+    expect(screen.queryByText(/You do not have this permission yet/)).toBeNull();
+  });
+
+  it('keeps donation browsing closed at no scope even when action switches are enabled', async () => {
+    const policy = { ...defaultStewardPermissions(6), donation_scope: 'none' as const };
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await renderWithProviders(
+      <CharityManagement frame="steward" accountId="1" actorLevel={5} permissions={policy} />,
+      { station: 'user', role: 'level5', route: '/steward?charity_section=donations' },
+    );
+    expect(screen.getByText(/You do not have this permission yet/)).toBeVisible();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('offers model creation without first requiring model list access', async () => {
+    const policy = defaultStewardPermissions(1);
+    policy.permissions['charity.create'] = true;
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await renderWithProviders(
+      <CharityManagement frame="steward" accountId="1" actorLevel={5} permissions={policy} />,
+      { station: 'user', role: 'level5', route: '/steward?charity_section=models' },
+    );
+    expect(screen.getByRole('button', { name: 'Create charity model' })).toBeEnabled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
 
 const managedKey = (overrides: Partial<ManagedDonationKey> = {}): ManagedDonationKey => ({
   id: '11',

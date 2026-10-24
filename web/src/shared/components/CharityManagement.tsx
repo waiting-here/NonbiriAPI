@@ -1,6 +1,7 @@
 import { DONATION_DISPLAY_STATUSES } from '@shared/operations/donationUses';
 import {
   defaultStewardPermissions,
+  stewardDonationScope,
   type StewardPermission,
   type StewardPermissions,
 } from '@shared/operations/stewardPermissions';
@@ -2124,14 +2125,14 @@ function DonationsPanel({
                 role={role}
                 accountId={accountId}
                 item={detail.data}
-                busy={detail.isFetching || list.isFetching}
+                busy={detail.isFetching}
                 onCapabilityLoss={onCapabilityLoss}
               />
               <DonationDetail
                 key={detail.data.id}
                 item={detail.data}
                 accountId={accountId}
-                busy={detail.isFetching || list.isFetching || Boolean(list.error)}
+                busy={detail.isFetching}
                 role={role}
                 refresh={refresh}
                 reviewRefresh={refreshReviewList}
@@ -2280,15 +2281,28 @@ function CharityManagementAccount({
     frame === 'admin' ||
     actorLevel === 6 ||
     (permissions ?? defaultStewardPermissions(actorLevel)).permissions[key];
+  const donationScope =
+    frame === 'admin'
+      ? 'full'
+      : stewardDonationScope({
+          effective_level: actorLevel,
+          ...(permissions ? { steward_permissions: permissions } : {}),
+        });
+  const donationsAllowed = donationScope !== 'none';
   const sectionAllowed =
     section === 'donations'
-      ? has('donations.review') || has('donations.read_all')
+      ? donationsAllowed &&
+        (has('donations.review') ||
+          has('donations.manage_keys') ||
+          has('donations.handle') ||
+          has('donations.discover') ||
+          has('donations.recurring'))
       : section === 'handling'
-        ? has('donations.handle')
+        ? donationsAllowed && has('donations.handle')
         : section === 'models'
-          ? has('charity.read')
+          ? has('charity.read') || has('charity.create')
           : section === 'sources'
-            ? has('donations.manage_keys')
+            ? donationsAllowed && has('donations.manage_keys')
             : has('charity.price_templates.read');
   const setSection = (nextSection: 'donations' | 'models' | 'sources' | 'handling' | 'templates') =>
     setParams((current) => {
@@ -2411,6 +2425,7 @@ function CharityManagementAccount({
                 renderScopedKeys={(props) => <ScopedKeyBrowser key={props.modelID} {...props} />}
                 role={frame}
                 accountId={accountId}
+                canRead={has('charity.read')}
                 onCapabilityLoss={clearCapability}
               />
             ) : null}
@@ -2418,7 +2433,7 @@ function CharityManagementAccount({
           {section === 'templates' && frame === 'admin' ? (
             <PriceTemplateManagement accountId={accountId} onCapabilityLoss={clearCapability} />
           ) : null}
-          {sectionAllowed && section === 'sources' && !has('charity.non_mainstream') ? (
+          {sectionAllowed && section === 'sources' && donationScope === 'standard' ? (
             <Note
               action={
                 <Button onClick={() => setSection('models')}>
