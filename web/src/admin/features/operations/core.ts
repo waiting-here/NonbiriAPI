@@ -1,3 +1,9 @@
+import { normalizeEndpointOverview } from '@shared/operations/endpoints';
+export {
+  normalizeEndpointOverview,
+  type EndpointOverview,
+  type EndpointOverviewUser,
+} from '@shared/operations/endpoints';
 import { normalizeUsageSummary, type DeletedAccount } from '@shared/operations/managedUsers';
 export {
   normalizeAdminUser,
@@ -111,52 +117,6 @@ export function normalizeSiteTimezoneOffset(value: unknown): number {
   );
   if (offset % 30 !== 0) invalidResponse('site timezone offset');
   return offset;
-}
-
-export interface EndpointOverviewUser {
-  user_id: string;
-  endpoint_count: string;
-  key_count: string;
-  enabled_count: string;
-}
-
-export interface EndpointOverview {
-  tags: string[];
-  base_url: string;
-  user_count: string;
-  endpoint_count: string;
-  key_count: string;
-  users: EndpointOverviewUser[];
-}
-
-export function normalizeEndpointOverview(value: unknown): EndpointOverview {
-  const root = record(
-    value,
-    ['base_url', 'user_count', 'endpoint_count', 'key_count', 'users', 'tags'],
-    'endpoint overview',
-    ['base_url', 'user_count', 'endpoint_count', 'key_count', 'users'],
-  );
-  const users = array(root.users, 'endpoint overview users', 100).map((entry) => {
-    const item = record(
-      entry,
-      ['user_id', 'endpoint_count', 'key_count', 'enabled_count'],
-      'endpoint overview user',
-    );
-    return {
-      user_id: decimalID(item.user_id, 'overview user id'),
-      endpoint_count: decimal(item.endpoint_count, 'user endpoint count'),
-      key_count: decimal(item.key_count, 'user key count'),
-      enabled_count: decimal(item.enabled_count, 'user enabled count'),
-    };
-  });
-  return {
-    base_url: string(root.base_url, 'canonical endpoint URL', { min: 1 }),
-    tags: array(root.tags ?? [], 'endpoint tags').map((tag) => string(tag, 'endpoint tag')),
-    user_count: decimal(root.user_count, 'endpoint user count'),
-    endpoint_count: decimal(root.endpoint_count, 'endpoint count'),
-    key_count: decimal(root.key_count, 'endpoint key count'),
-    users,
-  };
 }
 
 export const ALERT_KINDS = [

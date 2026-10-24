@@ -2763,7 +2763,7 @@
         "blacklist_read": "View blacklist and events",
         "blacklist_add": "Add blacklist entries",
         "donations_review": "Review donations and service uses",
-        "donations_read_all": "View all donations and associated identities",
+        "donations_read_all": "View full donation identity and key fields",
         "donations_force_reject": "Force reject approved donations",
         "donations_handle": "Handle donations and mark them processed",
         "donations_manage_keys": "Manage donated keys and failure policies",
@@ -2775,7 +2775,7 @@
         "charity_model_settings": "Manage charity model settings and request adaptation",
         "charity_pricing": "Adjust charity pricing and discounts",
         "charity_manage": "Manage role policies, bindings and key catalogs",
-        "charity_non_mainstream": "Manage resources outside mainstream channels",
+        "charity_non_mainstream": "Manage non-mainstream charity model targets",
         "charity_presets": "Manage binding presets and batch bindings",
         "charity_backoff": "Manage endpoint backoff policies",
         "charity_price_templates_read": "View price templates",
@@ -2791,7 +2791,9 @@
         "maintenance_read": "View maintenance state",
         "maintenance_enable": "Enable maintenance mode",
         "egress_read": "View Cloudflare routing",
-        "automation": "Use steward automation endpoints"
+        "automation": "Use steward automation endpoints",
+        "endpoints_read": "View site-wide endpoints",
+        "endpoints_tags": "Edit endpoint tags"
       },
       "limits": {
         "users_endpoint_limit_max": "Maximum endpoint limit",
@@ -2800,6 +2802,63 @@
         "users_balance_adjustment_max_milli": "Maximum general points per adjustment",
         "users_game_balance_adjustment_max_milli": "Maximum game points per adjustment",
         "users_ban_duration_max_seconds": "Maximum temporary ban duration (seconds)"
+      },
+      "scope": {
+        "title": "Donation scope",
+        "help": "The scope determines which donations can be handled. Each action still needs its own permission.",
+        "none": {
+          "label": "None",
+          "description": "No access to donation management resources. Donation history in user details has its own permission."
+        },
+        "standard": {
+          "label": "Standard",
+          "description": "Pending donations and approved sources with mainstream endpoints and mainstream models."
+        },
+        "enhanced": {
+          "label": "Enhanced",
+          "description": "Standard scope plus every donation containing a tagged endpoint, including all its keys."
+        },
+        "full": {
+          "label": "Full",
+          "description": "All donations and their keys, subject to each action permission."
+        }
+      }
+    },
+    "endpoints": {
+      "title": "Endpoint overview",
+      "description": "View site-wide endpoints, users and tags by service address.",
+      "baseUrl": "Base URL",
+      "users": "Users",
+      "endpointCount": "Endpoints",
+      "keys": "Keys",
+      "enabledCount": "Enabled endpoints",
+      "showUsers": "Show users",
+      "hideUsers": "Hide users",
+      "searchPlaceholder": "Filter by base URL substring",
+      "searchAria": "Filter endpoints by base URL",
+      "queryTooLong": "The search is too long. Shorten it and try again.",
+      "userFilterHint": "Shows endpoints used by this user. Counts and expanded user lists cover the whole site.",
+      "noProbeNotice": "This surface never sends ping, HEAD, empty, paid, or background health-check requests.",
+      "tags": "Tags",
+      "allTags": "All tags",
+      "untagged": "Untagged",
+      "selectAll": "Select endpoints on this page",
+      "selectEndpoint": "Select {{url}}",
+      "selected": "{{count}} endpoints selected",
+      "addTag": "Add tag",
+      "removeTag": "Remove tag",
+      "tagsSaved": "Tags updated",
+      "selectForBatch": "Select services below to change their tags.",
+      "userPlaceholder": "Site user ID",
+      "readOnly": "You can view endpoints. Editing tags requires a separate permission.",
+      "backManagement": "Back to steward workspace",
+      "tag": {
+        "abusive_third_party": "Abusive third party",
+        "community_charity": "Community charity",
+        "noncommercial_gateway": "Non-commercial aggregation gateway",
+        "user_gateway": "User-built gateway",
+        "steward_gateway": "Steward-built gateway",
+        "invalid_entry": "Incorrect entry"
       }
     }
   },

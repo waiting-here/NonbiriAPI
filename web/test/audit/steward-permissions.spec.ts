@@ -12,6 +12,7 @@ interface Fixture {
 }
 interface Policy {
   revision: string;
+  donation_scope: 'none' | 'standard' | 'enhanced' | 'full';
   permissions: Record<string, boolean>;
   limits: Record<string, string>;
 }
@@ -94,6 +95,7 @@ test('admin and level 6 configure actual level-5 permissions while the shared UI
     await page.getByRole('button', { name: copy.management.permissions.save, exact: true }).click();
     await expect(page.getByText(copy.common.outcome.saved, { exact: true })).toBeVisible();
     const noGrants = (await get(admin, state.admin_url, path)) as Policy;
+    expect(noGrants.donation_scope).toBe('none');
     expect(Object.values(noGrants.permissions).every((value) => !value)).toBe(true);
     const visitor = await steward.newPage();
     await visitor.goto(`${state.user_url}/steward?tab=users`);
@@ -110,6 +112,16 @@ test('admin and level 6 configure actual level-5 permissions while the shared UI
     await page.getByRole('button', { name: copy.management.permissions.all, exact: true }).click();
     await page.getByRole('button', { name: copy.management.permissions.save, exact: true }).click();
     await expect(page.getByText(copy.common.outcome.saved, { exact: true })).toBeVisible();
+    const full = (await get(admin, state.admin_url, path)) as Policy;
+    expect(full.donation_scope).toBe('full');
+    expect(Object.keys(full.permissions)).toHaveLength(48);
+    await visitor.goto(`${state.user_url}/steward/endpoints`);
+    await expect(
+      visitor.getByRole('heading', { name: copy.management.endpoints.title, exact: true }),
+    ).toBeVisible();
+    await expect(
+      visitor.getByRole('button', { name: copy.management.endpoints.addTag, exact: true }),
+    ).toBeVisible();
     await visitor.goto(`${state.user_url}/steward?tab=users&user=${owner.id}`);
     await visitor
       .getByRole('tab', { name: copy.management.permissions.history, exact: true })
@@ -136,6 +148,20 @@ test('admin and level 6 configure actual level-5 permissions while the shared UI
       `${state.user_url}/api/steward/users/${five.id}/steward-permissions`,
     );
     expect(forbiddenDelegate.status()).toBe(403);
+    await page
+      .getByRole('button', { name: copy.management.permissions.defaults, exact: true })
+      .click();
+    const scope = page.getByRole('slider', {
+      name: copy.management.permissions.scope.title,
+      exact: true,
+    });
+    await expect(scope).toHaveValue('1');
+    await scope.focus();
+    await scope.press('ArrowRight');
+    await expect(scope).toHaveValue('2');
+    await page.getByRole('button', { name: copy.management.permissions.save, exact: true }).click();
+    await expect(page.getByText(copy.common.outcome.saved, { exact: true })).toBeVisible();
+    expect(((await get(admin, state.admin_url, path)) as Policy).donation_scope).toBe('enhanced');
     const seniorPolicy = (await get(
       senior,
       state.user_url,
@@ -147,6 +173,7 @@ test('admin and level 6 configure actual level-5 permissions while the shared UI
         headers: { Origin: state.user_url, 'Idempotency-Key': randomUUID() },
         data: {
           expected_revision: seniorPolicy.revision,
+          donation_scope: original.donation_scope,
           permissions: original.permissions,
           limits: original.limits,
         },

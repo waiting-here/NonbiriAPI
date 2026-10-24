@@ -15,20 +15,6 @@
   align-items: end;
   gap: var(--nb-space-3);
 }
-.endpoint-batch .field-help {
-  margin-top: 0;
-}
-
-.ops-toolbar.endpoint-filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
-}
-.endpoint-filter-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: var(--nb-space-3);
-  align-self: end;
-  justify-self: start;
-  justify-content: flex-start;
+.endpoint-management-url {
+  overflow-wrap: anywhere;
 }

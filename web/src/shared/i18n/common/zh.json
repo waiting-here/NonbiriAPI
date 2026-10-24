@@ -2763,7 +2763,7 @@
         "blacklist_read": "查看黑名单及事件",
         "blacklist_add": "添加黑名单条目",
         "donations_review": "审核捐赠与服务用途",
-        "donations_read_all": "查看全部捐赠与相关身份信息",
+        "donations_read_all": "查看完整捐赠身份及密钥字段",
         "donations_force_reject": "强制驳回已批准捐赠",
         "donations_handle": "处理捐赠队列与标记完成",
         "donations_manage_keys": "管理捐赠密钥与失败策略",
@@ -2775,7 +2775,7 @@
         "charity_model_settings": "管理公益模型基础设置与请求适配",
         "charity_pricing": "调整公益模型定价与优惠",
         "charity_manage": "管理角色策略、绑定与密钥目录",
-        "charity_non_mainstream": "管理非主流渠道资源",
+        "charity_non_mainstream": "操作非主流公益模型目标",
         "charity_presets": "管理绑定预设与批量绑定",
         "charity_backoff": "管理端点智能退避",
         "charity_price_templates_read": "查看价格模板",
@@ -2791,7 +2791,9 @@
         "maintenance_read": "查看维护状态",
         "maintenance_enable": "开启维护模式",
         "egress_read": "查看 Cloudflare 路由",
-        "automation": "使用协管自动化接口"
+        "automation": "使用协管自动化接口",
+        "endpoints_read": "查看全站端点",
+        "endpoints_tags": "修改端点标签"
       },
       "limits": {
         "users_endpoint_limit_max": "可设置的端点数量上限",
@@ -2800,6 +2802,63 @@
         "users_balance_adjustment_max_milli": "单次通用积分调整上限（积分）",
         "users_game_balance_adjustment_max_milli": "单次游戏积分调整上限（游戏积分）",
         "users_ban_duration_max_seconds": "临时封禁时长上限（秒）"
+      },
+      "scope": {
+        "title": "捐赠操作范围",
+        "help": "范围决定可处理哪些捐赠；具体操作仍需对应权限。",
+        "none": {
+          "label": "无",
+          "description": "不能访问或操作捐赠管理资源。用户详情中的捐赠历史由其独立权限控制。"
+        },
+        "standard": {
+          "label": "标准",
+          "description": "待审捐赠，以及已审核通过且主流端点、主流模型的来源。"
+        },
+        "enhanced": {
+          "label": "增强",
+          "description": "标准范围，加上包含任意已打标签端点的整条捐赠及其全部密钥。"
+        },
+        "full": {
+          "label": "完全",
+          "description": "全部捐赠及其密钥，仍受具体操作权限限制。"
+        }
+      }
+    },
+    "endpoints": {
+      "title": "端点概览",
+      "description": "按服务地址查看全站端点、使用者和标签。",
+      "baseUrl": "基础 URL",
+      "users": "用户数",
+      "endpointCount": "端点数",
+      "keys": "密钥数",
+      "enabledCount": "启用端点数",
+      "showUsers": "展开用户",
+      "hideUsers": "收起用户",
+      "searchPlaceholder": "按基础 URL 子串筛选",
+      "searchAria": "按基础 URL 筛选端点",
+      "queryTooLong": "搜索内容过长，请缩短后再试。",
+      "userFilterHint": "仅列出该用户使用的端点，数量统计及用户列表仍显示各端点的全站情况。",
+      "noProbeNotice": "此页面绝不会发送 ping、HEAD、空请求、付费请求或后台健康检查请求。",
+      "tags": "标签",
+      "allTags": "全部标签",
+      "untagged": "无标签",
+      "selectAll": "选择本页端点",
+      "selectEndpoint": "选择 {{url}}",
+      "selected": "已选 {{count}} 个端点",
+      "addTag": "添加标签",
+      "removeTag": "移除标签",
+      "tagsSaved": "标签已更新",
+      "selectForBatch": "先选择下方服务，再批量调整标签。",
+      "userPlaceholder": "站内用户 ID",
+      "readOnly": "你可以查看端点。修改标签需单独授权。",
+      "backManagement": "返回协管工作台",
+      "tag": {
+        "abusive_third_party": "违规第三方",
+        "community_charity": "社区公益站",
+        "noncommercial_gateway": "非经营性聚合网关",
+        "user_gateway": "用户自建网关",
+        "steward_gateway": "协管自建网关",
+        "invalid_entry": "错误填写"
       }
     }
   },

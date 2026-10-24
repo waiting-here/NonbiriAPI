@@ -38,6 +38,7 @@ function installServer(loseFirstResponse = false) {
         if (loseFirstResponse && writes.length === 1) throw new TypeError('Connection interrupted');
         policy = {
           revision: '1',
+          donation_scope: body.donation_scope,
           permissions: body.permissions,
           limits: body.limits,
         } as StewardPermissions;
@@ -59,7 +60,9 @@ describe('steward permission editor', () => {
     );
     await user.click(await screen.findByRole('button', { name: copy.none }));
     expect(writes).toHaveLength(0);
+    expect(screen.getByRole('slider', { name: copy.scope.title })).toHaveValue('0');
     await user.click(screen.getByRole('button', { name: copy.all }));
+    expect(screen.getByRole('slider', { name: copy.scope.title })).toHaveValue('3');
     const amount = screen.getByRole('spinbutton', {
       name: copy.limits.users_balance_adjustment_max_milli,
     });
@@ -69,6 +72,7 @@ describe('steward permission editor', () => {
     expect(writes[0].key).toBeTruthy();
     expect(writes[0].body).toMatchObject({
       expected_revision: '0',
+      donation_scope: 'full',
       permissions: { 'users.balance': true },
       limits: { 'users.balance_adjustment_max_milli': '12345' },
     });
