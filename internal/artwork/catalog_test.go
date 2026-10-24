@@ -153,3 +153,36 @@ func TestBuiltInCatalogMatchesProduct(t *testing.T) {
 		}
 	}
 }
+
+func TestTomorrowArtworkRemainsAvailableWithR18Disabled(t *testing.T) {
+	for _, key := range []string{"card:r-chatgpt", "illustration:r", "cover:r", "appearance:tomorrow"} {
+		definition, ok := builtIn.definitions[key]
+		if !ok || definition.Rating != General || !Allowed(key, true) {
+			t.Fatal("theme inherited restricted artwork", key, definition)
+		}
+		for _, dependency := range definition.Uses {
+			if !Allowed(dependency, true) {
+				t.Fatal("theme uses restricted artwork", key, dependency)
+			}
+		}
+	}
+	for _, key := range []string{"card:r-chatgpt", "illustration:r", "cover:r"} {
+		if !MomentAllowed(key, true) {
+			t.Fatal("theme moment blocked by artwork policy", key)
+		}
+	}
+	for _, file := range []string{
+		"cards/r-chatgpt.webp", "hires/cards/r-chatgpt.webp", "thumbs/r-chatgpt.webp",
+		"backgrounds/r.webp", "hires/backgrounds/r.webp", "groups/r.webp", "hires/groups/r.webp",
+		"covers/r.webp", "hires/covers/r.webp",
+		"appearances/tomorrow-light.webp", "appearances/tomorrow-dark.webp",
+		"hires/appearances/tomorrow-light.webp", "hires/appearances/tomorrow-dark.webp",
+		"motion/r-chatgpt/hero.webp", "hires/motion/r-chatgpt/hero-dark.webp",
+		"motion/r-chatgpt/background-light.webp", "hires/motion/r-chatgpt/background-dark.webp",
+		"tomorrow/hero.webp", "hires/tomorrow/hero.webp",
+	} {
+		if rating, ok := AssetRating(file); !ok || rating != General {
+			t.Error("theme asset is not general", file, rating, ok)
+		}
+	}
+}

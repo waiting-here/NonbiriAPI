@@ -98,8 +98,8 @@ func TestProtectedPityAcrossRepeatedConfigurationChanges(t *testing.T) {
 	}
 }
 func TestCatalogCardAndThemeIntegrity(t *testing.T) {
-	if len(catalog.Cards) != 61 || len(catalog.Themes) != 17 {
-		t.Fatal("unexpected launch catalog")
+	if len(catalog.Cards) != 62 || len(catalog.Themes) != 18 {
+		t.Fatal("unexpected card catalog")
 	}
 	for _, theme := range catalog.Themes {
 		seen := map[string]bool{}

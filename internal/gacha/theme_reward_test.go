@@ -21,6 +21,7 @@ func TestThemeRewardsCreditTheMatchingWalletExactlyOnce(t *testing.T) {
 		{"i", "0", "10000", "limited"},
 		{"k", "0", "10000", "limited"},
 		{"l", "0", "10000", "limited"},
+		{"r", "0", "10000", "limited"},
 	} {
 		t.Run(tc.theme, func(t *testing.T) {
 			f := newFixture(t)
