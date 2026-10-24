@@ -57,15 +57,14 @@ describe('steward permission editor', () => {
       </Session>,
       { station: 'admin', locale: 'en' },
     );
-    await user.click(await screen.findByRole('button', { name: copy.none, exact: true }));
+    await user.click(await screen.findByRole('button', { name: copy.none }));
     expect(writes).toHaveLength(0);
-    await user.click(screen.getByRole('button', { name: copy.all, exact: true }));
+    await user.click(screen.getByRole('button', { name: copy.all }));
     const amount = screen.getByRole('spinbutton', {
       name: copy.limits.users_balance_adjustment_max_milli,
-      exact: true,
     });
     fireEvent.change(amount, { target: { value: '12.345' } });
-    await user.click(screen.getByRole('button', { name: copy.save, exact: true }));
+    await user.click(screen.getByRole('button', { name: copy.save }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0].key).toBeTruthy();
     expect(writes[0].body).toMatchObject({
@@ -84,11 +83,11 @@ describe('steward permission editor', () => {
       </Session>,
       { station: 'admin', locale: 'en' },
     );
-    await user.click(await screen.findByRole('button', { name: copy.none, exact: true }));
-    await user.click(screen.getByRole('button', { name: copy.save, exact: true }));
+    await user.click(await screen.findByRole('button', { name: copy.none }));
+    await user.click(screen.getByRole('button', { name: copy.save }));
     await screen.findByText(en.common.outcome.unknownTitle);
-    expect(screen.getByRole('button', { name: copy.all, exact: true })).toBeDisabled();
-    await user.click(screen.getByRole('button', { name: en.common.outcome.recheck, exact: true }));
+    expect(screen.getByRole('button', { name: copy.all })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: en.common.outcome.recheck }));
     await waitFor(() => expect(writes).toHaveLength(2));
     expect(writes[1]).toEqual(writes[0]);
     await screen.findByText(en.common.outcome.saved);

@@ -4,7 +4,12 @@ import { BlacklistManagement } from '../../admin/pages/BlacklistPage';
 import { AnnouncementManagement } from '@shared/components/AnnouncementManagement';
 import { AnnouncementEditor } from '@shared/components/AnnouncementEditor';
 import { listReturnPath } from '@shared/operations/listReturn';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  hasStewardPermission,
+  type StewardPermission,
+} from '@shared/operations/stewardPermissions';
+import { StewardPermissionNotice } from '@shared/components/StewardPermissionNotice';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -40,18 +45,14 @@ function StewardPageContent() {
   const refetchAuthority = authority.refetch;
   const [searchParams, setSearchParams] = useSearchState();
   const location = useLocation();
-  const trainee = authority.data?.effective_level === 5;
   const requestedTab = searchParams.get('tab');
-  const section = trainee
-    ? requestedTab === 'logs' || requestedTab === 'users'
-      ? requestedTab
-      : 'charity'
-    : requestedTab === 'charity' ||
-        requestedTab === 'maintenance' ||
-        requestedTab === 'users' ||
-        requestedTab === 'blacklist' ||
-        requestedTab === 'risk' ||
-        requestedTab === 'announcements'
+  const section =
+    requestedTab === 'charity' ||
+    requestedTab === 'maintenance' ||
+    requestedTab === 'users' ||
+    requestedTab === 'blacklist' ||
+    requestedTab === 'risk' ||
+    requestedTab === 'announcements'
       ? requestedTab
       : 'logs';
   const announcement = searchParams.get('announcement') ?? '';
@@ -67,18 +68,12 @@ function StewardPageContent() {
   const clearSensitiveQueries = useCallback(() => {
     const predicate = (query: { queryKey: readonly unknown[] }) =>
       (query.queryKey[0] === 'charity-management' && query.queryKey[1] === 'steward') ||
+      (query.queryKey[0] === 'risk' && query.queryKey[1] === 'steward') ||
+      (query.queryKey[0] === 'steward' && query.queryKey[1] === 'global-pressure') ||
       (query.queryKey[0] === 'user' &&
         (query.queryKey[1] === 'steward' ||
           query.queryKey[1] === 'steward-logs' ||
-          (query.queryKey[1] === 'operations' &&
-            [
-              'steward',
-              'users',
-              'user',
-              'deleted-account',
-              'announcements-page',
-              'announcement',
-            ].includes(String(query.queryKey[2])))));
+          query.queryKey[1] === 'operations'));
     void client.cancelQueries({ predicate });
     client.removeQueries({ predicate });
   }, [client]);
@@ -92,6 +87,29 @@ function StewardPageContent() {
   const allowed = Boolean(
     authority.data && [5, 6].includes(authority.data.effective_level) && !authority.data.is_banned,
   );
+  const has = (permission: StewardPermission) => hasStewardPermission(authority.data, permission);
+  const revision = authority.data?.steward_permissions?.revision;
+  const previousRevision = useRef(revision);
+  useEffect(() => {
+    if (previousRevision.current !== revision) clearSensitiveQueries();
+    previousRevision.current = revision;
+  }, [revision, clearSensitiveQueries]);
+  const sectionAllowed =
+    section === 'charity'
+      ? has('charity.read') || has('donations.review') || has('donations.read_all')
+      : section === 'logs'
+        ? has('logs.read') || has('diagnostics.read')
+        : has(
+            (
+              {
+                risk: 'risk.read',
+                users: 'users.read',
+                blacklist: 'blacklist.read',
+                announcements: 'announcements.read',
+                maintenance: 'maintenance.read',
+              } as const
+            )[section],
+          );
   useEffect(() => {
     if (!authority.isPending && !allowed) clearSensitiveQueries();
   }, [allowed, authority.isPending, clearSensitiveQueries]);
@@ -125,79 +143,90 @@ function StewardPageContent() {
     );
 
   return (
-    <TimeContextProvider station="steward">
+    <TimeContextProvider
+      key={`${authority.data.id}:${authority.data.effective_level}:${revision ?? '0'}`}
+      station="steward"
+    >
       <div className="page ops-page">
         <PageHeader
           icon="steward"
           title={t('user.steward.title')}
           description={t('user.steward.presentation.description')}
         />
-        {!trainee ? (
-          <div className="nb-actions">
-            <Link
-              className="nb-btn nb-btn--secondary"
-              to="/endpoint-policies"
-              state={{ returnTo: location.pathname + location.search }}
-            >
-              {t('common.endpointPolicies.title')}
-            </Link>
-          </div>
-        ) : null}
+        <div className="nb-actions">
+          <Link
+            className="nb-btn nb-btn--secondary"
+            to="/endpoint-policies"
+            state={{ returnTo: location.pathname + location.search }}
+          >
+            {t('common.endpointPolicies.title')}
+          </Link>
+        </div>
         <Tabs
           label={t('user.steward.sectionsLabel')}
           value={section}
           onChange={setSection}
-          tabs={(trainee
-            ? (['charity', 'logs', 'users'] as const)
-            : ([
-                'risk',
-                'logs',
-                'charity',
-                'users',
-                'blacklist',
-                'announcements',
-                'maintenance',
-              ] as const)
+          tabs={(
+            [
+              'risk',
+              'logs',
+              'charity',
+              'users',
+              'blacklist',
+              'announcements',
+              'maintenance',
+            ] as const
           ).map((value) => ({
             value,
             label: t(sectionKeys[value]),
           }))}
         />
-        {section === 'logs' ? (
+        {!sectionAllowed ? <StewardPermissionNotice /> : null}
+        {sectionAllowed && section === 'logs' ? (
           <>
-            <RoleLogPanel
-              key={`logs:${authority.data.id}:${authority.data.effective_level}`}
-              role="steward"
-              accountId={`${authority.data.id}:${authority.data.effective_level}`}
-              scopeReady={allowed}
-              enabled
-              onAuthorityLoss={authorityLoss}
-            />
-            <IndependentDiagnostics
-              role="steward"
-              accountId={`${authority.data.id}:${authority.data.effective_level}`}
-              scopeReady={allowed}
-              enabled
-            />
+            {has('logs.read') ? (
+              <RoleLogPanel
+                key={`logs:${authority.data.id}:${authority.data.effective_level}`}
+                role="steward"
+                accountId={`${authority.data.id}:${authority.data.effective_level}`}
+                scopeReady={allowed}
+                enabled
+                onAuthorityLoss={authorityLoss}
+              />
+            ) : (
+              <StewardPermissionNotice />
+            )}
+            {has('diagnostics.read') ? (
+              <IndependentDiagnostics
+                role="steward"
+                accountId={`${authority.data.id}:${authority.data.effective_level}`}
+                scopeReady={allowed}
+                enabled
+              />
+            ) : (
+              <StewardPermissionNotice />
+            )}
           </>
         ) : null}
-        {section === 'risk' ? (
+        {sectionAllowed && section === 'risk' ? (
           <RiskAuditPanel role="steward" scopeKey={authority.data.id} enabled={allowed} />
         ) : null}
-        {section === 'charity' ? (
+        {sectionAllowed && section === 'charity' ? (
           <CharityManagement
             key={`charity:${authority.data.id}`}
             frame="steward"
-            trainee={trainee}
             accountId={authority.data.id}
+            actorLevel={authority.data.effective_level === 5 ? 5 : 6}
+            permissions={authority.data.steward_permissions}
             onCapabilityLoss={authorityLoss}
           />
         ) : null}
-        {section === 'users' ? (
+        {sectionAllowed && section === 'users' ? (
           <UserManagement
             key={`users:${authority.data.id}:${authority.data.effective_level}`}
             role="steward"
-            trainee={trainee}
+            actorLevel={authority.data.effective_level === 5 ? 5 : 6}
+            permissions={authority.data.steward_permissions}
             account={authority.data.id}
             scopeReady={allowed}
             sessionError={authority.error}
@@ -205,7 +234,7 @@ function StewardPageContent() {
             embedded
           />
         ) : null}
-        {section === 'blacklist' ? (
+        {sectionAllowed && section === 'blacklist' ? (
           <BlacklistManagement
             key={`blacklist:${authority.data.id}`}
             role="steward"
@@ -217,7 +246,7 @@ function StewardPageContent() {
             embedded
           />
         ) : null}
-        {section === 'announcements' ? (
+        {sectionAllowed && section === 'announcements' ? (
           announcement ? (
             <AnnouncementEditor
               key={`announcement:${authority.data.id}:${announcement}`}
@@ -240,7 +269,7 @@ function StewardPageContent() {
             />
           )
         ) : null}
-        {section === 'maintenance' ? (
+        {sectionAllowed && section === 'maintenance' ? (
           <Panel tone="danger">
             <MaintenancePanel
               key={`maintenance:${authority.data.id}`}

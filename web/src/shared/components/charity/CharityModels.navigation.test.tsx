@@ -75,7 +75,6 @@ it('opens a direct trainee key in model scope and returns to the full log window
           element={
             <ModelsPanel
               role="steward"
-              trainee
               accountId="trainee"
               renderKeyManager={(props) => <KeyManager {...props} />}
               renderScopedKeys={() => null}
@@ -124,7 +123,6 @@ it.each([403, 404])(
           element={
             <ModelsPanel
               role="steward"
-              trainee
               accountId="trainee"
               onCapabilityLoss={loss}
               renderKeyManager={() => null}

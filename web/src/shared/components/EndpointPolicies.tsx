@@ -1,4 +1,9 @@
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
+import {
+  hasStewardPermission,
+  type StewardPermissions,
+} from '@shared/operations/stewardPermissions';
+import { StewardPermissionNotice } from './StewardPermissionNotice';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from 'react-router';
@@ -55,9 +60,14 @@ const periodKeys = {
 } as const;
 
 export function EndpointPolicies(props: Props) {
-  const { t } = useTranslation();
   const [lost, setLost] = useState(false);
-  const session = useQuery<{ user?: { effective_level: number; is_banned?: boolean } }>({
+  const session = useQuery<{
+    user?: {
+      effective_level: number;
+      is_banned?: boolean;
+      steward_permissions?: StewardPermissions;
+    };
+  }>({
     queryKey: [props.role === 'admin' ? 'admin' : 'user', 'session'],
     enabled: false,
   });
@@ -69,11 +79,13 @@ export function EndpointPolicies(props: Props) {
   if (
     lost ||
     (props.role === 'steward' &&
-      (session.data?.user?.effective_level !== 6 || session.data?.user?.is_banned))
+      ((!hasStewardPermission(session.data?.user, 'charity.backoff') &&
+        !hasStewardPermission(session.data?.user, 'egress.read')) ||
+        session.data?.user?.is_banned))
   )
     return (
       <div className="page">
-        <p role="alert">{t('common.endpointPolicies.accessDenied')}</p>
+        <StewardPermissionNotice />
       </div>
     );
   return <EndpointPoliciesContent {...props} onCapabilityLoss={reject} />;

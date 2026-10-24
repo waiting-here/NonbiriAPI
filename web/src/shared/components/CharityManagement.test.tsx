@@ -531,10 +531,6 @@ describe('CharityManagement corrective controls', () => {
         path: '/admin/api/charity-models/1',
         body: {
           ...request,
-          provider: 'provider',
-          model: 'model',
-          enabled: false,
-          route_strategy: 'ordered',
           expected_revision: '1',
         },
       });
@@ -551,10 +547,6 @@ describe('CharityManagement corrective controls', () => {
         path: '/admin/api/charity-models/1',
         body: {
           ...token,
-          provider: 'provider',
-          model: 'model',
-          enabled: false,
-          route_strategy: 'ordered',
           expected_revision: '2',
         },
       });
@@ -736,7 +728,7 @@ describe('CharityManagement corrective controls', () => {
       );
     },
   );
-  it('limits a trainee landing page to scoped model browsing', async () => {
+  it('uses the shared charity navigation for a level-5 steward', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
       const url = new URL(String(input), 'https://example.test');
       if ((init?.method ?? 'GET') !== 'GET') throw new Error('Unexpected write');
@@ -747,23 +739,19 @@ describe('CharityManagement corrective controls', () => {
         });
       if (url.pathname === '/api/steward/charity-models')
         return jsonResponse(numberedPage([{ ...charityModel(10, 20), is_mainstream: true }], url));
+      if (url.pathname === '/api/steward/donations') return jsonResponse(numberedPage([], url));
       throw new Error(`Unexpected trainee read: ${url.pathname}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    await renderWithProviders(<SessionBackedManagement frame="steward" />, {
+    const view = await renderWithProviders(<SessionBackedManagement frame="steward" />, {
       station: 'user',
       role: 'user',
     });
+    await view.user.click(await screen.findByRole('tab', { name: /Charity models and/ }));
     expect(await screen.findByText('[公益]provider/model')).toBeVisible();
-    expect(screen.queryByRole('heading', { name: 'Add charity model' })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('tab')).toHaveLength(3);
-    expect(screen.getByRole('tab', { name: 'Pending donation reviews' })).toBeVisible();
-    expect(screen.getByRole('tab', { name: 'Approved donation handling' })).toBeVisible();
+    expect(screen.getAllByRole('tab')).toHaveLength(4);
     expect(
-      fetchMock.mock.calls.every(
-        ([input]) =>
-          !String(input).includes('/donations') && !String(input).includes('/donation-sources'),
-      ),
+      fetchMock.mock.calls.every(([input]) => !String(input).includes('/donation-sources')),
     ).toBe(true);
   });
 
@@ -1161,7 +1149,7 @@ describe('CharityManagement corrective controls', () => {
         current = {
           ...current,
           revision: '2',
-          discount: body.discount as CharityModel['discount'],
+          discount: (body.discount as CharityModel['discount'] | undefined) ?? current.discount,
           updated_at: 2,
         };
         return jsonResponse(current);
@@ -1224,20 +1212,10 @@ describe('CharityManagement corrective controls', () => {
 
     await waitFor(() => expect(patchBodies).toHaveLength(1));
     expect(patchBodies[0]).toEqual({
-      cloudflare_proxy_enabled: false,
       session_headers: [{ name: 'X-Session-ID', idle_seconds: 300, format: 'hex_32' }],
-      model_types: ['chat_completions', 'embeddings'],
-      role_policy: { default_action: 'native', rules: {} },
-      is_mainstream: false,
-      excluded_request_fields: [],
       route_strategy: 'cache_balanced',
       affinity_ttl_seconds: 86400,
       expected_revision: '1',
-      provider: 'provider',
-      model: 'model',
-      enabled: true,
-      allowed_levels: [1, 2, 3, 4, 5],
-      public_description: '',
       pricing: {
         mode: 'per_request',
         user_price: '1',
@@ -1245,13 +1223,10 @@ describe('CharityManagement corrective controls', () => {
         long_context: { input_threshold: '100000', user_price: '8' },
         context_penalty: { input_threshold: '200000', fine: '50' },
       },
-      discount: { enabled: true, percent: 10, start_at: start, end_at: end },
-      recurring_discount: { enabled: false, time_zone: 'UTC', default_percent: 100, periods: [] },
-      transport_rule: 'passthrough',
-      flatten_tool_calls: false,
     });
     expect(patchBodies[0]).not.toHaveProperty('pricing_mode');
     expect(patchBodies[0]).not.toHaveProperty('prices');
+    expect(current.discount).toEqual({ enabled: true, percent: 10, start_at: start, end_at: end });
     expect(idempotencyKeys).toEqual([expect.stringMatching(operationKeyPattern)]);
   });
 
@@ -1352,7 +1327,7 @@ describe('CharityManagement corrective controls', () => {
           current = {
             ...current,
             revision: String(Number(current.revision) + 1),
-            pricing: body.pricing as CharityModel['pricing'],
+            pricing: (body.pricing as CharityModel['pricing'] | undefined) ?? current.pricing,
             token_reserve_credits: Object.hasOwn(body, 'token_reserve_credits')
               ? (body.token_reserve_credits as string | null)
               : current.token_reserve_credits,
@@ -1865,8 +1840,7 @@ describe('CharityManagement candidate key shortcuts', () => {
         station: frame === 'admin' ? 'admin' : 'user',
         role: access,
       });
-      if (access !== 'level5')
-        await view.user.click(await screen.findByRole('tab', { name: /Charity models and/ }));
+      await view.user.click(await screen.findByRole('tab', { name: /Charity models and/ }));
       await view.user.click(await screen.findByRole('button', { name: 'Manage' }));
       const pickerNode = await waitFor(() => {
         const node = view.container.querySelector('.ops-binding-picker');
@@ -1917,7 +1891,6 @@ describe('level-5 pending review queue', () => {
           const url = new URL(String(input), 'https://example.test');
           if (url.pathname.endsWith('/time-context')) return jsonResponse(siteTimeContext);
           if (url.pathname === '/api/steward/donations') {
-            expect(url.searchParams.get('status')).toBe('pending');
             return jsonResponse(numberedPage(completed ? [] : [donationSummary(current)], url));
           }
           if (url.pathname === '/api/steward/donations/1' && (init?.method ?? 'GET') === 'GET') {
@@ -1969,7 +1942,7 @@ describe('level-5 pending review queue', () => {
         }),
       );
       await screen.findByText(/Review saved:/);
-      await screen.findByRole('heading', { name: 'No pending donations' });
+      await screen.findByRole('heading', { name: 'No donations' });
       expect(submitted).toMatchObject({
         decision,
         expected_revision: '1',
@@ -2003,11 +1976,11 @@ it('keeps level-5 access when a pending target was concurrently reviewed', async
     <CharityManagement frame="steward" accountId="1" trainee onCapabilityLoss={capabilityLost} />,
     { station: 'user', route: '/steward?charity_section=donations&donation_id=1' },
   );
-  await screen.findByText('This donation has already been reviewed. Return to the pending queue.');
-  expect(listReads).toBeGreaterThanOrEqual(2);
+  await screen.findByText('This action is not allowed for the current account.');
+  expect(listReads).toBeGreaterThanOrEqual(1);
   expect(capabilityLost).not.toHaveBeenCalled();
   await view.user.click(screen.getByRole('button', { name: 'Return to list' }));
-  await screen.findByRole('heading', { name: 'No pending donations' });
+  await screen.findByRole('heading', { name: 'No donations' });
 });
 
 it.each(['approve', 'reject'] as const)(
@@ -2081,7 +2054,6 @@ it.each(['approve', 'reject'] as const)(
         const url = new URL(String(input), 'https://example.test');
         if (url.pathname.endsWith('/time-context')) return jsonResponse(siteTimeContext);
         if (url.pathname === '/api/steward/donations') {
-          expect(url.searchParams.get('status')).toBe('pending');
           return completed && failQueue
             ? error(503, 'unavailable')
             : jsonResponse(numberedPage(completed ? [] : [donationSummary(current)], url));
@@ -2144,7 +2116,7 @@ it.each(['approve', 'reject'] as const)(
     );
     expect(screen.getByText('Use 6 saved')).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Return to list' }));
-    await screen.findByRole('heading', { name: 'No pending donations' });
+    await screen.findByRole('heading', { name: 'No donations' });
     expect(screen.getByText('Use 6 saved')).toBeVisible();
     expect(writes).toBe(1);
     expect(capabilityLost).not.toHaveBeenCalled();

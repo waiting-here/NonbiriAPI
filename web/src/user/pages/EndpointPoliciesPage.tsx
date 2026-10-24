@@ -14,7 +14,9 @@ export function EndpointPoliciesPage() {
     return <ErrorState error={session.error} onRetry={() => void session.refetch()} />;
   return (
     <UserPageGate>
-      {session.data && hasStewardPermission(session.data.user, 'charity.backoff') ? (
+      {session.data &&
+      (hasStewardPermission(session.data.user, 'charity.backoff') ||
+        hasStewardPermission(session.data.user, 'egress.read')) ? (
         <EndpointPolicies
           key={session.data.user.id}
           role="steward"

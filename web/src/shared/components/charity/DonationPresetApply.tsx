@@ -1,4 +1,9 @@
 import { useEffect, useState } from 'react';
+import {
+  hasStewardPermission,
+  type StewardPermissions,
+} from '@shared/operations/stewardPermissions';
+import { StewardPermissionNotice } from '../StewardPermissionNotice';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -39,17 +44,20 @@ export function DonationPresetApply({
   busy?: boolean;
   onCapabilityLoss?: () => void;
 }) {
-  const session = useQuery<{ user?: { effective_level?: number } }>({
+  const session = useQuery<{
+    user?: { effective_level: number; steward_permissions?: StewardPermissions };
+  }>({
     queryKey: ['user', 'session'],
     enabled: false,
   });
   const source = item.keys.find((key) => key.safe_source.kind === 'mainstream')?.safe_source;
+  if (item.status !== 'approved' || source?.kind !== 'mainstream') return null;
   if (
-    item.status !== 'approved' ||
-    source?.kind !== 'mainstream' ||
-    (role === 'steward' && session.data?.user?.effective_level !== 6)
+    role === 'steward' &&
+    (!hasStewardPermission(session.data?.user, 'charity.presets') ||
+      !hasStewardPermission(session.data?.user, 'charity.manage'))
   )
-    return null;
+    return <StewardPermissionNotice />;
   return (
     <ApplyBody
       key={`${accountId}:${item.id}:${source.channel_id}`}

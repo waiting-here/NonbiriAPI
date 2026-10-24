@@ -172,15 +172,12 @@ it.each(['order', 'delete'] as const)(
     await screen.findByText('upstream-41');
     const before = f.reads();
     if (action === 'order') {
-      await view.user.click(screen.getAllByRole('button', { name: 'Down', exact: true })[0]!);
+      await view.user.click(screen.getAllByRole('button', { name: 'Down' })[0]!);
       await view.user.click(screen.getByRole('button', { name: 'Save connection order' }));
-    } else
-      await view.user.click(screen.getAllByRole('button', { name: 'Remove', exact: true })[0]!);
+    } else await view.user.click(screen.getAllByRole('button', { name: 'Remove' })[0]!);
     await waitFor(() => expect(f.writes).toHaveLength(1));
     await waitFor(() => expect(f.reads()).toBe(before + 1));
-    await waitFor(() =>
-      expect(screen.getAllByRole('button', { name: 'Remove', exact: true })[0]).toBeEnabled(),
-    );
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Remove' })[0]).toBeEnabled());
     expect(f.reads()).toBe(before + 1);
     const saved = view.queryClient.getQueryData<{ binding_revision: string }>([
       ...charityKeys.bindings('admin', '31'),

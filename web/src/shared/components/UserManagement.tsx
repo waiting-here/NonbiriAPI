@@ -1,5 +1,12 @@
 import { InferenceLimitFields, InferenceLimitSummary } from './userInferenceLimits';
 import { UserLimitBatch } from './UserLimitBatch';
+import { StewardPermissionEditor } from './StewardPermissionEditor';
+import { StewardPermissionNotice } from './StewardPermissionNotice';
+import { UserDonationHistory } from './UserDonationHistory';
+import {
+  defaultStewardPermissions,
+  type StewardPermissions,
+} from '@shared/operations/stewardPermissions';
 import {
   INFERENCE_LIMITS,
   canEditInferenceLimits,
@@ -274,12 +281,16 @@ function UserAuthority({
   renderSecurity,
   onAuthorityLoss,
   trainee = false,
+  actorLevel = trainee ? 5 : 6,
+  permissions,
 }: {
   user: AdminUser;
   refresh: () => Promise<unknown>;
   onClose: () => void;
   role: ManagementRole;
   trainee?: boolean;
+  actorLevel?: 5 | 6;
+  permissions?: StewardPermissions;
   account: string;
   onAuthorityLoss?: () => void;
   renderDeletion?: (user: AdminUser, refresh: () => Promise<unknown>) => ReactNode;
@@ -289,20 +300,25 @@ function UserAuthority({
   const { t } = useTranslation();
   const [draft, setDraft] = useState<UserDraft>(() => draftFor(user));
   const tabID = useId();
-  const [tab, setTab] = useState<'overview' | 'limits' | 'economy' | 'penalties'>('overview');
+  const [tab, setTab] = useState<
+    'overview' | 'limits' | 'economy' | 'penalties' | 'donations' | 'permissions'
+  >('overview');
   const [penaltiesVisited, setPenaltiesVisited] = useState(false);
   const [coordinating, setCoordinating] = useState(false);
   const [confirmedUser, setConfirmedUser] = useState<AdminUser | null>(null);
   const [confirm, setConfirm] = useState<'ban' | 'unban' | null>(null);
   const [economyConfirm, setEconomyConfirm] = useState<EconomyIntent | null>(null);
-  const editable =
-    !trainee && (role === 'admin' || (user.id !== account && user.level.effective < 6));
-  const limitsEditable = canEditInferenceLimits(user, role, account, trainee);
+  const editable = role === 'admin' || (user.id !== account && user.level.effective < actorLevel);
+  const limitsEditable = canEditInferenceLimits(user, role, account, actorLevel === 5);
   const callerKeyEditable =
     !user.is_admin &&
-    (role === 'admin' || (user.id !== account && user.level.effective < (trainee ? 5 : 6)));
-  const canBan =
-    editable || (trainee && user.id !== account && user.level.effective <= 4 && !user.is_banned);
+    (role === 'admin' || (user.id !== account && user.level.effective < actorLevel));
+  const canBan = editable;
+  const canManagePermissions = user.level.effective === 5 && (role === 'admin' || actorLevel === 6);
+  const canReadDonations =
+    role === 'admin' ||
+    actorLevel === 6 ||
+    (permissions ?? defaultStewardPermissions(actorLevel)).permissions['users.donations.read'];
   const root = managementRoot(role);
   const reconcile = async () => {
     await refresh();
@@ -378,10 +394,15 @@ function UserAuthority({
     if ((!editable && !limitsEditable) || invalidLimits || profileBusy) return;
     const profileBody = {
       mode: 'profile',
-      ...(limitsEditable ? inferenceLimits : {}),
-      ...(editable
-        ? { endpoint_limit: endpoint, ...(draft.lang ? { lang: draft.lang } : {}) }
+      ...(limitsEditable
+        ? Object.fromEntries(
+            Object.entries(inferenceLimits).filter(
+              ([key, value]) => value !== baseline[key as keyof typeof baseline],
+            ),
+          )
         : {}),
+      ...(editable && endpoint !== baseline.endpoint_limit ? { endpoint_limit: endpoint } : {}),
+      ...(editable && draft.lang && draft.lang !== baseline.lang ? { lang: draft.lang } : {}),
       ...(role === 'admin' && draft.discordGatePolicy !== baseline.discord_gate_policy
         ? { discord_gate_policy: draft.discordGatePolicy }
         : {}),
@@ -497,7 +518,6 @@ function UserAuthority({
 
   return (
     <div className="ops-stack user-authority">
-      {trainee ? <Note>{t('management.users.traineeReadOnly')}</Note> : null}
       <Card>
         <div className="user-authority__head">
           <Button variant="ghost" type="button" className="user-authority__back" onClick={onClose}>
@@ -534,8 +554,12 @@ function UserAuthority({
         tabs={[
           { value: 'overview', label: t('management.users.tabOverview') },
           { value: 'limits', label: t('management.users.tabLimits') },
-          ...(trainee ? [] : [{ value: 'economy', label: t('management.users.tabEconomy') }]),
+          { value: 'economy', label: t('management.users.tabEconomy') },
           { value: 'penalties', label: t('management.users.tabPenalties') },
+          { value: 'donations', label: t('management.permissions.history') },
+          ...(canManagePermissions
+            ? [{ value: 'permissions', label: t('management.permissions.title') }]
+            : []),
         ].map(({ value, label }) => ({
           value: value as typeof tab,
           label,
@@ -601,19 +625,17 @@ function UserAuthority({
             >
               {t('management.users.viewLogs')}
             </Link>
-            {!trainee ? (
-              <Link
-                className="nb-btn nb-btn--secondary"
-                to={
-                  role === 'admin'
-                    ? routePath('admin', 'admin-risk-audit') +
-                      `?audit_tab=user_ips&audit_ip_user=${user.id}`
-                    : `/steward?tab=risk&audit_tab=user_ips&audit_ip_user=${user.id}`
-                }
-              >
-                {t('common.audit.inspectUserIPs')}
-              </Link>
-            ) : null}
+            <Link
+              className="nb-btn nb-btn--secondary"
+              to={
+                role === 'admin'
+                  ? routePath('admin', 'admin-risk-audit') +
+                    `?audit_tab=user_ips&audit_ip_user=${user.id}`
+                  : `/steward?tab=risk&audit_tab=user_ips&audit_ip_user=${user.id}`
+              }
+            >
+              {t('common.audit.inspectUserIPs')}
+            </Link>
             <LoanHistory role={role} account={account} userID={user.id} />
           </div>
         </Card>
@@ -679,13 +701,14 @@ function UserAuthority({
                           onChange={(event) => setDraft({ ...draft, level: event.target.value })}
                         >
                           <option value="">{t('management.users.levelManualNone')}</option>
-                          {(role === 'admin' ? [1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5]).map(
-                            (level) => (
-                              <option key={level} value={level}>
-                                {level}
-                              </option>
-                            ),
-                          )}
+                          {(role === 'admin'
+                            ? [1, 2, 3, 4, 5, 6]
+                            : [1, 2, 3, 4, 5].filter((level) => level < actorLevel)
+                          ).map((level) => (
+                            <option key={level} value={level}>
+                              {level}
+                            </option>
+                          ))}
                         </select>
                       )}
                     </Field>
@@ -789,7 +812,7 @@ function UserAuthority({
             hidden={tab !== 'limits'}
           >
             <Card>
-              {!trainee ? <p>{t('management.users.readOnly')}</p> : null}
+              <p>{t('management.users.readOnly')}</p>
               <dl className="ops-kv">
                 <dt>{t('management.users.endpointLimit')}</dt>
                 <dd>{user.effective_endpoint_limit}</dd>
@@ -941,7 +964,7 @@ function UserAuthority({
             hidden={tab !== 'economy'}
           >
             <Card>
-              <p>{t(trainee ? 'management.users.traineeReadOnly' : 'management.users.readOnly')}</p>
+              <p>{t('management.users.readOnly')}</p>
             </Card>
           </section>
           <section
@@ -959,6 +982,34 @@ function UserAuthority({
           </section>
         </>
       )}
+      {tab === 'donations' ? (
+        <section
+          role="tabpanel"
+          id={`${tabID}-donations-panel`}
+          aria-labelledby={`${tabID}-donations`}
+        >
+          {canReadDonations ? (
+            <UserDonationHistory
+              role={role}
+              accountId={account}
+              userId={user.id}
+              enabled
+              onCapabilityLoss={onAuthorityLoss}
+            />
+          ) : (
+            <StewardPermissionNotice />
+          )}
+        </section>
+      ) : null}
+      {tab === 'permissions' && canManagePermissions ? (
+        <section
+          role="tabpanel"
+          id={`${tabID}-permissions-panel`}
+          aria-labelledby={`${tabID}-permissions`}
+        >
+          <StewardPermissionEditor role={role} account={account} userId={user.id} />
+        </section>
+      ) : null}
       {confirm ? (
         <ConfirmDialog
           open
@@ -1034,6 +1085,8 @@ function UserAuthority({
 
 interface UserManagementProps {
   trainee?: boolean;
+  actorLevel?: 5 | 6;
+  permissions?: StewardPermissions;
   account: string;
   scopeReady: boolean;
   sessionError: unknown;
@@ -1054,6 +1107,8 @@ export function UserManagement({
   renderDeletion,
   renderSecurity,
   trainee = false,
+  actorLevel = trainee ? 5 : 6,
+  permissions,
   embedded = false,
 }: UserManagementProps) {
   const { t } = useTranslation();
@@ -1177,7 +1232,8 @@ export function UserManagement({
   }, [batchScope]);
 
   const eligibleUsers = (users.data?.data ?? []).flatMap((entry) =>
-    entry.account_state === 'active' && canEditInferenceLimits(entry.user, role, account, trainee)
+    entry.account_state === 'active' &&
+    canEditInferenceLimits(entry.user, role, account, actorLevel === 5)
       ? [entry.user]
       : [],
   );
@@ -1312,16 +1368,12 @@ export function UserManagement({
       {embedded ? (
         <SectionHead
           title={t('management.users.title')}
-          description={t(
-            trainee ? 'management.users.traineeDescription' : 'management.users.description',
-          )}
+          description={t('management.users.description')}
         />
       ) : (
         <PageHeader
           title={role === 'admin' ? t('admin.navigation.users') : t('management.users.title')}
-          description={t(
-            trainee ? 'management.users.traineeDescription' : 'management.users.description',
-          )}
+          description={t('management.users.description')}
         />
       )}
       <div className={`nb-md${selection ? ' has-selection' : ''}`}>
@@ -1495,7 +1547,7 @@ export function UserManagement({
                       render: (entry) => (
                         <span className="user-list-selection">
                           {entry.account_state === 'active' &&
-                          canEditInferenceLimits(entry.user, role, account, trainee) ? (
+                          canEditInferenceLimits(entry.user, role, account, actorLevel === 5) ? (
                             <label className="user-limit-select">
                               <input
                                 type="checkbox"
@@ -1684,9 +1736,7 @@ export function UserManagement({
           {!selection ? (
             <EmptyState
               title={t('management.users.selectUser')}
-              body={t(
-                trainee ? 'management.users.traineeSelectBody' : 'management.users.selectUserBody',
-              )}
+              body={t('management.users.selectUserBody')}
             />
           ) : !selected ||
             detailUnavailable ||
@@ -1712,7 +1762,8 @@ export function UserManagement({
                 user={detail.data}
                 role={role}
                 account={account}
-                trainee={trainee}
+                actorLevel={actorLevel}
+                permissions={permissions}
                 renderDeletion={renderDeletion}
                 renderSecurity={renderSecurity}
                 onAuthorityLoss={onAuthorityLoss}

@@ -1,7 +1,7 @@
 import { CharityTargets } from './CharityTargets';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { isAISDKGateway } from '@shared/operations/connectorPolicy';
-import { CloudflareProxyField, CloudflareProxySummary } from '../CloudflareProxyField';
+import { CloudflareProxyField } from '../CloudflareProxyField';
 import { SessionHeaderFields } from './SessionHeaderFields';
 import { PriceTools } from './PriceTools';
 import {
@@ -78,7 +78,6 @@ import type { CharityPickerKeyManagerProps } from '../CharityBindingPicker';
 import { BindingAddForm } from './BindingAddForm';
 import { charityControlCopy } from '../charityControlCopy';
 import { CharityModelScope } from '../CharityModelScope';
-import { CharityRolePolicyForm } from '../CharityRolePolicyForm';
 import { KeyLimitSummary } from '../KeyRoutingLimits';
 import { useRequestAdaptationCopy } from '../requestAdaptationCopy';
 import { RequestAdaptationEditor } from '../RequestAdaptationEditor';
@@ -267,7 +266,7 @@ function ModelForm({
     target?.scrollIntoView?.({ block: 'nearest', behavior: 'instant' });
   }, [referenceOpen]);
   const save = useRetainedOperation<
-    { body: ReturnType<typeof modelBody>; revision?: string },
+    { body: Record<string, unknown>; revision?: string },
     CharityModel
   >(
     async (input, key, context) => {
@@ -699,14 +698,28 @@ function ModelForm({
             save.outcome === 'refresh-failed'
           }
           onClick={() => {
-            if (!modelDraftError(draft))
+            if (!modelDraftError(draft)) {
+              const candidate = modelBody(
+                draft,
+                !model || draft.tokenReserveCredits !== (model.token_reserve_credits ?? null),
+                role === 'admin',
+              );
+              const baseline = model
+                ? modelBody(modelDraft(model), true, role === 'admin')
+                : undefined;
+              const body = baseline
+                ? Object.fromEntries(
+                    Object.entries(candidate).filter(
+                      ([key, value]) =>
+                        JSON.stringify(value) !==
+                        JSON.stringify(baseline[key as keyof typeof baseline]),
+                    ),
+                  )
+                : candidate;
+              if (Object.keys(body).length === 0) return;
               save.mutate(
                 {
-                  body: modelBody(
-                    draft,
-                    !model || draft.tokenReserveCredits !== (model.token_reserve_credits ?? null),
-                    role === 'admin',
-                  ),
+                  body,
                   revision: baseRevision,
                 },
                 {
@@ -716,6 +729,7 @@ function ModelForm({
                   },
                 },
               );
+            }
           }}
         >
           {model
@@ -1145,7 +1159,6 @@ export function ModelsPanel({
   role,
   accountId,
   onCapabilityLoss,
-  trainee = false,
 }: {
   renderScopedKeys: (props: {
     modelID: string;
@@ -1156,7 +1169,6 @@ export function ModelsPanel({
   role: CharityRole;
   accountId: string;
   onCapabilityLoss?: () => void;
-  trainee?: boolean;
 }) {
   const { t } = useTranslation();
   const location = useLocation();
@@ -1173,7 +1185,7 @@ export function ModelsPanel({
   const managedDonation = selectedID(params, 'managed_donation');
   const managedKey = selectedID(params, 'managed_key');
   const managingKey = Boolean(selectedId && managedDonation && managedKey);
-  const creating = !trainee && oneParam(params, 'model_workspace') === 'new' && !selectedId;
+  const creating = oneParam(params, 'model_workspace') === 'new' && !selectedId;
   const [draft, setDraft] = useState({ query, text: query });
   const queryDraft = draft.query === query ? draft.text : query;
   const setQueryDraft = (text: string) => setDraft({ query, text });
@@ -1256,7 +1268,6 @@ export function ModelsPanel({
     ...charityKeys.root(role),
     'model-pages',
     accountId,
-    trainee ? 'trainee' : 'full',
     query,
     enabled,
     pager.page,
@@ -1272,13 +1283,7 @@ export function ModelsPanel({
       samePageFamily(previousQuery?.queryKey, listKey) ? previous : undefined,
   });
   const detail = useQuery({
-    queryKey: [
-      ...charityKeys.root(role),
-      'model-detail',
-      accountId,
-      trainee ? 'trainee' : 'full',
-      selectedId,
-    ],
+    queryKey: [...charityKeys.root(role), 'model-detail', accountId, selectedId],
     queryFn: ({ signal }) => getManagedCharityModel(role, selectedId, signal),
     retry: false,
     enabled: Boolean(selectedId),
@@ -1340,7 +1345,7 @@ export function ModelsPanel({
           ) : undefined
         }
         actions={
-          !trainee && !creating && !selectedId ? (
+          !creating && !selectedId ? (
             <button
               type="button"
               className="nb-btn nb-btn--primary"
@@ -1540,31 +1545,14 @@ export function ModelsPanel({
             </CharityModelScope>
           ) : selected ? (
             <fieldset className="ops-stack ops-unframed" disabled={detail.isFetching}>
-              {trainee ? (
-                <dl className="nb-kv">
-                  <CloudflareProxySummary
-                    enabled={selected.cloudflare_proxy_enabled}
-                    mode={selected.cloudflare_proxy_mode}
-                  />
-                </dl>
-              ) : null}
-              {trainee ? (
-                <CharityRolePolicyForm
-                  key={`roles:${selected.id}`}
-                  model={selected}
-                  refresh={refresh}
-                  onCapabilityLoss={onCapabilityLoss}
-                />
-              ) : (
-                <ModelForm
-                  key={`model:${selected.id}`}
-                  role={role}
-                  model={selected}
-                  refresh={refresh}
-                  onDeleted={() => setSelected('')}
-                  onCapabilityLoss={onCapabilityLoss}
-                />
-              )}
+              <ModelForm
+                key={`model:${selected.id}`}
+                role={role}
+                model={selected}
+                refresh={refresh}
+                onDeleted={() => setSelected('')}
+                onCapabilityLoss={onCapabilityLoss}
+              />
               <BindingsPanel
                 key={`bindings:${selected.id}`}
                 role={role}
@@ -1572,10 +1560,10 @@ export function ModelsPanel({
                 model={selected}
                 refresh={refresh}
                 onCapabilityLoss={onCapabilityLoss}
-                showAdaptation={!trainee}
+                showAdaptation
                 renderKeyManager={renderKeyManager}
               />
-              {trainee ? (
+              {role === 'steward' ? (
                 <CharityModelScope modelID={selected.id}>
                   {renderScopedKeys({ modelID: selected.id, accountId, onCapabilityLoss })}
                 </CharityModelScope>

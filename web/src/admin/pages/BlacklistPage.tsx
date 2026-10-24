@@ -99,6 +99,7 @@ export function BlacklistManagement({
   };
   const actorLabels = {
     admin: t('common.blacklist.actorAdmin'),
+    steward5: t('common.blacklist.actorSteward5'),
     steward6: t('common.blacklist.actorSteward'),
     automatic: t('common.blacklist.actorAutomatic'),
     unknown: t('common.blacklist.actorUnknown'),
@@ -381,6 +382,7 @@ export function BlacklistManagement({
                 <select value={kindDraft} onChange={(event) => setKindDraft(event.target.value)}>
                   <option value="">{t('common.blacklist.all')}</option>
                   <option value="admin">{actorLabels.admin}</option>
+                  <option value="steward5">{actorLabels.steward5}</option>
                   <option value="steward6">{actorLabels.steward6}</option>
                   <option value="automatic">{actorLabels.automatic}</option>
                   <option value="unknown">{actorLabels.unknown}</option>
