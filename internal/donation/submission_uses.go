@@ -70,6 +70,10 @@ func attachSubmissionUsesTx(ctx context.Context, tx *sql.Tx, ownerID int64, inpu
 		if (input.DiscoverySourceID == nil) != (input.DiscoverySourceRevision == nil) {
 			return ErrInvalidRequest
 		}
+		key.use.sourceRevisionID, err = connectionstore.ConfiguredDiscoverySourceRevisionTx(ctx, tx, grant)
+		if err != nil {
+			return connectionError(err)
+		}
 		if input.DiscoverySourceID != nil {
 			if *input.DiscoverySourceID <= 0 || *input.DiscoverySourceRevision <= 0 {
 				return ErrInvalidRequest

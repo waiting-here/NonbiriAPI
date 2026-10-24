@@ -1,0 +1,18 @@
+.connection-summary {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.connection-summary__text {
+  display: block;
+  min-inline-size: 0;
+  max-inline-size: min(32rem, calc(100vw - var(--nb-space-16)));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-summary__count {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}

@@ -8,6 +8,36 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Keep browser and steward time contexts in separate caches and preserve date
+  initialization when other fields change, so valid charity model forms remain
+  submittable.
+- Identify upgraded connections by their original endpoint note or hostname,
+  show endpoint context in lists and search all owned entry URLs and notes.
+  Clarify donation model setup and the separate System One protocol selection.
+- Load key credential and catalog editors only when opened, avoiding unnecessary
+  list requests while preserving unfinished edits when the panel is closed.
+- Restore model-list fetching for pending and approved donations without a
+  separate catalog-sharing permission, including existing unshared donations.
+  Reuse the configured catalog for the exact donated credential version or the
+  entry's standard model-list endpoint. Pending catalog reads do not grant
+  inference access. Preserve missing-resource errors without silently skipping them.
+- Restore whole-donation force rejection after per-service approval, including
+  partially approved submissions. Prevent legacy review actions from bypassing
+  the existing rejection safeguards or changing already approved uses.
+- Keep donation checkboxes, expiry fields and actions aligned on narrow and wide
+  screens. New mainstream donation drafts select available services by default,
+  while retaining the donor's manual exclusions. Remove the extra catalog-sharing
+  checkbox and pause-sharing action.
+- Apply mainstream catalog suggestions during normal credential authorization,
+  reusing an available catalog for the same credential version when possible.
+- Preserve each saved entry and its credential-authorization form when several
+  mainstream entries are created together.
+- Guide keys without a catalog to its configuration before attempting discovery.
+  Keep specific operation errors and recovery actions readable across the full
+  key table instead of squeezing them into the actions column.
+- Reuse existing manual model entries when importing or connecting models, so
+  reopening the workflow or retrying after a partial failure can complete the
+  model binding without a duplicate-entry conflict.
 - Index endpoint-key references in request logs, dispatch claims, report targets
   and donation keys so deleting a key avoids scanning unrelated history and
   holding up session loading and other writes. Existing deletion and retention
@@ -15,10 +45,16 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Storage
 
-- Fresh storage uses schema 34. Exact published schema 33 databases receive the
-  four indexes in one startup transaction with rollback on failure or cancellation.
-  The separate schema 16–26 converter targets the same schema; account export
-  remains 29.
+- Fresh storage uses schema 35. Exact published schema 33/34 databases receive
+  atomic startup upgrades: the four history indexes where needed, followed by
+  the donation catalog authorization trigger and catalog view. No table rebuild or data rewrite
+  is required. The separate schema 16–26 converter targets the same schema;
+  account export remains 29.
+
+### Security
+
+- Update DOMPurify to 3.4.17 and Vitest to 4.1.12, including its matching mocker
+  packages, to address the upstream sanitization and development-server advisories.
 
 ## 1.1.1 — 2026-10-23
 

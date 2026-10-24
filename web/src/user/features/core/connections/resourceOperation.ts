@@ -8,6 +8,7 @@ import {
   type ResourceStatus,
 } from '../resourceOperation';
 import { connectionAPI, connectionWrite, normalizeDiscoverySource, resourcePath } from './api';
+import { resolveSuggestedDiscovery } from './suggestedDiscovery';
 import type { Connection, Credential, DiscoverySource, DiscoverySourceInput } from './types';
 
 export type ConnectionIntent =
@@ -15,7 +16,12 @@ export type ConnectionIntent =
   | { kind: 'connection'; input: { name: string; note: string } }
   | { kind: 'credential'; connectionId: string; input: { note: string; ownership_confirmed: true } }
   | { kind: 'credential_version'; credentialId: string; expectedRevision: string }
-  | { kind: 'discovery_source'; connectionId: string; input: DiscoverySourceInput }
+  | {
+      kind: 'discovery_source';
+      connectionId: string;
+      input: DiscoverySourceInput;
+      suggestedCredentialVersion?: string;
+    }
   | { kind: 'source_refresh'; sourceId: string; expectedRevision: string };
 export type ConnectionResult =
   | ResourceResult
@@ -64,7 +70,15 @@ export async function executeConnection(
     case 'discovery_source':
       return {
         kind: intent.kind,
-        source: await connectionAPI.createSource(intent.connectionId, intent.input, key, signal),
+        source: intent.suggestedCredentialVersion
+          ? await resolveSuggestedDiscovery(
+              intent.connectionId,
+              intent.input,
+              intent.suggestedCredentialVersion,
+              key,
+              signal,
+            )
+          : await connectionAPI.createSource(intent.connectionId, intent.input, key, signal),
       };
     case 'source_refresh': {
       const source = await connectionWrite(

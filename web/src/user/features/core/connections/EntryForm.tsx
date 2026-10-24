@@ -1,14 +1,11 @@
-import { Link } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { SourceForm } from './SourceForm';
 import { PresetModels } from './PresetModels';
-import type { DiscoverySource } from './types';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NativeServicesField } from '@shared/components/NativeServicesField';
-import { Field, Fold, Note, Segmented } from '@shared/components/ui';
+import { Field, Note, Segmented } from '@shared/components/ui';
 import type { NativeService, RerankFormat } from '@shared/nativeServices';
-import type { NativeServiceOption } from '@shared/connections';
+import type { DiscoveryPreset, NativeServiceOption } from '@shared/connections';
 import { ConnectorLabel, CoreErrorPanel, CoreLoading } from '../components';
 import { CONNECTOR_COPY_KEYS, useCoreCopy } from '../copy';
 import { useEndpointCreateOptions } from '../queries';
@@ -45,7 +42,8 @@ export function EntryForm({
   const [selected, setSelected] = useState<Record<string, NativeService[]>>({});
   const [saved, setSaved] = useState<Record<string, Endpoint>>({});
   const [grants, setGrants] = useState<Record<string, EndpointKey>>({});
-  const [sources, setSources] = useState<Record<string, DiscoverySource>>({});
+  const [discoveryPresets, setDiscoveryPresets] = useState<Record<string, DiscoveryPreset>>({});
+  const activeDiscoveryPreset = useRef<DiscoveryPreset | null>(null);
   const active = useRef('custom');
   const nativeOptions = options.data?.native_service_options ?? [];
   const configurations = nativeOptions.filter(
@@ -59,7 +57,12 @@ export function EntryForm({
   );
   const operation = useConnectionOperation(accountId, (result) => {
     if (result.kind === 'endpoint') {
-      setSaved((current) => ({ ...current, [active.current]: result.endpoint }));
+      const row = active.current;
+      setSaved((current) => ({ ...current, [row]: result.endpoint }));
+      if (activeDiscoveryPreset.current) {
+        const preset = activeDiscoveryPreset.current;
+        setDiscoveryPresets((current) => ({ ...current, [result.endpoint.id]: preset }));
+      }
       onChanged?.();
     }
   });
@@ -108,6 +111,8 @@ export function EntryForm({
           }));
     for (const item of inputs) {
       active.current = item.row;
+      activeDiscoveryPreset.current =
+        mode === 'mainstream' && channel?.discovery_source ? { ...channel.discovery_source } : null;
       try {
         await operation.run({ kind: 'endpoint', input: item.input });
       } catch {
@@ -147,7 +152,10 @@ export function EntryForm({
       >
         {mode === 'custom' ? (
           <>
-            <Field label={t('common.connections.protocol')}>
+            <Field
+              label={t('common.connections.protocol')}
+              help={t('common.connections.protocolHelp')}
+            >
               {(props) => (
                 <select
                   {...props}
@@ -300,6 +308,7 @@ export function EntryForm({
             accountId={accountId}
             connectionId={connectionId}
             endpoint={endpoint}
+            discoveryPreset={discoveryPresets[endpoint.id]}
             onSaved={(key) => setGrants((previous) => ({ ...previous, [endpoint.id]: key }))}
           />
           {key === 'custom' ? (
@@ -321,34 +330,6 @@ export function EntryForm({
           ) : null}
         </section>
       ))}
-      {mode === 'mainstream' && channel?.discovery_source ? (
-        <Fold title={t('common.connections.adoptDiscoverySuggestion')} lazy>
-          {sources[channel.id] ? (
-            <Note tone="ok">
-              <Link
-                to={
-                  '/endpoints?connection_id=' +
-                  encodeURIComponent(connectionId) +
-                  '&connection_view=discovery&discovery_source_id=' +
-                  encodeURIComponent(sources[channel.id]!.id)
-                }
-              >
-                {t('common.connections.manageSource')}
-              </Link>
-            </Note>
-          ) : (
-            <SourceForm
-              key={channel.id}
-              accountId={accountId}
-              connectionId={connectionId}
-              preset={channel.discovery_source}
-              onSaved={(source) =>
-                setSources((previous) => ({ ...previous, [channel.id]: source }))
-              }
-            />
-          )}
-        </Fold>
-      ) : null}
       {mode === 'mainstream' && channel?.model_mappings?.length ? (
         <PresetModels
           accountId={accountId}

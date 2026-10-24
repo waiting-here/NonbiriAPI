@@ -13,6 +13,7 @@ import { ConnectionResourceList, connectionKeys } from './ResourceList';
 import { connectionAPI } from './api';
 import { ConnectionCreateForm } from './ConnectionForm';
 import { ConnectionEditor } from './ConnectionEditor';
+import { ConnectionSummary } from './ConnectionSummary';
 import { EntryForm } from './EntryForm';
 import { CredentialsPanel } from './CredentialsPanel';
 import { DiscoveryPanel } from './DiscoveryPanel';
@@ -103,14 +104,17 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
             header: t('common.connections.name'),
             cell: 'title',
             render: (row) => (
-              <Link to={connectionURL(location.search, row.id)}>
-                <strong>{row.name}</strong>
-              </Link>
+              <ConnectionSummary
+                connection={row}
+                to={connectionURL(location.search, row.id)}
+                showEntryCount={false}
+              />
             ),
           },
           {
             key: 'entries',
             header: t('common.connections.entries'),
+            mobileLabel: t('common.connections.entries'),
             cell: 'meta',
             align: 'num',
             render: (row) => formatCount(row.entry_count).display,
@@ -118,6 +122,7 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
           {
             key: 'credentials',
             header: t('common.connections.credentials'),
+            mobileLabel: t('common.connections.credentials'),
             cell: 'meta',
             align: 'num',
             render: (row) => formatCount(row.credential_count).display,
@@ -182,7 +187,7 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
   return (
     <div className="page core-page core-stack services-detail">
       <PageHeader
-        title={connection.data.name}
+        title={connection.data.display_name}
         description={connection.data.note}
         back={<Link to={back}>{t('common.connections.backToConnections')}</Link>}
         actions={

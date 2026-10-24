@@ -853,6 +853,17 @@
 .services-key-table .core-key-panels .nb-inline {
   justify-content: flex-start;
 }
+.services-key-table .core-key-feedback > td {
+  grid-column: 1 / -1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.services-key-table .core-key-feedback .core-state,
+.services-key-table .core-key-feedback .nb-note {
+  min-width: 0;
+  max-width: 100%;
+}
 .services-model-list {
   list-style: none;
   padding: 0;

@@ -1,7 +1,7 @@
 # Prepare existing storage
 
-The server creates fresh schema 34 databases and opens current schema 34. Exact
-published schema 33 receives an atomic index upgrade during normal startup.
+The server creates fresh schema 35 databases and opens current schema 35. Exact
+published schema 33/34 receives an atomic upgrade during normal startup.
 `nonbiri-upgrade-v1` is the separate, one-time offline converter for the following
 exact source structures:
 
@@ -21,13 +21,13 @@ exact source structures:
 
 The machine-readable descriptor is authoritative for these exact source commits
 and their pinned manifest hashes. All supported sources convert atomically to
-schema 34. Unreleased intermediate layouts are not supported sources.
+schema 35. Unreleased intermediate layouts are not supported sources.
 
 The executable that last used a database may differ from the listed commit if
 its stored application identity, generation, schema version and complete
 structure match. Unknown or modified structures are rejected. The server does
 not import the converter or its historical DDL; it only retains the exact schema
-33 manifest and index-only startup step.
+33/34 manifests and their small startup migrations.
 
 Build the converter from the same reviewed source as the target server:
 
@@ -114,7 +114,7 @@ conversion, remove the retired Gateway variable and `NONBIRI_SMTP_HOST`,
 `NONBIRI_SMTP_FROM` and `NONBIRI_SMTP_TLS` from the deployment environment.
 
 The [rc.7 command](../nonbiri-upgrade-rc7/README.md) remains a narrow wrapper
-accepting schema 16 and current schema 34. Both commands use one engine.
+accepting schema 16 and current schema 35. Both commands use one engine.
 `scripts/check-upgrade.sh` creates a populated synthetic source with the pinned
 rc.7 program, converts it, compares retained facts and resumes economy checks.
 The offline suite also covers the registered schema 17–26 fixtures. No

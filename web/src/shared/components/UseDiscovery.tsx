@@ -59,7 +59,8 @@ export function UseDiscovery({
     },
     root,
   );
-  const current = query.data ?? evidence ?? row.approved?.discovery;
+  const current =
+    query.data ?? evidence ?? (row.pending ? row.pending.discovery : row.approved?.discovery);
   return (
     <div className="nb-stack nb-stack--sm">
       <button

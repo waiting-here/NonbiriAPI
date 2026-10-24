@@ -73,14 +73,18 @@ func (s *Service) AuthorizeManagedDiscovery(ctx context.Context, tx *sql.Tx, rol
 		return target, err
 	}
 	use := selected.Use
-	source, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: target.OwnerUserID, SourceID: selected.SourceID, Purpose: connectionstore.SourceCharity, DonationUseID: use.UseID})
+	if use.DiscoverySourceRevisionID == 0 {
+		target.UseID, target.UseRevision, target.CredentialVersionID, target.ApprovedRevisionID = use.UseID, use.UseRevision, use.Grant.CredentialVersionID, use.RevisionID
+		return target, nil
+	}
+	source, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: target.OwnerUserID, SourceID: selected.SourceID, Purpose: connectionstore.SourceCharity, DonationUseID: use.UseID, UseRevisionID: use.RevisionID})
 	if errors.Is(err, connectionstore.ErrNotFound) || errors.Is(err, connectionstore.ErrUnavailable) {
 		return target, resources.ErrResourceLocked
 	}
 	if err != nil {
 		return target, resources.ErrUnavailable
 	}
-	target.UseID, target.UseRevision, target.SourceID, target.SourceRevisionID, target.CredentialVersionID, target.ApprovedRevisionID = use.UseID, use.UseRevision, source.SourceID, source.SourceRevisionID, source.CredentialVersionID, use.ApprovedRevisionID
+	target.UseID, target.UseRevision, target.SourceID, target.SourceRevisionID, target.CredentialVersionID, target.ApprovedRevisionID = use.UseID, use.UseRevision, source.SourceID, source.SourceRevisionID, source.CredentialVersionID, use.RevisionID
 	return target, nil
 }
 

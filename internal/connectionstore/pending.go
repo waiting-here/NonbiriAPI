@@ -49,6 +49,12 @@ func StagePendingUseRevisionTx(ctx context.Context, tx *sql.Tx, in StagePendingU
 	if grant.EndpointKeyID != keyID || grant.OwnerUserID != ownerID || grant.SecretRefID <= 0 || serviceBit <= 0 || serviceBit&(serviceBit-1) != 0 || grant.GrantedServices.Mask()&serviceBit != serviceBit {
 		return UseRevisionIdentity{}, ErrUnavailable
 	}
+	if in.DiscoverySourceRevisionID == nil {
+		in.DiscoverySourceRevisionID, err = ConfiguredDiscoverySourceRevisionTx(ctx, tx, grant)
+		if err != nil {
+			return UseRevisionIdentity{}, err
+		}
+	}
 	if in.DiscoverySourceRevisionID != nil {
 		var sourceOwner, sourceCredential, sourceVersion int64
 		var relationshipValid int

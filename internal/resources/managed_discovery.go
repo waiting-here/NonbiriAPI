@@ -65,6 +65,9 @@ func (r *Repository) managedDiscoveryEvidence(ctx context.Context, role string, 
 	if err != nil {
 		return DiscoveryEvidence{}, err
 	}
+	if target.SourceRevisionID == 0 {
+		return DiscoveryEvidence{State: "unknown", Revision: "1", SafeClass: "none"}, nil
+	}
 	row, err := discoveryEvidenceForRevisionTx(ctx, tx, target.SourceRevisionID)
 	if err != nil {
 		return DiscoveryEvidence{}, err

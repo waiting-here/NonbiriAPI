@@ -703,11 +703,11 @@ describe('experimental policy and charity controls', () => {
       ),
       '50',
     );
-    await rendered.user.click(
-      within(screen.getByRole('region', { name: 'Edit note and limits' })).getByRole('button', {
-        name: 'Save',
-      }),
-    );
+    const limitsForm = within(screen.getByRole('region', { name: 'Edit note and limits' }))
+      .getByLabelText('Maximum concurrency')
+      .closest('form');
+    if (!limitsForm) throw new Error('Endpoint key limits form not found');
+    await rendered.user.click(within(limitsForm).getByRole('button', { name: 'Save' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'PATCH', '/api/endpoints/1/keys/2')).toEqual({
         note: coreEndpointKey.note,

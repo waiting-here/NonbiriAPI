@@ -222,3 +222,141 @@ func TestAccountCleanupRetiresUnreferencedVersions(t *testing.T) {
 	}
 	execConnection(t, tx, "DELETE FROM users WHERE id=1")
 }
+
+func TestDiscoveryUsesKeepPendingAndApprovedVersionsSeparate(t *testing.T) {
+	_, tx := connectionFixture(t)
+	ctx := t.Context()
+	seedApprovedUse(t, tx, false)
+	old, err := connectionstore.LoadDiscoveryUseTx(ctx, tx, 1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldSource, err := connectionstore.EnsureDiscoverySourceTx(ctx, tx, old, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotateSelf(t, tx)
+	execConnection(t, tx, "INSERT INTO discovery_sources(id,user_id,current_revision_id,created_at,updated_at) VALUES(2,1,2,3,3)")
+	execConnection(t, tx, `INSERT INTO discovery_source_revisions(id,source_id,owner_user_id,source_revision,credential_id,credential_version_id,canonical_base_url,list_format,created_at)
+ VALUES(2,2,1,1,1,2,'https://catalog.example/special','anthropic',3)`)
+	execConnection(t, tx, "INSERT INTO discovery_source_states(source_revision_id,result_generation,updated_at) VALUES(2,1,3)")
+	execConnection(t, tx, "INSERT INTO endpoint_key_discovery_sources(endpoint_key_id,source_id,grant_revision_id,source_revision_id,credential_version_id) VALUES(1,2,2,2,2)")
+	staged, err := connectionstore.StagePendingUseRevisionTx(ctx, tx, connectionstore.StagePendingUseRevisionInput{UseID: 1, ExpectedRevision: 2, GrantRevisionID: 2, Origin: connectionstore.UseOriginRotation, At: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	execConnection(t, tx, "UPDATE donation_uses SET discovery_enabled=0,revision=revision+1 WHERE id=1")
+	pending, err := connectionstore.LoadDiscoveryUseTx(ctx, tx, 1, 0)
+	if err != nil || pending.RevisionID != staged.RevisionID || pending.Grant.CredentialVersion != 2 || pending.DiscoverySourceRevisionID != 2 {
+		t.Fatalf("pending: %+v %v", pending, err)
+	}
+	source, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: 1, SourceID: 2, Purpose: connectionstore.SourceCharity, DonationUseID: 1, UseRevisionID: pending.RevisionID})
+	if err != nil || source.CredentialVersion != 2 || source.CanonicalBaseURL != "https://catalog.example/special" || source.ListFormat != "anthropic" {
+		t.Fatalf("configured source: %+v %v", source, err)
+	}
+	approved, err := connectionstore.LoadApprovedUseTx(ctx, tx, 1, connectorcontract.NativeServiceChatCompletions)
+	if err != nil || approved.Grant.CredentialVersion != 1 {
+		t.Fatalf("inference changed: %+v %v", approved, err)
+	}
+	old, err = connectionstore.LoadDiscoveryUseTx(ctx, tx, 1, approved.ApprovedRevisionID)
+	if err != nil || old.DiscoverySourceRevisionID != oldSource || old.Grant.CredentialVersion != 1 {
+		t.Fatalf("approved catalog borrowed current version: %+v %v", old, err)
+	}
+	if _, err = connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: 1, SourceID: 2, Purpose: connectionstore.SourceCharity, DonationUseID: 1, UseRevisionID: approved.ApprovedRevisionID}); !errors.Is(err, connectionstore.ErrUnavailable) {
+		t.Fatalf("wrong-version source accepted: %v", err)
+	}
+	next, err := connectionstore.StagePendingUseRevisionTx(ctx, tx, connectionstore.StagePendingUseRevisionInput{UseID: 1, ExpectedRevision: staged.UseRevision + 1, GrantRevisionID: 2, Origin: connectionstore.UseOriginRotation, At: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = connectionstore.LoadDiscoveryUseTx(ctx, tx, 1, pending.RevisionID); !errors.Is(err, connectionstore.ErrUnavailable) {
+		t.Fatalf("superseded revision accepted: %v", err)
+	}
+	execConnection(t, tx, "UPDATE discovery_sources SET enabled=0,revision=revision+1 WHERE id=2")
+	if _, err = connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: 1, SourceID: 2, Purpose: connectionstore.SourceCharity, DonationUseID: 1, UseRevisionID: next.RevisionID}); !errors.Is(err, connectionstore.ErrUnavailable) {
+		t.Fatalf("disabled configured source accepted: %v", err)
+	}
+}
+
+func TestUnpinnedApprovedCatalogRetainsConfiguredSourceAcrossRotation(t *testing.T) {
+	_, tx := connectionFixture(t)
+	ctx := t.Context()
+	seedApprovedUse(t, tx, false)
+	execConnection(t, tx, "INSERT INTO discovery_sources(id,user_id,current_revision_id,created_at,updated_at) VALUES(1,1,1,1,1)")
+	execConnection(t, tx, `INSERT INTO discovery_source_revisions(id,source_id,owner_user_id,source_revision,credential_id,credential_version_id,canonical_base_url,list_format,created_at)
+ VALUES(1,1,1,1,1,1,'https://catalog.example/special-v1','openai',1)`)
+	execConnection(t, tx, "INSERT INTO discovery_source_states(source_revision_id,result_generation,updated_at) VALUES(1,1,1)")
+	execConnection(t, tx, "INSERT INTO endpoint_key_discovery_sources(endpoint_key_id,source_id,grant_revision_id,source_revision_id,credential_version_id) VALUES(1,1,1,1,1)")
+	rotateSelf(t, tx)
+	execConnection(t, tx, `INSERT INTO discovery_source_revisions(id,source_id,owner_user_id,source_revision,credential_id,credential_version_id,canonical_base_url,list_format,created_at)
+ VALUES(2,1,1,2,1,2,'https://catalog.example/special-v2','openai',3)`)
+	execConnection(t, tx, "INSERT INTO discovery_source_states(source_revision_id,result_generation,updated_at) VALUES(2,1,3)")
+	execConnection(t, tx, "UPDATE discovery_sources SET current_revision_id=2,revision=revision+1,updated_at=3 WHERE id=1")
+	execConnection(t, tx, "UPDATE endpoint_key_discovery_sources SET grant_revision_id=2,credential_version_id=2,source_revision_id=2 WHERE endpoint_key_id=1")
+	staged, err := connectionstore.StagePendingUseRevisionTx(ctx, tx, connectionstore.StagePendingUseRevisionInput{UseID: 1, ExpectedRevision: 2, GrantRevisionID: 2, Origin: connectionstore.UseOriginRotation, At: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: 1, SourceID: 1, Purpose: connectionstore.SourceCharity, DonationUseID: 1, UseRevisionID: 1})
+	if err != nil || old.CredentialVersion != 1 || old.SourceRevisionID != 1 || old.CanonicalBaseURL != "https://catalog.example/special-v1" {
+		t.Fatalf("lost configured historical catalog: %+v %v", old, err)
+	}
+	current, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: 1, SourceID: 1, Purpose: connectionstore.SourceCharity, DonationUseID: 1, UseRevisionID: staged.RevisionID})
+	if err != nil || current.CredentialVersion != 2 || current.SourceRevisionID != 2 || current.CanonicalBaseURL != "https://catalog.example/special-v2" {
+		t.Fatalf("pending catalog: %+v %v", current, err)
+	}
+}
+
+func TestUnpinnedApprovedCatalogRetainsStandardSourceAcrossRotation(t *testing.T) {
+	_, tx := connectionFixture(t)
+	ctx := t.Context()
+	seedApprovedUse(t, tx, false)
+	use, err := connectionstore.LoadDiscoveryUseTx(ctx, tx, 1, 0)
+	if err != nil || use.DiscoverySourceRevisionID != 0 {
+		t.Fatalf("unexpected initial catalog: %+v %v", use, err)
+	}
+	oldSourceRevision, err := connectionstore.EnsureDiscoverySourceTx(ctx, tx, use, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sourceID int64
+	if err := tx.QueryRow("SELECT source_id FROM discovery_source_revisions WHERE id=?", oldSourceRevision).Scan(&sourceID); err != nil {
+		t.Fatal(err)
+	}
+	run := execConnection(t, tx, "INSERT INTO discovery_runs(source_revision_id,source_revision_snapshot,credential_version_id,result_generation,authorization_kind,authorization_use_id,authorization_use_revision_id,state,started_at,completed_at,model_count) VALUES(?,1,1,2,'donation_use',1,1,'succeeded',2,2,1)", oldSourceRevision)
+	runID, err := run.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	execConnection(t, tx, "UPDATE discovery_source_states SET result_generation=2,current_run_id=?,last_successful_run_id=?,updated_at=2 WHERE source_revision_id=?", runID, runID, oldSourceRevision)
+	execConnection(t, tx, "INSERT INTO model_catalog_entries(discovery_run_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at,native_service_mask) VALUES(?,'automatic','2:0','old-model','',2,2,2,1)", runID)
+	assertCatalog := func() {
+		t.Helper()
+		var supports, generation int64
+		if err := tx.QueryRow("SELECT automatic_supports,automatic_revision FROM charity_model_catalog WHERE donation_key_id=1 AND normalized_model_id='old-model'").Scan(&supports, &generation); err != nil || supports != 1 || generation != 2 {
+			t.Fatalf("approved catalog lost successful result: supports=%d generation=%d err=%v", supports, generation, err)
+		}
+	}
+	assertCatalog()
+	rotateSelf(t, tx)
+	execConnection(t, tx, "INSERT INTO discovery_source_revisions(id,source_id,owner_user_id,source_revision,credential_id,credential_version_id,canonical_base_url,list_format,created_at) VALUES(?,?,1,2,1,2,'https://upstream.example/v1','openai',3)", oldSourceRevision+1, sourceID)
+	execConnection(t, tx, "INSERT INTO discovery_source_states(source_revision_id,result_generation,updated_at) VALUES(?,1,3)", oldSourceRevision+1)
+	execConnection(t, tx, "UPDATE discovery_sources SET current_revision_id=?,revision=revision+1,updated_at=3 WHERE id=?", oldSourceRevision+1, sourceID)
+	staged, err := connectionstore.StagePendingUseRevisionTx(ctx, tx, connectionstore.StagePendingUseRevisionInput{UseID: 1, ExpectedRevision: 2, GrantRevisionID: 2, Origin: connectionstore.UseOriginRotation, At: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: 1, SourceID: sourceID, Purpose: connectionstore.SourceCharity, DonationUseID: 1, UseRevisionID: 1})
+	if err != nil || old.SourceRevisionID != oldSourceRevision || old.CredentialVersion != 1 || old.SecretRefID != 1 {
+		t.Fatalf("standard catalog borrowed current credential: %+v %v", old, err)
+	}
+	current, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: 1, SourceID: sourceID, Purpose: connectionstore.SourceCharity, DonationUseID: 1, UseRevisionID: staged.RevisionID})
+	if err != nil || current.SourceRevisionID != oldSourceRevision+1 || current.CredentialVersion != 2 {
+		t.Fatalf("pending standard catalog: %+v %v", current, err)
+	}
+	assertCatalog()
+	execConnection(t, tx, "UPDATE discovery_sources SET enabled=0,revision=revision+1 WHERE id=?", sourceID)
+	if _, err := connectionstore.LoadDiscoveryAuthorizationTx(ctx, tx, connectionstore.SourceAuthorizationRef{OwnerUserID: 1, SourceID: sourceID, Purpose: connectionstore.SourceCharity, DonationUseID: 1, UseRevisionID: 1}); !errors.Is(err, connectionstore.ErrUnavailable) {
+		t.Fatalf("disabled historical source accepted: %v", err)
+	}
+}

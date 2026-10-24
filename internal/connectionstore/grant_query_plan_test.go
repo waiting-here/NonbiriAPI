@@ -31,6 +31,8 @@ func TestGrantQueriesBoundAuthorizationMaterialization(t *testing.T) {
 	}{
 		{"self", selfGrantsQuery("?,?"), []any{1, 2, 1, 1, 2}},
 		{"approved", approvedUsesQuery("?,?", ""), []any{1, 2, 1, 2}},
+		{"catalog pending", discoveryUsesQuery("?,?", false), []any{1, 2, 1, 2}},
+		{"catalog approved", discoveryUsesQuery("?,?", true), []any{1, 2, 1, 2}},
 		{"approved service", approvedUsesQuery("?,?", " AND u.native_service_bit=?"), []any{1, 2, 1, 2, 1}},
 	} {
 		t.Run(test.name, func(t *testing.T) {

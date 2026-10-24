@@ -58,6 +58,7 @@ type SourceAuthorizationRef struct {
 	SourceID      int64         `json:"-"`
 	Purpose       SourcePurpose `json:"-"`
 	DonationUseID int64         `json:"-"`
+	UseRevisionID int64         `json:"-"`
 }
 
 type SourceAuthorization struct {

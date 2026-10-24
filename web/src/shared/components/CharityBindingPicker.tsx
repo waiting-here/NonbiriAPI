@@ -889,7 +889,11 @@ function CharityBindingPickerBody({
                     role={role}
                     target={{ donation_id: selectedKey.donation_id, key_id: selectedKey.key_id }}
                     buttonLabel={t('common.operations.charity.refetchModels')}
-                    disabled={locked || !canRead || selectedKey.charity_state !== 'available'}
+                    disabled={
+                      locked ||
+                      !canRead ||
+                      !(selectedKey.can_manage ?? selectedKey.charity_state === 'available')
+                    }
                     onCapabilityLoss={onCapabilityLoss}
                   />
                 ) : null}

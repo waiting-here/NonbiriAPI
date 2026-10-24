@@ -11,7 +11,7 @@ import (
 )
 
 type ApprovedDiscoveryUse struct {
-	Use      connectionstore.UseAuthorization
+	Use      connectionstore.DiscoveryUseAuthorization
 	SourceID int64
 }
 
@@ -24,16 +24,20 @@ type discoveryChoice struct {
 // exact source revision and credential version. Caller permissions and the
 // donation's shared admission gates remain the responsibility of its caller.
 func SelectApprovedDiscoveryUseTx(ctx context.Context, tx *sql.Tx, keyID, now int64) (ApprovedDiscoveryUse, error) {
-	choices, err := readDiscoveryChoicesTx(ctx, tx, []int64{keyID}, now)
+	choices, err := readDiscoveryChoicesModeTx(ctx, tx, []int64{keyID}, now, true)
 	if err != nil {
 		return ApprovedDiscoveryUse{}, err
 	}
 	return chooseDiscoveryUse(choices[keyID], resources.ManagedDiscoverySelection{}, true)
 }
 
-// Both the bounded selection page and dispatch authorization use these exact
-// approved sources. Each batch uses two reads, never one read per member/use.
+// Selection and dispatch use the same bounded catalog, grant, and health reads.
+// No query is issued per member or per use.
 func readDiscoveryChoicesTx(ctx context.Context, tx *sql.Tx, keys []int64, now int64) (map[int64][]discoveryChoice, error) {
+	return readDiscoveryChoicesModeTx(ctx, tx, keys, now, false)
+}
+
+func readDiscoveryChoicesModeTx(ctx context.Context, tx *sql.Tx, keys []int64, now int64, approvedOnly bool) (map[int64][]discoveryChoice, error) {
 	out := make(map[int64][]discoveryChoice)
 	if len(keys) == 0 {
 		return out, nil
@@ -41,52 +45,103 @@ func readDiscoveryChoicesTx(ctx context.Context, tx *sql.Tx, keys []int64, now i
 	if len(keys) > 512 {
 		return nil, ErrInvalidRequest
 	}
-	approved, err := connectionstore.LoadApprovedUsesTx(ctx, tx, keys)
+	approved, err := connectionstore.LoadDiscoveryUsesTx(ctx, tx, keys, approvedOnly)
 	if err != nil {
 		return nil, err
 	}
-	byID := make(map[int64]connectionstore.UseAuthorization)
+	byID := make(map[int64]connectionstore.DiscoveryUseAuthorization)
 	for _, uses := range approved {
 		for _, use := range uses {
 			byID[use.UseID] = use
 		}
 	}
-	args := []any{now, now}
-	for _, key := range keys {
-		args = append(args, key)
+	sourceIDs := make([]any, 0, len(byID))
+	useIDs := make([]any, 0, len(byID))
+	for _, use := range byID {
+		useIDs = append(useIDs, use.UseID)
+		if use.DiscoverySourceRevisionID > 0 {
+			sourceIDs = append(sourceIDs, use.DiscoverySourceRevisionID)
+		}
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT du.donation_key_id,du.id,ur.id,sa.source_id,sa.source_revision_id,
-sa.owner_user_id,sa.credential_id,sa.credential_version_id,sa.credential_version,sa.relationship_valid,sa.available,
-COALESCE(h.failure_disabled,0)=0 AND COALESCE(h.retry_after_until,0)<=? AND COALESCE((`+smartbackoff.ServiceUntilSQL("h")+`),0)<=?
-FROM charity_use_availability av JOIN donation_uses du ON du.id=av.use_id
-JOIN donation_use_revisions ur ON ur.id=du.current_approved_revision_id AND ur.use_id=du.id
-JOIN discovery_source_authorizations sa ON sa.source_revision_id=ur.discovery_source_revision_id
-LEFT JOIN donation_service_health h ON h.use_id=du.id AND h.endpoint_key_id=(SELECT endpoint_key_id FROM donation_keys WHERE id=du.donation_key_id)
-AND h.native_service_bit=av.native_service_bit AND h.credential_version_id=av.credential_version_id
-WHERE du.discovery_enabled=1 AND du.donation_key_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(keys)), ",")+`)
-ORDER BY du.donation_key_id,du.native_service_bit`, args...)
+	if len(useIDs) == 0 {
+		return out, nil
+	}
+	health := make(map[int64]bool)
+	args := append([]any{now, now}, useIDs...)
+	rows, err := tx.QueryContext(ctx, `SELECT h.use_id,h.credential_version_id,
+ h.failure_disabled=0 AND COALESCE(h.retry_after_until,0)<=? AND COALESCE((`+smartbackoff.ServiceUntilSQL("h")+`),0)<=?
+ FROM donation_service_health h WHERE h.use_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(useIDs)), ",")+`)`, args...)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	for rows.Next() {
-		var key, useID, approvedID, sourceID, sourceRevisionID, owner, credential, versionID, version int64
-		var relation, available int
+		var useID, versionID int64
 		var healthy bool
-		if err := rows.Scan(&key, &useID, &approvedID, &sourceID, &sourceRevisionID, &owner, &credential, &versionID, &version, &relation, &available, &healthy); err != nil {
+		if err := rows.Scan(&useID, &versionID, &healthy); err != nil {
+			rows.Close()
 			return nil, err
 		}
-		use, ok := byID[useID]
-		if !ok || relation != 1 || available < 0 || available > 1 || sourceID <= 0 || !use.DiscoveryEnabled ||
-			use.ApprovedRevisionID != approvedID || use.DiscoverySourceRevisionID != sourceRevisionID ||
-			use.Grant.OwnerUserID != owner || use.Grant.CredentialID != credential || use.Grant.CredentialVersionID != versionID || use.Grant.CredentialVersion != version {
-			return nil, ErrInvariant
-		}
-		if available == 1 {
-			out[key] = append(out[key], discoveryChoice{ApprovedDiscoveryUse: ApprovedDiscoveryUse{Use: use, SourceID: sourceID}, healthy: healthy})
+		if use, ok := byID[useID]; ok && use.Grant.CredentialVersionID == versionID {
+			health[useID] = healthy
 		}
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	type catalog struct {
+		id, owner, credential, versionID, version int64
+		available                                 bool
+	}
+	sources := make(map[int64]catalog)
+	if len(sourceIDs) > 0 {
+		rows, err = tx.QueryContext(ctx, `SELECT source_revision_id,source_id,owner_user_id,credential_id,credential_version_id,credential_version,relationship_valid,available
+ FROM discovery_source_authorizations WHERE source_revision_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(sourceIDs)), ",")+`)`, sourceIDs...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var revision int64
+			var source catalog
+			var relation int
+			if err := rows.Scan(&revision, &source.id, &source.owner, &source.credential, &source.versionID, &source.version, &relation, &source.available); err != nil {
+				return nil, err
+			}
+			if relation != 1 {
+				return nil, ErrInvariant
+			}
+			sources[revision] = source
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+	for key, uses := range approved {
+		for _, use := range uses {
+			healthy, exists := health[use.UseID]
+			if !exists {
+				healthy = true
+			}
+			if use.DiscoverySourceRevisionID == 0 {
+				if connectionstore.DefaultDiscoveryFormat(use.Grant.ConfiguredType) != "" {
+					out[key] = append(out[key], discoveryChoice{ApprovedDiscoveryUse: ApprovedDiscoveryUse{Use: use}, healthy: healthy})
+				}
+				continue
+			}
+			source, ok := sources[use.DiscoverySourceRevisionID]
+			if !ok || source.owner != use.Grant.OwnerUserID || source.credential != use.Grant.CredentialID || source.versionID != use.Grant.CredentialVersionID || source.version != use.Grant.CredentialVersion {
+				return nil, ErrInvariant
+			}
+			if source.available {
+				out[key] = append(out[key], discoveryChoice{ApprovedDiscoveryUse: ApprovedDiscoveryUse{Use: use, SourceID: source.id}, healthy: healthy})
+			}
+		}
+	}
+	return out, nil
 }
 
 func chooseDiscoveryUse(choices []discoveryChoice, selection resources.ManagedDiscoverySelection, requireHealthy bool) (ApprovedDiscoveryUse, error) {

@@ -52,7 +52,9 @@ export const browserTimeContext = (): TimeContext => ({ mode: 'browser', offset_
 export const timeContextQueryKey = (station: TimeStation) =>
   station === 'admin'
     ? (['admin', 'time-context'] as const)
-    : (['user', 'steward', 'time-context'] as const);
+    : station === 'steward'
+      ? (['user', 'steward', 'time-context'] as const)
+      : (['user', 'time-context'] as const);
 
 export function fixedOffsetZone(offsetMinutes: number): string {
   if (

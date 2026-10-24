@@ -196,23 +196,26 @@
   margin-top: 0.1rem;
 }
 
+.donation-selected-chip {
+  align-items: flex-start;
+}
+
+.donation-selected-chip > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .economy-key-expiry {
   display: grid;
-  grid-template-columns: minmax(8rem, auto) minmax(0, 1fr);
-  gap: var(--nb-space-1) var(--nb-space-3);
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--nb-space-4);
   margin-top: var(--nb-space-2);
   border-left: 0.2rem solid var(--nb-color-border-strong);
   padding-left: var(--nb-space-3);
 }
 
-.economy-key-expiry input {
+.economy-key-expiry .time-input-field {
   min-width: 0;
-  width: 100%;
-}
-
-.economy-key-expiry small {
-  grid-column: 2;
 }
 
 .economy-disclosure,
@@ -396,14 +399,6 @@
 
   .economy-status-stack {
     justify-content: flex-start;
-  }
-
-  .economy-key-expiry {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .economy-key-expiry small {
-    grid-column: auto;
   }
 
   .economy-countdown {

@@ -2265,10 +2265,11 @@
         "status": "状态",
         "chooseKeys": "选择要捐赠的密钥",
         "chooseKeysHelp": "从我的服务中选择密钥，可同时设置到期时间。",
+        "modelSetupHelp": "选择密钥和共享服务后即可提交；管理员或协管审核并完成公益模型的命名与绑定。",
         "openPicker": "选择密钥…",
         "selectionDone": "完成选择",
         "removeKey": "移除 {{name}}",
-        "descriptionHelp": "说明会公开显示。不要写入密钥。",
+        "descriptionHelp": "说明公开显示，请勿填写密钥。无法获取模型目录时，可在这里附上模型 ID。",
         "selectedCount": "已选 {{count}} 把密钥",
         "donationCredit": "捐赠回馈积分",
         "keyFacts": "{{total}} 把密钥 · {{available}} 可用",
@@ -3599,6 +3600,9 @@
       "statuses": "至少一项成功返回 200；全部已确认失败返回 422；没有成功且仍有未完成项返回 504。不同内容共用同一 key 返回 409。"
     },
     "services": {
+      "chooseCatalog": "选择模型目录",
+      "catalogRequired": "先为这把密钥选择模型目录，再读取可用模型。你也可以手动添加模型。",
+      "catalogConnectionRequired": "先将此服务移入一个连接，再为密钥选择模型目录。你也可以手动添加模型。",
       "filters": "筛选",
       "removeFilter": "移除{{label}}筛选",
       "more": "更多操作",

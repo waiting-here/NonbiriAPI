@@ -6,6 +6,7 @@ import { listEndpointKeysPage } from '../pageApi';
 import { readEndpointKey } from '../resourceOperation';
 import type { Endpoint, EndpointKey } from '../types';
 import { ConnectionResourceList } from './ResourceList';
+import { ConnectionSummary } from './ConnectionSummary';
 import { connectionAPI, resourcePath } from './api';
 import { useMetadataOperation } from './useMetadataOperation';
 import { ConnectionOperationNotice } from './OperationNotice';
@@ -39,7 +40,7 @@ export function SourceAssociations({
               key: 'name',
               cell: 'title',
               header: t('common.connections.name'),
-              render: (row) => row.name,
+              render: (row) => <ConnectionSummary connection={row} />,
             },
             {
               key: 'select',

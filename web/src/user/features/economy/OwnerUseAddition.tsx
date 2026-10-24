@@ -97,15 +97,25 @@ function AdditionDraft({
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const [snapshot, setSnapshot] = useState(current);
-  const [expected, setExpected] = useState(donationRevision);
-  const [share, setShare] = useState<DonationShare>({ services: [] });
-  const [versions, setVersions] = useState<Partial<Record<NativeService, string | null>>>({});
-  const [done, setDone] = useState(false);
   const byService = new Map(uses.map((row) => [row.native_service, row]));
   const available = (current.native_services ?? []).filter(
     (service) => !byService.get(service)?.pending && !byService.get(service)?.approved,
   );
+  const mainstream = donationKey.source.kind === 'mainstream';
+  const [snapshot, setSnapshot] = useState(current);
+  const [expected, setExpected] = useState(donationRevision);
+  const [share, setShare] = useState<DonationShare>(() => ({
+    services: mainstream ? available.slice() : [],
+  }));
+  const [versions, setVersions] = useState<Partial<Record<NativeService, string | null>>>(() =>
+    Object.fromEntries(
+      (mainstream ? available : []).map((service) => [
+        service,
+        byService.get(service)?.revision ?? null,
+      ]),
+    ),
+  );
+  const [done, setDone] = useState(false);
   const snapshotChanged =
     snapshot.credential_id !== current.credential_id ||
     snapshot.credential_version !== current.credential_version ||
@@ -175,8 +185,17 @@ function AdditionDraft({
             onClick={() => {
               adopt();
               setDone(false);
-              setShare({ services: [] });
-              setVersions({});
+              setShare({
+                services: mainstream ? available.slice() : [],
+              });
+              setVersions(
+                Object.fromEntries(
+                  (mainstream ? available : []).map((service) => [
+                    service,
+                    byService.get(service)?.revision ?? null,
+                  ]),
+                ),
+              );
             }}
           >
             {t('common.connections.addServices')}
@@ -201,8 +220,8 @@ function AdditionDraft({
               native_service,
               expected_revision: versions[native_service] ?? null,
             })),
-            discovery_source_id: share.sourceId ?? null,
-            discovery_source_revision: share.sourceRevision ?? null,
+            discovery_source_id: null,
+            discovery_source_revision: null,
           })
           .catch(() => undefined);
       }}
@@ -217,14 +236,10 @@ function AdditionDraft({
       ) : null}
       {!available.length ? <Note>{t('common.connections.noServicesToAdd')}</Note> : null}
       <DonationShareFields
-        accountId={accountId}
         choice={{
           key: {
             nativeServices: available,
-            credentialId: snapshot.credential_id,
             credentialVersion: snapshot.credential_version,
-            grantRevision: snapshot.grant_revision,
-            discoverySourceId: snapshot.discovery_source_id,
           },
         }}
         value={share}

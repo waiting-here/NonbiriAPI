@@ -2,15 +2,16 @@
 
 ## Supported databases
 
-The application accepts a new database, current schema **34**, or the exact
-published schema **33** manifest. Schema 33 receives an atomic index upgrade
-during startup, before request handling and unfinished-work recovery. Index
-creation can take longer on large histories; allow the startup stage to finish.
+The application accepts a new database, current schema **35**, or the exact
+published schema **33/34** manifests. These receive atomic upgrades during
+startup, before request handling and unfinished-work recovery. Schema 33 adds
+history indexes; schema 34 updates the donation catalog authorization trigger and catalog view.
+Index creation can take longer on large histories; allow the startup stage to finish.
 Cancellation or failure rolls the upgrade back. No table rebuild or external
 database conversion is needed for this step.
 
 Existing exact schema 16–26 databases require the separate one-time converter.
-The normal service contains current DDL, validation and the schema 33 index step;
+The normal service contains current DDL, validation and the schema 33/34 startup steps;
 it does not import the historical conversion chain. Later v1.x releases must provide
 a complete upgrade path from every earlier stable v1.x database. An older binary
 is not required to read a newer database.
@@ -26,12 +27,18 @@ identity, version or structural manifest is rejected before writes.
 
 These commands load no application configuration or database. Each machine-readable descriptor
 contains the current identity and accepted versions. The application descriptor
-reports schema 34, minimum schema 33 and the exact accepted source version and
-manifest hash, with no offline conversions. The converter descriptor lists its
+reports schema 35, minimum schema 33 and the exact accepted source versions and
+manifest hashes, with no offline conversions. The converter descriptor lists its
 exact offline sources and target. Deployment tools use both
 descriptors instead of parsing Go source or deriving versions from array lengths.
 
 ## Schema changes
+
+Schema 35 updates the model-discovery authorization trigger and catalog view so valid pending
+and approved donations can fetch catalogs without separate sharing consent.
+The exact donated credential version and existing ownership checks remain
+enforced. It does not grant inference access to pending uses or rewrite stored
+rows. The trigger, view and schema identity updates are atomic.
 
 Schema 34 adds complete `endpoint_key_id` indexes on `request_logs`,
 `dispatch_claims`, `report_targets` and `donation_keys`. These avoid unrelated
@@ -192,7 +199,7 @@ needed. Ordinary `--apply` validates the exact source, encryption-root identity,
 required configuration and migration-affected relationships, without scanning
 unrelated historical tables. Run it with the service stopped and its existing
 master key available. The converter acquires exclusive
-database access and converts the source to schema 34 in one transaction. A matching
+database access and converts the source to schema 35 in one transaction. A matching
 current schema is a no-op; structural drift, an unknown source or a wrong key is
 rejected. Failure or cancellation rolls back.
 

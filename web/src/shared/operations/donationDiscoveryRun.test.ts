@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApiError } from '@shared/query/http';
+import { apiFetch, ApiError } from '@shared/query/http';
 import {
   normalizeManagedDiscovery,
   type DiscoveryEvidence,
@@ -82,14 +82,14 @@ describe('managed donation discovery', () => {
     expect(io.start.mock.calls.map((call) => call[0])).toEqual([item, next]);
     expect(run.counts.succeeded).toBe(2);
   });
-  it('distinguishes ineligible, concurrent, superseded, and failed results', async () => {
+  it('distinguishes unavailable, concurrent, superseded, and failed results', async () => {
     const io = transport();
     io.select.mockResolvedValue({
       items: [1, 2, 3, 4].map((id) => ({ donation_id: '2', key_id: String(id) })),
       next_cursor: null,
     });
     io.start
-      .mockRejectedValueOnce(new ApiError('resource_locked', 'Unavailable', 409))
+      .mockRejectedValueOnce(new ApiError('resource_locked', 'Unavailable', 423))
       .mockRejectedValueOnce(new ApiError('conflict', 'Checking', 409));
     io.read
       .mockResolvedValueOnce({ ...empty, revision: '3' })
@@ -104,6 +104,28 @@ describe('managed donation discovery', () => {
     ]);
     expect(run.counts).toEqual({ selected: 4, processed: 4, succeeded: 0, failed: 1, skipped: 3 });
   });
+  it.each(['', JSON.stringify({ error: { code: 'not_found', message: 'Not found' } })])(
+    'pauses on a missing resource or proxy route without treating a 404 as an invalid key (%s)',
+    async (body) => {
+      const io = transport();
+      const fetch = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response(body, { status: 404 }));
+      try {
+        io.start.mockImplementation(() =>
+          apiFetch('/admin/api/donations/2/keys/3/models/refresh', { method: 'POST' }),
+        );
+        const run = new DonationDiscoveryRun(item, io);
+        await run.resume();
+        expect(run.phase).toBe('paused');
+        expect(run.error).toMatchObject({ code: 'not_found', status: 404 });
+        expect(run.counts.skipped).toBe(0);
+        expect(io.read).not.toHaveBeenCalled();
+      } finally {
+        fetch.mockRestore();
+      }
+    },
+  );
   it('stops on capability loss, validates discovery state and strips unused fields', async () => {
     const io = transport();
     io.start.mockRejectedValue(new ApiError('forbidden', 'Forbidden', 403));

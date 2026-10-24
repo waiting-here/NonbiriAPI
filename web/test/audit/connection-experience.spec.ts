@@ -12,6 +12,7 @@ import {
 } from '@playwright/test';
 import common from '../../src/shared/i18n/common/en.json' with { type: 'json' };
 import adminEn from '../../src/admin/i18n/en.json' with { type: 'json' };
+import userEn from '../../src/user/i18n/en.json' with { type: 'json' };
 import type { NativeService } from '../../src/shared/nativeServices';
 import type { DonationUse } from '../../src/shared/operations/donationUses';
 
@@ -70,7 +71,7 @@ test.skip(
   process.env.NONBIRI_MANAGEMENT_BROWSER !== '1',
   'Requires the isolated management fixture.',
 );
-async function session(browser: Browser, role: 'owner' | 'admin' | 5) {
+async function session(browser: Browser, role: 'owner' | 'admin' | 5 | 6) {
   const state = fixture();
   const origin = role === 'admin' ? state.admin_url : state.user_url;
   const cookie =
@@ -189,6 +190,93 @@ async function baseURL(context: BrowserContext) {
 async function connection(context: BrowserContext, name: string) {
   return userAPI<Identity>(context, '/api/connections', 'POST', { name });
 }
+
+test('connection search exposes entry context and separate System One setup', async ({
+  browser,
+}, info) => {
+  const owner = await session(browser, 'owner');
+  try {
+    const marker = 'search-' + randomUUID();
+    const name = 'Recognizable provider ' + randomUUID();
+    const group = await connection(owner, name);
+    const origin = await baseURL(owner);
+    const primaryURL = origin + '/long-path-' + 'catalog-'.repeat(18);
+    const primaryNote = 'Primary endpoint ' + 'readable provider note '.repeat(12);
+    for (const [base, note] of [
+      [primaryURL, primaryNote],
+      [origin + '/' + marker, 'Secondary ' + marker],
+    ]) {
+      await userAPI<Entry>(owner, '/api/endpoints', 'POST', {
+        connection_id: group.id,
+        source: 'custom',
+        connector_type: 'openai-compatible',
+        base_url: base,
+        note,
+        enabled: true,
+        native_services: ['chat_completions', 'responses'],
+      });
+    }
+    const page = await owner.newPage();
+    await page.goto(fixture().user_url + '/endpoints');
+    await page.getByPlaceholder(c.connectionSearch).fill(marker);
+    const searchResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        response.request().method() === 'GET' &&
+        url.pathname === '/api/connections' &&
+        url.searchParams.get('q') === marker
+      );
+    });
+    await page.getByRole('button', { name: c.search, exact: true }).click();
+    const result = await searchResponse;
+    expect(result.status()).toBe(200);
+    await result.finished();
+    const table = page.getByRole('table', { name: c.yourConnections, exact: true });
+    await expect(table.getByRole('row')).toHaveCount(2);
+    const row = table.getByRole('row').filter({ hasText: name });
+    await expect(row.getByText(primaryURL, { exact: true })).toBeVisible();
+    await expect(row.getByText(primaryNote, { exact: true })).toHaveAttribute('title', primaryNote);
+    for (const width of [1440, 390]) {
+      for (const theme of ['light', 'dark'] as const) {
+        await screenshot(page, info, 'connection-identification', width, theme, row, {
+          entry_count: 2,
+          matched_secondary_entry: true,
+        });
+      }
+    }
+    await row.getByRole('link', { name, exact: true }).click();
+    await expect(page.getByRole('heading', { name, level: 1, exact: true })).toBeVisible();
+    await page.getByRole('button', { name: c.editConnection, exact: true }).click();
+    await expect(page.getByRole('textbox', { name: c.name, exact: true })).toHaveValue(name);
+    await page
+      .getByRole('region', { name: c.editConnection, exact: true })
+      .getByRole('button', { name: c.close, exact: true })
+      .click();
+    await page
+      .locator('.nb-panel__head')
+      .filter({ has: page.getByRole('heading', { name: c.entries, exact: true }) })
+      .getByRole('button', { name: c.addEntry, exact: true })
+      .click();
+    const form = page.getByRole('region', { name: c.addEntry, exact: true });
+    await form
+      .getByRole('combobox', { name: c.protocol, exact: true })
+      .selectOption('typesafe-systemone');
+    await expect(form.getByRole('checkbox', { name: native.systemone, exact: true })).toBeChecked();
+    await expect(form.getByRole('checkbox', { name: native.decisions, exact: true })).toHaveCount(
+      0,
+    );
+    await screenshot(page, info, 'system-one-entry', 390, 'dark', form, {
+      protocol: 'typesafe-systemone',
+    });
+    await form.getByRole('button', { name: c.close, exact: true }).first().click();
+    await page.getByRole('link', { name: c.backToConnections, exact: true }).click();
+    await expect(page.getByPlaceholder(c.connectionSearch)).toHaveValue(marker);
+    await expect(page.getByRole('link', { name, exact: true })).toBeVisible();
+  } finally {
+    await owner.close();
+  }
+});
+
 async function entry(
   context: BrowserContext,
   group: Identity,
@@ -234,6 +322,7 @@ async function donate(
   key: Key,
   services: NativeService[],
   description: string,
+  source?: Source,
 ) {
   return userAPI<Donation>(context, '/api/donations', 'POST', {
     description,
@@ -247,6 +336,12 @@ async function donate(
         grant_revision: key.grant_revision,
         native_services: services,
         expires_at: null,
+        ...(source
+          ? {
+              discovery_source_id: source.id,
+              discovery_source_revision: source.discovery_source_revision,
+            }
+          : {}),
       },
     ],
   });
@@ -279,6 +374,89 @@ async function approve(context: BrowserContext, owner: BrowserContext, donation:
     200,
   );
   expect(result.results.every((row) => row.ok)).toBe(true);
+}
+
+for (const configuredCatalog of [false, true]) {
+  test(`donation catalog ${configuredCatalog ? 'configured' : 'standard'} works before and after approval without sharing consent`, async ({
+    browser,
+  }, info) => {
+    const owner = await session(browser, 'owner');
+    const admin = await session(browser, 'admin');
+    const manager = configuredCatalog ? admin : await session(browser, 6);
+    const tag = 'Catalog access ' + randomUUID().slice(0, 8);
+    let donationId: string | undefined;
+    try {
+      const group = await connection(owner, tag);
+      const saved = await credential(owner, group, tag, 'synthetic-image-credential');
+      const value = await entry(
+        owner,
+        group,
+        saved,
+        await baseURL(owner),
+        tag,
+        ['chat_completions'],
+        configuredCatalog,
+      );
+      expect(Boolean(value.key.discovery_source_id)).toBe(configuredCatalog);
+      const donation = await donate(owner, value.key, ['chat_completions'], tag);
+      donationId = donation.id;
+      const page = await manager.newPage();
+      const origin = configuredCatalog ? fixture().admin_url : fixture().user_url;
+      const path = configuredCatalog
+        ? '/charity?charity_section=donations&donation_id='
+        : '/steward?tab=charity&charity_section=donations&donation_id=';
+      const prefix = configuredCatalog ? '/admin/api' : '/api/steward';
+      for (const status of ['pending', 'approved']) {
+        if (status === 'approved') await approve(admin, owner, donation);
+        await page.goto(origin + path + donation.id);
+        const use = await openFold(page, native.chat_completions);
+        const fetchButton = use.getByRole('button', { name: c.refreshSharedCatalog, exact: true });
+        await expect(fetchButton).toBeEnabled();
+        const result = responseFor(
+          page,
+          'POST',
+          prefix +
+            '/donations/' +
+            donation.id +
+            '/keys/' +
+            donation.keys[0]!.id +
+            '/models/refresh',
+        );
+        await fetchButton.click();
+        expect((await result).status()).toBe(202);
+        await expect(use).toContainText('Catalog: Succeeded');
+        await expect(use.getByText(/^Catalog:/)).toHaveCount(1);
+        if (status === 'pending')
+          for (const width of [1440, 390])
+            for (const theme of ['light', 'dark'] as const) {
+              await screenshot(
+                page,
+                info,
+                'donation-catalog-' + (configuredCatalog ? 'configured' : 'standard'),
+                width,
+                theme,
+                use,
+                { status, configuredCatalog },
+              );
+            }
+      }
+    } finally {
+      try {
+        if (donationId) {
+          const live = await userAPI<Donation>(owner, '/api/donations/' + donationId);
+          await userAPI<Donation>(
+            owner,
+            '/api/donations/' + donationId + '/withdraw',
+            'POST',
+            { expected_revision: live.revision },
+            200,
+          );
+        }
+      } finally {
+        await Promise.all([...new Set([owner, admin, manager])].map((context) => context.close()));
+      }
+    }
+  });
 }
 
 test('shared versions keep old charity approval and survive deletion of their original connection', async ({
@@ -519,8 +697,6 @@ test('additional services stay pending with their old budget and use-only traine
     await expect(form.getByRole('button', { name: c.submitServices, exact: true })).toBeDisabled();
     await form.getByLabel(native.embeddings, { exact: true }).check();
     await form.getByLabel(native.responses, { exact: true }).check();
-    await expect(form.getByLabel(c.shareDiscovery, { exact: true })).not.toBeChecked();
-    await form.getByLabel(c.shareDiscovery, { exact: true }).check();
     const submitted = responseFor(page, 'POST', '/api/donations/' + donation.id + '/uses');
     await form.getByRole('button', { name: c.submitServices, exact: true }).click();
     const response = await submitted;
@@ -536,8 +712,13 @@ test('additional services stay pending with their old budget and use-only traine
       'responses',
     ]);
     expect(input.items.every((row) => row.expected_revision === null)).toBe(true);
-    expect(input.discovery_source_id).toBe(sharedSource.id);
-    expect(input.discovery_source_revision).toBe(sharedSource.discovery_source_revision);
+    expect(input.discovery_source_id).toBeNull();
+    expect(input.discovery_source_revision).toBeNull();
+    const addedUses = await uses(owner, donation.id);
+    for (const use of addedUses.filter((row) => row.native_service !== 'chat_completions')) {
+      expect(use.pending?.discovery_source_id).toBe(sharedSource.id);
+      expect(use.pending?.discovery_source_revision).toBe(sharedSource.discovery_source_revision);
+    }
     expect(input.credential_version).toBe('1');
     expect(
       budget((await adminAPI<Donation>(admin, '/admin/api/donations/' + donation.id)).keys[0]!),
@@ -1393,6 +1574,33 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
     const rows = await uses(owner, approved.id);
     expect(rows).toHaveLength(2);
     expect(rows.every((row) => row.approved?.status === 'approved' && !row.pending)).toBe(true);
+    await approval.getByRole('button', { name: common.common.close, exact: true }).click();
+    await page
+      .getByLabel(common.common.operations.charity.reason, { exact: true })
+      .fill('Synthetic review of the approved services');
+    await page
+      .getByRole('button', { name: common.common.donationReview.forceTitle, exact: true })
+      .click();
+    const rejection = page.getByRole('alertdialog', {
+      name: common.common.donationReview.forceTitle,
+      exact: true,
+    });
+    const rejectedResponse = responseFor(
+      page,
+      'POST',
+      '/admin/api/donations/' + approved.id + '/review',
+    );
+    await rejection
+      .getByRole('button', { name: common.common.donationReview.forceTitle, exact: true })
+      .click();
+    const forcedRejection = await rejectedResponse;
+    expect(forcedRejection.status()).toBe(200);
+    expect(forcedRejection.request().postDataJSON().decision).toBe('force_reject');
+    expect(forcedRejection.request().postDataJSON()).not.toHaveProperty('key_settings');
+    expect((await uses(owner, approved.id)).every((row) => !row.approved && !row.pending)).toBe(
+      true,
+    );
+    createdDonationIDs.splice(createdDonationIDs.indexOf(approved.id), 1);
   } finally {
     try {
       for (const id of createdDonationIDs) {
@@ -1449,5 +1657,466 @@ test('returned request alerts show source details and unresolved review state', 
     }
   } finally {
     await admin.close();
+  }
+});
+
+test('mainstream entry authorization applies, reuses and lets users decline the suggested catalog', async ({
+  browser,
+}, info) => {
+  const owner = await session(browser, 'owner');
+  const admin = await session(browser, 'admin');
+  const tag = 'Catalog default ' + randomUUID().slice(0, 8);
+  let group: Identity | undefined;
+  let channel: (Identity & { entries: { id: string; name: string }[] }) | undefined;
+  try {
+    group = await connection(owner, tag);
+    const saved = await credential(owner, group, tag, 'synthetic-catalog-' + randomUUID());
+    const base = await baseURL(owner);
+    channel = await adminAPI<Identity & { entries: { id: string; name: string }[] }>(
+      admin,
+      '/admin/api/mainstream-channels',
+      'POST',
+      {
+        name: tag,
+        category: 'api_platform',
+        enabled: true,
+        entries: [1, 2, 3].map((index) => ({
+          name: tag + ' ' + index,
+          connector_type: 'openai-compatible',
+          base_url: base,
+          native_services: ['chat_completions', 'responses'],
+          rerank_format: '',
+          enabled: true,
+        })),
+        discovery_source: { base_url: base, list_format: 'openai' },
+        model_mappings: [],
+      },
+    );
+    const page = await owner.newPage();
+    await page.goto(fixture().user_url + '/endpoints?connection_id=' + group.id);
+    await page
+      .locator('.nb-panel__head')
+      .filter({ has: page.getByRole('heading', { name: c.entries, exact: true }) })
+      .getByRole('button', { name: c.addEntry, exact: true })
+      .click();
+    await page.getByText(c.mainstream, { exact: true }).click();
+    await expect(page.getByRole('radio', { name: c.mainstream, exact: true })).toBeChecked();
+    await page.getByRole('combobox', { name: c.mainstream, exact: true }).selectOption(channel.id);
+    for (const item of channel.entries)
+      await page.getByRole('checkbox', { name: item.name, exact: true }).check();
+    await page.getByRole('button', { name: c.saveEntries, exact: true }).click();
+    await expect(page.getByText(c.entrySaved, { exact: false })).toHaveCount(3);
+    const entries = (
+      await userAPI<Numbered<Entry & { note: string }>>(
+        owner,
+        '/api/connections/' + group.id + '/entries?page=1&page_size=20',
+      )
+    ).data;
+    const granted: Key[] = [];
+    for (const [index, item] of channel.entries.entries()) {
+      const form = page
+        .locator('section')
+        .filter({ has: page.getByRole('heading', { name: item.name, exact: true }) })
+        .last();
+      await form.getByRole('button', { name: c.select, exact: true }).click();
+      const defaultCatalog = form.getByLabel(c.useSuggestedCatalog, { exact: true });
+      await expect(defaultCatalog).toBeChecked();
+      if (index === 2) await defaultCatalog.uncheck();
+      if (index === 0) {
+        for (const width of [1440, 390])
+          for (const theme of ['light', 'dark'] as const)
+            await screenshot(
+              page,
+              info,
+              'suggested-catalog-authorization',
+              width,
+              theme,
+              defaultCatalog,
+              { credential_version: saved.credential_version, default_selected: true },
+            );
+      }
+      const target = entries.find((row) => row.note === item.name)!;
+      const written = responseFor(page, 'POST', '/api/endpoints/' + target.id + '/keys');
+      await form.getByRole('button', { name: c.authorizeEntry, exact: true }).click();
+      const response = await written;
+      expect(response.status()).toBe(201);
+      const grant = (await response.json()) as Key;
+      expect(grant.credential_id).toBe(saved.id);
+      expect(grant.credential_version).toBe(saved.credential_version);
+      expect(grant.native_services).toEqual(['chat_completions', 'responses']);
+      if (index === 0) expect(grant.discovery_source_id).not.toBeNull();
+      else
+        expect(grant.discovery_source_id).toBe(
+          index === 1 ? granted[0]!.discovery_source_id : null,
+        );
+      granted.push(grant);
+      await expect(form.getByText(c.grantSaved, { exact: true })).toBeVisible();
+    }
+    const sources = (
+      await userAPI<
+        Numbered<Source & { credential_id: string; base_url: string; list_format: string }>
+      >(owner, '/api/connections/' + group.id + '/discovery-sources?page=1&page_size=20')
+    ).data;
+    expect(sources).toHaveLength(1);
+    expect(sources[0]).toMatchObject({
+      id: granted[0]!.discovery_source_id,
+      credential_id: saved.id,
+      credential_version: saved.credential_version,
+      base_url: base,
+      list_format: 'openai',
+    });
+
+    const draft = await owner.newPage();
+    const first = entries.find((row) => row.note === channel!.entries[0]!.name)!;
+    await draft.goto(
+      fixture().user_url +
+        '/charity?tab=donate&endpoint_id=' +
+        first.id +
+        '&endpoint_q=' +
+        encodeURIComponent(first.note),
+    );
+    await draft
+      .getByRole('button', { name: userEn.user.charity.presentation.openPicker, exact: true })
+      .click();
+    const picker = draft.locator('.donation-resource-picker');
+    await picker.locator('.donation-resource-picker__key-list').getByRole('checkbox').check();
+    const selected = picker.getByRole('region', {
+      name: userEn.user.charity.resourcePicker.selectedTitle,
+      exact: true,
+    });
+    await expect(selected.getByLabel(native.chat_completions, { exact: true })).toBeChecked();
+    await expect(selected.getByLabel(native.responses, { exact: true })).toBeChecked();
+    for (const width of [1440, 390])
+      for (const theme of ['light', 'dark'] as const)
+        await screenshot(draft, info, 'suggested-catalog-donation-draft', width, theme, selected, {
+          services: granted[0]!.native_services,
+          discovery_source_id: granted[0]!.discovery_source_id,
+          submitted: false,
+        });
+    await draft.route('**/api/appearance', (route) =>
+      route.fulfill({
+        json: {
+          selected: 'celestial',
+          moment: 'cover:h',
+          moments: ['cover:h'],
+          unlocked: ['default', 'celestial'],
+          visible: ['default', 'celestial'],
+          updated_at: 1800000000,
+        },
+      }),
+    );
+    await draft.reload();
+    await expect(draft.locator('html')).toHaveAttribute('data-appearance', 'celestial');
+    await draft
+      .getByRole('button', { name: userEn.user.charity.presentation.openPicker, exact: true })
+      .click();
+    await picker.locator('.donation-resource-picker__key-list').getByRole('checkbox').check();
+    for (const width of [1440, 390])
+      await screenshot(
+        draft,
+        info,
+        'suggested-catalog-donation-appearance',
+        width,
+        'dark',
+        selected,
+        {
+          appearance: 'celestial',
+          submitted: false,
+        },
+      );
+  } finally {
+    try {
+      if (group) {
+        const current = await userAPI<Identity>(owner, '/api/connections/' + group.id);
+        await userAPI(
+          owner,
+          '/api/connections/' + group.id,
+          'DELETE',
+          { expected_revision: current.revision },
+          204,
+        );
+      }
+      if (channel) {
+        const current = await adminAPI<Identity>(
+          admin,
+          '/admin/api/mainstream-channels/' + channel.id,
+        );
+        await adminAPI(
+          admin,
+          '/admin/api/mainstream-channels/' + channel.id,
+          'DELETE',
+          { expected_revision: current.revision, confirmation: 'retire' },
+          204,
+        );
+      }
+    } finally {
+      await owner.close();
+      await admin.close();
+    }
+  }
+});
+
+test('a key without a catalog can recover, show a readable failure and load models', async ({
+  browser,
+}, info) => {
+  const owner = await session(browser, 'owner');
+  const tag = 'Catalog recovery ' + randomUUID().slice(0, 8);
+  let group: Identity | undefined;
+  try {
+    group = await connection(owner, tag);
+    const saved = await credential(owner, group, tag, 'synthetic-image-credential');
+    const base = await baseURL(owner);
+    const value = await entry(owner, group, saved, base, tag, ['chat_completions']);
+    const source = await userAPI<Source>(
+      owner,
+      '/api/connections/' + group.id + '/discovery-sources',
+      'POST',
+      { name: tag, base_url: base, list_format: 'openai', credential_id: saved.id, enabled: true },
+    );
+    const page = await owner.newPage();
+    const keyPath = '/api/endpoints/' + value.endpoint.id + '/keys/' + value.key.id;
+    const refreshPath = keyPath + '/models/refresh';
+    const core = userEn.user.core;
+    await page.goto(fixture().user_url + '/endpoints/' + value.endpoint.id);
+    await expect(
+      page.getByRole('button', { name: core['endpoints.refreshDiscovery'], exact: true }),
+    ).toHaveCount(0);
+    await page.getByRole('button', { name: userEn.user.services.viewModels, exact: true }).click();
+    await page
+      .getByLabel(core['endpoints.manualModel'], { exact: true })
+      .fill('vendor/manual-before-discovery');
+    const manualCreated = responseFor(page, 'POST', keyPath + '/models/manual');
+    await page.getByRole('button', { name: core['endpoints.manualAdd'], exact: true }).click();
+    expect((await manualCreated).status()).toBe(201);
+    await expect(page.getByText('vendor/manual-before-discovery', { exact: true })).toBeVisible();
+    await page
+      .getByRole('region', { name: userEn.user.services.viewModels + ' · ' + tag, exact: true })
+      .getByRole('button', { name: core['common.close'], exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: userEn.user.services.chooseCatalog, exact: true })
+      .click();
+    const grant = await openFold(page, c.credentialAndServices);
+    await grant.getByRole('button', { name: c.useSource, exact: true }).click();
+    const patched = responseFor(page, 'PATCH', keyPath);
+    await grant.getByRole('button', { name: c.save, exact: true }).click();
+    const patchResponse = await patched;
+    expect(patchResponse.status()).toBe(200);
+    expect(((await patchResponse.json()) as Key).discovery_source_id).toBe(source.id);
+    await page
+      .getByRole('region', { name: userEn.user.services.editKey, exact: true })
+      .getByRole('button', { name: core['common.close'], exact: true })
+      .click();
+
+    const failure = 'The selected model catalog changed. Choose the current catalog and try again.';
+    await page.route('**' + refreshPath, (route) =>
+      route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'invalid_request', message: failure } }),
+      }),
+    );
+    await page
+      .getByRole('button', { name: core['endpoints.refreshDiscovery'], exact: true })
+      .click();
+    const feedback = page.locator('.core-key-feedback');
+    await expect(feedback).toContainText(failure);
+    await expect(feedback.locator('td')).toHaveAttribute('colspan', '6');
+    for (const width of [1440, 390])
+      for (const theme of ['light', 'dark'] as const)
+        await screenshot(page, info, 'key-operation-error', width, theme, feedback, {
+          error: 'invalid_request',
+          catalog_linked: true,
+        });
+    await page.unroute('**' + refreshPath);
+    const refreshed = responseFor(page, 'POST', refreshPath);
+    await page
+      .getByRole('button', { name: core['endpoints.refreshDiscovery'], exact: true })
+      .click();
+    expect((await refreshed).status()).toBe(202);
+    await expect
+      .poll(
+        async () =>
+          (await userAPI<{ evidence: { state: string } }>(owner, keyPath + '/models')).evidence
+            .state,
+      )
+      .toBe('succeeded');
+    const catalog = await userAPI<{ automatic_entries: { upstream_model_id: string }[] }>(
+      owner,
+      keyPath + '/models',
+    );
+    expect(catalog.automatic_entries.length).toBeGreaterThan(0);
+    await expect(
+      page.getByText(catalog.automatic_entries[0]!.upstream_model_id, { exact: true }),
+    ).toBeVisible();
+    await page.getByLabel(core['endpoints.manualModel'], { exact: true }).fill('vendor/recovered');
+    await page.getByRole('button', { name: core['endpoints.manualAdd'], exact: true }).click();
+    await expect(page.getByText('vendor/recovered', { exact: true })).toBeVisible();
+  } finally {
+    try {
+      if (group) {
+        const current = await userAPI<Identity>(owner, '/api/connections/' + group.id);
+        await userAPI(
+          owner,
+          '/api/connections/' + group.id,
+          'DELETE',
+          { expected_revision: current.revision },
+          204,
+        );
+      }
+    } finally {
+      await owner.close();
+    }
+  }
+});
+
+test('model imports reuse manual support after reopening and resume after a model conflict', async ({
+  browser,
+}) => {
+  const owner = await session(browser, 'owner');
+  const tag = 'Import reuse ' + randomUUID().slice(0, 8);
+  const provider = 'import-reuse-' + randomUUID().slice(0, 8);
+  const models: string[] = [];
+  let group: Identity | undefined;
+  try {
+    group = await connection(owner, tag);
+    const saved = await credential(owner, group, tag, 'synthetic-import-' + randomUUID());
+    const base = await baseURL(owner);
+    const target = await entry(owner, group, saved, base, tag, ['chat_completions']);
+    const source = await userAPI<Source>(
+      owner,
+      '/api/connections/' + group.id + '/discovery-sources',
+      'POST',
+      {
+        name: tag,
+        base_url: base,
+        list_format: 'openai',
+        credential_id: saved.id,
+        enabled: true,
+      },
+    );
+    const catalogPath =
+      '/api/endpoints/' + target.endpoint.id + '/keys/' + target.key.id + '/models';
+    const upstream = 'existing-' + randomUUID().slice(0, 8);
+    const original = await userAPI<{
+      entries: { id: string; provider: string; source_revision: string; pair_revision: string }[];
+    }>(owner, catalogPath + '/manual', 'POST', {
+      entries: [{ upstream_model_id: upstream, provider: 'Original provider' }],
+    });
+    const page = await owner.newPage();
+    const manualWrites: string[] = [];
+    page.on('request', (request) => {
+      if (
+        request.method() === 'POST' &&
+        new URL(request.url()).pathname === catalogPath + '/manual'
+      )
+        manualWrites.push(request.postData() ?? '');
+    });
+    const destination =
+      fixture().user_url +
+      '/endpoints?connection_id=' +
+      group.id +
+      '&connection_view=discovery&discovery_source_id=' +
+      source.id;
+    const prepare = async (upstreamName: string, modelName: string) => {
+      await page.goto(destination);
+      const manual = await openFold(page, c.manualModel);
+      await manual.getByLabel(c.upstreamModel, { exact: true }).fill(upstreamName);
+      await manual.getByRole('button', { name: c.configureModel, exact: true }).click();
+      const chooser = await openFold(page, c.chooseEntry);
+      await chooser.getByPlaceholder(c.entrySearch, { exact: true }).fill(tag);
+      await chooser.getByRole('button', { name: c.search, exact: true }).click();
+      await chooser
+        .getByRole('row')
+        .filter({ hasText: tag })
+        .getByRole('button', { name: c.select, exact: true })
+        .click();
+      await chooser
+        .getByRole('row')
+        .filter({ hasText: tag })
+        .getByRole('button', { name: c.select, exact: true })
+        .click();
+      const row = await openFold(page.locator('.connection-model-batch'), upstreamName);
+      await row.getByRole('checkbox', { name: tag + ' · ' + upstreamName, exact: true }).check();
+      await row.getByRole('checkbox', { name: native.chat_completions, exact: true }).check();
+      await row.getByLabel(c.provider, { exact: true }).fill(provider);
+      await row.getByLabel(c.model, { exact: true }).fill(modelName);
+      await row.getByRole('checkbox', { name: native.chat_responses, exact: true }).check();
+      return row;
+    };
+    const save = async (row: Locator, upstreamName: string) => {
+      const written = responseFor(page, 'POST', '/api/models');
+      await row.getByRole('button', { name: c.saveMapping, exact: true }).click();
+      const response = await written;
+      expect(response.status()).toBe(201);
+      const model = (await response.json()) as Identity;
+      models.push(model.id);
+      await expect(row.getByText(c.mappingSaved, { exact: true })).toBeVisible();
+      const bindings = await userAPI<Bindings>(owner, '/api/models/' + model.id + '/bindings');
+      expect(bindings.bindings).toHaveLength(1);
+      expect(bindings.bindings[0]!.targets).toMatchObject([
+        {
+          endpoint_key_id: target.key.id,
+          upstream_model_id: upstreamName,
+          native_services: ['chat_completions'],
+        },
+      ]);
+    };
+    const firstName = 'first-' + randomUUID().slice(0, 8);
+    await save(await prepare(upstream, firstName), upstream);
+    await save(await prepare(upstream, 'reopened-' + randomUUID().slice(0, 8)), upstream);
+    expect(manualWrites).toHaveLength(0);
+    const reused = await userAPI<{ manual_entries: unknown[] }>(
+      owner,
+      catalogPath + '?page=1&page_size=100&source=manual',
+    );
+    expect(reused.manual_entries).toEqual(original.entries);
+
+    const fresh = 'fresh-' + randomUUID().slice(0, 8);
+    const row = await prepare(fresh, firstName);
+    const failed = responseFor(page, 'POST', '/api/models');
+    await row.getByRole('button', { name: c.saveMapping, exact: true }).click();
+    expect((await failed).status()).toBe(409);
+    await expect(row.getByText(c.mappingSaved, { exact: true })).toHaveCount(0);
+    expect(manualWrites).toHaveLength(1);
+    await expect(row.getByLabel(c.model, { exact: true })).toBeEnabled();
+    await row.getByLabel(c.model, { exact: true }).fill('recovered-' + randomUUID().slice(0, 8));
+    await save(row, fresh);
+    expect(manualWrites).toHaveLength(1);
+    const final = await userAPI<{ manual_entries: { upstream_model_id: string }[] }>(
+      owner,
+      catalogPath + '?page=1&page_size=100&source=manual',
+    );
+    expect(final.manual_entries.map((item) => item.upstream_model_id).sort()).toEqual(
+      [upstream, fresh].sort(),
+    );
+  } finally {
+    try {
+      try {
+        for (const id of models) {
+          const current = await userAPI<Identity>(owner, '/api/models/' + id);
+          await userAPI(
+            owner,
+            '/api/models/' + id,
+            'DELETE',
+            { expected_revision: current.revision },
+            204,
+          );
+        }
+      } finally {
+        if (group) {
+          const current = await userAPI<Identity>(owner, '/api/connections/' + group.id);
+          await userAPI(
+            owner,
+            '/api/connections/' + group.id,
+            'DELETE',
+            { expected_revision: current.revision },
+            204,
+          );
+        }
+      }
+    } finally {
+      await owner.close();
+    }
   }
 });

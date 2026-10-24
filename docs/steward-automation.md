@@ -216,9 +216,11 @@ Only current L6 CallerKeys can query their existing charity-management scope. Ne
 Ordinary users, L5 and L6 can separately query/import/append **their own** resources through [personal automation](api-contract.md#34-personal-callerkey-automation). Its fixed 24-hour per-item recovery differs from the older charity model-bindings operation above. It neither creates nor approves a donation. All these controls use one shared four-global/one-per-user admission budget.
 
 Donation projections use `first_approval_origin: "none"` for pending requests
-and requests directly rejected before approval. `unknown` remains reserved
-for historical approvals whose origin cannot be established. This display
-field does not grant review or forced-rejection permission.
+without approved uses and requests directly rejected before approval. `unknown`
+means that approval exists but its initial origin was not recorded, including
+per-service approvals without a legacy parent approval record. Use `use_summary`
+for the current service-review status. This display field does not grant review
+or forced-rejection permission.
 
 ## Model price reads
 

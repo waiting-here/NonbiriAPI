@@ -78,6 +78,14 @@ func approveDiscoveryDonation(t *testing.T, env *donationTestEnv, donation Donat
 
 func newDiscoveryFixture(t *testing.T, blocked bool, services ...contract.NativeService) *discoveryFixture {
 	t.Helper()
+	return newDiscoverySharingFixture(t, blocked, true, services...)
+}
+
+func newDiscoverySharingFixture(t *testing.T, blocked, share bool, services ...contract.NativeService) *discoveryFixture {
+	return newDiscoveryStatusFixture(t, blocked, share, true, services...)
+}
+func newDiscoveryStatusFixture(t *testing.T, blocked, share, approved bool, services ...contract.NativeService) *discoveryFixture {
+	t.Helper()
 	env := newDonationTestEnv(t)
 	level := int64(6)
 	f := &discoveryFixture{donationTestEnv: env, owner: env.seedUser(t, "discovery-donor", nil, false), admin: env.seedUser(t, "", nil, true), steward: env.seedUser(t, "discovery-steward", &level, false)}
@@ -102,15 +110,33 @@ func newDiscoveryFixture(t *testing.T, blocked bool, services ...contract.Native
 	if len(services) == 0 {
 		services = []contract.NativeService{contract.NativeServiceChatCompletions}
 	}
+	keyInput := CreateKeyInput{EndpointKeyID: f.key, ExpiresAt: &expires, NativeServices: services}
+	if share {
+		keyInput.DiscoverySourceID, keyInput.DiscoverySourceRevision = &source.SourceID, &shared.SourceRevision
+	}
+	if !share {
+		if _, err := env.store.DB().Exec("DELETE FROM endpoint_key_discovery_sources WHERE endpoint_key_id=?", f.key); err != nil {
+			t.Fatal(err)
+		}
+	}
 	created, err := env.service.Create(context.Background(), f.owner,
 		donationMutation(t, 'A', http.MethodPost, routeDonations, nil, map[string]any{"fixture": "discovery"}),
-		CreateInput{Description: "discovery donation", OwnershipAuthorized: true, Keys: []CreateKeyInput{{EndpointKeyID: f.key, ExpiresAt: &expires, NativeServices: services, DiscoverySourceID: &source.SourceID, DiscoverySourceRevision: &shared.SourceRevision}}})
+		CreateInput{Description: "discovery donation", OwnershipAuthorized: true, Keys: []CreateKeyInput{keyInput}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	donation := created.Value
 	f.donation, f.donationKey = parseTestID(t, donation.ID), parseTestID(t, donation.Keys[0].ID)
-	approveDiscoveryDonation(t, env, donation, 'B')
+	if !share {
+		_, err := env.store.DB().Exec(`INSERT INTO endpoint_key_discovery_sources(endpoint_key_id,source_id,grant_revision_id,source_revision_id,credential_version_id)
+ SELECT k.id,?,k.current_grant_revision_id,?,g.credential_version_id FROM endpoint_keys k JOIN endpoint_key_grant_revisions g ON g.id=k.current_grant_revision_id WHERE k.id=?`, source.SourceID, shared.SourceRevisionID, f.key)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if approved {
+		approveDiscoveryDonation(t, env, donation, 'B')
+	}
 	f.rail = &donationDiscoveryRail{result: resources.DiscoveryClaimResult{Succeeded: true, Models: []resources.DiscoveredModel{{UpstreamModelID: "fresh-model", Provider: "fixture"}}}}
 	if blocked {
 		f.rail.started = make(chan struct{}, 1)
@@ -454,5 +480,42 @@ func TestManagedDiscoveryQueuedAndLateEligibilityChanges(t *testing.T) {
 				t.Fatalf("withdrawn result published %+v %v", catalog, err)
 			}
 		})
+	}
+}
+
+func TestManagedDiscoveryPendingReplacementInterruptsCompletion(t *testing.T) {
+	f := newDiscoveryStatusFixture(t, true, false, false)
+	var once sync.Once
+	release := func() { once.Do(func() { close(f.rail.release) }) }
+	defer release()
+	accepted, err := f.start(t, "admin", f.admin, 'Y')
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-f.rail.started
+	tx, err := f.store.DB().BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	uses, err := connectionstore.LoadDiscoveryUsesTx(t.Context(), tx, []int64{f.donationKey}, false)
+	if err != nil || len(uses[f.donationKey]) != 1 {
+		t.Fatal(uses, err)
+	}
+	use := uses[f.donationKey][0]
+	_, err = connectionstore.StagePendingUseRevisionTx(t.Context(), tx, connectionstore.StagePendingUseRevisionInput{
+		UseID: use.UseID, ExpectedRevision: use.UseRevision, GrantRevisionID: use.Grant.GrantRevisionID, Origin: connectionstore.UseOriginRotation, At: f.clock.Load()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	release()
+	f.wait(t, accepted.Value.OperationID)
+	var state, safe string
+	var count int
+	if err = f.store.DB().QueryRow("SELECT state,safe_class,model_count FROM discovery_runs WHERE operation_id=?", accepted.Value.OperationID).Scan(&state, &safe, &count); err != nil || state != "failed" || safe != "interrupted" || count != 0 {
+		t.Fatalf("obsolete pending result: %s %s %d %v", state, safe, count, err)
 	}
 }

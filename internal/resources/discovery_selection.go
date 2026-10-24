@@ -62,7 +62,25 @@ func (r *Repository) startDiscovery(ctx context.Context, actorID, endpointID, ke
 		ref := connectionstore.SourceAuthorizationRef{OwnerUserID: actorID, Purpose: connectionstore.SourceSelf}
 		selectedEndpoint, selectedKey := endpointID, keyID
 		if managed != nil {
+			if target.SourceRevisionID == 0 {
+				use, err := connectionstore.LoadDiscoveryUseTx(ctx, tx, target.UseID, target.ApprovedRevisionID)
+				if err != nil {
+					return discoverySelection{}, mapConnectionStoreError(err)
+				}
+				now, err := r.nowUnix()
+				if err != nil {
+					return discoverySelection{}, err
+				}
+				if _, err = connectionstore.EnsureDiscoverySourceTx(ctx, tx, use, now); err != nil {
+					return discoverySelection{}, mapConnectionStoreError(err)
+				}
+				target, err = r.managedDiscovery.AuthorizeManagedDiscovery(ctx, tx, managed.role, actorID, managed.donationID, managed.keyID, managed.selection, true)
+				if err != nil {
+					return discoverySelection{}, err
+				}
+			}
 			ref.OwnerUserID, ref.SourceID, ref.Purpose, ref.DonationUseID = target.OwnerUserID, target.SourceID, connectionstore.SourceCharity, target.UseID
+			ref.UseRevisionID = target.ApprovedRevisionID
 			selectedEndpoint, selectedKey = target.EndpointID, target.EndpointKeyID
 		} else {
 			if _, err := discoveryOwnerTx(ctx, tx, actorID, endpointID, keyID); err != nil {
