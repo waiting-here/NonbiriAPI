@@ -261,6 +261,7 @@ test('connection search exposes entry context and separate System One setup', as
     await form
       .getByRole('combobox', { name: c.protocol, exact: true })
       .selectOption('typesafe-systemone');
+    await openFold(form, c.nativeServices);
     await expect(form.getByRole('checkbox', { name: native.systemone, exact: true })).toBeChecked();
     await expect(form.getByRole('checkbox', { name: native.decisions, exact: true })).toHaveCount(
       0,
@@ -917,8 +918,26 @@ async function saveTargets(page: Page, editor: Locator, path: string, status = 2
     await expect(editor.getByRole('button', { name: c.saveTargets, exact: true })).toBeEnabled();
   }
 }
+async function openTargetEditor(page: Page, title: string, charity: boolean) {
+  if (!charity) return openFold(page, title);
+  await page
+    .getByRole('row')
+    .filter({ has: page.getByRole('button', { name: c.editBindingSources, exact: true }) })
+    .first()
+    .getByRole('button', { name: c.editBindingSources, exact: true })
+    .click();
+  return page.getByRole('region', { name: c.editBindingSources, exact: true });
+}
 async function addGroup(page: Page, name: string, charity: boolean, path: string) {
-  const editor = await openFold(page, c.addTargetGroup);
+  let editor: Locator;
+  if (charity) {
+    const mode = page.getByRole('combobox', { name: c.addBindingMode, exact: true });
+    await mode.selectOption('group');
+    editor = mode
+      .locator('xpath=ancestor::section[1]')
+      .locator(':scope > div')
+      .filter({ has: page.getByRole('table', { name: c.availableTargets, exact: true }) });
+  } else editor = await openFold(page, c.addTargetGroup);
   const candidates = charity ? editor : await openFold(editor, c.addTarget);
   if (charity) await candidates.getByLabel(c.modelSearch, { exact: true }).fill(name);
   else {
@@ -929,8 +948,12 @@ async function addGroup(page: Page, name: string, charity: boolean, path: string
   await row.getByRole('button', { name: c.addTarget, exact: true }).click();
   const selected = targetRows(editor);
   await expect(selected).toHaveCount(1);
-  await expect(selected.getByLabel(native.chat_completions, { exact: true })).not.toBeChecked();
-  await selected.getByLabel(native.chat_completions, { exact: true }).check();
+  const chat = selected.getByLabel(native.chat_completions, { exact: true });
+  if (charity) await expect(chat).toBeChecked();
+  else {
+    await expect(chat).not.toBeChecked();
+    await chat.check();
+  }
   const response = responseFor(page, 'POST', path + '/batch-receipt');
   await editor.getByRole('button', { name: c.addTargetGroup, exact: true }).click();
   const saved = await response;
@@ -953,7 +976,7 @@ async function exerciseTargets(
 ) {
   await page.goto(origin + destination);
   const title = c.targetGroup.replace('{{number}}', '1');
-  let editor = await openFold(page, title);
+  let editor = await openTargetEditor(page, title, charity);
   await expect(targetRows(editor)).toHaveCount(2);
   const before = await api<Bindings>(context, origin, path);
   const binding = before.bindings[0]!;
@@ -1025,17 +1048,19 @@ async function exerciseTargets(
       ),
     )
     .toEqual([names[1]]);
+  if (charity) await editor.getByRole('button', { name: c.returnToBindings, exact: true }).click();
   await addGroup(page, names[2]!, charity, path);
   await addGroup(page, names[3]!, charity, path);
   await expect
     .poll(async () => (await api<Bindings>(context, origin, path)).bindings.length)
     .toBe(3);
   await page.reload();
-  editor = await openFold(page, title);
+  editor = await openTargetEditor(page, title, charity);
   await expect(targetRows(editor)).toHaveCount(1);
   await expect(targetRows(editor).first()).toContainText(names[1]!);
-  await editor.locator(':scope > summary').click();
-  await openFold(page, title);
+  if (charity) await editor.getByRole('button', { name: c.returnToBindings, exact: true }).click();
+  else await editor.locator(':scope > summary').click();
+  editor = await openTargetEditor(page, title, charity);
   await expect(targetRows(editor).first()).toContainText(names[1]!);
   const final = await api<Bindings>(context, origin, path);
   expect(
@@ -1699,27 +1724,19 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
       .filter({ has: page.getByRole('heading', { name: c.entries, exact: true }) })
       .getByRole('button', { name: c.addEntry, exact: true })
       .click();
-    await page.getByText(c.mainstream, { exact: true }).click();
-    await expect(page.getByRole('radio', { name: c.mainstream, exact: true })).toBeChecked();
-    await page.getByRole('combobox', { name: c.mainstream, exact: true }).selectOption(channel.id);
-    for (const item of channel.entries)
-      await page.getByRole('checkbox', { name: item.name, exact: true }).check();
-    await page.getByRole('button', { name: c.saveEntries, exact: true }).click();
-    await expect(page.getByText(c.entrySaved, { exact: false })).toHaveCount(3);
-    const entries = (
-      await userAPI<Numbered<Entry & { note: string }>>(
-        owner,
-        '/api/connections/' + group.id + '/entries?page=1&page_size=20',
-      )
-    ).data;
-    const granted: Key[] = [];
+    const form = page.getByRole('region', { name: c.addEntry, exact: true });
+    await form.getByRole('radio', { name: c.mainstream, exact: true }).check();
+    await form.getByRole('combobox', { name: c.mainstream, exact: true }).selectOption(channel.id);
+    const entryChoices = await openFold(form, c.entries);
     for (const [index, item] of channel.entries.entries()) {
-      const form = page
-        .locator('section')
-        .filter({ has: page.getByRole('heading', { name: item.name, exact: true }) })
-        .last();
-      await form.getByRole('button', { name: c.select, exact: true }).click();
-      const defaultCatalog = form.getByLabel(c.useSuggestedCatalog, { exact: true });
+      const selectedEntry = entryChoices.getByRole('checkbox', { name: item.name, exact: true });
+      await expect(selectedEntry).toBeChecked();
+      const option = selectedEntry.locator(
+        'xpath=ancestor::div[contains(@class, "nb-stack--sm")][1]',
+      );
+      await expect(option.getByLabel(native.chat_completions, { exact: true })).toBeChecked();
+      await expect(option.getByLabel(native.responses, { exact: true })).toBeChecked();
+      const defaultCatalog = option.getByLabel(c.useSuggestedCatalog, { exact: true });
       await expect(defaultCatalog).toBeChecked();
       if (index === 2) await defaultCatalog.uncheck();
       if (index === 0) {
@@ -1735,12 +1752,53 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
               { credential_version: saved.credential_version, default_selected: true },
             );
       }
+    }
+    await expect(
+      form.getByRole('radio', { name: c.existingCredential, exact: true }),
+    ).toBeChecked();
+    await form
+      .getByRole('table', { name: c.chooseCredential, exact: true })
+      .getByRole('row')
+      .filter({ hasText: tag })
+      .getByRole('button', { name: c.select, exact: true })
+      .click();
+    await form.getByLabel(c.ownership, { exact: true }).check();
+    const grantResponses: { path: string; status: number }[] = [];
+    page.on('response', (response) => {
+      const path = new URL(response.url()).pathname;
+      if (response.request().method() === 'POST' && /^\/api\/endpoints\/[^/]+\/keys$/.test(path))
+        grantResponses.push({ path, status: response.status() });
+    });
+    await form
+      .getByRole('button', { name: userEn.user.workflows.continueService, exact: true })
+      .click();
+    await expect(form.getByText(userEn.user.workflows.serviceReady, { exact: true })).toBeVisible();
+    await expect(
+      form.getByRole('button', { name: userEn.user.workflows.useModels, exact: true }),
+    ).toBeVisible();
+    await expect(
+      form.getByRole('link', { name: userEn.user.workflows.donateService, exact: true }),
+    ).toBeVisible();
+    const entries = (
+      await userAPI<Numbered<Entry & { note: string }>>(
+        owner,
+        '/api/connections/' + group.id + '/entries?page=1&page_size=20',
+      )
+    ).data;
+    expect(entries).toHaveLength(3);
+    expect(grantResponses.map((response) => response.status)).toEqual([201, 201, 201]);
+    expect(grantResponses.map((response) => response.path).sort()).toEqual(
+      entries.map((entry) => '/api/endpoints/' + entry.id + '/keys').sort(),
+    );
+    const granted: Key[] = [];
+    for (const [index, item] of channel.entries.entries()) {
       const target = entries.find((row) => row.note === item.name)!;
-      const written = responseFor(page, 'POST', '/api/endpoints/' + target.id + '/keys');
-      await form.getByRole('button', { name: c.authorizeEntry, exact: true }).click();
-      const response = await written;
-      expect(response.status()).toBe(201);
-      const grant = (await response.json()) as Key;
+      const keys = await userAPI<Numbered<Key>>(
+        owner,
+        '/api/endpoints/' + target.id + '/keys?page=1&page_size=20',
+      );
+      expect(keys.data).toHaveLength(1);
+      const grant = keys.data[0]!;
       expect(grant.credential_id).toBe(saved.id);
       expect(grant.credential_version).toBe(saved.credential_version);
       expect(grant.native_services).toEqual(['chat_completions', 'responses']);
@@ -1750,7 +1808,6 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
           index === 1 ? granted[0]!.discovery_source_id : null,
         );
       granted.push(grant);
-      await expect(form.getByText(c.grantSaved, { exact: true })).toBeVisible();
     }
     const sources = (
       await userAPI<

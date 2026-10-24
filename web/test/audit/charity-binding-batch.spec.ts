@@ -546,22 +546,49 @@ test('level 5 keeps its allowed manual targets and cannot open channel presets',
     data = state.management,
     context = await session(browser, 5);
   try {
-    const options = await read(
+    const models = await read(
       context,
       state.user_url,
-      `/api/steward/donations/${data.binding_donation_id}/keys/${data.binding_key_ids[0]}/binding-options?q=binding-browser&page=1&page_size=20`,
+      '/api/steward/charity-models?q=binding-browser&page=1&page_size=20',
     );
-    expect(options.data.map((row: { charity_model_id: string }) => row.charity_model_id)).toContain(
-      data.binding_model_ids[0],
+    expect(models.data.map((row: { id: string }) => row.id)).toContain(data.binding_model_ids[0]);
+    expect(models.data.map((row: { id: string }) => row.id)).not.toContain(
+      data.binding_model_ids[5],
     );
-    expect(
-      options.data.map((row: { charity_model_id: string }) => row.charity_model_id),
-    ).not.toContain(data.binding_model_ids[5]);
-    const denied = await context.request.get(
-      state.user_url + '/api/steward/charity-binding-presets?page=1&page_size=20',
-    );
-    expect(denied.status()).toBe(403);
+    for (const path of [
+      '/api/steward/donations/' +
+        data.binding_donation_id +
+        '/keys/' +
+        data.binding_key_ids[0] +
+        '/binding-options?q=binding-browser&page=1&page_size=20',
+      '/api/steward/charity-binding-presets?page=1&page_size=20',
+    ]) {
+      const denied = await context.request.get(state.user_url + path);
+      expect(denied.status()).toBe(403);
+      expect((await denied.json()).error.code).toBe('steward_permission_denied');
+    }
     const page = await context.newPage();
+    await page.goto(
+      state.user_url +
+        '/steward?tab=charity&charity_section=models&charity_model=' +
+        data.binding_model_ids[0],
+    );
+    const picker = page.locator('.ops-binding-picker');
+    const sourceSearch = picker.getByRole('searchbox', {
+      name: common.common.operations.charity.searchSources,
+    });
+    await sourceSearch.fill('Binding browser service');
+    await sourceSearch
+      .locator('xpath=ancestor::form')
+      .getByRole('button', { name: common.common.search, exact: true })
+      .click();
+    await picker.getByRole('button').filter({ hasText: 'Binding browser service' }).click();
+    await picker
+      .getByRole('region', { name: common.common.operations.charity.chooseKey })
+      .getByRole('button', { name: /Binding browser key 1/ })
+      .click();
+    await expect(picker.getByRole('checkbox', { name: /binding-up-0/ })).toBeDisabled();
+    await expect(picker.getByText(batch.boundHere, { exact: true })).toBeVisible();
     await page.goto(state.user_url + '/steward?tab=charity');
     await expect(page.getByRole('link', { name: presets.title })).toBeVisible();
     await page.goto(state.user_url + '/charity/channel-presets');
