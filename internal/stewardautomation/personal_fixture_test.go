@@ -46,6 +46,13 @@ func (a automationAuthority) AuthorizeStewardMutation(ctx context.Context, tx *s
 	_, err := a.auth.AuthorizeStewardCaller(ctx, tx, id)
 	return err
 }
+func (a automationAuthority) AuthorizeTraineeMutation(ctx context.Context, tx *sql.Tx, id int64) error {
+	principal, err := a.auth.AuthorizeStewardCaller(ctx, tx, id)
+	if err == nil && principal.EffectiveLevel != 5 {
+		return authz.ErrForbidden
+	}
+	return err
+}
 func (automationAuthority) AuthorizeAdminMutation(context.Context, *sql.Tx, int64) error {
 	return authz.ErrUnauthorized
 }
@@ -129,6 +136,9 @@ func newPersonalFixture(t *testing.T) *personalFixture {
 		case 5:
 			f.exec(t, `UPDATE users SET is_banned=1,banned_until=NULL WHERE id=?`, f.userID)
 			_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"exact/model","object":"model"}]}`))
+		case 6:
+			f.exec(t, `UPDATE steward_permissions SET permissions=json_set(permissions,'$."donations.discover"',json('false')),revision=revision+1 WHERE user_id=?`, f.userID)
+			_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"exact/model","object":"model"}]}`))
 		default:
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"exact/model","object":"model"}]}`))
@@ -183,11 +193,11 @@ func newPersonalFixture(t *testing.T) *personalFixture {
 	}
 	t.Cleanup(f.worker.Close)
 	authority := automationAuthority{auth: authz.New(authz.Options{Now: now})}
-	f.repo, err = resources.New(resources.Config{Store: f.store, Connectors: connector.NewDefaultRegistry(), BaseURLs: stack, Secrets: f.bridge, KeyDeletion: &f.hooks, KeyCreation: &f.hooks, Projection: &f.hooks, DiscoveryRail: f.bridge, DiscoveryWorker: f.worker, CursorKeys: vault, FinalAuth: authority, AdminFinalAuth: authority, Now: now})
+	donations, err := donation.New(donation.Config{Store: f.store, Review: review, OwnerAuth: authority, RoleAuth: authority, CursorKeys: vault, Now: now})
 	if err != nil {
 		t.Fatal(err)
 	}
-	donations, err := donation.New(donation.Config{Store: f.store, Review: review, OwnerAuth: authority, RoleAuth: authority, CursorKeys: vault, Now: now})
+	f.repo, err = resources.New(resources.Config{Store: f.store, Connectors: connector.NewDefaultRegistry(), BaseURLs: stack, Secrets: f.bridge, KeyDeletion: &f.hooks, KeyCreation: &f.hooks, Projection: &f.hooks, DiscoveryRail: f.bridge, DiscoveryWorker: f.worker, CursorKeys: vault, FinalAuth: authority, AdminFinalAuth: authority, ManagedDiscovery: donations, Now: now})
 	if err != nil {
 		t.Fatal(err)
 	}

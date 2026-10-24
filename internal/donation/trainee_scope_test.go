@@ -48,7 +48,7 @@ func TestTraineeKeyScopeAllowsUnboundMainstreamAndOnlyBoundCustom(t *testing.T) 
 	model := controlModel(t, e, "managed", true)
 	other := controlModel(t, e, "private-model-name", false)
 	ctx := charityscope.WithModel(context.Background(), model)
-	if _, err := e.service.KeyStewardSession(context.Background(), trainee, mainID, mainKey); !errors.Is(err, ErrNotFound) {
+	if _, err := e.service.KeyStewardSession(context.Background(), trainee, mainID, mainKey); !errors.Is(err, charityscope.ErrModelRequired) {
 		t.Fatal("missing model context", err)
 	}
 	if _, err := e.service.KeyStewardSession(charityscope.WithModel(ctx, other), trainee, mainID, mainKey); !errors.Is(err, ErrNotFound) {

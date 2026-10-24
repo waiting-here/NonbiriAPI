@@ -235,7 +235,7 @@ func requireManagedDonationTx(ctx context.Context, tx *sql.Tx, role reviewerRole
 	var exists int
 	query := `SELECT 1 FROM donations WHERE id=?`
 	args := []any{donationID}
-	if role == reviewerSteward || role == reviewerTrainee {
+	if role == reviewerSteward || role == reviewerTrainee || role == reviewerGranted {
 		query += ` AND (status IN ('pending','approved') OR terminal_at>?)`
 		args = append(args, now-terminalRetention)
 	}

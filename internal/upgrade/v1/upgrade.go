@@ -60,8 +60,9 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 	{from: 26, version: 33, manifest: db.Schema33ManifestHash, apply: extendConnections, impact: connectionsMigrationImpact},
 	{from: 33, version: 34, manifest: db.Schema34ManifestHash, sql: db.EndpointKeyHistoryIndexesSQL, impact: &migrationImpact{
 		indexedTables: []string{"request_logs", "dispatch_claims", "report_targets", "donation_keys"}, credentials: credentialsUnchanged}},
-	{from: 34, version: 35, manifest: db.PinnedGenerationTwoManifestHash, sql: db.DonationDiscoveryAuthorizationSQL, impact: &migrationImpact{
+	{from: 34, version: 35, manifest: db.Schema35ManifestHash, sql: db.DonationDiscoveryAuthorizationSQL, impact: &migrationImpact{
 		constraintTables: []string{"discovery_runs", "charity_model_catalog"}, credentials: credentialsUnchanged}},
+	{from: 35, version: 36, manifest: db.PinnedGenerationTwoManifestHash, sql: db.StewardPermissionsSQL + db.StewardAuditRolesSQL, impact: &migrationImpact{rebuiltTables: []string{"risk_client_rules", "client_rule_auto_bans", "discord_blacklist_origins", "discord_blacklist_events"}, addedTables: []string{"steward_permissions", "steward_permission_audits"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {

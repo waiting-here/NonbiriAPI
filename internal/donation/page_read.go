@@ -46,7 +46,7 @@ func (s *Service) beginBrowseActorTx(ctx context.Context, role reviewerRole, use
 				err = mapAuthorization(s.roleAuth.AuthorizeAdminMutation(ctx, tx, userID))
 			}
 		}
-	case reviewerSteward:
+	case reviewerSteward, reviewerGranted:
 		if nilDependency(s.roleAuth) || userID <= 0 {
 			err = ErrForbidden
 		} else {
@@ -176,7 +176,7 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 	if err != nil {
 		return empty, err
 	}
-	if !visible && !scope.Trainee && (role == reviewerAdmin || role == reviewerSteward) {
+	if !visible && !scope.Trainee && (role == reviewerAdmin || role == reviewerSteward || role == reviewerGranted) {
 		visible, err = s.managementHeldRead(ctx, tx, role, userID, donationID, now)
 		if err != nil {
 			return empty, err
@@ -226,7 +226,7 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 			value.EndpointID = key.OwnerEndpointID
 			value.CanManage = false
 		}
-		if scope.Trainee {
+		if scope.Redact {
 			value.EndpointKeyID = nil
 		}
 		if role != recurringOwner {

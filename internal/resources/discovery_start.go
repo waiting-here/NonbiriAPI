@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
@@ -114,7 +115,16 @@ func beginSourceDiscovery[T any](ctx context.Context, r *Repository, mutation Co
 		launch = func(work func(context.Context)) { cancellable.StartContext(ctx, work) }
 	}
 	checkpoint := "source:" + strconv.FormatInt(selected.source.SourceRevisionID, 10) + ":" + strconv.FormatInt(generation, 10)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO accepted_operations(id,kind,actor_user_id,actor_role,payload_hash,state,checkpoint,last_error_class,created_at,terminal_at) VALUES(?,'model_discovery',?,?,?,'accepted',?,NULL,?,NULL)`, operationID, start.actorID, start.role, digest[:], checkpoint, now); err != nil {
+	auditRole := start.role
+	_, stewardCaller := authz.StewardCallerFromContext(ctx)
+	if start.role == "level6" || stewardCaller {
+		var level int
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(level,auto_level) FROM users WHERE id=?`, start.actorID).Scan(&level); err != nil {
+			return MutationResult[T]{}, err
+		}
+		auditRole = "level" + strconv.Itoa(level)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO accepted_operations(id,kind,actor_user_id,actor_role,payload_hash,state,checkpoint,last_error_class,created_at,terminal_at) VALUES(?,'model_discovery',?,?,?,'accepted',?,NULL,?,NULL)`, operationID, start.actorID, auditRole, digest[:], checkpoint, now); err != nil {
 		return MutationResult[T]{}, err
 	}
 	var useID, useRevision any

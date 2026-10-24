@@ -28,6 +28,8 @@ func safeError(err error) (string, string) {
 	code, message := httperr.CodeInternal, "operation failed; no diagnostic details are exposed"
 	var completedDiscovery *resources.DonationDiscoveryFailure
 	switch {
+	case errors.Is(err, authz.ErrPermissionDenied):
+		code, message = httperr.CodeStewardPermissionDenied, "This action requires permission from an administrator or level 6 steward."
 	case errors.Is(err, errInvalid), errors.Is(err, resources.ErrInvalidRequest), errors.Is(err, donation.ErrInvalidRequest), errors.Is(err, charityrouting.ErrInvalidRequest), errors.Is(err, donationquota.ErrInvalid):
 		code, message = httperr.CodeInvalidRequest, "invalid input or incompatible settings"
 	case errors.Is(err, authz.ErrUnauthorized), errors.Is(err, resources.ErrUnauthorized), errors.Is(err, donation.ErrUnauthorized), errors.Is(err, charityrouting.ErrUnauthorized):

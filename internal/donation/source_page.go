@@ -308,7 +308,7 @@ func (s *Service) sourceKeysPage(ctx context.Context, role reviewerRole, userID 
 			return empty, err
 		}
 		value := managedKeySummary(keys[0], header, rules)
-		if scope.Trainee {
+		if scope.Redact {
 			value.EndpointKeyID = nil
 		}
 		impact, err := scope.Impact(ctx, tx, keyID)

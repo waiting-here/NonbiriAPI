@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
@@ -63,6 +64,16 @@ func (s *Service) beginHandlingTx(ctx context.Context, role reviewerRole, userID
 		actor.hashKind, actor.storedRole, actor.trainee = "trainee5", "level5", true
 	} else if err := s.roleAuth.AuthorizeStewardMutation(ctx, tx, userID); err != nil {
 		return rollback(mapAuthorization(err))
+	}
+	if err := authz.RequireStewardPermission(ctx, tx, userID, "donations.handle"); err != nil {
+		return rollback(err)
+	}
+	if level == 5 {
+		p, err := authz.ReadStewardPermissions(ctx, tx, userID)
+		if err != nil {
+			return rollback(err)
+		}
+		actor.trainee = !p.Permissions["donations.read_all"]
 	}
 	if _, err := charityscope.SessionIdentity(ctx, s.roleAuth, userID); err != nil {
 		return rollback(mapAuthorization(err))

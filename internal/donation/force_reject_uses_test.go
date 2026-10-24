@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -73,7 +74,7 @@ func TestForceRejectReviewedUsesWithPendingHeader(t *testing.T) {
 					}
 				}
 				input := ReviewInput{Decision: "force_reject", ExpectedRevision: parseTestID(t, before.Revision), Reason: "Recheck all credential bodies"}
-				if _, err := e.service.ReviewSteward(ctx, trainee, id, donationMutation(t, 'T', http.MethodPost, routeStewardReview, []int64{id}, input), input); !errors.Is(err, ErrForbidden) {
+				if _, err := e.service.ReviewSteward(ctx, trainee, id, donationMutation(t, 'T', http.MethodPost, routeStewardReview, []int64{id}, input), input); !errors.Is(err, authz.ErrPermissionDenied) {
 					t.Fatalf("trainee force rejection: %v", err)
 				}
 				stale := input

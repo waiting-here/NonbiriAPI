@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"net/http"
 	"testing"
 
@@ -46,7 +47,7 @@ func TestRolePolicyManagedScopeRevisionAuditAndReplay(t *testing.T) {
 	}
 	enabled := false
 	forbidden := ModelPatch{ExpectedRevision: "2", RolePolicy: &policy, Enabled: &enabled}
-	if _, err := e.service.PatchSteward(context.Background(), trainee, id, routingMutation(t, 'c', http.MethodPatch, routeStewardModel, []int64{id}, forbidden), forbidden); !errors.Is(err, ErrForbidden) {
+	if _, err := e.service.PatchSteward(context.Background(), trainee, id, routingMutation(t, 'c', http.MethodPatch, routeStewardModel, []int64{id}, forbidden), forbidden); !errors.Is(err, authz.ErrPermissionDenied) {
 		t.Fatal("trainee other policy accepted", err)
 	}
 	omitted := ModelPatch{ExpectedRevision: "2", Enabled: &enabled}

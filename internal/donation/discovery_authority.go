@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -31,6 +32,11 @@ func (s *Service) AuthorizeManagedDiscovery(ctx context.Context, tx *sql.Tx, rol
 	var target resources.ManagedDiscoveryTarget
 	if s == nil || tx == nil || nilDependency(s.roleAuth) || actorID <= 0 || donationID <= 0 || donationKeyID <= 0 {
 		return target, resources.ErrInvalidRequest
+	}
+	if role != string(reviewerAdmin) {
+		if err := authz.RequireStewardPermission(ctx, tx, actorID, "donations.discover"); err != nil {
+			return target, discoveryResourceError(err)
+		}
 	}
 	scope, err := s.managementScope(ctx, tx, reviewerRole(role), actorID)
 	if err != nil {
@@ -90,9 +96,11 @@ func (s *Service) AuthorizeManagedDiscovery(ctx context.Context, tx *sql.Tx, rol
 
 func discoveryResourceError(err error) error {
 	switch {
-	case errors.Is(err, ErrUnauthorized):
+	case errors.Is(err, authz.ErrPermissionDenied), errors.Is(err, authz.ErrMFARequired):
+		return err
+	case errors.Is(err, ErrUnauthorized), errors.Is(err, authz.ErrUnauthorized):
 		return resources.ErrUnauthorized
-	case errors.Is(err, ErrForbidden):
+	case errors.Is(err, ErrForbidden), errors.Is(err, authz.ErrForbidden):
 		return resources.ErrForbidden
 	case errors.Is(err, ErrNotFound):
 		return resources.ErrNotFound

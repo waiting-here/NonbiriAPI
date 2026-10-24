@@ -31,6 +31,7 @@ const (
 	CodeInvalidRequest          = "invalid_request"
 	CodeUnauthorized            = "unauthorized"
 	CodeForbidden               = "forbidden"
+	CodeStewardPermissionDenied = "steward_permission_denied"
 	CodeNotFound                = "not_found"
 	CodeConflict                = "conflict"
 	CodeRefreshRequired         = "refresh_required"
@@ -120,7 +121,7 @@ func (e Error) WithUpstreamCode(code string) Error {
 // closed set. Wire sinks use the same predicate to fail closed to internal.
 func IsStableCode(code string) bool {
 	switch code {
-	case CodeInternal, CodeInvalidRequest, CodeUnauthorized, CodeForbidden,
+	case CodeInternal, CodeInvalidRequest, CodeUnauthorized, CodeForbidden, CodeStewardPermissionDenied,
 		CodeNotFound, CodeConflict, CodeRefreshRequired, CodeMethodNotAllowed, CodeRateLimited,
 		CodePayloadTooLarge, CodeElevationRequired, CodeMFARequired, CodeMFAInvalidCode, CodeMFASetupExpired, CodeUnboundModel,
 		CodeUpstream, CodeMaintenance, CodeServiceUnavailable,
@@ -143,7 +144,7 @@ func statusOf(code string) int {
 		return http.StatusBadRequest
 	case CodeUnauthorized:
 		return http.StatusUnauthorized
-	case CodeForbidden, CodeMFARequired, CodeMFAInvalidCode, CodeElevationRequired, CodeInsufficientCredits, CodeFeatureDisabled,
+	case CodeForbidden, CodeStewardPermissionDenied, CodeMFARequired, CodeMFAInvalidCode, CodeElevationRequired, CodeInsufficientCredits, CodeFeatureDisabled,
 		CodeCharitySuspended, CodeCheckinCapReached:
 		return http.StatusForbidden
 	case CodeNotFound:

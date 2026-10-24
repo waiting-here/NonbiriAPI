@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"math"
 	"net/http"
 	"strconv"
@@ -92,6 +93,7 @@ func (s *Service) SetBlacklist(ctx context.Context, adminID int64, control Contr
 }
 
 func (s *Service) setBlacklist(ctx context.Context, adminID int64, role managementRole, control ControlMutation, discordID, reason string, add bool) (MutationResult[struct{}], error) {
+	ctx = authz.WithStewardPermission(ctx, "blacklist.add")
 	empty := MutationResult[struct{}]{}
 	if !validDiscordID(discordID) {
 		return empty, ErrInvalidRequest
@@ -118,7 +120,7 @@ func (s *Service) setBlacklist(ctx context.Context, adminID int64, role manageme
 		return empty, err
 	}
 	if add {
-		_, err = blacklistTargetTx(ctx, preflight, role, discordID)
+		_, err = blacklistTargetTx(ctx, preflight, role, discordID, adminID)
 	}
 	if err != nil {
 		preflight.Rollback()
@@ -138,6 +140,18 @@ func (s *Service) setBlacklist(ctx context.Context, adminID int64, role manageme
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
+	var targetID int64
+	if add {
+		targetID, err = blacklistTargetTx(ctx, tx, role, discordID, adminID)
+		if err != nil {
+			return empty, err
+		}
+		if role == roleSteward && targetID != 0 {
+			if err := authz.RequireStewardBanBounds(ctx, tx, adminID, nil); err != nil {
+				return empty, err
+			}
+		}
+	}
 	decision, err := beginControlMutation(ctx, tx, adminID, role, control, now)
 	if err != nil {
 		return empty, err
@@ -149,16 +163,16 @@ func (s *Service) setBlacklist(ctx context.Context, adminID int64, role manageme
 		done = true
 		return MutationResult[struct{}]{Status: decision.HTTPStatus, Body: append([]byte(nil), decision.ResponseBody...), Replayed: true}, nil
 	}
-	var targetID int64
 	if add {
-		targetID, err = blacklistTargetTx(ctx, tx, role, discordID)
-		if err != nil {
-			return empty, err
-		}
 		if targetID != 0 {
 			row, err := readUserRow(ctx, tx, targetID)
 			if err != nil {
 				return empty, err
+			}
+			if role == roleSteward && row.isBanned == 1 && (!row.bannedUntil.Valid || row.bannedUntil.Int64 > now) {
+				if err := authz.RequireStewardPermission(ctx, tx, adminID, "users.unban"); err != nil {
+					return empty, err
+				}
 			}
 			revision, err := db.DecodeU128(row.revision)
 			if err != nil {
@@ -212,6 +226,13 @@ func (s *Service) setBlacklist(ctx context.Context, adminID int64, role manageme
 		kind := blacklist.Admin
 		if role == roleSteward {
 			kind = blacklist.Steward6
+			var level int
+			if err := tx.QueryRowContext(ctx, `SELECT COALESCE(level,auto_level) FROM users WHERE id=?`, adminID).Scan(&level); err != nil {
+				return empty, err
+			}
+			if level == 5 {
+				kind = blacklist.Steward5
+			}
 		}
 		_, err = blacklist.AppendTx(ctx, tx, blacklist.Event{
 			DiscordID: discordID, OperationKey: fmt.Sprintf("manual:%s:%d:%s", role.actorKind(), adminID, control.IdempotencyKey),
@@ -236,7 +257,7 @@ func (s *Service) setBlacklist(ctx context.Context, adminID int64, role manageme
 	return MutationResult[struct{}]{Status: http.StatusNoContent, Body: []byte{}}, nil
 }
 
-func blacklistTargetTx(ctx context.Context, tx *sql.Tx, role managementRole, discordID string) (int64, error) {
+func blacklistTargetTx(ctx context.Context, tx *sql.Tx, role managementRole, discordID string, actorID ...int64) (int64, error) {
 	var targetID int64
 	var admin, level int
 	err := tx.QueryRowContext(ctx, `SELECT id,is_admin,COALESCE(level,auto_level) FROM users WHERE discord_id=?`, discordID).Scan(&targetID, &admin, &level)
@@ -246,7 +267,13 @@ func blacklistTargetTx(ctx context.Context, tx *sql.Tx, role managementRole, dis
 	if err != nil {
 		return 0, err
 	}
-	if admin != 0 || role == roleSteward && level >= 6 {
+	actorLevel := 6
+	if role == roleSteward && len(actorID) == 1 {
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(level,auto_level) FROM users WHERE id=?`, actorID[0]).Scan(&actorLevel); err != nil {
+			return 0, err
+		}
+	}
+	if admin != 0 || role == roleSteward && level >= actorLevel {
 		return 0, ErrForbidden
 	}
 	return targetID, nil

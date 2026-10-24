@@ -112,6 +112,34 @@ func TestAuditRetentionUsesStableOrderAndOneTotalBudget(t *testing.T) {
 	}
 }
 
+func TestStewardPermissionRetentionUsesNinetyDaysAndBoundedBatches(t *testing.T) {
+	f := openAdapterFixture(t)
+	tx := beginAdapterTx(t, f.store.DB())
+	user := seedAdapterUser(t, tx, "permission-retention", 0)
+	for _, at := range []int64{1, 2, 3} {
+		if _, err := tx.Exec(`INSERT INTO steward_permission_audits(user_id,from_revision,to_revision,previous_policy,next_policy,created_at) VALUES(?,0,1,'{}','{}',?)`, user.id, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	a := NewStewardPermissionRetention(f.store.DB())
+	deadline := time.Now().Add(time.Minute)
+	first, err := a.Retain(context.Background(), 90*86400+2, 1, deadline)
+	if err != nil || first.Processed != 1 || !first.More {
+		t.Fatal(first, err)
+	}
+	second, err := a.Retain(context.Background(), 90*86400+2, 10, deadline)
+	if err != nil || second.Processed != 1 || second.More {
+		t.Fatal(second, err)
+	}
+	var count, at int64
+	if err := f.store.DB().QueryRow(`SELECT count(*),min(created_at) FROM steward_permission_audits`).Scan(&count, &at); err != nil || count != 1 || at != 3 {
+		t.Fatal(count, at, err)
+	}
+}
+
 func TestAuditRetentionDrainsMaintenanceBeforeAnnouncements(t *testing.T) {
 	deadline := time.Unix(4_000, 0)
 	order := []string{}

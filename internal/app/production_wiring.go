@@ -69,6 +69,7 @@ func newAutomationHandler(service *stewardautomation.Service, repository *resour
 			ctx = authz.WithPersonalCaller(ctx, authz.PersonalCaller{UserID: identity.UserID, Generation: identity.Generation})
 		} else {
 			ctx = authz.WithStewardCaller(ctx, authz.StewardCaller{UserID: identity.UserID, Generation: identity.Generation})
+			ctx = authz.WithStewardPermission(ctx, authz.StewardRoutePermission(r.Method, r.URL.Path))
 		}
 		service.ServeHTTP(w, r.WithContext(ctx))
 	})

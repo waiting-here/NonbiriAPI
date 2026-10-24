@@ -729,6 +729,7 @@ func (service *Service) Profile(ctx context.Context, adminID, userID int64, cont
 }
 
 func (service *Service) profile(ctx context.Context, adminID, userID int64, role managementRole, control ControlMutation, input ProfileMutation) (MutationResult[AdminUser], error) {
+	ctx = authz.WithStewardPermission(ctx, "user_fields")
 	if userID <= 0 {
 		return MutationResult[AdminUser]{}, ErrNotFound
 	}
@@ -763,6 +764,11 @@ func (service *Service) profile(ctx context.Context, adminID, userID int64, role
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
+	if role == roleSteward {
+		if err := authorizeProfilePermissions(ctx, tx, adminID, input); err != nil {
+			return MutationResult[AdminUser]{}, err
+		}
+	}
 	if input.LevelSet && decision.Kind != idempotency.Replay && (!row.discordID.Valid || row.discordID.String != lockedDiscord) {
 		return MutationResult[AdminUser]{}, ErrConflict
 	}
@@ -856,6 +862,7 @@ func (service *Service) Economy(ctx context.Context, adminID, userID int64, cont
 }
 
 func (service *Service) economy(ctx context.Context, adminID, userID int64, role managementRole, control ControlMutation, input EconomyMutation) (MutationResult[AdminUser], error) {
+	ctx = authz.WithStewardPermission(ctx, "user_fields")
 	if userID <= 0 {
 		return MutationResult[AdminUser]{}, ErrNotFound
 	}
@@ -869,6 +876,11 @@ func (service *Service) economy(ctx context.Context, adminID, userID int64, role
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
+	if role == roleSteward && input.Target != "donation_credit" {
+		if err := authorizeEconomyPermissions(ctx, tx, adminID, input); err != nil {
+			return MutationResult[AdminUser]{}, err
+		}
+	}
 	if role == roleSteward && input.Target == "donation_credit" {
 		return MutationResult[AdminUser]{}, ErrForbidden
 	}
@@ -1004,6 +1016,11 @@ func (service *Service) Unban(ctx context.Context, adminID, userID int64, contro
 }
 
 func (service *Service) setBan(ctx context.Context, adminID, userID int64, role managementRole, control ControlMutation, expected db.U128, banned bool, reason string, duration *int64) (MutationResult[struct{}], error) {
+	permission := "users.unban"
+	if banned {
+		permission = "users.ban"
+	}
+	ctx = authz.WithStewardPermission(ctx, permission)
 	if userID <= 0 {
 		return MutationResult[struct{}]{}, ErrNotFound
 	}
@@ -1022,6 +1039,11 @@ func (service *Service) setBan(ctx context.Context, adminID, userID int64, role 
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
+	if role == roleSteward && banned {
+		if err := authorizeBanPermissions(ctx, tx, adminID, duration); err != nil {
+			return MutationResult[struct{}]{}, err
+		}
+	}
 	if decision.Kind != idempotency.Replay && (!row.discordID.Valid || row.discordID.String != lockedDiscord) {
 		return MutationResult[struct{}]{}, ErrConflict
 	}

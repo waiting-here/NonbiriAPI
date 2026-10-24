@@ -3,6 +3,7 @@ package adminusers
 import (
 	"context"
 	"database/sql"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"strconv"
 	"strings"
 
@@ -53,10 +54,17 @@ func (s *Service) beginManagementAccess(ctx context.Context, actorID int64, role
 	case roleAdmin:
 		err = s.finalAuth.AuthorizeAdmin(ctx, tx, actorID)
 	case roleSteward:
-		if allowTrainee {
-			trainee, err = s.finalAuth.AuthorizeUserManagement(ctx, tx, actorID)
-		} else {
-			err = s.finalAuth.AuthorizeStewardMutation(ctx, tx, actorID)
+		trainee, err = s.finalAuth.AuthorizeUserManagement(ctx, tx, actorID)
+		if err == nil {
+			permission := authz.StewardPermissionFromContext(ctx)
+			if permission == "" {
+				if allowTrainee {
+					permission = "users.read"
+				} else {
+					permission = "delegate"
+				}
+			}
+			err = authz.RequireStewardPermission(ctx, tx, actorID, permission)
 		}
 	default:
 		err = ErrForbidden
@@ -125,7 +133,7 @@ func (s *Service) beginUserMutationAccess(ctx context.Context, actorID, userID i
 	// Changing an existing ban could shorten it, effectively granting an unban.
 	// An identical replay remains valid after the target-level check above.
 	if err == nil && trainee && !limitsOnly && decision.Kind != idempotency.Replay && row.isBanned == 1 && (!row.bannedUntil.Valid || row.bannedUntil.Int64 > now) {
-		err = ErrForbidden
+		err = authz.RequireStewardPermission(ctx, tx, actorID, "users.unban")
 	}
 	if err == nil && role == roleAdmin && decision.Kind != idempotency.Replay {
 		row, err = readUserRow(ctx, tx, userID)

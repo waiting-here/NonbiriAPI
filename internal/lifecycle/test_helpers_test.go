@@ -366,6 +366,10 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 		t.Fatalf("db.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
+	fixtureUser := seedLifecycleUser(t, store.DB(), "export-fixture", false, now)
+	if _, err := store.DB().Exec(`UPDATE users SET id=7 WHERE id=?`, fixtureUser); err != nil {
+		t.Fatal(err)
+	}
 	auth := &testFinalAuth{}
 	exports := &testExportAdapter{governance: GovernanceExport{LakeNotes: testLakeNotesExport()}}
 	deleteCalls := []string{}

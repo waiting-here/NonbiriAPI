@@ -56,7 +56,7 @@ func (r *Repository) authorize(ctx context.Context, tx *sql.Tx, actor Actor, now
 		err = r.finalAuth.AuthorizeStewardMutation(ctx, tx, actor.UserID)
 	}
 	if err != nil {
-		if errors.Is(err, authz.ErrMFARequired) {
+		if errors.Is(err, authz.ErrMFARequired) || errors.Is(err, authz.ErrPermissionDenied) {
 			return err
 		}
 		if errors.Is(err, authz.ErrUnauthorized) || errors.Is(err, authz.ErrForbidden) {
@@ -68,14 +68,18 @@ func (r *Repository) authorize(ctx context.Context, tx *sql.Tx, actor Actor, now
 		return nil
 	}
 	var allowed int
-	err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE id=? AND is_admin=0 AND COALESCE(level,auto_level)=6 AND (is_banned=0 OR (banned_until IS NOT NULL AND banned_until<=?))`, actor.UserID, now).Scan(&allowed)
+	err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE id=? AND is_admin=0 AND COALESCE(level,auto_level) IN (5,6) AND (is_banned=0 OR (banned_until IS NOT NULL AND banned_until<=?))`, actor.UserID, now).Scan(&allowed)
 	if err != nil {
 		return ErrUnavailable
 	}
 	if allowed != 1 {
 		return ErrForbidden
 	}
-	return nil
+	permission := authz.StewardPermissionFromContext(ctx)
+	if permission == "" {
+		permission = "risk.read"
+	}
+	return authz.RequireStewardPermission(ctx, tx, actor.UserID, permission)
 }
 func (r *Repository) begin(ctx context.Context, actor Actor, write bool) (*sql.Tx, error) {
 	if r == nil || ctx == nil {
@@ -329,6 +333,20 @@ func (r *Repository) PutRuleWithAction(ctx context.Context, actor Actor, rule Ru
 	defer tx.Rollback()
 	now := r.now().Unix()
 	role, user := actorFields(actor)
+	if !actor.Admin {
+		var level int
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(level,auto_level) FROM users WHERE id=?`, actor.UserID).Scan(&level); err != nil {
+			return Rule{}, err
+		}
+		if level == 5 {
+			role = "level5"
+		}
+	}
+	if !actor.Admin && action.Present && action.AutoBan != nil && action.AutoBan.Enabled {
+		if err := authz.RequireStewardBanBounds(ctx, tx, actor.UserID, action.AutoBan.DurationSeconds); err != nil {
+			return Rule{}, err
+		}
+	}
 	conditionsJSON, _ := json.Marshal(rule.Conditions)
 	if len(conditionsJSON) > 16384 {
 		return Rule{}, ErrInvalid
@@ -384,6 +402,11 @@ func (r *Repository) PutRuleWithAction(ctx context.Context, actor Actor, rule Ru
 				current := bound
 				if action.Present {
 					current = action.AutoBan
+				}
+				if !actor.Admin && current.Enabled {
+					if err := authz.RequireStewardBanBounds(ctx, tx, actor.UserID, current.DurationSeconds); err != nil {
+						return Rule{}, err
+					}
 				}
 				_, err = tx.ExecContext(ctx, `UPDATE client_rule_auto_bans SET enabled=?,duration_seconds=?,revision=?,actor_user_id=?,updated_at=? WHERE rule_id=? AND revision=?`, current.Enabled, current.DurationSeconds, rule.Revision+1, actor.UserID, now, rule.ID, rule.Revision)
 			} else if action.Present && action.AutoBan != nil {

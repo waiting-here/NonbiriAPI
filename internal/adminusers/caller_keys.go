@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"math"
 	"net/http"
 	"strconv"
@@ -82,6 +83,7 @@ FROM caller_keys WHERE user_id=?`, userID).Scan(&generation, &state.Active, &cre
 }
 
 func (s *Service) managedCallerKey(ctx context.Context, actorID, userID int64, role managementRole) (ManagedCallerKey, error) {
+	ctx = authz.WithStewardPermission(ctx, "users.caller_keys.read")
 	tx, err := s.beginCallerKeyManagement(ctx, actorID, userID, role, true)
 	if err != nil {
 		return ManagedCallerKey{}, err
@@ -98,6 +100,7 @@ func (s *Service) managedCallerKey(ctx context.Context, actorID, userID int64, r
 }
 
 func (s *Service) revokeManagedCallerKey(ctx context.Context, actorID, userID int64, role managementRole, control ControlMutation, expectedGeneration int64) (MutationResult[CallerKeyRevocation], error) {
+	ctx = authz.WithStewardPermission(ctx, "users.caller_keys.revoke")
 	if expectedGeneration < 0 {
 		return MutationResult[CallerKeyRevocation]{}, ErrInvalidRequest
 	}

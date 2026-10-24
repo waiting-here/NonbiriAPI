@@ -294,6 +294,9 @@ func (r *Runtime) RegisterUserRoute(method, pattern string, handler resources.Au
 			writeStableError(w, httperr.CodeUnauthorized, "authentication required")
 			return
 		}
+		if permission := authz.StewardRoutePermission(method, pattern); permission != "" {
+			req = req.WithContext(authz.WithStewardPermission(req.Context(), permission))
+		}
 		handler(w, req, resources.UserPrincipal{UserID: actor.UserID})
 	})
 	return r.registerUserInternal(method, pattern, adapter, false, false)

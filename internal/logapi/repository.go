@@ -89,7 +89,7 @@ func (repository *Repository) beginStewardReadOn(
 		if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, false, translateReadError(ctx, err)
 		}
-		if errors.Is(err, authz.ErrMFARequired) {
+		if errors.Is(err, authz.ErrMFARequired) || errors.Is(err, authz.ErrPermissionDenied) {
 			return nil, false, err
 		}
 		if errors.Is(err, ErrUnavailable) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"net/http"
 	"strconv"
 	"unicode/utf8"
@@ -272,11 +273,17 @@ func (s *Service) applyBindingPreset(ctx context.Context, role roleKind, actorID
 	if err != nil {
 		return empty, err
 	}
-	tx, actor, err := s.beginRoleTx(ctx, role, actorID)
+	tx, scope, err := s.beginManagementTx(ctx, role, actorID, 0, true, false)
 	if err != nil {
 		return empty, err
 	}
 	defer tx.Rollback()
+	actor := scope.ActorID
+	if role != roleAdmin {
+		if err := authz.RequireStewardPermission(ctx, tx, actor, "charity.manage"); err != nil {
+			return empty, err
+		}
+	}
 	revision, err := donationBindingRevision(ctx, tx, donationID)
 	if err != nil {
 		return empty, err
@@ -292,6 +299,28 @@ func (s *Service) applyBindingPreset(ctx context.Context, role roleKind, actorID
 	if err != nil {
 		return empty, err
 	}
+	preset, err := readBindingPreset(ctx, tx, channel)
+	if err != nil {
+		return empty, err
+	}
+	for _, mapping := range preset.Mappings {
+		if !scope.Trainee || mapping.BindingRevision == nil {
+			continue
+		}
+		modelID, err := parsePositiveID(mapping.CharityModelID)
+		if err != nil {
+			return empty, ErrInvariant
+		}
+		scope, err := s.managementScope(ctx, tx, role, actor, modelID, false)
+		if err != nil {
+			return empty, err
+		}
+		for _, key := range keys {
+			if err := scope.RequireKey(ctx, tx, donationID, key.id, now, true); err != nil {
+				return empty, managementScopeError(err)
+			}
+		}
+	}
 	decision, err := beginMutation(ctx, tx, role, actor, mutation, now)
 	if err != nil {
 		return empty, err
@@ -301,10 +330,6 @@ func (s *Service) applyBindingPreset(ctx context.Context, role roleKind, actorID
 	}
 	if revision != expected || channel.ChannelRevision != input.ExpectedChannelRevision || channel.PresetRevision != input.ExpectedPresetRevision {
 		return empty, ErrConflict
-	}
-	preset, err := readBindingPreset(ctx, tx, channel)
-	if err != nil {
-		return empty, err
 	}
 	if len(preset.Mappings) == 0 {
 		return empty, ErrConflict

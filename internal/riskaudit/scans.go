@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"log/slog"
 	"regexp"
 	"strconv"
@@ -664,9 +665,17 @@ func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, resul
 		return false, err
 	}
 	var allowed bool
-	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id=? AND ((?=1 AND is_admin=1) OR (?=0 AND is_admin=0 AND COALESCE(level,auto_level)=6)) AND (is_banned=0 OR (banned_until IS NOT NULL AND banned_until<=?)))`, scan.owner, scan.admin, scan.admin, now).Scan(&allowed)
+	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id=? AND ((?=1 AND is_admin=1) OR (?=0 AND is_admin=0 AND COALESCE(level,auto_level) IN (5,6))) AND (is_banned=0 OR (banned_until IS NOT NULL AND banned_until<=?)))`, scan.owner, scan.admin, scan.admin, now).Scan(&allowed)
 	if err != nil {
 		return false, err
+	}
+	if allowed && !scan.admin {
+		err := authz.RequireStewardPermission(ctx, tx, scan.owner, "risk.manage")
+		if errors.Is(err, authz.ErrPermissionDenied) || errors.Is(err, authz.ErrForbidden) {
+			allowed = false
+		} else if err != nil {
+			return false, err
+		}
 	}
 	if !allowed {
 		_, err = tx.ExecContext(ctx, `UPDATE risk_client_scans SET state='cancelled',reason='permission_changed',checkpoint_json=`+scanCheckpointWithoutIdentitySQL+`,updated_at=? WHERE id=?`, now, scan.ID)

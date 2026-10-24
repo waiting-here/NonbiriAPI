@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	ErrInvalid  = errors.New("charity scope: invalid selector")
-	ErrNotFound = errors.New("charity scope: not found")
+	ErrInvalid       = errors.New("charity scope: invalid selector")
+	ErrNotFound      = errors.New("charity scope: not found")
+	ErrModelRequired = fmt.Errorf("charity scope: model selector required: %w", authz.ErrPermissionDenied)
 )
 
 type Authorizer interface {
@@ -87,13 +88,15 @@ type Scope struct {
 	ModelID       int64
 	ModelRevision int64
 	Trainee       bool
+	Redact        bool
+	ActorLevel    int
 }
 
 func (scope Scope) AuditRole(admin bool) string {
 	if admin {
 		return "admin"
 	}
-	if scope.Trainee {
+	if scope.ActorLevel == 5 || scope.Trainee {
 		return "trainee5"
 	}
 	return "level6"
@@ -127,6 +130,10 @@ func Authorize(ctx context.Context, tx *sql.Tx, authority Authorizer, admin bool
 		if isAdmin != 0 || level != 5 && level != 6 {
 			return result, authz.ErrForbidden
 		}
+		result.ActorLevel = level
+		if err := authz.RequireContextStewardPermission(ctx, tx, actorID); err != nil {
+			return result, err
+		}
 		if level == 6 {
 			if err := authority.AuthorizeStewardMutation(ctx, tx, actorID); err != nil {
 				return result, err
@@ -142,9 +149,14 @@ func Authorize(ctx context.Context, tx *sql.Tx, authority Authorizer, admin bool
 			if _, err := SessionIdentity(ctx, authority, actorID); err != nil {
 				return result, err
 			}
-			result.Trainee = true
-			if modelID == 0 && !listing {
-				return result, ErrNotFound
+			policy, err := authz.ReadStewardPermissions(ctx, tx, actorID)
+			if err != nil {
+				return result, err
+			}
+			result.Trainee = !policy.Permissions["charity.non_mainstream"]
+			result.Redact = !policy.Permissions["donations.read_all"]
+			if result.Trainee && modelID == 0 && !listing {
+				return result, ErrModelRequired
 			}
 		}
 	}
@@ -162,6 +174,9 @@ func Authorize(ctx context.Context, tx *sql.Tx, authority Authorizer, admin bool
 }
 
 func SessionIdentity(ctx context.Context, authority Authorizer, actorID int64) (string, error) {
+	if caller, ok := authz.StewardCallerFromContext(ctx); ok && caller.UserID == actorID {
+		return fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("caller:%d:%d", actorID, caller.Generation)))), nil
+	}
 	source, ok := authority.(actorSource)
 	if !ok {
 		return "", authz.ErrUnauthorized

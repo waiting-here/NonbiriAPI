@@ -236,6 +236,13 @@ func (s *Service) ReadFailurePolicyStewardInTransaction(ctx context.Context, tx 
 	if err := requireManagedDonationTx(ctx, tx, reviewerSteward, donationID, now); err != nil {
 		return FailurePolicy{}, err
 	}
+	scope, err := s.managementScope(ctx, tx, reviewerSteward, actorID)
+	if err != nil {
+		return FailurePolicy{}, err
+	}
+	if err := scope.RequireKey(ctx, tx, donationID, keyID, now, false); err != nil {
+		return FailurePolicy{}, scopeError(err)
+	}
 	return readFailurePolicyTx(ctx, tx, donationID, keyID, now)
 }
 
@@ -247,5 +254,9 @@ func (s *Service) SetFailurePolicyStewardInTransaction(ctx context.Context, tx *
 	if err != nil {
 		return FailurePolicy{}, err
 	}
-	return updateFailurePolicyTx(ctx, tx, actorID, string(reviewerSteward), donationID, keyID, expected, threshold, now)
+	scope, err := s.managementScope(ctx, tx, reviewerSteward, actorID)
+	if err != nil {
+		return FailurePolicy{}, err
+	}
+	return updateFailurePolicyTx(ctx, tx, actorID, scope.AuditRole(false), donationID, keyID, expected, threshold, now)
 }

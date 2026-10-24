@@ -478,8 +478,15 @@ func (s *Service) review(
 	role = reviewRole
 	committed := false
 	defer finishTx(tx, &committed)
-	if role == reviewerTrainee && input.Decision == "force_reject" {
-		return roleDonationMutation{}, ErrForbidden
+	if role != reviewerAdmin {
+		if err := authz.RequireStewardPermission(ctx, tx, actorID, "donations.review"); err != nil {
+			return roleDonationMutation{}, err
+		}
+		if input.Decision == "force_reject" {
+			if err := authz.RequireStewardPermission(ctx, tx, actorID, "donations.force_reject"); err != nil {
+				return roleDonationMutation{}, err
+			}
+		}
 	}
 	now, err := s.nowUnix()
 	if err != nil {
@@ -495,7 +502,7 @@ func (s *Service) review(
 	if decision.Kind == idempotency.Replay {
 		return replayRoleDonation(ctx, tx, decision, role, actorID, donationID)
 	}
-	if role == reviewerTrainee {
+	if role == reviewerTrainee && input.Decision != "force_reject" {
 		if err := requirePendingReviewTx(ctx, tx, donationID, now); err != nil {
 			return roleDonationMutation{}, err
 		}
@@ -798,14 +805,12 @@ func (s *Service) manageKey(
 		return roleDonationMutation{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		if scope.Trainee {
-			out, err := replay[ManagedKeyReceipt](decision)
+		if scope.Redact {
+			key, err := s.managedKeyTx(ctx, tx, scope, donationID, keyID, now)
 			if err != nil {
 				return roleDonationMutation{}, err
 			}
-			if out.Value.DonationID != strconv.FormatInt(donationID, 10) || out.Value.KeyID != strconv.FormatInt(keyID, 10) {
-				return roleDonationMutation{}, ErrInvariant
-			}
+			out := resources.MutationResult[ManagedKeyReceipt]{Value: ManagedKeyReceipt{DonationID: key.DonationID, KeyID: key.KeyID, DonationRevision: key.DonationRevision, Key: key}, Status: decision.HTTPStatus, Replayed: true}
 			impact, err := scope.Impact(ctx, tx, keyID)
 			if err != nil {
 				return roleDonationMutation{}, err
@@ -815,7 +820,19 @@ func (s *Service) manageKey(
 			body, err := json.Marshal(out.Value)
 			return roleDonationMutation{trainee: &out.Value, status: out.Status, body: body, replayed: true}, err
 		}
-		return replayRoleDonation(ctx, tx, decision, role, actorID, donationID)
+		value, err := getAdminDonationTx(ctx, tx, donationID, now)
+		if err != nil {
+			return roleDonationMutation{}, err
+		}
+		result := roleDonationMutation{status: decision.HTTPStatus, replayed: true}
+		if role == reviewerAdmin {
+			result.admin = value
+			result.body, err = json.Marshal(value)
+		} else {
+			result.steward = stewardFromAdmin(value, actorID)
+			result.body, err = json.Marshal(result.steward)
+		}
+		return result, err
 	}
 	expiry, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
 	if err != nil {
@@ -854,7 +871,7 @@ func (s *Service) manageKey(
 	if err := manageDonationKeyTx(ctx, tx, donationID, keyID, actorID, scope.AuditRole(role == reviewerAdmin), input, now); err != nil {
 		return roleDonationMutation{}, err
 	}
-	if scope.Trainee {
+	if scope.Redact {
 		key, err := s.managedKeyTx(ctx, tx, scope, donationID, keyID, now)
 		if err != nil {
 			return roleDonationMutation{}, err
@@ -889,7 +906,7 @@ func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.De
 		return roleDonationMutation{}, ErrInvariant
 	}
 	result := roleDonationMutation{status: decision.HTTPStatus, body: body, replayed: true}
-	if role == reviewerSteward || role == reviewerTrainee {
+	if role == reviewerSteward || role == reviewerGranted || role == reviewerTrainee {
 		if err := json.Unmarshal(decision.ResponseBody, &result.steward); err != nil {
 			return roleDonationMutation{}, ErrInvariant
 		}
@@ -978,7 +995,7 @@ JOIN donation_keys dk ON dk.id=b.donation_key_id WHERE dk.donation_id=? AND dk.i
 }
 
 func finishRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, role reviewerRole, actorID int64, value AdminDonation) (roleDonationMutation, error) {
-	if role == reviewerSteward || role == reviewerTrainee {
+	if role == reviewerSteward || role == reviewerGranted || role == reviewerTrainee {
 		if role == reviewerTrainee {
 			value = traineeReviewProjection(value)
 		}
@@ -1148,7 +1165,7 @@ func (s *Service) beginRoleTx(ctx context.Context, role reviewerRole, actorUserI
 		if err := s.roleAuth.AuthorizeAdminMutation(ctx, tx, actorUserID); err != nil {
 			return rollback(mapAuthorization(err))
 		}
-	case reviewerSteward:
+	case reviewerSteward, reviewerGranted:
 		if actorUserID <= 0 {
 			return rollback(ErrInvalidRequest)
 		}
@@ -1577,7 +1594,7 @@ func classifyWrite(operation string, err error) error {
 }
 
 func mapAuthorization(err error) error {
-	if errors.Is(err, authz.ErrMFARequired) {
+	if errors.Is(err, authz.ErrMFARequired) || errors.Is(err, authz.ErrPermissionDenied) {
 		return err
 	}
 	if err == nil {

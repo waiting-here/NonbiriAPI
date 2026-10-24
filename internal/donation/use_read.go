@@ -219,7 +219,7 @@ WHERE d.id=? AND du.id IN (` + strings.TrimRight(strings.Repeat("?,", len(ids)),
 		value.ID, value.DonationID, value.DonationKeyID, value.Revision = strconv.FormatInt(id, 10), strconv.FormatInt(donationID, 10), strconv.FormatInt(keyID, 10), strconv.FormatInt(revision, 10)
 		value.EndpointKeyID = decimalPointer(endpoint)
 		value.NativeService = services.Services()[0]
-		if access.reviewOnly || access.scope.Trainee {
+		if access.reviewOnly || access.scope.Redact {
 			value.EndpointKeyID = nil
 		}
 		if disabled.Valid {
