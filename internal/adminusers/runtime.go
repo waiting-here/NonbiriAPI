@@ -627,6 +627,9 @@ FROM site_activity_daily WHERE day<?`, ` ORDER BY day DESC`, []any{upper}, query
 }
 
 func (service *Service) EndpointOverview(ctx context.Context, adminID int64, query EndpointOverviewQuery) (Page[EndpointOverview], error) {
+	return service.endpointOverview(ctx, adminID, roleAdmin, query)
+}
+func (service *Service) endpointOverview(ctx context.Context, adminID int64, role managementRole, query EndpointOverviewQuery) (Page[EndpointOverview], error) {
 	limit := normalizePageLimit(query.Page, query.Cursor, query.Limit)
 	if limit == 0 || query.UserID < 0 || !validEndpointTagFilter(query.Tag) {
 		return Page[EndpointOverview]{}, ErrInvalidRequest
@@ -648,7 +651,7 @@ func (service *Service) EndpointOverview(ctx context.Context, adminID int64, que
 	if err != nil {
 		return Page[EndpointOverview]{}, err
 	}
-	tx, err := service.beginListRead(ctx, adminID, query.Page != nil)
+	tx, err := service.beginEndpointManagement(ctx, adminID, role, true, "endpoints.read")
 	if err != nil {
 		return Page[EndpointOverview]{}, err
 	}

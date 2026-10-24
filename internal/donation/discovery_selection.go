@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -104,9 +103,10 @@ func (s *Service) selectDiscoveries(ctx context.Context, role reviewerRole, user
 		query += ` AND d.id=?`
 		args = append(args, donationID)
 	}
-	if scope.Trainee {
-		query += ` AND ` + charityscope.KeyPredicate()
-		args = append(args, scope.ModelID, now)
+	if scope.RestrictedKeys() {
+		predicate, values := scope.KeyPredicate(now, false)
+		query += " AND " + predicate
+		args = append(args, values...)
 	}
 	rows, err = tx.QueryContext(ctx, query+` ORDER BY dk.id`, args...)
 	if err != nil {

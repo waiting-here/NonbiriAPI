@@ -18,11 +18,12 @@ type handlingActor struct {
 	id                   int64
 	hashKind, storedRole string
 	trainee              bool
+	scope                authz.DonationScope
 }
 
 // Handling is a separate capability; it does not grant donation review or model access.
 func (s *Service) beginHandlingTx(ctx context.Context, role reviewerRole, userID int64, readOnly bool) (*sql.Tx, handlingActor, error) {
-	actor := handlingActor{id: userID, hashKind: string(role), storedRole: string(role)}
+	actor := handlingActor{id: userID, hashKind: string(role), storedRole: string(role), scope: authz.DonationScopeFull}
 	if role == reviewerAdmin {
 		tx, id, err := s.beginRoleTx(ctx, role, userID)
 		actor.id = id
@@ -73,7 +74,11 @@ func (s *Service) beginHandlingTx(ctx context.Context, role reviewerRole, userID
 		if err != nil {
 			return rollback(err)
 		}
-		actor.trainee = !p.Permissions["donations.read_all"]
+		actor.scope = p.DonationScope
+		actor.trainee = p.DonationScope != authz.DonationScopeFull
+		if p.DonationScope == authz.DonationScopeNone {
+			return rollback(authz.ErrPermissionDenied)
+		}
 	}
 	if _, err := charityscope.SessionIdentity(ctx, s.roleAuth, userID); err != nil {
 		return rollback(mapAuthorization(err))
@@ -115,7 +120,7 @@ func (s *Service) HandlingStewardPage(ctx context.Context, userID int64, filter 
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, _, err := s.beginHandlingTx(ctx, reviewerSteward, userID, true)
+	tx, actor, err := s.beginHandlingTx(ctx, reviewerSteward, userID, true)
 	if err != nil {
 		return empty, err
 	}
@@ -124,8 +129,16 @@ func (s *Service) HandlingStewardPage(ctx context.Context, userID int64, filter 
 	if err != nil {
 		return empty, err
 	}
-	from := ` FROM donations d JOIN donation_handling h ON h.donation_id=d.id WHERE ` + manageableDonationSQL
+	predicate := manageableDonationSQL
 	args := []any{now}
+	if actor.scope == authz.DonationScopeFull {
+		predicate = logicallyActiveDonationSQL
+	}
+	if actor.scope == authz.DonationScopeEnhanced {
+		predicate = "(" + predicate + " OR (" + charityscope.TaggedDonationSQL + " AND " + logicallyActiveDonationSQL + "))"
+		args = append(args, now)
+	}
+	from := ` FROM donations d JOIN donation_handling h ON h.donation_id=d.id WHERE ` + predicate
 	if filter.Handling != "all" {
 		handling := filter.Handling
 		if handling == "" {

@@ -6,6 +6,7 @@ const StewardPermissionsSQL = `CREATE TABLE steward_permissions (
  revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807),
  permissions TEXT NOT NULL CHECK(length(CAST(permissions AS BLOB))<=8192 AND json_valid(permissions) AND json_type(permissions)='object'),
  limits TEXT NOT NULL CHECK(length(CAST(limits AS BLOB))<=2048 AND json_valid(limits) AND json_type(limits)='object'),
+ donation_scope TEXT NOT NULL DEFAULT 'standard' CHECK(donation_scope IN ('none','standard','enhanced','full')),
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
  updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN created_at AND 253402300799)
 );
@@ -108,4 +109,17 @@ INSERT INTO discord_blacklist_origins SELECT * FROM saved_discord_blacklist_orig
 DROP TABLE saved_discord_blacklist_origins;
 INSERT INTO discord_blacklist_events SELECT * FROM saved_discord_blacklist_events;
 DROP TABLE saved_discord_blacklist_events;
+`
+
+// EndpointTagsSQL widens the existing tag registry without changing stored labels.
+const EndpointTagsSQL = `CREATE TEMP TABLE saved_endpoint_tags AS SELECT base_url,tag FROM admin_endpoint_tags;
+DROP TABLE admin_endpoint_tags;
+CREATE TABLE admin_endpoint_tags (
+ base_url TEXT NOT NULL CHECK(length(base_url) BETWEEN 1 AND 4096),
+ tag TEXT NOT NULL CHECK(tag IN ('abusive_third_party','community_charity','noncommercial_gateway','user_gateway','steward_gateway','invalid_entry')),
+ PRIMARY KEY(base_url,tag)
+) STRICT, WITHOUT ROWID;
+CREATE INDEX idx_admin_endpoint_tags_tag ON admin_endpoint_tags(tag,base_url);
+INSERT INTO admin_endpoint_tags SELECT base_url,tag FROM saved_endpoint_tags;
+DROP TABLE saved_endpoint_tags;
 `

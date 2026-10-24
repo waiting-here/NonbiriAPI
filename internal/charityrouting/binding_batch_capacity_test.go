@@ -49,7 +49,7 @@ func TestKeyBindingBatchPreservesLargeSelectionCapacity(t *testing.T) {
 			model := catalogCreate(t, e, byte('a'+index), fmt.Sprint("capacity-", count), nil, true)
 			targets := make([]KeyBindingTarget, 257)
 			for i := range targets {
-				targets[i] = KeyBindingTarget{model.ID, "0", upstreamIDs[i]}
+				targets[i] = KeyBindingTarget{model.ID, "0", upstreamIDs[i], nil}
 			}
 			input := KeyBindingBatch{"1", targets[:count]}
 			body, err := json.Marshal(input)

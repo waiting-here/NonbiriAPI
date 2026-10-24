@@ -61,7 +61,7 @@ func (s *Service) bindingCandidates(ctx context.Context, role roleKind, actorUse
 	if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, now, 100); err != nil {
 		return nil, 0, "", fmt.Errorf("charity routing: materialize candidate expiry: %w", err)
 	}
-	query.traineeOnly = scope.Trainee
+	query.maintenanceScope = scope
 	statement, args := candidatePageSelection(modelID, now, query)
 	statement += ` ORDER BY dk.id,pc.normalized_model_id LIMIT ?`
 	args = append(args, query.Limit+1)
@@ -131,10 +131,19 @@ func (s *Service) GetBindingsSteward(ctx context.Context, actorUserID, modelID i
 		return StewardBindings{}, fmt.Errorf("charity routing: begin steward bindings read: %w", err)
 	}
 	defer tx.Rollback()
-	if _, err := s.managementScope(ctx, tx, roleSteward, actorUserID, modelID, false); err != nil {
+	scope, err := s.managementScope(ctx, tx, roleSteward, actorUserID, modelID, false)
+	if err != nil {
 		return StewardBindings{}, err
 	}
 	value, err := readAdminBindingsTx(ctx, tx, modelID)
+	if err != nil {
+		return StewardBindings{}, err
+	}
+	now, err := s.nowUnix()
+	if err != nil {
+		return StewardBindings{}, err
+	}
+	value, err = scopedBindingsTx(ctx, tx, scope, value, now)
 	if err != nil {
 		return StewardBindings{}, err
 	}
@@ -279,6 +288,9 @@ func (s *Service) addBindings(ctx context.Context, role roleKind, actorUserID, m
 		var value AdminBindings
 		value, err = readAdminBindingsTx(ctx, tx, modelID)
 		if err == nil {
+			value, err = scopedBindingsTx(ctx, tx, scope, value, now)
+		}
+		if err == nil {
 			result.full, err = finishJSON(ctx, tx, decision, http.StatusCreated, value)
 		}
 	}
@@ -333,6 +345,9 @@ func (s *Service) orderBindings(ctx context.Context, role roleKind, actorUserID,
 	}
 	committed := false
 	defer finishTx(tx, &committed)
+	if err := requireBindingSourceScope(ctx, tx, scope, modelID, 0, now); err != nil {
+		return resources.MutationResult[AdminBindings]{}, err
+	}
 	decision, err := beginMutation(ctx, tx, roleKind(scope.AuditRole(role == roleAdmin)), scope.ActorID, mutation, now)
 	if err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
@@ -366,7 +381,7 @@ func (s *Service) orderBindings(ctx context.Context, role roleKind, actorUserID,
 	if err := advanceBindingRevisionTx(ctx, tx, modelID, expected, now); err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
-	out, err := finishBindingEdit(ctx, tx, decision, modelID, expected+1, input.Response)
+	out, err := finishBindingEdit(ctx, tx, decision, modelID, expected+1, input.Response, scope, now)
 	if err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
@@ -417,12 +432,15 @@ func (s *Service) deleteBinding(ctx context.Context, role roleKind, actorUserID,
 	}
 	committed := false
 	defer finishTx(tx, &committed)
+	if err := requireBindingSourceScope(ctx, tx, scope, modelID, bindingID, now); err != nil {
+		return resources.MutationResult[AdminBindings]{}, err
+	}
 	decision, err := beginMutation(ctx, tx, roleKind(scope.AuditRole(role == roleAdmin)), scope.ActorID, mutation, now)
 	if err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replayBindingEdit(ctx, tx, decision, scope, now, input.Response)
+		return replayDeletedBinding(ctx, tx, decision, scope, now, input.Response)
 	}
 	current, _, err := readBindingHeadTx(ctx, tx, modelID)
 	if err != nil {
@@ -430,6 +448,10 @@ func (s *Service) deleteBinding(ctx context.Context, role roleKind, actorUserID,
 	}
 	if current != expected {
 		return resources.MutationResult[AdminBindings]{}, ErrConflict
+	}
+	sourceKeys, err := bindingReplaySourcesTx(ctx, tx, modelID, bindingID)
+	if err != nil {
+		return resources.MutationResult[AdminBindings]{}, err
 	}
 	result, err := tx.ExecContext(ctx, `DELETE FROM charity_model_bindings WHERE id=? AND charity_model_id=?`, bindingID, modelID)
 	if err != nil {
@@ -453,7 +475,7 @@ func (s *Service) deleteBinding(ctx context.Context, role roleKind, actorUserID,
 	if err := advanceBindingRevisionTx(ctx, tx, modelID, expected, now); err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
-	out, err := finishBindingEdit(ctx, tx, decision, modelID, expected+1, input.Response)
+	out, err := finishBindingEdit(ctx, tx, decision, modelID, expected+1, input.Response, scope, now, sourceKeys)
 	if err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}

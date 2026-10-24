@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -26,6 +27,9 @@ func (s *Service) managementScope(ctx context.Context, tx *sql.Tx, role reviewer
 		return charityscope.Scope{}, ErrInvalidRequest
 	}
 	scope, err := charityscope.Authorize(ctx, tx, s.roleAuth, role == reviewerAdmin, actorID, charityscope.ModelID(ctx), false)
+	if err == nil && scope.DonationScope == authz.DonationScopeNone {
+		err = authz.ErrPermissionDenied
+	}
 	return scope, scopeError(err)
 }
 
@@ -103,6 +107,13 @@ func (s *Service) managedKeyTx(ctx context.Context, tx *sql.Tx, scope charitysco
 		return ManagedKeySummary{}, err
 	}
 	value := managedKeySummary(keys[0], header, rules)
+	if scope.ActorLevel > 0 {
+		canManage, err := keyManagementAllowedTx(ctx, tx, reviewerSteward, scope.ActorID)
+		if err != nil {
+			return ManagedKeySummary{}, err
+		}
+		value.CanManage = value.CanManage && canManage
+	}
 	if scope.Redact {
 		value.EndpointKeyID = nil
 	}

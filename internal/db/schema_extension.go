@@ -109,7 +109,7 @@ func upgradeStartupSchema(ctx context.Context, database *sql.DB, codec secret.Ge
 			return err
 		}
 	}
-	if _, err := conn.ExecContext(ctx, StewardPermissionsSQL+StewardAuditRolesSQL); err != nil {
+	if _, err := conn.ExecContext(ctx, StewardPermissionsSQL+StewardAuditRolesSQL+EndpointTagsSQL); err != nil {
 		return err
 	}
 	changed, err := conn.ExecContext(ctx, "UPDATE schema_state SET version=? WHERE id=1 AND version=?", CurrentSchemaVersion, version)

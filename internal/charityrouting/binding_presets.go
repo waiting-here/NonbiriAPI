@@ -303,8 +303,12 @@ func (s *Service) applyBindingPreset(ctx context.Context, role roleKind, actorID
 	if err != nil {
 		return empty, err
 	}
+	checkedSources := false
+	if scope.DonationScope == "none" {
+		return empty, authz.ErrPermissionDenied
+	}
 	for _, mapping := range preset.Mappings {
-		if !scope.Trainee || mapping.BindingRevision == nil {
+		if (!scope.Trainee && !scope.RestrictedKeys()) || mapping.BindingRevision == nil {
 			continue
 		}
 		modelID, err := parsePositiveID(mapping.CharityModelID)
@@ -315,6 +319,14 @@ func (s *Service) applyBindingPreset(ctx context.Context, role roleKind, actorID
 		if err != nil {
 			return empty, err
 		}
+		checkedSources = true
+		for _, key := range keys {
+			if err := scope.RequireKey(ctx, tx, donationID, key.id, now, true); err != nil {
+				return empty, managementScopeError(err)
+			}
+		}
+	}
+	if scope.RestrictedKeys() && !checkedSources {
 		for _, key := range keys {
 			if err := scope.RequireKey(ctx, tx, donationID, key.id, now, true); err != nil {
 				return empty, managementScopeError(err)
@@ -349,7 +361,7 @@ func (s *Service) applyBindingPreset(ctx context.Context, role roleKind, actorID
 		} else if _, ok := revisions[mapping.CharityModelID]; ok {
 			used[mapping.CharityModelID] = true
 		}
-		targets = append(targets, bindingTarget{id, mapping.UpstreamModelID, expected})
+		targets = append(targets, bindingTarget{modelID: id, upstream: mapping.UpstreamModelID, expected: expected, legacy: true})
 	}
 	if len(used) != len(revisions) {
 		return empty, ErrInvalidRequest

@@ -1,5 +1,5 @@
-// Package charityscope keeps trainee management tied to a live session and
-// an explicit mainstream model. A context value is a selector, never authority.
+// Package charityscope checks model targets and donated sources against live
+// steward permissions. A context value is a selector, never authority.
 package charityscope
 
 import (
@@ -90,6 +90,7 @@ type Scope struct {
 	Trainee       bool
 	Redact        bool
 	ActorLevel    int
+	DonationScope authz.DonationScope
 }
 
 func (scope Scope) AuditRole(admin bool) string {
@@ -105,7 +106,7 @@ func (scope Scope) AuditRole(admin bool) string {
 // Authorize revalidates exact role/session in the caller's transaction.
 // A trainee may omit a model only when listing its mainstream models.
 func Authorize(ctx context.Context, tx *sql.Tx, authority Authorizer, admin bool, actorID, modelID int64, listing bool) (Scope, error) {
-	result := Scope{ActorID: actorID, ModelID: modelID}
+	result := Scope{ActorID: actorID, ModelID: modelID, DonationScope: authz.DonationScopeFull}
 	if ctx == nil || tx == nil || authority == nil || modelID < 0 {
 		return result, ErrInvalid
 	}
@@ -155,7 +156,8 @@ func Authorize(ctx context.Context, tx *sql.Tx, authority Authorizer, admin bool
 			}
 			result.Trainee = !policy.Permissions["charity.non_mainstream"]
 			result.Redact = !policy.Permissions["donations.read_all"]
-			if result.Trainee && modelID == 0 && !listing {
+			result.DonationScope = policy.DonationScope
+			if result.DonationScope == authz.DonationScopeStandard && modelID == 0 && !listing {
 				return result, ErrModelRequired
 			}
 		}
@@ -201,7 +203,7 @@ func (scope Scope) CursorOwner(ctx context.Context, authority Authorizer, suffix
 // stay editable, while unbound mainstream candidates must retain a valid,
 // approved and unexpired donor/physical membership.
 func KeyPredicate() string {
-	return `(EXISTS(SELECT 1 FROM charity_model_bindings scope_binding JOIN charity_binding_targets scope_target ON scope_target.binding_id=scope_binding.id WHERE scope_binding.charity_model_id=? AND scope_target.donation_key_id=dk.id)
+	return `(EXISTS(SELECT 1 FROM charity_model_bindings scope_binding JOIN charity_binding_targets scope_target ON scope_target.binding_id=scope_binding.id WHERE scope_binding.charity_model_id=? AND scope_target.donation_key_id=dk.id AND EXISTS(SELECT 1 FROM charity_models sm WHERE sm.id=scope_binding.charity_model_id AND sm.is_mainstream=1))
 OR (dk.mainstream_channel_id IS NOT NULL AND d.status IN ('pending','approved') AND d.terminal_at IS NULL AND d.user_id IS NOT NULL
 AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?)
 AND EXISTS(SELECT 1 FROM charity_use_availability av WHERE av.donation_key_id=dk.id)
@@ -213,17 +215,18 @@ AND scope_membership.endpoint_key_id=dk.endpoint_key_id AND scope_endpoint.user_
 }
 
 func (scope Scope) RequireKey(ctx context.Context, tx *sql.Tx, donationID, keyID, now int64, adding bool) error {
+	if scope.ActorLevel == 5 && scope.DonationScope == authz.DonationScopeNone {
+		return authz.ErrPermissionDenied
+	}
 	if donationID <= 0 || keyID <= 0 {
 		return ErrNotFound
 	}
 	query := `SELECT EXISTS(SELECT 1 FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id WHERE dk.id=? AND d.id=?`
 	args := []any{keyID, donationID}
-	if scope.Trainee {
-		query += ` AND ` + KeyPredicate()
-		args = append(args, scope.ModelID, now)
-		if adding {
-			query += ` AND dk.mainstream_channel_id IS NOT NULL`
-		}
+	if scope.RestrictedKeys() {
+		predicate, values := scope.KeyPredicate(now, adding)
+		query += " AND " + predicate
+		args = append(args, values...)
 	}
 	var exists bool
 	if err := tx.QueryRowContext(ctx, query+`)`, args...).Scan(&exists); err != nil {
@@ -276,4 +279,34 @@ GROUP BY cm.id,cm.full_name,cm.enabled ORDER BY cm.id LIMIT 21`, keyID, scope.Tr
 		result.VisibleModels = append(result.VisibleModels, item)
 	}
 	return result, rows.Err()
+}
+
+// TaggedDonationSQL matches the entire donation when any canonical endpoint has a tag.
+const TaggedDonationSQL = `EXISTS(SELECT 1 FROM donation_keys tagged_key JOIN admin_endpoint_tags tagged_endpoint ON tagged_endpoint.base_url=tagged_key.canonical_base_url WHERE tagged_key.donation_id=d.id)`
+
+func (scope Scope) RestrictedKeys() bool {
+	return scope.ActorLevel == 5 && scope.DonationScope != authz.DonationScopeFull
+}
+
+// KeyPredicate is shared by point authorization and pre-pagination filtering.
+func (scope Scope) KeyPredicate(now int64, adding bool) (string, []any) {
+	if !scope.RestrictedKeys() {
+		return "1", nil
+	}
+	if scope.DonationScope == authz.DonationScopeNone {
+		return "0", nil
+	}
+	predicate := "0"
+	var args []any
+	if scope.ModelID > 0 {
+		predicate = KeyPredicate()
+		args = []any{scope.ModelID, now}
+		if adding {
+			predicate = "(" + predicate + " AND dk.mainstream_channel_id IS NOT NULL)"
+		}
+	}
+	if scope.DonationScope == authz.DonationScopeEnhanced {
+		predicate = "(" + predicate + " OR " + TaggedDonationSQL + ")"
+	}
+	return predicate, args
 }

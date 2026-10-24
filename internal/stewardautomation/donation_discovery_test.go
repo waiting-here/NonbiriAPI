@@ -215,7 +215,7 @@ func testAutomationDiscoveryBindsApprovedUseOnPendingDonation(t *testing.T, fall
 		t.Helper()
 		permissions, _ := json.Marshal(policy.Permissions)
 		limits, _ := json.Marshal(policy.Limits)
-		f.exec(t, `INSERT INTO steward_permissions(user_id,revision,permissions,limits,created_at,updated_at) VALUES(?,1,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET permissions=excluded.permissions,revision=steward_permissions.revision+1`, f.userID, string(permissions), string(limits), f.clock.Load(), f.clock.Load())
+		f.exec(t, `INSERT INTO steward_permissions(user_id,revision,permissions,limits,donation_scope,created_at,updated_at) VALUES(?,1,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET permissions=excluded.permissions,donation_scope=excluded.donation_scope,revision=steward_permissions.revision+1`, f.userID, string(permissions), string(limits), policy.DonationScope, f.clock.Load(), f.clock.Load())
 	}
 	f.exec(t, `UPDATE users SET level=5 WHERE id=?`, f.userID)
 	writePolicy()
@@ -339,5 +339,15 @@ FROM discovery_source_states st JOIN discovery_runs r ON r.id=st.current_run_id 
 	err = f.service.bindOne(steward, f.userID, modelID, member, "exact/model", false)
 	if err == nil || f.count(t, `SELECT COUNT(*) FROM discovery_runs WHERE state='succeeded'`) != successful || f.count(t, `SELECT binding_revision FROM charity_models WHERE id=?`, modelID) != beforeRevision {
 		t.Fatal("revoked discover grant published worker result", err)
+	}
+	policy.DonationScope = authz.DonationScopeEnhanced
+	writePolicy()
+	f.exec(t, `INSERT INTO admin_endpoint_tags(base_url,tag) SELECT canonical_base_url,'user_gateway' FROM donation_keys WHERE id=?`, member)
+	f.mode.Store(7)
+	beforeCalls := f.calls.Load()
+	successful = f.count(t, `SELECT COUNT(*) FROM discovery_runs WHERE state='succeeded'`)
+	err = f.service.bindOne(steward, f.userID, modelID, member, "exact/model", false)
+	if err == nil || f.calls.Load() != beforeCalls+1 || f.count(t, `SELECT COUNT(*) FROM discovery_runs WHERE state='succeeded'`) != successful || f.count(t, `SELECT binding_revision FROM charity_models WHERE id=?`, modelID) != beforeRevision {
+		t.Fatal("removed endpoint tag published worker result", err)
 	}
 }

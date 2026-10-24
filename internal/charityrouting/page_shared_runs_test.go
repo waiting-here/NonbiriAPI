@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -153,9 +154,9 @@ WHERE u.donation_key_id=?3`, first.SourceRevisionID, second.SourceRevisionID, ke
 		{"manual", CandidateQuery{DonationKeyID: keyID, Source: "manual"}, []string{all[2], all[3]}},
 		{"search", CandidateQuery{DonationKeyID: keyID, Query: "m"}, []string{all[3]}},
 		{"literal wildcard", CandidateQuery{DonationKeyID: keyID, Query: "%"}, nil},
-		{"trainee mainstream", CandidateQuery{DonationKeyID: keyID, traineeOnly: true}, all},
-		{"trainee custom", CandidateQuery{DonationKeyID: otherKeyID, traineeOnly: true}, nil},
-		{"all parameters", CandidateQuery{DonationID: donationID, DonationKeyID: keyID, traineeOnly: true, KeyState: "available", Source: "manual", Query: "m", AfterKeyID: keyID, AfterModelID: "c"}, []string{all[3]}},
+		{"trainee mainstream", CandidateQuery{DonationKeyID: keyID, maintenanceScope: charityscope.Scope{ActorLevel: 5, DonationScope: "standard", ModelID: modelID}}, all},
+		{"trainee custom", CandidateQuery{DonationKeyID: otherKeyID, maintenanceScope: charityscope.Scope{ActorLevel: 5, DonationScope: "standard", ModelID: modelID}}, nil},
+		{"all parameters", CandidateQuery{DonationID: donationID, DonationKeyID: keyID, maintenanceScope: charityscope.Scope{ActorLevel: 5, DonationScope: "standard", ModelID: modelID}, KeyState: "available", Source: "manual", Query: "m", AfterKeyID: keyID, AfterModelID: "c"}, []string{all[3]}},
 		{"after last", CandidateQuery{DonationID: donationID, DonationKeyID: keyID, AfterKeyID: keyID, AfterModelID: "m"}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

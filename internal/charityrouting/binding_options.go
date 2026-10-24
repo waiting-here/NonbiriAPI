@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -34,17 +34,25 @@ func (s *Service) keyBindingOptions(ctx context.Context, role roleKind, actorID,
 	if err != nil {
 		return out, err
 	}
-	if !scope.Trainee {
-		if err := scope.RequireKey(ctx, tx, donationID, keyID, now, false); err != nil {
-			return out, managementScopeError(err)
-		}
+	if scope.DonationScope == "none" {
+		return out, authz.ErrPermissionDenied
 	}
 	query := `SELECT cm.id,cm.full_name,cm.enabled,cm.binding_revision FROM charity_models cm WHERE instr(lower(cm.full_name),lower(?))>0`
 	args := []any{q}
 	if scope.Trainee {
-		predicate := strings.Replace(charityscope.KeyPredicate(), "scope_binding.charity_model_id=?", "scope_binding.charity_model_id=cm.id", 1)
-		query += ` AND cm.is_mainstream=1 AND EXISTS(SELECT 1 FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id WHERE dk.id=? AND d.id=? AND dk.mainstream_channel_id IS NOT NULL AND ` + predicate + `)`
-		args = append(args, keyID, donationID, now)
+		query += ` AND cm.is_mainstream=1`
+	}
+	if scope.RestrictedKeys() {
+		selected := scope
+		selected.ModelID = 1
+		predicate, values := selected.KeyPredicate(now, true)
+		predicate = strings.Replace(predicate, "scope_binding.charity_model_id=?", "scope_binding.charity_model_id=cm.id", 1)
+		values = values[1:]
+		query += ` AND EXISTS(SELECT 1 FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id WHERE dk.id=? AND d.id=? AND ` + predicate + `)`
+		args = append(args, keyID, donationID)
+		args = append(args, values...)
+	} else if err := scope.RequireKey(ctx, tx, donationID, keyID, now, false); err != nil {
+		return out, managementScopeError(err)
 	}
 	meta, offset, err := pageWindow(ctx, tx, query, args, page)
 	if err != nil {

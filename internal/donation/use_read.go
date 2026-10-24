@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
@@ -24,7 +25,7 @@ type useAccess struct {
 	reviewOnly bool
 }
 
-func (s *Service) beginUseTx(ctx context.Context, role reviewerRole, actorID int64, readOnly bool) (*sql.Tx, useAccess, error) {
+func (s *Service) beginUseTx(ctx context.Context, role reviewerRole, actorID, donationID int64, readOnly bool) (*sql.Tx, useAccess, error) {
 	a := useAccess{role: role, actorID: actorID}
 	var tx *sql.Tx
 	var err error
@@ -35,7 +36,26 @@ func (s *Service) beginUseTx(ctx context.Context, role reviewerRole, actorID int
 		a.actorID = a.scope.ActorID
 	} else {
 		tx, a.role, a.actorID, err = s.beginReviewTx(ctx, role, actorID, readOnly)
-		a.reviewOnly = a.role == reviewerTrainee
+		if err == nil && role == reviewerSteward {
+			rangeScope, e := readDonationAccessScope(ctx, tx, role, actorID)
+			if e == nil {
+				var whole bool
+				whole, e = rangeScope.wholeTx(ctx, tx, donationID)
+				if e == nil && !whole && !rangeScope.review {
+					e = authz.ErrPermissionDenied
+				}
+				a.reviewOnly = !whole
+				level := 6
+				if a.role == reviewerTrainee || a.role == reviewerGranted {
+					level = 5
+				}
+				a.scope = charityscope.Scope{ActorID: actorID, ActorLevel: level, DonationScope: rangeScope.mode, Redact: rangeScope.redact}
+			}
+			if e != nil {
+				tx.Rollback()
+				return nil, a, e
+			}
+		}
 	}
 	return tx, a, err
 }
@@ -62,7 +82,7 @@ func (s *Service) UsesPage(ctx context.Context, role reviewerRole, actorID, dona
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, access, err := s.beginUseTx(ctx, role, actorID, false)
+	tx, access, err := s.beginUseTx(ctx, role, actorID, donationID, false)
 	if err != nil {
 		return empty, err
 	}
@@ -96,7 +116,7 @@ func (s *Service) UsesPage(ctx context.Context, role reviewerRole, actorID, dona
 	if err != nil {
 		return empty, err
 	}
-	if access.role == reviewerAdmin || !visible && access.role == reviewerSteward && !access.reviewOnly {
+	if access.role == reviewerAdmin || !visible && (access.role == reviewerSteward || access.role == reviewerTrainee || access.role == reviewerGranted) && !access.reviewOnly {
 		held, err := s.managementHeldRead(ctx, tx, access.role, access.actorID, donationID, now)
 		if err != nil {
 			return empty, err
@@ -111,9 +131,10 @@ func (s *Service) UsesPage(ctx context.Context, role reviewerRole, actorID, dona
 	predicate, values := access.predicate()
 	query += predicate
 	args = append(args, values...)
-	if access.scope.Trainee {
-		query += ` AND ` + charityscope.KeyPredicate()
-		args = append(args, access.scope.ModelID, now)
+	if access.scope.RestrictedKeys() && !access.reviewOnly {
+		predicate, values := access.scope.KeyPredicate(now, false)
+		query += " AND " + predicate
+		args = append(args, values...)
 	}
 	if filter.State != "" {
 		switch filter.State {
@@ -219,7 +240,7 @@ WHERE d.id=? AND du.id IN (` + strings.TrimRight(strings.Repeat("?,", len(ids)),
 		value.ID, value.DonationID, value.DonationKeyID, value.Revision = strconv.FormatInt(id, 10), strconv.FormatInt(donationID, 10), strconv.FormatInt(keyID, 10), strconv.FormatInt(revision, 10)
 		value.EndpointKeyID = decimalPointer(endpoint)
 		value.NativeService = services.Services()[0]
-		if access.reviewOnly || access.scope.Redact {
+		if access.scope.Redact {
 			value.EndpointKeyID = nil
 		}
 		if disabled.Valid {
@@ -260,6 +281,14 @@ WHERE d.id=? AND du.id IN (` + strings.TrimRight(strings.Repeat("?,", len(ids)),
 			discoverable[choice.Use.UseID] = choice.healthy
 		}
 	}
+	canReview, canManage, canDiscover, canBind := true, true, true, true
+	if access.role != reviewerAdmin && access.role != recurringOwner {
+		p, err := authz.ReadStewardPermissions(ctx, tx, access.actorID)
+		if err != nil {
+			return nil, mapAuthorization(err)
+		}
+		canReview, canManage, canDiscover, canBind = p.Permissions["donations.review"], p.Permissions["donations.manage_keys"], p.Permissions["donations.discover"], p.Permissions["charity.manage"]
+	}
 	for index := range out {
 		value, state := &out[index], states[index]
 		value.Approved, value.Pending, value.Latest = revisions[state.approved.Int64], revisions[state.pending.Int64], revisions[state.latest.Int64]
@@ -267,13 +296,13 @@ WHERE d.id=? AND du.id IN (` + strings.TrimRight(strings.Repeat("?,", len(ids)),
 			return nil, ErrInvariant
 		}
 		canMaintain := !access.reviewOnly
-		value.Capabilities.CanManage = canMaintain && state.active
-		value.Capabilities.CanReview = access.role != recurringOwner && value.Pending != nil && state.active && value.Pending.Review.MaterialAvailable && value.Pending.available
-		value.Capabilities.CanResetFailures = canMaintain && state.active && value.Approved != nil
+		value.Capabilities.CanManage = canManage && canMaintain && state.active
+		value.Capabilities.CanReview = canReview && access.role != recurringOwner && value.Pending != nil && state.active && value.Pending.Review.MaterialAvailable && value.Pending.available
+		value.Capabilities.CanResetFailures = canManage && canMaintain && state.active && value.Approved != nil
 		usable := state.active && state.eligible && state.available && state.healthy && value.Approved != nil && !value.Approved.Review.Required
-		value.Capabilities.CanBind = canMaintain && usable
+		value.Capabilities.CanBind = canBind && canMaintain && usable
 		useID, _ := strconv.ParseInt(value.ID, 10, 64)
-		value.Capabilities.CanDiscover = canMaintain && state.active && state.eligible && discoverable[useID]
+		value.Capabilities.CanDiscover = canDiscover && canMaintain && state.active && state.eligible && discoverable[useID]
 		if !usable {
 			reason := "unavailable"
 			switch {
@@ -389,7 +418,7 @@ func requireUseAccessTx(ctx context.Context, tx *sql.Tx, access useAccess, donat
 	if err != nil {
 		return err
 	}
-	if access.scope.Trainee {
+	if access.scope.RestrictedKeys() && !access.reviewOnly {
 		if err := access.scope.RequireKey(ctx, tx, donationID, keyID, now, false); err != nil {
 			return scopeError(err)
 		}

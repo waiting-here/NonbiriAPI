@@ -80,9 +80,9 @@ func (s *Service) donationsPage(ctx context.Context, role reviewerRole, userID i
 	defer cancel()
 	var tx *sql.Tx
 	var err error
-	reviewRole := role
+
 	if role == reviewerSteward {
-		tx, reviewRole, _, err = s.beginReviewTx(ctx, role, userID, true)
+		tx, _, _, err = s.beginReviewTx(ctx, role, userID, true)
 	} else {
 		tx, err = s.beginBrowseTx(ctx, role, userID)
 	}
@@ -90,12 +90,17 @@ func (s *Service) donationsPage(ctx context.Context, role reviewerRole, userID i
 		return empty, err
 	}
 	defer tx.Rollback()
-	if reviewRole == reviewerTrainee {
+	access, err := readDonationAccessScope(ctx, tx, role, userID)
+	if err != nil {
+		return empty, err
+	}
+	if access.mode == "standard" {
 		filter, err = pendingReviewFilter(filter)
 		if err != nil {
 			return empty, err
 		}
 	}
+
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
@@ -103,10 +108,9 @@ func (s *Service) donationsPage(ctx context.Context, role reviewerRole, userID i
 	query := `SELECT d.id AS id FROM donations d JOIN donation_handling h ON h.donation_id=d.id
 WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 	args := []any{now - terminalRetention}
-	if reviewRole == reviewerTrainee {
-		query += ` AND ` + pendingUseReviewSQL
-		args = append(args, now)
-	}
+	predicate, values := access.predicate(now)
+	query += " AND " + predicate
+	args = append(args, values...)
 	if role == recurringOwner {
 		query += ` AND d.user_id=?`
 		args = append(args, userID)
@@ -135,10 +139,14 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 			return empty, err
 		}
 		header.UseSummary = summaries[id]
-		if reviewRole == reviewerTrainee {
+		if access.redact {
 			header = traineeReviewProjection(header)
 		}
-		summary, err := donationSummaryTx(ctx, tx, header, now, reviewRole == reviewerTrainee)
+		whole, err := access.wholeTx(ctx, tx, id)
+		if err != nil {
+			return empty, err
+		}
+		summary, err := donationSummaryTx(ctx, tx, header, now, !whole)
 		if err != nil {
 			return empty, err
 		}

@@ -74,7 +74,7 @@ func (api *httpAPI) putStewardPermissions(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	if !exactObject(object, "expected_revision", "permissions", "limits") {
+	if !exactObject(object, "expected_revision", "permissions", "limits", "donation_scope") {
 		writeError(w, ErrInvalidRequest)
 		return
 	}
@@ -84,7 +84,12 @@ func (api *httpAPI) putStewardPermissions(w http.ResponseWriter, r *http.Request
 		writeError(w, ErrInvalidRequest)
 		return
 	}
-	p := authz.StewardPermissions{Revision: revision}
+	scope, scopeOK := requiredString(object, "donation_scope")
+	if !scopeOK {
+		writeError(w, ErrInvalidRequest)
+		return
+	}
+	p := authz.StewardPermissions{Revision: revision, DonationScope: authz.DonationScope(scope)}
 	// Pointer values keep JSON null distinct from false.
 	var booleans map[string]*bool
 	if json.Unmarshal(object["permissions"], &booleans) != nil || json.Unmarshal(object["limits"], &p.Limits) != nil {
@@ -103,7 +108,7 @@ func (api *httpAPI) putStewardPermissions(w http.ResponseWriter, r *http.Request
 		writeError(w, ErrInvalidRequest)
 		return
 	}
-	control, ok := makeControl(w, r, api.role.route(routeStewardPermissions), id, map[string]any{"expected_revision": revision, "permissions": p.Permissions, "limits": p.Limits})
+	control, ok := makeControl(w, r, api.role.route(routeStewardPermissions), id, map[string]any{"expected_revision": revision, "permissions": p.Permissions, "limits": p.Limits, "donation_scope": p.DonationScope})
 	if !ok {
 		return
 	}
@@ -138,7 +143,7 @@ func (s *Service) replaceStewardPermissions(ctx context.Context, actorID, userID
 	p.Revision = strconv.FormatInt(expected+1, 10)
 	permissions, _ := json.Marshal(p.Permissions)
 	limits, _ := json.Marshal(p.Limits)
-	_, err = tx.ExecContext(ctx, `INSERT INTO steward_permissions(user_id,revision,permissions,limits,created_at,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET revision=excluded.revision,permissions=excluded.permissions,limits=excluded.limits,updated_at=excluded.updated_at`, userID, expected+1, string(permissions), string(limits), now, now)
+	_, err = tx.ExecContext(ctx, `INSERT INTO steward_permissions(user_id,revision,permissions,limits,donation_scope,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET revision=excluded.revision,permissions=excluded.permissions,limits=excluded.limits,donation_scope=excluded.donation_scope,updated_at=excluded.updated_at`, userID, expected+1, string(permissions), string(limits), string(p.DonationScope), now, now)
 	if err != nil {
 		return MutationResult[authz.StewardPermissions]{}, classifyDatabaseError("save steward permissions", err)
 	}

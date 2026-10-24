@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
@@ -52,6 +53,20 @@ func (s *Service) reauthorizeUseReviewTx(ctx context.Context, tx *sql.Tx, access
 func (s *Service) reviewUseTx(ctx context.Context, tx *sql.Tx, access useAccess, donationID int64, item UseReviewItem, now int64) error {
 	if err := s.reauthorizeUseReviewTx(ctx, tx, access); err != nil {
 		return err
+	}
+	if access.role != reviewerAdmin {
+		if err := authz.RequireStewardPermission(ctx, tx, access.actorID, "donations.review"); err != nil {
+			return err
+		}
+		rangeScope, err := readDonationAccessScope(ctx, tx, access.role, access.actorID)
+		if err != nil {
+			return err
+		}
+		whole, err := rangeScope.requireTx(ctx, tx, donationID, now)
+		if err != nil {
+			return err
+		}
+		access.reviewOnly = !whole
 	}
 	if err := requireUseAccessTx(ctx, tx, access, donationID, item.UseID, now, true); err != nil {
 		return err
@@ -174,12 +189,19 @@ func (s *Service) reviewUses(ctx context.Context, role reviewerRole, actorID, do
 	if err := requireManagedDonationTx(ctx, tx, actualRole, donationID, now); err != nil {
 		return empty, err
 	}
+	rangeErr := requireDonationRangeTx(ctx, tx, actualRole, actorID, donationID, now)
 	decision, err := beginMutation(ctx, tx, string(actualRole), actorID, idempotency.ScopeControlMutation, mutation, now)
 	if err != nil {
 		return empty, err
 	}
 	if decision.Kind == idempotency.Replay {
+		if rangeErr != nil && !errors.Is(rangeErr, ErrForbidden) {
+			return empty, rangeErr
+		}
 		return replay[UseReviewReceipt](decision)
+	}
+	if rangeErr != nil {
+		return empty, rangeErr
 	}
 	receipt := UseReviewReceipt{Results: make([]UseReviewResult, 0, len(items))}
 	for _, item := range items {

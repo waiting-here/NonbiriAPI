@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
@@ -364,5 +365,39 @@ func TestDeleteAccountFailureRollsBackAndAbortsPreparedState(t *testing.T) {
 	}
 	if strings.Contains(strings.Join(calls, ","), "ledger") {
 		t.Fatalf("ledger ran after adapter failure: %v", calls)
+	}
+}
+
+func TestExportKeepsStoredDonationScopeWhenEffectiveLevelChanges(t *testing.T) {
+	f := newLifecycleTestFixture(t, 100)
+	policy := authz.DefaultStewardPermissions(5)
+	policy.Revision = "1"
+	policy.DonationScope = authz.DonationScopeEnhanced
+	grants, _ := json.Marshal(policy.Permissions)
+	limits, _ := json.Marshal(policy.Limits)
+	previous, _ := json.Marshal(authz.DefaultStewardPermissions(5))
+	next, _ := json.Marshal(policy)
+	if _, err := f.store.DB().Exec(`INSERT INTO steward_permissions(user_id,revision,permissions,limits,donation_scope,created_at,updated_at) VALUES(7,1,?,?,'enhanced',100,100)`, string(grants), string(limits)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.DB().Exec(`INSERT INTO steward_permission_audits(user_id,actor_user_id,from_revision,to_revision,previous_policy,next_policy,created_at) VALUES(7,NULL,0,1,?,?,100)`, string(previous), string(next)); err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range []struct {
+		level int
+		scope authz.DonationScope
+	}{{5, authz.DonationScopeEnhanced}, {6, authz.DonationScopeFull}, {1, authz.DonationScopeNone}} {
+		if _, err := f.store.DB().Exec(`UPDATE users SET level=? WHERE id=7`, entry.level); err != nil {
+			t.Fatal(err)
+		}
+		tx, err := f.store.DB().BeginTx(t.Context(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := exportStewardPermissions(t.Context(), tx, 7)
+		tx.Rollback()
+		if err != nil || got.Effective.DonationScope != entry.scope || got.Stored == nil || got.Stored.DonationScope != authz.DonationScopeEnhanced || len(got.History) != 1 || got.History[0].Previous.DonationScope != authz.DonationScopeStandard || got.History[0].Next.DonationScope != authz.DonationScopeEnhanced {
+			t.Fatalf("scope export %+v %v", got, err)
+		}
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
@@ -76,6 +77,39 @@ func TestDonationOrdinaryCutoffAndKnownIDHeldRead(t *testing.T) {
 	}
 	if _, err := environment.service.KeysStewardPage(context.Background(), steward, donationID, pagination.Default()); err != nil {
 		t.Fatalf("steward held donation keys: %v", err)
+	}
+	if _, err := environment.store.DB().Exec(`UPDATE users SET level=5 WHERE id=?`, steward); err != nil {
+		t.Fatal(err)
+	}
+	policy := authz.DefaultStewardPermissions(5)
+	policy.DonationScope = authz.DonationScopeFull
+	writeDonationPolicy(t, environment, steward, policy)
+	if _, err := environment.service.UsesPage(context.Background(), reviewerSteward, steward, donationID, UseFilter{}, pagination.Default()); err != nil {
+		t.Fatal("configured full5 held uses", err)
+	}
+	policy.DonationScope = authz.DonationScopeEnhanced
+	writeDonationPolicy(t, environment, steward, policy)
+	if _, err := environment.store.DB().Exec(`INSERT INTO admin_endpoint_tags(base_url,tag) SELECT canonical_base_url,'steward_gateway' FROM donation_keys WHERE donation_id=?`, donationID); err != nil {
+		t.Fatal(err)
+	}
+	if keys, err := environment.service.KeysStewardPage(context.Background(), steward, donationID, pagination.Default()); err != nil || len(keys.Data) != 1 {
+		t.Fatal("enhanced held keys", keys, err)
+	}
+	if _, err := environment.store.DB().Exec(`DELETE FROM admin_endpoint_tags`); err != nil {
+		t.Fatal(err)
+	}
+	callsBeforeTagRead := hook.calls
+	if _, err := environment.service.KeysStewardPage(context.Background(), steward, donationID, pagination.Default()); err == nil || hook.calls != callsBeforeTagRead {
+		t.Fatal("removed tag reached held keys", err)
+	}
+	policy.DonationScope = authz.DonationScopeNone
+	writeDonationPolicy(t, environment, steward, policy)
+	calls := hook.calls
+	if _, err := environment.service.UsesPage(context.Background(), reviewerSteward, steward, donationID, UseFilter{}, pagination.Default()); !errors.Is(err, authz.ErrPermissionDenied) || hook.calls != calls {
+		t.Fatal("revoked scope reached held reader", err)
+	}
+	if _, err := environment.store.DB().Exec(`UPDATE users SET level=6 WHERE id=?`, steward); err != nil {
+		t.Fatal(err)
 	}
 	hook.allow = false
 	if _, err := environment.service.GetSteward(context.Background(), steward, donationID); !errors.Is(err, ErrNotFound) {

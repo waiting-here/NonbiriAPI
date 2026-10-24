@@ -24,17 +24,17 @@ func exportStewardPermissions(ctx context.Context, tx *sql.Tx, userID int64) (St
 	out := StewardPermissionsExport{History: []StewardPermissionAuditExport{}}
 	var level int
 	var revision int64
-	var permissions, limits string
-	err := tx.QueryRowContext(ctx, `SELECT COALESCE(u.level,u.auto_level),COALESCE(p.revision,0),COALESCE(p.permissions,''),COALESCE(p.limits,'') FROM users u LEFT JOIN steward_permissions p ON p.user_id=u.id WHERE u.id=?`, userID).Scan(&level, &revision, &permissions, &limits)
+	var permissions, limits, scope string
+	err := tx.QueryRowContext(ctx, `SELECT COALESCE(u.level,u.auto_level),COALESCE(p.revision,0),COALESCE(p.permissions,''),COALESCE(p.limits,''),COALESCE(p.donation_scope,'standard') FROM users u LEFT JOIN steward_permissions p ON p.user_id=u.id WHERE u.id=?`, userID).Scan(&level, &revision, &permissions, &limits, &scope)
 	if err != nil {
 		return out, err
 	}
-	out.Effective, err = authz.DecodeStewardPermissions(level, revision, permissions, limits)
+	out.Effective, err = authz.DecodeStewardPermissions(level, revision, permissions, limits, scope)
 	if err != nil {
 		return out, err
 	}
 	if revision > 0 {
-		p, e := authz.DecodeStewardPermissions(5, revision, permissions, limits)
+		p, e := authz.DecodeStewardPermissions(5, revision, permissions, limits, scope)
 		if e != nil {
 			return out, e
 		}

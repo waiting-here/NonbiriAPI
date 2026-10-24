@@ -162,6 +162,20 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 		return empty, err
 	}
 	defer tx.Rollback()
+	if role == reviewerSteward && scope.ModelID == 0 && scope.RestrictedKeys() {
+		rangeScope, e := readDonationAccessScope(ctx, tx, role, userID)
+		if e != nil {
+			return empty, e
+		}
+		whole, e := rangeScope.wholeTx(ctx, tx, donationID)
+		if e != nil {
+			return empty, e
+		}
+		if !whole {
+			tx.Rollback()
+			return s.reviewKeysPage(ctx, userID, donationID, page)
+		}
+	}
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
@@ -179,7 +193,18 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 	if err != nil {
 		return empty, err
 	}
-	if !visible && !scope.Trainee && (role == reviewerAdmin || role == reviewerSteward || role == reviewerGranted) {
+	heldScope := !scope.RestrictedKeys()
+	if !visible && scope.DonationScope == "enhanced" {
+		access, scopeErr := readDonationAccessScope(ctx, tx, role, userID)
+		if scopeErr != nil {
+			return empty, scopeErr
+		}
+		heldScope, err = access.wholeTx(ctx, tx, donationID)
+		if err != nil {
+			return empty, err
+		}
+	}
+	if !visible && heldScope && (role == reviewerAdmin || role == reviewerSteward || role == reviewerGranted) {
 		visible, err = s.managementHeldRead(ctx, tx, role, userID, donationID, now)
 		if err != nil {
 			return empty, err
@@ -202,15 +227,20 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 		}
 		args = append(args, now)
 	}
-	if scope.Trainee {
-		query += ` AND ` + charityscope.KeyPredicate()
-		args = append(args, scope.ModelID, now)
+	if scope.RestrictedKeys() {
+		predicate, values := scope.KeyPredicate(now, false)
+		query += " AND " + predicate
+		args = append(args, values...)
 	}
 	ids, metadata, err := browseIDs(ctx, tx, query, args, page)
 	if err != nil {
 		return empty, err
 	}
 	keys, err := readDonationKeySelectionTx(ctx, tx, donationID, header.Status, now, ids)
+	if err != nil {
+		return empty, err
+	}
+	canManage, err := keyManagementAllowedTx(ctx, tx, role, userID)
 	if err != nil {
 		return empty, err
 	}
@@ -225,6 +255,7 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 			return empty, err
 		}
 		value := managedKeySummary(key, header, rules)
+		value.CanManage = value.CanManage && canManage
 		if role == recurringOwner {
 			value.EndpointID = key.OwnerEndpointID
 			value.CanManage = false

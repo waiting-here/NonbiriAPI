@@ -86,7 +86,7 @@ func (s *Service) recurringScope(ctx context.Context, tx *sql.Tx, role reviewerR
 		if err := scope.RequireKey(ctx, tx, donationID, keyID, now, false); err != nil {
 			return 0, scopeError(err)
 		}
-		if scope.Trainee {
+		if scope.RestrictedKeys() {
 			var revision int64
 			err := tx.QueryRowContext(ctx, `SELECT revision FROM donations WHERE id=?`, donationID).Scan(&revision)
 			return revision, err

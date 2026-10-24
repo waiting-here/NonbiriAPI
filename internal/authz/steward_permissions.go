@@ -24,9 +24,10 @@ func WritePermissionDenied(w http.ResponseWriter, err error) bool {
 
 // StewardPermissions describes effective authority without changing account level.
 type StewardPermissions struct {
-	Revision    string            `json:"revision"`
-	Permissions map[string]bool   `json:"permissions"`
-	Limits      map[string]string `json:"limits"`
+	Revision      string            `json:"revision"`
+	DonationScope DonationScope     `json:"donation_scope"`
+	Permissions   map[string]bool   `json:"permissions"`
+	Limits        map[string]string `json:"limits"`
 }
 
 var stewardDefaults = map[string]bool{
@@ -35,6 +36,7 @@ var stewardDefaults = map[string]bool{
 	"users.ban_permanent": true, "users.caller_keys.read": true, "users.caller_keys.revoke": true,
 	"users.loans.read": true, "users.penalties.read": true, "users.donations.read": true,
 	"blacklist.read": false, "blacklist.add": false,
+	"endpoints.read": false, "endpoints.tags": false,
 	"donations.review": true, "donations.read_all": false, "donations.force_reject": false,
 	"donations.handle": true, "donations.manage_keys": true, "donations.discover": true, "donations.recurring": true,
 	"charity.read": true, "charity.manage": true, "charity.non_mainstream": false,
@@ -54,8 +56,27 @@ var stewardLimitMaxima = map[string]int64{
 	"users.ban_duration_max_seconds":          316224000,
 }
 
+type DonationScope string
+
+const (
+	DonationScopeNone     DonationScope = "none"
+	DonationScopeStandard DonationScope = "standard"
+	DonationScopeEnhanced DonationScope = "enhanced"
+	DonationScopeFull     DonationScope = "full"
+)
+
+func (s DonationScope) Valid() bool {
+	return s == DonationScopeNone || s == DonationScopeStandard || s == DonationScopeEnhanced || s == DonationScopeFull
+}
+
 func DefaultStewardPermissions(level int) StewardPermissions {
 	p := StewardPermissions{Revision: "0", Permissions: make(map[string]bool, len(stewardDefaults)), Limits: make(map[string]string, len(stewardLimitMaxima))}
+	p.DonationScope = DonationScopeNone
+	if level == 5 {
+		p.DonationScope = DonationScopeStandard
+	} else if level == 6 {
+		p.DonationScope = DonationScopeFull
+	}
 	for key, enabled := range stewardDefaults {
 		p.Permissions[key] = level == 6 || level == 5 && enabled
 	}
@@ -69,6 +90,9 @@ func DefaultStewardPermissions(level int) StewardPermissions {
 }
 
 func ValidateStewardPermissions(p StewardPermissions) error {
+	if !p.DonationScope.Valid() {
+		return ErrInvalidRequirement
+	}
 	if len(p.Permissions) != len(stewardDefaults) || len(p.Limits) != len(stewardLimitMaxima) {
 		return ErrInvalidRequirement
 	}
@@ -88,7 +112,7 @@ func ValidateStewardPermissions(p StewardPermissions) error {
 }
 
 // DecodeStewardPermissions is also used by the session projection's existing user query.
-func DecodeStewardPermissions(level int, revision int64, permissions, limits string) (StewardPermissions, error) {
+func DecodeStewardPermissions(level int, revision int64, permissions, limits, donationScope string) (StewardPermissions, error) {
 	p := DefaultStewardPermissions(level)
 	if level != 5 || revision == 0 {
 		return p, nil
@@ -98,6 +122,7 @@ func DecodeStewardPermissions(level int, revision int64, permissions, limits str
 		return StewardPermissions{}, ErrInvalidRequirement
 	}
 	p.Revision = strconv.FormatInt(revision, 10)
+	p.DonationScope = DonationScope(donationScope)
 	if err := ValidateStewardPermissions(p); err != nil {
 		return StewardPermissions{}, err
 	}
@@ -112,8 +137,8 @@ func ReadStewardPermissions(ctx context.Context, tx *sql.Tx, userID int64) (Stew
 	}
 	var level, admin int
 	var revision int64
-	var permissions, limits string
-	err := tx.QueryRowContext(ctx, `SELECT COALESCE(u.level,u.auto_level),u.is_admin,COALESCE(p.revision,0),COALESCE(p.permissions,''),COALESCE(p.limits,'') FROM users u LEFT JOIN steward_permissions p ON p.user_id=u.id WHERE u.id=?`, userID).Scan(&level, &admin, &revision, &permissions, &limits)
+	var permissions, limits, donationScope string
+	err := tx.QueryRowContext(ctx, `SELECT COALESCE(u.level,u.auto_level),u.is_admin,COALESCE(p.revision,0),COALESCE(p.permissions,''),COALESCE(p.limits,''),COALESCE(p.donation_scope,'standard') FROM users u LEFT JOIN steward_permissions p ON p.user_id=u.id WHERE u.id=?`, userID).Scan(&level, &admin, &revision, &permissions, &limits, &donationScope)
 	if errors.Is(err, sql.ErrNoRows) {
 		return StewardPermissions{}, ErrUnauthorized
 	}
@@ -123,7 +148,7 @@ func ReadStewardPermissions(ctx context.Context, tx *sql.Tx, userID int64) (Stew
 	if admin != 0 || level < 5 || level > 6 {
 		return StewardPermissions{}, ErrForbidden
 	}
-	return DecodeStewardPermissions(level, revision, permissions, limits)
+	return DecodeStewardPermissions(level, revision, permissions, limits, donationScope)
 }
 
 func RequireStewardPermission(ctx context.Context, tx *sql.Tx, userID int64, key string) error {
@@ -207,7 +232,7 @@ func StewardRoutePermission(method, path string) string {
 		inner := strings.TrimPrefix(p, "automation/")
 		if strings.HasPrefix(inner, "donations") {
 			if read {
-				return "donations.read_all"
+				return "donations.browse"
 			}
 			return "donations.manage_keys"
 		}
@@ -245,6 +270,11 @@ func StewardRoutePermission(method, path string) string {
 		default:
 			return "user_fields"
 		}
+	case strings.HasPrefix(p, "overview/endpoints"):
+		if read {
+			return "endpoints.read"
+		}
+		return "endpoints.tags"
 	case strings.HasPrefix(p, "blacklist"):
 		if read {
 			return "blacklist.read"
@@ -335,6 +365,9 @@ func StewardRoutePermission(method, path string) string {
 }
 
 func (p StewardPermissions) AllowsOperation(key string) bool {
+	if strings.HasPrefix(key, "donations.") && p.DonationScope == DonationScopeNone {
+		return false
+	}
 	switch key {
 	case "model_fields":
 		return p.Permissions["charity.manage"] || p.Permissions["charity.model_settings"] || p.Permissions["charity.pricing"]
@@ -346,7 +379,7 @@ func (p StewardPermissions) AllowsOperation(key string) bool {
 		}
 		return false
 	case "donations.browse":
-		return p.Permissions["donations.review"] || p.Permissions["donations.read_all"]
+		return p.Permissions["donations.review"] || p.Permissions["donations.manage_keys"] || p.Permissions["donations.handle"] || p.Permissions["donations.discover"] || p.Permissions["donations.recurring"]
 	case "any":
 		for _, enabled := range p.Permissions {
 			if enabled {

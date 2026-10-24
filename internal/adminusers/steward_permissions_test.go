@@ -19,7 +19,7 @@ func TestPerUserStewardPermissionsDelegationBoundsAndRevokedReplay(t *testing.T)
 	policy := authz.DefaultStewardPermissions(5)
 	put := func(who int64, revision string, key string, want int) {
 		t.Helper()
-		b, _ := json.Marshal(map[string]any{"expected_revision": revision, "permissions": policy.Permissions, "limits": policy.Limits})
+		b, _ := json.Marshal(map[string]any{"expected_revision": revision, "permissions": policy.Permissions, "limits": policy.Limits, "donation_scope": policy.DonationScope})
 		got := stewardUserRequest(t, f, who, actor, "PUT", routeStewardPermissions, "", string(b), strings.Repeat(key, 22))
 		if got.Code != want {
 			t.Fatalf("policy PUT=%d want %d: %s", got.Code, want, got.Body)
