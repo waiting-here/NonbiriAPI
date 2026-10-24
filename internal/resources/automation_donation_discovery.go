@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 )
 
@@ -31,6 +32,18 @@ func (r *Repository) RefreshDonationDiscoveryAndWait(ctx context.Context, userID
 	load := func(ctx context.Context, tx *sql.Tx, requireRevision bool) (connectionstore.SourceAuthorization, error) {
 		if err := r.finalAuth.AuthorizeUserMutation(ctx, tx, userID); err != nil {
 			return connectionstore.SourceAuthorization{}, err
+		}
+		if _, steward := authz.StewardCallerFromContext(ctx); steward {
+			if isNilInterface(r.managedDiscovery) {
+				return connectionstore.SourceAuthorization{}, ErrUnavailable
+			}
+			currentSelection := selection
+			if !requireRevision {
+				currentSelection.ExpectedRevision = 0
+			}
+			if _, err := r.managedDiscovery.AuthorizeManagedDiscovery(ctx, tx, "level6", userID, donationID, donationKeyID, currentSelection, true); err != nil {
+				return connectionstore.SourceAuthorization{}, err
+			}
 		}
 		var revision, currentEndpoint, currentKey, approvedID int64
 		err := tx.QueryRowContext(ctx, `SELECT u.revision,k.endpoint_id,dk.endpoint_key_id,ur.id

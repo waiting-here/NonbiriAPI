@@ -209,6 +209,39 @@ func testAutomationDiscoveryBindsApprovedUseOnPendingDonation(t *testing.T, fall
 	}
 	ctx, cancel := context.WithTimeout(steward, 10*time.Second)
 	defer cancel()
+	policy := authz.DefaultStewardPermissions(6)
+	policy.Permissions["charity.non_mainstream"] = false
+	writePolicy := func() {
+		t.Helper()
+		permissions, _ := json.Marshal(policy.Permissions)
+		limits, _ := json.Marshal(policy.Limits)
+		f.exec(t, `INSERT INTO steward_permissions(user_id,revision,permissions,limits,created_at,updated_at) VALUES(?,1,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET permissions=excluded.permissions,revision=steward_permissions.revision+1`, f.userID, string(permissions), string(limits), f.clock.Load(), f.clock.Load())
+	}
+	f.exec(t, `UPDATE users SET level=5 WHERE id=?`, f.userID)
+	writePolicy()
+	sourceCount := f.count(t, `SELECT count(*) FROM discovery_sources`)
+	if err := f.service.bindOne(ctx, f.userID, modelID, member, "exact/model", false); !errors.Is(err, charityrouting.ErrNotFound) || f.calls.Load() != 0 || f.count(t, `SELECT count(*) FROM discovery_sources`) != sourceCount {
+		t.Fatal("restricted model started discovery", err)
+	}
+	policy.Permissions["charity.non_mainstream"] = true
+	policy.Permissions["donations.discover"] = false
+	writePolicy()
+	if err := f.service.bindOne(ctx, f.userID, modelID, member, "exact/model", false); !errors.Is(err, authz.ErrPermissionDenied) || f.calls.Load() != 0 || f.count(t, `SELECT count(*) FROM discovery_sources`) != sourceCount {
+		t.Fatal("revoked discover grant started discovery", err)
+	}
+	policy.Permissions["donations.discover"] = true
+	policy.Permissions["donations.review"] = false
+	writePolicy()
+	tx, err = f.store.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewErr := f.service.donations.ApproveOwnNewInTransaction(ctx, tx, f.userID, donationID, donation.ReviewInput{Decision: "approve", ExpectedRevision: 1, KeySettings: []donation.KeySetting{{DonationKeyID: member, Enabled: true}}})
+	tx.Rollback()
+	if !errors.Is(reviewErr, authz.ErrPermissionDenied) {
+		t.Fatal("automation approval ignored review grant", reviewErr)
+	}
+	f.exec(t, `UPDATE users SET level=6 WHERE id=?`, f.userID)
 	if err := f.service.bindOne(ctx, f.userID, modelID, member, "exact/model", false); err != nil {
 		t.Fatalf("automatic binding of the approved use on a pending donation: %v", err)
 	}
@@ -297,5 +330,14 @@ FROM discovery_source_states st JOIN discovery_runs r ON r.id=st.current_run_id 
 		if runState != test.state || runUse != approved.UseID || runApproval != approved.ApprovedRevisionID || runSource != approved.DiscoverySourceRevisionID || runVersion != approved.Grant.CredentialVersionID {
 			t.Fatal("fresh failure was not the pinned use/source/version run")
 		}
+	}
+	f.exec(t, `UPDATE users SET level=5 WHERE id=?`, f.userID)
+	policy.Permissions["donations.discover"] = true
+	writePolicy()
+	f.mode.Store(6)
+	successful := f.count(t, `SELECT COUNT(*) FROM discovery_runs WHERE state='succeeded'`)
+	err = f.service.bindOne(steward, f.userID, modelID, member, "exact/model", false)
+	if err == nil || f.count(t, `SELECT COUNT(*) FROM discovery_runs WHERE state='succeeded'`) != successful || f.count(t, `SELECT binding_revision FROM charity_models WHERE id=?`, modelID) != beforeRevision {
+		t.Fatal("revoked discover grant published worker result", err)
 	}
 }

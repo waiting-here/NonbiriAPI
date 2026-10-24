@@ -20,11 +20,13 @@ type GenerationTwoCompatibility struct {
 	SourceSchemaVersions []int    `json:"source_schema_versions"`
 }
 
-const CurrentSchemaVersion = 35
+const CurrentSchemaVersion = 36
 const MinimumSchemaVersion = 33
 
 // Schema33ManifestHash pins the published source accepted for an index-only upgrade.
 const Schema33ManifestHash = "bf3821c938fba16a863df866b801621068722c97c57acb67191075cb3c89f550"
+
+const Schema35ManifestHash = "3ddfc2a65af916def3e6ea53545f29e7f5883778ee2b841f45993542359fd108"
 
 const Schema34ManifestHash = "6f5e1dc12a53ccd7dc8cd07a98d09c0f6d9b411aa31caddd97aeb58fc6321571"
 
@@ -43,7 +45,7 @@ func GenerationTwoCompatibilityDescriptor() GenerationTwoCompatibility {
 	return GenerationTwoCompatibility{
 		SchemaHash: PinnedGenerationTwoSchemaHash, ManifestHash: PinnedGenerationTwoManifestHash,
 		SchemaVersion: CurrentSchemaVersion, MinimumSchemaVersion: MinimumSchemaVersion,
-		SourceManifestHashes: []string{Schema33ManifestHash, Schema34ManifestHash}, SourceSchemaVersions: []int{33, 34},
+		SourceManifestHashes: []string{Schema33ManifestHash, Schema34ManifestHash, Schema35ManifestHash}, SourceSchemaVersions: []int{33, 34, 35},
 	}
 }
 
@@ -52,7 +54,7 @@ func upgradeStartupSchema(ctx context.Context, database *sql.DB, codec secret.Ge
 	if err != nil || version == CurrentSchemaVersion {
 		return err
 	}
-	if version != 33 && version != 34 {
+	if version != 33 && version != 34 && version != 35 {
 		return errors.New("unsupported startup schema version")
 	}
 	RecordStartupStage(ctx, StageSchemaUpgrade)
@@ -102,7 +104,12 @@ func upgradeStartupSchema(ctx context.Context, database *sql.DB, codec secret.Ge
 			return err
 		}
 	}
-	if _, err := conn.ExecContext(ctx, startupDiscoveryUpgradeSQL); err != nil {
+	if version < 35 {
+		if _, err := conn.ExecContext(ctx, startupDiscoveryUpgradeSQL); err != nil {
+			return err
+		}
+	}
+	if _, err := conn.ExecContext(ctx, StewardPermissionsSQL+StewardAuditRolesSQL); err != nil {
 		return err
 	}
 	changed, err := conn.ExecContext(ctx, "UPDATE schema_state SET version=? WHERE id=1 AND version=?", CurrentSchemaVersion, version)

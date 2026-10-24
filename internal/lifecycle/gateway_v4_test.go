@@ -28,7 +28,7 @@ func TestGatewayVersionsRemainDistinctInAccountExport(t *testing.T) {
 	if err := json.Unmarshal(body, &document); err != nil {
 		t.Fatal(err)
 	}
-	if document.SchemaVersion != 29 || !reflect.DeepEqual(document.Endpoints, fixture.exports.endpoints) || len(document.Models) != 1 || !reflect.DeepEqual(document.Models[0].Bindings, bindings) {
+	if document.SchemaVersion != 30 || !reflect.DeepEqual(document.Endpoints, fixture.exports.endpoints) || len(document.Models) != 1 || !reflect.DeepEqual(document.Models[0].Bindings, bindings) {
 		t.Fatal("account export changed a Gateway version or binding identity")
 	}
 }

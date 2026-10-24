@@ -161,6 +161,9 @@ func writeJSON(writer http.ResponseWriter, value any) {
 }
 
 func writeDonationError(writer http.ResponseWriter, err error) {
+	if authz.WritePermissionDenied(writer, err) {
+		return
+	}
 	if errors.Is(err, authz.ErrMFARequired) {
 		httperr.WriteError(writer, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
 		return

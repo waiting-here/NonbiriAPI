@@ -175,12 +175,21 @@ func (s *Service) create(ctx context.Context, role roleKind, actorUserID int64, 
 	if err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
-	tx, actorID, err := s.beginRoleTx(ctx, role, actorUserID)
+	tx, scope, err := s.beginManagementTx(ctx, role, actorUserID, 0, true, false)
 	if err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
+	actorID := scope.ActorID
+	if role != roleAdmin {
+		if err := authz.RequireStewardPermission(ctx, tx, actorID, "charity.create"); err != nil {
+			return resources.MutationResult[AdminCharityModel]{}, err
+		}
+	}
+	if scope.Trainee && !input.IsMainstream {
+		return resources.MutationResult[AdminCharityModel]{}, authz.ErrPermissionDenied
+	}
 	decision, err := beginMutation(ctx, tx, role, actorID, mutation, now)
 	if err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
@@ -230,13 +239,13 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)`,
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	if input.FlattenToolCalls {
-		if err := insertPolicyAudit(ctx, tx, actorID, string(role), modelID, false, true, now); err != nil {
+		if err := insertPolicyAudit(ctx, tx, actorID, scope.AuditRole(role == roleAdmin), modelID, false, true, now); err != nil {
 			return resources.MutationResult[AdminCharityModel]{}, err
 		}
 	}
 	defaultPolicy, _ := rolepolicy.Default().Canonical()
 	if encodedPolicy != defaultPolicy {
-		if err := rolepolicy.RecordAudit(ctx, tx, actorID, string(role), "charity_model", modelID, 0, 1, now); err != nil {
+		if err := rolepolicy.RecordAudit(ctx, tx, actorID, scope.AuditRole(role == roleAdmin), "charity_model", modelID, 0, 1, now); err != nil {
 			return resources.MutationResult[AdminCharityModel]{}, err
 		}
 	}
@@ -291,11 +300,10 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 	}
 	tx, scope, err := s.beginManagementTx(ctx, role, actorUserID, modelID, false, false)
 	actorID := scope.ActorID
-	if err == nil && scope.Trainee {
-		onlyRole := input.RolePolicy != nil && input.Provider == nil && input.Model == nil && input.Enabled == nil && input.Pricing == nil && input.Discount == nil && input.RecurringDiscount == nil && input.FlattenToolCalls == nil && input.CloudflareProxyEnabled == nil && input.RouteStrategy == nil && input.AffinityTTLSeconds == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil && input.IsMainstream == nil && input.ExcludedRequestFields == nil && input.ModelTypes == nil && input.TransportRule == nil && input.SessionHeaders == nil
-		if !onlyRole {
+	if err == nil && role != roleAdmin {
+		if permissionErr := authorizeModelPatch(ctx, tx, actorID, input); permissionErr != nil {
 			tx.Rollback()
-			return resources.MutationResult[AdminCharityModel]{}, ErrForbidden
+			return resources.MutationResult[AdminCharityModel]{}, permissionErr
 		}
 	}
 	if err != nil {
@@ -444,7 +452,7 @@ revision=revision+1,updated_at=? WHERE id=? AND revision=?`,
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	if current.flatten != updated.flatten {
-		if err := insertPolicyAudit(ctx, tx, actorID, string(role), modelID, current.flatten == 1, updated.flatten == 1, now); err != nil {
+		if err := insertPolicyAudit(ctx, tx, actorID, scope.AuditRole(role == roleAdmin), modelID, current.flatten == 1, updated.flatten == 1, now); err != nil {
 			return resources.MutationResult[AdminCharityModel]{}, err
 		}
 	}
@@ -519,12 +527,28 @@ func (s *Service) deleteModel(ctx context.Context, role roleKind, actorUserID, m
 	if err != nil {
 		return resources.MutationResult[struct{}]{}, err
 	}
-	tx, actorID, err := s.beginRoleTx(ctx, role, actorUserID)
+	tx, scope, err := s.beginManagementTx(ctx, role, actorUserID, 0, true, false)
 	if err != nil {
 		return resources.MutationResult[struct{}]{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
+	actorID := scope.ActorID
+	if role != roleAdmin {
+		if err := authz.RequireStewardPermission(ctx, tx, actorID, "charity.delete"); err != nil {
+			return resources.MutationResult[struct{}]{}, err
+		}
+	}
+	if scope.Trainee {
+		var mainstream bool
+		err := tx.QueryRowContext(ctx, `SELECT is_mainstream FROM charity_models WHERE id=?`, modelID).Scan(&mainstream)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return resources.MutationResult[struct{}]{}, err
+		}
+		if err == nil && !mainstream {
+			return resources.MutationResult[struct{}]{}, ErrNotFound
+		}
+	}
 	decision, err := beginMutation(ctx, tx, role, actorID, mutation, now)
 	if err != nil {
 		return resources.MutationResult[struct{}]{}, err
@@ -1387,7 +1411,7 @@ func classifyWrite(operation string, err error) error {
 }
 
 func mapAuthorization(err error) error {
-	if errors.Is(err, authz.ErrMFARequired) {
+	if errors.Is(err, authz.ErrMFARequired) || errors.Is(err, authz.ErrPermissionDenied) {
 		return err
 	}
 	if err == nil {

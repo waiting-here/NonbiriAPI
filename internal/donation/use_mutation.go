@@ -63,8 +63,8 @@ func (s *Service) mutateUse(ctx context.Context, role reviewerRole, actorID, don
 	actorKind := string(role)
 	if role == recurringOwner {
 		actorKind = "user"
-	} else if access.scope.Trainee {
-		actorKind = "trainee5"
+	} else {
+		actorKind = access.scope.AuditRole(role == reviewerAdmin)
 	}
 	decision, err := beginMutation(ctx, tx, actorKind, access.actorID, idempotency.ScopeDonation, mutation, now)
 	if err != nil {

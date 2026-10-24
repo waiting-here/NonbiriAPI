@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -176,6 +177,11 @@ func (s *Service) bindKeyTargets(ctx context.Context, role roleKind, actorID, do
 	}
 	defer tx.Rollback()
 	// Check every requested permission before reading receipts or skipping missing targets.
+	if role != roleAdmin {
+		if err := authz.RequireStewardPermission(ctx, tx, actorID, "charity.manage"); err != nil {
+			return empty, err
+		}
+	}
 	for _, target := range targets {
 		if scope.Trainee {
 			targetScope, err := s.managementScope(ctx, tx, role, actorID, target.modelID, false)

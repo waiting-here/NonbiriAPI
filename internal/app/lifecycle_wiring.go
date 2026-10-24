@@ -146,7 +146,7 @@ func heldReadAdminID(ctx context.Context) (int64, error) {
 }
 
 func translateDonationHeldReadError(err error) error {
-	if errors.Is(err, authz.ErrMFARequired) {
+	if errors.Is(err, authz.ErrMFARequired) || errors.Is(err, authz.ErrPermissionDenied) {
 		return err
 	}
 	var target error
@@ -170,7 +170,7 @@ func translateDonationHeldReadError(err error) error {
 }
 
 func translateLogHeldReadError(err error) error {
-	if errors.Is(err, authz.ErrMFARequired) {
+	if errors.Is(err, authz.ErrMFARequired) || errors.Is(err, authz.ErrPermissionDenied) {
 		return err
 	}
 	var target error
@@ -481,7 +481,7 @@ func newLifecycleCoordinator(
 			Governance:         activityEngines,
 			Sessions:           lifecycleadapters.NewAuthSessionRetention(authRuntime),
 			RequestLogs:        lifecycleadapters.NewRequestLogRetention(logRepository),
-			Audits:             lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository, charityRoutingService),
+			Audits:             lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository, charityRoutingService, lifecycleadapters.NewStewardPermissionRetention(store.DB())),
 			Observability:      diagnosticRetention{audits.observations},
 			RiskAudit:          riskRetention{repository: audits.risk, clientGuard: forwardRuntime.clientGuard},
 			Issues:             lifecycleadapters.NewIssueRetention(issueService),

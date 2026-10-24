@@ -82,6 +82,7 @@ func schema33Fixture(t *testing.T) (string, *secret.Vault, *Store) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
+	restoreSchema35ForTest(t, store)
 	for _, index := range endpointKeyHistoryIndexes {
 		hostileMustExec(t, store.DB(), "DROP INDEX "+index)
 	}

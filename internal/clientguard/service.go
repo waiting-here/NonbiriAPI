@@ -129,7 +129,7 @@ type ruleQuerier interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }
 
-func candidates(ctx context.Context, q ruleQuerier, source riskaudit.Source, now int64) ([]ruleRef, *int64, error) {
+func candidates(ctx context.Context, q *sql.Tx, source riskaudit.Source, now, targetID int64) ([]ruleRef, *int64, error) {
 	rules, err := riskaudit.ActiveAutoBanRules(ctx, q)
 	if err != nil {
 		return nil, nil, err
@@ -152,6 +152,13 @@ func candidates(ctx context.Context, q ruleQuerier, source riskaudit.Source, now
 		action, ok := byID[match.RuleID]
 		if !ok || !action.Enabled || len(refs) >= riskaudit.MaxAutoBanRules {
 			return nil, nil, ErrInvariant
+		}
+		allowed, err := ruleActionAllowed(ctx, q, match.RuleID, targetID, now, action)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !allowed {
+			continue
 		}
 		refs = append(refs, ruleRef{ID: match.RuleID, Revision: match.Revision, Name: match.Name})
 		if action.DurationSeconds == nil {
@@ -218,7 +225,7 @@ func (s *Service) CheckCall(parent context.Context, userID int64, model string, 
 	if err := readTx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id=? AND is_admin=0)`, userID).Scan(&exists); err != nil || !exists {
 		return Decision{}, ErrUnavailable
 	}
-	pre, _, err := candidates(ctx, readTx, sourceForRules(source), decisionNow)
+	pre, _, err := candidates(ctx, readTx, sourceForRules(source), decisionNow, userID)
 	if err != nil {
 		return Decision{}, fmt.Errorf("%w: read candidates: %v", ErrUnavailable, err)
 	}
@@ -269,7 +276,7 @@ func (s *Service) CheckCall(parent context.Context, userID int64, model string, 
 	if err != nil || admin != 0 {
 		return Decision{}, ErrUnavailable
 	}
-	refs, until, err := candidates(ctx, tx, sourceForRules(source), decisionNow)
+	refs, until, err := candidates(ctx, tx, sourceForRules(source), decisionNow, userID)
 	if err != nil {
 		return Decision{}, fmt.Errorf("%w: recheck candidates: %v", ErrUnavailable, err)
 	}

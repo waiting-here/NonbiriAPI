@@ -20,6 +20,7 @@ func schema34CatalogFixture(t *testing.T) (string, *secret.Vault, *Store) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Close() })
+	restoreSchema35ForTest(t, store)
 	hostileMustExec(t, store.DB(), "DROP TRIGGER discovery_run_version_guard")
 	hostileMustExec(t, store.DB(), previousDiscoveryRunGuardSQL)
 	hostileMustExec(t, store.DB(), "DROP VIEW charity_model_catalog")

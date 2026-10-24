@@ -7,10 +7,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 )
 
 const reviewerTrainee reviewerRole = "trainee5"
+const reviewerGranted reviewerRole = "level5"
 
 // Review authority is independent of the model-scoped maintenance capability.
 func (s *Service) beginReviewTx(ctx context.Context, role reviewerRole, userID int64, readOnly bool) (*sql.Tx, reviewerRole, int64, error) {
@@ -57,6 +59,20 @@ func (s *Service) beginReviewTx(ctx context.Context, role reviewerRole, userID i
 			err = ErrForbidden
 		}
 	}
+	if err == nil {
+		permission := authz.StewardPermissionFromContext(ctx)
+		if permission == "" {
+			permission = "donations.review"
+		}
+		err = mapAuthorization(authz.RequireStewardPermission(ctx, tx, userID, permission))
+		if err == nil && level == 5 {
+			p, e := authz.ReadStewardPermissions(ctx, tx, userID)
+			err = e
+			if err == nil && p.Permissions["donations.read_all"] {
+				role = reviewerGranted
+			}
+		}
+	}
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, role, 0, err
@@ -66,7 +82,7 @@ func (s *Service) beginReviewTx(ctx context.Context, role reviewerRole, userID i
 
 func pendingReviewFilter(filter ManagementFilter) (ManagementFilter, error) {
 	if filter.Status != "" && filter.Status != "pending" || filter.ReviewStatus != "" && filter.ReviewStatus != "pending" && filter.ReviewStatus != "approved_pending" || filter.Handling != "" && filter.Handling != "pending" {
-		return filter, ErrForbidden
+		return filter, authz.ErrPermissionDenied
 	}
 	filter.Status = ""
 	return filter, nil

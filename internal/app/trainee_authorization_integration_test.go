@@ -190,8 +190,12 @@ VALUES('synthetic','outside-scope','[公益]synthetic/outside-scope',1,'per_requ
 	}
 	patchBody := fmt.Sprintf(`{"expected_revision":%q,"expected_key_limits_revision":%q,"max_concurrency":3,"max_rpm":120,"safe_note":"Scoped maintenance applied","calls_limit":"7"}`, keyView.DonationRevision, *keyView.KeyLimitsRevision)
 	for _, wrong := range []string{"", "?charity_model_id=" + strconv.FormatInt(other, 10), "?charity_model_id=9223372036854775807"} {
-		requireStatus(call(http.MethodGet, keyPath+wrong, "", "", false), http.StatusNotFound)
-		requireStatus(call(http.MethodPatch, keyPath+wrong, patchBody, nextKey(), false), http.StatusNotFound)
+		status := http.StatusNotFound
+		if wrong == "" {
+			status = http.StatusForbidden
+		}
+		requireStatus(call(http.MethodGet, keyPath+wrong, "", "", false), status)
+		requireStatus(call(http.MethodPatch, keyPath+wrong, patchBody, nextKey(), false), status)
 	}
 	foreignPath := "/api/steward/donations/" + customKey.id + "/keys/" + customKey.key + scope
 	requireStatus(call(http.MethodGet, foreignPath, "", "", false), http.StatusNotFound)

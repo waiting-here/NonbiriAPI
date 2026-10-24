@@ -52,6 +52,8 @@ type managementRoute struct {
 func (api *httpAPI) userRoutes() []managementRoute {
 	return []managementRoute{
 		{http.MethodGet, api.role.route(routeUsers), api.listUsers},
+		{http.MethodGet, api.role.route(routeStewardPermissions), api.getStewardPermissions},
+		{http.MethodPut, api.role.route(routeStewardPermissions), api.putStewardPermissions},
 		{http.MethodGet, api.role.route(routeDeletedUser), api.getDeletedUser},
 		{http.MethodGet, api.role.route(routeUser), api.getUser},
 		{http.MethodGet, api.role.route(routeCallerKey), api.getCallerKey},
@@ -956,6 +958,9 @@ func writeMutation(writer http.ResponseWriter, status int, body []byte) {
 }
 
 func writeError(writer http.ResponseWriter, err error) {
+	if authz.WritePermissionDenied(writer, err) {
+		return
+	}
 	if errors.Is(err, authz.ErrMFARequired) {
 		httperr.WriteError(writer, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
 		return

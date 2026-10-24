@@ -19,6 +19,7 @@ type ActorKind string
 
 const (
 	Admin          ActorKind = "admin"
+	Steward5       ActorKind = "steward5"
 	Steward6       ActorKind = "steward6"
 	Automatic      ActorKind = "automatic"
 	PenaltyEvasion           = "deletion_penalty_evasion"
@@ -62,7 +63,7 @@ func AppendTx(ctx context.Context, tx *sql.Tx, event Event) (string, error) {
 	if err != nil || ctx == nil || tx == nil || !ValidDiscordID(event.DiscordID) ||
 		len(event.OperationKey) < 1 || len(event.OperationKey) > 128 ||
 		event.At < 0 || event.At > 253402300799 ||
-		(event.ActorKind != Admin && event.ActorKind != Steward6 && event.ActorKind != Automatic) ||
+		(event.ActorKind != Admin && event.ActorKind != Steward5 && event.ActorKind != Steward6 && event.ActorKind != Automatic) ||
 		(event.ActorUserID != nil && *event.ActorUserID <= 0) {
 		return "", ErrInvalid
 	}

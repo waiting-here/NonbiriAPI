@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -70,7 +71,7 @@ func TestRecurringDiscountModelReplacementAndAuthority(t *testing.T) {
 	patch = ModelPatch{ExpectedRevision: updated.Value.Revision, RecurringDiscount: recurringConfig(50)}
 	role := rolepolicy.Default()
 	patch.RolePolicy = &role
-	if _, err := e.service.PatchSteward(t.Context(), trainee, id, routingMutation(t, 'e', http.MethodPatch, routeStewardModel, []int64{id}, patch), patch); !errors.Is(err, ErrForbidden) {
+	if _, err := e.service.PatchSteward(t.Context(), trainee, id, routingMutation(t, 'e', http.MethodPatch, routeStewardModel, []int64{id}, patch), patch); !errors.Is(err, authz.ErrPermissionDenied) {
 		t.Fatal("trainee changed pricing", err)
 	}
 	if _, err := e.service.PatchSteward(t.Context(), steward, id, routingMutation(t, 'f', http.MethodPatch, routeStewardModel, []int64{id}, patch), patch); err != nil {

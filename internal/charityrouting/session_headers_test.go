@@ -3,6 +3,7 @@ package charityrouting
 import (
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"net/http"
 	"strconv"
 	"testing"
@@ -53,7 +54,7 @@ func TestSessionHeaderConfigurationPermissionsAndOmission(t *testing.T) {
 	}
 	p.RolePolicy = role
 	_, err = e.service.PatchSteward(t.Context(), trainee, id, routingMutation(t, 'd', http.MethodPatch, routeStewardModel, []int64{id}, p), p)
-	if !errors.Is(err, ErrForbidden) {
+	if !errors.Is(err, authz.ErrPermissionDenied) {
 		t.Fatal(err)
 	}
 }

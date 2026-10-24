@@ -186,6 +186,7 @@ func (service *Service) EnableTx(ctx context.Context, tx *sql.Tx, actor authz.Ac
 	if service == nil || ctx == nil || tx == nil || !command.Confirmed || !validCommand(command.ExpectedRevision, command.OperationID, command.Reason) {
 		return Transition{}, ErrInvalidMutation
 	}
+	ctx = authz.WithStewardPermission(ctx, "maintenance.enable")
 	requiredRole := authz.RoleSteward
 	if actor.Kind == authz.ActorAdminSession {
 		requiredRole = authz.RoleAdministrator

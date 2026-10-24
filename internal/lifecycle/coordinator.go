@@ -387,6 +387,9 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 	}
 	request := ExportRequest{UserID: userID, DecisionNow: decisionNow, Limit: CollectionLimit}
 	document := ExportDocument{SchemaVersion: SchemaVersion, GeneratedAt: decisionNow}
+	if document.StewardPermissions, err = exportStewardPermissions(ctx, tx, userID); err != nil {
+		return nil, err
+	}
 	// Lazy game completion can post rewards and ranking contributions. Read
 	// balances, ledgers and holds only after all such writes have converged.
 	var finalizer ExportFinalizer

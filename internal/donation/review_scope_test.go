@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -38,7 +39,7 @@ func TestTraineeReviewsAllPendingSourcesWithPrivateReceipts(t *testing.T) {
 		t.Fatalf("pending final page: %+v %v", last, err)
 	}
 	for _, status := range []string{"approved", "rejected", "expired", "deleted"} {
-		if _, err := e.service.DonationsStewardPage(ctx, actor, ManagementFilter{Status: status}, pagination.Default()); !errors.Is(err, ErrForbidden) {
+		if _, err := e.service.DonationsStewardPage(ctx, actor, ManagementFilter{Status: status}, pagination.Default()); !errors.Is(err, authz.ErrPermissionDenied) {
 			t.Fatalf("non-pending status %s: %v", status, err)
 		}
 	}
@@ -86,7 +87,7 @@ func TestTraineeReviewsAllPendingSourcesWithPrivateReceipts(t *testing.T) {
 		t.Fatal("trainee updated approved limits", err)
 	}
 	input = ReviewInput{Decision: "force_reject", ExpectedRevision: 2, Reason: "Not allowed"}
-	if _, err := e.service.ReviewSteward(ctx, actor, id, donationMutation(t, 'C', http.MethodPost, routeStewardReview, []int64{id}, input), input); !errors.Is(err, ErrForbidden) {
+	if _, err := e.service.ReviewSteward(ctx, actor, id, donationMutation(t, 'C', http.MethodPost, routeStewardReview, []int64{id}, input), input); !errors.Is(err, authz.ErrPermissionDenied) {
 		t.Fatal("trainee force rejected approval", err)
 	}
 	rejectID := parseTestID(t, pending[1].ID)

@@ -94,6 +94,9 @@ func parseIndependentDiagnosticQuery(r *http.Request) (DiagnosticFilter, error) 
 	return out, nil
 }
 func writeIndependentDiagnosticError(w http.ResponseWriter, err error) {
+	if authz.WritePermissionDenied(w, err) {
+		return
+	}
 	if errors.Is(err, authz.ErrMFARequired) {
 		httperr.WriteError(w, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
 		return

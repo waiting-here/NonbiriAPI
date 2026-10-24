@@ -17,7 +17,7 @@ func TestStewardCallerRechecksLiveAuthority(t *testing.T) {
 		{"rotated", "UPDATE caller_keys SET generation=2,key_hash=zeroblob(32),display_head='newh',display_tail='newt' WHERE user_id=?", 1, ErrUnauthorized},
 		{"revoked", "UPDATE caller_keys SET generation=2,key_hash=NULL,display_head='',display_tail='',key_created_at=NULL WHERE user_id=?", 1, ErrUnauthorized},
 		{"demoted", "UPDATE users SET level=4 WHERE id=?", 1, ErrForbidden},
-		{"trainee", "UPDATE users SET level=5 WHERE id=?", 1, ErrForbidden},
+		{"trainee", "UPDATE users SET level=5 WHERE id=?", 1, ErrPermissionDenied},
 		{"automatic level", "UPDATE users SET level=NULL WHERE id=?", 1, ErrForbidden},
 		{"banned", "UPDATE users SET is_banned=1,banned_until=NULL WHERE id=?", 1, ErrForbidden},
 		{"expired ban", "UPDATE users SET is_banned=1,banned_until=1 WHERE id=?", 1, nil},

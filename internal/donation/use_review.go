@@ -30,7 +30,7 @@ func (s *Service) reauthorizeUseReviewTx(ctx context.Context, tx *sql.Tx, access
 	switch access.role {
 	case reviewerAdmin:
 		return mapAuthorization(s.roleAuth.AuthorizeAdminMutation(ctx, tx, access.actorID))
-	case reviewerSteward:
+	case reviewerSteward, reviewerGranted:
 		return mapAuthorization(s.roleAuth.AuthorizeStewardMutation(ctx, tx, access.actorID))
 	case reviewerTrainee:
 		authority, ok := s.roleAuth.(interface {

@@ -3,29 +3,39 @@ package lifecycle
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"strconv"
 	"testing"
+
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 )
 
 type currentStewardHeldRead struct{}
 
 func (currentStewardHeldRead) AuthorizeStewardRead(ctx context.Context, tx *sql.Tx, userID int64) error {
 	var allowed bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id=? AND is_admin=0 AND is_banned=0 AND level=6)`, userID).Scan(&allowed); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id=? AND is_admin=0 AND is_banned=0 AND level IN (5,6))`, userID).Scan(&allowed); err != nil {
 		return err
 	}
 	if !allowed {
 		return ErrForbidden
 	}
-	return nil
+	return authz.RequireStewardPermission(ctx, tx, userID, "logs.read")
 }
 
 func TestStewardHeldReadAuditsRevocationAndAccountDeletion(t *testing.T) {
+	for _, level := range []int{5, 6} {
+		t.Run(strconv.Itoa(level), func(t *testing.T) { testStewardHeldRead(t, level) })
+	}
+}
+
+func testStewardHeldRead(t *testing.T, level int) {
 	f := newLifecycleTestFixture(t, 100)
 	admin := seedLifecycleUser(t, f.store.DB(), "held-admin", true, 100)
 	user := seedLifecycleUser(t, f.store.DB(), "held-steward", false, 100)
 	owner := seedLifecycleUser(t, f.store.DB(), "held-caller", false, 100)
-	if _, err := f.store.DB().Exec(`UPDATE users SET level=6 WHERE id=?`, user); err != nil {
+	if _, err := f.store.DB().Exec(`UPDATE users SET level=? WHERE id=?`, level, user); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.DB().Exec(`INSERT INTO logical_requests(id,user_id,route_kind,state,attempt_limit,accounting_state,settlement_destination,ledger_rows_remaining,created_at)
@@ -86,13 +96,31 @@ VALUES(?,?,'openai_chat_completions','accepted',1,'none','user',zeroblob(16),100
 			t.Fatalf("invalid audit mutation accepted: %s", mutation)
 		}
 	}
+	if level == 5 {
+		p := authz.DefaultStewardPermissions(5)
+		p.Permissions["logs.read"] = false
+		permissions, _ := json.Marshal(p.Permissions)
+		limits, _ := json.Marshal(p.Limits)
+		if _, err := f.store.DB().Exec(`INSERT INTO steward_permissions(user_id,revision,permissions,limits,created_at,updated_at) VALUES(?,1,?,?,100,100)`, user, string(permissions), string(limits)); err != nil {
+			t.Fatal(err)
+		}
+		if allowed, err := read(113, true); allowed || !errors.Is(err, authz.ErrPermissionDenied) {
+			t.Fatal("revoked held read", allowed, err)
+		}
+		if err := f.store.DB().QueryRow(`SELECT read_count FROM legal_hold_steward_reads WHERE user_id=?`, user).Scan(&reads); err != nil || reads != 2 {
+			t.Fatal("revoked read wrote audit", reads, err)
+		}
+		if _, err := f.store.DB().Exec(`DELETE FROM steward_permissions WHERE user_id=?`, user); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if _, err := f.store.DB().Exec(`UPDATE users SET level=4 WHERE id=?`, user); err != nil {
 		t.Fatal(err)
 	}
 	if allowed, err := read(113, true); !errors.Is(err, ErrForbidden) || allowed {
 		t.Fatal("revoked read", allowed, err)
 	}
-	if _, err := f.store.DB().Exec(`UPDATE users SET level=6 WHERE id=?`, user); err != nil {
+	if _, err := f.store.DB().Exec(`UPDATE users SET level=? WHERE id=?`, level, user); err != nil {
 		t.Fatal(err)
 	}
 	tx, err := f.store.DB().BeginTx(context.Background(), nil)

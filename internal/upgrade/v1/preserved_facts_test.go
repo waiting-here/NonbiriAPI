@@ -89,7 +89,7 @@ func assertExactPublishedSource(t *testing.T, database *sql.DB, version int, man
 		t.Fatalf("restored source has no published conversion path: %+v, %v", plan, err)
 	}
 	for _, step := range plan.steps {
-		if step.from > 26 && step.from != 33 && step.from != 34 || step.version > 26 && step.version != 33 && step.version != 34 && step.version != 35 {
+		if step.from > 26 && step.from != 33 && step.from != 34 && step.from != 35 || step.version > 26 && step.version != 33 && step.version != 34 && step.version != 35 && step.version != 36 {
 			t.Fatalf("unreleased intermediate schema became a supported source: %+v", step)
 		}
 	}

@@ -103,7 +103,7 @@ func (s *Service) managedKeyTx(ctx context.Context, tx *sql.Tx, scope charitysco
 		return ManagedKeySummary{}, err
 	}
 	value := managedKeySummary(keys[0], header, rules)
-	if scope.Trainee {
+	if scope.Redact {
 		value.EndpointKeyID = nil
 	}
 	impact, err := scope.Impact(ctx, tx, keyID)
