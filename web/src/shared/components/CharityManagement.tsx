@@ -1268,6 +1268,7 @@ function DonationKeyPages({
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
   const staleRevision = keys.data?.data.some((key) => key.donation_revision !== item.revision);
+  const maintenanceScopeRequired = keys.data?.data.some((key) => key.maintenance_scope_required);
   const bindingItem =
     keys.data?.data.find((key) => key.key_id === bindingKey) ??
     (bindingSnapshot?.key_id === bindingKey ? bindingSnapshot : null);
@@ -1313,11 +1314,16 @@ function DonationKeyPages({
       {item.use_summary ? (
         <p className="nb-sub">{t('common.connections.legacyKeyHealth')}</p>
       ) : null}
+      {maintenanceScopeRequired ? (
+        <Note>{t('common.donationHistory.maintenanceScope')}</Note>
+      ) : null}
       <DonationDiscoveryControl
         key={`discovery:${role}:${accountId}:${item.id}`}
         role={role}
         target={{ donation_id: item.id }}
-        disabled={keys.isFetching || Boolean(keys.error) || staleRevision}
+        disabled={
+          keys.isFetching || Boolean(keys.error) || staleRevision || maintenanceScopeRequired
+        }
         onCapabilityLoss={onCapabilityLoss}
       />
       {keys.data ? (
@@ -1325,7 +1331,9 @@ function DonationKeyPages({
           key={`${role}:${accountId}:${item.id}`}
           role={role}
           selection={{ view: 'donation_keys', donation_id: item.id }}
-          disabled={keys.isFetching || Boolean(keys.error) || staleRevision}
+          disabled={
+            keys.isFetching || Boolean(keys.error) || staleRevision || maintenanceScopeRequired
+          }
           onCapabilityLoss={onCapabilityLoss}
           choices={keys.data.data.map((key) => ({
             id: key.id,
@@ -1402,37 +1410,41 @@ function DonationKeyPages({
                   }}
                   onCapabilityLoss={onCapabilityLoss}
                 />
-                <DonationKeyModels
-                  role={role}
-                  accountId={accountId}
-                  donationId={item.id}
-                  keyId={key.id}
-                  editable={key.charity_state !== 'ended' && key.charity_state !== 'expired'}
-                  onCapabilityLoss={onCapabilityLoss}
-                />
-                <DonationDiscoveryControl
-                  key={`discovery:${role}:${accountId}:${key.id}`}
-                  role={role}
-                  target={{ donation_id: item.id, key_id: key.id }}
-                  disabled={!(key.can_manage ?? key.charity_state === 'available')}
-                  onCapabilityLoss={onCapabilityLoss}
-                />
-                <RecurringLimitsDisclosure
-                  accountId={accountId}
-                  role={role}
-                  donationId={item.id}
-                  keyId={key.id}
-                  label={t('common.operations.charity.keyHeading', {
-                    id: key.id,
-                    head: key.display_head,
-                    tail: key.display_tail,
-                  })}
-                  readOnly={key.charity_state === 'ended' || key.charity_state === 'expired'}
-                  onSaved={() => {
-                    void refresh();
-                  }}
-                  onCapabilityLoss={onCapabilityLoss}
-                />
+                {!key.maintenance_scope_required ? (
+                  <>
+                    <DonationKeyModels
+                      role={role}
+                      accountId={accountId}
+                      donationId={item.id}
+                      keyId={key.id}
+                      editable={key.charity_state !== 'ended' && key.charity_state !== 'expired'}
+                      onCapabilityLoss={onCapabilityLoss}
+                    />
+                    <DonationDiscoveryControl
+                      key={`discovery:${role}:${accountId}:${key.id}`}
+                      role={role}
+                      target={{ donation_id: item.id, key_id: key.id }}
+                      disabled={!(key.can_manage ?? key.charity_state === 'available')}
+                      onCapabilityLoss={onCapabilityLoss}
+                    />
+                    <RecurringLimitsDisclosure
+                      accountId={accountId}
+                      role={role}
+                      donationId={item.id}
+                      keyId={key.id}
+                      label={t('common.operations.charity.keyHeading', {
+                        id: key.id,
+                        head: key.display_head,
+                        tail: key.display_tail,
+                      })}
+                      readOnly={key.charity_state === 'ended' || key.charity_state === 'expired'}
+                      onSaved={() => {
+                        void refresh();
+                      }}
+                      onCapabilityLoss={onCapabilityLoss}
+                    />
+                  </>
+                ) : null}
               </section>
             ))}
           </fieldset>
@@ -1446,6 +1458,14 @@ function DonationKeyPages({
         </>
       ) : null}
     </Card>
+  );
+}
+
+function validDonorFilters(userID: string, discordID: string): boolean {
+  return (
+    (!userID ||
+      (/^[1-9][0-9]{0,18}$/.test(userID) && BigInt(userID) <= 9_223_372_036_854_775_807n)) &&
+    (!discordID || /^[1-9][0-9]{0,19}$/.test(discordID))
   );
 }
 
@@ -1473,12 +1493,24 @@ function DonationsPanel({
   const status = (DONATION_DISPLAY_STATUSES as readonly string[]).includes(rawStatus)
     ? rawStatus
     : '';
+  const userID = selectedID(searchParams, 'donor_user_id');
+  const rawDiscordID = oneParam(searchParams, 'donor_discord_id');
+  const discordID = /^[1-9][0-9]{0,19}$/.test(rawDiscordID) ? rawDiscordID : '';
   const selected = selectedID(searchParams, 'donation_id');
   const binding = Boolean(selected && selectedID(searchParams, 'binding_key'));
   const [draft, setDraft] = useState({ query, text: query });
   const queryDraft = draft.query === query ? draft.text : query;
   const setQueryDraft = (text: string) => setDraft({ query, text });
-  const queryValid = validManagementSearch(queryDraft);
+  const [donorDraft, setDonorDraft] = useState({
+    userID,
+    discordID,
+    user: userID,
+    discord: discordID,
+  });
+  const userDraft = donorDraft.userID === userID ? donorDraft.user : userID;
+  const discordDraft = donorDraft.discordID === discordID ? donorDraft.discord : discordID;
+  const donorValid = validDonorFilters(userDraft, discordDraft);
+  const queryValid = validManagementSearch(queryDraft) && donorValid;
   const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
     listType: 'managed-donations',
@@ -1486,13 +1518,21 @@ function DonationsPanel({
     pageParam: 'donations_page',
     pageSizeParam: 'donations_page_size',
   });
-  const updateFilters = (nextHandling: string, nextQuery: string, nextStatus = status) => {
+  const updateFilters = (
+    nextHandling: string,
+    nextQuery: string,
+    nextStatus = status,
+    nextUserID = userID,
+    nextDiscordID = discordID,
+  ) => {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       for (const [name, value] of [
         ['handling', nextHandling],
         ['q', nextQuery],
         ['donation_status', nextStatus],
+        ['donor_user_id', nextUserID],
+        ['donor_discord_id', nextDiscordID],
       ]) {
         if (value) next.set(name, value);
         else next.delete(name);
@@ -1523,7 +1563,14 @@ function DonationsPanel({
     });
   };
   useEffect(() => {
-    const desired = { handling, q: query, donation_status: status, donation_id: selected };
+    const desired = {
+      handling,
+      q: query,
+      donation_status: status,
+      donation_id: selected,
+      donor_user_id: userID,
+      donor_discord_id: discordID,
+    };
     if (
       Object.entries(desired).every(
         ([name, value]) =>
@@ -1542,7 +1589,7 @@ function DonationsPanel({
       },
       { replace: true },
     );
-  }, [handling, query, status, selected, searchParams, setSearchParams]);
+  }, [handling, query, status, selected, userID, discordID, searchParams, setSearchParams]);
   const listKey = [
     ...charityKeys.root(role),
     'donation-pages',
@@ -1550,6 +1597,8 @@ function DonationsPanel({
     status,
     handling,
     query,
+    userID,
+    discordID,
     pager.page,
     pager.pageSize,
   ] as const;
@@ -1558,7 +1607,13 @@ function DonationsPanel({
     queryFn: ({ signal }) =>
       getManagedDonationsPage(
         role,
-        { review_status: status, handling, q: query } as ManagedDonationPageFilters,
+        {
+          review_status: status,
+          handling,
+          q: query,
+          user_id: userID,
+          discord_id: discordID,
+        } as ManagedDonationPageFilters,
         pager.page,
         pager.pageSize,
         signal,
@@ -1605,7 +1660,7 @@ function DonationsPanel({
           <div className="charity-donation-toolbar">
             <FilterBar
               secondaryLabel={t('common.filter')}
-              activeCount={[handling, status, query].filter(Boolean).length}
+              activeCount={[handling, status, query, userID, discordID].filter(Boolean).length}
               search={
                 <div className="charity-donation-search">
                   {' '}
@@ -1615,12 +1670,12 @@ function DonationsPanel({
                       type="search"
                       placeholder={t('common.donationHandling.searchPlaceholder')}
                       value={queryDraft}
-                      aria-invalid={!queryValid}
+                      aria-invalid={!validManagementSearch(queryDraft)}
                       onChange={(event) => setQueryDraft(event.target.value)}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' && queryValid) {
                           event.preventDefault();
-                          updateFilters(handling, queryDraft);
+                          updateFilters(handling, queryDraft, status, userDraft, discordDraft);
                         }
                       }}
                     />
@@ -1629,11 +1684,13 @@ function DonationsPanel({
                     type="button"
                     className="nb-btn nb-btn--secondary"
                     disabled={!queryValid}
-                    onClick={() => updateFilters(handling, queryDraft)}
+                    onClick={() =>
+                      updateFilters(handling, queryDraft, status, userDraft, discordDraft)
+                    }
                   >
                     {t('common.donationHandling.applySearch')}
                   </button>
-                  {!queryValid ? (
+                  {!validManagementSearch(queryDraft) ? (
                     <p className="field-error" role="alert">
                       {t('common.donationHandling.searchInvalid')}
                     </p>
@@ -1642,7 +1699,66 @@ function DonationsPanel({
               }
               secondary={
                 <>
-                  {' '}
+                  <Field
+                    label={t('common.donationHistory.userId')}
+                    help={t('common.donationHistory.exactId')}
+                    error={
+                      validDonorFilters(userDraft, '')
+                        ? undefined
+                        : t('common.donationHistory.invalidId')
+                    }
+                  >
+                    {(field) => (
+                      <input
+                        {...field}
+                        inputMode="numeric"
+                        placeholder={t('common.donationHistory.userIdPlaceholder')}
+                        value={userDraft}
+                        onChange={(event) =>
+                          setDonorDraft({
+                            userID,
+                            discordID,
+                            user: event.target.value.trim(),
+                            discord: discordDraft,
+                          })
+                        }
+                      />
+                    )}
+                  </Field>
+                  <Field
+                    label="Discord ID"
+                    help={t('common.donationHistory.exactId')}
+                    error={
+                      validDonorFilters('', discordDraft)
+                        ? undefined
+                        : t('common.donationHistory.invalidId')
+                    }
+                  >
+                    {(field) => (
+                      <input
+                        {...field}
+                        inputMode="numeric"
+                        placeholder={t('common.donationHistory.discordIdPlaceholder')}
+                        value={discordDraft}
+                        onChange={(event) =>
+                          setDonorDraft({
+                            userID,
+                            discordID,
+                            user: userDraft,
+                            discord: event.target.value.trim(),
+                          })
+                        }
+                      />
+                    )}
+                  </Field>
+                  <Button
+                    disabled={!queryValid}
+                    onClick={() =>
+                      updateFilters(handling, queryDraft, status, userDraft, discordDraft)
+                    }
+                  >
+                    {t('common.donationHandling.applySearch')}
+                  </Button>{' '}
                   <label>
                     <span>{t('common.donationHandling.filter')}</span>
                     <select
@@ -1676,6 +1792,24 @@ function DonationsPanel({
                 </>
               }
               chips={[
+                ...[
+                  { value: userID, name: 'user', label: t('common.donationHistory.userId') },
+                  { value: discordID, name: 'discord', label: 'Discord ID' },
+                ]
+                  .filter((item) => item.value)
+                  .map((item) => ({
+                    key: item.name,
+                    label: `${item.label}: ${item.value}`,
+                    removeLabel: t('common.resetFilter'),
+                    onRemove: () =>
+                      updateFilters(
+                        handling,
+                        query,
+                        status,
+                        item.name === 'user' ? '' : userID,
+                        item.name === 'discord' ? '' : discordID,
+                      ),
+                  })),
                 ...(handling
                   ? [
                       {
@@ -1711,10 +1845,15 @@ function DonationsPanel({
                     ]
                   : []),
               ]}
-              onClearAll={() => updateFilters('', '', '')}
+              onClearAll={() => {
+                setQueryDraft('');
+                setDonorDraft({ userID: '', discordID: '', user: '', discord: '' });
+                updateFilters('', '', '', '', '');
+              }}
               clearAllLabel={t('common.resetFilter')}
               onSubmit={() => {
-                if (queryValid) updateFilters(handling, queryDraft);
+                if (queryValid)
+                  updateFilters(handling, queryDraft, status, userDraft, discordDraft);
               }}
             />
             <div className="charity-batch-menu">
@@ -1758,11 +1897,17 @@ function DonationsPanel({
           <div hidden={batch !== 'reset'} ref={resetBatchRef} className="charity-batch-section">
             {list.data ? (
               <FailureResetControl
-                key={`${role}:${accountId}:${status}:${handling}:${query}`}
+                key={`${role}:${accountId}:${status}:${handling}:${query}:${userID}:${discordID}`}
                 role={role}
                 selection={{
                   view: 'donations',
-                  ...({ review_status: status, handling, q: query } as ManagedDonationPageFilters),
+                  ...({
+                    review_status: status,
+                    handling,
+                    q: query,
+                    ...(userID ? { user_id: userID } : {}),
+                    ...(discordID ? { discord_id: discordID } : {}),
+                  } as ManagedDonationPageFilters),
                 }}
                 disabled={list.isFetching || Boolean(list.error)}
                 onCapabilityLoss={onCapabilityLoss}
@@ -1952,6 +2097,8 @@ const workflowSearchParameters = [
   'donation_key',
   'donation_from',
   'donation_status',
+  'donor_user_id',
+  'donor_discord_id',
   'donations_page',
   'donations_page_size',
   'donation_keys_page',
@@ -2505,6 +2652,37 @@ function PendingDonationReviews({
   const q = validManagementSearch(rawQuery) ? rawQuery : '';
   const [search, setSearch] = useState({ q, text: q });
   const searchText = search.q === q ? search.text : q;
+  const userID = selectedID(params, 'donor_user_id');
+  const rawDiscordID = oneParam(params, 'donor_discord_id');
+  const discordID = /^[1-9][0-9]{0,19}$/.test(rawDiscordID) ? rawDiscordID : '';
+  const [donorDraft, setDonorDraft] = useState({
+    userID,
+    discordID,
+    user: userID,
+    discord: discordID,
+  });
+  const userDraft = donorDraft.userID === userID ? donorDraft.user : userID;
+  const discordDraft = donorDraft.discordID === discordID ? donorDraft.discord : discordID;
+  const filtersValid =
+    validManagementSearch(searchText) && validDonorFilters(userDraft, discordDraft);
+  const applyFilters = (
+    nextQuery = searchText,
+    nextUserID = userDraft,
+    nextDiscordID = discordDraft,
+  ) =>
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      for (const [name, value] of [
+        ['pending_review_q', nextQuery.trim()],
+        ['donor_user_id', nextUserID],
+        ['donor_discord_id', nextDiscordID],
+      ]) {
+        if (value) next.set(name, value);
+        else next.delete(name);
+      }
+      next.set('pending_reviews_page', '1');
+      return next;
+    });
   const [receipt, setReceipt] = useState<ManagedDonation | null>(null);
   const [useReceipt, setUseReceipt] = useState<{
     accountId: string;
@@ -2520,11 +2698,11 @@ function PendingDonationReviews({
   });
   const listRoot = [...charityKeys.root('steward'), 'pending-reviews', accountId] as const;
   const list = useQuery({
-    queryKey: [...listRoot, q, pager.page, pager.pageSize],
+    queryKey: [...listRoot, q, userID, discordID, pager.page, pager.pageSize],
     queryFn: ({ signal }) =>
       getManagedDonationsPage(
         'steward',
-        { status: 'pending', q },
+        { status: 'pending', q, user_id: userID, discord_id: discordID },
         pager.page,
         pager.pageSize,
         signal,
@@ -2625,7 +2803,7 @@ function PendingDonationReviews({
       ) : (
         <>
           <FilterBar
-            activeCount={q ? 1 : 0}
+            activeCount={[q, userID, discordID].filter(Boolean).length}
             secondaryLabel={t('common.filter')}
             search={
               <>
@@ -2640,18 +2818,110 @@ function PendingDonationReviews({
                     />
                   )}
                 </Field>
-                <Button type="submit" disabled={!validManagementSearch(searchText)}>
+                <Button type="submit" disabled={!filtersValid}>
                   {t('common.search')}
                 </Button>
               </>
             }
+            secondary={
+              <>
+                <Field
+                  label={t('common.donationHistory.userId')}
+                  help={t('common.donationHistory.exactId')}
+                  error={
+                    validDonorFilters(userDraft, '')
+                      ? undefined
+                      : t('common.donationHistory.invalidId')
+                  }
+                >
+                  {(field) => (
+                    <input
+                      {...field}
+                      inputMode="numeric"
+                      placeholder={t('common.donationHistory.userIdPlaceholder')}
+                      value={userDraft}
+                      onChange={(event) =>
+                        setDonorDraft({
+                          userID,
+                          discordID,
+                          user: event.target.value.trim(),
+                          discord: discordDraft,
+                        })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field
+                  label="Discord ID"
+                  help={t('common.donationHistory.exactId')}
+                  error={
+                    validDonorFilters('', discordDraft)
+                      ? undefined
+                      : t('common.donationHistory.invalidId')
+                  }
+                >
+                  {(field) => (
+                    <input
+                      {...field}
+                      inputMode="numeric"
+                      placeholder={t('common.donationHistory.discordIdPlaceholder')}
+                      value={discordDraft}
+                      onChange={(event) =>
+                        setDonorDraft({
+                          userID,
+                          discordID,
+                          user: userDraft,
+                          discord: event.target.value.trim(),
+                        })
+                      }
+                    />
+                  )}
+                </Field>
+                <Button disabled={!filtersValid} onClick={() => applyFilters()}>
+                  {t('common.donationHandling.applySearch')}
+                </Button>
+              </>
+            }
+            chips={[
+              ...(q
+                ? [
+                    {
+                      key: 'q',
+                      label: q,
+                      onRemove: () => applyFilters('', userID, discordID),
+                      removeLabel: t('common.resetFilter'),
+                    },
+                  ]
+                : []),
+              ...(userID
+                ? [
+                    {
+                      key: 'user',
+                      label: `${t('common.donationHistory.userId')}: ${userID}`,
+                      onRemove: () => applyFilters(q, '', discordID),
+                      removeLabel: t('common.resetFilter'),
+                    },
+                  ]
+                : []),
+              ...(discordID
+                ? [
+                    {
+                      key: 'discord',
+                      label: `Discord ID: ${discordID}`,
+                      onRemove: () => applyFilters(q, userID, ''),
+                      removeLabel: t('common.resetFilter'),
+                    },
+                  ]
+                : []),
+            ]}
+            onClearAll={() => {
+              setSearch({ q: '', text: '' });
+              setDonorDraft({ userID: '', discordID: '', user: '', discord: '' });
+              applyFilters('', '', '');
+            }}
+            clearAllLabel={t('common.resetFilter')}
             onSubmit={() => {
-              if (validManagementSearch(searchText))
-                setParams((next) => {
-                  next.set('pending_review_q', searchText.trim());
-                  next.set('pending_reviews_page', '1');
-                  return next;
-                });
+              if (filtersValid) applyFilters();
             }}
           />
           {list.isPending ? (

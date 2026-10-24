@@ -32,12 +32,34 @@ SELECT 1 FROM donation_keys live WHERE live.donation_id=d.id AND live.ended_at I
 type ManagementFilter struct {
 	Status, Handling, Query, OwnerView string
 	ReviewStatus                       string `json:",omitempty"`
+	UserID                             string `json:",omitempty"`
+	DiscordID                          string `json:",omitempty"`
 }
 
 func validManagementFilter(filter ManagementFilter) bool {
 	return validStatusFilter(filter.Status) && validReviewStatusFilter(filter.ReviewStatus) && validHandlingFilter(filter.Handling) &&
 		utf8.ValidString(filter.Query) && utf8.RuneCountInString(filter.Query) <= 128 &&
-		len(filter.Query) <= 512 && !strings.ContainsRune(filter.Query, 0)
+		len(filter.Query) <= 512 && !strings.ContainsRune(filter.Query, 0) &&
+		validDonorID(filter.UserID, false) && validDonorID(filter.DiscordID, true)
+}
+
+func validDonorID(value string, discord bool) bool {
+	if value == "" {
+		return true
+	}
+	if !discord {
+		_, err := parseCanonicalID(value)
+		return err == nil
+	}
+	if len(value) > 20 || value[0] == '0' {
+		return false
+	}
+	for _, c := range value {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func validHandlingFilter(value string) bool {
@@ -49,6 +71,14 @@ func validHandlingFilter(value string) bool {
 }
 
 func appendManagementFilter(query string, args []any, filter ManagementFilter, now int64) (string, []any) {
+	if filter.UserID != "" {
+		query += ` AND d.user_id=?`
+		args = append(args, filter.UserID)
+	}
+	if filter.DiscordID != "" {
+		query += ` AND d.user_id=(SELECT donor.id FROM users donor WHERE donor.discord_id=?)`
+		args = append(args, filter.DiscordID)
+	}
 	if filter.Status != "" {
 		query += ` AND (CASE WHEN d.status IN ('pending','approved') AND NOT ` + logicallyActiveDonationSQL + ` THEN 'expired' ELSE d.status END)=?`
 		args = append(args, now, filter.Status)

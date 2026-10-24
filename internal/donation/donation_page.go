@@ -73,7 +73,7 @@ WHERE dk.donation_id=?`+keyFilter+` GROUP BY state`, now, now, now, now, header.
 
 func (s *Service) donationsPage(ctx context.Context, role reviewerRole, userID int64, filter ManagementFilter, page pagination.Request) (Page[AdminDonationSummary], error) {
 	var empty Page[AdminDonationSummary]
-	if ctx == nil || !page.Valid() || !validManagementFilter(filter) || role == recurringOwner && (filter.Handling != "" || !validOwnerView(filter.OwnerView)) || role != recurringOwner && filter.OwnerView != "" {
+	if ctx == nil || !page.Valid() || !validManagementFilter(filter) || role == recurringOwner && (filter.Handling != "" || filter.UserID != "" || filter.DiscordID != "" || !validOwnerView(filter.OwnerView)) || role != recurringOwner && filter.OwnerView != "" {
 		return empty, ErrInvalidRequest
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)

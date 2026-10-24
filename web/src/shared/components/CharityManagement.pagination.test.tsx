@@ -188,6 +188,56 @@ function install(pending = false, role: 'admin' | 'steward' = 'admin', keyCount 
     },
   };
 }
+
+it.each(['admin', 'steward'] as const)(
+  'applies exact donor IDs and clears both in the %s review queue',
+  async (role) => {
+    const fixture = install(true, role);
+    const view = await renderWithProviders(
+      <CharityManagement frame={role} accountId="donor-filter-account" />,
+      {
+        station: role === 'admin' ? 'admin' : 'user',
+        role: role === 'admin' ? 'admin' : 'level5',
+        locale: 'en',
+        route: '/charity?charity_section=donations',
+      },
+    );
+    await screen.findAllByText('Shared donation');
+    await view.user.click(screen.getByText('Filter', { exact: true }));
+    await view.user.type(screen.getByRole('textbox', { name: 'Site user ID' }), '7');
+    await view.user.type(screen.getByRole('textbox', { name: 'Discord ID' }), '840000000000000001');
+    await view.user.click(screen.getAllByRole('button', { name: 'Apply filters' }).at(-1)!);
+    await waitFor(() =>
+      expect(
+        fixture.requests
+          .filter((url) => url.pathname.endsWith('/donations'))
+          .at(-1)
+          ?.searchParams.get('discord_id'),
+      ).toBe('840000000000000001'),
+    );
+    expect(
+      fixture.requests
+        .filter((url) => url.pathname.endsWith('/donations'))
+        .at(-1)
+        ?.searchParams.get('user_id'),
+    ).toBe('7');
+    await view.user.click(screen.getAllByRole('button', { name: 'Reset' }).at(-1)!);
+    await waitFor(() =>
+      expect(
+        fixture.requests
+          .filter((url) => url.pathname.endsWith('/donations'))
+          .at(-1)
+          ?.searchParams.has('user_id'),
+      ).toBe(false),
+    );
+    expect(
+      fixture.requests
+        .filter((url) => url.pathname.endsWith('/donations'))
+        .at(-1)
+        ?.searchParams.has('discord_id'),
+    ).toBe(false);
+  },
+);
 function installBindingNavigation(
   role: 'admin' | 'steward',
   forbidden = false,
