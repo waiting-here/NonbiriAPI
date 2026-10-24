@@ -3,6 +3,7 @@ import type { CharityPriceConfig } from '@shared/operations/charity';
 import {
   draftPriceConfig,
   priceDraft,
+  priceDraftError,
   priceDraftSignature,
   snapshotPriceDraft,
   switchPriceMode,
@@ -51,6 +52,22 @@ const token: CharityPriceConfig = {
 };
 
 describe('complete charity price snapshots', () => {
+  it('preserves unchanged discount dates without requiring a configured site time zone', () => {
+    for (const config of [undefined, token]) {
+      const original = priceDraft(config);
+      const draft = {
+        ...original,
+        discountStart: rezoneSiteTimeDraft(original.discountStart, null),
+        discountEnd: rezoneSiteTimeDraft(original.discountEnd, null),
+      };
+      expect(priceDraftError(draft)).toBeNull();
+      expect(draftPriceConfig(draft)).toEqual(draftPriceConfig(original));
+      draft.discountStart = editTimeDraft(draft.discountStart, '2026-10-24T09:00:00');
+      expect(priceDraftError(draft)).toBe('discountDates');
+      expect(draftPriceConfig(draft)).toBeNull();
+    }
+  });
+
   it('round trips all token prices, rewards, reserve, context settings, and discount', () => {
     expect(draftPriceConfig(priceDraft(token))).toEqual(token);
     const draft = priceDraft(token);
