@@ -10,7 +10,7 @@ import { useConnectionOperation } from './useConnectionOperation';
 import { ConnectionOperationNotice } from './OperationNotice';
 import { connectionAPI } from './api';
 import { connectionKeys } from './ResourceList';
-import { CoreErrorPanel } from '../components';
+import { CoreErrorPanel, DiscoveryFailureNotice } from '../components';
 
 export function ServiceModelSetup({
   accountId,
@@ -83,6 +83,14 @@ export function ServiceModelSetup({
             )}
           </button>
           <ConnectionOperationNotice operation={refresh} />
+          {currentSource.state === 'failed' ? (
+            <>
+              <DiscoveryFailureNotice failure={currentSource.safe_class} />
+              {currentSource.safe_diag ? <Note tone="warn">{currentSource.safe_diag}</Note> : null}
+            </>
+          ) : currentSource.state === 'checking' ? (
+            <Note>{t(`common.connections.sourceStates.${currentSource.state}`)}</Note>
+          ) : null}
           {current.error ? (
             <CoreErrorPanel error={current.error} onRetry={() => void current.refetch()} />
           ) : null}
