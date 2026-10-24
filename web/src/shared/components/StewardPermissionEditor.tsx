@@ -16,6 +16,7 @@ import { managementRoot, type ManagementRole } from '@shared/operations/managedU
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import {
   defaultStewardPermissions,
+  DONATION_SCOPES,
   getStewardPermissions,
   saveStewardPermissions,
   STEWARD_PERMISSION_DEFAULTS,
@@ -103,6 +104,7 @@ function PermissionForm({
 }) {
   const { t } = useTranslation();
   const [permissions, setPermissions] = useState(policy.permissions);
+  const [donationScope, setDonationScope] = useState(policy.donation_scope);
   const inputsFor = (value: StewardPermissions) =>
     Object.fromEntries(
       stewardLimitKeys.map((key) => [key, displayLimit(key, value.limits[key])]),
@@ -114,6 +116,7 @@ function PermissionForm({
   ) as Record<StewardLimit, string | null>;
   const valid = stewardLimitKeys.every((key) => limits[key] !== null);
   const dirty =
+    Number(donationScope !== policy.donation_scope) +
     stewardPermissionKeys.filter((key) => permissions[key] !== policy.permissions[key]).length +
     stewardLimitKeys.filter((key) => limits[key] !== policy.limits[key]).length;
   const mutation = useRetainedOperation(
@@ -149,6 +152,7 @@ function PermissionForm({
     onEdit();
     const next = defaultStewardPermissions(level);
     setPermissions(next.permissions);
+    setDonationScope(next.donation_scope);
     setInputs(inputsFor(next));
   };
   const rows = stewardPermissionKeys.filter((key) =>
@@ -175,6 +179,40 @@ function PermissionForm({
           {t('management.permissions.none')}
         </Button>
       </div>
+      <Field
+        label={t('management.permissions.scope.title')}
+        help={t('management.permissions.scope.help')}
+      >
+        {(field) => (
+          <>
+            <strong>{t(`management.permissions.scope.${donationScope}.label`)}</strong>
+            <input
+              {...field}
+              type="range"
+              min="0"
+              max="3"
+              step="1"
+              value={DONATION_SCOPES.indexOf(donationScope)}
+              aria-valuetext={t(`management.permissions.scope.${donationScope}.label`)}
+              disabled={locked}
+              onChange={(event) => {
+                onEdit();
+                setDonationScope(DONATION_SCOPES[Number(event.target.value)]);
+              }}
+            />
+          </>
+        )}
+      </Field>
+      <dl className="nb-stack">
+        {DONATION_SCOPES.map((scope) => (
+          <div key={scope}>
+            <dt>
+              <strong>{t(`management.permissions.scope.${scope}.label`)}</strong>
+            </dt>
+            <dd>{t(`management.permissions.scope.${scope}.description`)}</dd>
+          </div>
+        ))}
+      </dl>
       <Field label={t('management.permissions.search')}>
         {(field) => (
           <input
@@ -287,6 +325,7 @@ function PermissionForm({
         dirtyLabel={(count) => t('management.permissions.dirty', { count })}
         onDiscard={() => {
           setPermissions(policy.permissions);
+          setDonationScope(policy.donation_scope);
           setInputs(inputsFor(policy));
         }}
         onSave={() => {
@@ -294,6 +333,7 @@ function PermissionForm({
             void mutation
               .mutateAsync({
                 revision: policy.revision,
+                donation_scope: donationScope,
                 permissions,
                 limits: limits as StewardPermissions['limits'],
               })

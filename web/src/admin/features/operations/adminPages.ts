@@ -1,8 +1,15 @@
-import { apiFetch } from '@shared/query/http';
+import { record } from '@shared/operations/wire';
+import {
+  getEndpointsPage,
+  getEndpointUsersPage,
+  setEndpointTags,
+  type EndpointUsersPage,
+} from '@shared/operations/endpoints';
+import type { ManagementRole } from '@shared/operations/managedUsers';
+export type AdminEndpointUsersPage = EndpointUsersPage;
 import {
   normalizeNumberedPage as normalizePage,
   validateWindow,
-  validateText,
   invalidRequest,
   type NumberedPage,
 } from '@shared/operations/numberedPage';
@@ -11,10 +18,9 @@ import {
   getManagedUserDetail,
   managedUserKeys,
 } from '@shared/operations/managedUsers';
-import { decoded, queryPath, idempotentOptions, operationKey } from '@shared/operations/api';
+import { decoded, queryPath } from '@shared/operations/api';
 import type { PageSize } from '@shared/operations/pageNumbers';
-import { decimal, decimalID, invalidResponse, record } from '@shared/operations/wire';
-import { normalizeEndpointOverview, type EndpointOverview, type AdminUser } from './core';
+import { type AdminUser } from './core';
 import {
   normalizeActivitiesConfig,
   normalizePeriod,
@@ -35,51 +41,6 @@ export function normalizeAdminPageResponse<T>(
 ): AdminPage<T> {
   return normalizePage(value, label, item, requestedPage, requestedSize);
 }
-
-function normalizeEndpointOverviewPageItem(value: unknown): EndpointOverview {
-  const group = normalizeEndpointOverview(value);
-  if (group.users.length > 3) invalidResponse('endpoint overview preview');
-  const users = BigInt(group.user_count);
-  if (
-    users === 0n ||
-    BigInt(group.endpoint_count) < users ||
-    BigInt(group.users.length) !== (users < 3n ? users : 3n) ||
-    new Set(group.users.map((user) => user.user_id)).size !== group.users.length ||
-    group.users.some(
-      (user) =>
-        BigInt(user.endpoint_count) === 0n ||
-        BigInt(user.enabled_count) > BigInt(user.endpoint_count),
-    ) ||
-    group.users.reduce((sum, user) => sum + BigInt(user.endpoint_count), 0n) >
-      BigInt(group.endpoint_count) ||
-    group.users.reduce((sum, user) => sum + BigInt(user.key_count), 0n) > BigInt(group.key_count)
-  )
-    invalidResponse('endpoint overview counts');
-  return group;
-}
-
-function normalizeEndpointUsersPageItem(value: unknown) {
-  const root = record(
-    value,
-    ['user_id', 'endpoint_count', 'key_count', 'enabled_count'],
-    'endpoint overview user',
-  );
-  const user = {
-    user_id: decimalID(root.user_id, 'overview user id'),
-    endpoint_count: decimal(root.endpoint_count, 'user endpoint count'),
-    key_count: decimal(root.key_count, 'user key count'),
-    enabled_count: decimal(root.enabled_count, 'user enabled count'),
-  };
-  if (
-    BigInt(user.endpoint_count) === 0n ||
-    BigInt(user.enabled_count) > BigInt(user.endpoint_count)
-  ) {
-    invalidResponse('endpoint overview user counts');
-  }
-  return user;
-}
-
-export type AdminEndpointUsersPage = AdminPage<EndpointOverview['users'][number]>;
 
 function adminPagePath(
   path: string,
@@ -131,65 +92,16 @@ export function getAdminUserDetail(id: string, signal?: AbortSignal): Promise<Ad
   return getManagedUserDetail('admin', id, signal);
 }
 
-export async function getAdminEndpointsPage(
-  query: string,
-  page: string,
-  pageSize: PageSize,
-  signal?: AbortSignal,
-  tag = '',
-  userId = '',
-): Promise<AdminPage<EndpointOverview>> {
-  validateWindow(page, pageSize);
-  validateText(query, 512, true);
-  const path = adminPagePath('/admin/api/overview/endpoints', {
-    q: query || undefined,
-    tag: tag || undefined,
-    user_id: userId || undefined,
-    page,
-    page_size: pageSize,
-  });
-  return decoded(
-    path,
-    (value) =>
-      normalizePage(
-        value,
-        'endpoint overview page',
-        normalizeEndpointOverviewPageItem,
-        page,
-        pageSize,
-        (group) => group.base_url,
-      ),
-    { signal },
-  );
-}
-
-export async function getAdminEndpointUsersPage(
-  baseURL: string,
-  page: string,
-  pageSize: PageSize,
-  signal?: AbortSignal,
-): Promise<AdminEndpointUsersPage> {
-  validateWindow(page, pageSize);
-  validateText(baseURL, 4096, false);
-  const path = adminPagePath('/admin/api/overview/endpoints/users', {
-    base_url: baseURL,
-    page,
-    page_size: pageSize,
-  });
-  return decoded(
-    path,
-    (value) =>
-      normalizePage(
-        value,
-        'endpoint overview users page',
-        normalizeEndpointUsersPageItem,
-        page,
-        pageSize,
-        (user) => user.user_id,
-      ),
-    { signal },
-  );
-}
+export const getAdminEndpointsPage = (
+  ...args: Parameters<typeof getEndpointsPage> extends [ManagementRole, ...infer Rest]
+    ? Rest
+    : never
+) => getEndpointsPage('admin', ...args);
+export const getAdminEndpointUsersPage = (
+  ...args: Parameters<typeof getEndpointUsersPage> extends [ManagementRole, ...infer Rest]
+    ? Rest
+    : never
+) => getEndpointUsersPage('admin', ...args);
 
 export async function getAdminPoolsPage(
   type: string,
@@ -233,16 +145,5 @@ export function getAdminThursday(signal?: AbortSignal): Promise<{ period: Period
   );
 }
 
-export async function setAdminEndpointTags(
-  baseURLs: string[],
-  tag: string,
-  add: boolean,
-): Promise<void> {
-  await apiFetch(
-    '/admin/api/overview/endpoints/tags',
-    idempotentOptions(operationKey(), {
-      method: 'PATCH',
-      json: { base_urls: baseURLs, tag, add },
-    }),
-  );
-}
+export const setAdminEndpointTags = (baseURLs: string[], tag: string, add: boolean) =>
+  setEndpointTags('admin', baseURLs, tag, add);

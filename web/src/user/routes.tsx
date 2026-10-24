@@ -91,6 +91,12 @@ export const router = createBrowserRouter([
         lazy: async () => ({ Component: (await import('./pages/CharityPage')).CharityPage }),
       },
       {
+        path: pathFor('steward-endpoints'),
+        lazy: async () => ({
+          Component: (await import('./pages/StewardEndpointsPage')).StewardEndpointsPage,
+        }),
+      },
+      {
         path: pathFor('endpoint-policies'),
         lazy: async () => ({
           Component: (await import('./pages/EndpointPoliciesPage')).EndpointPoliciesPage,

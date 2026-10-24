@@ -7,6 +7,7 @@ import { listReturnPath } from '@shared/operations/listReturn';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   hasStewardPermission,
+  canAccessStewardCharityManagement,
   type StewardPermission,
 } from '@shared/operations/stewardPermissions';
 import { StewardPermissionNotice } from '@shared/components/StewardPermissionNotice';
@@ -96,7 +97,7 @@ function StewardPageContent() {
   }, [revision, clearSensitiveQueries]);
   const sectionAllowed =
     section === 'charity'
-      ? has('charity.read') || has('donations.review') || has('donations.read_all')
+      ? canAccessStewardCharityManagement(authority.data)
       : section === 'logs'
         ? has('logs.read') || has('diagnostics.read')
         : has(
@@ -154,6 +155,13 @@ function StewardPageContent() {
           description={t('user.steward.presentation.description')}
         />
         <div className="nb-actions">
+          <Link
+            className="nb-btn nb-btn--secondary"
+            to="/steward/endpoints"
+            state={{ returnTo: location.pathname + location.search }}
+          >
+            {t('management.endpoints.title')}
+          </Link>
           <Link
             className="nb-btn nb-btn--secondary"
             to="/endpoint-policies"

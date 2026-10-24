@@ -105,6 +105,13 @@ export const USER_ROUTE_DESCRIPTORS = [
     labelKey: 'user.charity.nav',
   }),
   user({
+    id: 'steward-endpoints',
+    path: '/steward/endpoints',
+    access: 'user',
+    layout: 'wide',
+    registered: true,
+  }),
+  user({
     id: 'endpoint-policies',
     path: '/endpoint-policies',
     access: 'user',
