@@ -354,17 +354,17 @@ describe('CharityBindingPicker numbered source flow', () => {
 
     await screen.findByRole('button', { name: /Custom endpoint/ });
     expect(requests[0]).toBe(
-      '/admin/api/donation-sources?scope=active&key_state=available&page=1&page_size=20',
+      '/admin/api/donation-sources?scope=all&key_state=all&page=1&page_size=20',
     );
     await view.user.click(screen.getByRole('button', { name: /Custom endpoint/ }));
     await view.user.click(await screen.findByRole('button', { name: /safe key note/ }));
     await view.user.click(await screen.findByRole('checkbox', { name: /model-a/ }));
 
     expect(requests).toContain(
-      `/admin/api/donation-sources/${encodeURIComponent(SOURCE_KEY)}/keys?scope=active&key_state=available&page=1&page_size=20`,
+      `/admin/api/donation-sources/${encodeURIComponent(SOURCE_KEY)}/keys?scope=all&key_state=all&page=1&page_size=20`,
     );
     expect(requests).toContain(
-      '/admin/api/charity-models/31/binding-candidates?donation_id=7&donation_key_id=21&key_state=available&include_bound=true&page=1&page_size=20',
+      '/admin/api/charity-models/31/binding-candidates?donation_id=7&donation_key_id=21&key_state=all&include_bound=true&page=1&page_size=20',
     );
     expect(screen.getByRole('heading', { name: '1 service connection(s) selected' })).toBeVisible();
   });
@@ -531,7 +531,7 @@ describe('CharityBindingPicker numbered source flow', () => {
     await view.user.click(screen.getByRole('button', { name: /Choose source/ }));
     expect(await screen.findByRole('button', { name: /source-21/ })).toBeVisible();
     expect(requests).toContain(
-      '/admin/api/charity-models/31/binding-candidates?donation_id=22&donation_key_id=22&key_state=available&include_bound=true&page=2&page_size=20',
+      '/admin/api/charity-models/31/binding-candidates?donation_id=22&donation_key_id=22&key_state=all&include_bound=true&page=2&page_size=20',
     );
   });
 
@@ -607,7 +607,7 @@ describe('CharityBindingPicker numbered source flow', () => {
     await view.user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() =>
       expect(requests).toContain(
-        `/admin/api/donation-sources?q=${encodeURIComponent(query)}&scope=active&key_state=available&page=1&page_size=20`,
+        `/admin/api/donation-sources?q=${encodeURIComponent(query)}&scope=all&key_state=all&page=1&page_size=20`,
       ),
     );
   });
@@ -636,7 +636,7 @@ describe('CharityBindingPicker numbered source flow', () => {
     expect(sourceQuery).toBeDefined();
     await view.queryClient.refetchQueries({ queryKey: sourceQuery!.queryKey, exact: true });
     expect(await screen.findByText('The service is temporarily unavailable.')).toBeVisible();
-    expect(screen.getByRole('button', { name: /safe key note/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /safe key note/ })).toBeEnabled();
     await view.user.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /safe key note/ })).toBeEnabled(),
@@ -690,7 +690,7 @@ describe('CharityBindingPicker numbered source flow', () => {
     },
   );
 
-  it('reports background key reads and keeps candidate controls paused until retry succeeds', async () => {
+  it('keeps an existing selection editable when a background key read fails', async () => {
     let sourceKeyReads = 0;
     const readStates: boolean[] = [];
     const fetchMock = vi.fn<typeof fetch>(async (input) => {
@@ -715,7 +715,7 @@ describe('CharityBindingPicker numbered source flow', () => {
     authorize(view.queryClient);
     await view.user.click(await screen.findByRole('button', { name: /Custom endpoint/ }));
     await view.user.click(await screen.findByRole('button', { name: /safe key note/ }));
-    await screen.findByRole('checkbox', { name: /model-a/ });
+    await view.user.click(await screen.findByRole('checkbox', { name: /model-a/ }));
     const sourceKeyQuery = view.queryClient
       .getQueryCache()
       .findAll({
@@ -726,8 +726,11 @@ describe('CharityBindingPicker numbered source flow', () => {
     expect(sourceKeyQuery).toBeDefined();
     await view.queryClient.refetchQueries({ queryKey: sourceKeyQuery!.queryKey, exact: true });
     expect(await screen.findByText('The service is temporarily unavailable.')).toBeVisible();
-    expect(readStates).toContain(true);
-    expect(screen.getByRole('checkbox', { name: /model-a/ })).toBeDisabled();
+    expect(readStates.at(-1)).toBe(false);
+    expect(screen.getByRole('checkbox', { name: /model-a/ })).toBeEnabled();
+    expect(screen.getByRole('checkbox', { name: /model-a/ })).toBeChecked();
+    await view.user.click(screen.getByRole('button', { name: 'Clear all selections' }));
+    expect(screen.getByRole('checkbox', { name: /model-a/ })).not.toBeChecked();
     await view.user.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(readStates.at(-1)).toBe(false));
     expect(screen.getByRole('checkbox', { name: /model-a/ })).not.toBeDisabled();

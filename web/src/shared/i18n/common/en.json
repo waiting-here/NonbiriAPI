@@ -703,7 +703,6 @@
           "ended": "Ended"
         },
         "charitySwitchChange": "Charity switch change",
-        "confirmReview": "I confirm this review result and its per-key consequences.",
         "createdUpdated": "Created / updated",
         "decision": {
           "approve": "Approve",
@@ -1854,11 +1853,7 @@
       "latestLoaded": "Loaded “{{name}}”, revision {{revision}}. Your draft is unchanged."
     },
     "pendingReviews": {
-      "title": "Pending donation reviews",
-      "help": "Review all pending donations. Set each key’s limits and enabled state before approval.",
       "saved": "Review saved: {{status}}.",
-      "empty": "No pending donations",
-      "emptyHelp": "New donations will appear here. Try clearing the search if needed.",
       "noLongerPending": "This donation has already been reviewed. Return to the pending queue."
     },
     "bindingBatch": {
@@ -1921,8 +1916,7 @@
       "applyTitle": "Apply channel preset",
       "applyHelp": "Use {{count}} mappings from {{name}} for every key in this donation. Missing models and existing connections will be skipped.",
       "apply": "Apply preset to all keys",
-      "noPreset": "This channel has no mappings yet. Configure its preset first.",
-      "accessDenied": "Channel binding presets require administrator or level 6 steward access."
+      "noPreset": "This channel has no mappings yet. Configure its preset first."
     },
     "recurringDiscount": {
       "title": "Recurring discount",
@@ -1964,7 +1958,6 @@
     "endpointPolicies": {
       "title": "Endpoint policies",
       "description": "Manage shared backoff rules and inspect loaded outbound routes.",
-      "accessDenied": "Only administrators and level 6 stewards can manage endpoint policies.",
       "backList": "Back to endpoints",
       "backManagement": "Back to management",
       "sections": "Endpoint policy sections",
@@ -2110,6 +2103,15 @@
       "addSource": "Add discovery source",
       "addTarget": "Add target",
       "addTargetGroup": "Add target group",
+      "editBindingSources": "Edit sources and services",
+      "returnToBindings": "Return to connections",
+      "addBindingMode": "Add sources",
+      "addBindingModeHelp": "Add sources separately for normal routing, or combine several entries when one connection needs their services together.",
+      "addSeparateSources": "Select models from a source",
+      "combineSources": "Combine multiple entries",
+      "configureReviewedUse": "Configure charity models",
+      "reviewConfigurationDenied": "The review is saved. Configuring this source requires maintenance access. An administrator or level-6 steward can adjust your access.",
+      "reviewedServiceDefault": "Continue with the reviewed service: {{service}}. You can adjust the selected services before saving.",
       "all": "All",
       "allCredentialUsesEffect": "Disabling or deleting affects every entry and charity use of this credential.",
       "applyToUnedited": "Apply to unedited models",
@@ -2500,8 +2502,6 @@
       "nav": "Users",
       "title": "User management",
       "description": "Manage accounts, credits, access limits, and bans.",
-      "traineeDescription": "Find accounts, adjust permitted inference limits, revoke site keys and apply permitted bans.",
-      "traineeSelectBody": "View account details, inference limits, site keys and available ban actions.",
       "listTitle": "Users",
       "username": "Username",
       "status": "Status",
@@ -2578,7 +2578,6 @@
       "discordGateExempt": "Exempt from server and role checks",
       "limitInvalid": "Use whole numbers: endpoints 0–10000, RPM 1–4096, concurrency 1–100000. Leave blank to use the default.",
       "readOnly": "Your account and other stewards can be viewed here. Their settings cannot be changed.",
-      "traineeReadOnly": "Level-5 stewards may adjust inference limits, revoke site keys and ban level 1–4 users. Other settings, credits and existing bans remain read-only.",
       "view": "View",
       "backToList": "Back to list",
       "selectUser": "Select a user",

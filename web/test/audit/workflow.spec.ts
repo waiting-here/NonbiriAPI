@@ -1371,7 +1371,7 @@ test('level 5 reviews independent pending sources, retains receipts after refres
           `/steward?tab=charity&charity_section=donations&donation_id=${donation.id}`,
       );
       await expect(
-        page.getByRole('tab', { name: common.common.pendingReviews.title, exact: true }),
+        page.getByRole('tab', { name: en.user.steward.donationsTitle, exact: true }),
       ).toBeVisible();
       await expect(page.getByRole('tab', { name: workflow.templates, exact: true })).toHaveCount(0);
       await expect(
@@ -1472,8 +1472,8 @@ test('level 5 reviews independent pending sources, retains receipts after refres
       await page.getByRole('button', { name: operations.returnToList, exact: true }).click();
       await expect(page).toHaveURL((url) => !url.searchParams.has('donation_id'));
       await expect(
-        page.getByRole('heading', {
-          name: common.common.pendingReviews.title,
+        page.getByRole('tab', {
+          name: en.user.steward.donationsTitle,
           exact: true,
         }),
       ).toBeVisible();

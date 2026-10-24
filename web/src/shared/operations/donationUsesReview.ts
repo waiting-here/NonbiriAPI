@@ -1,5 +1,5 @@
 import { ApiError } from '@shared/query/http';
-import { NATIVE_SERVICES } from '@shared/nativeServices';
+import { NATIVE_SERVICES, type NativeService } from '@shared/nativeServices';
 import { operationKey } from './api';
 import type { DonationUse, UsePage, UseReviewItem, UseReviewResult } from './donationUses';
 
@@ -8,6 +8,29 @@ export interface DonationUseReviewPlan {
   rows: DonationUse[];
   blocked: DonationUse[];
   batches: { key: string; items: UseReviewItem[] }[];
+}
+
+export interface ReviewedUseLabel {
+  use_id: string;
+  donation_key_id: string;
+  native_service: NativeService;
+  display_head: string;
+  display_tail: string;
+  decision: 'approve' | 'reject';
+}
+
+export function reviewedUseLabels(
+  rows: DonationUse[],
+  decision: 'approve' | 'reject',
+): ReviewedUseLabel[] {
+  return rows.map((row) => ({
+    use_id: row.id,
+    donation_key_id: row.donation_key_id,
+    native_service: row.native_service,
+    display_head: row.pending?.display_head ?? row.approved?.display_head ?? '',
+    display_tail: row.pending?.display_tail ?? row.approved?.display_tail ?? '',
+    decision,
+  }));
 }
 
 export async function collectPendingDonationUses(

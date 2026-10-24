@@ -183,6 +183,7 @@ interface CharityBindingPickerProps {
   capacity?: number;
   role: CharityRole;
   modelId: string;
+  preferredServices?: readonly NativeService[];
   selected: Record<string, CharitySelection>;
   onChange: (next: Record<string, CharitySelection>) => void;
   locked: boolean;
@@ -238,6 +239,7 @@ function CharityBindingPickerBody({
   showSelectionSummary = true,
   role,
   modelId,
+  preferredServices,
   selected,
   onChange,
   locked,
@@ -257,10 +259,10 @@ function CharityBindingPickerBody({
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const [keyState, setKeyState] = useState<KeyState>('available');
+  const [keyState, setKeyState] = useState<KeyState>('all');
   const [selectedSearch, setSelectedSearch] = useState('');
   const selectedSearchInput = useRef<HTMLInputElement>(null);
-  const [scope, setScope] = useState<SourceScope>('active');
+  const [scope, setScope] = useState<SourceScope>('all');
   const [sourceQueryDraft, setSourceQueryDraft] = useState('');
   const [sourceQuery, setSourceQuery] = useState('');
   const [selectedSource, setSelectedSource] = useState<DonationSourceSummary | null>(() =>
@@ -477,13 +479,7 @@ function CharityBindingPickerBody({
   const candidateReadBlocked =
     candidateReadActive &&
     (candidates.isPending || candidates.isFetching || Boolean(candidates.error));
-  const readStateBlocked =
-    !canRead ||
-    managingKey ||
-    requestCapabilityLost ||
-    sourceReadBlocked ||
-    sourceKeyReadBlocked ||
-    candidateReadBlocked;
+  const readStateBlocked = !canRead || managingKey || requestCapabilityLost;
   useEffect(() => {
     onReadStateChange?.(readStateBlocked);
   }, [onReadStateChange, readStateBlocked]);
@@ -544,9 +540,9 @@ function CharityBindingPickerBody({
   const sourcePage = sources.data;
   const keyPage = sourceKeys.data;
   const candidatePage = candidates.data;
-  const sourceBusy = interactionBlocked;
-  const keyBusy = interactionBlocked;
-  const candidateBusy = interactionBlocked;
+  const sourceBusy = interactionBlocked || sourceReadBlocked;
+  const keyBusy = interactionBlocked || sourceKeyReadBlocked;
+  const candidateBusy = interactionBlocked || candidateReadBlocked;
   const allSelectedEntries = Object.entries(selected);
   const selectedEntries = allSelectedEntries.filter(([, entry]) =>
     entry.upstream_model_id.toLowerCase().includes(selectedSearch.toLowerCase()),
@@ -1004,7 +1000,17 @@ function CharityBindingPickerBody({
                                       return;
                                     const next = { ...selected };
                                     if (event.target.checked) {
-                                      next[key] = { ...entry, note: selectedKey.safe_note };
+                                      next[key] = {
+                                        ...entry,
+                                        note: selectedKey.safe_note,
+                                        selected_native_services: entry.capabilities?.can_bind
+                                          ? entry.native_services?.filter(
+                                              (service) =>
+                                                !preferredServices ||
+                                                preferredServices.includes(service),
+                                            )
+                                          : undefined,
+                                      };
                                     } else {
                                       delete next[key];
                                     }
@@ -1098,6 +1104,12 @@ function CharityBindingPickerBody({
                           next[charitySelectionKey(entry)] ??= {
                             ...entry,
                             note: selectedKey.safe_note,
+                            selected_native_services: entry.capabilities?.can_bind
+                              ? entry.native_services?.filter(
+                                  (service) =>
+                                    !preferredServices || preferredServices.includes(service),
+                                )
+                              : undefined,
                           };
                         onChange(next);
                       }}

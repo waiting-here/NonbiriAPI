@@ -849,6 +849,10 @@ function BindingsPanel({
   const { t } = useTranslation();
   const adaptationCopy = useRequestAdaptationCopy();
   const [adaptationBinding, setAdaptationBinding] = useState('');
+  const [editingBinding, setEditingBinding] = useState('');
+  const [visitedBindings, setVisitedBindings] = useState<string[]>([]);
+  const [addMode, setAddMode] = useState<'single' | 'group'>('single');
+  const [groupVisited, setGroupVisited] = useState(false);
   const [, setParams] = useSearchState();
   const pager = usePagePager({
     station: role === 'admin' ? 'admin' : 'user',
@@ -945,7 +949,6 @@ function BindingsPanel({
         </Fold>
       ) : null}
       <Card>
-        <CharityTargets role={role} accountId={accountId} model={model} />
         <h3>{t('common.operations.charity.orderedBindings')}</h3>
         {bindings.isPending ? (
           <LoadingState />
@@ -1006,6 +1009,19 @@ function BindingsPanel({
                         ) : null}
                       </td>
                       <td className="ops-cell-wide" data-label={t(charityCopyKey(role, 'actions'))}>
+                        <button
+                          className="nb-btn nb-btn--secondary"
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            setEditingBinding(entry.id);
+                            setVisitedBindings((previous) =>
+                              previous.includes(entry.id) ? previous : [...previous, entry.id],
+                            );
+                          }}
+                        >
+                          {t('common.connections.editBindingSources')}
+                        </button>
                         <button
                           className="nb-btn nb-btn--secondary"
                           type="button"
@@ -1135,14 +1151,68 @@ function BindingsPanel({
             <span>{t('common.operations.charity.saveOrderHelp')}</span>
           </div>
         ) : null}
-        <BindingAddForm
-          role={role}
-          accountId={accountId}
-          model={model}
-          refresh={refresh}
-          onCapabilityLoss={onCapabilityLoss}
-          renderKeyManager={renderKeyManager}
-        />
+        {visitedBindings
+          .filter((id) => bindings.data?.bindings.some((row) => row.id === id))
+          .map((id) => (
+            <section
+              key={id}
+              hidden={editingBinding !== id}
+              className="nb-stack"
+              aria-label={t('common.connections.editBindingSources')}
+            >
+              <h3>{t('common.connections.editBindingSources')}</h3>
+              <button
+                className="nb-btn nb-btn--ghost"
+                type="button"
+                onClick={() => setEditingBinding('')}
+              >
+                {t('common.connections.returnToBindings')}
+              </button>
+              <CharityTargets
+                role={role}
+                accountId={accountId}
+                model={model}
+                bindingId={id}
+                inline
+              />
+            </section>
+          ))}
+        <section hidden={Boolean(editingBinding)} className="nb-stack">
+          <Field
+            label={t('common.connections.addBindingMode')}
+            help={t('common.connections.addBindingModeHelp')}
+          >
+            {(props) => (
+              <select
+                {...props}
+                value={addMode}
+                onChange={(event) => {
+                  const mode = event.target.value as 'single' | 'group';
+                  setAddMode(mode);
+                  if (mode === 'group') setGroupVisited(true);
+                }}
+              >
+                <option value="single">{t('common.connections.addSeparateSources')}</option>
+                <option value="group">{t('common.connections.combineSources')}</option>
+              </select>
+            )}
+          </Field>
+          <div hidden={addMode !== 'single'}>
+            <BindingAddForm
+              role={role}
+              accountId={accountId}
+              model={model}
+              refresh={refresh}
+              onCapabilityLoss={onCapabilityLoss}
+              renderKeyManager={renderKeyManager}
+            />
+          </div>
+          {groupVisited ? (
+            <div hidden={addMode !== 'group'}>
+              <CharityTargets role={role} accountId={accountId} model={model} inline />
+            </div>
+          ) : null}
+        </section>
         {order.error ? (
           <ErrorState error={order.error} />
         ) : remove.error ? (

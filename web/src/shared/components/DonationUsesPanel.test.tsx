@@ -2,7 +2,7 @@ import { ApiError } from '@shared/query/http';
 import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
-import { DonationUsesPanel } from './DonationUsesPanel';
+import { DonationUseReviewResults, DonationUsesPanel } from './DonationUsesPanel';
 const mocks = vi.hoisted(() => ({ get: vi.fn(), review: vi.fn(), start: vi.fn(), read: vi.fn() }));
 vi.mock('@shared/operations/donationDiscovery', async (original) => ({
   ...(await original<typeof import('@shared/operations/donationDiscovery')>()),
@@ -53,6 +53,41 @@ const row = (id: string, revision: string) => ({
 });
 afterEach(() => vi.clearAllMocks());
 describe('per-use review recovery', () => {
+  it('continues from the approved service and preserves its credential label after review', async () => {
+    const configure = vi.fn();
+    const approved = {
+      use_id: '6',
+      donation_key_id: '4',
+      native_service: 'chat_completions' as const,
+      display_head: 'head-2',
+      display_tail: 'tail',
+      decision: 'approve' as const,
+    };
+    const view = await renderWithProviders(
+      <DonationUseReviewResults
+        results={[
+          { use_id: '6', ok: true },
+          { use_id: '7', ok: false, error: { code: 'conflict', message: 'Version changed' } },
+          { use_id: '8', ok: true },
+        ]}
+        labels={[
+          approved,
+          { ...approved, use_id: '7', native_service: 'responses' },
+          { ...approved, use_id: '8', decision: 'reject' },
+        ]}
+        onConfigure={configure}
+        configurationStatus={() => 'available'}
+      />,
+      { station: 'admin', role: 'admin' },
+    );
+    const buttons = screen.getAllByRole('button', { name: 'Configure charity models' });
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]!.closest('li')).toHaveTextContent('Chat completions');
+    expect(buttons[0]!.closest('li')).toHaveTextContent('head-2…tail');
+    await view.user.click(buttons[0]!);
+    expect(configure).toHaveBeenCalledWith(approved);
+  });
+
   it('keeps the failed selection, shows both versions, and requires explicit adoption of a refreshed revision', async () => {
     let revision = '9';
     mocks.get.mockImplementation(async () => ({

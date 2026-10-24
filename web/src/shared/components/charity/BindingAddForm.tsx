@@ -94,8 +94,7 @@ export function BindingAddForm({
   const duplicates = Object.keys(selected).filter((key) => identities.has(key));
   const locked =
     reading ||
-    bindings.isFetching ||
-    Boolean(bindings.error) ||
+    !bindings.data ||
     add.isPending ||
     add.outcome === 'unknown' ||
     add.outcome === 'refresh-failed';

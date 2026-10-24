@@ -703,7 +703,6 @@
           "ended": "已终止"
         },
         "charitySwitchChange": "公益开关变更",
-        "confirmReview": "我确认此审核结果及其对各把密钥的影响。",
         "createdUpdated": "创建时间 / 更新时间",
         "decision": {
           "approve": "批准",
@@ -1854,11 +1853,7 @@
       "latestLoaded": "已载入「{{name}}」第 {{revision}} 版，当前草稿保持不变。"
     },
     "pendingReviews": {
-      "title": "待处理捐赠审核",
-      "help": "审核所有待处理捐赠。通过前可设置各密钥的限额和启用状态。",
       "saved": "已完成审核：{{status}}。",
-      "empty": "暂无待处理捐赠",
-      "emptyHelp": "新捐赠会出现在这里，也可以清空搜索条件重试。",
       "noLongerPending": "此捐赠已完成审核，请返回待处理队列。"
     },
     "bindingBatch": {
@@ -1921,8 +1916,7 @@
       "applyTitle": "应用渠道预设",
       "applyHelp": "将“{{name}}”的 {{count}} 项映射应用到本份捐赠的每把密钥。缺失模型和已有绑定会跳过。",
       "apply": "应用到全部密钥",
-      "noPreset": "此渠道尚无映射，请先配置渠道绑定预设。",
-      "accessDenied": "渠道绑定预设仅供管理员和 6 级协管使用。"
+      "noPreset": "此渠道尚无映射，请先配置渠道绑定预设。"
     },
     "recurringDiscount": {
       "title": "周期折扣",
@@ -1964,7 +1958,6 @@
     "endpointPolicies": {
       "title": "端点策略",
       "description": "管理共用退避规则，查看当前加载的出站路由。",
-      "accessDenied": "仅管理员和6级协管可管理端点策略。",
       "backList": "返回端点列表",
       "backManagement": "返回管理页",
       "sections": "端点策略分区",
@@ -2110,6 +2103,15 @@
       "addSource": "添加发现来源",
       "addTarget": "添加目标",
       "addTargetGroup": "添加目标组",
+      "editBindingSources": "编辑来源与服务",
+      "returnToBindings": "返回连接列表",
+      "addBindingMode": "添加来源",
+      "addBindingModeHelp": "通常从来源中选择模型即可；同一个连接需要组合多个入口的服务时，可选择多入口组合。",
+      "addSeparateSources": "从来源中选择模型",
+      "combineSources": "组合多个入口",
+      "configureReviewedUse": "配置到公益模型",
+      "reviewConfigurationDenied": "审核结果已保存。继续配置该来源需要维护权限，可联系管理员或 6 级协管调整授权范围。",
+      "reviewedServiceDefault": "继续配置刚刚审核的服务：{{service}}。保存前仍可调整所选服务。",
       "all": "全部",
       "allCredentialUsesEffect": "停用或删除会影响使用这份凭据的所有入口和公益用途。",
       "applyToUnedited": "应用到未修改的型号",
@@ -2500,8 +2502,6 @@
       "nav": "用户",
       "title": "用户管理",
       "description": "管理账号、积分、访问限制与封禁。",
-      "traineeDescription": "查找账号，调整允许的推理限额，作废站点密钥或处理封禁。",
-      "traineeSelectBody": "查看账号、推理限额、站点密钥和可用的封禁操作。",
       "listTitle": "用户",
       "username": "用户名",
       "status": "状态",
@@ -2578,7 +2578,6 @@
       "discordGateExempt": "免于服务器与身份组核验",
       "limitInvalid": "请输入整数：端点 0～10000、RPM 1～4096、并发 1～100000；留空使用默认值。",
       "readOnly": "本人和其他协管的账户可在此查看，不能修改设置。",
-      "traineeReadOnly": "5 级协管可调整 1–4 级用户的推理限额、作废站点密钥并处理封禁；其它设置、积分和已有封禁保持只读。",
       "view": "查看",
       "backToList": "返回列表",
       "selectUser": "选择一个用户",

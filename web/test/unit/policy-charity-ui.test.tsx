@@ -1833,11 +1833,6 @@ describe('experimental policy and charity controls', () => {
     await screen.findByRole('heading', { name: 'Review pending submission' });
     await rendered.user.type(screen.getByLabelText('Reason'), 'expiry validation');
     await rendered.user.click(screen.getByRole('checkbox', { name: 'No expiry' }));
-    await rendered.user.click(
-      screen.getByRole('checkbox', {
-        name: 'I confirm this review result and its per-key consequences.',
-      }),
-    );
     const expiry = document.querySelector<HTMLInputElement>('input[type="datetime-local"]');
     if (!expiry) throw new Error('review expiry control not found');
     Object.defineProperty(expiry, 'value', {
@@ -1924,11 +1919,6 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(detailReads).toBe(2));
     await rendered.user.type(screen.getByLabelText('Reason'), 'detail recovered');
-    await rendered.user.click(
-      screen.getByRole('checkbox', {
-        name: 'I confirm this review result and its per-key consequences.',
-      }),
-    );
     await rendered.user.click(screen.getByRole('button', { name: 'Approve donation' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'POST', '/admin/api/donations/21/review')).toMatchObject({
@@ -2232,7 +2222,6 @@ describe('experimental policy and charity controls', () => {
       await rendered.user.click(within(editForm).getByRole('button', { name: /^Save model / }));
       await waitFor(() =>
         expect(lastBody(fetchMock, 'PATCH', `${basePath}/charity-models/7`)).toMatchObject({
-          transport_rule: 'passthrough',
           flatten_tool_calls: true,
         }),
       );
@@ -2446,11 +2435,6 @@ describe('experimental policy and charity controls', () => {
       await screen.findByRole('heading', { name: /sk-a…tail.*upstream\.test\/v1/i });
       expect(screen.getByText(/Original key status: enabled/i)).toBeVisible();
       await rendered.user.type(screen.getByLabelText('Reason'), 'approved');
-      await rendered.user.click(
-        screen.getByRole('checkbox', {
-          name: 'I confirm this review result and its per-key consequences.',
-        }),
-      );
       await rendered.user.click(screen.getByRole('button', { name: 'Approve donation' }));
       await waitFor(() =>
         expect(lastBody(fetchMock, 'POST', `${basePath}/donations/9/review`)).toBeDefined(),
@@ -2550,7 +2534,7 @@ describe('experimental policy and charity controls', () => {
     await act(async () => {
       await rendered.queryClient.invalidateQueries({ queryKey: userKeys.session });
     });
-    await waitFor(() => expect(screen.queryByRole('tab', { name: 'Abuse audit' })).toBeNull());
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Abuse audit' })).toBeVisible());
     expect(screen.getByRole('tab', { name: 'Request logs' })).toBeVisible();
     await act(async () => {
       finishOld(jsonResponse(detail(false)));

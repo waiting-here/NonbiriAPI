@@ -734,7 +734,7 @@ test('additional services stay pending with their old budget and use-only traine
         donation.id,
     );
     await expect(
-      reviewer.getByRole('tab', { name: common.common.pendingReviews.title, exact: true }),
+      reviewer.getByRole('tab', { name: userEn.user.steward.donationsTitle, exact: true }),
     ).toHaveAttribute('aria-selected', 'true');
     const projected = await userAPI<Numbered<DonationUse>>(
       trainee,

@@ -25,6 +25,7 @@ import {
 } from '@shared/operations/donationUses';
 import { NATIVE_SERVICE_LABEL_KEYS } from '@shared/nativeServices';
 import { formatCount } from '@shared/utils/formatNumber';
+import { reviewedUseLabels, type ReviewedUseLabel } from '@shared/operations/donationUsesReview';
 
 export function DonationUsesPanel({
   role,
@@ -38,7 +39,7 @@ export function DonationUsesPanel({
   accountId: string;
   donationId: string;
   donationKeyId?: string;
-  onReviewed?: (results: UseReviewResult[]) => void;
+  onReviewed?: (results: UseReviewResult[], labels: ReviewedUseLabel[]) => void;
   onPendingChange?: (pending: boolean) => void;
 }) {
   const { t } = useTranslation();
@@ -59,6 +60,7 @@ export function DonationUsesPanel({
   const [note, setNote] = useState('');
   const [bulkLocked, setBulkLocked] = useState(false);
   const [results, setResults] = useState<UseReviewResult[]>([]);
+  const [resultLabels, setResultLabels] = useState<ReviewedUseLabel[]>([]);
   const result = useRef<UseReviewResult[]>([]);
   const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
@@ -85,8 +87,11 @@ export function DonationUsesPanel({
   const refresh = async () => {
     await client.invalidateQueries({ queryKey: root }, { throwOnError: true });
   };
-  const review = useRetainedOperation<UseReviewItem[], UseReviewResult[]>(
-    async (items, key, context) => {
+  const review = useRetainedOperation<
+    { items: UseReviewItem[]; labels: ReviewedUseLabel[] },
+    UseReviewResult[]
+  >(
+    async ({ items }, key, context) => {
       const value = await reviewDonationUses(
         role as 'admin' | 'steward',
         donationId,
@@ -99,7 +104,7 @@ export function DonationUsesPanel({
       });
       return value;
     },
-    async (items, error, context) => {
+    async ({ items, labels }, error, context) => {
       if (error && responseOutcomeUnknown(error) && context.operationKey) {
         const value = await reviewDonationUses(
           role as 'admin' | 'steward',
@@ -115,7 +120,8 @@ export function DonationUsesPanel({
       if (!error || result.current.length) {
         context.commit(() => {
           setResults(result.current);
-          onReviewed?.(result.current);
+          setResultLabels(labels);
+          onReviewed?.(result.current, labels);
           setSelected((previous) =>
             Object.fromEntries(
               Object.entries(previous).filter(
@@ -138,18 +144,20 @@ export function DonationUsesPanel({
   const submit = (decision: 'approve' | 'reject') => {
     result.current = [];
     review.reset();
+    const rows = Object.values(selected).filter(
+      (row) => row.pending && row.capabilities.can_review,
+    );
     void review
-      .mutateAsync(
-        Object.values(selected)
-          .filter((row) => row.pending && row.capabilities.can_review)
-          .map((row) => ({
-            use_id: row.id,
-            expected_revision: row.revision,
-            expected_review_revision: row.pending!.expected_review_revision,
-            decision,
-            review_note: note.trim(),
-          })),
-      )
+      .mutateAsync({
+        items: rows.map((row) => ({
+          use_id: row.id,
+          expected_revision: row.revision,
+          expected_review_revision: row.pending!.expected_review_revision,
+          decision,
+          review_note: note.trim(),
+        })),
+        labels: reviewedUseLabels(rows, decision),
+      })
       .catch(() => undefined);
   };
   return (
@@ -164,9 +172,10 @@ export function DonationUsesPanel({
             donationKeyId={donationKeyId}
             disabled={review.isPending || review.outcome === 'unknown'}
             onLockedChange={setBulkLocked}
-            onReviewed={(value) => {
+            onReviewed={(value, labels) => {
               setResults(value);
-              onReviewed?.(value);
+              setResultLabels(labels);
+              onReviewed?.(value, labels);
               setSelected((previous) =>
                 Object.fromEntries(
                   Object.entries(previous).filter(
@@ -296,7 +305,7 @@ export function DonationUsesPanel({
             <ErrorState error={review.refreshError} onRetry={() => void review.refresh()} />
           )
         ) : null}
-        {!onReviewed ? <DonationUseReviewResults results={results} /> : null}
+        {!onReviewed ? <DonationUseReviewResults results={results} labels={resultLabels} /> : null}
       </PanelBody>
     </Panel>
   );

@@ -563,9 +563,11 @@ test('level 5 keeps its allowed manual targets and cannot open channel presets',
     expect(denied.status()).toBe(403);
     const page = await context.newPage();
     await page.goto(state.user_url + '/steward?tab=charity');
-    await expect(page.getByRole('link', { name: presets.title })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: presets.title })).toBeVisible();
     await page.goto(state.user_url + '/charity/channel-presets');
-    await expect(page.getByRole('alert')).toContainText(presets.accessDenied);
+    await expect(
+      page.getByText(common.management.permissions.denied, { exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole('searchbox', { name: presets.searchChannels })).toHaveCount(0);
   } finally {
     await context.close();

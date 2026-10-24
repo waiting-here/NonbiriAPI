@@ -4,7 +4,9 @@ import {
   collectPendingDonationUses,
   prepareDonationUseReview,
   runDonationUseReview,
+  reviewedUseLabels,
   type DonationUseReviewPlan,
+  type ReviewedUseLabel,
 } from '@shared/operations/donationUsesReview';
 import {
   getDonationUses,
@@ -36,7 +38,7 @@ export function DonationUsesReviewAll({
   donationKeyId?: string;
   disabled: boolean;
   onLockedChange: (locked: boolean) => void;
-  onReviewed: (results: UseReviewResult[]) => void;
+  onReviewed: (results: UseReviewResult[], labels: ReviewedUseLabel[]) => void;
   refresh: () => Promise<void>;
 }) {
   const { t } = useTranslation();
@@ -90,7 +92,7 @@ export function DonationUsesReviewAll({
       const value = snapshot.batches.flatMap((batch) => receipts.current.get(batch.key) ?? []);
       context.commit(() => {
         setResults(value);
-        onReviewed(value);
+        onReviewed(value, reviewedUseLabels(snapshot.rows, snapshot.decision));
       });
       await refresh();
       if (error && responseOutcomeUnknown(error)) return { operationConfirmed: true };
@@ -330,7 +332,7 @@ export function DonationUsesReviewAll({
                 className="nb-btn nb-btn--secondary"
                 onClick={() => {
                   stop.current = true;
-                  onReviewed(results);
+                  onReviewed(results, reviewedUseLabels(plan?.rows ?? [], decision));
                   setPlan(null);
                   setStarted(false);
                   setOpen(false);
@@ -344,7 +346,10 @@ export function DonationUsesReviewAll({
             ) : null}
             {results.length ? (
               <Fold title={t('common.connections.reviewResults')}>
-                <DonationUseReviewResults results={results} />
+                <DonationUseReviewResults
+                  results={results}
+                  labels={reviewedUseLabels(plan?.rows ?? [], decision)}
+                />
               </Fold>
             ) : null}
           </div>
@@ -353,19 +358,65 @@ export function DonationUsesReviewAll({
     </>
   );
 }
-export function DonationUseReviewResults({ results }: { results: UseReviewResult[] }) {
+export function DonationUseReviewResults({
+  results,
+  labels = [],
+  onConfigure,
+  configurationStatus,
+}: {
+  results: UseReviewResult[];
+  labels?: ReviewedUseLabel[];
+  onConfigure?: (label: ReviewedUseLabel) => void;
+  configurationStatus?: (label: ReviewedUseLabel) => 'available' | 'denied' | undefined;
+}) {
   const { t } = useTranslation();
   return results.length ? (
-    <ul className="nb-list" role="status">
-      {results.map((result) => (
-        <li key={result.use_id}>
-          {t(
-            result.ok ? 'common.connections.useReviewSaved' : 'common.connections.useReviewFailed',
-            { id: result.use_id },
-          )}
-          {result.error ? ' · ' + result.error.message : ''}
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul className="nb-list" role="status">
+        {results.map((result) => {
+          const label = labels.find((row) => row.use_id === result.use_id);
+          return (
+            <li key={result.use_id}>
+              <span>
+                {t(
+                  result.ok
+                    ? 'common.connections.useReviewSaved'
+                    : 'common.connections.useReviewFailed',
+                  { id: result.use_id },
+                )}
+              </span>
+              {label ? (
+                <span>
+                  {' '}
+                  · {t(NATIVE_SERVICE_LABEL_KEYS[label.native_service])} · {label.display_head}…
+                  {label.display_tail}
+                </span>
+              ) : null}
+              {result.error ? ' · ' + result.error.message : ''}
+              {result.ok &&
+              label?.decision === 'approve' &&
+              onConfigure &&
+              configurationStatus?.(label) === 'available' ? (
+                <button
+                  type="button"
+                  className="nb-btn nb-btn--secondary"
+                  onClick={() => onConfigure(label)}
+                >
+                  {t('common.connections.configureReviewedUse')}
+                </button>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+      {results.some((result) => {
+        const label = labels.find((row) => row.use_id === result.use_id);
+        return (
+          result.ok && label?.decision === 'approve' && configurationStatus?.(label) === 'denied'
+        );
+      }) ? (
+        <Note>{t('common.connections.reviewConfigurationDenied')}</Note>
+      ) : null}
+    </>
   ) : null;
 }

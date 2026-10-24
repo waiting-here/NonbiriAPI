@@ -49,6 +49,7 @@ export interface BindingTarget {
   charity_model_id: string;
   expected_binding_revision: string;
   upstream_model_id: string;
+  native_services?: import('@shared/nativeServices').NativeService[];
 }
 export interface ManualBindingInput {
   expected_donation_revision: string;

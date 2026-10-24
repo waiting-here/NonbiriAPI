@@ -60,7 +60,9 @@ const candidate = {
   upstream_model_id: 'new-upstream',
   source,
   source_types: ['automatic'],
-  native_services: ['chat_completions'],
+  native_services: ['embeddings'],
+  model_types: ['embeddings'],
+  service_routes: [{ operation: 'embeddings', native_service: 'embeddings', mode: 'native' }],
   capabilities: { can_bind: true },
 } as CharityBindingCandidate;
 const json = (body: unknown, status = 200) => Response.json(body, { status });
@@ -158,7 +160,7 @@ async function selectTarget(view: Awaited<ReturnType<typeof setup>>) {
   const group = summary.closest('details')!;
   await view.user.click(summary);
   await view.user.click(await within(group).findByRole('button', { name: 'Add target' }));
-  await view.user.click(within(group).getByRole('checkbox'));
+  expect(within(group).getByRole('checkbox')).toBeChecked();
   return group;
 }
 
@@ -195,6 +197,19 @@ it('reads once and advances the retained target revision after a confirmed edit'
   await view.user.click(within(group).getByRole('button', { name: 'Add target group' }));
   await within(group).findByText('Saved');
   expect(f.reads()).toBe(before + 1);
+  expect(f.writes[0]?.body).toMatchObject({
+    selections: [
+      {
+        targets: [
+          {
+            donation_key_id: '21',
+            upstream_model_id: 'new-upstream',
+            native_services: ['embeddings'],
+          },
+        ],
+      },
+    ],
+  });
   expect(
     view.queryClient.getQueryData<{ binding_revision: string }>([
       ...charityKeys.bindings('admin', '31'),

@@ -41,7 +41,7 @@ function expectNumberedPageQuery(url: URL, filters: Record<string, string> = {})
   expect(pageSize).toMatch(/^(10|20|50|100)$/);
   const expected = new URLSearchParams(filters);
   if (url.pathname.includes('/donation-sources') || url.pathname.endsWith('/binding-candidates'))
-    expected.set('key_state', 'available');
+    expected.set('key_state', 'all');
   if (url.pathname.endsWith('/binding-candidates')) expected.set('include_bound', 'true');
   expected.set('page', page!);
   expected.set('page_size', pageSize!);
@@ -798,7 +798,7 @@ describe('CharityManagement corrective controls', () => {
           return jsonResponse({ bindings: [], binding_revision: bindingRevision });
         }
         if (url.pathname === '/admin/api/donation-sources') {
-          expectNumberedPageQuery(url, { scope: 'active' });
+          expectNumberedPageQuery(url, { scope: 'all' });
           return jsonResponse(
             numberedPage(
               [
@@ -816,7 +816,7 @@ describe('CharityManagement corrective controls', () => {
           );
         }
         if (url.pathname === `/admin/api/donation-sources/dsg_${'A'.repeat(43)}/keys`) {
-          expectNumberedPageQuery(url, { scope: 'active' });
+          expectNumberedPageQuery(url, { scope: 'all' });
           return jsonResponse(
             numberedPage(
               [keySummary(first, first.keys[0]), keySummary(second, second.keys[0])],
@@ -1015,11 +1015,6 @@ describe('CharityManagement corrective controls', () => {
     await view.user.click(await screen.findByRole('button', { name: 'Review' }));
     await screen.findByRole('heading', { name: 'Review pending submission' });
     await view.user.type(screen.getByLabelText('Reason'), 'Reviewed the current member');
-    await view.user.click(
-      screen.getByRole('checkbox', {
-        name: 'I confirm this review result and its per-key consequences.',
-      }),
-    );
     await view.user.click(screen.getByRole('button', { name: 'Approve donation' }));
     await waitFor(() => expect(requests.reviewBodies).toHaveLength(1));
     expect(requests.reviewBodies[0].key_settings).toEqual([
@@ -1042,11 +1037,6 @@ describe('CharityManagement corrective controls', () => {
     await view.user.click(await screen.findByRole('button', { name: 'Review' }));
     await screen.findByRole('heading', { name: 'Review pending submission' });
     await view.user.type(screen.getByLabelText('Reason'), 'Keep the affected member disabled');
-    await view.user.click(
-      screen.getByRole('checkbox', {
-        name: 'I confirm this review result and its per-key consequences.',
-      }),
-    );
     expect(screen.getByRole('button', { name: 'Approve donation' })).toBeDisabled();
     await view.user.click(screen.getByRole('checkbox', { name: 'Enable for charity' }));
     await view.user.click(screen.getByRole('button', { name: 'Approve donation' }));
@@ -1071,11 +1061,6 @@ describe('CharityManagement corrective controls', () => {
     expect(screen.getByRole('checkbox', { name: 'No expiry' })).toBeChecked();
     expect(screen.getByLabelText('Effective expiry')).toBeDisabled();
     await view.user.type(screen.getByLabelText('Reason'), 'approved without expiry');
-    await view.user.click(
-      screen.getByRole('checkbox', {
-        name: 'I confirm this review result and its per-key consequences.',
-      }),
-    );
     await view.user.click(screen.getByRole('button', { name: 'Approve donation' }));
 
     await waitFor(() => expect(requests.reviewBodies).toHaveLength(1));
@@ -1135,7 +1120,7 @@ describe('CharityManagement corrective controls', () => {
         return jsonResponse({ bindings: [], binding_revision: '0' });
       }
       if (method === 'GET' && path === '/admin/api/donation-sources') {
-        expectNumberedPageQuery(url, { scope: 'active' });
+        expectNumberedPageQuery(url, { scope: 'all' });
         return jsonResponse(numberedPage([], url));
       }
       if (method === 'GET' && path === '/admin/api/charity-models/1/binding-candidates') {
@@ -1314,7 +1299,7 @@ describe('CharityManagement corrective controls', () => {
           return jsonResponse({ bindings: [], binding_revision: current.binding_revision });
         }
         if (method === 'GET' && path === `${fixture.prefix}/donation-sources`) {
-          expectNumberedPageQuery(url, { scope: 'active' });
+          expectNumberedPageQuery(url, { scope: 'all' });
           return jsonResponse(numberedPage([], url));
         }
         if (method === 'GET' && path === `${fixture.prefix}/charity-models/1/binding-candidates`) {
@@ -1526,7 +1511,7 @@ describe('CharityManagement corrective controls', () => {
         return jsonResponse({ bindings: [], binding_revision: current.binding_revision });
       }
       if (method === 'GET' && url.pathname === '/admin/api/donation-sources') {
-        expectNumberedPageQuery(url, { scope: 'active' });
+        expectNumberedPageQuery(url, { scope: 'all' });
         return jsonResponse(numberedPage([], url));
       }
       if (method === 'GET' && url.pathname === '/admin/api/charity-models/1/binding-candidates') {
@@ -1615,7 +1600,7 @@ describe('CharityManagement corrective controls', () => {
           return jsonResponse({ bindings: [], binding_revision: '0' });
         }
         if (method === 'GET' && url.pathname === '/admin/api/donation-sources') {
-          expectNumberedPageQuery(url, { scope: 'active' });
+          expectNumberedPageQuery(url, { scope: 'all' });
           return jsonResponse(numberedPage([], url));
         }
         if (method === 'GET' && url.pathname.endsWith('/binding-candidates')) {
@@ -1704,7 +1689,7 @@ describe('CharityManagement corrective controls', () => {
         return jsonResponse({ bindings: [], binding_revision: model.binding_revision });
       }
       if (url.pathname === '/api/steward/donation-sources') {
-        expectNumberedPageQuery(url, { scope: 'active' });
+        expectNumberedPageQuery(url, { scope: 'all' });
         return jsonResponse(numberedPage([], url));
       }
       if (url.pathname === '/api/steward/charity-models/1/binding-candidates') {
@@ -1931,11 +1916,6 @@ describe('level-5 pending review queue', () => {
       if (decision === 'reject')
         await view.user.selectOptions(screen.getByLabelText('Decision'), 'reject');
       await view.user.type(screen.getByLabelText('Reason'), 'Reviewed pending source');
-      await view.user.click(
-        screen.getByRole('checkbox', {
-          name: 'I confirm this review result and its per-key consequences.',
-        }),
-      );
       await view.user.click(
         screen.getByRole('button', {
           name: decision === 'approve' ? 'Approve donation' : 'Reject donation',

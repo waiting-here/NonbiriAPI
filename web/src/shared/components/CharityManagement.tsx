@@ -8,6 +8,8 @@ import { StewardPermissionNotice } from './StewardPermissionNotice';
 import { DonationStatusBadge, UseSummary } from './UseSummary';
 import { DonationUseReviewResults, DonationUsesPanel } from './DonationUsesPanel';
 import type { UseReviewResult } from '@shared/operations/donationUses';
+import type { ReviewedUseLabel } from '@shared/operations/donationUsesReview';
+import { NATIVE_SERVICES, type NativeService } from '@shared/nativeServices';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { NullableValue } from './charity/NullableValue';
@@ -733,7 +735,7 @@ interface DonationDetailProps {
   refresh: () => Promise<unknown>;
   onCapabilityLoss?: () => void;
   onReviewed?: (result: ManagedDonation) => void;
-  onUsesReviewed?: (results: UseReviewResult[]) => void;
+  onUsesReviewed?: (results: UseReviewResult[], labels: ReviewedUseLabel[]) => void;
   onPendingChange?: (pending: boolean) => void;
   reviewRefresh?: () => Promise<unknown>;
 }
@@ -790,7 +792,6 @@ function DonationReview({
   const decision = legacyPendingReview ? pendingDecision : 'force_reject';
   const [reason, setReason] = useState('');
   const [useReviewPending, setUseReviewPending] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
   const [forceConfirmation, setForceConfirmation] = useState(false);
   const [keys, setKeys] = useState<Record<string, KeySettingsDraft>>(() =>
     legacyPendingReview
@@ -975,7 +976,6 @@ function DonationReview({
                 value={decision}
                 onChange={(event) => {
                   setPendingDecision(event.target.value as typeof pendingDecision);
-                  setConfirmed(false);
                 }}
               >
                 {legacyPendingReview ? (
@@ -1084,17 +1084,7 @@ function DonationReview({
               />
             </div>
           ) : null}
-          {decision !== 'force_reject' ? (
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={confirmed}
-                onChange={(event) => setConfirmed(event.target.checked)}
-              />
-              <span>{t('common.operations.charity.confirmReview')}</span>
-            </label>
-          ) : null}
-          {validationError && (reason.length > 0 || confirmed) ? (
+          {validationError && reason.length > 0 ? (
             <p className="field-error" role="alert">
               {t(
                 validationError === 'reviewMaterial'
@@ -1124,7 +1114,6 @@ function DonationReview({
             type="button"
             disabled={
               !reason.trim() ||
-              (decision !== 'force_reject' && !confirmed) ||
               review.isPending ||
               review.outcome === 'unknown' ||
               Boolean(validationError)
@@ -1135,7 +1124,6 @@ function DonationReview({
                 return;
               }
               if (
-                !confirmed ||
                 !validText(reason.trim(), 1024, true) ||
                 (decision === 'approve' &&
                   item.keys.some(
@@ -1300,12 +1288,19 @@ function DonationKeyPages({
         accountId={accountId}
         item={bindingItem}
         initialTarget={selectedID(params, 'binding_target')}
+        reviewedService={
+          NATIVE_SERVICES.includes(oneParam(params, 'binding_service') as NativeService)
+            ? (oneParam(params, 'binding_service') as NativeService)
+            : undefined
+        }
         onCapabilityLoss={onCapabilityLoss}
         onBack={() =>
           setParams((current) => {
             const next = new URLSearchParams(current);
             next.delete('binding_key');
             next.delete('binding_target');
+            next.delete('binding_use');
+            next.delete('binding_service');
             return next;
           })
         }
@@ -1498,6 +1493,7 @@ function DonationsPanel({
   const [useReceipt, setUseReceipt] = useState<{
     donationId: string;
     results: UseReviewResult[];
+    labels: ReviewedUseLabel[];
   } | null>(null);
   const [reviewPending, setReviewPending] = useState(false);
   const resetBatchRef = useRef<HTMLDivElement>(null);
@@ -1688,7 +1684,32 @@ function DonationsPanel({
           {t('common.pendingReviews.saved', { status: t(charityStatusKey(role, receipt.status)) })}
         </Note>
       ) : null}
-      {useReceipt ? <DonationUseReviewResults results={useReceipt.results} /> : null}
+      {useReceipt ? (
+        <DonationUseReviewResults
+          results={useReceipt.results}
+          labels={useReceipt.labels}
+          configurationStatus={(label) => {
+            if (useReceipt.donationId !== selected || detail.isFetching) return undefined;
+            if (reviewedTargetUnavailable) return 'denied';
+            if (detail.error || !detail.data) return undefined;
+            const key = detail.data.keys.find((row) => row.id === label.donation_key_id);
+            return key && canMaintainDonationKey(detail.data, key) ? 'available' : 'denied';
+          }}
+          onConfigure={(label) =>
+            setSearchParams((current) => {
+              const next = new URLSearchParams(current);
+              next.set('donation_id', useReceipt.donationId);
+              next.set('donation_key', label.donation_key_id);
+              next.set('binding_key', label.donation_key_id);
+              next.set('binding_use', label.use_id);
+              next.set('binding_service', label.native_service);
+              next.delete('binding_target');
+              next.delete('donation_keys_page');
+              return next;
+            })
+          }
+        />
+      ) : null}
       <div className="charity-donations__list" hidden={binding}>
         <Card>
           <div className="charity-donation-toolbar">
@@ -2121,9 +2142,9 @@ function DonationsPanel({
                   setUseReceipt(null);
                   setSelected('');
                 }}
-                onUsesReviewed={(results) => {
+                onUsesReviewed={(results, labels) => {
                   setReceipt(null);
-                  setUseReceipt({ donationId: selected, results });
+                  setUseReceipt({ donationId: selected, results, labels });
                 }}
               />
             </>
@@ -2136,6 +2157,8 @@ function DonationsPanel({
 
 const workflowNavigationSubjects = new WeakMap<ReturnType<typeof useQueryClient>, string>();
 const workflowSearchParameters = [
+  'binding_use',
+  'binding_service',
   'charity_section',
   'price_template',
   'pending_review_q',
