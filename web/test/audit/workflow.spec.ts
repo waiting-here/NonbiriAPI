@@ -221,7 +221,7 @@ test('charity request and attempt shortcuts preserve the log window for administ
   }
 });
 
-test('approve a fixed key, page 240 targets and bind 144 cross-page selections with a compact receipt', async ({
+test('approve pending content, page 240 targets and bind 144 cross-page selections with a compact receipt', async ({
   browser,
 }, info) => {
   const state = fixture(),
@@ -248,8 +248,7 @@ test('approve a fixed key, page 240 targets and bind 144 cross-page selections w
     )!;
     expect(chat.pending).not.toBeNull();
     expect(chat.capabilities.can_review).toBe(true);
-    const chatFold = await openUseFold(page, common.common.modelTypes.chat_completions);
-    await chatFold.getByLabel(connections.selectUseReview, { exact: true }).check();
+    await openUseFold(page, common.common.modelTypes.chat_completions);
     await page
       .getByLabel(connections.reviewReason, { exact: true })
       .fill('Synthetic workflow approval');
@@ -259,21 +258,26 @@ test('approve a fixed key, page 240 targets and bind 144 cross-page selections w
         new URL(response.url()).pathname ===
           '/admin/api/donations/' + data.pending_donation_id + '/uses/review',
     );
-    await page.getByRole('button', { name: connections.approveSelected, exact: true }).click();
+    await page.getByRole('button', { name: connections.approveAllUses, exact: true }).click();
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
     const reviewResponse = await reviewed;
     expect(reviewResponse.status()).toBe(200);
     expect(reviewResponse.request().postDataJSON()).toEqual({
-      items: [
-        {
-          use_id: chat.id,
-          expected_revision: chat.revision,
-          expected_review_revision: chat.pending!.expected_review_revision,
+      items: pendingUses
+        .filter((row) => row.pending)
+        .map((row) => ({
+          use_id: row.id,
+          expected_revision: row.revision,
+          expected_review_revision: row.pending!.expected_review_revision,
           decision: 'approve',
           review_note: 'Synthetic workflow approval',
-        },
-      ],
+        })),
     });
-    expect(await reviewResponse.json()).toEqual({ results: [{ use_id: chat.id, ok: true }] });
+    expect(await reviewResponse.json()).toEqual({
+      results: pendingUses
+        .filter((row) => row.pending)
+        .map((row) => ({ use_id: row.id, ok: true })),
+    });
     await expect(
       page.getByRole('button', { name: common.common.connections.modelsAndBindings, exact: true }),
     ).toBeVisible();
@@ -285,16 +289,20 @@ test('approve a fixed key, page 240 targets and bind 144 cross-page selections w
     expect(partial.status).toBe('pending');
     expect(partial.use_summary).toEqual({
       total: '3',
-      pending: '2',
-      approved: '1',
+      pending: '0',
+      approved: '3',
       rejected: '0',
       withdrawn: '0',
-      review_status: 'approved_pending',
+      review_status: 'approved',
     });
     expect(
       partial.keys.find((key: { id: string }) => key.id === data.pending_key_id).can_manage,
     ).toBe(true);
-    await page.getByRole('button', { name: connections.configureReviewedUse, exact: true }).click();
+    await page
+      .getByRole('listitem')
+      .filter({ hasText: connections.useReviewSaved.replace('{{id}}', chat.id) })
+      .getByRole('button', { name: connections.configureReviewedUse, exact: true })
+      .click();
     await expect(page).toHaveURL(
       (url) =>
         url.searchParams.get('donation_id') === data.pending_donation_id &&
@@ -955,7 +963,6 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
         await expect(fold).toHaveCount(1);
         if ((await fold.getAttribute('open')) === null)
           await fold.locator(':scope > summary').click();
-        await fold.getByLabel(connections.selectUseReview, { exact: true }).check();
       }
       await page
         .getByLabel(connections.reviewReason, { exact: true })
@@ -966,7 +973,7 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
           new URL(response.url()).pathname ===
             '/api/steward/donations/' + data.processing_donation_id + '/uses/review',
       );
-      await page.getByRole('button', { name: connections.approveSelected, exact: true }).click();
+      await page.getByRole('button', { name: connections.approveAllUses, exact: true }).click();
       const response = await approval;
       expect(response.status()).toBe(200);
       expect(response.request().postDataJSON()).toEqual({
@@ -1403,8 +1410,7 @@ test('level 5 reviews independent pending sources, retains receipts after refres
       await expect(
         page.getByRole('button', { name: common.common.donationReview.forceTitle, exact: true }),
       ).toHaveCount(0);
-      const chatFold = await openUseFold(page, common.common.modelTypes.chat_completions);
-      await chatFold.getByLabel(connections.selectUseReview, { exact: true }).check();
+      await openUseFold(page, common.common.modelTypes.chat_completions);
       await page
         .getByLabel(connections.reviewReason, { exact: true })
         .fill('Synthetic independent pending review');
@@ -1416,7 +1422,7 @@ test('level 5 reviews independent pending sources, retains receipts after refres
       }
       await page
         .getByRole('button', {
-          name: decision === 'approve' ? connections.approveSelected : connections.rejectSelected,
+          name: decision === 'approve' ? connections.approveAllUses : connections.rejectAllUses,
           exact: true,
         })
         .click();
@@ -1462,7 +1468,7 @@ test('level 5 reviews independent pending sources, retains receipts after refres
         ).toBeVisible();
       await expect(
         page.getByRole('button', {
-          name: decision === 'approve' ? connections.approveSelected : connections.rejectSelected,
+          name: decision === 'approve' ? connections.approveAllUses : connections.rejectAllUses,
           exact: true,
         }),
       ).toHaveCount(0);
