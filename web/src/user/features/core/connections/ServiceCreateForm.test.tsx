@@ -103,7 +103,11 @@ beforeEach(() => {
       return {
         kind: 'endpoint',
         endpoint: {
-          id: intent.input.channel_entry_id === '2' ? '12' : '11',
+          id:
+            (intent.input.source === 'mainstream' ? intent.input.channel_entry_id : undefined) ===
+            '2'
+              ? '12'
+              : '11',
           note: 'Service',
           base_url: 'https://service.example/v1',
           native_services: intent.input.native_services,
