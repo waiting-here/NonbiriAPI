@@ -3,10 +3,10 @@ export { DonationUseReviewResults } from './DonationUsesPanelReview';
 import { ConnectionUnavailable } from './ConnectionUnavailable';
 import { useSearchParams } from 'react-router';
 import { UseDiscovery } from './UseDiscovery';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Field, Fold, Note, OutcomeNote, Panel, PanelBody, PanelHead } from './ui';
+import { Field, Fold, Note, Panel, PanelBody, PanelHead } from './ui';
 import { ErrorState, LoadingState } from './States';
 import { ConfirmDialog } from './ConfirmDialog';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -16,16 +16,15 @@ import { responseOutcomeUnknown } from '@shared/operations/api';
 import {
   getDonationUses,
   mutateDonationUse,
-  reviewDonationUses,
   type DonationUse,
-  type UseReviewItem,
   type UseReviewResult,
   type UseRole,
   type UseVersion,
 } from '@shared/operations/donationUses';
 import { NATIVE_SERVICE_LABEL_KEYS } from '@shared/nativeServices';
 import { formatCount } from '@shared/utils/formatNumber';
-import { reviewedUseLabels, type ReviewedUseLabel } from '@shared/operations/donationUsesReview';
+import type { ReviewedUseLabel } from '@shared/operations/donationUsesReview';
+import { charityKeys } from '@shared/operations/charity';
 
 export function DonationUsesPanel({
   role,
@@ -56,12 +55,9 @@ export function DonationUsesPanel({
       else next.delete(stateParam);
       return next;
     });
-  const [selected, setSelected] = useState<Record<string, DonationUse>>({});
-  const [note, setNote] = useState('');
-  const [bulkLocked, setBulkLocked] = useState(false);
+  const [locked, setLocked] = useState(false);
   const [results, setResults] = useState<UseReviewResult[]>([]);
   const [resultLabels, setResultLabels] = useState<ReviewedUseLabel[]>([]);
-  const result = useRef<UseReviewResult[]>([]);
   const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
     listType: 'donation-uses',
@@ -85,104 +81,51 @@ export function DonationUsesPanel({
       getDonationUses(role, donationId, pager.page, pager.pageSize, state, signal, donationKeyId),
   });
   const refresh = async () => {
-    await client.invalidateQueries({ queryKey: root }, { throwOnError: true });
-  };
-  const review = useRetainedOperation<
-    { items: UseReviewItem[]; labels: ReviewedUseLabel[] },
-    UseReviewResult[]
-  >(
-    async ({ items }, key, context) => {
-      const value = await reviewDonationUses(
-        role as 'admin' | 'steward',
-        donationId,
-        items,
-        key,
-        context.signal,
-      );
-      context.commit(() => {
-        result.current = value;
-      });
-      return value;
-    },
-    async ({ items, labels }, error, context) => {
-      if (error && responseOutcomeUnknown(error) && context.operationKey) {
-        const value = await reviewDonationUses(
-          role as 'admin' | 'steward',
-          donationId,
-          items,
-          context.operationKey,
-          context.signal,
-        );
-        context.commit(() => {
-          result.current = value;
-        });
-      }
-      if (!error || result.current.length) {
-        context.commit(() => {
-          setResults(result.current);
-          setResultLabels(labels);
-          onReviewed?.(result.current, labels);
-          setSelected((previous) =>
-            Object.fromEntries(
-              Object.entries(previous).filter(
-                ([id]) => !result.current.some((row) => row.use_id === id && row.ok),
-              ),
-            ),
+    if (role === 'owner') {
+      await client.invalidateQueries({ queryKey: root }, { throwOnError: true });
+      return;
+    }
+    const managedRoot = charityKeys.root(role);
+    await client.invalidateQueries(
+      {
+        queryKey: root,
+        predicate: ({ queryKey }) => {
+          const local = queryKey.slice(root.length);
+          if (local[0] === 'donation-uses')
+            return local[1] === accountId && local[2] === donationId;
+          if (!managedRoot.every((part, index) => queryKey[index] === part)) return false;
+          const [family, scope, id] = queryKey.slice(managedRoot.length);
+          if (family === 'donation') return scope === donationId;
+          if (family === 'key-pages') return scope === accountId && id === donationId;
+          return (
+            family === 'donations' ||
+            ((family === 'donation-pages' || family === 'handling-summaries') &&
+              scope === accountId)
           );
-        });
-        await refresh();
-        if (error) return { operationConfirmed: true };
-      } else await refresh();
-    },
-    root,
-  );
-  useEffect(() => {
-    onPendingChange?.(review.isPending || bulkLocked);
-    return () => onPendingChange?.(false);
-  }, [onPendingChange, review.isPending, bulkLocked]);
-  const locked = review.isPending || review.outcome === 'unknown' || bulkLocked;
-  const submit = (decision: 'approve' | 'reject') => {
-    result.current = [];
-    review.reset();
-    const rows = Object.values(selected).filter(
-      (row) => row.pending && row.capabilities.can_review,
+        },
+      },
+      { throwOnError: true },
     );
-    void review
-      .mutateAsync({
-        items: rows.map((row) => ({
-          use_id: row.id,
-          expected_revision: row.revision,
-          expected_review_revision: row.pending!.expected_review_revision,
-          decision,
-          review_note: note.trim(),
-        })),
-        labels: reviewedUseLabels(rows, decision),
-      })
-      .catch(() => undefined);
   };
+  useEffect(() => {
+    onPendingChange?.(locked);
+    return () => onPendingChange?.(false);
+  }, [onPendingChange, locked]);
   return (
     <Panel>
       <PanelHead title={t('common.connections.donationUses')} />
       <PanelBody>
-        <Note>{t('common.connections.useVersionNote')}</Note>
+        {role === 'owner' ? <Note>{t('common.connections.useVersionNote')}</Note> : null}
         {role !== 'owner' ? (
           <DonationUsesReviewAll
             role={role}
             donationId={donationId}
             donationKeyId={donationKeyId}
-            disabled={review.isPending || review.outcome === 'unknown'}
-            onLockedChange={setBulkLocked}
+            onLockedChange={setLocked}
             onReviewed={(value, labels) => {
               setResults(value);
               setResultLabels(labels);
               onReviewed?.(value, labels);
-              setSelected((previous) =>
-                Object.fromEntries(
-                  Object.entries(previous).filter(
-                    ([id]) => !value.some((entry) => entry.use_id === id && entry.ok),
-                  ),
-                ),
-              );
             }}
             refresh={refresh}
           />
@@ -217,18 +160,7 @@ export function DonationUsesPanel({
                   role={role}
                   accountId={accountId}
                   row={row}
-                  selected={Boolean(selected[row.id])}
                   disabled={locked}
-                  selectionFull={!selected[row.id] && Object.keys(selected).length >= 100}
-                  onSelect={(checked) =>
-                    setSelected((previous) => {
-                      const next = { ...previous };
-                      if (checked && (previous[row.id] || Object.keys(previous).length < 100))
-                        next[row.id] = row;
-                      else delete next[row.id];
-                      return next;
-                    })
-                  }
                   refresh={refresh}
                 />
               ))}
@@ -242,69 +174,6 @@ export function DonationUsesPanel({
             />
           </>
         ) : null}
-        {role !== 'owner' && Object.keys(selected).length ? (
-          <div className="nb-stack">
-            <p>
-              {t('common.connections.selectedUses', { count: Object.keys(selected).length })} ·{' '}
-              {t('common.connections.reviewBatchLimit')}
-            </p>
-            <Field
-              label={t('common.connections.reviewReason')}
-              help={t('common.connections.reviewReasonVisible')}
-            >
-              {(props) => (
-                <textarea
-                  {...props}
-                  value={note}
-                  disabled={locked}
-                  onChange={(event) => setNote(event.target.value)}
-                />
-              )}
-            </Field>
-            <div className="nb-actions">
-              <button
-                type="button"
-                className="nb-btn nb-btn--primary"
-                disabled={locked}
-                onClick={() => submit('approve')}
-              >
-                {t('common.connections.approveSelected')}
-              </button>
-              <button
-                type="button"
-                className="nb-btn nb-btn--secondary"
-                disabled={locked}
-                onClick={() => submit('reject')}
-              >
-                {t('common.connections.rejectSelected')}
-              </button>
-            </div>
-          </div>
-        ) : null}
-        {review.error ? <ErrorState error={review.error} /> : null}
-        {review.outcome === 'unknown' ? (
-          <Note tone="warn">
-            <p>{t('common.connections.unknownResult')}</p>
-            <button
-              type="button"
-              className="nb-btn nb-btn--secondary"
-              disabled={review.isPending}
-              onClick={() => void review.check().catch(() => undefined)}
-            >
-              {t('common.connections.checkResult')}
-            </button>
-          </Note>
-        ) : null}
-        {review.refreshError ? (
-          review.isSuccess ? (
-            <OutcomeNote
-              busy={review.isPending}
-              outcome={{ kind: 'savedRefreshFailed', recheck: () => void review.refresh() }}
-            />
-          ) : (
-            <ErrorState error={review.refreshError} onRetry={() => void review.refresh()} />
-          )
-        ) : null}
         {!onReviewed ? <DonationUseReviewResults results={results} labels={resultLabels} /> : null}
       </PanelBody>
     </Panel>
@@ -314,19 +183,13 @@ function UseRow({
   role,
   accountId,
   row,
-  selected,
   disabled,
-  selectionFull,
-  onSelect,
   refresh,
 }: {
   role: UseRole;
   accountId: string;
   row: DonationUse;
-  selected: boolean;
   disabled: boolean;
-  selectionFull: boolean;
-  onSelect: (value: boolean) => void;
   refresh: () => Promise<void>;
 }) {
   const { t } = useTranslation();
@@ -409,29 +272,6 @@ function UseRow({
         pending: row.pending ? '1' : '0',
       })}
     >
-      {role !== 'owner' && row.pending ? (
-        <Field label={t('common.connections.selectUseReview')}>
-          {(props) => (
-            <input
-              {...props}
-              type="checkbox"
-              checked={selected}
-              disabled={locked || selectionFull || !row.capabilities.can_review}
-              onChange={(event) => onSelect(event.target.checked)}
-            />
-          )}
-        </Field>
-      ) : null}
-      {selected && row.pending && row.capabilities.can_review ? (
-        <button
-          type="button"
-          className="nb-btn nb-btn--secondary"
-          disabled={locked}
-          onClick={() => onSelect(true)}
-        >
-          {t('common.connections.useCurrentRevision')}
-        </button>
-      ) : null}
       {row.approved ? (
         <VersionMaterial
           label={t('common.connections.approvedVersion')}

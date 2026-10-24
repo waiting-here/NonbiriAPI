@@ -20,7 +20,6 @@ import {
 import { responseOutcomeUnknown } from '@shared/operations/api';
 import { NATIVE_SERVICE_LABEL_KEYS } from '@shared/nativeServices';
 import { formatCount } from '@shared/utils/formatNumber';
-import { ConfirmDialog } from './ConfirmDialog';
 import { ErrorState, LoadingState } from './States';
 import { Field, Fold, Note, OutcomeNote } from './ui';
 
@@ -28,7 +27,6 @@ export function DonationUsesReviewAll({
   role,
   donationId,
   donationKeyId,
-  disabled,
   onLockedChange,
   onReviewed,
   refresh,
@@ -36,32 +34,29 @@ export function DonationUsesReviewAll({
   role: 'admin' | 'steward';
   donationId: string;
   donationKeyId?: string;
-  disabled: boolean;
   onLockedChange: (locked: boolean) => void;
   onReviewed: (results: UseReviewResult[], labels: ReviewedUseLabel[]) => void;
   refresh: () => Promise<void>;
 }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const [decision, setDecision] = useState<'approve' | 'reject'>('approve');
   const [plan, setPlan] = useState<DonationUseReviewPlan | null>(null);
   const [note, setNote] = useState('');
-  const [started, setStarted] = useState(false);
   const [results, setResults] = useState<UseReviewResult[]>([]);
-  const [stopping, setStopping] = useState(false);
   const [checking, setChecking] = useState(false);
   const [exitRefreshError, setExitRefreshError] = useState<unknown>(null);
   const receipts = useRef(new Map<string, UseReviewResult[]>());
-  const stop = useRef(false);
   const root = role === 'admin' ? ['admin', 'operations'] : ['user'];
-  const prepare = useRetainedOperation<'approve' | 'reject', DonationUseReviewPlan>(
+  const prepare = useRetainedOperation<
+    { decision: 'approve' | 'reject'; note: string },
+    DonationUseReviewPlan
+  >(
     async (value, _key, context) => {
       const rows = await collectPendingDonationUses(
         (page) =>
           getDonationUses(role, donationId, page, 100, 'pending', context.signal, donationKeyId),
         context.signal,
       );
-      const snapshot = prepareDonationUseReview(rows, value, '');
+      const snapshot = prepareDonationUseReview(rows, value.decision, value.note);
       context.commit(() => setPlan(snapshot));
       return snapshot;
     },
@@ -76,11 +71,12 @@ export function DonationUsesReviewAll({
       (items, key) => reviewDonationUses(role, donationId, items, key, context.signal),
       {
         assertCurrent: context.assertCurrent,
-        stopped: () => (checkOnly ? processed : stop.current),
+        stopped: () => checkOnly && processed,
         onProgress: (value) =>
           context.commit(() => {
             processed = true;
             setResults(value);
+            onReviewed(value, reviewedUseLabels(snapshot.rows, snapshot.decision));
           }),
       },
     );
@@ -100,76 +96,78 @@ export function DonationUsesReviewAll({
     root,
   );
   const incomplete = Boolean(
-    started &&
-    plan &&
-    results.length < plan.batches.reduce((total, batch) => total + batch.items.length, 0),
+    plan && results.length < plan.batches.reduce((total, batch) => total + batch.items.length, 0),
   );
   const locked =
-    open ||
     prepare.isPending ||
     review.isPending ||
     checking ||
     incomplete ||
-    review.outcome === 'unknown';
+    review.outcome === 'unknown' ||
+    Boolean(review.refreshError);
   useEffect(() => {
     onLockedChange(locked);
     return () => onLockedChange(false);
   }, [locked, onLockedChange]);
-  const begin = (value: 'approve' | 'reject') => {
+  const begin = async (decision: 'approve' | 'reject') => {
     setExitRefreshError(null);
-    setDecision(value);
     setPlan(null);
-    setNote('');
-    setStarted(false);
     setResults([]);
-    setStopping(false);
     receipts.current.clear();
-    stop.current = false;
     prepare.reset();
     review.reset();
-    setOpen(true);
-    void prepare.mutateAsync(value).catch(() => undefined);
+    try {
+      const snapshot = await prepare.mutateAsync({ decision, note });
+      if (snapshot.batches.length) await review.mutateAsync(snapshot);
+    } catch {
+      // The retained operations present errors and keep the original review intent.
+    }
   };
-  const execute = () => {
-    if (!plan) return;
-    const snapshot = started ? plan : prepareDonationUseReview(plan.rows, decision, note);
-    setPlan(snapshot);
-    setStarted(true);
-    setStopping(false);
-    stop.current = false;
-    void review.mutateAsync(snapshot).catch(() => undefined);
-  };
-  const eligible = plan ? plan.rows.length - plan.blocked.length : 0;
-  const title = t(
-    decision === 'approve'
-      ? 'common.connections.approveAllUses'
-      : 'common.connections.rejectAllUses',
-  );
   return (
-    <>
+    <div className="nb-stack">
+      <Field
+        label={t('common.connections.reviewReason')}
+        help={t('common.connections.reviewReasonVisible')}
+      >
+        {(props) => (
+          <textarea
+            {...props}
+            rows={2}
+            value={note}
+            disabled={locked}
+            onChange={(event) => setNote(event.target.value)}
+          />
+        )}
+      </Field>
       <div className="nb-actions">
         <button
           type="button"
-          className="nb-btn nb-btn--secondary"
-          disabled={disabled || locked}
-          onClick={() => begin('approve')}
+          className="nb-btn nb-btn--primary"
+          disabled={locked}
+          onClick={() => void begin('approve')}
         >
           {t('common.connections.approveAllUses')}
         </button>
         <button
           type="button"
           className="nb-btn nb-btn--danger-outline"
-          disabled={disabled || locked}
-          onClick={() => begin('reject')}
+          disabled={locked}
+          onClick={() => void begin('reject')}
         >
           {t('common.connections.rejectAllUses')}
         </button>
-        {!open && (incomplete || review.outcome === 'unknown') ? (
-          <button type="button" className="nb-btn nb-btn--secondary" onClick={() => setOpen(true)}>
+        {incomplete && !review.isPending && !checking && review.outcome !== 'unknown' ? (
+          <button
+            type="button"
+            className="nb-btn nb-btn--secondary"
+            onClick={() => void review.mutateAsync(plan!).catch(() => undefined)}
+          >
             {t('common.connections.resumeUseReview')}
           </button>
         ) : null}
       </div>
+      {prepare.isPending || review.isPending ? <LoadingState /> : null}
+      {prepare.error ? <ErrorState error={prepare.error} /> : null}
       {exitRefreshError ? (
         <ErrorState
           error={exitRefreshError}
@@ -180,182 +178,98 @@ export function DonationUsesReviewAll({
           }
         />
       ) : null}
-      <ConfirmDialog
-        open={open}
-        title={title}
-        description={t(
-          donationKeyId
-            ? 'common.connections.reviewKeyScope'
-            : 'common.connections.reviewDonationScope',
-          { donation: donationId, key: donationKeyId },
-        )}
-        confirmLabel={started ? t('common.connections.resumeUseReview') : title}
-        cancelLabel={started ? t('common.close') : undefined}
-        danger={decision === 'reject'}
-        busy={prepare.isPending || review.isPending || checking}
-        confirmDisabled={
-          !plan || eligible === 0 || review.outcome === 'unknown' || (started && !incomplete)
-        }
-        onCancel={() => setOpen(false)}
-        onConfirm={execute}
-      >
-        {prepare.isPending ? (
-          <>
-            <LoadingState />
+      {plan ? (
+        <div className="nb-stack">
+          <Note
+            tone={
+              incomplete || plan.blocked.length || results.some((entry) => !entry.ok)
+                ? 'warn'
+                : 'info'
+            }
+          >
+            {plan.rows.length
+              ? t('common.connections.reviewProgress', {
+                  completed: formatCount(String(results.length)).display,
+                  total: formatCount(String(plan.rows.length)).display,
+                  succeeded: formatCount(String(results.filter((entry) => entry.ok).length))
+                    .display,
+                  failed: formatCount(String(results.filter((entry) => !entry.ok).length)).display,
+                })
+              : t('common.connections.noPendingContent')}
+          </Note>
+          {plan.blocked.length ? (
+            <Fold title={t('common.connections.blockedUses')}>
+              <ul className="nb-list">
+                {plan.blocked.map((row) => (
+                  <li key={row.id}>
+                    {t('common.connections.reviewUseLabel', {
+                      key: row.donation_key_id,
+                      service: t(NATIVE_SERVICE_LABEL_KEYS[row.native_service]),
+                    })}
+                    {' · '}
+                    {t(
+                      row.pending?.review.material_available
+                        ? 'common.connections.useReviewUnavailable'
+                        : 'common.connections.reviewMaterialUnavailable',
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </Fold>
+          ) : null}
+          {review.error ? <ErrorState error={review.error} /> : null}
+          {review.outcome === 'unknown' ? (
+            <Note tone="warn">
+              <p>{t('common.connections.unknownResult')}</p>
+              <button
+                type="button"
+                className="nb-btn nb-btn--secondary"
+                disabled={review.isPending || checking}
+                onClick={() => {
+                  setChecking(true);
+                  void review
+                    .check()
+                    .catch(() => undefined)
+                    .finally(() => setChecking(false));
+                }}
+              >
+                {t('common.connections.checkResult')}
+              </button>
+            </Note>
+          ) : null}
+          {review.refreshError ? (
+            review.isSuccess &&
+            !incomplete &&
+            !results.some((entry) => !entry.ok) &&
+            !plan.blocked.length ? (
+              <OutcomeNote
+                busy={review.isPending || checking}
+                outcome={{ kind: 'savedRefreshFailed', recheck: () => void review.refresh() }}
+              />
+            ) : (
+              <ErrorState
+                error={review.refreshError}
+                onRetry={review.isSuccess ? () => void review.refresh() : undefined}
+              />
+            )
+          ) : null}
+          {incomplete && !review.isPending && !checking && review.outcome !== 'unknown' ? (
             <button
               type="button"
               className="nb-btn nb-btn--secondary"
               onClick={() => {
-                prepare.cancel();
-                setOpen(false);
+                setPlan(null);
+                receipts.current.clear();
+                review.reset();
+                void refresh().catch(setExitRefreshError);
               }}
             >
-              {t('common.connections.cancelUseReviewLoading')}
+              {t('common.connections.finishUseReview')}
             </button>
-          </>
-        ) : null}
-        {prepare.error ? (
-          <ErrorState
-            error={prepare.error}
-            onRetry={() => void prepare.mutateAsync(decision).catch(() => undefined)}
-          />
-        ) : null}
-        {plan ? (
-          <div className="nb-stack">
-            <Note tone={plan.blocked.length ? 'warn' : 'info'}>
-              <p>
-                {t('common.connections.reviewSnapshotCount', {
-                  total: formatCount(String(plan.rows.length)).display,
-                  eligible: formatCount(String(eligible)).display,
-                  blocked: formatCount(String(plan.blocked.length)).display,
-                })}
-              </p>
-              <p>{t('common.connections.reviewSnapshotFixed')}</p>
-              {decision === 'reject' ? <p>{t('common.connections.rejectKeepsApproved')}</p> : null}
-            </Note>
-            {plan.blocked.length ? (
-              <Fold title={t('common.connections.blockedUses')}>
-                <ul className="nb-list">
-                  {plan.blocked.map((row) => (
-                    <li key={row.id}>
-                      {t('common.connections.reviewUseLabel', {
-                        key: row.donation_key_id,
-                        service: t(NATIVE_SERVICE_LABEL_KEYS[row.native_service]),
-                      })}
-                      {' · '}
-                      {t(
-                        row.pending?.review.material_available
-                          ? 'common.connections.useReviewUnavailable'
-                          : 'common.connections.reviewMaterialUnavailable',
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </Fold>
-            ) : null}
-            {!started ? (
-              <Field
-                label={t('common.connections.reviewReason')}
-                help={t('common.connections.reviewReasonVisible')}
-              >
-                {(props) => (
-                  <textarea
-                    {...props}
-                    value={note}
-                    onChange={(event) => setNote(event.target.value)}
-                  />
-                )}
-              </Field>
-            ) : null}
-            {started ? (
-              <p role="status">
-                {t('common.connections.reviewProgress', {
-                  completed: formatCount(String(results.length)).display,
-                  total: formatCount(String(eligible)).display,
-                  succeeded: formatCount(String(results.filter((entry) => entry.ok).length))
-                    .display,
-                  failed: formatCount(String(results.filter((entry) => !entry.ok).length)).display,
-                })}
-              </p>
-            ) : null}
-            {review.isPending ? (
-              <button
-                type="button"
-                className="nb-btn nb-btn--secondary"
-                disabled={stopping}
-                onClick={() => {
-                  stop.current = true;
-                  setStopping(true);
-                }}
-              >
-                {t(
-                  stopping
-                    ? 'common.connections.stoppingUseReview'
-                    : 'common.connections.stopUseReview',
-                )}
-              </button>
-            ) : null}
-            {review.error ? <ErrorState error={review.error} /> : null}
-            {review.outcome === 'unknown' ? (
-              <Note tone="warn">
-                <p>{t('common.connections.unknownResult')}</p>
-                <button
-                  type="button"
-                  className="nb-btn nb-btn--secondary"
-                  disabled={review.isPending || checking}
-                  onClick={() => {
-                    stop.current = false;
-                    setChecking(true);
-                    void review
-                      .check()
-                      .catch(() => undefined)
-                      .finally(() => setChecking(false));
-                  }}
-                >
-                  {t('common.connections.checkResult')}
-                </button>
-              </Note>
-            ) : null}
-            {review.refreshError ? (
-              review.isSuccess ? (
-                <OutcomeNote
-                  busy={review.isPending || checking}
-                  outcome={{ kind: 'savedRefreshFailed', recheck: () => void review.refresh() }}
-                />
-              ) : (
-                <ErrorState error={review.refreshError} />
-              )
-            ) : null}
-            {incomplete && !review.isPending && !checking && review.outcome !== 'unknown' ? (
-              <button
-                type="button"
-                className="nb-btn nb-btn--secondary"
-                onClick={() => {
-                  stop.current = true;
-                  onReviewed(results, reviewedUseLabels(plan?.rows ?? [], decision));
-                  setPlan(null);
-                  setStarted(false);
-                  setOpen(false);
-                  receipts.current.clear();
-                  review.reset();
-                  void refresh().catch(setExitRefreshError);
-                }}
-              >
-                {t('common.connections.finishUseReview')}
-              </button>
-            ) : null}
-            {results.length ? (
-              <Fold title={t('common.connections.reviewResults')}>
-                <DonationUseReviewResults
-                  results={results}
-                  labels={reviewedUseLabels(plan?.rows ?? [], decision)}
-                />
-              </Fold>
-            ) : null}
-          </div>
-        ) : null}
-      </ConfirmDialog>
-    </>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 export function DonationUseReviewResults({

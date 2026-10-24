@@ -751,21 +751,40 @@ test('additional services stay pending with their old budget and use-only traine
     await expect(
       reviewer.getByRole('button', { name: c.modelsAndBindings, exact: true }),
     ).toHaveCount(0);
-    const embeddings = await openFold(reviewer, native.embeddings);
-    await embeddings.getByLabel(c.selectUseReview, { exact: true }).check();
-    await reviewer.getByLabel(c.reviewReason, { exact: true }).fill('Synthetic embedding approval');
+    await openFold(reviewer, native.embeddings);
+    await reviewer.getByLabel(c.reviewReason, { exact: true }).fill('Synthetic pending approval');
     const accepted = responseFor(
       reviewer,
       'POST',
       '/api/steward/donations/' + donation.id + '/uses/review',
     );
-    await reviewer.getByRole('button', { name: c.approveSelected, exact: true }).click();
-    expect((await accepted).status()).toBe(200);
-    const responses = await openFold(reviewer, native.responses);
-    await responses.getByLabel(c.selectUseReview, { exact: true }).check();
+    await reviewer.getByRole('button', { name: c.approveAllUses, exact: true }).click();
+    const acceptedResponse = await accepted;
+    expect(acceptedResponse.status()).toBe(200);
+    expect(
+      (acceptedResponse.request().postDataJSON() as { items: { decision: string }[] }).items,
+    ).toEqual(
+      projected.data.map((row) => ({
+        use_id: row.id,
+        expected_revision: row.revision,
+        expected_review_revision: row.pending!.expected_review_revision,
+        decision: 'approve',
+        review_note: 'Synthetic pending approval',
+      })),
+    );
+    const currentCredential = await userAPI<Credential>(owner, '/api/credentials/' + saved.id);
+    await userAPI(owner, '/api/credentials/' + saved.id + '/versions', 'POST', {
+      expected_revision: currentCredential.revision,
+      secret: 'synthetic-replacement-' + randomUUID(),
+      ownership_confirmed: true,
+    });
+    const replacements = (await uses(owner, donation.id)).filter((row) => row.pending);
+    expect(replacements).toHaveLength(3);
+    await reviewer.reload();
+    await openFold(reviewer, native.responses);
     await reviewer
       .getByLabel(c.reviewReason, { exact: true })
-      .fill('Synthetic responses rejection');
+      .fill('Synthetic pending replacement return');
     await screenshot(
       reviewer,
       info,
@@ -786,14 +805,27 @@ test('additional services stay pending with their old budget and use-only traine
       'POST',
       '/api/steward/donations/' + donation.id + '/uses/review',
     );
-    await reviewer.getByRole('button', { name: c.rejectSelected, exact: true }).click();
-    expect((await rejected).status()).toBe(200);
+    await reviewer.getByRole('button', { name: c.rejectAllUses, exact: true }).click();
+    const rejectedResponse = await rejected;
+    expect(rejectedResponse.status()).toBe(200);
+    expect((rejectedResponse.request().postDataJSON() as { items: unknown[] }).items).toEqual(
+      replacements.map((row) => ({
+        use_id: row.id,
+        expected_revision: row.revision,
+        expected_review_revision: row.pending!.expected_review_revision,
+        decision: 'reject',
+        review_note: 'Synthetic pending replacement return',
+      })),
+    );
     const decided = await uses(owner, donation.id);
     expect(decided.find((row) => row.native_service === 'embeddings')!.approved?.status).toBe(
       'approved',
     );
     expect(decided.find((row) => row.native_service === 'responses')!.latest?.status).toBe(
       'rejected',
+    );
+    expect(decided.every((row) => row.approved?.credential_version === '1' && !row.pending)).toBe(
+      true,
     );
     expect(
       decided.find((row) => row.native_service === 'chat_completions')!.approved
@@ -839,7 +871,7 @@ test('additional services stay pending with their old budget and use-only traine
       total: '3',
       pending: '0',
       approved: '0',
-      rejected: '1',
+      rejected: '3',
       withdrawn: '0',
       review_status: 'mixed',
     });
@@ -1534,37 +1566,38 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
         donation.id +
         '&uses_page_size=10',
     );
-    await page.getByRole('button', { name: c.rejectAllUses, exact: true }).first().click();
-    const dialog = page.getByRole('alertdialog', { name: c.rejectAllUses, exact: true });
-    await expect(
-      dialog.getByText('24 pending uses: 24 will be processed; 0 cannot be processed.'),
-    ).toBeVisible();
-    await dialog.getByLabel(c.reviewReason, { exact: true }).fill('Synthetic complete rejection');
+    await page.getByLabel(c.reviewReason, { exact: true }).fill('Synthetic complete rejection');
     for (const [width, theme] of [
       [1440, 'light'],
       [1440, 'dark'],
       [390, 'light'],
       [390, 'dark'],
     ] as const) {
-      await screenshot(page, info, 'bulk-use-review', width, theme, dialog, {
-        pending: 24,
-        visiblePageSize: 10,
-        scope: 'entire donation',
-      });
+      await screenshot(
+        page,
+        info,
+        'bulk-use-review',
+        width,
+        theme,
+        page.getByLabel(c.reviewReason, { exact: true }),
+        {
+          pending: 24,
+          visiblePageSize: 10,
+          scope: 'entire donation',
+        },
+      );
     }
     const reviewed = responseFor(
       page,
       'POST',
       '/admin/api/donations/' + donation.id + '/uses/review',
     );
-    await dialog.getByRole('button', { name: c.rejectAllUses, exact: true }).click();
+    await page.getByRole('button', { name: c.rejectAllUses, exact: true }).click();
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
     const receipt = await reviewed;
     expect(receipt.status()).toBe(200);
     expect((receipt.request().postDataJSON() as { items: unknown[] }).items).toHaveLength(24);
-    await expect(
-      dialog.getByText('Processed 24 of 24 uses: 24 succeeded, 0 failed.'),
-    ).toBeVisible();
-    await dialog.getByRole('button', { name: common.common.close, exact: true }).click();
+    await expect(page.getByText('Processed 24 of 24 uses: 24 succeeded, 0 failed.')).toBeVisible();
     const rejected = await adminAPI<
       Numbered<{ id: string; use_summary: { review_status: string } }>
     >(admin, '/admin/api/donations?page=1&page_size=100&review_status=rejected');
@@ -1590,16 +1623,11 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
       fixture().admin_url + '/charity?charity_section=donations&donation_id=' + approved.id,
     );
     await page.getByRole('button', { name: c.approveAllUses, exact: true }).first().click();
-    const approval = page.getByRole('alertdialog', { name: c.approveAllUses, exact: true });
-    await expect(
-      approval.getByText('2 pending uses: 2 will be processed; 0 cannot be processed.'),
-    ).toBeVisible();
-    await approval.getByRole('button', { name: c.approveAllUses, exact: true }).click();
-    await expect(approval.getByText('Processed 2 of 2 uses: 2 succeeded, 0 failed.')).toBeVisible();
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
+    await expect(page.getByText('Processed 2 of 2 uses: 2 succeeded, 0 failed.')).toBeVisible();
     const rows = await uses(owner, approved.id);
     expect(rows).toHaveLength(2);
     expect(rows.every((row) => row.approved?.status === 'approved' && !row.pending)).toBe(true);
-    await approval.getByRole('button', { name: common.common.close, exact: true }).click();
     await page
       .getByLabel(common.common.operations.charity.reason, { exact: true })
       .fill('Synthetic review of the approved services');
