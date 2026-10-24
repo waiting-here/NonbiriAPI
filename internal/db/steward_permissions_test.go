@@ -10,6 +10,7 @@ func restoreSchema35ForTest(t *testing.T, store *Store) {
 	t.Helper()
 	old := strings.ReplaceAll(strings.ReplaceAll(StewardAuditRolesSQL, "'admin','level5','level6'", "'admin','level6'"), "'admin','steward5','steward6'", "'admin','steward6'")
 	hostileMustExec(t, store.DB(), strings.ReplaceAll(old, "level IN (5,6)", "level=6"))
+	hostileMustExec(t, store.DB(), strings.ReplaceAll(EndpointTagsSQL, ",'user_gateway','steward_gateway','invalid_entry'", ""))
 	hostileMustExec(t, store.DB(), `DROP TABLE steward_permission_audits; DROP TABLE steward_permissions; UPDATE schema_state SET version=35 WHERE id=1`)
 }
 
@@ -24,7 +25,11 @@ func TestStewardPermissionStartupUpgradePreservesExistingAccounts(t *testing.T) 
 INSERT INTO client_rule_auto_bans(rule_id,enabled,duration_seconds,revision,updated_at) VALUES('historical-rule',1,60,4,2);
 INSERT INTO discord_blacklist(discord_id,reason,created_at) VALUES('123456789012345678','Historical restriction',1);
 INSERT INTO discord_blacklist_origins(discord_id,first_actor_kind) VALUES('123456789012345678','steward6');
-INSERT INTO discord_blacklist_events(id,discord_id,operation_key,actor_kind,reason_codes_json,safe_note,created_at) VALUES(17,'123456789012345678','historical-operation','steward6','[]','Historical note',1);`); err != nil {
+INSERT INTO discord_blacklist_events(id,discord_id,operation_key,actor_kind,reason_codes_json,safe_note,created_at) VALUES(17,'123456789012345678','historical-operation','steward6','[]','Historical note',1);
+INSERT INTO admin_endpoint_tags(base_url,tag) VALUES('https://historical.example/v1','community_charity');`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DB().Exec(strings.ReplaceAll(EndpointTagsSQL, ",'user_gateway','steward_gateway','invalid_entry'", "")); err != nil {
 		t.Fatal(err)
 	}
 	oldRoles := strings.ReplaceAll(strings.ReplaceAll(StewardAuditRolesSQL, "'admin','level5','level6'", "'admin','level6'"), "'admin','steward5','steward6'", "'admin','steward6'")
@@ -54,6 +59,7 @@ INSERT INTO discord_blacklist_events(id,discord_id,operation_key,actor_kind,reas
 	}
 	var preserved bool
 	if err := store.DB().QueryRow(`SELECT EXISTS(SELECT 1 FROM risk_client_rules r JOIN client_rule_auto_bans a ON a.rule_id=r.id WHERE r.id='historical-rule' AND r.revision=3 AND r.created_by_role='admin' AND r.updated_by_role='level6' AND r.conditions_json='[]' AND a.revision=4 AND a.duration_seconds=60)
+AND EXISTS(SELECT 1 FROM admin_endpoint_tags WHERE base_url='https://historical.example/v1' AND tag='community_charity')
 AND EXISTS(SELECT 1 FROM discord_blacklist_origins o JOIN discord_blacklist_events e USING(discord_id) WHERE o.first_actor_kind='steward6' AND e.id=17 AND e.actor_kind='steward6' AND e.operation_key='historical-operation' AND e.reason_codes_json='[]' AND e.safe_note='Historical note')`).Scan(&preserved); err != nil || !preserved {
 		t.Fatal("historical audit rows changed", preserved, err)
 	}

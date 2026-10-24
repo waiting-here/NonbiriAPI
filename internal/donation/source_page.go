@@ -56,9 +56,10 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 		query += ` AND (` + donationstate.SQL() + `)=?`
 		args = append(args, now, now, now, now, filter.KeyState)
 	}
-	if filter.traineeModelID > 0 {
-		query += ` AND ` + charityscope.KeyPredicate()
-		args = append(args, filter.traineeModelID, now)
+	if filter.maintenanceScope.RestrictedKeys() {
+		predicate, values := filter.maintenanceScope.KeyPredicate(now, false)
+		query += " AND " + predicate
+		args = append(args, values...)
 	}
 	if len(candidates) > 0 {
 		query += ` AND dk.id IN (` + strings.TrimSuffix(strings.Repeat("?,", len(candidates)), ",") + `)`
@@ -162,9 +163,7 @@ func (s *Service) sourcesPage(ctx context.Context, role reviewerRole, userID int
 		return empty, err
 	}
 	defer tx.Rollback()
-	if scope.Trainee {
-		filter.traineeModelID = scope.ModelID
-	}
+	filter.maintenanceScope = scope
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
@@ -262,9 +261,7 @@ func (s *Service) sourceKeysPage(ctx context.Context, role reviewerRole, userID 
 		return empty, err
 	}
 	defer tx.Rollback()
-	if scope.Trainee {
-		filter.traineeModelID = scope.ModelID
-	}
+	filter.maintenanceScope = scope
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
@@ -283,6 +280,10 @@ func (s *Service) sourceKeysPage(ctx context.Context, role reviewerRole, userID 
 	selection, args := sourceSelectionSQL(filter, identity, now)
 	query := `SELECT id FROM (` + selection + `)`
 	ids, metadata, err := browseIDs(ctx, tx, query, args, page)
+	if err != nil {
+		return empty, err
+	}
+	canManage, err := keyManagementAllowedTx(ctx, tx, role, userID)
 	if err != nil {
 		return empty, err
 	}
@@ -308,6 +309,7 @@ func (s *Service) sourceKeysPage(ctx context.Context, role reviewerRole, userID 
 			return empty, err
 		}
 		value := managedKeySummary(keys[0], header, rules)
+		value.CanManage = value.CanManage && canManage
 		if scope.Redact {
 			value.EndpointKeyID = nil
 		}

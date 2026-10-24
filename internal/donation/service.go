@@ -495,17 +495,19 @@ func (s *Service) review(
 	if err := requireManagedDonationTx(ctx, tx, role, donationID, now); err != nil {
 		return roleDonationMutation{}, err
 	}
+	rangeErr := requireDonationRangeTx(ctx, tx, role, actorID, donationID, now)
 	decision, err := beginMutation(ctx, tx, string(role), actorID, idempotency.ScopeControlMutation, mutation, now)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replayRoleDonation(ctx, tx, decision, role, actorID, donationID)
-	}
-	if role == reviewerTrainee && input.Decision != "force_reject" {
-		if err := requirePendingReviewTx(ctx, tx, donationID, now); err != nil {
-			return roleDonationMutation{}, err
+		if rangeErr != nil && (input.Decision == "force_reject" || !errors.Is(rangeErr, ErrForbidden)) {
+			return roleDonationMutation{}, rangeErr
 		}
+		return replayRoleDonation(ctx, tx, decision, role, actorID, donationID, input)
+	}
+	if rangeErr != nil {
+		return roleDonationMutation{}, rangeErr
 	}
 	expiry, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
 	if err != nil {
@@ -839,7 +841,7 @@ func (s *Service) manageKey(
 		return roleDonationMutation{}, err
 	}
 	if expiry.changed {
-		if scope.Trainee {
+		if scope.RestrictedKeys() {
 			return roleDonationMutation{}, ErrConflict
 		}
 		if err := tx.Rollback(); err != nil {
@@ -900,7 +902,7 @@ func (s *Service) manageKey(
 	return out, nil
 }
 
-func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, role reviewerRole, actorID, donationID int64) (roleDonationMutation, error) {
+func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, role reviewerRole, actorID, donationID int64, reviews ...ReviewInput) (roleDonationMutation, error) {
 	body, err := smartbackoff.ProjectReceipt(decision.ResponseBody)
 	if err != nil {
 		return roleDonationMutation{}, ErrInvariant
@@ -928,7 +930,43 @@ func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.De
 				key.BindingCount, key.Idle = strconv.FormatInt(count, 10), count == 0
 			}
 		}
-		var err error
+		access, err := readDonationAccessScope(ctx, tx, role, actorID)
+		if err != nil {
+			return roleDonationMutation{}, err
+		}
+		whole, err := access.wholeTx(ctx, tx, donationID)
+		if err != nil {
+			return roleDonationMutation{}, err
+		}
+		if !whole && len(reviews) > 0 {
+			allowed := map[string]bool{}
+			for _, setting := range reviews[0].KeySettings {
+				allowed[strconv.FormatInt(setting.DonationKeyID, 10)] = true
+			}
+			kept := result.steward.Keys[:0]
+			for _, key := range result.steward.Keys {
+				if allowed[key.ID] {
+					kept = append(kept, key)
+				}
+			}
+			result.steward.Keys = kept
+		}
+		forceAllowed := whole && access.review && access.force
+		result.steward.CanForceReject = result.steward.CanForceReject && forceAllowed
+		if !forceAllowed {
+			result.steward.ForceRejectUnavailableReason = nil
+		}
+		if access.redact {
+			result.steward.Owner = nil
+			result.steward.Reviewer = nil
+			result.steward.DiscordPublicThanks = nil
+		}
+		for i := range result.steward.Keys {
+			result.steward.Keys[i].CanManage = result.steward.Keys[i].CanManage && whole && access.manage
+			if access.redact {
+				result.steward.Keys[i].EndpointKeyID = nil
+			}
+		}
 		result.body, err = json.Marshal(result.steward)
 		if err != nil {
 			return roleDonationMutation{}, ErrInvariant
@@ -996,8 +1034,13 @@ JOIN donation_keys dk ON dk.id=b.donation_key_id WHERE dk.donation_id=? AND dk.i
 
 func finishRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, role reviewerRole, actorID int64, value AdminDonation) (roleDonationMutation, error) {
 	if role == reviewerSteward || role == reviewerGranted || role == reviewerTrainee {
-		if role == reviewerTrainee {
-			value = traineeReviewProjection(value)
+		access, err := readDonationAccessScope(ctx, tx, role, actorID)
+		if err != nil {
+			return roleDonationMutation{}, err
+		}
+		value, err = access.projectReceiptTx(ctx, tx, value)
+		if err != nil {
+			return roleDonationMutation{}, err
 		}
 		steward := stewardFromAdmin(value, actorID)
 		out, err := finishJSON(ctx, tx, decision, http.StatusOK, steward)
@@ -1172,6 +1215,9 @@ func (s *Service) beginRoleTx(ctx context.Context, role reviewerRole, actorUserI
 		if err := s.roleAuth.AuthorizeStewardMutation(ctx, tx, actorUserID); err != nil {
 			return rollback(mapAuthorization(err))
 		}
+		if _, err := readDonationAccessScope(ctx, tx, role, actorUserID); err != nil {
+			return rollback(err)
+		}
 	default:
 		return rollback(ErrInvalidRequest)
 	}
@@ -1196,7 +1242,7 @@ func (s *Service) materializeRoleExpiryStandalone(
 	committed := false
 	defer finishTx(tx, &committed)
 	if role == reviewerTrainee {
-		if err := requirePendingReviewTx(ctx, tx, donationID, now); err != nil {
+		if err := requireDonationRangeTx(ctx, tx, role, actorUserID, donationID, now); err != nil {
 			return err
 		}
 	}

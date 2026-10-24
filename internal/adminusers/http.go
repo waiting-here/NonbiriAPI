@@ -74,6 +74,9 @@ func RegisterStewardRoutes(registrar StewardRouteRegistrar, service *Service) er
 	}
 	api := &httpAPI{service: service, role: roleSteward}
 	routes := append(api.userRoutes(), []managementRoute{
+		{http.MethodGet, api.role.route(routeEndpointOverview), api.getEndpointOverview},
+		{http.MethodGet, api.role.route(routeEndpointOverviewUsers), api.getEndpointOverviewUsers},
+		{http.MethodPatch, api.role.route(routeEndpointTags), api.patchEndpointTags},
 		{http.MethodGet, api.role.route(routeBlacklist), api.listBlacklist},
 		{http.MethodPost, api.role.route(routeBlacklist), api.addBlacklist},
 		{http.MethodGet, api.role.route(routeBlacklistEvents), api.listBlacklistEvents},
@@ -474,7 +477,7 @@ func (api *httpAPI) getEndpointOverview(writer http.ResponseWriter, request *htt
 	if !parsePageQuery(writer, values, &query.Cursor, &query.Limit, &query.Page) {
 		return
 	}
-	page, err := api.service.EndpointOverview(request.Context(), principal.UserID, query)
+	page, err := api.service.endpointOverview(request.Context(), principal.UserID, api.role, query)
 	if err != nil {
 		writeError(writer, err)
 		return

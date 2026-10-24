@@ -90,7 +90,9 @@
         "maintenance.read": false,
         "maintenance.enable": false,
         "egress.read": false,
-        "automation": false
+        "automation": false,
+        "endpoints.read": false,
+        "endpoints.tags": false
       },
       "limits": {
         "users.endpoint_limit_max": "10000",
@@ -99,7 +101,8 @@
         "users.balance_adjustment_max_milli": "9000000000000000",
         "users.game_balance_adjustment_max_milli": "9000000000000000",
         "users.ban_duration_max_seconds": "316224000"
-      }
+      },
+      "donation_scope": "standard"
     }
   }
 }

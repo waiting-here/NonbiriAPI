@@ -92,13 +92,15 @@ func TestLegacyManagementReceiptRetainsUnsplitUsage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	level := int64(6)
+	viewer := e.seedUser(t, "receipt-reviewer", &level, false)
 	tx, err := e.store.DB().BeginTx(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
 	for _, role := range []reviewerRole{reviewerAdmin, reviewerSteward} {
-		result, err := replayRoleDonation(context.Background(), tx, idempotency.Decision{ResponseBody: encoded, HTTPStatus: http.StatusOK}, role, owner, id)
+		result, err := replayRoleDonation(context.Background(), tx, idempotency.Decision{ResponseBody: encoded, HTTPStatus: http.StatusOK}, role, viewer, id)
 		if err != nil {
 			t.Fatal(err)
 		}

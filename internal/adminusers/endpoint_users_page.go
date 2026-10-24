@@ -43,6 +43,9 @@ func readEndpointOverviewUsers(ctx context.Context, tx *sql.Tx, selection string
 // EndpointOverviewUsers reads the complete user grouping behind the bounded
 // preview returned by a numbered endpoint overview page.
 func (service *Service) EndpointOverviewUsers(ctx context.Context, adminID int64, baseURL string, requested pagination.Request) (Page[EndpointOverviewUser], error) {
+	return service.endpointOverviewUsers(ctx, adminID, roleAdmin, baseURL, requested)
+}
+func (service *Service) endpointOverviewUsers(ctx context.Context, adminID int64, role managementRole, baseURL string, requested pagination.Request) (Page[EndpointOverviewUser], error) {
 	if !requested.Valid() || baseURL == "" || len(baseURL) > 4096 || !utf8.ValidString(baseURL) {
 		return Page[EndpointOverviewUser]{}, ErrInvalidRequest
 	}
@@ -51,7 +54,7 @@ func (service *Service) EndpointOverviewUsers(ctx context.Context, adminID int64
 	}
 	ctx, cancel := context.WithTimeout(ctx, pageReadTimeout)
 	defer cancel()
-	tx, err := service.beginListRead(ctx, adminID, true)
+	tx, err := service.beginEndpointManagement(ctx, adminID, role, true, "endpoints.read")
 	if err != nil {
 		return Page[EndpointOverviewUser]{}, err
 	}
@@ -85,7 +88,7 @@ func (api *httpAPI) getEndpointOverviewUsers(writer http.ResponseWriter, request
 		writeError(writer, ErrInvalidRequest)
 		return
 	}
-	page, err := api.service.EndpointOverviewUsers(request.Context(), principal.UserID, baseURL, requested)
+	page, err := api.service.endpointOverviewUsers(request.Context(), principal.UserID, api.role, baseURL, requested)
 	if err != nil {
 		writeError(writer, err)
 		return

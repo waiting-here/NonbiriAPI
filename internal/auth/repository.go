@@ -197,7 +197,7 @@ func (r *Runtime) deleteSession(ctx context.Context, rawToken string) (bool, err
 
 type userRow struct {
 	permissionsRevision                                                  int64
-	permissionsJSON, permissionLimitsJSON                                string
+	donationScope, permissionsJSON, permissionLimitsJSON                 string
 	id                                                                   int64
 	discordID, username, avatar, guildNick, guildAvatarURL, lang         string
 	isBanned, gamePublic, charityPublic                                  bool
@@ -214,7 +214,7 @@ type userRow struct {
 func readUserRow(ctx context.Context, tx *sql.Tx, userID int64) (userRow, error) {
 	var u userRow
 	var banned, public, charityPublic int
-	err := tx.QueryRowContext(ctx, `SELECT id,discord_id,username,avatar,guild_nick,guild_avatar_url,is_banned,banned_until,charity_suspended_until,endpoint_limit,rpm_limit,concurrency_limit,game_profile_public,donation_credit_mag,level,auto_level,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,lang,created_at,updated_at,charity_profile_public,light_rpm_limit,light_concurrency_limit,global_rpm_limit,COALESCE((SELECT revision FROM steward_permissions WHERE user_id=users.id),0),COALESCE((SELECT permissions FROM steward_permissions WHERE user_id=users.id),''),COALESCE((SELECT limits FROM steward_permissions WHERE user_id=users.id),'') FROM users WHERE id=? AND is_admin=0`, userID).Scan(&u.id, &u.discordID, &u.username, &u.avatar, &u.guildNick, &u.guildAvatarURL, &banned, &u.bannedUntil, &u.charityUntil, &u.endpointLimit, &u.rpmLimit, &u.concurrencyLimit, &public, &u.donation, &u.manualLevel, &u.autoLevel, &u.requests, &u.uncached, &u.cacheWrite, &u.cacheRead, &u.output, &u.unknown, &u.revision, &u.lang, &u.createdAt, &u.updatedAt, &charityPublic, &u.lightRPMLimit, &u.lightConcurrencyLimit, &u.globalRPMLimit, &u.permissionsRevision, &u.permissionsJSON, &u.permissionLimitsJSON)
+	err := tx.QueryRowContext(ctx, `SELECT id,discord_id,username,avatar,guild_nick,guild_avatar_url,is_banned,banned_until,charity_suspended_until,endpoint_limit,rpm_limit,concurrency_limit,game_profile_public,donation_credit_mag,level,auto_level,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,lang,created_at,updated_at,charity_profile_public,light_rpm_limit,light_concurrency_limit,global_rpm_limit,COALESCE((SELECT revision FROM steward_permissions WHERE user_id=users.id),0),COALESCE((SELECT permissions FROM steward_permissions WHERE user_id=users.id),''),COALESCE((SELECT limits FROM steward_permissions WHERE user_id=users.id),''),COALESCE((SELECT donation_scope FROM steward_permissions WHERE user_id=users.id),'standard') FROM users WHERE id=? AND is_admin=0`, userID).Scan(&u.id, &u.discordID, &u.username, &u.avatar, &u.guildNick, &u.guildAvatarURL, &banned, &u.bannedUntil, &u.charityUntil, &u.endpointLimit, &u.rpmLimit, &u.concurrencyLimit, &public, &u.donation, &u.manualLevel, &u.autoLevel, &u.requests, &u.uncached, &u.cacheWrite, &u.cacheRead, &u.output, &u.unknown, &u.revision, &u.lang, &u.createdAt, &u.updatedAt, &charityPublic, &u.lightRPMLimit, &u.lightConcurrencyLimit, &u.globalRPMLimit, &u.permissionsRevision, &u.permissionsJSON, &u.permissionLimitsJSON, &u.donationScope)
 	if err != nil {
 		return userRow{}, err
 	}
@@ -419,7 +419,7 @@ func (r *Runtime) userEnvelopeTx(ctx context.Context, tx *sql.Tx, userID int64, 
 	if err != nil {
 		return UserEnvelope{}, err
 	}
-	permissions, err := authz.DecodeStewardPermissions(effective, u.permissionsRevision, u.permissionsJSON, u.permissionLimitsJSON)
+	permissions, err := authz.DecodeStewardPermissions(effective, u.permissionsRevision, u.permissionsJSON, u.permissionLimitsJSON, u.donationScope)
 	if err != nil {
 		return UserEnvelope{}, err
 	}

@@ -77,14 +77,17 @@ func (s *Service) bindingSources(ctx context.Context, role roleKind, actorID, mo
 		return nil, nil, 0, err
 	}
 	from, args := bindingSourceSelection(modelID, now, keyState, includeBound...)
-	if scope.Trainee {
-		from += ` AND dk.mainstream_channel_id IS NOT NULL`
+	if scope.RestrictedKeys() {
+		predicate, values := scope.KeyPredicate(now, true)
+		from += " AND " + predicate
+		args = append(args, values...)
 	}
+	scopeArgs := append([]any(nil), args...)
 	query := `SELECT d.id,d.description,COUNT(DISTINCT dk.id)` + from + ` AND d.id>? GROUP BY d.id,d.description ORDER BY d.id LIMIT ?`
 	args = append(args, afterID, limit+1)
 	if donationID != 0 {
 		query = `SELECT dk.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,dk.safe_note,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),d.description,d.review_note` + from + ` AND d.id=? AND dk.id>? ORDER BY dk.id LIMIT ?`
-		_, args = bindingSourceSelection(modelID, now, keyState, includeBound...)
+		args = scopeArgs
 		args = append(args, donationID, afterID, limit+1)
 	}
 	rows, err := tx.QueryContext(ctx, query, args...)

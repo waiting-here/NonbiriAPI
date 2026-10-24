@@ -60,6 +60,8 @@ func TestStewardPermissionsRejectUnknownMissingAndNumericOverflow(t *testing.T) 
 	for _, change := range []func(*StewardPermissions){
 		func(p *StewardPermissions) { delete(p.Permissions, "users.read") },
 		func(p *StewardPermissions) { p.Permissions["admin"] = true },
+		func(p *StewardPermissions) { p.DonationScope = "" },
+		func(p *StewardPermissions) { p.DonationScope = "all" },
 		func(p *StewardPermissions) { p.Limits["users.rpm_limit_max"] = "4097" },
 		func(p *StewardPermissions) { p.Limits["users.rpm_limit_max"] = "01" },
 		func(p *StewardPermissions) { p.Limits["users.balance_adjustment_max_milli"] = "9223372036854775808" },
@@ -71,7 +73,7 @@ func TestStewardPermissionsRejectUnknownMissingAndNumericOverflow(t *testing.T) 
 		}
 	}
 	p := DefaultStewardPermissions(5)
-	if !p.Permissions["users.donations.read"] || p.Permissions["logs.unredacted"] || p.Permissions["automation"] {
+	if !p.Permissions["users.donations.read"] || p.Permissions["logs.unredacted"] || p.Permissions["automation"] || p.Permissions["endpoints.read"] || p.Permissions["endpoints.tags"] || p.DonationScope != DonationScopeStandard {
 		t.Fatal("default contract drift")
 	}
 }

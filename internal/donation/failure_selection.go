@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
@@ -39,10 +38,8 @@ func (s *Service) selectFailureReset(ctx context.Context, role reviewerRole, use
 	}
 	defer tx.Rollback()
 	actorID := scope.ActorID
-	if scope.Trainee {
-		selection.scopeModelID = scope.ModelID
-		selection.Source.traineeModelID = scope.ModelID
-	}
+	selection.scopeModelID = scope.ModelID
+	selection.Source.maintenanceScope = scope
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
@@ -95,7 +92,7 @@ func (s *Service) selectFailureReset(ctx context.Context, role reviewerRole, use
 		if err != nil {
 			return empty, err
 		}
-		if !visible && !scope.Trainee {
+		if !visible && !scope.RestrictedKeys() {
 			visible, err = s.managementHeldRead(ctx, tx, role, actorID, selection.DonationID, now)
 			if err != nil {
 				return empty, err
@@ -165,9 +162,10 @@ func failureSelectionSQL(selection failureSelection, now int64, ids []int64) (st
 	for i, id := range ids {
 		args[i] = id
 	}
-	if selection.scopeModelID > 0 {
-		query += ` AND ` + charityscope.KeyPredicate()
-		args = append(args, selection.scopeModelID, now)
+	if selection.Source.maintenanceScope.RestrictedKeys() {
+		predicate, values := selection.Source.maintenanceScope.KeyPredicate(now, false)
+		query += " AND " + predicate
+		args = append(args, values...)
 	}
 	if selection.View == "donation_keys" {
 		query += ` AND d.id=?`

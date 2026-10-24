@@ -90,5 +90,5 @@ type DonationSource struct {
 type SourceFilter struct {
 	Query, Scope, Handling, Idle string
 	KeyState                     string `json:",omitempty"`
-	traineeModelID               int64
+	maintenanceScope             charityscope.Scope
 }

@@ -149,8 +149,10 @@ func candidateSelection(modelID, now int64, query CandidateQuery, projection str
 		statement += ` AND (` + donationstate.SQL() + `)=?`
 		args = append(args, now, now, now, now, query.KeyState)
 	}
-	if query.traineeOnly {
-		statement += ` AND dk.mainstream_channel_id IS NOT NULL`
+	if query.maintenanceScope.RestrictedKeys() {
+		predicate, values := query.maintenanceScope.KeyPredicate(now, true)
+		statement += " AND " + predicate
+		args = append(args, values...)
 	}
 	if query.DonationID > 0 {
 		statement += ` AND d.id=?`
@@ -207,7 +209,7 @@ func (s *Service) candidatesPage(ctx context.Context, role roleKind, actorID, mo
 	if err != nil {
 		return empty, err
 	}
-	query.traineeOnly = scope.Trainee
+	query.maintenanceScope = scope
 	countSelection, countArgs := candidateCountSelection(modelID, now, query)
 	metadata, offset, err := pageWindow(ctx, tx, countSelection, countArgs, page)
 	if err != nil {
@@ -272,8 +274,10 @@ func (s *Service) bindingSourcesPage(ctx context.Context, role roleKind, actorID
 		return donations, keys, err
 	}
 	from, args := bindingSourceSelection(modelID, now, keyState, includeBound...)
-	if scope.Trainee {
-		from += ` AND dk.mainstream_channel_id IS NOT NULL`
+	if scope.RestrictedKeys() {
+		predicate, values := scope.KeyPredicate(now, true)
+		from += " AND " + predicate
+		args = append(args, values...)
 	}
 	selection := `SELECT d.id,d.description,COUNT(DISTINCT dk.id)` + from + ` GROUP BY d.id,d.description`
 	order := ` ORDER BY d.id`

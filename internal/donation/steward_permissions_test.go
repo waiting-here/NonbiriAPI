@@ -22,7 +22,7 @@ func TestForceRejectPermissionDoesNotGrantPrivateProjection(t *testing.T) {
 	policy.Permissions["donations.force_reject"] = true
 	permissions, _ := json.Marshal(policy.Permissions)
 	limits, _ := json.Marshal(policy.Limits)
-	if _, err := e.store.DB().Exec(`INSERT INTO steward_permissions(user_id,revision,permissions,limits,created_at,updated_at) VALUES(?,1,?,?,?,?)`, actor, string(permissions), string(limits), donationTestNow, donationTestNow); err != nil {
+	if _, err := e.store.DB().Exec(`INSERT INTO steward_permissions(user_id,revision,permissions,limits,donation_scope,created_at,updated_at) VALUES(?,1,?,?,'full',?,?)`, actor, string(permissions), string(limits), donationTestNow, donationTestNow); err != nil {
 		t.Fatal(err)
 	}
 	id := parseTestID(t, approved.ID)
@@ -67,7 +67,7 @@ func TestManagedKeyReceiptKeepsReadGrantSeparateFromSourceScope(t *testing.T) {
 	writePolicy := func() {
 		permissions, _ := json.Marshal(p.Permissions)
 		limits, _ := json.Marshal(p.Limits)
-		if _, err := e.store.DB().Exec(`INSERT INTO steward_permissions(user_id,revision,permissions,limits,created_at,updated_at) VALUES(?,1,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET permissions=excluded.permissions,revision=steward_permissions.revision+1`, actor, string(permissions), string(limits), donationTestNow, donationTestNow); err != nil {
+		if _, err := e.store.DB().Exec(`INSERT INTO steward_permissions(user_id,revision,permissions,limits,donation_scope,created_at,updated_at) VALUES(?,1,?,?,'full',?,?) ON CONFLICT(user_id) DO UPDATE SET permissions=excluded.permissions,revision=steward_permissions.revision+1`, actor, string(permissions), string(limits), donationTestNow, donationTestNow); err != nil {
 			t.Fatal(err)
 		}
 	}

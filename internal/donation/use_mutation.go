@@ -37,7 +37,7 @@ func (s *Service) mutateUse(ctx context.Context, role reviewerRole, actorID, don
 	var access useAccess
 	var err error
 	if role == recurringOwner {
-		tx, access, err = s.beginUseTx(ctx, role, actorID, false)
+		tx, access, err = s.beginUseTx(ctx, role, actorID, donationID, false)
 	} else {
 		access.role = role
 		tx, access.scope, err = s.beginScopedTx(ctx, role, actorID, false)

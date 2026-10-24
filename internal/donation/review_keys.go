@@ -12,12 +12,20 @@ import (
 // It exposes the same pending key subset as the existing reviewer detail.
 func (s *Service) reviewKeysPage(ctx context.Context, userID, donationID int64, page pagination.Request) (Page[ManagedKeySummary], error) {
 	var empty Page[ManagedKeySummary]
-	tx, role, _, err := s.beginReviewTx(ctx, reviewerSteward, userID, true)
+	tx, _, _, err := s.beginReviewTx(ctx, reviewerSteward, userID, true)
 	if err != nil {
 		return empty, err
 	}
 	defer tx.Rollback()
-	if role == reviewerTrainee {
+	access, err := readDonationAccessScope(ctx, tx, reviewerSteward, userID)
+	if err != nil {
+		return empty, err
+	}
+	whole, err := access.wholeTx(ctx, tx, donationID)
+	if err != nil {
+		return empty, err
+	}
+	if !whole {
 		if err := authz.RequireStewardPermission(ctx, tx, userID, "donations.review"); err != nil {
 			return empty, mapAuthorization(err)
 		}
@@ -33,7 +41,7 @@ func (s *Service) reviewKeysPage(ctx context.Context, userID, donationID int64, 
 	if !visible {
 		return empty, ErrNotFound
 	}
-	if role == reviewerTrainee {
+	if !whole {
 		if err := requirePendingUseReviewTx(ctx, tx, donationID, now); err != nil {
 			return empty, err
 		}
@@ -43,7 +51,7 @@ func (s *Service) reviewKeysPage(ctx context.Context, userID, donationID int64, 
 		return empty, err
 	}
 	query := `SELECT dk.id FROM donation_keys dk WHERE dk.donation_id=?`
-	if role == reviewerTrainee {
+	if !whole {
 		query += ` AND EXISTS(SELECT 1 FROM donation_uses u WHERE u.donation_key_id=dk.id AND u.current_pending_revision_id IS NOT NULL)`
 	}
 	ids, metadata, err := browseIDs(ctx, tx, query, []any{donationID}, page)
@@ -54,7 +62,7 @@ func (s *Service) reviewKeysPage(ctx context.Context, userID, donationID int64, 
 	if err != nil {
 		return empty, err
 	}
-	if role == reviewerTrainee {
+	if access.redact {
 		header = traineeReviewProjection(header)
 	}
 	result := Page[ManagedKeySummary]{Data: make([]ManagedKeySummary, 0, len(keys)), Pagination: &metadata}
@@ -70,7 +78,7 @@ func (s *Service) reviewKeysPage(ctx context.Context, userID, donationID int64, 
 		value := managedKeySummary(key, header, rules)
 		value.CanManage = false
 		value.MaintenanceScopeRequired = true
-		if role == reviewerTrainee {
+		if access.redact {
 			value.EndpointKeyID = nil
 		}
 		result.Data = append(result.Data, value)

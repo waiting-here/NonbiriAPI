@@ -136,6 +136,9 @@ func newPersonalFixture(t *testing.T) *personalFixture {
 		case 5:
 			f.exec(t, `UPDATE users SET is_banned=1,banned_until=NULL WHERE id=?`, f.userID)
 			_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"exact/model","object":"model"}]}`))
+		case 7:
+			f.exec(t, `DELETE FROM admin_endpoint_tags`)
+			_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"exact/model","object":"model"}]}`))
 		case 6:
 			f.exec(t, `UPDATE steward_permissions SET permissions=json_set(permissions,'$."donations.discover"',json('false')),revision=revision+1 WHERE user_id=?`, f.userID)
 			_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"exact/model","object":"model"}]}`))

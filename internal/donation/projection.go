@@ -104,15 +104,17 @@ func (s *Service) GetSteward(ctx context.Context, userID, donationID int64) (Ste
 	if err != nil {
 		return StewardDonation{}, err
 	}
-	tx, role, _, err := s.beginReviewTx(ctx, reviewerSteward, userID, false)
+	tx, _, _, err := s.beginReviewTx(ctx, reviewerSteward, userID, false)
 	if err != nil {
 		return StewardDonation{}, err
 	}
 	defer tx.Rollback()
-	if role == reviewerTrainee {
-		if err := requirePendingUseReviewTx(ctx, tx, donationID, now); err != nil {
-			return StewardDonation{}, err
-		}
+	access, err := readDonationAccessScope(ctx, tx, reviewerSteward, userID)
+	if err != nil {
+		return StewardDonation{}, err
+	}
+	if _, err = access.requireTx(ctx, tx, donationID, now); err != nil {
+		return StewardDonation{}, err
 	}
 	if _, err := materializeDonationExpiryTx(ctx, tx, donationID, now); err != nil {
 		return StewardDonation{}, err
@@ -138,12 +140,9 @@ func (s *Service) GetSteward(ctx context.Context, userID, donationID int64) (Ste
 	if err != nil {
 		return StewardDonation{}, err
 	}
-	if role == reviewerTrainee {
-		keys, err := pendingReviewKeysTx(ctx, tx, []int64{donationID})
-		if err != nil {
-			return StewardDonation{}, err
-		}
-		value = pendingUseReviewProjection(value, keys)
+	value, err = access.projectTx(ctx, tx, value)
+	if err != nil {
+		return StewardDonation{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return StewardDonation{}, fmt.Errorf("donation: commit steward read: %w", err)
@@ -238,24 +237,28 @@ func (s *Service) listRole(ctx context.Context, userID int64, filter ManagementF
 	if err != nil {
 		return nil, 0, err
 	}
-	tx, reviewRole, _, err := s.beginReviewTx(ctx, role, userID, false)
+	tx, _, _, err := s.beginReviewTx(ctx, role, userID, false)
 	if err != nil {
 		return nil, 0, fmt.Errorf("donation: begin role list: %w", err)
 	}
 	defer tx.Rollback()
-	if reviewRole == reviewerTrainee {
+	access, err := readDonationAccessScope(ctx, tx, role, userID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if access.mode == "standard" {
 		filter, err = pendingReviewFilter(filter)
 		if err != nil {
 			return nil, 0, err
 		}
 	}
+
 	query := `SELECT d.id FROM donations d JOIN donation_handling h ON h.donation_id=d.id WHERE d.id>?
  AND (d.status IN ('pending','approved') OR d.terminal_at>?)`
 	args := []any{afterID, now - terminalRetention}
-	if reviewRole == reviewerTrainee {
-		query += ` AND ` + pendingUseReviewSQL
-		args = append(args, now)
-	}
+	predicate, values := access.predicate(now)
+	query += " AND " + predicate
+	args = append(args, values...)
 	query, args = appendManagementFilter(query, args, filter, now)
 	query += ` ORDER BY d.id LIMIT ?`
 	args = append(args, limit+1)
@@ -282,20 +285,14 @@ func (s *Service) listRole(ctx context.Context, userID int64, filter ManagementF
 	if err != nil {
 		return nil, 0, err
 	}
-	var pendingKeys map[string]bool
-	if reviewRole == reviewerTrainee {
-		pendingKeys, err = pendingReviewKeysTx(ctx, tx, ids)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
 	for _, id := range ids {
 		item, err := getAdminDonationTx(ctx, tx, id, now, summaries[id])
 		if err != nil {
 			return nil, 0, err
 		}
-		if reviewRole == reviewerTrainee {
-			item = pendingUseReviewProjection(item, pendingKeys)
+		item, err = access.projectTx(ctx, tx, item)
+		if err != nil {
+			return nil, 0, err
 		}
 		items = append(items, item)
 	}

@@ -65,13 +65,7 @@ func (s *Service) beginReviewTx(ctx context.Context, role reviewerRole, userID i
 			permission = "donations.review"
 		}
 		err = mapAuthorization(authz.RequireStewardPermission(ctx, tx, userID, permission))
-		if err == nil && level == 5 {
-			p, e := authz.ReadStewardPermissions(ctx, tx, userID)
-			err = e
-			if err == nil && p.Permissions["donations.read_all"] {
-				role = reviewerGranted
-			}
-		}
+
 	}
 	if err != nil {
 		_ = tx.Rollback()

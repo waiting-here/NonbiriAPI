@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -156,7 +157,7 @@ func (s *Service) badge(ctx context.Context, role reviewerRole, userID int64) (D
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, _, err := s.beginRoleTx(ctx, role, userID)
+	tx, _, err := s.beginHandlingTx(ctx, role, userID, true)
 	if err != nil {
 		return DonationBadge{}, err
 	}
@@ -165,9 +166,27 @@ func (s *Service) badge(ctx context.Context, role reviewerRole, userID int64) (D
 	if err != nil {
 		return DonationBadge{}, err
 	}
+	query := `SELECT COUNT(*) FROM donation_handling h JOIN donations d ON d.id=h.donation_id WHERE h.state='pending' AND ` + logicallyActiveDonationSQL
+	args := []any{now}
+	if role != reviewerAdmin {
+		access, err := readDonationAccessScope(ctx, tx, role, userID)
+		if err != nil {
+			return DonationBadge{}, err
+		}
+		policy, err := authz.ReadStewardPermissions(ctx, tx, userID)
+		if err != nil {
+			return DonationBadge{}, mapAuthorization(err)
+		}
+		predicate, values := access.predicate(now)
+		if access.mode != authz.DonationScopeFull && policy.Permissions["donations.handle"] {
+			predicate = "(" + predicate + " OR " + manageableDonationSQL + ")"
+			values = append(values, now)
+		}
+		query += " AND " + predicate
+		args = append(args, values...)
+	}
 	var count int64
-	err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM donation_handling h JOIN donations d ON d.id=h.donation_id
-WHERE h.state='pending' AND `+logicallyActiveDonationSQL, now).Scan(&count)
+	err = tx.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
 		return DonationBadge{}, fmt.Errorf("donation: count pending handling: %w", err)
 	}
@@ -205,6 +224,19 @@ func (s *Service) process(ctx context.Context, role reviewerRole, userID, donati
 	}
 	if err := requireManagedDonationTx(ctx, tx, role, donationID, now); err != nil {
 		return empty, err
+	}
+	if actor.scope == "enhanced" {
+		access, err := readDonationAccessScope(ctx, tx, role, actor.id)
+		if err != nil {
+			return empty, err
+		}
+		whole, err := access.wholeTx(ctx, tx, donationID)
+		if err != nil {
+			return empty, err
+		}
+		if whole {
+			actor.trainee = false
+		}
 	}
 	if actor.trainee {
 		if err := requireApprovedHandlingTx(ctx, tx, donationID, now); err != nil {

@@ -19,7 +19,7 @@ type endpointTagsMutation struct {
 }
 
 func validEndpointTag(tag string) bool {
-	return tag == "abusive_third_party" || tag == "community_charity" || tag == "noncommercial_gateway"
+	return tag == "abusive_third_party" || tag == "community_charity" || tag == "noncommercial_gateway" || tag == "user_gateway" || tag == "steward_gateway" || tag == "invalid_entry"
 }
 
 func validEndpointTagFilter(tag string) bool {
@@ -27,6 +27,9 @@ func validEndpointTagFilter(tag string) bool {
 }
 
 func (s *Service) setEndpointTags(ctx context.Context, adminID int64, control ControlMutation, input endpointTagsMutation) (MutationResult[struct{}], error) {
+	return s.setManagedEndpointTags(ctx, adminID, roleAdmin, control, input)
+}
+func (s *Service) setManagedEndpointTags(ctx context.Context, adminID int64, role managementRole, control ControlMutation, input endpointTagsMutation) (MutationResult[struct{}], error) {
 	empty := MutationResult[struct{}]{}
 	if !validEndpointTag(input.Tag) || len(input.BaseURLs) == 0 || len(input.BaseURLs) > 100 {
 		return empty, ErrInvalidRequest
@@ -36,12 +39,12 @@ func (s *Service) setEndpointTags(ctx context.Context, adminID int64, control Co
 			return empty, ErrInvalidRequest
 		}
 	}
-	tx, err := s.beginManagement(ctx, adminID, roleAdmin, false)
+	tx, err := s.beginEndpointManagement(ctx, adminID, role, false, "endpoints.tags")
 	if err != nil {
 		return empty, err
 	}
 	defer tx.Rollback()
-	decision, err := beginControlMutation(ctx, tx, adminID, roleAdmin, control, s.now().Unix())
+	decision, err := beginControlMutation(ctx, tx, adminID, role, control, s.now().Unix())
 	if err != nil {
 		return empty, err
 	}
@@ -89,12 +92,12 @@ func (api *httpAPI) patchEndpointTags(w http.ResponseWriter, r *http.Request, p 
 	}
 	slices.Sort(input.BaseURLs)
 	input.BaseURLs = slices.Compact(input.BaseURLs)
-	control, ok := makeControl(w, r, routeEndpointTags, 0, input)
+	control, ok := makeControl(w, r, api.role.route(routeEndpointTags), 0, input)
 	if !ok {
 		return
 	}
 	control.PathIDs = []string{}
-	result, err := api.service.setEndpointTags(r.Context(), p.UserID, control, input)
+	result, err := api.service.setManagedEndpointTags(r.Context(), p.UserID, api.role, control, input)
 	if err != nil {
 		writeError(w, err)
 		return
