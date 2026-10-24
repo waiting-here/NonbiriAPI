@@ -84,7 +84,7 @@ const pageCopyKeys = {
   'user.services.deleteImpact': 'user.services.deleteImpact',
   'user.services.donated': 'user.services.donated',
   'user.services.editKey': 'user.services.editKey',
-  'user.services.editName': 'user.services.editName',
+  'user.workflows.editService': 'user.workflows.editService',
   'user.services.inUse': 'user.services.inUse',
   'user.services.keyLimits': 'user.services.keyLimits',
   'user.services.modelsUsing': 'user.services.modelsUsing',
@@ -1578,8 +1578,6 @@ export function EndpointDetail({
   useResourceListScroll(accountId, Boolean(keys.data) && !keys.isFetching);
   const [addingKey, setAddingKey] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [endpointNote, setEndpointNote] = useState('');
   const returnTo = listReturnPath(location.state, '/endpoints');
   type Intent =
     { kind: 'patch'; input: EndpointPatchInput } | { kind: 'delete'; expectedRevision: string };
@@ -1591,7 +1589,7 @@ export function EndpointDetail({
         await patchEndpoint(endpointId, intent.input, identity, context.signal);
       else await deleteEndpoint(endpointId, intent.expectedRevision, identity, context.signal);
       context.commit(() => {
-        if (intent.kind === 'patch') setEditing(false);
+        if (intent.kind === 'patch') setEntryScopeOpen(false);
         else setDeleteOpen(false);
       });
     },
@@ -1634,7 +1632,7 @@ export function EndpointDetail({
         const [current, currentKeys] = await Promise.all([endpoint.refetch(), keys.refetch()]);
         context.assertCurrent();
         if (current.error || currentKeys.error) throw current.error ?? currentKeys.error;
-        if (!error || confirmed) context.commit(() => setEditing(false));
+        if (!error || confirmed) context.commit(() => setEntryScopeOpen(false));
       }
       if (confirmed) return { operationConfirmed: true };
     },
@@ -1642,7 +1640,7 @@ export function EndpointDetail({
     {
       clearSecrets: () => {
         setDeleteOpen(false);
-        setEditing(false);
+        setEntryScopeOpen(false);
         setAddingKey(false);
       },
     },
@@ -1669,15 +1667,6 @@ export function EndpointDetail({
     }
     await operation.mutateAsync(intent).catch(() => undefined);
   };
-  useEffect(() => {
-    let active = true;
-    queueMicrotask(() => {
-      if (active) setEndpointNote(endpoint.data?.note ?? '');
-    });
-    return () => {
-      active = false;
-    };
-  }, [endpoint.data?.note]);
 
   if (endpoint.isPending && !endpoint.data)
     return (
@@ -1744,9 +1733,9 @@ export function EndpointDetail({
               type="button"
               className="nb-btn nb-btn--secondary"
               disabled={busy || reconciliationRequired || Boolean(replayAttempt)}
-              onClick={() => setEditing(true)}
+              onClick={chooseConnection}
             >
-              {ui('user.services.editName')}
+              {ui('user.workflows.editService')}
             </button>
             <button
               type="button"
@@ -1851,55 +1840,7 @@ export function EndpointDetail({
               {t('common.reconcile')}
             </button>
           ) : null}
-          {editing ? (
-            <form
-              className="core-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void runEndpointAction({
-                  kind: 'patch',
-                  input: { note: endpointNote, expected_revision: endpoint.data.revision },
-                });
-              }}
-            >
-              <div className="core-field-grid">
-                <label>
-                  <span>{t('endpoints.note')}</span>
-                  <input
-                    value={endpointNote}
-                    maxLength={2048}
-                    disabled={Boolean(replayAttempt)}
-                    onChange={(event) => setEndpointNote(event.target.value)}
-                  />
-                </label>
-              </div>
-              <div className="core-form-actions">
-                <button
-                  type="button"
-                  className="nb-btn nb-btn--secondary"
-                  disabled={busy || Boolean(replayAttempt)}
-                  onClick={() => {
-                    setEndpointNote(endpoint.data.note);
-                    setEditing(false);
-                  }}
-                >
-                  {t('common.cancel')}
-                </button>
-                <button
-                  type="submit"
-                  className="nb-btn nb-btn--primary"
-                  disabled={
-                    busy ||
-                    reconciliationRequired ||
-                    Boolean(replayAttempt) ||
-                    endpointNote === endpoint.data.note
-                  }
-                >
-                  {t('common.save')}
-                </button>
-              </div>
-            </form>
-          ) : null}
+
         </div>
       </section>
       <ExpandablePanel

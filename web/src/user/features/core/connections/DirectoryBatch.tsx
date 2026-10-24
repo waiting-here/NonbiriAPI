@@ -8,10 +8,22 @@ import type { Endpoint, EndpointKey } from '../types';
 import type { DiscoveryModel } from './types';
 import { ManualCatalog } from './ManualCatalog';
 import { PresetModelRow, type MappingSaveState } from './PresetModels';
-export function DirectoryBatch({ accountId, rows }: { accountId: string; rows: DiscoveryModel[] }) {
+export function DirectoryBatch({
+  accountId,
+  rows,
+  initialTarget,
+}: {
+  accountId: string;
+  rows: DiscoveryModel[];
+  initialTarget?: { entry: Endpoint; key: EndpointKey };
+}) {
   const { t } = useTranslation();
-  const [entries, setEntries] = useState<Record<string, Endpoint>>({});
-  const [grants, setGrants] = useState<Record<string, EndpointKey>>({});
+  const [entries, setEntries] = useState<Record<string, Endpoint>>(() =>
+    initialTarget ? { [initialTarget.key.id]: initialTarget.entry } : {},
+  );
+  const [grants, setGrants] = useState<Record<string, EndpointKey>>(() =>
+    initialTarget ? { [initialTarget.key.id]: initialTarget.key } : {},
+  );
   const [states, setStates] = useState<Record<string, MappingSaveState>>({});
   const saves = useRef<Record<string, () => Promise<boolean>>>({});
   const [busy, setBusy] = useState(false);
@@ -36,6 +48,9 @@ export function DirectoryBatch({ accountId, rows }: { accountId: string; rows: D
   const locked = busy || Object.values(states).some((state) => state.locked);
   return (
     <div className="nb-stack">
+      {initialTarget ? (
+        <Note>{initialTarget.entry.note || initialTarget.entry.base_url}</Note>
+      ) : null}
       <Fold title={t('common.connections.chooseEntry')}>
         <Note>{t('common.connections.batchTargetHelp')}</Note>
         <ManualCatalog
@@ -89,7 +104,7 @@ export function DirectoryBatch({ accountId, rows }: { accountId: string; rows: D
                 entries: Object.keys(grants).map((id) => ({
                   entry_id: id,
                   upstream_model_id: row.upstream_model_id,
-                  native_services: [],
+                  native_services: row.needs_service_selection ? [] : row.native_services,
                 })),
               }}
               entries={entries}

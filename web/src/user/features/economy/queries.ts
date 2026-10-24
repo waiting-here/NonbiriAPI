@@ -1,4 +1,5 @@
 import { usePriceRefresh } from '@shared/operations/usePriceRefresh';
+import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   useMutation,
@@ -14,7 +15,7 @@ import {
   StationSessionChangedError,
   stationSessionMatches,
 } from '@shared/charityManagement';
-import { isApiError, isUnauthorized } from '@shared/query/http';
+import { ApiError, isApiError, isUnauthorized } from '@shared/query/http';
 import {
   claimWelfare,
   contributeThursday,
@@ -282,9 +283,19 @@ function useDonationOperation<T>(
 }
 
 export function useCreateDonation() {
-  return useDonationOperation(
-    (input: CreateDonationInput) => createDonation(input),
-    (client) => reconcileDonations(client, undefined, true),
+  const client = useQueryClient();
+  return useRetainedOperation<CreateDonationInput, Donation>(
+    (input, key, context) => createDonation(input, key, context.signal),
+    (_input, error) => {
+      // A list refresh cannot establish whether this particular POST was saved.
+      if (
+        error &&
+        !(error instanceof ApiError && (error.status === 409 || error.code === 'result_unknown'))
+      )
+        return;
+      return reconcileDonations(client, undefined, true);
+    },
+    economyKeys.all,
   );
 }
 

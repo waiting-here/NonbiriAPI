@@ -5,9 +5,9 @@ import { contextPriceProps, contextRows } from './contextPrices';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { NativeServicesSummary } from '@shared/components/ServiceRoutesSummary';
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Field, Fold, Note, PanelFoot, Segmented } from '@shared/components/ui';
+import { Field, Fold, Note, OutcomeNote, PanelFoot, Segmented } from '@shared/components/ui';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import { DonationConnectorLabel } from './DonationConnectorLabel';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -254,26 +254,26 @@ export function DonationComposer({
   const donationNotice = notice?.trim() ? notice : t('user.charity.donationNoticeDefault');
   const formID = useId();
   const mutation = useCreateDonation();
+  const location = useLocation();
   const [description, setDescription] = useState(() => parseDraft(draftNamespace));
   const [publicThanks, setPublicThanks] = useState<'' | 'yes' | 'no'>('');
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(() =>
+    Boolean(new URLSearchParams(location.search).get('endpoint_id')),
+  );
   const controlCopy = charityControlCopy(useTranslation().i18n.language);
   const [selectedChoices, setSelectedChoices] = useState<readonly EndpointKeyChoice[]>([]);
   const [shares, setShares] = useState<Record<string, DonationShare>>({});
   const [expiryByKey, setExpiryByKey] = useState<Record<string, TimeDraft>>({});
   const [thresholdByKey, setThresholdByKey] = useState<Record<string, string>>({});
-  const [readBlocked, setReadBlocked] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [validation, setValidation] = useState('');
   const [success, setSuccess] = useState(false);
-  const [blockedAuthority, setBlockedAuthority] = useState<{ baselineGeneration: number } | null>(
-    null,
-  );
-  const authorityAdvanced =
-    blockedAuthority !== null && mutation.reconcileGeneration > blockedAuthority.baselineGeneration;
-  const waitingForAuthority = blockedAuthority !== null && !authorityAdvanced;
   const selectionMode = classifyDonationSelection(selectedChoices);
-  const locked = !enabled || mutation.isPending || mutation.isReconciling || waitingForAuthority;
+  const locked =
+    !enabled ||
+    mutation.isPending ||
+    mutation.outcome === 'unknown' ||
+    mutation.outcome === 'refresh-failed';
   const invalidSelection =
     selectedChoices.length === 0 ||
     selectedChoices.length > 100 ||
@@ -298,10 +298,9 @@ export function DonationComposer({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (locked || readBlocked) return;
+    if (locked) return;
     setValidation('');
     setSuccess(false);
-    setBlockedAuthority(null);
     mutation.reset();
     if (!validDonationDescription(description)) {
       setValidation(t('user.charity.descriptionInvalid'));
@@ -333,7 +332,6 @@ export function DonationComposer({
     }
     const keys = selectedChoices.map((choice) => {
       const failureDisableThreshold = thresholdByKey[choice.key.id] ?? '10';
-      if (!validFailureThreshold(failureDisableThreshold)) return undefined;
       const expiresAt = expiryByKey[choice.key.id]
         ? timeDraftValue(expiryByKey[choice.key.id])
         : null;
@@ -359,7 +357,9 @@ export function DonationComposer({
       keys: keys as CreateDonationInput['keys'],
       ownershipAuthorized: true,
     };
-    const baselineGeneration = mutation.reconcileGeneration;
+    await send(input);
+  };
+  const send = async (input: CreateDonationInput) => {
     try {
       await mutation.mutateAsync(input);
       setDescription('');
@@ -371,14 +371,7 @@ export function DonationComposer({
       setPublicThanks('');
       storeDraft(draftNamespace, '');
       setSuccess(true);
-      setBlockedAuthority({ baselineGeneration });
     } catch (error) {
-      if (isConflictError(error) || isResponseUnknown(error)) {
-        setSelectedChoices([]);
-        setExpiryByKey({});
-        setAuthorized(false);
-        setBlockedAuthority({ baselineGeneration });
-      }
       if (isConflictError(error)) setValidation(t('user.charity.reselectAfterConflict'));
     }
   };
@@ -420,7 +413,7 @@ export function DonationComposer({
                     </span>
                     <button
                       type="button"
-                      disabled={locked || readBlocked}
+                      disabled={locked}
                       aria-label={t('user.charity.presentation.removeKey', {
                         name:
                           choice.key.note ||
@@ -475,9 +468,8 @@ export function DonationComposer({
                 const next = { ...previous };
                 for (const choice of choices) {
                   if (next[choice.key.id]) continue;
-                  const mainstream = choice.endpoint.origin.kind === 'mainstream';
                   next[choice.key.id] = {
-                    services: mainstream ? (choice.key.nativeServices?.slice() ?? []) : [],
+                    services: choice.key.nativeServices?.slice() ?? [],
                   };
                 }
                 return next;
@@ -485,7 +477,6 @@ export function DonationComposer({
             }}
             disabled={locked}
             enabled={enabled}
-            onReadStateChange={setReadBlocked}
             renderSelected={(choice) => (
               <div className="economy-key-expiry">
                 <DonationShareFields
@@ -496,33 +487,35 @@ export function DonationComposer({
                     setShares((current) => ({ ...current, [choice.key.id]: value }))
                   }
                 />
-                <Field label={t('user.charity.keyExpiry')} help={t('user.charity.expiryHint')}>
-                  {(props) => (
-                    <TimeInput
-                      {...props}
-                      station="user"
-                      disabled={locked}
-                      draft={expiryByKey[choice.key.id] ?? createTimeDraft()}
-                      onChange={(update) =>
-                        setExpiryByKey((current) => ({
-                          ...current,
-                          [choice.key.id]: update(current[choice.key.id] ?? createTimeDraft()),
-                        }))
-                      }
-                      onClick={(event) => event.stopPropagation()}
-                      aria-label={t('user.charity.keyExpiryFor', {
-                        key: maskedKey(choice.key.displayHead, choice.key.displayTail),
-                      })}
-                    />
-                  )}
-                </Field>
-                <FailureThresholdInput
-                  value={thresholdByKey[choice.key.id] ?? '10'}
-                  disabled={locked}
-                  onChange={(value) =>
-                    setThresholdByKey((current) => ({ ...current, [choice.key.id]: value }))
-                  }
-                />
+                <Fold title={t('user.workflows.donationOptions')}>
+                  <Field label={t('user.charity.keyExpiry')} help={t('user.charity.expiryHint')}>
+                    {(props) => (
+                      <TimeInput
+                        {...props}
+                        station="user"
+                        disabled={locked}
+                        draft={expiryByKey[choice.key.id] ?? createTimeDraft()}
+                        onChange={(update) =>
+                          setExpiryByKey((current) => ({
+                            ...current,
+                            [choice.key.id]: update(current[choice.key.id] ?? createTimeDraft()),
+                          }))
+                        }
+                        onClick={(event) => event.stopPropagation()}
+                        aria-label={t('user.charity.keyExpiryFor', {
+                          key: maskedKey(choice.key.displayHead, choice.key.displayTail),
+                        })}
+                      />
+                    )}
+                  </Field>
+                  <FailureThresholdInput
+                    value={thresholdByKey[choice.key.id] ?? '10'}
+                    disabled={locked}
+                    onChange={(value) =>
+                      setThresholdByKey((current) => ({ ...current, [choice.key.id]: value }))
+                    }
+                  />
+                </Fold>
               </div>
             )}
           />
@@ -609,20 +602,25 @@ export function DonationComposer({
           </p>
         ) : null}
         <MutationNotice
-          error={authorityAdvanced ? null : mutation.error}
-          successKey={
-            success
-              ? 'user.charity.submitted'
-              : authorityAdvanced
-                ? 'user.charity.mutationReconciled'
-                : undefined
-          }
+          error={mutation.error}
+          successKey={success ? 'user.charity.submitted' : undefined}
         />
-        {waitingForAuthority && mutation.reconcileError ? (
-          <ErrorState
-            error={mutation.reconcileError}
-            onRetry={() => void mutation.retryReconcile()}
+        {mutation.outcome === 'unknown' && mutation.variables ? (
+          <button
+            type="button"
+            className="nb-btn nb-btn--secondary"
+            disabled={!enabled || mutation.isPending}
+            onClick={() => void send(mutation.variables!)}
+          >
+            {t('user.workflows.confirmDonation')}
+          </button>
+        ) : null}
+        {mutation.outcome === 'refresh-failed' ? (
+          <OutcomeNote
+            outcome={{ kind: 'savedRefreshFailed', recheck: () => void mutation.refresh() }}
           />
+        ) : mutation.refreshError ? (
+          <ErrorState error={mutation.refreshError} onRetry={() => void mutation.check()} />
         ) : null}
         <PanelFoot>
           <span>
@@ -632,13 +630,9 @@ export function DonationComposer({
             className="nb-btn nb-btn--primary"
             type="submit"
             form={formID}
-            disabled={
-              locked || readBlocked || invalidSelection || invalidExpiry || publicThanks === ''
-            }
+            disabled={locked || invalidSelection || invalidExpiry || publicThanks === ''}
           >
-            {mutation.isPending || mutation.isReconciling
-              ? t('common.working')
-              : t('user.charity.submit')}
+            {mutation.isPending ? t('common.working') : t('user.charity.submit')}
           </button>
         </PanelFoot>
       </div>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Fold, Note } from '@shared/components/ui';
+import { Field, Fold, Note } from '@shared/components/ui';
 import { NativeServicesField } from '@shared/components/NativeServicesField';
 import { NativeServicesSummary } from '@shared/components/ServiceRoutesSummary';
 import { useEndpointCreateOptions } from '../queries';
@@ -29,7 +29,7 @@ export function EntryScope(props: {
   return (
     <Fold
       lazy
-      title={t('common.connections.entryScope')}
+      title={t('user.workflows.editService')}
       open={props.open}
       onOpenChange={props.onOpenChange}
     >
@@ -44,10 +44,12 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
     (row) => row.connector_type === endpoint.connector_type,
   );
   const [services, setServices] = useState<NativeService[]>(endpoint.native_services ?? []);
+  const [note, setNote] = useState(endpoint.note);
   const [format, setFormat] = useState<RerankFormat | null>(endpoint.rerank_format || null);
   const [group, setGroup] = useState<string | null>(null);
   const [creatingConnection, setCreatingConnection] = useState(false);
   const [expectedRevision, setExpectedRevision] = useState(endpoint.revision);
+  const [baseline, setBaseline] = useState(endpoint);
   const operation = useMetadataOperation(
     accountId,
     '/api/endpoints/' + resourcePath(endpoint.id),
@@ -56,6 +58,8 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
     () => undefined,
     (saved) => {
       setExpectedRevision(saved.revision);
+      setBaseline(saved);
+      setNote(saved.note);
       setServices(saved.native_services ?? []);
       setFormat(saved.rerank_format || null);
       setGroup(null);
@@ -65,6 +69,11 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
     operation.isPending ||
     operation.outcome === 'unknown' ||
     operation.outcome === 'refresh-failed';
+  const dirty =
+    note !== baseline.note ||
+    Boolean(group) ||
+    JSON.stringify(services) !== JSON.stringify(baseline.native_services ?? []) ||
+    (format ?? '') !== (baseline.rerank_format ?? '');
   return (
     <div className="nb-stack">
       <form
@@ -73,29 +82,47 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
           event.preventDefault();
           void operation
             .mutateAsync({
-              native_services: services,
-              rerank_format: format ?? '',
+              ...(note !== baseline.note ? { note } : {}),
+              ...(JSON.stringify(services) !== JSON.stringify(baseline.native_services ?? [])
+                ? { native_services: services }
+                : {}),
+              ...((format ?? '') !== (baseline.rerank_format ?? '')
+                ? { rerank_format: format ?? '' }
+                : {}),
               ...(group ? { connection_id: group } : {}),
               expected_revision: expectedRevision,
             })
             .catch(() => undefined);
         }}
       >
+        <Field label={t('user.workflows.serviceName')}>
+          {(props) => (
+            <input
+              {...props}
+              value={note}
+              maxLength={2048}
+              disabled={locked}
+              onChange={(event) => setNote(event.target.value)}
+            />
+          )}
+        </Field>
         <NativeServicesSummary value={endpoint.native_services ?? []} />
         {endpoint.connection_id ? (
           <Link to={'/endpoints?connection_id=' + encodeURIComponent(endpoint.connection_id)}>
             {t('common.connections.backToConnection')}
           </Link>
         ) : null}
-        <NativeServicesField
-          options={allowed?.native_services ?? []}
-          value={services}
-          onChange={setServices}
-          rerankFormats={allowed?.rerank_formats}
-          rerankFormat={format}
-          onRerankFormatChange={setFormat}
-          disabled={locked}
-        />
+        <Fold title={t('common.connections.entryScope')}>
+          <NativeServicesField
+            options={allowed?.native_services ?? []}
+            value={services}
+            onChange={setServices}
+            rerankFormats={allowed?.rerank_formats}
+            rerankFormat={format}
+            onRerankFormatChange={setFormat}
+            disabled={locked}
+          />
+        </Fold>
         <Fold
           lazy
           title={t('common.connections.moveConnection')}
@@ -152,6 +179,7 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
             className="nb-btn nb-btn--secondary"
             onClick={() => {
               setExpectedRevision(endpoint.revision);
+              setBaseline(endpoint);
               operation.reset();
             }}
           >
@@ -161,7 +189,7 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
         <button
           type="submit"
           className="nb-btn nb-btn--primary"
-          disabled={locked || !services.length || operation.outcome === 'conflict'}
+          disabled={locked || !dirty || !services.length || operation.outcome === 'conflict'}
         >
           {t('common.connections.save')}
         </button>

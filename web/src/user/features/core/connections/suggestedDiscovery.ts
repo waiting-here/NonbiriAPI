@@ -1,6 +1,7 @@
 import { ApiError } from '@shared/query/http';
 import { connectionAPI } from './api';
 import type { DiscoverySource, DiscoverySourceInput } from './types';
+import { canonicalBaseURLPreview } from '../normalizers';
 
 export async function resolveSuggestedDiscovery(
   connectionId: string,
@@ -9,6 +10,7 @@ export async function resolveSuggestedDiscovery(
   key: string,
   signal: AbortSignal,
 ): Promise<DiscoverySource> {
+  input = { ...input, base_url: canonicalBaseURLPreview(input.base_url) };
   const changed = () => new ApiError('conflict', 'The credential changed.', 409);
   const credential = await connectionAPI.credential(input.credential_id, signal);
   if (!credential.enabled || credential.credential_version !== credentialVersion) throw changed();

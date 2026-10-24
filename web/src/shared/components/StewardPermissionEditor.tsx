@@ -186,7 +186,7 @@ function PermissionForm({
         )}
       </Field>
       {rows.length === 0 ? (
-        <EmptyState title={t('management.permissions.noMatches')} />
+        <EmptyState title={t('management.permissions.noMatches')} body={t('common.noResultsBody')} />
       ) : (
         <DataTable
           caption={t('management.permissions.title')}
