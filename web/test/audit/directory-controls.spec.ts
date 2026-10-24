@@ -159,12 +159,16 @@ test('administrator submits endpoint search, resets it and pages actual shared m
       });
     const page = await admin.newPage();
     await page.goto(state.admin_url + '/endpoints');
-    const search = page.getByRole('search');
+    const search = page.locator('.endpoint-management form.nb-filter');
+    const endpointTable = page.getByRole('table', {
+      name: commonEn.management.endpoints.title,
+      exact: true,
+    });
     await search
       .getByLabel(commonEn.management.endpoints.searchAria)
       .fill('directory.example.test');
     await search.getByRole('button', { name: commonEn.common.applyFilter, exact: true }).click();
-    await expect(page.locator('.ops-table tbody tr')).toHaveCount(1);
+    await expect(endpointTable.locator(':scope > tbody > tr')).toHaveCount(1);
     expect(
       (
         await read(
@@ -182,9 +186,14 @@ test('administrator submits endpoint search, resets it and pages actual shared m
     await page
       .getByRole('button', { name: commonEn.management.endpoints.showUsers, exact: true })
       .click();
-    const members = page.locator('.ops-table .ops-table');
+    const members = endpointTable.getByRole('table', {
+      name: commonEn.management.endpoints.users,
+      exact: true,
+    });
     await expect(members.locator('tbody tr')).toHaveCount(2);
-    const memberPager = page.getByRole('navigation', { name: 'Pagination', exact: true }).first();
+    const memberPager = endpointTable
+      .locator('tr.nb-table__detail')
+      .getByRole('navigation', { name: 'Pagination', exact: true });
     await expect(memberPager).toHaveText('2 items');
     await expect(memberPager.getByLabel(commonEn.common.pageControls.size)).toHaveCount(0);
     const result = await memberRead;
@@ -201,9 +210,7 @@ test('administrator submits endpoint search, resets it and pages actual shared m
     await expect(search.getByLabel(commonEn.management.endpoints.searchAria)).toHaveValue('');
     await expect(members).toHaveCount(0);
     expect(new URL(page.url()).searchParams.has('q')).toBe(false);
-    await expect(
-      page.locator('.ops-table tbody').getByText(baseURL, { exact: true }),
-    ).toBeVisible();
+    await expect(endpointTable.getByText(baseURL, { exact: true })).toBeVisible();
   } finally {
     await admin.close();
     await owner.close();
@@ -234,7 +241,8 @@ test('administrator labels and filters non-commercial aggregation gateways in bo
     try {
       const page = await context.newPage();
       await page.goto(state.admin_url + '/endpoints?q=gateway-classification.example.test');
-      await expect(page.locator('.ops-table tbody tr')).toHaveCount(1);
+      const endpointTable = page.getByRole('table', { name: words.title, exact: true });
+      await expect(endpointTable.locator(':scope > tbody > tr')).toHaveCount(1);
       const batch = page.locator('fieldset.endpoint-batch');
       await page
         .getByRole('checkbox', {
@@ -246,13 +254,13 @@ test('administrator labels and filters non-commercial aggregation gateways in bo
       const add = batch.getByRole('button', { name: words.addTag, exact: true });
       await add.focus();
       await page.keyboard.press('Enter');
-      await expect(page.getByRole('status')).toContainText(words.tagsSaved);
+      await expect(page.getByRole('status').filter({ hasText: words.tagsSaved })).toBeVisible();
       await page
-        .getByRole('search')
+        .locator('.endpoint-management form.nb-filter')
         .getByRole('combobox', { name: words.tags })
         .selectOption('noncommercial_gateway');
-      await expect(page.locator('.ops-table tbody tr')).toHaveCount(1);
-      await expect(page.locator('.ops-table tbody')).toContainText(words.tag.noncommercial_gateway);
+      await expect(endpointTable.locator(':scope > tbody > tr')).toHaveCount(1);
+      await expect(endpointTable).toContainText(words.tag.noncommercial_gateway);
       expect(new URL(page.url()).searchParams.get('tag')).toBe('noncommercial_gateway');
       if (process.env.NONBIRI_VISUAL_DIR) {
         for (const theme of ['light', 'dark'])
@@ -284,7 +292,7 @@ test('administrator labels and filters non-commercial aggregation gateways in bo
         .check();
       await batch.getByRole('combobox', { name: words.tags }).selectOption('noncommercial_gateway');
       await batch.getByRole('button', { name: words.removeTag, exact: true }).click();
-      await expect(page.locator('.ops-table tbody tr')).toHaveCount(0);
+      await expect(endpointTable.locator(':scope > tbody > tr')).toHaveCount(0);
       const result = await read(
         context,
         state.admin_url,
@@ -392,6 +400,7 @@ test('administrator filters donations and manages manual candidates', async ({ b
     await page.goto(state.admin_url + '/charity');
     await page.getByLabel(copy.donationHandling.search).fill(donation.description);
     await page
+      .locator('.charity-donation-search')
       .getByRole('button', { name: copy.donationHandling.applySearch, exact: true })
       .click();
     const filterDisclosure = page.locator('.charity-donations .nb-filter__more summary');

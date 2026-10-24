@@ -942,6 +942,11 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
         )
       ).data as DonationUse[];
       const chats = pending.filter((row) => row.native_service === 'chat_completions');
+      expect(pending).toHaveLength(12);
+      for (const row of pending) {
+        expect(row.pending).not.toBeNull();
+        expect(row.capabilities.can_review).toBe(true);
+      }
       expect(chats).toHaveLength(4);
       expect(chats.map((row) => row.donation_key_id).sort()).toEqual(
         members.map((row) => row.id).sort(),
@@ -977,7 +982,7 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
       const response = await approval;
       expect(response.status()).toBe(200);
       expect(response.request().postDataJSON()).toEqual({
-        items: chats.map((row) => ({
+        items: pending.map((row) => ({
           use_id: row.id,
           expected_revision: row.revision,
           expected_review_revision: row.pending!.expected_review_revision,
@@ -986,11 +991,11 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
         })),
       });
       expect(await response.json()).toEqual({
-        results: chats.map((row) => ({ use_id: row.id, ok: true })),
+        results: pending.map((row) => ({ use_id: row.id, ok: true })),
       });
       const prepared = await read(reviewContext, state.admin_url, donationPath);
       expect(prepared.status).toBe(original.status);
-      expect(prepared.use_summary.approved).toBe('4');
+      expect(prepared.use_summary.approved).toBe('12');
       expect(prepared.keys.map(snapshot)).toEqual(members.map(snapshot));
     } finally {
       await reviewContext.close();
@@ -1036,7 +1041,7 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
     );
     expect(denied.status()).toBe(403);
     const sourceState = page.getByRole('combobox', { name: workflow.keyState, exact: true }).last();
-    await expect(sourceState).toHaveValue('available');
+    await expect(sourceState).toHaveValue('all');
     await sourceState.selectOption('disabled');
     const browserSource = page
       .locator('.charity-source-browser__source-button')
@@ -1534,7 +1539,7 @@ test('level 5 reviews independent pending sources, retains receipts after refres
         expect(beforeCorrection.first_approval_origin).toBe('manual');
         expect(beforeCorrection.can_force_reject).toBe(true);
         expect(beforeCorrection.handling.state).toBe('processed');
-        expect(beforeCorrection.use_summary.approved).toBe('4');
+        expect(beforeCorrection.use_summary.approved).toBe('12');
         const preparedChats = (
           (
             await read(

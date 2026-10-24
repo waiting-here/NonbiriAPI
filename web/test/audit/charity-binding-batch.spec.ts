@@ -157,7 +157,12 @@ test('model-centric binding picker reaches bound keys through the general source
       .getByRole('button', { name: /Binding browser key 1/ })
       .click();
     await expect(picker.getByRole('checkbox', { name: /binding-up-0/ })).toBeDisabled();
-    await expect(picker.getByText(batch.boundHere, { exact: true })).toBeVisible();
+    await expect(
+      picker
+        .getByRole('checkbox', { name: /binding-up-0/ })
+        .locator('..')
+        .getByText(batch.boundHere, { exact: true }),
+    ).toBeVisible();
     expect(sourceReads.length).toBeGreaterThan(1);
     expect(sourceReads.every((url) => !url.searchParams.has('include_bound'))).toBe(true);
   } finally {
@@ -587,7 +592,12 @@ test('level 5 keeps its allowed manual targets and cannot open channel presets',
       .getByRole('button', { name: /Binding browser key 1/ })
       .click();
     await expect(picker.getByRole('checkbox', { name: /binding-up-0/ })).toBeDisabled();
-    await expect(picker.getByText(batch.boundHere, { exact: true })).toBeVisible();
+    await expect(
+      picker
+        .getByRole('checkbox', { name: /binding-up-0/ })
+        .locator('..')
+        .getByText(batch.boundHere, { exact: true }),
+    ).toBeVisible();
     await page.goto(state.user_url + '/steward?tab=charity');
     await expect(page.getByRole('link', { name: presets.title })).toBeVisible();
     await page.goto(state.user_url + '/charity/channel-presets');

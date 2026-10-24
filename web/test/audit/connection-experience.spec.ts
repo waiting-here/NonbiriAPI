@@ -1753,7 +1753,9 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
       .getByRole('button', { name: c.addEntry, exact: true })
       .click();
     const form = page.getByRole('region', { name: c.addEntry, exact: true });
-    await form.getByRole('radio', { name: c.mainstream, exact: true }).check();
+    const mainstreamMode = form.getByRole('radio', { name: c.mainstream, exact: true });
+    await form.locator('.nb-seg').getByText(c.mainstream, { exact: true }).click();
+    await expect(mainstreamMode).toBeChecked();
     await form.getByRole('combobox', { name: c.mainstream, exact: true }).selectOption(channel.id);
     const entryChoices = await openFold(form, c.entries);
     for (const [index, item] of channel.entries.entries()) {

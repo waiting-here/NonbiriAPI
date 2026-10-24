@@ -78,18 +78,24 @@ test('admin and level 6 configure actual level-5 permissions while the shared UI
         for (const width of [1440, 390]) {
           await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
           await page
-            .getByRole('heading', { name: copy.management.permissions.title, exact: true })
+            .getByRole('slider', { name: copy.management.permissions.scope.title, exact: true })
             .scrollIntoViewIfNeeded();
           expect(
             await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
           ).toBe(true);
-          await page.screenshot({ path: resolve(visual, `permissions-${theme}-${width}.png`) });
+          await page.screenshot({
+            path: resolve(visual, `permissions-${theme}-${width}.png`),
+            animations: 'disabled',
+          });
         }
       }
       await page
         .getByRole('heading', { name: copy.management.permissions.limitsTitle })
         .scrollIntoViewIfNeeded();
-      await page.screenshot({ path: resolve(visual, 'permission-limits-mobile.png') });
+      await page.screenshot({
+        path: resolve(visual, 'permission-limits-mobile.png'),
+        animations: 'disabled',
+      });
     }
     await page.getByRole('button', { name: copy.management.permissions.none, exact: true }).click();
     await page.getByRole('button', { name: copy.management.permissions.save, exact: true }).click();
@@ -188,11 +194,12 @@ test('admin and level 6 configure actual level-5 permissions while the shared UI
         headers: { Origin: state.admin_url, 'Idempotency-Key': randomUUID() },
         data: {
           expected_revision: current.revision,
+          donation_scope: original.donation_scope,
           permissions: original.permissions,
           limits: original.limits,
         },
       });
-      expect(restored.ok()).toBe(true);
+      expect.soft(restored.ok(), `Restore permission policy: HTTP ${restored.status()}`).toBe(true);
     } finally {
       await Promise.all([admin.close(), steward.close(), senior.close()]);
     }
