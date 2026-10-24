@@ -16,6 +16,7 @@ import { automaticRestrictions } from '@shared/operations/restrictions';
 import { oneOf } from '@shared/operations/wire';
 import { ApiError } from '@shared/query/http';
 import { normalizeRolePolicy } from '@shared/rolePolicy';
+import { normalizeStewardPermissions } from '@shared/operations/stewardPermissions';
 import { normalizeTransportRule } from '@shared/transportRule';
 import { normalizeAnnouncementSummary } from '../operations/data';
 import {
@@ -589,7 +590,7 @@ export function normalizeUserProfile(value: unknown): UserProfile {
     'updated_at',
     'usage',
   ] as const;
-  const record = responseRecord(value, fields, [], 'user profile');
+  const record = responseRecord(value, fields, ['steward_permissions'], 'user profile');
   const lang = record.lang;
   if (lang !== '' && lang !== 'zh' && lang !== 'en') invalid('account language');
   if (
@@ -650,6 +651,11 @@ export function normalizeUserProfile(value: unknown): UserProfile {
     game_balance: creditAmount(record.game_balance, 'game balance', true),
     donation_credit: creditAmount(record.donation_credit, 'donation credit', false),
     effective_level: record.effective_level as UserProfile['effective_level'],
+    ...(record.steward_permissions === undefined
+      ? {}
+      : {
+          steward_permissions: normalizeStewardPermissions(record.steward_permissions),
+        }),
     level_display_name: scalarString(record.level_display_name, 'level display name', {
       allowEmpty: true,
     }),

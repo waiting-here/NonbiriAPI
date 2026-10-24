@@ -77,6 +77,31 @@ describe('station session identity', () => {
     client.clear();
   });
 
+  it('invalidates sensitive state when the same steward receives a new permission revision', () => {
+    const client = new QueryClient();
+    const update = (revision: string) => {
+      const value = {
+        user: {
+          id: '7',
+          username: 'sample',
+          effective_level: 5,
+          steward_permissions: { revision },
+        },
+      };
+      const serial = beginManagementSessionRequest(client, 'steward');
+      expect(noteManagementSessionSuccess(client, 'steward', value, serial)).toBe(true);
+      client.setQueryData(['user', 'session'], value);
+    };
+    update('0');
+    const snapshot = captureStationSession(client, 'steward');
+    client.setQueryData(['user', 'operations', 'user', '7', '8'], 'previous access');
+    update('1');
+    expect(stationSessionMatches(client, 'steward', snapshot)).toBe(false);
+    expect(client.getQueryData(['user', 'operations', 'user', '7', '8'])).toBeUndefined();
+    expect(client.getQueryData(['user', 'session'])).toBeTruthy();
+    client.clear();
+  });
+
   it('retains the station on transport failures and domain rejection, but clears authoritative authentication failures', async () => {
     const client = new QueryClient();
     login(client);

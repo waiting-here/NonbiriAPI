@@ -1,7 +1,12 @@
 import { Button } from '@shared/components/ui/Button';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { isApiError, isForbidden, isUnauthorized } from '@shared/query/http';
+import {
+  isApiError,
+  isForbidden,
+  isUnauthorized,
+  isStewardPermissionDenied,
+} from '@shared/query/http';
 import { usePublicConfig } from '@shared/query/publicConfig';
 import { Icon, type IconName } from './Icon';
 import '../operations/pagePagination.css';
@@ -113,6 +118,7 @@ export function EmptyState({ title, body, action }: EmptyStateProps) {
 
 function errorMessage(error: unknown, translate: (key: string) => string): string {
   if (isUnauthorized(error)) return translate('common.authRequired');
+  if (isStewardPermissionDenied(error)) return translate('management.permissions.denied');
   if (isApiError(error) && error.code === 'elevated_required')
     return translate('common.elevationRequired');
   if (isForbidden(error)) return translate('common.forbidden');

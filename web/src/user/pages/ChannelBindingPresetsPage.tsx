@@ -1,12 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useTranslation } from 'react-i18next';
+import { hasStewardPermission } from '@shared/operations/stewardPermissions';
+import { StewardPermissionNotice } from '@shared/components/StewardPermissionNotice';
 import { ChannelBindingPresets } from '@shared/components/charity/ChannelBindingPresets';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { useUserSession } from '../data';
 import { UserPageGate } from '../components/UserPageGate';
 import '@shared/operations/operations.css';
 export function ChannelBindingPresetsPage() {
-  const { t } = useTranslation();
   const session = useUserSession();
   const client = useQueryClient();
   if (session.isPending) return <LoadingState />;
@@ -14,7 +14,7 @@ export function ChannelBindingPresetsPage() {
     return <ErrorState error={session.error} onRetry={() => void session.refetch()} />;
   return (
     <UserPageGate>
-      {session.data?.user.effective_level === 6 ? (
+      {session.data && hasStewardPermission(session.data.user, 'charity.presets') ? (
         <ChannelBindingPresets
           key={session.data.user.id}
           role="steward"
@@ -25,7 +25,7 @@ export function ChannelBindingPresetsPage() {
         />
       ) : (
         <div className="page">
-          <p role="alert">{t('common.bindingPresets.accessDenied')}</p>
+          <StewardPermissionNotice />
         </div>
       )}
     </UserPageGate>

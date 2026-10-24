@@ -52,6 +52,7 @@ export interface UsageSummary {
 }
 
 export interface UserProfile {
+  steward_permissions?: import('@shared/operations/stewardPermissions').StewardPermissions;
   id: string;
   username: string;
   avatar: string | null;
