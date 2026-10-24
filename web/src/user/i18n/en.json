@@ -3606,7 +3606,6 @@
       "filters": "Filters",
       "removeFilter": "Remove {{label}} filter",
       "more": "More actions",
-      "editName": "Edit name",
       "modelsUsing": "Models using this service",
       "viewModels": "View models",
       "keyLimits": "Limits",
@@ -3687,6 +3686,21 @@
       "intensityVivid": "Vivid",
       "intensityBalanced": "Balanced",
       "intensityFocus": "Focused reading"
+    },
+    "workflows": {
+      "addService": "Add service",
+      "editService": "Edit service",
+      "serviceName": "Service name",
+      "defaultServiceName": "My service",
+      "serviceReady": "Your service is ready. Choose models to use it or share it as a donation.",
+      "continueSetup": "Completed steps are saved. Continue to finish setting up this service.",
+      "continueService": "Continue setup",
+      "useModels": "Choose models for my use",
+      "donateService": "Donate this service",
+      "manualModelHelp": "Enter a model name provided by this service, then choose which services it supports.",
+      "donationOptions": "Expiry and failure settings",
+      "confirmDonation": "Confirm this submission",
+      "discoverModels": "Discover models from this service"
     }
   },
   "games": {

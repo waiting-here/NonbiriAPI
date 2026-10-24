@@ -3606,7 +3606,6 @@
       "filters": "筛选",
       "removeFilter": "移除{{label}}筛选",
       "more": "更多操作",
-      "editName": "编辑名称",
       "modelsUsing": "正在使用它的模型",
       "viewModels": "查看模型",
       "keyLimits": "限制",
@@ -3687,6 +3686,21 @@
       "intensityVivid": "鲜明",
       "intensityBalanced": "均衡",
       "intensityFocus": "专注阅读"
+    },
+    "workflows": {
+      "addService": "添加服务",
+      "editService": "编辑服务",
+      "serviceName": "服务名称",
+      "defaultServiceName": "我的服务",
+      "serviceReady": "服务已就绪。选择模型供自己使用，也可以将服务捐赠给公益。",
+      "continueSetup": "已完成的步骤已保存，可以继续完成服务设置。",
+      "continueService": "继续设置",
+      "useModels": "选择自用模型",
+      "donateService": "捐赠此服务",
+      "manualModelHelp": "填写此服务提供的模型名称，再选择它支持的服务。",
+      "donationOptions": "有效期与失败设置",
+      "confirmDonation": "确认这次提交",
+      "discoverModels": "从此服务发现模型"
     }
   },
   "games": {

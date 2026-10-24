@@ -57,6 +57,31 @@ const run = () =>
   );
 
 describe('suggested discovery catalogs', () => {
+  it('reuses the same canonical source when its entered address has a default port or trailing slash', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (url, init) => {
+        expect(init?.method ?? 'GET').toBe('GET');
+        const parsed = new URL(String(url), 'https://app.example');
+        if (parsed.pathname === '/api/credentials/8') return json(credential);
+        expect(parsed.searchParams.get('q')).toBe(input.base_url);
+        return page([source]);
+      }),
+    );
+    await expect(
+      executeConnection(
+        {
+          kind: 'discovery_source',
+          connectionId: '9',
+          input: { ...input, base_url: ' https://CATALOG.example:443/v1/ ' },
+          suggestedCredentialVersion: '2',
+        },
+        undefined,
+        'ABCDEFGHIJKLMNOPQRSTUV',
+        new AbortController().signal,
+      ),
+    ).resolves.toEqual({ kind: 'discovery_source', source });
+  });
   it('finds an exact available version across pages without changing existing catalogs', async () => {
     const calls: string[] = [];
     vi.stubGlobal(

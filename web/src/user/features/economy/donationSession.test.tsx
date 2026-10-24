@@ -121,6 +121,6 @@ describe('donation commands bind the initiating account', () => {
     });
     expect(success).not.toHaveBeenCalled();
     expect(client.getQueryData(economyKeys.charityCapability)).toEqual({ marker: 'new-account' });
-    expect(view.result.current.reconcileGeneration).toBe(0);
+    expect(view.result.current.outcome).toBe('idle');
   });
 });

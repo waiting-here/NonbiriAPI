@@ -226,17 +226,26 @@ function withPickerChoices(
 }
 
 function createMutation(error: ApiError) {
-  return {
+  const mutation = {
     data: undefined,
     error: error as unknown,
     isPending: false,
+    outcome: 'idle' as string,
+    variables: undefined as unknown,
+    refreshError: null as unknown,
+    refresh: vi.fn(async () => undefined),
     reconcileGeneration: 0,
     reconcileError: null as unknown,
     isReconciling: false,
-    retryReconcile: vi.fn(() => Promise.resolve()),
+    retryReconcile: vi.fn(async () => undefined),
     reset: vi.fn(),
-    mutateAsync: vi.fn(() => Promise.reject(error)),
+    mutateAsync: vi.fn(async (input: unknown) => {
+      mutation.variables = structuredClone(input);
+      mutation.outcome = error.status === 409 ? 'conflict' : 'unknown';
+      throw error;
+    }),
   };
+  return mutation;
 }
 
 function successfulMutation(reconcileError: ApiError | null = null) {
@@ -244,6 +253,13 @@ function successfulMutation(reconcileError: ApiError | null = null) {
     data: undefined,
     error: null,
     isPending: false,
+    outcome: 'idle' as string,
+    refreshError: reconcileError as unknown,
+    refresh: vi.fn(async () => {
+      mutation.outcome = 'confirmed';
+      mutation.refreshError = null;
+      mutation.reconcileGeneration += 1;
+    }),
     reconcileGeneration: 0,
     reconcileError: reconcileError as unknown,
     isReconciling: false,
@@ -253,6 +269,7 @@ function successfulMutation(reconcileError: ApiError | null = null) {
     }),
     reset: vi.fn(),
     mutateAsync: vi.fn(async () => {
+      mutation.outcome = reconcileError ? 'refresh-failed' : 'confirmed';
       if (reconcileError) {
         mutation.reconcileError = reconcileError;
       } else {
@@ -456,183 +473,74 @@ describe('donation composer recovery', () => {
     expect(screen.getByText(charityCopy.donationNoticeDefault)).toBeVisible();
   });
 
-  it('keeps the actual page draft namespace and unknown lock independent of announcement epoch', async () => {
-    const unknown = createMutation(new ApiError('network_error', 'response lost', 0));
-    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(unknown as never);
-    vi.mocked(economyQueries.useCharityCapability).mockReturnValue({
-      data: CHARITY_OPEN,
-      error: null,
-      isPending: false,
-      refetch: vi.fn(),
-    } as never);
-    const rendered = await renderWithProviders(withPickerChoices(<CharityPage />), {
-      station: 'user',
-      role: 'user',
-    });
-    expect(
-      within(screen.getByRole('complementary')).getByRole('heading', {
-        name: 'True Charity',
-      }),
-    ).toBeVisible();
-    await rendered.user.click(screen.getByRole('tab', { name: 'Donate my keys' }));
-    const checkboxes = donationCheckboxes();
-    await rendered.user.type(screen.getByRole('textbox'), 'account-scoped draft');
-    await clickDonationCheckbox(rendered.user, checkboxes[0]);
-    await clickDonationCheckbox(rendered.user, checkboxes[1]);
-    await declinePublicThanks(rendered.user);
-    await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
-    expect(screen.getByRole('button', { name: /submit for review/i })).toBeDisabled();
-    expect(sessionStorage.getItem('nonbiri:charity-donation-draft:v1:7')).toBe(
-      JSON.stringify({ description: 'account-scoped draft' }),
-    );
-
-    pageMocks.usePublicConfig.mockReturnValue({
-      data: { announcementEpoch: 'announcement-2' },
-    });
-    rendered.rerender(<CharityPage />);
-    expect(screen.getByRole('textbox')).toHaveValue('account-scoped draft');
-    expect(screen.getByRole('button', { name: /submit for review/i })).toBeDisabled();
-    expect(unknown.mutateAsync).toHaveBeenCalledTimes(1);
-
-    await rendered.user.click(screen.getByRole('tab', { name: 'Shared models' }));
-    await rendered.user.click(screen.getByRole('tab', { name: 'Donate my keys' }));
-    expect(screen.getByRole('textbox')).toHaveValue('account-scoped draft');
-    expect(screen.getByRole('button', { name: /submit for review/i })).toBeDisabled();
-
-    unknown.reconcileGeneration = 1;
-    rendered.rerender(<CharityPage />);
-    expect(screen.getByText(charityCopy.mutationReconciled)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /submit for review/i })).toBeDisabled();
-    const recoveredCheckboxes = donationCheckboxes();
-    await clickDonationCheckbox(rendered.user, recoveredCheckboxes[0]);
-    await clickDonationCheckbox(rendered.user, recoveredCheckboxes[1]);
-    await declinePublicThanks(rendered.user);
-    expect(screen.getByRole('button', { name: /submit for review/i })).toBeEnabled();
-  });
-
-  it('preserves only the description and requires key/ownership reconfirmation after 409', async () => {
-    const conflict = createMutation(new ApiError('conflict', 'revision changed', 409));
-    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(conflict as never);
-    const rendered = await renderWithProviders(
-      withPickerChoices(<DonationComposer draftNamespace="account-7" />),
-      { station: 'user', role: 'user' },
-    );
-    const user = rendered.user;
-    const description = screen.getByRole('textbox');
-    const checkboxes = donationCheckboxes();
-    await user.type(description, 'safe description');
-    await clickDonationCheckbox(user, checkboxes[0]);
-    await clickDonationCheckbox(user, checkboxes[1]);
-    await declinePublicThanks(user);
-    await user.click(screen.getByRole('button', { name: /submit for review/i }));
-    expect(conflict.mutateAsync).toHaveBeenCalledTimes(1);
-    expect(description).toHaveValue('safe description');
-    expect(checkboxes[0]).not.toBeChecked();
-    expect(checkboxes[1]).not.toBeChecked();
-    expect(sessionStorage.getItem('nonbiri:charity-donation-draft:v1:account-7')).toBe(
-      JSON.stringify({ description: 'safe description' }),
-    );
-    expect(JSON.stringify(sessionStorage)).not.toMatch(/61|ownership|secret/i);
-  });
-
-  it('keeps an unknown create locked across an unrelated announcement epoch and unlocks on a same-value GET generation', async () => {
-    const unknown = createMutation(new ApiError('network_error', 'response lost', 0));
-    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(unknown as never);
-    const Host = ({ announcementEpoch }: { announcementEpoch: string }) => (
-      <section data-announcement-epoch={announcementEpoch}>
-        {withPickerChoices(<DonationComposer draftNamespace="account-8" />)}
+  it('retains an unknown submission across announcement changes and retries the same intent', async () => {
+    const mutation = createMutation(new ApiError('network_error', 'response lost', 0));
+    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
+    const Host = ({ epoch }: { epoch: string }) => (
+      <section data-epoch={epoch}>
+        {withPickerChoices(<DonationComposer draftNamespace="account-recovery" />)}
       </section>
     );
-    const rendered = await renderWithProviders(<Host announcementEpoch="announcement-1" />, {
+    const view = await renderWithProviders(<Host epoch="first" />, {
       station: 'user',
       role: 'user',
     });
-    const user = rendered.user;
+    await view.user.type(screen.getByRole('textbox', { name: /donation description/i }), 'keep the original intent');
     const checkboxes = donationCheckboxes();
-    await user.type(screen.getByRole('textbox'), 'one intent');
-    await clickDonationCheckbox(user, checkboxes[0]);
-    await clickDonationCheckbox(user, checkboxes[1]);
-    await declinePublicThanks(user);
-    const submit = screen.getByRole('button', { name: /submit for review/i });
-    await user.click(submit);
-    expect(submit).toBeDisabled();
-    rendered.rerender(<Host announcementEpoch="announcement-2" />);
-    expect(screen.getByRole('textbox')).toHaveValue('one intent');
-    expect(submit).toBeDisabled();
-    await user.click(submit);
-    expect(unknown.mutateAsync).toHaveBeenCalledTimes(1);
-    unknown.reconcileGeneration = 1;
-    rendered.rerender(<Host announcementEpoch="announcement-2" />);
-    expect(screen.getByText(charityCopy.mutationReconciled)).toBeInTheDocument();
-    expect(submit).toBeDisabled();
-    const refreshedCheckboxes = donationCheckboxes();
-    await clickDonationCheckbox(user, refreshedCheckboxes[0]);
-    await clickDonationCheckbox(user, refreshedCheckboxes[1]);
-    await declinePublicThanks(user);
-    expect(submit).toBeEnabled();
-    await user.click(screen.getByRole('button', { name: /submit for review/i }));
-    expect(unknown.mutateAsync).toHaveBeenCalledTimes(2);
+    await clickDonationCheckbox(view.user, checkboxes[0]);
+    await clickDonationCheckbox(view.user, checkboxes[1]);
+    await declinePublicThanks(view.user);
+    await view.user.click(screen.getByRole('button', { name: /submit for review/i }));
+    const original = structuredClone(mutation.mutateAsync.mock.calls[0]![0]);
+    view.rerender(<Host epoch="second" />);
+    expect(screen.getByRole('textbox', { name: /donation description/i })).toHaveValue('keep the original intent');
+    expect(checkboxes[0]).toBeChecked();
+    expect(checkboxes[1]).toBeChecked();
+    expect(screen.getByRole('button', { name: /submit for review/i })).toBeDisabled();
+    await view.user.click(
+      screen.getByRole('button', { name: userEn.user.workflows.confirmDonation }),
+    );
+    expect(mutation.mutateAsync.mock.calls[1]![0]).toEqual(original);
   });
 
-  it('keeps create blocked on a failed authority GET and retries only the GET', async () => {
-    const unknown = createMutation(new ApiError('network_error', 'response lost', 0));
-    unknown.reconcileError = new ApiError('network_error', 'refresh failed', 0);
-    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(unknown as never);
-    const rendered = await renderWithProviders(
-      withPickerChoices(<DonationComposer draftNamespace="account-8b" />),
+  it('preserves selected keys, authorization and description after an explicit conflict', async () => {
+    const mutation = createMutation(new ApiError('conflict', 'revision changed', 409));
+    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
+    const view = await renderWithProviders(
+      withPickerChoices(<DonationComposer draftNamespace="conflict" />),
       { station: 'user', role: 'user' },
     );
+    await view.user.type(screen.getByRole('textbox', { name: /donation description/i }), 'keep my draft');
     const checkboxes = donationCheckboxes();
-    await rendered.user.type(screen.getByRole('textbox'), 'one intent');
-    await clickDonationCheckbox(rendered.user, checkboxes[0]);
-    await clickDonationCheckbox(rendered.user, checkboxes[1]);
-    await declinePublicThanks(rendered.user);
-    await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
-    expect(screen.getByRole('button', { name: /submit for review/i })).toBeDisabled();
-    await rendered.user.click(screen.getByRole('button', { name: /retry/i }));
-    expect(unknown.retryReconcile).toHaveBeenCalledTimes(1);
-    expect(unknown.mutateAsync).toHaveBeenCalledTimes(1);
-
-    unknown.reconcileError = null;
-    unknown.reconcileGeneration = 1;
-    rendered.rerender(withPickerChoices(<DonationComposer draftNamespace="account-8b" />));
-    expect(screen.getByText(charityCopy.mutationReconciled)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /submit for review/i })).toBeDisabled();
-    const recoveredCheckboxes = donationCheckboxes();
-    await clickDonationCheckbox(rendered.user, recoveredCheckboxes[0]);
-    await clickDonationCheckbox(rendered.user, recoveredCheckboxes[1]);
-    await declinePublicThanks(rendered.user);
-    expect(screen.getByRole('button', { name: /submit for review/i })).toBeEnabled();
+    await clickDonationCheckbox(view.user, checkboxes[0]);
+    await clickDonationCheckbox(view.user, checkboxes[1]);
+    await declinePublicThanks(view.user);
+    await view.user.click(screen.getByRole('button', { name: /submit for review/i }));
+    expect(screen.getByRole('textbox', { name: /donation description/i })).toHaveValue('keep my draft');
+    expect(checkboxes[0]).toBeChecked();
+    expect(checkboxes[1]).toBeChecked();
+    const remove = screen.getByRole('button', { name: /remove/i });
+    expect(remove).toBeEnabled();
   });
 
-  it('does not submit while the picker read is blocked, then resumes after the read recovers', async () => {
+  it('can remove and submit selected keys while unrelated picker reads fail', async () => {
     pickerHarness.readBlocked = true;
     const mutation = successfulMutation();
     vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
-    const rendered = await renderWithProviders(
-      withPickerChoices(<DonationComposer draftNamespace="account-read-blocked" />),
+    const view = await renderWithProviders(
+      withPickerChoices(<DonationComposer draftNamespace="browse-failed" />),
       { station: 'user', role: 'user' },
     );
-    const user = rendered.user;
-    await user.type(
-      screen.getByRole('textbox', { name: /donation description/i }),
-      'Shared resource',
-    );
-    await clickDonationCheckbox(user, screen.getByLabelText('Select resource key 61'));
-    await clickDonationCheckbox(user, donationCheckboxes()[1]);
-    await declinePublicThanks(user);
+    await view.user.type(screen.getByRole('textbox', { name: /donation description/i }), 'selected valid resource');
+    const checkboxes = donationCheckboxes();
+    await clickDonationCheckbox(view.user, checkboxes[0]);
+    await clickDonationCheckbox(view.user, checkboxes[1]);
+    await declinePublicThanks(view.user);
+    expect(screen.getByRole('button', { name: /remove/i })).toBeEnabled();
     const submit = screen.getByRole('button', { name: /submit for review/i });
-    expect(submit).toBeDisabled();
-    await user.click(submit);
-    expect(mutation.mutateAsync).not.toHaveBeenCalled();
-
-    pickerHarness.readBlocked = false;
-    rendered.rerender(
-      withPickerChoices(<DonationComposer draftNamespace="account-read-blocked" />),
-    );
-    await waitFor(() => expect(submit).toBeEnabled());
-    await user.click(submit);
-    await waitFor(() => expect(mutation.mutateAsync).toHaveBeenCalledTimes(1));
+    expect(submit).toBeEnabled();
+    await view.user.click(submit);
+    expect(mutation.mutateAsync).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the page composer unwritable while hidden and restores its draft on return', async () => {
@@ -651,7 +559,7 @@ describe('donation composer recovery', () => {
     });
     const user = rendered.user;
     await user.click(screen.getByRole('tab', { name: 'Donate my keys' }));
-    const description = screen.getByRole('textbox');
+    const description = screen.getByRole('textbox', { name: /donation description/i });
     await user.type(description, 'draft kept while hidden');
     const keyCheckbox = screen.getByLabelText('Select resource key 61');
     await clickDonationCheckbox(user, keyCheckbox);
@@ -700,11 +608,11 @@ describe('donation composer recovery', () => {
     expect(mutation.reconcileGeneration).toBe(0);
     expect(submit).toBeDisabled();
     expect(keyCheckbox).toBeDisabled();
-    const retry = screen.getByRole('button', { name: /retry/i });
+    const retry = screen.getByRole('button', { name: 'Check again' });
     expect(retry).toBeVisible();
 
     await user.click(retry);
-    expect(mutation.retryReconcile).toHaveBeenCalledTimes(1);
+    expect(mutation.refresh).toHaveBeenCalledTimes(1);
     expect(mutation.mutateAsync).toHaveBeenCalledTimes(1);
     expect(mutation.reconcileGeneration).toBe(1);
 
@@ -750,7 +658,7 @@ describe('donation composer recovery', () => {
         keys: [
           {
             endpointKeyId: '61',
-            nativeServices: ['chat_completions'],
+            nativeServices: ['chat_completions', 'responses'],
             credentialId: '81',
             credentialVersion: '1',
             grantRevision: '1',
@@ -779,9 +687,9 @@ describe('donation composer recovery', () => {
       ]),
       { station: 'user', role: 'user' },
     );
-    expect(screen.getByRole('textbox')).toHaveValue('return-safe draft');
+    expect(screen.getByRole('textbox', { name: /donation description/i })).toHaveValue('return-safe draft');
     rendered.rerender(withPickerChoices(<DonationComposer draftNamespace="account-10" />));
-    expect(screen.getByRole('textbox')).toHaveValue('return-safe draft');
+    expect(screen.getByRole('textbox', { name: /donation description/i })).toHaveValue('return-safe draft');
     expect(rendered.container.querySelector('input[type="password"]')).toBeNull();
   });
 
@@ -856,7 +764,7 @@ describe('donation composer recovery', () => {
     );
   });
 
-  it('defaults mainstream donations without a catalog to available services only and leaves custom sharing explicit', async () => {
+  it('defaults mainstream donations without a catalog to available services only and custom donations to their authorized services', async () => {
     vi.mocked(economyQueries.useCreateDonation).mockReturnValue(successfulMutation() as never);
     const rendered = await renderWithProviders(
       withPickerChoices(<DonationComposer draftNamespace="defaults-without-catalog" />, [
@@ -873,8 +781,8 @@ describe('donation composer recovery', () => {
     expect(screen.queryByRole('checkbox', { name: 'Share this catalog' })).toBeNull();
     await rendered.user.click(screen.getByLabelText('Select resource key 62'));
     await rendered.user.click(screen.getByLabelText('Select resource key 61'));
-    expect(screen.getByRole('checkbox', { name: 'Chat completions' })).not.toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Responses' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
   });
 
   it('requires a pure mainstream channel or a custom-only selection', async () => {
@@ -967,7 +875,7 @@ describe('donation composer recovery', () => {
         keys: [
           {
             endpointKeyId: '61',
-            nativeServices: ['chat_completions'],
+            nativeServices: ['chat_completions', 'responses'],
             credentialId: '81',
             credentialVersion: '1',
             grantRevision: '1',
@@ -1159,7 +1067,7 @@ describe('donation composer recovery', () => {
         expect(screen.getByText(charityCopy.presentation.modelSetupHelp)).toBeVisible();
       }
       await rendered.user.click(screen.getByRole('button', { name: /edit/i }));
-      const description = screen.getByRole('textbox');
+      const description = screen.getByRole('textbox', { name: /donation description/i });
       await rendered.user.clear(description);
       await rendered.user.type(description, 'preserved safe edit');
       await rendered.user.click(screen.getByRole('button', { name: /save/i }));
@@ -1175,7 +1083,7 @@ describe('donation composer recovery', () => {
       conflict.reconcileGeneration = 1;
       conflict.reconcileError = null;
       rendered.rerender(<DonationCard donation={donation} showDetailLink={showDetailLink} />);
-      expect(screen.getByRole('textbox')).toHaveValue('preserved safe edit');
+      expect(screen.getByRole('textbox', { name: /donation description/i })).toHaveValue('preserved safe edit');
       expect(screen.getByRole('button', { name: /save/i })).toBeEnabled();
       expect(screen.getByText(charityCopy.mutationReconciled)).toBeInTheDocument();
     },

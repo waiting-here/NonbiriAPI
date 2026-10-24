@@ -11,10 +11,9 @@ import { ConnectorLabel, CoreErrorPanel, CoreLoading } from '../components';
 import type { UserProfile } from '../types';
 import { ConnectionResourceList, connectionKeys } from './ResourceList';
 import { connectionAPI } from './api';
-import { ConnectionCreateForm } from './ConnectionForm';
+import { ServiceCreateForm } from './ServiceCreateForm';
 import { ConnectionEditor } from './ConnectionEditor';
 import { ConnectionSummary } from './ConnectionSummary';
-import { EntryForm } from './EntryForm';
 import { CredentialsPanel } from './CredentialsPanel';
 import { DiscoveryPanel } from './DiscoveryPanel';
 import { DiscoverySourceDetail } from './DiscoverySourceDetail';
@@ -59,7 +58,7 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
     return <ConnectionDetail key={user.id + ':' + selected} accountId={user.id} id={selected} />;
   const createButton = (
     <button type="button" className="nb-btn nb-btn--primary" onClick={() => setCreating(true)}>
-      {t('common.connections.addConnection')}
+      {t('user.workflows.addService')}
     </button>
   );
   return (
@@ -74,18 +73,10 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
         <ExpandablePanel
           open
           onClose={close}
-          title={t('common.connections.addConnection')}
+          title={t('user.workflows.addService')}
           closeLabel={t('common.connections.close')}
         >
-          <ConnectionCreateForm
-            accountId={user.id}
-            onSaved={(value) => {
-              setCreating(false);
-              setParams(
-                new URLSearchParams(connectionURL(location.search, value.id).split('?')[1]),
-              );
-            }}
-          />
+          <ServiceCreateForm accountId={user.id} />
         </ExpandablePanel>
       ) : null}
       <ConnectionResourceList
@@ -244,7 +235,7 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
               title={t('common.connections.addEntry')}
               closeLabel={t('common.connections.close')}
             >
-              <EntryForm accountId={accountId} connectionId={id} />
+              <ServiceCreateForm accountId={accountId} connection={connection.data} />
             </ExpandablePanel>
           ) : null}
           <ConnectionResourceList

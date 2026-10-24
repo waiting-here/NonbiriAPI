@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider, QueryObserver, useQuery } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -124,17 +124,6 @@ const OWNER_ACCOUNT_ID = '7';
 
 function ownerDonationsPageKey(page: string, pageSize = 20) {
   return [...economyKeys.donations, 'pages', OWNER_ACCOUNT_ID, '', '', page, pageSize] as const;
-}
-
-function endpointChoicesPageKey(page: string, pageSize = 20) {
-  return [
-    ...economyKeys.endpointChoicesRoot,
-    OWNER_ACCOUNT_ID,
-    'endpoints',
-    '',
-    page,
-    pageSize,
-  ] as const;
 }
 
 function deferred<T>() {
@@ -430,47 +419,60 @@ describe('activity query authority recovery', () => {
     },
   );
 
-  it.each([
-    ['409 conflict', new ApiError('conflict', 'revision changed', 409)],
-    ['response unknown', new ApiError('network_error', 'response lost', 0)],
-  ])(
-    'reconciles a donation %s with one GET and never resubmits the mutation',
-    async (_name, rejected) => {
-      const refreshedPage = { marker: 'refreshed donation page' };
-      const donationPageRead = vi.fn().mockResolvedValue(refreshedPage);
-      const donationPage = activePageFixture(
-        ownerDonationsPageKey('1'),
-        { marker: 'old donation page' },
-        donationPageRead,
-      );
-      mocks.createDonation.mockRejectedValue(rejected);
-      mocks.getCharityCapability.mockResolvedValue(CHARITY_CAPABILITY);
-      const rendered = renderHook(() => useCreateDonation(), { wrapper });
-      await act(async () => {
-        await expect(
-          rendered.result.current.mutateAsync({
-            description: 'one intent',
-            keys: [{ endpointKeyId: '61', expiresAt: null }],
-            ownershipAuthorized: true,
-            discordPublicThanks: false,
-          }),
-        ).rejects.toBe(rejected);
-      });
-      await waitFor(() => expect(donationPageRead).toHaveBeenCalledTimes(1));
-      await waitFor(() => expect(rendered.result.current.reconcileGeneration).toBe(1));
-      expect(rendered.result.current.reconcileError).toBeNull();
-      expect(mocks.createDonation).toHaveBeenCalledTimes(1);
-      expect(mocks.getCharityCapability).toHaveBeenCalledTimes(1);
-      expect(mocks.getDonations).not.toHaveBeenCalled();
-      expect(donationPageRead).toHaveBeenCalledTimes(1);
-      expect(queryClient.getQueryData(ownerDonationsPageKey('1'))).toEqual(refreshedPage);
-      expect(queryClient.getQueryData(economyKeys.charityCapability)).toEqual(CHARITY_CAPABILITY);
-      rendered.rerender();
-      expect(mocks.createDonation).toHaveBeenCalledTimes(1);
-      rendered.unmount();
-      donationPage.unsubscribe();
-    },
-  );
+  it('keeps an unknown donation intent and replays the original body and key', async () => {
+    const rejected = new ApiError('network_error', 'response lost', 0);
+    mocks.createDonation
+      .mockRejectedValueOnce(rejected)
+      .mockResolvedValueOnce({ id: '91' } as Donation);
+    mocks.getCharityCapability.mockResolvedValue(CHARITY_CAPABILITY);
+    const rendered = renderHook(() => useCreateDonation(), { wrapper });
+    const input = {
+      description: 'one intent',
+      keys: [{ endpointKeyId: '61', expiresAt: null }],
+      ownershipAuthorized: true as const,
+      discordPublicThanks: false,
+    };
+    await act(async () => {
+      await expect(rendered.result.current.mutateAsync(input)).rejects.toBe(rejected);
+    });
+    expect(rendered.result.current.outcome).toBe('unknown');
+    expect(mocks.getCharityCapability).not.toHaveBeenCalled();
+    const original = structuredClone(mocks.createDonation.mock.calls[0]![0]);
+    const key = mocks.createDonation.mock.calls[0]![1];
+    input.description = 'edited outside the operation';
+    await act(async () => {
+      await rendered.result.current.mutateAsync(rendered.result.current.variables!);
+    });
+    expect(mocks.createDonation.mock.calls[1]![0]).toEqual(original);
+    expect(mocks.createDonation.mock.calls[1]![1]).toBe(key);
+    expect(rendered.result.current.outcome).toBe('confirmed');
+    expect(mocks.getCharityCapability).toHaveBeenCalledTimes(1);
+    rendered.unmount();
+  });
+
+  it('refreshes donation pages after an explicit conflict without resubmitting', async () => {
+    const rejected = new ApiError('conflict', 'revision changed', 409);
+    const pageRead = vi.fn().mockResolvedValue({ marker: 'fresh' });
+    const page = activePageFixture(ownerDonationsPageKey('1'), { marker: 'old' }, pageRead);
+    mocks.createDonation.mockRejectedValue(rejected);
+    mocks.getCharityCapability.mockResolvedValue(CHARITY_CAPABILITY);
+    const rendered = renderHook(() => useCreateDonation(), { wrapper });
+    await act(async () => {
+      await expect(
+        rendered.result.current.mutateAsync({
+          description: 'keep this draft',
+          keys: [{ endpointKeyId: '61', expiresAt: null }],
+          ownershipAuthorized: true,
+          discordPublicThanks: false,
+        }),
+      ).rejects.toBe(rejected);
+    });
+    expect(rendered.result.current.outcome).toBe('conflict');
+    expect(pageRead).toHaveBeenCalledTimes(1);
+    expect(mocks.createDonation).toHaveBeenCalledTimes(1);
+    rendered.unmount();
+    page.unsubscribe();
+  });
 
   it('keeps an activity reconcile generation blocked after GET failure and retries only the GET', async () => {
     const rejected = new ApiError('network_error', 'response lost', 0);
@@ -515,103 +517,26 @@ describe('activity query authority recovery', () => {
     rendered.unmount();
   });
 
-  it('requires both donation and capability GET success before create reconcile advances', async () => {
-    const rejected = new ApiError('conflict', 'final gate rejected', 409);
+  it('retries only reads after a confirmed donation write and failed refresh', async () => {
     const refreshFailure = new ApiError('network_error', 'capability refresh failed', 0);
-    const donationPageRead = vi.fn().mockResolvedValue({ marker: 'refreshed donation page' });
-    const donationPage = activePageFixture(
-      ownerDonationsPageKey('1'),
-      { marker: 'old donation page' },
-      donationPageRead,
-    );
-    mocks.createDonation.mockRejectedValue(rejected);
+    mocks.createDonation.mockResolvedValue({ id: '91' } as Donation);
     mocks.getCharityCapability
       .mockRejectedValueOnce(refreshFailure)
       .mockResolvedValueOnce(CHARITY_CAPABILITY);
     const rendered = renderHook(() => useCreateDonation(), { wrapper });
     await act(async () => {
-      await expect(
-        rendered.result.current.mutateAsync({
-          description: 'one intent',
-          keys: [{ endpointKeyId: '61', expiresAt: null }],
-          ownershipAuthorized: true,
-          discordPublicThanks: false,
-        }),
-      ).rejects.toBe(rejected);
+      await rendered.result.current.mutateAsync({
+        description: 'saved intent',
+        keys: [{ endpointKeyId: '61', expiresAt: null }],
+        ownershipAuthorized: true,
+        discordPublicThanks: false,
+      });
     });
-    await waitFor(() => expect(rendered.result.current.reconcileError).toBe(refreshFailure));
-    expect(rendered.result.current.reconcileGeneration).toBe(0);
-    expect(mocks.createDonation).toHaveBeenCalledTimes(1);
-    expect(donationPageRead).not.toHaveBeenCalled();
-    expect(queryClient.getQueryData(ownerDonationsPageKey('1'))).toEqual({
-      marker: 'old donation page',
-    });
-
-    await act(async () => rendered.result.current.retryReconcile());
-    await waitFor(() => expect(rendered.result.current.reconcileGeneration).toBe(1));
-    expect(rendered.result.current.reconcileError).toBeNull();
-    expect(mocks.getDonations).not.toHaveBeenCalled();
-    expect(donationPageRead).toHaveBeenCalledTimes(1);
+    expect(rendered.result.current.outcome).toBe('refresh-failed');
+    expect(rendered.result.current.refreshError).toBe(refreshFailure);
+    await act(async () => rendered.result.current.refresh());
+    expect(rendered.result.current.outcome).toBe('confirmed');
     expect(mocks.getCharityCapability).toHaveBeenCalledTimes(2);
-    expect(mocks.createDonation).toHaveBeenCalledTimes(1);
-    expect(queryClient.getQueryData(economyKeys.charityCapability)).toEqual(CHARITY_CAPABILITY);
-    rendered.unmount();
-    donationPage.unsubscribe();
-  });
-
-  it('keeps the composer mounted and blocked until its endpoint-choice GET succeeds', async () => {
-    const rejected = new ApiError('network_error', 'response lost', 0);
-    const refreshFailure = new ApiError('network_error', 'choice refresh failed', 0);
-    const oldChoicesPage = { marker: 'old endpoint choices' };
-    const refreshedChoicesPage = { marker: 'refreshed endpoint choices' };
-    const choicesPageRead = vi
-      .fn<() => Promise<typeof oldChoicesPage>>()
-      .mockRejectedValueOnce(refreshFailure)
-      .mockResolvedValueOnce(refreshedChoicesPage);
-    mocks.createDonation.mockRejectedValue(rejected);
-    mocks.getCharityCapability.mockResolvedValue(CHARITY_CAPABILITY);
-    const rendered = renderHook(
-      () => {
-        const choices = useQuery({
-          queryKey: endpointChoicesPageKey('1'),
-          queryFn: () => choicesPageRead(),
-          initialData: oldChoicesPage,
-          staleTime: Infinity,
-          retry: false,
-        });
-        return { choices, create: useCreateDonation() };
-      },
-      { wrapper },
-    );
-    expect(rendered.result.current.choices.data).toEqual(oldChoicesPage);
-
-    await act(async () => {
-      await expect(
-        rendered.result.current.create.mutateAsync({
-          description: 'one intent',
-          keys: [{ endpointKeyId: '61', expiresAt: null }],
-          ownershipAuthorized: true,
-          discordPublicThanks: false,
-        }),
-      ).rejects.toBe(rejected);
-    });
-    await waitFor(() => expect(rendered.result.current.create.reconcileError).toBe(refreshFailure));
-    expect(rendered.result.current.create.reconcileGeneration).toBe(0);
-    expect(rendered.result.current.choices.isError).toBe(true);
-    expect(rendered.result.current.choices.error).toBe(refreshFailure);
-    expect(rendered.result.current.choices.data).toEqual(oldChoicesPage);
-    expect(mocks.getDonations).not.toHaveBeenCalled();
-    expect(mocks.getEndpointChoices).not.toHaveBeenCalled();
-    expect(choicesPageRead).toHaveBeenCalledTimes(1);
-    expect(mocks.createDonation).toHaveBeenCalledTimes(1);
-
-    await act(async () => rendered.result.current.create.retryReconcile());
-    await waitFor(() => expect(rendered.result.current.create.reconcileGeneration).toBe(1));
-    expect(rendered.result.current.create.reconcileError).toBeNull();
-    expect(rendered.result.current.choices.isSuccess).toBe(true);
-    expect(rendered.result.current.choices.error).toBeNull();
-    expect(rendered.result.current.choices.data).toEqual(refreshedChoicesPage);
-    expect(choicesPageRead).toHaveBeenCalledTimes(2);
     expect(mocks.createDonation).toHaveBeenCalledTimes(1);
     rendered.unmount();
   });

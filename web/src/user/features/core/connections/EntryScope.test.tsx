@@ -40,6 +40,54 @@ const emptyPage = {
   pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
 };
 describe('persistent entry metadata drafts', () => {
+  it('edits the service name with one patch without rewriting unchanged authorization fields', async () => {
+    let endpoint = endpointWire();
+    const writes: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input, init) => {
+        const url = new URL(String(input), 'https://app.example');
+        if (init?.method === 'PATCH') {
+          const body = JSON.parse(String(init.body));
+          writes.push(body);
+          endpoint = { ...endpoint, ...body, revision: '2' };
+          return json(endpoint);
+        }
+        if (url.pathname === '/api/endpoints/11') return json(endpoint);
+        if (url.pathname === '/api/connections') return json(emptyPage);
+        if (url.pathname === '/api/endpoint-create-options')
+          return json({
+            base_connector_types: ['openai-compatible'],
+            mainstream_channels: [],
+            native_service_options: [
+              {
+                connector_type: 'openai-compatible',
+                configuration_type: 'openai-compatible',
+                default_native_services: ['chat_completions'],
+                native_services: ['chat_completions'],
+                rerank_formats: [],
+              },
+            ],
+          });
+        throw Error('Unexpected ' + url.pathname);
+      }),
+    );
+    const view = await renderWithProviders(
+      <EntryScope accountId="1" endpoint={normalizeEndpoint(endpoint)} />,
+      { station: 'user', role: 'user' },
+    );
+    view.queryClient.setQueryData(['user', 'session'], {
+      user: { id: '1', username: 'fixture-user', effective_level: 1 },
+    });
+    await view.user.click(screen.getByText('Edit service', { exact: true }));
+    const name = screen.getByRole('textbox', { name: 'Service name' });
+    await view.user.clear(name);
+    await view.user.type(name, 'Renamed service');
+    await view.user.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByText('Saved');
+    expect(writes).toEqual([{ note: 'Renamed service', expected_revision: '1' }]);
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
   it.each(['entry', 'key'] as const)(
     'uses the confirmed %s revision for a second save without adopting unrelated refetches',
     async (kind) => {
@@ -107,9 +155,7 @@ describe('persistent entry metadata drafts', () => {
       });
       await view.user.click(
         screen.getByText(
-          kind === 'entry'
-            ? 'Entry services and connection'
-            : 'Credential and service authorization',
+          kind === 'entry' ? 'Edit service' : 'Credential and service authorization',
           { exact: true },
         ),
       );

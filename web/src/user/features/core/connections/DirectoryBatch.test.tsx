@@ -41,6 +41,53 @@ vi.mock('./useConnectionOperation', () => ({
   }),
 }));
 describe('directory model batch', () => {
+  it('applies known directory services to the chosen target and preserves a user override', async () => {
+    const view = await renderWithProviders(
+      <DirectoryBatch
+        accountId="1"
+        rows={[
+          {
+            id: 'known',
+            upstream_model_id: 'known-model',
+            provider: 'demo',
+            native_services: ['chat_completions'],
+            service_evidence: 'provider',
+            needs_service_selection: false,
+          },
+        ]}
+      />,
+      { station: 'user', role: 'user' },
+    );
+    await view.user.click(
+      screen.getByText(common.common.connections.chooseEntry, { selector: 'strong' }),
+    );
+    await view.user.click(screen.getByRole('button', { name: 'Choose shared grant' }));
+    const row = screen.getByText('known-model', { selector: 'strong' }).closest('details')!;
+    const chat = within(row).getByRole('checkbox', {
+      name: common.common.modelTypes.chat_completions,
+    });
+    expect(chat).toBeChecked();
+    await view.user.click(chat);
+    view.rerender(
+      <DirectoryBatch
+        accountId="1"
+        rows={[
+          {
+            id: 'known',
+            upstream_model_id: 'known-model',
+            provider: 'demo',
+            native_services: ['chat_completions', 'responses'],
+            service_evidence: 'provider',
+            needs_service_selection: false,
+          },
+        ]}
+      />,
+    );
+    expect(chat).not.toBeChecked();
+    expect(
+      within(row).getByRole('checkbox', { name: common.common.modelTypes.responses }),
+    ).not.toBeChecked();
+  });
   it('uses the same readiness for individual and batch saves when the upstream name is empty', async () => {
     mocks.run.mockClear();
     const c = common.common.connections;

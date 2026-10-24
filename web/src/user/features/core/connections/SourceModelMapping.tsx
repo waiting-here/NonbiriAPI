@@ -7,13 +7,16 @@ import { connectionAPI } from './api';
 import { ConnectionResourceList } from './ResourceList';
 import { DirectoryBatch } from './DirectoryBatch';
 import type { DiscoveryModel, DiscoverySource } from './types';
+import type { Endpoint, EndpointKey } from '../types';
 
 export function SourceModelMapping({
   accountId,
   source,
+  initialTarget,
 }: {
   accountId: string;
   source: DiscoverySource;
+  initialTarget?: { entry: Endpoint; key: EndpointKey };
 }) {
   const { t } = useTranslation();
   const [selected, setSelected] = useState<DiscoveryModel[]>([]);
@@ -123,7 +126,9 @@ export function SourceModelMapping({
           </button>
         </form>
       </Fold>
-      {selected.length ? <DirectoryBatch accountId={accountId} rows={selected} /> : null}
+      {selected.length ? (
+        <DirectoryBatch accountId={accountId} rows={selected} initialTarget={initialTarget} />
+      ) : null}
     </div>
   );
 }
