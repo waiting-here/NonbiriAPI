@@ -11,6 +11,21 @@ name and note of the connection and the addresses and notes of all its entries.
 Untouched names generated during an upgrade use the original entry's note or
 hostname for display. Custom names and stored metadata remain unchanged.
 
+## Set up and continue
+
+The new-service form collects custom or mainstream entries, native services,
+credential selection and ownership confirmation, and an applicable model directory.
+Choose Save once to run the required steps. These remain separate authorized API
+operations: if a later step fails, already-created resources stay available.
+Resolve an unknown response with the retained request before resuming the next
+step; do not create a second service to retry.
+
+After saving, continue directly to personal model setup, donation or connection
+management. A preset can supply model mappings; otherwise refresh the configured
+directory or enter exact model IDs manually. Donation starts with the selected
+entry, and the donor still chooses which keys and services to share. Existing
+entry IDs and credentials remain editable through the same connection workspace.
+
 ## Configure entries and models
 
 An OpenAI-compatible entry can select Chat Completions, Responses, embeddings,
@@ -111,11 +126,18 @@ and other applicable availability checks still apply. A `423 resource_locked`
 response alone does not mean the upstream credential is invalid.
 
 Administrators and stewards with `donations.force_reject` can force-reject a donation that has approved
-uses, including when its parent retains the pending status. The action requires
+uses within their current donation scope, including when its parent retains the pending status. The action requires
 a reason and complete review material, stops new charity dispatches and preserves
 normal settlement for requests already sent. Legacy whole-donation approval or
 rejection cannot override per-service approvals; review pending uses individually
 or use the authorized force-rejection action for the whole donation.
+
+Review results retain the service type and masked key label for each decision.
+After a successful approval, reviewers with current maintenance access can
+continue to charity-model configuration with that donation, key and service
+selected. They can adjust the selection before saving; reviewers without that
+access receive an explanation. A list refresh failure retries the read, not
+the already-completed approval.
 
 Owners can add another service to the same donated key or explicitly resubmit
 a rejected or withdrawn use. These actions create pending review material and

@@ -35,13 +35,20 @@ Attempt and request completion use small synchronous transaction batches when
 work overlaps. Success still requires a durable commit, and anonymous queue
 metrics distinguish application waiting from database pool waiting.
 
-Level-5 stewards have per-account permissions, configured by administrators or
-level-6 stewards. Defaults preserve pending-donation review, scoped charity
+Level-5 stewards have 48 per-account action permissions, six numeric limits and
+a four-position donation scope, configured by administrators or level-6 stewards.
+Defaults preserve pending-donation review, scoped charity
 management, account reads, lower-level bans and the five inference-limit
-overrides. Additional grants can enable available full-steward workflows;
-actual account hierarchy and administrator-only operations remain unchanged.
+overrides. Donation scope is none, standard (default), enhanced (also tagged
+donations) or
+full. Identity visibility remains a separate grant. Additional grants can enable
+available full-steward workflows; actual account hierarchy and administrator-only operations remain unchanged.
 Revoked grants take effect in current sessions and CallerKeys. See the
-[action catalog and limits](docs/steward-permissions.md).
+[action catalog, scopes and limits](docs/steward-permissions.md).
+
+Level 6 can use shared endpoint and endpoint-policy management. Level 5 needs
+explicit endpoint grants. Tags include User-built gateway, Steward-built gateway
+and Incorrect entry alongside existing classifications.
 
 Management donation lists support exact donor account and Discord ID filters.
 User details provide complete retained donation history, including hidden owner
@@ -79,9 +86,16 @@ configuration. Existing AI Gateway mappings remain compatible when no Worker is 
 
 [Service connections](docs/service-connections.md) group explicitly authorized entries around shared credentials and an independent model directory. OpenAI-compatible and Gateway entries select their native services; each model selects its applicable targets. Credential rotation preserves approved charity versions until explicit review.
 
+New service setup collects entries, credential authorization and applicable
+model-directory choices in one form. One save completes the necessary stages;
+a failure preserves completed resources for recovery. Continue directly to
+personal model setup or donation.
+
 Donation lists summarize decisions across their service uses. Reviewers can
 approve or reject all pending uses in one donation or key, confirm the exact
-selection and recover partial or uncertain results without expanding it.
+selection and recover partial or uncertain results without expanding it. Successful
+approval results retain service/key context and offer authorized charity-model
+configuration. Batch targets preserve each explicitly selected service subset.
 
 Outbound requests include a short-lived, authenticated opaque origin header.
 A valid returned marker creates an unresolved administrator alert while the

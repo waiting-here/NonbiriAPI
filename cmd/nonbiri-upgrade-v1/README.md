@@ -3,7 +3,8 @@
 The server creates fresh schema 36 databases and opens current schema 36. Exact
 published schema 33–35 receives atomic upgrades during normal startup: history
 indexes and donation catalog authorization changes where needed, then steward
-permissions and data-preserving audit-role table rebuilds.
+permissions with donation scope, expanded endpoint tags and data-preserving
+audit-role/tag table rebuilds.
 `nonbiri-upgrade-v1` is the separate, one-time offline converter for the following
 exact source structures:
 
