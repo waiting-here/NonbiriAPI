@@ -133,7 +133,7 @@ The application accepts forwarding metadata only from configured trusted proxy a
 
 Review upstream operators as a trust boundary. Their reported usage determines actual charges and donation rewards and may exceed the admission reserve; the platform cannot independently verify a provider's token accounting. Public HTTP endpoints remain supported, but send credentials and content without transport encryption. Prefer HTTPS and review any HTTP exception before approving a donated source.
 
-Original-error diagnostics may retain a credential or other private content echoed by an upstream. Administrators and currently authorized level-6 stewards can read the complete saved content. Level-5 stewards can also read site-wide logs and diagnostics, with IPv4 addresses redacted from upstream error details. Source IPs and other authorized fields remain visible. Protect the database and its backups accordingly. Ordinary user displays still redact IPv4 addresses. Silent retries before an accepted response can also duplicate provider work when delivery is uncertain. Personal routes default to retries off; charity routes stop retrying as soon as HTTP 200 is received. See the [API contract](api-contract.md) for billing and error behavior.
+Original-error diagnostics may retain a credential or other private content echoed by an upstream. Administrators and stewards with `logs.unredacted` can read complete authorized saved content. Level-5 log and diagnostic reads require the corresponding grants; without `logs.unredacted`, upstream details redact IPv4 addresses and non-mainstream DNS identifiers. Source IPs and other authorized fields remain visible. Protect the database and its backups accordingly. Ordinary user displays still redact IPv4 addresses. Silent retries before an accepted response can also duplicate provider work when delivery is uncertain. Personal routes default to retries off; charity routes stop retrying as soon as HTTP 200 is received. See the [API contract](api-contract.md) for billing and error behavior.
 
 Source auditing distinguishes a direct peer, a validated forwarded client and a fallback peer. Before using shared-IP findings, verify the complete direct/CDN → Nginx → application chain for both IPv4 and IPv6, including an untrusted client-supplied forwarding header and malformed or duplicate values. A proxy address incorrectly treated as a client can associate many unrelated users. Fallback-quality addresses are excluded from shared-IP findings, but configuration still determines whether a forwarded address is trustworthy. Client headers are self-reported clues and cannot establish the identity of a relay or application.
 
@@ -307,21 +307,21 @@ This fallback also covers proxy timeouts or invalid upstream responses before re
 
 ## Database compatibility and version changes
 
-The application creates fresh schema **35** databases and opens current schema 35.
-Exact published schema **33/34** receives atomic upgrades during startup,
-before requests are served. Schema 33 builds four history indexes; schema 34
-updates the donation catalog authorization trigger and catalog view without rewriting data.
-Allow for index creation time on large schema 33 databases. Exact registered
-schema **16–26** structures use the standalone
+The application creates fresh schema **36** databases and opens current schema 36.
+Exact published schema **33–35** receives atomic upgrades before requests:
+history indexes and donation catalog authorization changes where needed, then
+steward permission tables and audit-role table rebuilds that preserve existing
+rows and constraints. Allow index creation and audit-table copying to complete.
+Exact registered schema **16–26** structures use the standalone
 [v1 converter](../cmd/nonbiri-upgrade-v1/README.md). Other prereleases and unknown
 structures are rejected. SQLite identity remains Generation 2; exports use
-format **29**. See [database upgrades](database-upgrades.md) for manifests, stable
+format **30**. See [database upgrades](database-upgrades.md) for manifests,
 migration guarantees and content versions.
 
 Run `./nonbiriapi maintenance schema-info --json` without a production environment
 or database to inspect the target's compatibility descriptor. Deployment helpers
 must consume this output and the matching converter's `--schema-info --json`
-instead of parsing Go files. The service descriptor declares the exact schema 33/34
+instead of parsing Go files. The service descriptor declares the exact schema 33–35
 startup sources and manifests; the converter declares its exact offline sources. Use
 `./nonbiriapi maintenance verify` on a stopped current database or consistent copy
 for a full offline audit; normal startup performs the current checks and recovers

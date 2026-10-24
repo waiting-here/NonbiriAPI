@@ -20,7 +20,7 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh schema 35, the exact schema 33/34 startup upgrades and supported
+- Validate fresh schema 36, the exact schema 33–35 startup upgrades and supported
   schema 16–26 offline conversions: target equality, rollback/cancellation, re-entry
   and zero-write unsupported-source rejection. Check that endpoint-key deletion
   uses indexes for its referencing history tables and preserves cascading behavior.
@@ -30,7 +30,8 @@ has passed.
 - Keep content-only catalog/template/period edits free of DDL and preserve administrator
   edits, historical eligibility, pity and claims. Recheck exports and deletion
   for every new user-associated record.
-- Check account export 29 includes personal-model header configuration but excludes
+- Check account export 30 includes own stored/effective steward permissions,
+  retained policy history and personal-model header configuration, but excludes
   temporary generated values, shared charity settings, pressure samples and
   caller-parameter receipts. Verify model/user deletion, late completions and
   the zero/default/positive idle-lifetime cases across all five formats.

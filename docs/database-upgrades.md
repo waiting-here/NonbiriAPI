@@ -2,22 +2,23 @@
 
 ## Supported databases
 
-The application accepts a new database, current schema **35**, or the exact
-published schema **33/34** manifests. These receive atomic upgrades during
-startup, before request handling and unfinished-work recovery. Schema 33 adds
-history indexes; schema 34 updates the donation catalog authorization trigger and catalog view.
-Index creation can take longer on large histories; allow the startup stage to finish.
-Cancellation or failure rolls the upgrade back. No table rebuild or external
-database conversion is needed for this step.
+The application accepts a new database, current schema **36**, or the exact
+published schema **33–35** manifests. These receive atomic upgrades during
+startup, before request handling and unfinished-work recovery. Schema 33 sources
+first receive history indexes; schema 34 sources receive the donation catalog
+authorization trigger/view changes. The final step from schema 35 adds steward
+permissions and rebuilds the affected audit tables while preserving their data.
+Allow index creation and audit-table copying to finish. Cancellation or failure
+rolls back the upgrade. No external conversion is needed for these sources.
 
 Existing exact schema 16–26 databases require the separate one-time converter.
-The normal service contains current DDL, validation and the schema 33/34 startup steps;
+The normal service contains current DDL, validation and the schema 33–35 startup steps;
 it does not import the historical conversion chain. Later v1.x releases must provide
 a complete upgrade path from every earlier stable v1.x database. An older binary
 is not required to read a newer database.
 
 SQLite identity remains `application_id=0x4E425249`, `user_version=2`. Account
-exports use format **29**, independently of the storage schema. An unknown
+exports use format **30**, independently of the storage schema. An unknown
 identity, version or structural manifest is rejected before writes.
 
 ```sh
@@ -27,12 +28,29 @@ identity, version or structural manifest is rejected before writes.
 
 These commands load no application configuration or database. Each machine-readable descriptor
 contains the current identity and accepted versions. The application descriptor
-reports schema 35, minimum schema 33 and the exact accepted source versions and
+reports schema 36, minimum schema 33 and the exact accepted source versions and
 manifest hashes, with no offline conversions. The converter descriptor lists its
 exact offline sources and target. Deployment tools use both
 descriptors instead of parsing Go source or deriving versions from array lengths.
 
 ## Schema changes
+
+Schema 36 adds per-account `steward_permissions` and revisioned
+`steward_permission_audits`. Existing level-5 accounts keep their legacy default
+permissions until explicitly configured. Audits use bounded 90-day cleanup;
+target-account deletion cascades, while editor deletion clears its actor reference.
+Account export 30 adds the owner's effective/stored policy and retained policy
+history without editor identities.
+
+The same atomic step rebuilds `risk_client_rules`, `client_rule_auto_bans`,
+`discord_blacklist_origins` and `discord_blacklist_events` to admit actual
+level-5 audit labels. It copies and restores every existing row, preserves IDs,
+revisions, reason history and actor labels, and recreates their indexes, foreign
+keys, capacity and immutability triggers. Foreign-key enforcement remains on;
+the dependent automatic-ban table is rebuilt with its parent. The blacklist
+parent and original reason remain unchanged. Retained-read audit guards accept
+actual levels 5 and 6 after live domain authorization. These changes do not
+reclassify historical actions or grant permission by their stored role label.
 
 Schema 35 updates the model-discovery authorization trigger and catalog view so valid pending
 and approved donations can fetch catalogs without separate sharing consent.
@@ -121,8 +139,8 @@ existing keys at that version, with no supplemental rules or active episode. Acc
 configuration and current state. Existing retry-header cooldowns, failure counts,
 credentials and accounting retain their meanings.
 
-`internal/db/generation_two.sql` is the complete fresh schema. The schema 33
-source manifest and index-only startup step live in `internal/db`; older source
+`internal/db/generation_two.sql` is the complete fresh schema. The exact schema 33–35
+source manifests and startup steps live in `internal/db`; older source
 manifests and transformations live under `internal/upgrade/`, outside the normal
 application dependency graph. Released source definitions are immutable.
 
@@ -199,7 +217,7 @@ needed. Ordinary `--apply` validates the exact source, encryption-root identity,
 required configuration and migration-affected relationships, without scanning
 unrelated historical tables. Run it with the service stopped and its existing
 master key available. The converter acquires exclusive
-database access and converts the source to schema 35 in one transaction. A matching
+database access and converts the source to schema 36 in one transaction. A matching
 current schema is a no-op; structural drift, an unknown source or a wrong key is
 rejected. Failure or cancellation rolls back.
 

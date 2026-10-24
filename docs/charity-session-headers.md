@@ -24,7 +24,7 @@ Managed values replace same-named fixed and forwarded headers. They cannot overr
 
 ## Configuration API
 
-Owner personal-model create, PATCH and detail DTOs and administrator/level-6 charity-model DTOs include `session_headers`. Existing ownership, model-setting authority, revision checks, strict JSON parsing and idempotency rules apply. Level-5 permissions do not expand. Authorized CallerKey model reads include the saved configuration under their existing scope; this feature adds no CallerKey write route. Level-6 charity request adaptation remains read-only even though model settings can be edited.
+Owner personal-model create, PATCH and detail DTOs and authorized management charity-model DTOs include `session_headers`. Existing ownership, model-setting authority, revision checks, strict JSON parsing and idempotency rules apply. Steward changes require the applicable `charity.create` or `charity.model_settings` grant and current source/model scope. Authorized CallerKey model reads include the saved configuration under their existing scope; this feature adds no CallerKey write route. Steward charity request adaptation remains read-only even though model settings can be edited.
 
 ```json
 {
@@ -45,6 +45,6 @@ Creation without the field disables the feature. PATCH omission preserves it; an
 
 Session values are temporary upstream correlation identifiers, not authentication credentials. They are not returned through configuration or public model APIs, logged, exposed in raw error diagnostics, or included in account-content exports. They may allow the selected upstream to associate requests during the session.
 
-Account export 29 includes personal models' saved `session_headers` entries (`name,idle_seconds,format`). Shared charity-model configuration and generated values are excluded; personal charity consumption retains its existing aggregate.
+Account export 30 includes personal models' saved `session_headers` entries (`name,idle_seconds,format`). Shared charity-model configuration and generated values are excluded; personal charity consumption retains its existing aggregate.
 
 Expired inactive values are removed by bounded maintenance. Deleting the user or model removes its cache and active-use records. Late completions update only surviving records and cannot recreate deleted data or extend a replacement value.
