@@ -80,5 +80,16 @@
     "card": "q-glm",
     "light": "/assets/gacha/appearances/heart-thief-light.webp",
     "dark": "/assets/gacha/appearances/heart-thief-dark.webp"
+  },
+  {
+    "id": "tomorrow",
+    "name": "未命名的明天",
+    "name_en": "Tomorrow, Still Unwritten",
+    "description": "把昨天放进背包，向还没有答案的明天出发。",
+    "description_en": "Pack a little of yesterday, and step into a tomorrow still full of questions.",
+    "unlock": "card:r-chatgpt",
+    "card": "r-chatgpt",
+    "light": "/assets/gacha/appearances/tomorrow-light.webp",
+    "dark": "/assets/gacha/appearances/tomorrow-dark.webp"
   }
 ]

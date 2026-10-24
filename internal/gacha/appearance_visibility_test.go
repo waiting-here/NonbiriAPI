@@ -15,9 +15,8 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
-func TestAppearanceVisibilityFollowsOwnershipAndActualOpening(t *testing.T) {
-	f := newFixture(t)
-	visibilityReads := 0
+func newAppearanceService(t *testing.T, f *fixture, visibilityRead func()) *appearance.Service {
+	t.Helper()
 	service, err := appearance.New(appearance.Config{
 		Database: f.db, Users: testAuthority{f.admin}, Gate: f.gate, Moments: f.s.MomentOptionsTx, Now: func() time.Time { return time.Unix(f.at.Load(), 0) },
 		Unlock: func(ctx context.Context, tx *sql.Tx, user int64, key string) (bool, error) {
@@ -26,7 +25,9 @@ func TestAppearanceVisibilityFollowsOwnershipAndActualOpening(t *testing.T) {
 			return owned, err
 		},
 		Visible: func(ctx context.Context, tx *sql.Tx, keys []string) (map[string]bool, error) {
-			visibilityReads++
+			if visibilityRead != nil {
+				visibilityRead()
+			}
 			ids := make([]string, len(keys))
 			for i, key := range keys {
 				ids[i] = strings.TrimPrefix(key, "card:")
@@ -42,6 +43,13 @@ func TestAppearanceVisibilityFollowsOwnershipAndActualOpening(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return service
+}
+
+func TestAppearanceVisibilityFollowsOwnershipAndActualOpening(t *testing.T) {
+	f := newFixture(t)
+	visibilityReads := 0
+	service := newAppearanceService(t, f, func() { visibilityReads++ })
 	check := func(user int64, visible, unlocked []string) {
 		t.Helper()
 		before := visibilityReads
@@ -106,5 +114,67 @@ func TestAppearanceVisibilityFollowsOwnershipAndActualOpening(t *testing.T) {
 	var profiles int
 	if err := tx.QueryRowContext(t.Context(), "SELECT count(*) FROM gacha_profiles").Scan(&profiles); err != nil || profiles != 0 {
 		t.Fatal("appearance read granted activity entry", profiles, err)
+	}
+}
+
+func TestTomorrowAcquisitionUnlocksAppearanceWithoutSelectingIt(t *testing.T) {
+	f := newFixture(t)
+	service := newAppearanceService(t, f, nil)
+	state, err := service.State(t.Context(), f.user)
+	if err != nil || slices.Contains(state.Visible, "tomorrow") || slices.Contains(state.Unlocked, "tomorrow") {
+		t.Fatal("unpublished appearance became visible", state, err)
+	}
+	if _, err = service.Select(t.Context(), f.user, "tomorrow", ""); !errors.Is(err, authz.ErrForbidden) {
+		t.Fatal(err)
+	}
+	f.enter(t)
+	var pool Pool
+	for _, preset := range defaultPresets.Presets {
+		if preset.ID == "tomorrow" {
+			pool = preset.Pool
+		}
+	}
+	pool.ID, err = db.GenerateOpaqueID("gp_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := f.save(t, "draft-tomorrow", AdminInput{Kind: "pool", Pool: &pool})
+	for _, stored := range saved.Pools {
+		if stored.ID == pool.ID {
+			pool = stored
+		}
+	}
+	if _, err = f.act(f.user, "unpublished-tomorrow", Action{Action: "draw", PoolID: pool.ID, Quantity: 1}); !errors.Is(err, ErrClosed) {
+		t.Fatal("an unpublished pool accepted a draw", err)
+	}
+	start, end := f.at.Load(), f.at.Load()+86400
+	pool.StartsAt, pool.EndsAt, pool.Published = &start, &end, true
+	f.save(t, "open-tomorrow", AdminInput{Kind: "pool", Pool: &pool, ExpectedRevision: pool.Revision})
+	f.exec(t, "UPDATE gacha_profiles SET limited=1 WHERE user_id=?", f.user)
+	f.exec(t, "INSERT INTO gacha_pity(user_id,group_id,sr,ssr,sr_limit,ssr_limit,sr_featured,ssr_featured,ssr_misses) VALUES(?,?,0,59,10,60,0,1,2)", f.user, pool.Rules.Group())
+	f.s.random = func(n int) (int, error) { return n - 1, nil }
+	out, err := f.act(f.user, "first-tomorrow", Action{Action: "draw", PoolID: pool.ID, Quantity: 1})
+	if err != nil || out.Draw == nil || len(out.Draw.Items) != 1 || out.Draw.Items[0].CardID != "r-chatgpt" || out.Draw.Items[0].Duplicate || out.Snapshot.Owned["r-chatgpt"].Source != "draw" {
+		t.Fatal(out, err)
+	}
+	state, err = service.State(t.Context(), f.user)
+	if err != nil || state.Selected != "default" || !slices.Contains(state.Unlocked, "tomorrow") || !slices.Contains(state.Visible, "tomorrow") ||
+		!slices.Contains(state.Moments, "card:r-chatgpt") || !slices.Contains(state.Moments, "illustration:r") {
+		t.Fatal("first acquisition did not unlock the complete single-card theme", state, err)
+	}
+	if f.scalar(t, "SELECT count(*) FROM user_appearance WHERE user_id=?", f.user) != 0 {
+		t.Fatal("acquisition changed the saved appearance")
+	}
+	other, err := service.State(t.Context(), f.other)
+	if err != nil || slices.Contains(other.Unlocked, "tomorrow") {
+		t.Fatal("another account inherited the unlock", other, err)
+	}
+	selected, err := service.Select(t.Context(), f.user, "tomorrow", "")
+	if err != nil || selected.Selected != "tomorrow" {
+		t.Fatal(selected, err)
+	}
+	restored, err := service.Select(t.Context(), f.user, "default", "")
+	if err != nil || restored.Selected != "default" || !slices.Contains(restored.Unlocked, "tomorrow") {
+		t.Fatal(restored, err)
 	}
 }

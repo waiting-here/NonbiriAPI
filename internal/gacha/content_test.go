@@ -31,10 +31,20 @@ func TestCatalogSyncAddsOnlyMissingTemplatesWithoutSchemaOrPlayerChanges(t *test
 	if err := f.db.QueryRow("SELECT config FROM gacha_presets WHERE id='celestial'").Scan(&edited); err != nil {
 		t.Fatal(err)
 	}
-	f.exec(t, "DELETE FROM gacha_presets WHERE id='theatre'")
+	f.exec(t, "DELETE FROM gacha_presets WHERE id IN ('theatre','tomorrow')")
 	version := f.scalar(t, "SELECT version FROM schema_state")
 	ddlVersion := f.scalar(t, "PRAGMA schema_version")
 	events := f.scalar(t, "SELECT count(*) FROM gacha_config_events")
+	reloaded, err := New(f.s.config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = reloaded.SyncCatalog(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if f.scalar(t, "SELECT count(*) FROM gacha_presets WHERE id='tomorrow'") != 1 {
+		t.Fatal("restart did not add the new built-in template")
+	}
 	content := presetCatalog{Version: defaultPresets.Version + 1, Presets: append([]Preset(nil), defaultPresets.Presets...)}
 	newPreset := content.Presets[0]
 	newPreset.ID, newPreset.Name = "future-template", "Future template"
@@ -57,7 +67,7 @@ func TestCatalogSyncAddsOnlyMissingTemplatesWithoutSchemaOrPlayerChanges(t *test
 	if err := f.db.QueryRow("SELECT config FROM gacha_presets WHERE id='celestial'").Scan(&afterEdit); err != nil || afterEdit != edited {
 		t.Fatal("administrator template overwritten", err)
 	}
-	after, err := f.s.State(t.Context(), f.user)
+	after, err := reloaded.State(t.Context(), f.user)
 	if err != nil || jsonText(after) != jsonText(before) {
 		t.Fatal("content update changed player facts", err)
 	}

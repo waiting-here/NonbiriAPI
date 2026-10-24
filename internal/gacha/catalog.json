@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "characters": [
     "ChatGPT",
     "Claude",
@@ -183,6 +183,17 @@
       "tagline_en": "Come away with me tonight.",
       "art": "/assets/gacha/groups/q.webp",
       "appearance": "heart-thief"
+    },
+    {
+      "id": "r",
+      "name": "未命名的明天",
+      "name_en": "Tomorrow, Still Unwritten",
+      "rarity": "SP",
+      "source": "limited",
+      "tagline": "把昨天放进背包，向还没有答案的明天出发。",
+      "tagline_en": "Pack a little of yesterday, and step into a tomorrow still full of questions.",
+      "art": "/assets/gacha/groups/r.webp",
+      "appearance": "tomorrow"
     }
   ],
   "cards": [
@@ -862,6 +873,18 @@
       "art": "/assets/gacha/cards/q-glm.webp",
       "thumb": "/assets/gacha/thumbs/q-glm.webp",
       "appearance": "heart-thief"
+    },
+    {
+      "id": "r-chatgpt",
+      "theme": "r",
+      "character": "ChatGPT",
+      "name": "未命名的明天·ChatGPT",
+      "name_en": "Tomorrow, Still Unwritten · ChatGPT",
+      "rarity": "SP",
+      "source": "limited",
+      "art": "/assets/gacha/cards/r-chatgpt.webp",
+      "thumb": "/assets/gacha/thumbs/r-chatgpt.webp",
+      "appearance": "tomorrow"
     }
   ]
 }
