@@ -779,7 +779,9 @@ function DonationReview({
   const [confirmed, setConfirmed] = useState(false);
   const [forceConfirmation, setForceConfirmation] = useState(false);
   const [keys, setKeys] = useState<Record<string, KeySettingsDraft>>(() =>
-    Object.fromEntries(item.keys.map((key) => [key.id, keySettingsDraft(key)])),
+    legacyPendingReview
+      ? Object.fromEntries(item.keys.map((key) => [key.id, keySettingsDraft(key)]))
+      : {},
   );
   const review = useRetainedOperation<DonationReviewInput, ManagedDonation>(
     (input, key) =>

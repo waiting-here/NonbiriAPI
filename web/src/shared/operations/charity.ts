@@ -1687,7 +1687,6 @@ export const orderManagedBindings = async (
       json: { expected_binding_revision: revision, order, response: 'receipt' },
     }),
   );
-  return getManagedBindings(role, id);
 };
 export const deleteManagedBinding = async (
   role: CharityRole,
@@ -1704,7 +1703,6 @@ export const deleteManagedBinding = async (
       json: { expected_binding_revision: revision, response: 'receipt' },
     }),
   );
-  return getManagedBindings(role, modelID);
 };
 
 export interface CharityTarget extends ServiceProjection {
