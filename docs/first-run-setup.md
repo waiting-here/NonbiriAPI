@@ -191,7 +191,7 @@ material.
 
 ## 6. Prepare a Generation 2 database path
 
-For a fresh start, the configured database and its exact `-wal` and `-shm` paths must all be absent. Fresh storage uses schema 35. Exact published schema 33/34 receives an atomic startup upgrade, adding history indexes where needed and updating the donation catalog authorization trigger and catalog view. Existing published schema 16–26 databases must first pass the [one-time conversion](database-upgrades.md#one-time-conversion); that historical conversion chain remains outside the normal service. Other prerelease schemas and empty placeholder files are rejected.
+For a fresh start, the configured database and its exact `-wal` and `-shm` paths must all be absent. Fresh storage uses schema 36. Exact published schema 33–35 receives atomic startup upgrades, adding history indexes and donation catalog authorization changes where needed, then steward permission tables and data-preserving audit-role table rebuilds. Existing published schema 16–26 databases must first pass the [one-time conversion](database-upgrades.md#one-time-conversion); that historical conversion chain remains outside the normal service. Other prerelease schemas and empty placeholder files are rejected.
 
 On a true fresh start the process creates a Generation 2 SQLite database with `application_id=0x4E425249` and `user_version=2`, validates the complete schema, and seeds these safe states:
 

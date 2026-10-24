@@ -6,7 +6,7 @@ pairs and submit them together. Selections remain available while changing targe
 models or pages. A connection already present on the selected charity model is
 marked and cannot be selected again.
 
-Administrators and level-6 stewards also have a separate **Channel presets** view.
+Administrators and stewards with `charity.presets` also have a separate **Channel presets** view.
 Choose a mainstream channel and save up to 16 exact upstream-model-to-charity-model
 pairs. From an approved donation for that channel, apply the preset to all its keys
 in one operation. A missing upstream model skips only that pair for that key.
@@ -18,8 +18,10 @@ key, approves a donation, refreshes discovery or changes saved model pricing.
 Use the administrator prefix `/admin/api` or steward prefix `/api/steward`.
 These are authenticated browser-session routes, with the existing CSRF,
 `Idempotency-Key`, current-role and revision requirements. They are not CallerKey
-automation routes. Level-5 stewards retain their existing per-model scope for
-manual bindings; preset reads and writes require an administrator or level 6.
+automation routes. Stewards require `charity.presets` for preset reads/edits,
+and both `charity.presets` and `charity.manage` for preset application or
+key-to-model batch binding. Current model/source scope is checked for every
+target and key. See [steward permissions](steward-permissions.md).
 
 IDs, revisions and counts below are canonical decimal strings, except opaque
 channel IDs. Pagination uses the existing numbered-page envelope.
@@ -101,6 +103,6 @@ from personal account exports. They contain no donor or operator identity.
 Mutations use the existing role-scoped control receipts and their retention
 boundary. Schema 33 extends the presets with entries, independent discovery
 suggestions and model-to-entry mappings. Shared presets are excluded from account
-export 29. Use the matching [offline converter](database-upgrades.md) for an
+export 30. Use the matching [offline converter](database-upgrades.md) for an
 existing published database. See [service connections](service-connections.md)
 for per-service approvals and ordered alternative binding targets.

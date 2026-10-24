@@ -110,7 +110,7 @@ approved credential with a pending one. Expiry, withdrawal, disabled credentials
 and other applicable availability checks still apply. A `423 resource_locked`
 response alone does not mean the upstream credential is invalid.
 
-Administrators and level-6 stewards can force-reject a donation that has approved
+Administrators and stewards with `donations.force_reject` can force-reject a donation that has approved
 uses, including when its parent retains the pending status. The action requires
 a reason and complete review material, stops new charity dispatches and preserves
 normal settlement for requests already sent. Legacy whole-donation approval or

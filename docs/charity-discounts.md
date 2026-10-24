@@ -69,9 +69,10 @@ All object fields are required when supplied; null, duplicate keys and unknown
 fields are rejected. The configuration is limited to 4 KiB, within the existing
 request-body limit. Disabled configurations are validated too.
 
-Administrators and level-6 stewards use their existing model pricing permissions.
-Level 5 cannot change these settings. Template maintenance remains administrator
-only, with enabled-template reads for level-6 sessions. Applying a template copies
+Administrators and stewards with the applicable `charity.create` or
+`charity.pricing` grant can save these settings. Template maintenance remains
+administrator-only, with enabled-template reads requiring
+`charity.price_templates.read` for steward sessions. Applying a template copies
 both discount configurations completely; later template edits do not change a
 model.
 

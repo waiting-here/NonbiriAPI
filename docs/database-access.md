@@ -6,6 +6,16 @@ accounting and lifecycle work. `Store.ReadDB()` opens the same validated databas
 with `mode=ro` and `query_only`; repositories must not send writes to it. Both
 pools belong to the store and close with the application.
 
+## Scoped charity catalog checks
+
+Binding, candidate, manual-entry and preset paths query the selected donation
+member or key when checking catalog existence. They combine its automatic and
+manual entries within the current scope instead of repeatedly aggregating the
+global catalog. This shortens work inside binding transactions as unrelated
+catalogs grow. Source eligibility, ordering, revisions, atomicity and current
+permission checks remain in those transactions; no catalog-result cache or new
+schema is introduced by this optimization.
+
 ## Prepared statements and configuration reads
 
 Writable connections retain at most 128 prepared single-statement

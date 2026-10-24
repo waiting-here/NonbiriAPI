@@ -27,36 +27,45 @@ configuration reads use the read pool and reuse validation only when the full
 current contents match. Database values are still read on every call; accounting,
 authorization and availability remain authoritative.
 
+Charity binding and candidate checks query only the selected donation/key catalog.
+This avoids repeatedly aggregating unrelated catalog history while preserving
+current authorization, revisions and atomic binding changes.
+
 Attempt and request completion use small synchronous transaction batches when
 work overlaps. Success still requires a durable commit, and anonymous queue
 metrics distinguish application waiting from database pool waiting.
 
-Level-5 stewards can inspect user accounts, adjust the five inference RPM/concurrency
-overrides or revoke CallerKeys for strictly lower-level users, and ban level 1–4
-users. They cannot change other account settings or credits, lift a ban, or replace
-an active ban. They can approve or reject every pending donation. Administrators and level-6
-stewards can force-reject any approved donation, including manual approvals.
-Administrators can revoke any non-administrator user's CallerKey; level-6
-stewards use the same strictly lower-level rule. Revocation leaves browser
-sessions and upstream credentials usable, and the user may create a replacement.
+Level-5 stewards have per-account permissions, configured by administrators or
+level-6 stewards. Defaults preserve pending-donation review, scoped charity
+management, account reads, lower-level bans and the five inference-limit
+overrides. Additional grants can enable available full-steward workflows;
+actual account hierarchy and administrator-only operations remain unchanged.
+Revoked grants take effect in current sessions and CallerKeys. See the
+[action catalog and limits](docs/steward-permissions.md).
+
+Management donation lists support exact donor account and Discord ID filters.
+User details provide complete retained donation history, including hidden owner
+history, through a safe summary without credentials or key controls. Source
+browsers initially show all retained sources, with an active-only filter.
 
 Administrators manage complete price templates in a dedicated charity workspace,
 with search, pagination, creation, editing and deletion. Administrators and
-level-6 stewards can copy a template into a model form and adjust it before saving.
+stewards with price-template read permission can copy a template into a model
+form and adjust it before saving.
 Models and templates support [recurring weekly discounts](docs/charity-discounts.md)
 with configurable time zones and percentages. An enabled fixed-window discount
 pauses the recurring schedule. Accepted requests keep their captured price.
 
 Binding selectors show existing connections. Authorized managers can bind one
 donated key to several charity models in one operation. Administrators and
-level-6 stewards can maintain channel presets and apply them to every key in an
-approved donation; missing models and existing bindings are reported individually.
+stewards with the required preset and binding permissions can maintain channel
+presets and apply them to every key in an approved donation; missing models and existing bindings are reported individually.
 
 Models can use a [Cloudflare Worker](docs/cloudflare-egress.md) to forward
 requests across providers without adding a mapping for each upstream. Personal
 models enable forwarding by default; charity models disable it by default.
-Administrators and level-6 stewards can inspect the loaded configuration. Existing
-AI Gateway mappings remain compatible when no Worker is configured.
+Administrators and stewards with egress-read permission can inspect the loaded
+configuration. Existing AI Gateway mappings remain compatible when no Worker is configured.
 
 | Area | Source and contract |
 | --- | --- |
@@ -130,9 +139,9 @@ Charity calls automatically wait after recognized recoverable quota errors and
 recover through one real charity request. No per-key setup is required.
 Retry headers take precedence; other errors retain the consecutive-failure policy. See the
 [smart-backoff contract](docs/api-contract.md#413-smart-donated-key-backoff).
-Administrators and level-6 stewards can configure additional recognition rules
-per complete endpoint, shared by its donated keys, and inspect loaded egress
-routes. [Google routing](docs/cloudflare-egress.md#google-official-channels)
+Administrators and stewards with endpoint-backoff permission can configure
+additional recognition rules per complete endpoint, shared by its donated keys.
+Inspecting loaded egress routes requires the separate egress-read permission. [Google routing](docs/cloudflare-egress.md#google-official-channels)
 covers AI Studio and Vertex AI's OpenAI-compatible Chat endpoints.
 
 ## Build and develop
@@ -151,7 +160,15 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed. Fresh storage uses schema 35. Exact published schema 33 and 34 databases receive atomic startup upgrades; schema 33 adds the history indexes, and schema 34 updates the donation catalog authorization rule. Current schema 35 opens directly. Account export remains 29. Existing published schema 16–26 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases. Source documentation does not imply that an instance has released or deployed the update.
+Fresh databases start in maintenance with public features closed and use schema 36.
+Exact published schema 33–35 databases receive atomic startup upgrades: history
+indexes and donation catalog authorization changes where needed, followed by
+per-account steward permissions and data-preserving audit-role table rebuilds.
+Current schema 36 opens directly. Account export uses format 30. Existing
+published schema 16–26 databases use the separate offline converter; historical
+conversion code is excluded from the service. Later v1.x releases retain an
+upgrade path from every earlier stable v1.x schema. Older binaries need not read
+newer databases. Source documentation does not imply an instance deployment.
 
 [Deployment](docs/deployment.md) covers systemd, proxies, immutable artifacts, upgrades and complete-snapshot recovery. Startup variables and online settings have one reference in [configuration](docs/configuration.md).
 
@@ -159,7 +176,7 @@ Fresh databases start in maintenance with public features closed. Fresh storage 
 
 | Topic | Documentation |
 | --- | --- |
-| HTTP and automation | [API contract](docs/api-contract.md), [steward integration](docs/steward-automation.md) |
+| HTTP and automation | [API contract](docs/api-contract.md), [steward permissions](docs/steward-permissions.md), [steward integration](docs/steward-automation.md) |
 | Gateway and charging | [Gateway controls](docs/gateway-model-controls.md), [context prices](docs/charity-context-pricing.md), [managed headers](docs/charity-session-headers.md) |
 | Game integration | [Game modules](docs/game-modules.md), [randomness](docs/game-randomness.md), [duels](docs/duel-games.md), [AI players](docs/ai-players.md) |
 | Game storage and rules | [Blackjack](docs/blackjack.md), [Steady Catch](docs/steady-catch.md), [AI Gwent](docs/ai-gwent.md), [Lake Notes](docs/lake-notes.md), [Fat Fish editor](docs/fatfish-editor.md) |

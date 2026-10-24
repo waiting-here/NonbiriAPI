@@ -1,7 +1,9 @@
 # Prepare existing storage
 
-The server creates fresh schema 35 databases and opens current schema 35. Exact
-published schema 33/34 receives an atomic upgrade during normal startup.
+The server creates fresh schema 36 databases and opens current schema 36. Exact
+published schema 33–35 receives atomic upgrades during normal startup: history
+indexes and donation catalog authorization changes where needed, then steward
+permissions and data-preserving audit-role table rebuilds.
 `nonbiri-upgrade-v1` is the separate, one-time offline converter for the following
 exact source structures:
 
@@ -21,13 +23,13 @@ exact source structures:
 
 The machine-readable descriptor is authoritative for these exact source commits
 and their pinned manifest hashes. All supported sources convert atomically to
-schema 35. Unreleased intermediate layouts are not supported sources.
+schema 36. Unreleased intermediate layouts are not supported sources.
 
 The executable that last used a database may differ from the listed commit if
 its stored application identity, generation, schema version and complete
 structure match. Unknown or modified structures are rejected. The server does
 not import the converter or its historical DDL; it only retains the exact schema
-33/34 manifests and their small startup migrations.
+33–35 manifests and their startup migrations.
 
 Build the converter from the same reviewed source as the target server:
 
@@ -94,7 +96,11 @@ Earlier sources receive default-off MFA policies without enrollments or proofs.
 Schema 20 adds four covering indexes for request-log filtering; it changes no
 business records. Schema 21 widens endpoint tags with `noncommercial_gateway`
 and model-discovery outcomes with `region` and `unavailable`, preserving
-existing rows. The current application produces account export format 29.
+existing rows. The current application produces account export format 30, including own
+stored/effective steward permissions and retained policy history. Schema 36
+rebuilds the risk-rule/automatic-ban and blacklist audit tables with existing
+rows, labels, indexes and constraints preserved; new actions can record actual
+level-5 actors. See the [upgrade contract](../../docs/database-upgrades.md).
 
 Schema 17 additionally receives the protocol and fishing presentation changes
 already present in schema 18. Existing probabilities and outcomes remain:
@@ -114,7 +120,7 @@ conversion, remove the retired Gateway variable and `NONBIRI_SMTP_HOST`,
 `NONBIRI_SMTP_FROM` and `NONBIRI_SMTP_TLS` from the deployment environment.
 
 The [rc.7 command](../nonbiri-upgrade-rc7/README.md) remains a narrow wrapper
-accepting schema 16 and current schema 35. Both commands use one engine.
+accepting schema 16 and current schema 36. Both commands use one engine.
 `scripts/check-upgrade.sh` creates a populated synthetic source with the pinned
 rc.7 program, converts it, compares retained facts and resumes economy checks.
 The offline suite also covers the registered schema 17–26 fixtures. No

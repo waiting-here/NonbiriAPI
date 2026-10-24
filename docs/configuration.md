@@ -223,9 +223,9 @@ The administrator user APIs expose both nullable raw values and their current fa
 
 Profile mode on `PATCH /admin/api/users/{id}` accepts canonical decimal strings or null: `endpoint_limit` (0–10000), `rpm_limit`, `light_rpm_limit` and `global_rpm_limit` (1–4096), and `concurrency_limit` and `light_concurrency_limit` (1–100000). Effective fields are strings. Omission preserves a value; null restores the fallback. Heavy charity RPM uses the existing RPM default, light charity RPM defaults to 30, and combined user RPM uses the site global-per-user default. Heavy and light concurrency default to 5 and 15. These pools each combine personal and charity calls. Embeddings, rerank, SystemOne and decisions are light; all other inference operations are heavy. Classification uses the ingress operation, independent of model names or capabilities.
 
-Administrators may edit these limits. On `/api/steward/users/{id}`, an L5 or L6 steward may edit the five inference limits only for another non-administrator account whose effective level is strictly lower. A profile request containing other fields retains its existing permissions; endpoint settings still require an administrator or eligible L6 steward. Batch edits use the same per-user checks. Permission is rechecked before replay and mutation. Explicit limits can exceed defaults; zero never means unlimited. Site-wide RPM and egress limits remain independent.
+Administrators may edit these limits. On `/api/steward/users/{id}`, a steward with `users.limits` may edit the five inference limits within configured numeric bounds only for another non-administrator account whose effective level is strictly lower. A profile request containing other fields retains its existing permissions; endpoint quota changes require an administrator or `users.profile` within its endpoint allowance. Batch edits use the same per-user checks. Permission is rechecked before replay and mutation. Explicit limits can exceed defaults; zero never means unlimited. Site-wide RPM and egress limits remain independent.
 
-Donated-key `max_concurrency` and `max_rpm` edit the same physical `endpoint_key_limits` used by personal calls. Both are JSON integers 0–2147483647; zero adds no per-key limit and existing site/user gates still apply. Management PATCH requires the donation `expected_revision` and, when either field is present, the physical `expected_key_limits_revision`. Null is invalid; omission preserves the value. A concurrent owner edit conflicts. Administrators and L6 may edit authorized donated keys; L5 remains limited to its existing model/source scope with `charity_model_id`. This shared effect must be shown when submitting a donation. See [API revision and replay rules](api-contract.md#31-endpoints-and-keys).
+Donated-key `max_concurrency` and `max_rpm` edit the same physical `endpoint_key_limits` used by personal calls. Both are JSON integers 0–2147483647; zero adds no per-key limit and existing site/user gates still apply. Management PATCH requires the donation `expected_revision` and, when either field is present, the physical `expected_key_limits_revision`. Null is invalid; omission preserves the value. A concurrent owner edit conflicts. Administrators and stewards with `donations.manage_keys` may edit authorized donated keys; without `charity.non_mainstream`, steward access retains its model/source scope and `charity_model_id` requirement. This shared effect must be shown when submitting a donation. See [API revision and replay rules](api-contract.md#31-endpoints-and-keys).
 
 ### Registration gate
 
@@ -237,7 +237,7 @@ A brand-new account is accepted only when all of these are true:
 
 If either ID is blank, registration and sign-in without an exemption cannot complete. Existing accounts can sign in while registration is closed, but by default must still satisfy the guild and role checks. Administrators may enable `discord_registered_user_gate_exempt` globally or set `discord_gate_policy` in a user's profile to `inherit` (the default), `require`, or `exempt`. The per-user setting takes priority. Only administrators can change this setting through `PATCH /admin/api/users/{id}` in profile mode; stewards and users cannot change it. The current value is included in the user's account export and disappears with account deletion.
 
-Changes apply at the next OAuth sign-in. Existing sessions and API keys keep their current lifetime and authority checks. Exemption never bypasses Discord identity verification, bans, blacklists, account deletion or new-registration requirements. Normal users may update their interface language and `game_profile_public` leaderboard preference through `PATCH /api/me`; endpoint limits are managed by administrators or authorized L6 stewards. L5 and L6 stewards may change inference limits only for strictly lower-level users; their other permissions remain unchanged.
+Changes apply at the next OAuth sign-in. Existing sessions and API keys keep their current lifetime and authority checks. Exemption never bypasses Discord identity verification, bans, blacklists, account deletion or new-registration requirements. Normal users may update their interface language and `game_profile_public` leaderboard preference through `PATCH /api/me`; endpoint quotas require administrator authority or `users.profile`. Steward inference-limit changes require `users.limits`, a strictly lower-level target and configured numeric bounds. See [steward permissions](steward-permissions.md).
 
 ### Mainstream channel catalog
 
@@ -286,7 +286,7 @@ The Gacha Simulator entry is hidden by default and can be shown in its administr
 
 ## Managed session headers
 
-Personal and charity model settings use the same managed-header fields and save them with the model. Request adaptation saves separately, with request-header and request-body groups. Owners edit their personal models; administrator/level-6 authority edits charity settings, and level-6 charity request adaptation remains read-only.
+Personal and charity model settings use the same managed-header fields and save them with the model. Request adaptation saves separately, with request-header and request-body groups. Owners edit their personal models; administrator authority or the applicable `charity.create`/`charity.model_settings` grant edits charity settings; steward charity request adaptation remains read-only.
 
 Each header selects `uuid_v4`, `hex_32`, `opencode_session`, `opencode_message` or `opencode_part`. Idle lifetime accepts 0–86,400 seconds; omission or a blank browser field uses 300. Zero generates a new value for each logical request, reused by its internal retries, without an absolute uniqueness guarantee. Positive lifetimes reuse a value for the same user/model/header until idle expiry. See [field defaults, precedence, export and lifecycle](charity-session-headers.md).
 
@@ -309,8 +309,9 @@ until capacity becomes available, without evicting retained captures. See
 [header capture and privacy](api-contract.md#11-restricted-diagnostics-and-manual-risk-auditing).
 
 Price templates are shared resources managed by administrators and readable by
-L6 browser sessions. Applying one copies the complete price/reward, Token
+steward browser sessions with `charity.price_templates.read`. Applying one copies the complete price/reward, Token
 reserve, context and discount values into a model form, including clearing
 disabled settings. Model save remains explicit. There is no template CallerKey
-scope, L5 access or automatic propagation to existing models. See
+scope or automatic propagation to existing models. Saving the model requires
+the applicable create/pricing grant. See
 [the template API](api-contract.md#741-price-templates).

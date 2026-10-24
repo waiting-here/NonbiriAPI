@@ -8,12 +8,22 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
+- Add per-account level-5 steward permissions with 46 actions, six numeric limits,
+  revisioned updates and live revocation. Preserve default workflows, actual
+  actor hierarchy and administrator-only operations; include own policy and
+  retained change history in account export.
+- Add exact donor account/Discord ID filters and complete retained donation
+  history in user management, including owner-hidden records through a safe
+  projection. Default source browsers to all retained sources.
 - Add the single-card ChatGPT SP theme “Tomorrow, Still Unwritten”, with an
   unpublished limited-pool template, animated card, cover, collection illustration
   and unlockable light/dark site appearance. Its artwork is classified as general.
 
 ### Fixed
 
+- Limit charity binding, candidate and preset catalog checks to selected
+  donation keys, avoiding repeated aggregation of unrelated catalogs inside
+  write transactions while preserving scope, replay and atomicity.
 - Keep browser and steward time contexts in separate caches and preserve date
   initialization when other fields change, so valid charity model forms remain
   submittable.
@@ -51,11 +61,13 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Storage
 
-- Fresh storage uses schema 35. Exact published schema 33/34 databases receive
-  atomic startup upgrades: the four history indexes where needed, followed by
-  the donation catalog authorization trigger and catalog view. No table rebuild or data rewrite
-  is required. The separate schema 16–26 converter targets the same schema;
-  account export remains 29.
+- Fresh storage uses schema 36. Exact published schema 33–35 databases receive
+  atomic startup upgrades: history indexes and donation catalog authorization
+  changes where needed, then steward permission tables and audit-role changes.
+  The risk-rule/automatic-ban and blacklist audit tables are rebuilt with their
+  rows, history, indexes and constraints preserved so actions record actual
+  level-5 identities. The separate schema 16–26 converter targets schema 36;
+  account export uses format 30.
 
 ### Security
 
