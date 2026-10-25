@@ -2172,7 +2172,7 @@
       "keyState": {
         "rate_limited": "限流中",
         "pending": "待审核",
-        "disabled": "公益使用已停用",
+        "disabled": "公益服务已暂停或未启用",
         "physical_disabled": "密钥已停用",
         "suspended": "已暂停",
         "failure_disabled": "连续失败后停用",
@@ -2200,10 +2200,6 @@
       "tokensUnit": "tokens",
       "tokenReserve": "每次请求预扣的 Token",
       "tokensPerRequest": "tokens / 次",
-      "failureStreak": "连续失败次数",
-      "failureDisabled": "连续失败自动锁定",
-      "failureDisabledYes": "已触发",
-      "failureDisabledNo": "未触发",
       "endedReason": "结束原因",
       "notEnded": "尚未结束",
       "endedReasonValue": {

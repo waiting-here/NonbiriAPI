@@ -154,14 +154,5 @@ func readSplitTokenProjection(ctx context.Context, tx *sql.Tx, keyID int64, item
 	if err != nil {
 		return err
 	}
-	if item.CharityState == "available" {
-		exhausted, err := anyCapExhausted(inLimit, inUsed, inReserved, outLimit, outUsed, outReserved)
-		if err != nil {
-			return err
-		}
-		if exhausted {
-			item.CharityState = "exhausted"
-		}
-	}
 	return nil
 }

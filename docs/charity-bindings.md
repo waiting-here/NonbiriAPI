@@ -26,6 +26,16 @@ target and key. See [steward permissions](steward-permissions.md).
 IDs, revisions and counts below are canonical decimal strings, except opaque
 channel IDs. Pagination uses the existing numbered-page envelope.
 
+Binding reads include a current `availability` snapshot on each target, with
+`state` and `service_statuses`. The latter contains only selected upstream
+services relevant to the platform model's interfaces. Availability uses the
+same resource checks as the public catalog, scoped to the exact target; a healthy
+sibling target cannot mask a paused target. `capabilities.can_bind` continues to
+describe configuration compatibility, so temporary health failures do not prevent
+editing a connection. Key-to-model binding pages expose the same information in
+`targets:[{target_id,upstream_model_id,availability}]`. Write receipts omit the
+live snapshot; refresh the read endpoint after a mutation.
+
 | Method and suffix | Request or response |
 | --- | --- |
 | `GET /donations/{id}/keys/{keyId}/binding-options` | `q,page,page_size`; `{data:[{charity_model_id,full_name,enabled,binding_revision}],pagination,next_cursor:null}` |

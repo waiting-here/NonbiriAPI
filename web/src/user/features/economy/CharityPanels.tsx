@@ -1,5 +1,6 @@
 import { DonationStatusBadge } from '@shared/components/UseSummary';
 import { DonationUsesPanel } from '@shared/components/DonationUsesPanel';
+import { ServiceHealth } from '@shared/components/ResourceHealth';
 import { OwnerUseAddition } from './OwnerUseAddition';
 import { DonationShareFields } from './DonationShareFields';
 import { contextPriceProps, contextRows } from './contextPrices';
@@ -791,6 +792,7 @@ export function DonationKeyPanel({
         until={donationKey.rateLimitedUntil}
         smartBackoff={donationKey.smartBackoff}
       />
+      <ServiceHealth statuses={donationKey.serviceStatuses} />
       {accountID && donationId && donationKey.endedReason === null ? (
         <DonationUsesPanel
           role="owner"
@@ -908,20 +910,16 @@ export function DonationKeyPanel({
               />
             </dd>
           </div>
-          <div className="detail-row">
-            <dt>{t('user.charity.failureStreak')}</dt>
-            <dd>
-              <ExactCount value={donationKey.streak.count} />
-            </dd>
-          </div>
-          <div className="detail-row">
-            <dt>{t('user.charity.failureDisabled')}</dt>
-            <dd>
-              {donationKey.streak.failureDisabled
-                ? t('user.charity.failureDisabledYes')
-                : t('user.charity.failureDisabledNo')}
-            </dd>
-          </div>
+          {donationKey.streak.count !== '0' || donationKey.streak.failureDisabled ? (
+            <div className="detail-row">
+              <dt>{t('common.resourceHealth.keyFailures', { count: donationKey.streak.count })}</dt>
+              <dd>
+                {donationKey.streak.failureDisabled
+                  ? t('common.resourceHealth.states.failure_disabled')
+                  : t('common.resourceHealth.states.available')}
+              </dd>
+            </div>
+          ) : null}
           <div className="detail-row">
             <dt>{t('user.charity.endedReason')}</dt>
             <dd>

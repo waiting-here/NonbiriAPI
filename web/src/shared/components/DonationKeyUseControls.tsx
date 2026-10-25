@@ -57,12 +57,7 @@ export function DonationKeyUseControls({
             ['user', 'economy', 'donations'],
             [...root, 'donation-uses', accountId, donationId],
           ]
-        : [
-            [...root, 'donation-uses', accountId, donationId],
-            charityKeys.donation(role, donationId),
-            [...charityKeys.root(role), 'key-pages', accountId, donationId],
-            [...charityKeys.root(role), 'donation-pages', accountId],
-          ];
+        : [[...root, 'donation-uses', accountId, donationId], charityKeys.root(role)];
     await Promise.all(
       keys.map((queryKey) => client.invalidateQueries({ queryKey }, { throwOnError: true })),
     );

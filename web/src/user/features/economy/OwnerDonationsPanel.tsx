@@ -1,3 +1,4 @@
+import { serviceHealthDeadlines } from '@shared/operations/resourceHealth';
 import {
   DONATION_DISPLAY_STATUSES,
   type DonationDisplayStatus,
@@ -529,9 +530,11 @@ export function OwnerDonationKeys({
   });
   useRateLimitRefresh(
     enabled
-      ? (query.data?.data
-          .filter((key) => key.charityState === 'rate_limited')
-          .flatMap((key) => [key.rateLimitedUntil, smartBackoffDeadline(key.smartBackoff)]) ?? [])
+      ? (query.data?.data.flatMap((key) => [
+          key.rateLimitedUntil,
+          smartBackoffDeadline(key.smartBackoff),
+          ...serviceHealthDeadlines(key.serviceStatuses),
+        ]) ?? [])
       : [],
     () => query.refetch({ throwOnError: true }),
   );

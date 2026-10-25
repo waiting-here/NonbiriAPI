@@ -1,3 +1,4 @@
+import { serviceHealthDeadlines } from '@shared/operations/resourceHealth';
 import { DONATION_DISPLAY_STATUSES } from '@shared/operations/donationUses';
 import {
   defaultStewardPermissions,
@@ -8,6 +9,7 @@ import {
 import { StewardPermissionNotice } from './StewardPermissionNotice';
 import { DonationStatusBadge } from './UseSummary';
 import { DonationKeyUseControls } from './DonationKeyUseControls';
+import { ServiceHealth } from './ResourceHealth';
 import { DonationUseReviewResults, DonationUsesPanel } from './DonationUsesPanel';
 import type { UseReviewResult } from '@shared/operations/donationUses';
 import type { ReviewedUseLabel } from '@shared/operations/donationUsesReview';
@@ -428,6 +430,7 @@ function DonationKeyEditor(
         })}
       </h4>
       <p>{safeSourceLabel(props.item.safe_source, t)}</p>
+      <ServiceHealth statuses={props.item.service_statuses} />
       <DonationKeyUseControls
         role={props.role}
         accountId={props.accountId}
@@ -577,7 +580,9 @@ function DonationKeySettings({
             state: t(item.physical_enabled ? 'common.enabled' : 'common.disabled'),
           })}
         </span>
-        <span>{t('common.operations.charity.failureStreak', { count: item.streak.count })}</span>
+        {item.streak.count !== '0' || item.streak.failure_disabled ? (
+          <span>{t('common.resourceHealth.keyFailures', { count: item.streak.count })}</span>
+        ) : null}
         <span>
           {t(item.idle ? 'common.donationHandling.idle' : 'common.donationHandling.bound', {
             count: item.binding_count,
@@ -1269,9 +1274,11 @@ function DonationKeyPages({
   });
   const capabilityLost = isForbidden(keys.error) || isUnauthorized(keys.error);
   useRateLimitRefresh(
-    keys.data?.data
-      .filter((key) => key.charity_state === 'rate_limited')
-      .flatMap((key) => [key.rate_limited_until, smartBackoffDeadline(key.smart_backoff)]) ?? [],
+    keys.data?.data.flatMap((key) => [
+      key.rate_limited_until,
+      smartBackoffDeadline(key.smart_backoff),
+      ...serviceHealthDeadlines(key.service_statuses),
+    ]) ?? [],
     () => keys.refetch({ throwOnError: true }),
   );
   useEffect(() => {
@@ -2487,8 +2494,12 @@ function ScopedKeyBrowser({
   const refresh = () =>
     client.invalidateQueries({ queryKey: charityKeys.root('steward') }, { throwOnError: true });
   useRateLimitRefresh(
-    detail.data?.charity_state === 'rate_limited'
-      ? [detail.data.rate_limited_until, smartBackoffDeadline(detail.data.smart_backoff)]
+    detail.data
+      ? [
+          detail.data.rate_limited_until,
+          smartBackoffDeadline(detail.data.smart_backoff),
+          ...serviceHealthDeadlines(detail.data.service_statuses),
+        ]
       : [],
     () => detail.refetch({ throwOnError: true }),
   );
@@ -2646,8 +2657,12 @@ function PickerKeyManager({
   const refresh = () =>
     client.invalidateQueries({ queryKey: charityKeys.root(role) }, { throwOnError: true });
   useRateLimitRefresh(
-    detail.data?.key.charity_state === 'rate_limited'
-      ? [detail.data.key.rate_limited_until, smartBackoffDeadline(detail.data.key.smart_backoff)]
+    detail.data
+      ? [
+          detail.data.key.rate_limited_until,
+          smartBackoffDeadline(detail.data.key.smart_backoff),
+          ...serviceHealthDeadlines(detail.data.key.service_statuses),
+        ]
       : [],
     () => detail.refetch({ throwOnError: true }),
   );

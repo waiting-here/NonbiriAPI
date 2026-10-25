@@ -327,6 +327,10 @@ func (s *Service) sourceKeysPage(ctx context.Context, role reviewerRole, userID 
 		return empty, err
 	}
 	result := Page[ManagedKeySummary]{Data: make([]ManagedKeySummary, 0, len(ids)), Pagination: &metadata}
+	statuses, err := donationstate.LoadServiceStatuses(ctx, tx, ids, now)
+	if err != nil {
+		return empty, err
+	}
 	for _, keyID := range ids {
 		var donationID int64
 		if err := tx.QueryRowContext(ctx, `SELECT donation_id FROM donation_keys WHERE id=?`, keyID).Scan(&donationID); err != nil {
@@ -336,7 +340,7 @@ func (s *Service) sourceKeysPage(ctx context.Context, role reviewerRole, userID 
 		if err != nil {
 			return empty, err
 		}
-		keys, err := readDonationKeySelectionTx(ctx, tx, donationID, header.Status, now, []int64{keyID})
+		keys, err := readDonationKeySelectionTx(ctx, tx, donationID, header.Status, now, []int64{keyID}, statuses)
 		if err != nil {
 			return empty, err
 		}

@@ -1,6 +1,7 @@
 import { decoded, idempotentOptions, queryPath } from './api';
 import { charityScopePath } from './charityScope';
 import { type CharityRole } from './charity';
+import { normalizeBindingAvailability, type BindingAvailability } from './resourceHealth';
 import {
   normalizeNumberedPage,
   validateWindow,
@@ -41,6 +42,7 @@ export interface DonationKeyModel {
   available_binding_count: string;
 }
 export interface DonationKeyModelBinding {
+  targets?: { target_id: string; upstream_model_id: string; availability?: BindingAvailability }[];
   binding_id: string;
   upstream_model_id: string;
   ord: number;
@@ -245,14 +247,30 @@ export function getDonationKeyModelBindings(
         (entry) => {
           const row = record(
             entry,
-            ['binding_id', 'upstream_model_id', 'ord', 'state'],
+            ['binding_id', 'upstream_model_id', 'ord', 'state', 'targets'],
             'donation key model binding',
+            ['binding_id', 'upstream_model_id', 'ord', 'state'],
           );
           return {
             binding_id: decimalID(row.binding_id, 'binding id'),
             upstream_model_id: string(row.upstream_model_id, 'upstream model id', { min: 1 }),
             ord: integer(row.ord, 'binding order', 0, 255),
             state: oneOf(row.state, donationBindingStates, 'binding state'),
+            targets:
+              row.targets === undefined
+                ? undefined
+                : array(row.targets, 'binding target states').map((value) => {
+                    const target = record(
+                      value,
+                      ['target_id', 'upstream_model_id', 'availability'],
+                      'binding target state',
+                    );
+                    return {
+                      target_id: decimalID(target.target_id, 'target id'),
+                      upstream_model_id: string(target.upstream_model_id, 'target model'),
+                      availability: normalizeBindingAvailability(target.availability),
+                    };
+                  }),
           };
         },
         page,

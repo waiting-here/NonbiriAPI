@@ -18,6 +18,7 @@ export default defineConfig({
     'operation-controls.spec.ts',
     'discovery-errors.spec.ts',
     'smart-backoff.spec.ts',
+    'resource-health.spec.ts',
     'recurring-discounts.spec.ts',
     'charity-binding-batch.spec.ts',
     'connection-experience.spec.ts',

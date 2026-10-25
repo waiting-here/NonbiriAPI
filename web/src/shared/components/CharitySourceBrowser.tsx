@@ -1,4 +1,6 @@
+import { serviceHealthDeadlines } from '@shared/operations/resourceHealth';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
+import { ServiceHealth } from './ResourceHealth';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { Button } from '@shared/components/ui/Button';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -399,6 +401,7 @@ function KeySummary({
           label={t(keyStateLabel[keyValue.charity_state])}
         />
       </header>
+      <ServiceHealth statuses={keyValue.service_statuses} />
       <DonationKeyNotes
         note={keyValue.safe_note}
         donor={keyValue.donation_note}
@@ -638,9 +641,11 @@ export function CharitySourceBrowser({
         : undefined,
   });
   useRateLimitRefresh(
-    sourceKeys.data?.data
-      .filter((key) => key.charity_state === 'rate_limited')
-      .flatMap((key) => [key.rate_limited_until, smartBackoffDeadline(key.smart_backoff)]) ?? [],
+    sourceKeys.data?.data.flatMap((key) => [
+      key.rate_limited_until,
+      smartBackoffDeadline(key.smart_backoff),
+      ...serviceHealthDeadlines(key.service_statuses),
+    ]) ?? [],
     () => sourceKeys.refetch({ throwOnError: true }),
   );
   const authorityError = [sources.error, sourceKeys.error].find(

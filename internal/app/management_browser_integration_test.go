@@ -126,6 +126,7 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 	}, f.adminCookie, true)
 	bindings := seedBindingManagementBrowser(t, f, now)
 	backoff := seedAutomaticBackoffBrowser(t, f, now, channel)
+	resourceHealth := seedResourceHealthBrowser(t, f, now, channel)
 	recurring := seedRecurringDiscountBrowser(t, f, now, channel)
 	exportUserID, err := strconv.ParseInt(f.users[0].ID, 10, 64)
 	if err != nil {
@@ -138,6 +139,7 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 	}
 	return map[string]any{"recurring_discount": recurring, "automatic_backoff_donation_id": backoff["donation_id"], "automatic_backoff_key_ids": backoff["key_ids"], "automatic_backoff_model_id": backoff["model_id"], "binding_donation_id": bindings["donation_id"], "binding_key_ids": bindings["key_ids"], "binding_model_ids": bindings["model_ids"], "binding_channel_id": bindings["channel_id"], "old_user_id": old.ID, "current_user": current, "history_discord_id": historyDiscord, "history_record_id": historyID, "request_ids": requests,
 		"account_export":     map[string]any{"user_id": f.users[0].ID, "elevated_token": exportToken},
+		"resource_health":    resourceHealth,
 		"gemini_endpoint_id": geminiEndpoint, "gemini_key_id": geminiKey,
 		"disposable_user_id": disposable.ID,
 		"trainee_target_id":  traineeTarget.ID,

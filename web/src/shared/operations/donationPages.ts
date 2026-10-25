@@ -267,6 +267,7 @@ const DONATION_KEY_FIELDS = [
 ] as const;
 
 const KEY_SUMMARY_FIELDS = [
+  'service_statuses',
   'maintenance_scope_required',
   'can_manage',
   'donation_note',
@@ -611,6 +612,7 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
       (field) =>
         ![
           'can_manage',
+          'service_statuses',
           'maintenance_scope_required',
           'review',
           'key_limits_revision',
@@ -628,6 +630,7 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
   const key = normalizeManagedKey(
     {
       can_manage: root.can_manage,
+      service_statuses: root.service_statuses,
       review: root.review,
       binding_count: root.binding_count,
       failure_disable_threshold: root.failure_disable_threshold,

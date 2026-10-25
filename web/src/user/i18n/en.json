@@ -2172,7 +2172,7 @@
       "keyState": {
         "rate_limited": "Rate limited",
         "pending": "Pending review",
-        "disabled": "Charity use disabled",
+        "disabled": "Charity services paused or not enabled",
         "physical_disabled": "Key disabled",
         "suspended": "Suspended",
         "failure_disabled": "Disabled after failures",
@@ -2200,10 +2200,6 @@
       "tokensUnit": "tokens",
       "tokenReserve": "Tokens held per request",
       "tokensPerRequest": "tokens / request",
-      "failureStreak": "Failure streak",
-      "failureDisabled": "Automatic failure lock",
-      "failureDisabledYes": "Active",
-      "failureDisabledNo": "Inactive",
       "endedReason": "Ended because",
       "notEnded": "Not ended",
       "endedReasonValue": {

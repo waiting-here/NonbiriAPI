@@ -4,6 +4,12 @@ import {
   type ServiceProjection,
 } from '@shared/connections';
 import { normalizeUseSummary, type UseSummary } from './donationUses';
+import {
+  normalizeServiceStatuses,
+  normalizeBindingAvailability,
+  type ServiceStatus,
+  type BindingAvailability,
+} from './resourceHealth';
 import { normalizeSessionHeaders, type SessionHeader } from '@shared/sessionHeaders';
 export type { SessionHeader } from '@shared/sessionHeaders';
 import { normalizeCloudflareProxyMode, type CloudflareProxyMode } from '@shared/cloudflareProxy';
@@ -113,6 +119,7 @@ export type ManagedSafeSource =
     };
 
 export interface ManagedDonationKey extends SmartBackoffFields {
+  service_statuses?: ServiceStatus[];
   can_manage?: boolean;
   review?: { required: boolean; revision: string | null; material_available: boolean };
   failure_disable_threshold: string;
@@ -319,6 +326,7 @@ export function normalizeManagedKey(
       'breakdown_started_at',
       'review',
       'can_manage',
+      'service_statuses',
     ],
     label,
     required,
@@ -430,6 +438,7 @@ export function normalizeManagedKey(
     safe_source: normalizeManagedSource(root.safe_source, `${label} source`, role),
     physical_enabled: boolean(root.physical_enabled, `${label} physical switch`),
     charity_state: state,
+    service_statuses: normalizeServiceStatuses(root.service_statuses),
     rate_limited_until: nullableUnixSecond(
       root.rate_limited_until ?? null,
       `${label} rate limit expiry`,
@@ -1728,6 +1737,7 @@ export const deleteManagedBinding = async (
 };
 
 export interface CharityTarget extends ServiceProjection {
+  availability?: BindingAvailability;
   id: string;
   revision: string;
   donation_key_id: string;
@@ -1764,8 +1774,25 @@ function normalizeCharityTarget(value: unknown): CharityTarget {
       'connector_type',
       'configuration_type',
       'base_url',
+      'availability',
     ],
     'charity target',
+    [
+      'id',
+      'revision',
+      'donation_id',
+      'endpoint_id',
+      'donation_key_id',
+      'upstream_model_id',
+      'native_services',
+      'model_types',
+      'service_routes',
+      'capabilities',
+      'uses',
+      'connector_type',
+      'configuration_type',
+      'base_url',
+    ],
   );
   return {
     id: decimalID(row.id, 'target'),
@@ -1794,6 +1821,7 @@ function normalizeCharityTarget(value: unknown): CharityTarget {
     donation_key_id: decimalID(row.donation_key_id, 'donation key'),
     upstream_model_id: string(row.upstream_model_id, 'target model'),
     ...normalizeServiceProjection(value),
+    availability: normalizeBindingAvailability(row.availability),
     uses: array(row.uses, 'approved uses').map((value) => {
       const use = record(
         value,

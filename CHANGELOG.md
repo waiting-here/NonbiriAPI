@@ -44,6 +44,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Show current approved service health on donation keys, source summaries and
+  model connections. Distinguish manual recovery after consecutive failures from
+  timed backoff, retain partial availability, and align key details with filters.
 - Accept legitimate mixed donation states in the frontend, including a pending
   parent with approved services and a service awaiting a replacement. Keep valid
   donation history readable instead of rejecting the complete response.

@@ -149,7 +149,7 @@ func (s *Service) AutomationKeys(ctx context.Context, userID, donationID int64, 
 		return out, err
 	}
 	out.Pagination = &meta
-	out.Data, err = readDonationKeySelectionTx(ctx, tx, donationID, header.Status, now, ids)
+	out.Data, err = readDonationKeySelectionWithStatusesTx(ctx, tx, donationID, header.Status, now, ids)
 	if err != nil {
 		return out, err
 	}
@@ -178,7 +178,7 @@ func (s *Service) AutomationKey(ctx context.Context, userID, donationID, keyID i
 	if err != nil {
 		return AdminDonationKey{}, err
 	}
-	keys, err := readDonationKeySelectionTx(ctx, tx, donationID, header.Status, now, []int64{keyID})
+	keys, err := readDonationKeySelectionWithStatusesTx(ctx, tx, donationID, header.Status, now, []int64{keyID})
 	if err != nil {
 		return AdminDonationKey{}, err
 	}

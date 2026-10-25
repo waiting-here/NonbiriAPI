@@ -207,11 +207,15 @@ func agentDonationsTx(ctx context.Context, tx *sql.Tx, access useAccess, selecti
 		if err != nil {
 			return nil, err
 		}
+		statuses, err := readDonationServiceStatusesTx(ctx, tx, batch, now)
+		if err != nil {
+			return nil, err
+		}
 		for _, id := range batch {
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			value, err := getAdminDonationTx(ctx, tx, id, now, summaries[id])
+			value, err := getDonationProjectionWithStatusesTx(ctx, tx, id, now, statuses, summaries[id])
 			if err != nil {
 				return nil, err
 			}

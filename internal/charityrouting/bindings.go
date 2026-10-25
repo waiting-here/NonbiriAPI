@@ -119,22 +119,29 @@ func (s *Service) GetBindingsAdmin(ctx context.Context, modelID int64) (AdminBin
 		return AdminBindings{}, err
 	}
 	defer tx.Rollback()
-	return readAdminBindingsTx(ctx, tx, modelID)
+	value, err := readAdminBindingsTx(ctx, tx, modelID)
+	if err != nil {
+		return AdminBindings{}, err
+	}
+	now, err := s.nowUnix()
+	if err != nil {
+		return AdminBindings{}, err
+	}
+	if err := annotateBindingAvailabilityTx(ctx, tx, modelID, now, &value); err != nil {
+		return AdminBindings{}, err
+	}
+	return value, nil
 }
 
 func (s *Service) GetBindingsSteward(ctx context.Context, actorUserID, modelID int64) (StewardBindings, error) {
 	if s == nil || s.db == nil || ctx == nil || actorUserID <= 0 || modelID <= 0 || nilDependency(s.roleAuth) {
 		return StewardBindings{}, ErrInvalidRequest
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, scope, err := s.beginManagementTx(ctx, roleSteward, actorUserID, modelID, false, true)
 	if err != nil {
 		return StewardBindings{}, fmt.Errorf("charity routing: begin steward bindings read: %w", err)
 	}
 	defer tx.Rollback()
-	scope, err := s.managementScope(ctx, tx, roleSteward, actorUserID, modelID, false)
-	if err != nil {
-		return StewardBindings{}, err
-	}
 	value, err := readAdminBindingsTx(ctx, tx, modelID)
 	if err != nil {
 		return StewardBindings{}, err
@@ -145,6 +152,9 @@ func (s *Service) GetBindingsSteward(ctx context.Context, actorUserID, modelID i
 	}
 	value, err = scopedBindingsTx(ctx, tx, scope, value, now)
 	if err != nil {
+		return StewardBindings{}, err
+	}
+	if err := annotateBindingAvailabilityTx(ctx, tx, modelID, now, &value); err != nil {
 		return StewardBindings{}, err
 	}
 	if err := tx.Commit(); err != nil {

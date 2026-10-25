@@ -37,10 +37,11 @@ type KeyModelPage struct {
 }
 
 type KeyModelBinding struct {
-	BindingID       string `json:"binding_id"`
-	UpstreamModelID string `json:"upstream_model_id"`
-	Ord             int    `json:"ord"`
-	State           string `json:"state"`
+	Targets         []KeyModelTarget `json:"targets,omitempty"`
+	BindingID       string           `json:"binding_id"`
+	UpstreamModelID string           `json:"upstream_model_id"`
+	Ord             int              `json:"ord"`
+	State           string           `json:"state"`
 }
 
 // Left joins retain a still-configured association even when its source has
@@ -171,6 +172,23 @@ func (s *Service) keyModelPages(ctx context.Context, role roleKind, actorID, don
 	}
 	if err = rows.Close(); err != nil {
 		return models, bindings, err
+	}
+	if modelID != 0 {
+		ids := make([]string, 0, len(bindings.Data))
+		for _, binding := range bindings.Data {
+			ids = append(ids, binding.BindingID)
+		}
+		targets, err := readBindingAvailabilityTx(ctx, tx, modelID, keyID, now, ids)
+		if err != nil {
+			return models, bindings, err
+		}
+		byBinding := make(map[string][]KeyModelTarget)
+		for _, target := range targets {
+			byBinding[target.bindingID] = append(byBinding[target.bindingID], target.KeyModelTarget)
+		}
+		for i := range bindings.Data {
+			bindings.Data[i].Targets = byBinding[bindings.Data[i].BindingID]
+		}
 	}
 	if modelID == 0 {
 		q := ""

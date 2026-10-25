@@ -1,4 +1,7 @@
 import { CharityTargets } from './CharityTargets';
+import { BindingHealth } from '../ResourceHealth';
+import { serviceHealthDeadlines } from '@shared/operations/resourceHealth';
+import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
 import { StewardPermissionNotice } from '../StewardPermissionNotice';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { isAISDKGateway } from '@shared/operations/connectorPolicy';
@@ -867,6 +870,15 @@ function BindingsPanel({
     queryFn: ({ signal }) => getManagedBindings(role, model.id, signal),
     retry: false,
   });
+  useRateLimitRefresh(
+    bindings.data?.bindings.flatMap(
+      (binding) =>
+        binding.targets?.flatMap((target) =>
+          serviceHealthDeadlines(target.availability?.service_statuses),
+        ) ?? [],
+    ) ?? [],
+    () => bindings.refetch({ throwOnError: true }),
+  );
 
   const capabilityLost = isUnauthorized(bindings.error) || isForbidden(bindings.error);
   useEffect(() => {
@@ -975,6 +987,13 @@ function BindingsPanel({
               <tbody>
                 {bindingPage.data.map((entry, pageIndex) => {
                   const index = bindingPage.offset + pageIndex;
+                  const sourceKeys = entry.targets?.length
+                    ? [
+                        ...new Map(
+                          entry.targets.map((target) => [target.donation_key_id, target]),
+                        ).values(),
+                      ]
+                    : [entry];
                   return (
                     <tr key={entry.id}>
                       <td data-label={t(charityCopyKey(role, 'order'))}>{index + 1}</td>
@@ -1004,7 +1023,14 @@ function BindingsPanel({
                         className="ops-cell-wide"
                         data-label={t(charityCopyKey(role, 'upstreamModel'))}
                       >
-                        {entry.upstream_model_id}
+                        {entry.targets?.length
+                          ? entry.targets.map((target) => (
+                              <div key={target.id} className="nb-stack nb-stack--sm">
+                                <strong>{target.upstream_model_id}</strong>
+                                <BindingHealth value={target.availability} />
+                              </div>
+                            ))
+                          : entry.upstream_model_id}
                         {(entry.targets?.every((target) => isAISDKGateway(target.connector_type)) ??
                         isAISDKGateway(entry.source.connector_type)) ? (
                           <GatewayCapabilitySummary entry={entry.gateway_capabilities} />
@@ -1024,27 +1050,30 @@ function BindingsPanel({
                         >
                           {t('common.connections.editBindingSources')}
                         </button>
-                        <button
-                          className="nb-btn nb-btn--secondary"
-                          type="button"
-                          disabled={busy || orderChanged}
-                          onClick={() =>
-                            setParams((current) => {
-                              const next = new URLSearchParams(current);
-                              next.set('charity_section', 'donations');
-                              next.set('donation_id', entry.donation_id);
-                              next.set('donation_key', entry.donation_key_id);
-                              next.set('donation_from', 'models');
-                              next.delete('donation_keys_page');
-                              next.delete('donation_keys_page_size');
-                              return next;
-                            })
-                          }
-                        >
-                          {t('common.operations.charity.sourceBrowser.manageKey', {
-                            id: entry.donation_key_id,
-                          })}
-                        </button>
+                        {sourceKeys.map((sourceKey) => (
+                          <button
+                            key={sourceKey.donation_key_id}
+                            className="nb-btn nb-btn--secondary"
+                            type="button"
+                            disabled={busy || orderChanged}
+                            onClick={() =>
+                              setParams((current) => {
+                                const next = new URLSearchParams(current);
+                                next.set('charity_section', 'donations');
+                                next.set('donation_id', sourceKey.donation_id);
+                                next.set('donation_key', sourceKey.donation_key_id);
+                                next.set('donation_from', 'models');
+                                next.delete('donation_keys_page');
+                                next.delete('donation_keys_page_size');
+                                return next;
+                              })
+                            }
+                          >
+                            {t('common.operations.charity.sourceBrowser.manageKey', {
+                              id: sourceKey.donation_key_id,
+                            })}
+                          </button>
+                        ))}
                         {showAdaptation ? (
                           <button
                             className="nb-btn nb-btn--secondary"

@@ -852,6 +852,23 @@ header-only; smart `waiting` and `probing` also project
 `charity_state:"rate_limited"`. Ready state still requires every ordinary
 ownership, approval, enablement, expiry, quota and admission check.
 
+Donation key read responses include optional `service_statuses` for current approved
+services. Each entry contains `use_id`, `native_service`, `state`,
+`failure_streak`, `failure_disabled`, nullable `retry_after_until`, and nullable
+`smart_backoff` with the state/reason/source/retry time described above.
+Service state is `available|disabled|review_required|failure_disabled|rate_limited|unavailable`.
+It describes that service's authorization and health; shared key quotas and
+lifecycle remain in `charity_state`. Detail and filter projections use the same
+key-state calculation. One paused service does not disable other healthy services.
+Old key-level `streak` and cooldown fields retain their key-level meaning.
+Only the current approved credential version contributes service failures;
+discovery success does not recover a paused inference service. Failure suspension
+requires the existing authorized service reset, which preserves cooldowns.
+Recovery probes expose `probing` with a real recorded retry time, never a sentinel
+date. These safe status fields contain no upstream error body or credential.
+Mutation receipts and account exports omit the live service snapshot; refresh a
+read endpoint after changing health controls.
+
 #### Endpoint recognition rules
 
 Administrators and stewards with `charity.backoff` configure an exact `connector_type`

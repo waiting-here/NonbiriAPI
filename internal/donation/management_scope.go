@@ -9,6 +9,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
+	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -143,6 +144,11 @@ func (s *Service) KeyStewardSession(ctx context.Context, userID, donationID, key
 	if err != nil {
 		return ManagedKeySummary{}, err
 	}
+	statuses, err := donationstate.LoadServiceStatuses(ctx, tx, []int64{keyID}, now)
+	if err != nil {
+		return ManagedKeySummary{}, err
+	}
+	value.ServiceStatuses = statuses[keyID]
 	return value, tx.Commit()
 }
 

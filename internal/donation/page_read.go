@@ -220,7 +220,7 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 	if err != nil {
 		return empty, err
 	}
-	keys, err := readDonationKeySelectionTx(ctx, tx, donationID, header.Status, now, ids)
+	keys, err := readDonationKeySelectionWithStatusesTx(ctx, tx, donationID, header.Status, now, ids)
 	if err != nil {
 		return empty, err
 	}

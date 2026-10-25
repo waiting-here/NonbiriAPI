@@ -46,16 +46,17 @@ type ServiceProjection struct {
 
 type BindingTarget struct {
 	ServiceProjection
-	ID                string             `json:"id"`
-	Revision          string             `json:"revision"`
-	DonationID        string             `json:"donation_id"`
-	DonationKeyID     string             `json:"donation_key_id"`
-	UpstreamModelID   string             `json:"upstream_model_id"`
-	EndpointID        string             `json:"endpoint_id"`
-	ConnectorType     contract.Type      `json:"connector_type"`
-	ConfigurationType contract.Type      `json:"configuration_type"`
-	BaseURL           string             `json:"base_url"`
-	Uses              []BindingTargetUse `json:"uses"`
+	Availability      *BindingAvailability `json:"availability,omitempty"`
+	ID                string               `json:"id"`
+	Revision          string               `json:"revision"`
+	DonationID        string               `json:"donation_id"`
+	DonationKeyID     string               `json:"donation_key_id"`
+	UpstreamModelID   string               `json:"upstream_model_id"`
+	EndpointID        string               `json:"endpoint_id"`
+	ConnectorType     contract.Type        `json:"connector_type"`
+	ConfigurationType contract.Type        `json:"configuration_type"`
+	BaseURL           string               `json:"base_url"`
+	Uses              []BindingTargetUse   `json:"uses"`
 }
 
 type BindingTargetsUpdate struct {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
@@ -43,7 +44,11 @@ func (s *Service) GetOwner(ctx context.Context, userID, donationID int64) (Donat
 	if !visible {
 		return Donation{}, ErrNotFound
 	}
-	value, err := getOwnerDonationTx(ctx, tx, userID, donationID, now)
+	statuses, err := readDonationServiceStatusesTx(ctx, tx, []int64{donationID}, now)
+	if err != nil {
+		return Donation{}, err
+	}
+	value, err := getOwnerDonationWithStatusesTx(ctx, tx, userID, donationID, now, statuses)
 	if err != nil {
 		return Donation{}, err
 	}
@@ -86,7 +91,11 @@ func (s *Service) GetAdmin(ctx context.Context, donationID int64) (AdminDonation
 		}
 		return AdminDonation{}, ErrNotFound
 	}
-	value, err := getAdminDonationTx(ctx, tx, donationID, now)
+	statuses, err := readDonationServiceStatusesTx(ctx, tx, []int64{donationID}, now)
+	if err != nil {
+		return AdminDonation{}, err
+	}
+	value, err := getDonationProjectionWithStatusesTx(ctx, tx, donationID, now, statuses)
 	if err != nil {
 		return AdminDonation{}, err
 	}
@@ -136,7 +145,11 @@ func (s *Service) GetSteward(ctx context.Context, userID, donationID int64) (Ste
 		}
 		return StewardDonation{}, ErrNotFound
 	}
-	value, err := getAdminDonationTx(ctx, tx, donationID, now)
+	statuses, err := readDonationServiceStatusesTx(ctx, tx, []int64{donationID}, now)
+	if err != nil {
+		return StewardDonation{}, err
+	}
+	value, err := getDonationProjectionWithStatusesTx(ctx, tx, donationID, now, statuses)
 	if err != nil {
 		return StewardDonation{}, err
 	}
@@ -189,8 +202,12 @@ ORDER BY id LIMIT ?`, userID, afterID, now-terminalRetention, limit+1)
 	if err != nil {
 		return nil, 0, err
 	}
+	statuses, err := readDonationServiceStatusesTx(ctx, tx, ids, now)
+	if err != nil {
+		return nil, 0, err
+	}
 	for _, id := range ids {
-		item, err := getOwnerDonationTx(ctx, tx, userID, id, now, summaries[id])
+		item, err := getOwnerDonationWithStatusesTx(ctx, tx, userID, id, now, statuses, summaries[id])
 		if err != nil {
 			return nil, 0, err
 		}
@@ -279,8 +296,12 @@ func (s *Service) listRole(ctx context.Context, userID int64, filter ManagementF
 	if err != nil {
 		return nil, 0, err
 	}
+	statuses, err := readDonationServiceStatusesTx(ctx, tx, ids, now)
+	if err != nil {
+		return nil, 0, err
+	}
 	for _, id := range ids {
-		item, err := getAdminDonationTx(ctx, tx, id, now, summaries[id])
+		item, err := getDonationProjectionWithStatusesTx(ctx, tx, id, now, statuses, summaries[id])
 		if err != nil {
 			return nil, 0, err
 		}
@@ -361,7 +382,11 @@ func donationOrdinarilyVisibleTx(ctx context.Context, tx *sql.Tx, donationID, no
 }
 
 func getOwnerDonationTx(ctx context.Context, tx *sql.Tx, userID, donationID, now int64, summary ...UseSummary) (Donation, error) {
-	admin, err := getDonationProjectionTx(ctx, tx, donationID, now, summary...)
+	return getOwnerDonationWithStatusesTx(ctx, tx, userID, donationID, now, nil, summary...)
+}
+
+func getOwnerDonationWithStatusesTx(ctx context.Context, tx *sql.Tx, userID, donationID, now int64, statuses map[int64][]donationstate.ServiceStatus, summary ...UseSummary) (Donation, error) {
+	admin, err := getDonationProjectionWithStatusesTx(ctx, tx, donationID, now, statuses, summary...)
 	if err != nil {
 		return Donation{}, err
 	}
@@ -381,6 +406,10 @@ func getAdminDonationTx(ctx context.Context, tx *sql.Tx, donationID, now int64, 
 }
 
 func getDonationProjectionTx(ctx context.Context, tx *sql.Tx, donationID, now int64, summary ...UseSummary) (AdminDonation, error) {
+	return getDonationProjectionWithStatusesTx(ctx, tx, donationID, now, nil, summary...)
+}
+
+func getDonationProjectionWithStatusesTx(ctx context.Context, tx *sql.Tx, donationID, now int64, statuses map[int64][]donationstate.ServiceStatus, summary ...UseSummary) (AdminDonation, error) {
 	out, err := getDonationHeaderTx(ctx, tx, donationID, now)
 	if err != nil {
 		return AdminDonation{}, err
@@ -394,7 +423,11 @@ func getDonationProjectionTx(ctx context.Context, tx *sql.Tx, donationID, now in
 		}
 		out.UseSummary = values[donationID]
 	}
-	out.Keys, err = readDonationKeysTx(ctx, tx, donationID, out.Status, now)
+	if statuses == nil {
+		out.Keys, err = readDonationKeysTx(ctx, tx, donationID, out.Status, now)
+	} else {
+		out.Keys, err = readDonationKeySelectionTx(ctx, tx, donationID, out.Status, now, nil, statuses)
+	}
 	return out, err
 }
 
@@ -501,8 +534,9 @@ func readDonationKeysTx(ctx context.Context, tx *sql.Tx, donationID int64, donat
 }
 
 // selectedIDs, when present, were obtained from an authorized page in this
-// transaction. The parent condition is retained for every projected key.
-func readDonationKeySelectionTx(ctx context.Context, tx *sql.Tx, donationID int64, donationStatus string, now int64, selectedIDs []int64) ([]AdminDonationKey, error) {
+// transaction. Service health is included only when the caller preloaded it;
+// mutation receipts and exports keep the compact common projection.
+func readDonationKeySelectionTx(ctx context.Context, tx *sql.Tx, donationID int64, _ string, now int64, selectedIDs []int64, preloaded ...map[int64][]donationstate.ServiceStatus) ([]AdminDonationKey, error) {
 	where := `dk.donation_id=?`
 	args := []any{donationID}
 	if selectedIDs != nil {
@@ -530,16 +564,14 @@ dk.canonical_base_url,dk.connector_type,dk.mainstream_channel_id,dk.mainstream_c
 dk.mainstream_channel_name,dk.mainstream_channel_category,COALESCE(e.enabled,0),COALESCE(k.enabled,0),
 dk.price_limit_mag,dk.call_limit_mag,dk.token_limit_mag,
 dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.tokens_used,dk.tokens_reserved,
-dk.token_reserve,dk.enabled,dk.failure_disabled,dk.failure_streak,dk.streak_generation,dk.failure_disable_threshold,dk.safe_note,
+dk.token_reserve,dk.failure_disabled,dk.failure_streak,dk.streak_generation,dk.failure_disable_threshold,dk.safe_note,
 dk.authorized_expires_at,dk.expires_at,dk.ended_reason,
-EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=dk.endpoint_key_id),
-EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id),
 CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_concurrency,0) END,
 CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_rpm,0) END,
 k.revision,cooldown.rate_limited_until,COALESCE(sb.period,''),COALESCE(sb.source,''),sb.retry_at,sb.trial_claim_id IS NOT NULL,
 (SELECT COUNT(DISTINCT binding_id) FROM charity_binding_targets b WHERE b.donation_key_id=dk.id),
 dk.key_body_review_hmac IS NOT NULL,COALESCE(rr.required,0),rr.revision,
-`+manageableKeySQL+`,CASE WHEN e.user_id=d.user_id THEN e.id END
+`+manageableKeySQL+`,CASE WHEN e.user_id=d.user_id THEN e.id END,`+donationstate.SQL()+`
 FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
 LEFT JOIN donation_key_review_requirements rr ON rr.hmac=dk.key_body_review_hmac
 LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
@@ -547,12 +579,13 @@ LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
 LEFT JOIN endpoints e ON e.id=k.endpoint_id
 LEFT JOIN donation_key_cooldowns cooldown ON cooldown.donation_key_id=dk.id
  LEFT JOIN donation_key_backoffs sb ON sb.donation_key_id=dk.id
-WHERE `+where+` ORDER BY dk.id`, append([]any{now}, args...)...)
+WHERE `+where+` ORDER BY dk.id`, append([]any{now, now, now, now, now}, args...)...)
 	if err != nil {
 		return nil, fmt.Errorf("donation: read key projections: %w", err)
 	}
 	defer rows.Close()
 	items := make([]AdminDonationKey, 0)
+	keyIDs := make([]int64, 0)
 	for rows.Next() {
 		var item AdminDonationKey
 		var bperiod, bsource string
@@ -561,7 +594,7 @@ WHERE `+where+` ORDER BY dk.id`, append([]any{now}, args...)...)
 		var id int64
 		var endpointKeyID sql.NullInt64
 		var endpointID sql.NullInt64
-		var endpointEnabled, keyPhysicalEnabled, enabled, failureDisabled, suspended, member int
+		var endpointEnabled, keyPhysicalEnabled, failureDisabled int
 		var priceLimit, callLimit, tokenLimit []byte
 		var priceUsed, priceReserved, callsUsed, callsReserved, tokensUsed, tokensReserved []byte
 		var streak, generation []byte
@@ -575,8 +608,8 @@ WHERE `+where+` ORDER BY dk.id`, append([]any{now}, args...)...)
 			&item.SafeSource.BaseURL, &item.SafeSource.ConnectorType, &channelID, &channelRevision,
 			&channelName, &channelCategory, &endpointEnabled, &keyPhysicalEnabled,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceReserved, &callsUsed, &callsReserved,
-			&tokensUsed, &tokensReserved, &item.TokenReserve, &enabled, &failureDisabled, &streak,
-			&generation, &item.FailureDisableThreshold, &item.SafeNote, &authorizedExpires, &expires, &ended, &suspended, &member, &item.MaxConcurrency, &item.MaxRPM, &item.KeyLimitsRevision, &item.RateLimitedUntil, &bperiod, &bsource, &until, &probing, &bindingCount, &item.Review.MaterialAvailable, &item.Review.Required, &reviewRevision, &item.CanManage, &endpointID); err != nil {
+			&tokensUsed, &tokensReserved, &item.TokenReserve, &failureDisabled, &streak,
+			&generation, &item.FailureDisableThreshold, &item.SafeNote, &authorizedExpires, &expires, &ended, &item.MaxConcurrency, &item.MaxRPM, &item.KeyLimitsRevision, &item.RateLimitedUntil, &bperiod, &bsource, &until, &probing, &bindingCount, &item.Review.MaterialAvailable, &item.Review.Required, &reviewRevision, &item.CanManage, &endpointID, &item.CharityState); err != nil {
 			return nil, fmt.Errorf("donation: scan key projection: %w", err)
 		}
 		item.Projection = smartbackoff.DecodeProjection(bperiod, bsource, until, probing, now)
@@ -665,47 +698,25 @@ WHERE `+where+` ORDER BY dk.id`, append([]any{now}, args...)...)
 			value := ended.String
 			item.EndedReason = &value
 		}
-		exhausted, err := anyCapExhausted(priceLimit, priceUsed, priceReserved, callLimit, callsUsed, callsReserved, tokenLimit, tokensUsed, tokensReserved)
-		if err != nil {
-			return nil, err
-		}
-		switch {
-		case ended.Valid || member == 0:
-			if ended.Valid && ended.String == "expired" || donationStatus == "expired" {
-				item.CharityState = "expired"
-			} else {
-				item.CharityState = "ended"
-			}
-		case expires.Valid && now >= expires.Int64 || donationStatus == "expired":
-			item.CharityState = "expired"
-		case donationStatus == "pending":
-			item.CharityState = "pending"
-		case !item.PhysicalEnabled || enabled == 0 || failureDisabled == 1:
-			item.CharityState = "disabled"
-		case suspended == 1:
-			item.CharityState = "suspended"
-		case exhausted:
-			item.CharityState = "exhausted"
-		default:
-			item.CharityState = "available"
-		}
 		if err := readSplitTokenProjection(ctx, tx, id, &item); err != nil {
 			return nil, err
 		}
-		if item.Backoff != nil && item.Backoff.State != "ready" && item.CharityState == "available" {
-			item.CharityState = "rate_limited"
-		}
-		if item.RateLimitedUntil != nil {
-			if *item.RateLimitedUntil <= now {
-				item.RateLimitedUntil = nil
-			} else if item.CharityState == "available" {
-				item.CharityState = "rate_limited"
-			}
+		if item.RateLimitedUntil != nil && *item.RateLimitedUntil <= now {
+			item.RateLimitedUntil = nil
 		}
 		items = append(items, item)
+		keyIDs = append(keyIDs, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("donation: iterate key projections: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("donation: close key projections: %w", err)
+	}
+	if len(preloaded) > 0 {
+		for i, id := range keyIDs {
+			items[i].ServiceStatuses = preloaded[0][id]
+		}
 	}
 	return items, nil
 }
@@ -751,6 +762,7 @@ func ownerKey(value AdminDonationKey) DonationKey {
 		Name:          value.SafeSource.Name,
 	}
 	return DonationKey{
+		ServiceStatuses:         value.ServiceStatuses,
 		EndpointID:              value.OwnerEndpointID,
 		Projection:              value.Projection,
 		TokenBreakdown:          value.TokenBreakdown,
@@ -817,31 +829,6 @@ func formatMilli(value *big.Int) string {
 		text += "." + fraction
 	}
 	return text
-}
-
-func anyCapExhausted(blobs ...[]byte) (bool, error) {
-	for index := 0; index < len(blobs); index += 3 {
-		limit := blobs[index]
-		if limit == nil {
-			continue
-		}
-		l, err := db.DecodeU128(limit)
-		if err != nil {
-			return false, ErrInvariant
-		}
-		used, err := db.DecodeU128(blobs[index+1])
-		if err != nil {
-			return false, ErrInvariant
-		}
-		reserved, err := db.DecodeU128(blobs[index+2])
-		if err != nil {
-			return false, ErrInvariant
-		}
-		if new(big.Int).Add(used.Big(), reserved.Big()).Cmp(l.Big()) >= 0 {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 func validStatusFilter(status string) bool {

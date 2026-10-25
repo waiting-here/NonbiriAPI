@@ -1,4 +1,5 @@
 import { normalizeUseSummary } from '@shared/operations/donationUses';
+import { normalizeServiceStatuses } from '@shared/operations/resourceHealth';
 import {
   normalizeRecurringDiscount,
   normalizeEffectiveDiscount,
@@ -595,6 +596,7 @@ export function normalizeDonationKey(value: unknown): DonationKey {
       'output_token_reserve',
       'breakdown_started_at',
       'rate_limited_until',
+      'service_statuses',
     ],
   );
   const source = normalizeDonationSafeSource(item.safe_source);
@@ -641,6 +643,7 @@ export function normalizeDonationKey(value: unknown): DonationKey {
             item.endpoint_id === null ? null : decimalID(item.endpoint_id, 'owner endpoint id'),
         }),
     smartBackoff: smartBackoff.smart_backoff,
+    serviceStatuses: normalizeServiceStatuses(item.service_statuses),
     failureDisableThreshold: decimal(item.failure_disable_threshold, 'failure threshold'),
     id: decimalID(item.id, 'donation key id'),
     endpointKeyId:

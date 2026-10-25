@@ -107,7 +107,11 @@ func (s *Service) AgentIntelligence(ctx context.Context, tx *sql.Tx, donationID 
 	if err != nil {
 		return nil, "", err
 	}
-	header, err := getAdminDonationTx(ctx, tx, donationID, now)
+	statuses, err := readDonationServiceStatusesTx(ctx, tx, []int64{donationID}, now)
+	if err != nil {
+		return nil, "", err
+	}
+	header, err := getDonationProjectionWithStatusesTx(ctx, tx, donationID, now, statuses)
 	if err != nil {
 		return nil, "", err
 	}

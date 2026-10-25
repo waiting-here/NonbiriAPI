@@ -10,6 +10,25 @@ import {
 const U128_MAX_AMOUNT = '340282366920938463463374607431768211.455';
 const OWNER_ID = '41';
 const KEY_ID = '51';
+
+it('retains current service failures in the owner key page', () => {
+  const status = {
+    use_id: '1',
+    native_service: 'chat_completions',
+    state: 'failure_disabled',
+    failure_streak: '10',
+    failure_disabled: true,
+    retry_after_until: null,
+    smart_backoff: null,
+  };
+  const result = normalizeOwnerDonationKeysPage(
+    page([key({ service_statuses: [status] })]),
+    OWNER_ID,
+    '1',
+    20,
+  );
+  expect(result.data[0]?.serviceStatuses).toEqual([status]);
+});
 const RULE_IDS = [
   `qlr_${'A'.repeat(21)}Q`,
   `qlr_${'B'.repeat(21)}Q`,
