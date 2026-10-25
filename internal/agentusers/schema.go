@@ -81,7 +81,7 @@ func OperationSchemas() map[string]json.RawMessage {
 	}
 }
 func ReadSchema() json.RawMessage {
-	return encode(object("Read safe managed account information. A profile search returns all matches as data plus decimal-string total; exact user_id returns the selected object. Search filters are optional. MFA requires an administrator; key metadata never includes key fragments.", schema{
+	return encode(object("Read safe managed account information. Profile search returns all matching identity/status summaries and current revisions as data plus decimal-string total; exact user_id returns the complete selected object. More than 5000 rows, 1 MiB or available model context fails the whole read; narrow query or select user_id and retry. MFA requires an administrator; key metadata never includes key fragments.", schema{
 		"user_id": schema{"type": "string", "pattern": "^[1-9][0-9]*$"},
 		"kind":    schema{"type": "string", "enum": []string{"profile", "caller_key", "permissions", "mfa"}},
 		"query":   schema{"type": "string", "maxLength": 512},

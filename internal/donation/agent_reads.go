@@ -122,6 +122,7 @@ SELECT donation_id,record_id,revision,reviewer_id,role,action,note,at,kind,use_i
 			At         int64   `json:"created_at"`
 		}
 		data := []review{}
+		var budget agentplan.ReadBudget
 		for rows.Next() {
 			var v review
 			var reviewer, useID sql.NullString
@@ -133,6 +134,9 @@ SELECT donation_id,record_id,revision,reviewer_id,role,action,note,at,kind,use_i
 			}
 			if useID.Valid {
 				v.UseID = &useID.String
+			}
+			if err = budget.Add(v); err != nil {
+				return nil, err
 			}
 			data = append(data, v)
 		}
@@ -155,12 +159,17 @@ SELECT donation_id,record_id,revision,reviewer_id,role,action,note,at,kind,use_i
 	}
 	defer rows.Close()
 	data := []map[string]string{}
+	var budget agentplan.ReadBudget
 	for rows.Next() {
 		var donationID, key, model, name, source string
 		if err = rows.Scan(&donationID, &key, &model, &name, &source); err != nil {
 			return nil, err
 		}
-		data = append(data, map[string]string{"donation_id": donationID, "key_id": key, "model": model, "name": name, "source": source})
+		item := map[string]string{"donation_id": donationID, "key_id": key, "model": model, "name": name, "source": source}
+		if err = budget.Add(item); err != nil {
+			return nil, err
+		}
+		data = append(data, item)
 	}
 	if err = rows.Err(); err != nil {
 		return nil, err
@@ -169,7 +178,7 @@ SELECT donation_id,record_id,revision,reviewer_id,role,action,note,at,kind,use_i
 }
 
 func agentReadResult(data any, count int) (json.RawMessage, error) {
-	return json.Marshal(struct {
+	return agentplan.MarshalRead(struct {
 		Data  any    `json:"data"`
 		Total string `json:"total"`
 	}{data, strconv.Itoa(count)})
@@ -180,7 +189,7 @@ func agentDonationsTx(ctx context.Context, tx *sql.Tx, access useAccess, selecti
 	if err != nil {
 		return nil, err
 	}
-	ids, err := scanIDs(rows)
+	ids, err := agentReadIDs(rows)
 	if err != nil {
 		return nil, err
 	}
@@ -189,6 +198,7 @@ func agentDonationsTx(ctx context.Context, tx *sql.Tx, access useAccess, selecti
 		return nil, err
 	}
 	data := make([]json.RawMessage, 0, len(ids))
+	var budget agentplan.ReadBudget
 	// Batches bound SQLite parameters and reuse summaries; every selected row
 	// still belongs to this one read transaction and the result is complete.
 	for start := 0; start < len(ids); start += 100 {
@@ -249,10 +259,29 @@ func agentDonationsTx(ctx context.Context, tx *sql.Tx, access useAccess, selecti
 			if err != nil {
 				return nil, err
 			}
+			if err = budget.AddEncoded(raw); err != nil {
+				return nil, err
+			}
 			data = append(data, raw)
 		}
 	}
 	return agentReadResult(data, len(data))
+}
+
+func agentReadIDs(rows *sql.Rows) ([]int64, error) {
+	defer rows.Close()
+	ids := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		if err := agentplan.CheckReadCount(len(ids) + 1); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func agentSafeUsesTx(ctx context.Context, tx *sql.Tx, access useAccess, id, now int64) ([]Use, error) {

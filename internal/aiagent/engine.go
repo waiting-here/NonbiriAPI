@@ -269,6 +269,14 @@ func (s *Service) run(ctx context.Context, id int64) error {
 			if err != nil {
 				return err
 			}
+		} else {
+			driver, e := s.config.Driver.Settings(ctx)
+			if e != nil {
+				return e
+			}
+			if !modelInputFits(messages, toolJSON, format, driver) {
+				return s.finishReview(ctx, job, actor, manualSizeReview("完整待审情报或后续工具上下文超出当前模型预算，未继续调用模型；请人工审核或调整模型窗口、输出上限及工具配置。完整已读取情报仍保留。"))
+			}
 		}
 		body, err := json.Marshal(messages)
 		if err != nil {
@@ -310,34 +318,32 @@ func (s *Service) run(ctx context.Context, id int64) error {
 			_, err = s.db.ExecContext(ctx, `UPDATE ai_agent_jobs SET state='completed',updated_at=? WHERE id=? AND state='running'`, s.now().UnixMilli(), job.ID)
 			return err
 		}
-		operations := []Operation{}
+		operations, writes, reads, err := collectToolWrites(assistant.ToolCalls, allowed)
+		if err != nil {
+			return err
+		}
 		writeCalls := []string{}
-		for _, call := range assistant.ToolCalls {
-			if call.ID == "" || call.Type != "function" {
-				return ErrInvalid
+		for _, call := range writes {
+			writeCalls = append(writeCalls, call.ID)
+		}
+		var round *toolRoundBudget
+		if len(reads) > 0 {
+			messages, round, err = s.prepareToolRound(ctx, job, actor, settings, messages, toolJSON, format, reads, writes, nil)
+			if err != nil {
+				if job.Kind == "auto_review" && errors.Is(err, errToolContext) {
+					return s.finishReview(ctx, job, actor, manualSizeReview("当前模型预算不足以接收完整工具轮的失败回执，未继续调用模型；请人工审核或调整模型窗口、输出上限及工具配置。"))
+				}
+				return err
 			}
+		}
+		for _, call := range reads {
 			var value json.RawMessage
 			if !allowed[call.Function.Name] {
 				value = toolError(ErrForbidden)
 			} else if call.Function.Name == "propose_operations" {
-				var args struct {
-					Operations []Operation `json:"operations"`
-				}
-				e := decodeClosed([]byte(call.Function.Arguments), &args)
-				if e != nil || len(args.Operations) == 0 {
-					value = toolError(ErrInvalid)
-				} else {
-					operations = append(operations, args.Operations...)
-					writeCalls = append(writeCalls, call.ID)
-					continue
-				}
+				value = toolError(ErrInvalid)
 			} else if call.Function.Name == "edit_memory" {
-				var args struct {
-					Action           string `json:"action"`
-					Kind             string `json:"kind"`
-					Content          string `json:"content"`
-					ExpectedRevision int64  `json:"expected_revision,string"`
-				}
+				var args memoryToolInput
 				e := decodeClosed([]byte(call.Function.Arguments), &args)
 				if e != nil {
 					value = toolError(ErrInvalid)
@@ -348,11 +354,6 @@ func (s *Service) run(ctx context.Context, id int64) error {
 					} else {
 						value, _ = json.Marshal(memory)
 					}
-				} else if args.Action == "write" {
-					raw, _ := json.Marshal(memoryEdit{Kind: args.Kind, Content: args.Content, ExpectedRevision: args.ExpectedRevision})
-					operations = append(operations, Operation{Kind: "memory.edit", TargetID: args.Kind, Input: raw})
-					writeCalls = append(writeCalls, call.ID)
-					continue
 				} else {
 					value = toolError(ErrInvalid)
 				}
@@ -365,25 +366,25 @@ func (s *Service) run(ctx context.Context, id int64) error {
 				} else {
 					value, err = s.search(ctx, actor, settings, args.Query)
 					if err != nil {
-						value = toolError(err)
+						value = readToolError(call.Function.Name, err)
 					}
 				}
 			} else {
 				value, err = s.config.Operations.Read(ctx, actor, call.Function.Name, json.RawMessage(call.Function.Arguments))
 				if err != nil {
-					value = toolError(err)
+					value = readToolError(call.Function.Name, err)
 				}
 			}
 			if len(value) == 0 {
 				value = json.RawMessage(`null`)
 			}
+			value = round.accept(call, value)
 			if job.Kind != "auto_review" {
 				if err = s.persistTool(ctx, job, actor, call.ID, value); err != nil {
 					return err
 				}
 			}
-			message, _ := json.Marshal(map[string]string{"role": "tool", "tool_call_id": call.ID, "content": string(value)})
-			messages = append(messages, message)
+			messages = append(messages, toolMessage(call, value))
 		}
 		if len(operations) > 0 {
 			if job.Kind == "auto_review" {
@@ -392,14 +393,61 @@ func (s *Service) run(ctx context.Context, id int64) error {
 			if err = s.propose(ctx, job, actor, operations, writeCalls); err == nil {
 				return nil
 			}
-			for _, id := range writeCalls {
-				if e := s.persistTool(ctx, job, actor, id, toolError(err)); e != nil {
+			failures := planFailureReceipts(writes, err)
+			if round == nil {
+				messages, round, err = s.prepareToolRound(ctx, job, actor, settings, messages, toolJSON, format, nil, writes, err)
+				if err != nil {
+					return err
+				}
+			}
+			for _, call := range writes {
+				value := round.accept(call, failures[call.ID])
+				if e := s.persistTool(ctx, job, actor, call.ID, value); e != nil {
 					return e
 				}
+				messages = append(messages, toolMessage(call, value))
 			}
 		}
 	}
 	return fmt.Errorf("%w: 本轮工具调用较多，已暂停；可继续对话", ErrInterrupted)
+}
+
+type memoryToolInput struct {
+	Action           string `json:"action"`
+	Kind             string `json:"kind"`
+	Content          string `json:"content"`
+	ExpectedRevision int64  `json:"expected_revision,string"`
+}
+
+func collectToolWrites(calls []toolCall, allowed map[string]bool) ([]Operation, []toolCall, []toolCall, error) {
+	operations := []Operation{}
+	writes, reads := []toolCall{}, []toolCall{}
+	for _, call := range calls {
+		if call.ID == "" || call.Type != "function" {
+			return nil, nil, nil, ErrInvalid
+		}
+		if allowed[call.Function.Name] && call.Function.Name == "propose_operations" {
+			var args struct {
+				Operations []Operation `json:"operations"`
+			}
+			if decodeClosed([]byte(call.Function.Arguments), &args) == nil && len(args.Operations) > 0 {
+				operations = append(operations, args.Operations...)
+				writes = append(writes, call)
+				continue
+			}
+		}
+		if allowed[call.Function.Name] && call.Function.Name == "edit_memory" {
+			var args memoryToolInput
+			if decodeClosed([]byte(call.Function.Arguments), &args) == nil && args.Action == "write" {
+				raw, _ := json.Marshal(memoryEdit{Kind: args.Kind, Content: args.Content, ExpectedRevision: args.ExpectedRevision})
+				operations = append(operations, Operation{Kind: "memory.edit", TargetID: args.Kind, Input: raw})
+				writes = append(writes, call)
+				continue
+			}
+		}
+		reads = append(reads, call)
+	}
+	return operations, writes, reads, nil
 }
 
 func (s *Service) persistAssistant(ctx context.Context, job Job, actor Actor, raw json.RawMessage, m assistantMessage) error {

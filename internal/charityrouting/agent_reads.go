@@ -62,6 +62,10 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 			rows.Close()
 			return nil, err
 		}
+		if err = agentplan.CheckReadCount(len(models) + 1); err != nil {
+			rows.Close()
+			return nil, err
+		}
 		models = append(models, model)
 	}
 	err = rows.Err()
@@ -74,7 +78,8 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 		Model    any            `json:"model"`
 		Bindings *AdminBindings `json:"bindings,omitempty"`
 	}
-	data := []item{}
+	data := []json.RawMessage{}
+	var budget agentplan.ReadBudget
 	for _, model := range models {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -100,21 +105,28 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 			}
 			v.Bindings = &bindings
 		}
-		data = append(data, v)
+		encoded, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		var safe any
+		if err = json.Unmarshal(encoded, &safe); err != nil {
+			return nil, err
+		}
+		stripAgentCredentialHints(safe)
+		encoded, err = json.Marshal(safe)
+		if err != nil {
+			return nil, err
+		}
+		if err = budget.AddEncoded(encoded); err != nil {
+			return nil, err
+		}
+		data = append(data, encoded)
 	}
-	raw, err := json.Marshal(struct {
-		Data  []item `json:"data"`
-		Total string `json:"total"`
+	return agentplan.MarshalRead(struct {
+		Data  []json.RawMessage `json:"data"`
+		Total string            `json:"total"`
 	}{data, strconv.Itoa(len(data))})
-	if err != nil {
-		return nil, err
-	}
-	var safe any
-	if err = json.Unmarshal(raw, &safe); err != nil {
-		return nil, err
-	}
-	stripAgentCredentialHints(safe)
-	return json.Marshal(safe)
 }
 func stripAgentCredentialHints(value any) {
 	switch v := value.(type) {

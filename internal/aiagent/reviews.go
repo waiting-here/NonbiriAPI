@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+
+	"github.com/waiting-here/NonbiriAPI/internal/agentplan"
 )
 
 // PendingSubmission is called only by a successful donor submission, inside
@@ -48,7 +50,8 @@ func (s *Service) collectReviewEvents(ctx context.Context) error {
 	}
 	for _, e := range events {
 		intelligence, signature, readErr := s.config.Operations.Intelligence(ctx, e.id)
-		if readErr != nil && !errors.Is(readErr, ErrNotFound) {
+		limited := agentplan.IsReadLimit(readErr)
+		if readErr != nil && !errors.Is(readErr, ErrNotFound) && !limited {
 			return readErr
 		}
 		tx, err := s.db.BeginTx(ctx, nil)
@@ -70,14 +73,23 @@ func (s *Service) collectReviewEvents(ctx context.Context) error {
 			tx.Rollback()
 			return err
 		}
-		if count == 1 && settings.Mode != "off" && readErr == nil && signature != "" {
+		if count == 1 && settings.Mode != "off" && (readErr == nil || limited) && signature != "" {
 			now := s.now().UnixMilli()
 			// Any older result is retained for review, but cannot approve the
 			// newly submitted version. Running calls are stopped on dispatch or
 			// final signature verification without holding this writer open.
 			_, err = tx.ExecContext(ctx, `UPDATE ai_agent_jobs SET state='cancelled',error='捐赠已提交新版本',updated_at=? WHERE donation_id=? AND kind='auto_review' AND state IN ('pending','running')`, now, e.id)
 			if err == nil {
-				_, err = tx.ExecContext(ctx, `INSERT INTO ai_agent_jobs(kind,actor_id,actor_role,actor_label,donation_id,revision_signature,mode,state,intelligence,created_at,updated_at) VALUES('auto_review',?,'admin',?,?,?,?,'pending',?,?,?)`, owner.ID, owner.Label, e.id, signature, e.mode, string(intelligence), now, now)
+				state := "pending"
+				var result, execution any
+				if limited {
+					state = "completed"
+					intelligence = toolResultTooLarge("donation_models", "read_limit")
+					outcome, _ := json.Marshal(manualSizeReview("完整待审情报超过5000条或1 MiB读取上限，未返回部分情报、未调用模型；请人工审核。"))
+					result = string(outcome)
+					execution = `{"status":"manual","applied":false}`
+				}
+				_, err = tx.ExecContext(ctx, `INSERT INTO ai_agent_jobs(kind,actor_id,actor_role,actor_label,donation_id,revision_signature,mode,state,intelligence,review_result,execution,created_at,updated_at) VALUES('auto_review',?,'admin',?,?,?,?,?,?,?,?,?,?)`, owner.ID, owner.Label, e.id, signature, e.mode, state, string(intelligence), result, execution, now, now)
 			}
 		}
 		if err != nil {
