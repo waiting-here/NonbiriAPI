@@ -17,22 +17,24 @@ function MotionCard({
   time,
   paused,
   high,
+  staticOnly,
 }: {
   id: string;
   time?: number;
   paused: boolean;
   high: boolean;
+  staticOnly: boolean;
 }) {
   const card = cardById[id];
   const policy = useArtworkPolicy();
   const allowed = policy.allowed('card:' + id);
   const surface = useRef<HTMLCanvasElement>(null);
-  const pause = useRef(paused);
+  const pause = useRef(paused || staticOnly);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    pause.current = paused;
-  }, [paused]);
+    pause.current = paused || staticOnly;
+  }, [paused, staticOnly]);
   useEffect(() => {
     if (!allowed || !surface.current) return;
     const controller = new AbortController();
@@ -65,7 +67,13 @@ function MotionCard({
           src={high ? highResolutionArt(card.art) : card.art}
           alt={card.name}
         />
-        {allowed && <canvas ref={surface} className={ready ? 'is-ready' : ''} aria-hidden="true" />}
+        {allowed && (
+          <canvas
+            ref={surface}
+            className={ready && !staticOnly ? 'is-ready' : ''}
+            aria-hidden="true"
+          />
+        )}
       </div>
       <figcaption>
         {card.name}
@@ -85,6 +93,11 @@ export function SeasonalPreview({
   const [time, setTime] = useState<number>();
   const [paused, setPaused] = useState(false);
   const [high, setHigh] = useState(false);
+  const [staticOnly, setStaticOnly] = useState(false);
+  const inspect = (seconds: number) => {
+    setStaticOnly(false);
+    setTime(seconds);
+  };
   return (
     <main className="seasonal-review gacha-app">
       <header className="seasonal-review__header">
@@ -102,11 +115,18 @@ export function SeasonalPreview({
           onChange={setAdult}
         />
         <Toggle label="高清资源" checked={high} onChange={setHigh} />
+        <Toggle
+          label="对比静态原画"
+          description="切换查看人物轮廓与动作幅度；返回动态时从原进度继续。"
+          checked={staticOnly}
+          onChange={setStaticOnly}
+        />
         <div className="nb-actions">
           <Button
             onClick={() => {
               setTime(undefined);
               setPaused(false);
+              setStaticOnly(false);
             }}
           >
             自然播放
@@ -114,10 +134,10 @@ export function SeasonalPreview({
           <Button onClick={() => setPaused((value) => !value)}>
             {paused ? '继续播放' : '暂停动作'}
           </Button>
-          <Button onClick={() => setTime(0)}>睁眼</Button>
-          <Button onClick={() => setTime(2.265)}>半闭</Button>
-          <Button onClick={() => setTime(2.35)}>闭眼</Button>
-          <Button onClick={() => setTime(2.48)}>重新睁开</Button>
+          <Button onClick={() => inspect(0)}>睁眼</Button>
+          <Button onClick={() => inspect(2.265)}>半闭</Button>
+          <Button onClick={() => inspect(2.35)}>闭眼</Button>
+          <Button onClick={() => inspect(2.48)}>重新睁开</Button>
         </div>
         <Field
           label="检查循环时刻"
@@ -131,7 +151,7 @@ export function SeasonalPreview({
               max="17.6"
               step="0.005"
               value={time ?? 0}
-              onChange={(event) => setTime(Number(event.target.value))}
+              onChange={(event) => inspect(Number(event.target.value))}
             />
           )}
         </Field>
@@ -146,7 +166,14 @@ export function SeasonalPreview({
       </section>
       <section className="seasonal-review__cards" aria-label="动态卡面">
         {['s-chatgpt', 's-claude'].map((id) => (
-          <MotionCard key={id} id={id} time={time} paused={paused} high={high} />
+          <MotionCard
+            key={id}
+            id={id}
+            time={time}
+            paused={paused}
+            high={high}
+            staticOnly={staticOnly}
+          />
         ))}
       </section>
       <section className="seasonal-review__tiles" aria-label="图鉴取景">
