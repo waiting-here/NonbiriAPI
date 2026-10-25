@@ -1129,9 +1129,22 @@ test('level 5 with full donation scope handles four custom-source keys and edits
     await sourceState.selectOption('pending');
     const pendingResponse = await pendingRead;
     expect(pendingResponse.status()).toBe(200);
-    expect((await pendingResponse.json()).data).toEqual([]);
-    await expect(browserSource).toHaveCount(0);
-    await expect(sourceKeys.getByRole('button', { name: /^Manage key #/ })).toHaveCount(0);
+    expect((await pendingResponse.json()).data).toEqual([
+      expect.objectContaining({
+        key_id: data.pending_key_id,
+        donation_id: data.pending_donation_id,
+        charity_state: 'pending',
+        can_manage: false,
+        endpoint_key_id: null,
+      }),
+    ]);
+    await expect(browserSource).toHaveCount(1);
+    await expect(
+      sourceKeys.getByRole('button', { name: `Manage key #${data.pending_key_id}`, exact: true }),
+    ).toBeVisible();
+    await expect(
+      sourceKeys.getByRole('button', { name: `Manage key #${pausedID}`, exact: true }),
+    ).toHaveCount(0);
     await sourceState.selectOption('disabled');
     await sourceKeys.getByRole('button', { name: `Manage key #${pausedID}`, exact: true }).click();
     const concurrency = page.getByLabel(common.common.keyLimits.concurrency, { exact: true });
@@ -1380,16 +1393,32 @@ test('level 5 reviews independent pending sources, retains receipts after refres
         ],
       });
       expect(donation.status).toBe('pending');
-      await write(admin, state.admin_url, `/admin/api/donations/${donation.id}/review`, {
-        expected_revision: donation.revision,
-        decision: 'approve',
-        reason: 'Synthetic initial approval',
-        key_settings: donation.keys.map((member: { id: string }) => ({
-          donation_key_id: member.id,
-          enabled: true,
-          expires_at: null,
-        })),
-      });
+      const initialUses = (
+        await read(
+          admin,
+          state.admin_url,
+          `/admin/api/donations/${donation.id}/uses?page=1&page_size=100&state=pending`,
+        )
+      ).data as DonationUse[];
+      expect(initialUses).toHaveLength(1);
+      expect(initialUses[0]!.pending).not.toBeNull();
+      const initialApproval = await write(
+        admin,
+        state.admin_url,
+        `/admin/api/donations/${donation.id}/pending-review`,
+        {
+          expected_revision: donation.revision,
+          decision: 'approve',
+          reason: 'Synthetic initial approval',
+          uses: initialUses.map((row) => ({
+            use_id: row.id,
+            expected_revision: row.revision,
+            expected_review_revision: row.pending!.expected_review_revision,
+          })),
+        },
+      );
+      expect(initialApproval.id).toBe(donation.id);
+      expect(initialApproval.status).toBe('approved');
       const catalogPath = `/admin/api/donations/${donation.id}/keys/${donation.keys[0].id}/models`;
       const catalog = await read(admin, state.admin_url, catalogPath + '?page=1&page_size=20');
       await write(admin, state.admin_url, catalogPath + '/manual', {

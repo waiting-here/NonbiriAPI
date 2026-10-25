@@ -1437,7 +1437,6 @@ function DonationKeyPages({
                       key={`discovery:${role}:${accountId}:${key.id}`}
                       role={role}
                       target={{ donation_id: item.id, key_id: key.id }}
-                      disabled={!(key.can_manage ?? key.charity_state === 'available')}
                       onCapabilityLoss={onCapabilityLoss}
                     />
                     <RecurringLimitsDisclosure

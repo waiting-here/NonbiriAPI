@@ -411,6 +411,22 @@ async function uses(context: BrowserContext, id: string) {
     )
   ).data;
 }
+async function endDonation(context: BrowserContext, id: string): Promise<Donation> {
+  const live = await userAPI<Donation>(context, '/api/donations/' + id);
+  if (live.status === 'pending' || live.status === 'approved')
+    return userAPI<Donation>(
+      context,
+      '/api/donations/' + id + (live.status === 'pending' ? '/withdraw' : '/terminate'),
+      'POST',
+      {
+        expected_revision: live.revision,
+        ...(live.status === 'approved' ? { confirmation: 'End synthetic donation' } : {}),
+      },
+      200,
+    );
+  expect(['rejected', 'deleted', 'expired']).toContain(live.status);
+  return live;
+}
 async function approve(context: BrowserContext, owner: BrowserContext, donation: Donation) {
   const rows = await uses(owner, donation.id);
   const current = await adminAPI<Donation>(context, '/admin/api/donations/' + donation.id);
@@ -508,16 +524,7 @@ for (const configuredCatalog of [false, true]) {
       }
     } finally {
       try {
-        if (donationId) {
-          const live = await userAPI<Donation>(owner, '/api/donations/' + donationId);
-          await userAPI<Donation>(
-            owner,
-            '/api/donations/' + donationId + '/withdraw',
-            'POST',
-            { expected_revision: live.revision },
-            200,
-          );
-        }
+        if (donationId) await endDonation(owner, donationId);
       } finally {
         await Promise.all([...new Set([owner, admin, manager])].map((context) => context.close()));
       }
@@ -925,29 +932,29 @@ test('additional services stay pending with their old budget and redacted stewar
       manager.getByRole('button', { name: c.modelsAndBindings, exact: true }),
     ).toBeVisible();
     const live = await userAPI<Donation>(owner, '/api/donations/' + donation.id);
-    expect(live.status).toBe('pending');
+    expect(live.status).toBe('approved');
     const ended = await userAPI<
       Donation & { use_summary: { total: string; pending: string; approved: string } }
     >(
       owner,
-      '/api/donations/' + donation.id + '/withdraw',
+      '/api/donations/' + donation.id + '/terminate',
       'POST',
-      { expected_revision: live.revision },
+      { expected_revision: live.revision, confirmation: 'End synthetic donation' },
       200,
     );
     expect(ended.id).toBe(donation.id);
     expect(ended.status).toBe('deleted');
     expect(ended.use_summary).toEqual({
-      total: '3',
+      total: String(fullServices.length),
       pending: '0',
       approved: '0',
-      rejected: '3',
+      rejected: String(fullServices.length),
       withdrawn: '0',
       review_status: 'rejected',
     });
     expect(ended.keys).toHaveLength(1);
     const endedMember = ended.keys.find((row) => row.id === member.id)!;
-    expect(endedMember.ended_reason).toBe('withdrawn');
+    expect(endedMember.ended_reason).toBe('terminated');
     expect(budget(endedMember)).toEqual({ ...before, state: 'ended' });
     await manager.reload();
     await expect(
@@ -958,7 +965,7 @@ test('additional services stay pending with their old budget and redacted stewar
     expect(closed.keys[0]!.id).toBe(member.id);
     expect(closed.keys[0]!.can_manage).toBe(false);
     const terminal = await uses(owner, donation.id);
-    expect(terminal).toHaveLength(3);
+    expect(terminal).toHaveLength(fullServices.length);
     expect(terminal.map((row) => row.id).sort()).toEqual(decided.map((row) => row.id).sort());
     for (const row of terminal) {
       expect(row.donation_key_id).toBe(member.id);
@@ -1321,14 +1328,7 @@ test('self and charity target groups save repeatedly and preserve drafts across 
       true,
       info,
     );
-    const liveDonation = await userAPI<Donation>(owner, '/api/donations/' + donation.id);
-    const ended = await userAPI<Donation>(
-      owner,
-      '/api/donations/' + donation.id + '/withdraw',
-      'POST',
-      { expected_revision: liveDonation.revision },
-      200,
-    );
+    const ended = await endDonation(owner, donation.id);
     expect(ended.status).toBe('deleted');
   } finally {
     await owner.close();
@@ -1567,8 +1567,26 @@ test('connection lists return to the requested page and mainstream mappings use 
       .filter({ has: manager.getByLabel(channels.form.name, { exact: true }) });
     await expect(form.getByLabel(channels.form.name, { exact: true })).toHaveValue(name);
     const reread = await openFold(form, c.modelMappings);
-    await expect(reread.getByLabel(native.chat_completions, { exact: true })).toBeChecked();
-    await expect(reread.getByLabel(native.responses, { exact: true })).toBeChecked();
+    const savedMapping = reread.getByRole('group', {
+      name: c.modelMapping.replace('{{number}}', '1'),
+      exact: true,
+    });
+    const mappedEntry = (name: string) =>
+      savedMapping
+        .locator(':scope > div.nb-stack')
+        .filter({ has: reread.getByLabel(name, { exact: true }) });
+    const savedChat = mappedEntry(channel.entries[0]!.name);
+    const savedResponses = mappedEntry(channel.entries[1]!.name);
+    await expect(savedChat.getByLabel(c.upstreamModel, { exact: true })).toHaveValue('mapped-chat');
+    await expect(savedChat.getByLabel(native.chat_completions, { exact: true })).toBeChecked();
+    await expect(savedChat.getByLabel(native.responses, { exact: true })).not.toBeChecked();
+    await expect(savedResponses.getByLabel(c.upstreamModel, { exact: true })).toHaveValue(
+      'mapped-responses',
+    );
+    await expect(
+      savedResponses.getByLabel(native.chat_completions, { exact: true }),
+    ).not.toBeChecked();
+    await expect(savedResponses.getByLabel(native.responses, { exact: true })).toBeChecked();
     await screenshot(
       manager,
       info,
@@ -1726,14 +1744,7 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
   } finally {
     try {
       for (const id of createdDonationIDs) {
-        const live = await userAPI<Donation>(owner, '/api/donations/' + id);
-        await userAPI<Donation>(
-          owner,
-          '/api/donations/' + id + '/withdraw',
-          'POST',
-          { expected_revision: live.revision },
-          200,
-        );
+        await endDonation(owner, id);
       }
     } finally {
       await Promise.all([owner.close(), admin.close()]);
