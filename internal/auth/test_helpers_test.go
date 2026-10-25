@@ -87,7 +87,7 @@ type runtimeFixture struct {
 
 func newRuntimeFixture(t *testing.T, configure func(*RuntimeConfig)) *runtimeFixture {
 	t.Helper()
-	key := bytes.Repeat([]byte{0x43}, secret.MasterKeyBytes)
+	key := bytes.Repeat([]byte{0x41}, secret.MasterKeyBytes)
 	vault, err := secret.New(key)
 	clear(key)
 	if err != nil {
@@ -95,7 +95,8 @@ func newRuntimeFixture(t *testing.T, configure func(*RuntimeConfig)) *runtimeFix
 	}
 	path := filepath.Join(t.TempDir(), "auth.db")
 
-	dbfixture.Materialize(t, path, vault)
+	// Use the template key to avoid reopening SQLite just to rebind the fixture.
+	dbfixture.Materialize(t, path)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		_ = vault.Close()
