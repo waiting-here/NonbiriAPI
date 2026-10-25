@@ -155,6 +155,9 @@ function StewardPageContent() {
           description={t('user.steward.presentation.description')}
         />
         <div className="nb-actions">
+          <Link className="nb-btn nb-btn--secondary" to="/steward/ai">
+            {t('common.agent.title')}
+          </Link>
           <Link
             className="nb-btn nb-btn--secondary"
             to="/steward/endpoints"
