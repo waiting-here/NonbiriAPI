@@ -722,23 +722,24 @@ describe('managed donation page integration', () => {
     });
     const heading = await screen.findByRole('heading', { name: 'Review pending submission' });
     const card = heading.closest('section')!;
-    const firstReviewNote = () => within(card).getAllByRole('textbox', { name: 'Review note' })[0]!;
+    const firstReviewNote = () =>
+      within(card.querySelector('h4')!.closest('section')!).getByRole('textbox', {
+        name: 'Review note',
+      });
     const firstNote = firstReviewNote();
     fireEvent.change(firstNote, { target: { value: 'first page note' } });
     fireEvent.click(
-      within(within(card).getByRole('navigation', { name: 'Pagination' })).getByRole('button', {
-        name: 'Next',
-      }),
+      within(card.querySelector('nav.page-pagination')!).getByRole('button', { name: 'Next' }),
     );
     const lastNote = within(card).getByLabelText('Review note');
     fireEvent.change(lastNote, { target: { value: 'second page note' } });
     fireEvent.click(
-      within(within(card).getByRole('navigation', { name: 'Pagination' })).getByRole('button', {
-        name: 'Previous',
-      }),
+      within(card.querySelector('nav.page-pagination')!).getByRole('button', { name: 'Previous' }),
     );
     expect(firstReviewNote()).toHaveValue('first page note');
-    const reason = within(card).getByLabelText('Reason');
+    const reviewFields = [...card.children].find((child) => child.matches('div.ops-field-grid'));
+    if (!(reviewFields instanceof HTMLElement)) throw new Error('Review fields missing');
+    const reason = within(reviewFields).getByLabelText('Reason');
     act(() => {
       fireEvent.change(reason, { target: { value: 'Reviewed all pages' } });
     });

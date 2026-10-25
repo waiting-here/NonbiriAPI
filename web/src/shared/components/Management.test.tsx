@@ -349,7 +349,7 @@ describe('shared account management', () => {
       duration_seconds: null,
     });
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Ban' })).toBeNull());
-    await view.user.click(screen.getByRole('button', { name: 'Unban', exact: true }));
+    await view.user.click(screen.getByRole('button', { name: 'Unban' }));
     await view.user.click(
       within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Unban user' }),
     );

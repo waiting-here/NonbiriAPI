@@ -1487,7 +1487,7 @@ describe('CharityManagement corrective controls', () => {
     await view.user.click(await screen.findByRole('tab', { name: 'Charity models and bindings' }));
     await view.user.click(screen.getByRole('button', { name: 'Create charity model' }));
     expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Responses', exact: true })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Embeddings' })).not.toBeChecked();
     await view.user.click(screen.getByRole('checkbox', { name: 'Image generation' }));
     expect(screen.getByRole('checkbox', { name: 'L1' })).toBeChecked();
@@ -2122,6 +2122,7 @@ it.each(['approve', 'reject'] as const)(
             ...current,
             revision: '2',
             status: decision === 'approve' ? 'approved' : 'rejected',
+            review_result: { decision, reason: '', reviewed_at: 1_800_000_000 },
             use_summary: { total: '1', pending: '0', approved: decision === 'approve' ? '1' : '0' },
           });
         }

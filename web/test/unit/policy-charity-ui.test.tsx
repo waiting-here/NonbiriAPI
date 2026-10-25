@@ -35,6 +35,24 @@ import {
   renderWithProviders,
 } from './support';
 
+const donationProtocolServices = [
+  'chat_completions',
+  'responses',
+  'responses_compact',
+  'responses_input_tokens',
+  'embeddings',
+  'images_generations',
+  'images_edits',
+  'images_variations',
+  'audio_speech',
+  'audio_transcriptions',
+  'audio_translations',
+  'completions',
+  'moderations',
+  'decisions',
+  'rerank',
+];
+
 const coreSession = {
   user: {
     id: '1',
@@ -1457,7 +1475,7 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() => expect(screen.queryByText('gpt-a')).toBeNull());
   });
 
-  test('submits an existing owned key with explicit service and credential authorization', async () => {
+  test('submits an existing owned key with all protocol services and exact credential authorization', async () => {
     const capability = {
       state: 'available',
       donation_intake: 'open',
@@ -1564,6 +1582,20 @@ describe('experimental policy and charity controls', () => {
         return jsonResponse(catalog);
       }
       if (method === 'GET' && path === '/api/charity/models') return jsonResponse(capability);
+      if (method === 'GET' && path === '/api/endpoint-create-options')
+        return jsonResponse({
+          base_connector_types: ['openai-compatible'],
+          mainstream_channels: [],
+          native_service_options: [
+            {
+              connector_type: 'openai-compatible',
+              configuration_type: 'openai-compatible',
+              native_services: donationProtocolServices,
+              default_native_services: ['chat_completions', 'embeddings', 'images_generations'],
+              rerank_formats: ['generic', 'cohere', 'jina', 'voyage', 'siliconflow'],
+            },
+          ],
+        });
       if (method === 'GET' && path === '/api/time-zones') {
         return jsonResponse({
           version: 'go1.26.6-zoneinfo',
@@ -1664,7 +1696,7 @@ describe('experimental policy and charity controls', () => {
         keys: [
           {
             endpoint_key_id: '2',
-            native_services: ['chat_completions', 'embeddings'],
+            native_services: donationProtocolServices,
             credential_id: '12',
             credential_version: '3',
             grant_revision: '4',
@@ -2013,6 +2045,7 @@ describe('experimental policy and charity controls', () => {
           ...donation,
           revision: '2',
           status: 'approved',
+          review_result: { decision: 'approve', reason: '', reviewed_at: 1_800_000_000 },
           keys: donation.keys.map((key) => ({
             ...key,
             ...(key.id === '6' ? { charity_state: 'available' } : {}),
