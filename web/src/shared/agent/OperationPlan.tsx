@@ -97,11 +97,16 @@ export function OperationPlan({
   };
   const [elevationError, setElevationError] = useState<unknown>(null);
   const content = (
-    <section className="agent-plan nb-stack" aria-label={t('common.agent.plan')}>
-      <div className="nb-inline">
-        <h3>{t('common.agent.plan')}</h3>
-        <AgentState state={plan.state === 'pending' ? 'waiting_confirmation' : plan.state} />
-      </div>
+    <section
+      className={'agent-plan nb-stack' + (plan.state !== 'pending' ? ' agent-plan--history' : '')}
+      aria-label={t('common.agent.plan')}
+    >
+      {plan.state === 'pending' ? (
+        <div className="nb-inline">
+          <h3>{t('common.agent.plan')}</h3>
+          <AgentState state="waiting_confirmation" />
+        </div>
+      ) : null}
       <ol className="agent-operation-list">
         {plan.operations.map((op, index) => {
           const preview = plan.preview[index];

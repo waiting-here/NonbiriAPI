@@ -103,6 +103,22 @@ func input(id string) Input {
 	messages, _ := json.Marshal([]map[string]string{{"role": "user", "content": id}})
 	return Input{Attribution: Attribution{ClientRequestID: id, Source: "admin_chat", Kind: "model", ActorRole: "admin"}, Messages: messages}
 }
+
+func TestDriverOutputBudgetMustLeaveRoomForInput(t *testing.T) {
+	f := newFixture(t, func(http.ResponseWriter, *http.Request) { t.Error("unexpected request") })
+	before, err := f.runtime.Settings(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.runtime.PutSettings(context.Background(), SettingsUpdate{ExpectedRevision: before.Revision, ContextWindow: 1024, MaxOutputTokens: 1024, Concurrency: 1, TimeoutSeconds: 30})
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("no input budget accepted: %v", err)
+	}
+	after, err := f.runtime.Settings(context.Background())
+	if err != nil || after.Revision != before.Revision {
+		t.Fatalf("invalid settings changed: %+v %v", after, err)
+	}
+}
 func submit(t *testing.T, r *Runtime, id string) Request {
 	t.Helper()
 	out, err := r.Submit(context.Background(), input(id))

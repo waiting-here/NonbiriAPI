@@ -26,6 +26,10 @@ export const roleLabels: Record<string, string> = {
   level5: 'common.agent.roles.steward',
   level6: 'common.agent.roles.steward',
 };
+export function compactInstructions(content: string): string | null {
+  const match = /^\/compact(?:\s+([\s\S]*))?$/u.exec(content.trim());
+  return match ? (match[1]?.trim() ?? '') : null;
+}
 export function textDiff(before: string, after: string) {
   const old = before.split('\n'),
     next = after.split('\n');

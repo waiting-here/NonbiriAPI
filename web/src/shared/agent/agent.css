@@ -22,6 +22,18 @@
 .agent-message--assistant {
   border-left-color: var(--nb-color-info);
 }
+.agent-message--command {
+  border-left-color: var(--nb-color-border-strong);
+  background: var(--nb-color-surface);
+}
+.agent-command {
+  display: grid;
+  gap: var(--nb-space-2);
+  overflow-wrap: anywhere;
+}
+.agent-command p {
+  margin: 0;
+}
 .agent-message--activity {
   padding: var(--nb-space-2) 0;
   border: 0;
@@ -61,6 +73,7 @@
 .agent-tool-activity .nb-fold__title {
   min-width: 0;
   flex: 1;
+  grid-template-columns: minmax(0, 1fr);
 }
 .agent-tool-activity > summary {
   padding: var(--nb-space-3) var(--nb-space-4);
@@ -181,6 +194,11 @@
   padding: var(--nb-space-4);
   border: 1px solid var(--nb-color-border-strong);
   border-radius: var(--nb-radius-md);
+}
+.agent-plan--history {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
 }
 .agent-operation-list,
 .agent-template-list {

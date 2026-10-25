@@ -114,6 +114,29 @@ async function mount(role: 'admin' | 'steward' = 'admin') {
   return view;
 }
 describe('Agent conversation and plans', () => {
+  it('presents compact as a command and uses a distinct submit action', async () => {
+    mocks.get.mockResolvedValue(
+      conversation([message('1', 'user', '/compact keep pending plans')]),
+    );
+    const view = await mount();
+    expect(screen.getByText('Context command')).toBeInTheDocument();
+    expect(screen.getByText('keep pending plans')).toBeInTheDocument();
+    await view.user.type(screen.getByRole('textbox', { name: 'Message' }), '/compact keep IDs');
+    await view.user.click(screen.getByRole('button', { name: 'Compact context' }));
+    expect(mocks.send).toHaveBeenCalledWith(
+      'admin',
+      expect.objectContaining({ content: '/compact keep IDs' }),
+      expect.any(AbortSignal),
+    );
+  });
+  it('recognizes edited user commands without treating assistant prose as a command', async () => {
+    mocks.get.mockResolvedValue(conversation([message('1', 'assistant', '/compact')]));
+    const view = await mount();
+    expect(screen.queryByText('Context command')).not.toBeInTheDocument();
+    await view.user.click(screen.getByRole('button', { name: 'Edit and regenerate' }));
+    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Compact context' })).not.toBeInTheDocument();
+  });
   it('only attaches plans to a complete call set in the known job', () => {
     const later = {
       ...message('2', 'assistant', ''),

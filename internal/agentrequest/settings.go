@@ -59,7 +59,7 @@ func (r *Runtime) PutSettings(ctx context.Context, in SettingsUpdate) (Settings,
 	if len(s.ExtraParameters) == 0 {
 		s.ExtraParameters = json.RawMessage("{}")
 	}
-	if in.ExpectedRevision < 0 || s.ContextWindow < 1024 || s.ContextWindow > 10000000 || s.MaxOutputTokens < 1 || s.MaxOutputTokens > s.ContextWindow || s.Concurrency < 1 || s.Concurrency > 128 || s.TimeoutSeconds < 1 || s.TimeoutSeconds > 1200 || len(s.Model) > 512 || len(s.BaseURL) > 4096 {
+	if in.ExpectedRevision < 0 || s.ContextWindow < 1024 || s.ContextWindow > 10000000 || s.MaxOutputTokens < 1 || s.MaxOutputTokens >= s.ContextWindow || s.Concurrency < 1 || s.Concurrency > 128 || s.TimeoutSeconds < 1 || s.TimeoutSeconds > 1200 || len(s.Model) > 512 || len(s.BaseURL) > 4096 {
 		return Settings{}, ErrInvalid
 	}
 	for _, pair := range []struct {

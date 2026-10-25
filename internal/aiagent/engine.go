@@ -168,6 +168,10 @@ func readContextHistory(ctx context.Context, tx *sql.Tx, conversationID, through
 		if err = rows.Scan(&m.ID, &m.Role, &m.Content, &calls, &m.ToolCallID, &wire); err != nil {
 			return nil, err
 		}
+		// Commands remain in the visible history, but are never chat input.
+		if _, command := compactInstructions(m.Content); m.Role == "user" && command {
+			continue
+		}
 		remaining -= len(m.Role) + len(m.Content) + len(calls) + len(m.ToolCallID) + len(wire) + 128
 		if remaining < 0 {
 			return nil, fmt.Errorf("%w: 待发送的对话内容过大，请编辑消息或重置当前上下文；原文仍保留供管理员查阅", ErrInvalid)
@@ -261,7 +265,7 @@ func (s *Service) run(ctx context.Context, id int64) error {
 			return err
 		}
 		if job.Kind != "auto_review" {
-			messages, err = s.compactIfNeeded(ctx, job, actor, settings, false)
+			messages, err = s.compactIfNeeded(ctx, job, actor, settings, toolJSON, false)
 			if err != nil {
 				return err
 			}
@@ -275,8 +279,10 @@ func (s *Service) run(ctx context.Context, id int64) error {
 			lower := strings.ToLower(response.RawResponse)
 			if job.Kind != "auto_review" && !overflowRecovered && (strings.Contains(lower, "context_length") || strings.Contains(lower, "context window") || strings.Contains(lower, "maximum context")) {
 				overflowRecovered = true
-				if _, e := s.compactIfNeeded(ctx, job, actor, settings, true); e == nil {
+				if _, e := s.compactIfNeeded(ctx, job, actor, settings, toolJSON, true); e == nil {
 					continue
+				} else {
+					return e
 				}
 			}
 			return err

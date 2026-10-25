@@ -273,7 +273,7 @@ func (s *Service) Send(ctx context.Context, actor Actor, input SendInput) (Job, 
 		return Job{}, err
 	}
 	kind := "chat"
-	if input.Content == "/compact" || strings.HasPrefix(input.Content, "/compact ") {
+	if _, command := compactInstructions(input.Content); command {
 		kind = "compact"
 	}
 	if _, err = appendMessage(ctx, tx, id, generation, "user", input.Content, nil, "", now); err != nil {
@@ -364,7 +364,11 @@ func (s *Service) Edit(ctx context.Context, actor Actor, messageID int64, input 
 	if _, err = appendMessage(ctx, tx, conversation, generation, role, input.Content, nil, "", now); err != nil {
 		return Job{}, err
 	}
-	job, err := createChatJob(ctx, tx, actor, conversation, generation, "chat", input.RequestKey, now)
+	kind := "chat"
+	if _, command := compactInstructions(input.Content); role == "user" && command {
+		kind = "compact"
+	}
+	job, err := createChatJob(ctx, tx, actor, conversation, generation, kind, input.RequestKey, now)
 	if err != nil {
 		return Job{}, err
 	}

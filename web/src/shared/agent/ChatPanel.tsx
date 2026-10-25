@@ -1,4 +1,4 @@
-import { roleLabels } from './presentation';
+import { compactInstructions, roleLabels } from './presentation';
 import { Fragment, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -56,16 +56,24 @@ export function ChatMessage({
   running?: boolean;
 }) {
   const { t } = useTranslation();
+  const command = message.role === 'user' ? compactInstructions(message.content) : null;
   return (
     <article
       className={
         'agent-message agent-message--' +
         message.role +
-        (message.tool_calls && !message.content ? ' agent-message--activity' : '')
+        (message.tool_calls && !message.content ? ' agent-message--activity' : '') +
+        (command !== null ? ' agent-message--command' : '')
       }
     >
       <div className="agent-message__head">
-        <strong>{t(roleLabels[message.role] ?? 'common.agent.roles.tool')}</strong>
+        <strong>
+          {t(
+            command !== null
+              ? 'common.agent.compactCommand'
+              : (roleLabels[message.role] ?? 'common.agent.roles.tool'),
+          )}
+        </strong>
         <AgentTime value={message.created_at} />
         {!message.active ? <span>{t('common.agent.archived')}</span> : null}
         {editable ? (
@@ -74,7 +82,13 @@ export function ChatMessage({
           </Button>
         ) : null}
       </div>
-      {message.content && message.role !== 'tool' ? (
+      {command !== null ? (
+        <div className="agent-command">
+          <code>/compact</code>
+          {command ? <p>{command}</p> : null}
+          <p className="nb-small nb-muted">{t('common.agent.compactCommandHelp')}</p>
+        </div>
+      ) : message.content && message.role !== 'tool' ? (
         <AgentMarkdown>{message.content}</AgentMarkdown>
       ) : null}
       {message.tool_calls != null ? (
@@ -182,6 +196,7 @@ export function ChatPanel({
   const locked =
     operation.isPending || operation.outcome === 'unknown' || Boolean(operation.refreshError);
   const running = activeJob(query.data?.job) || query.data?.job?.state === 'waiting_confirmation';
+  const compactDraft = editing?.role !== 'assistant' && compactInstructions(draft) !== null;
   const loadOlder = async () => {
     const generation = query.data?.generation;
     const request = ++historyRequest.current;
@@ -373,6 +388,7 @@ export function ChatPanel({
                   />
                 )}
               </Field>
+              {compactDraft ? <Note>{t('common.agent.compactCommandHelp')}</Note> : null}
               <div className="nb-actions">
                 <Button
                   variant="primary"
@@ -381,7 +397,13 @@ export function ChatPanel({
                     !query.data.enabled || locked || !draft.trim() || Boolean(running && !editing)
                   }
                 >
-                  {t(editing ? 'common.agent.regenerate' : 'common.agent.send')}
+                  {t(
+                    compactDraft
+                      ? 'common.agent.compactNow'
+                      : editing
+                        ? 'common.agent.regenerate'
+                        : 'common.agent.send',
+                  )}
                 </Button>
               </div>
             </form>

@@ -18,12 +18,15 @@ import (
 )
 
 type fakeDriver struct {
-	mu           sync.Mutex
-	inputs       []agentrequest.Input
-	replies      []string
-	unconsumed   []agentrequest.Request
-	acked        []int64
-	unconfigured bool
+	mu            sync.Mutex
+	inputs        []agentrequest.Input
+	replies       []string
+	unconsumed    []agentrequest.Request
+	acked         []int64
+	unconfigured  bool
+	settings      *agentrequest.Settings
+	finishReasons []string
+	afterWait     func(int64)
 }
 
 func (d *fakeDriver) Ready(context.Context, *sql.Tx) (bool, error) {
@@ -33,6 +36,9 @@ func (d *fakeDriver) Ready(context.Context, *sql.Tx) (bool, error) {
 }
 
 func (d *fakeDriver) Settings(context.Context) (agentrequest.Settings, error) {
+	if d.settings != nil {
+		return *d.settings, nil
+	}
 	return agentrequest.Settings{ContextWindow: 8192, MaxOutputTokens: 1024}, nil
 }
 func (d *fakeDriver) Submit(_ context.Context, in agentrequest.Input) (agentrequest.Request, error) {
@@ -43,12 +49,20 @@ func (d *fakeDriver) Submit(_ context.Context, in agentrequest.Input) (agentrequ
 }
 func (d *fakeDriver) Wait(_ context.Context, id int64) (agentrequest.Result, error) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
 	content := `{"role":"assistant","content":"已完成说明。"}`
 	if int(id) <= len(d.replies) {
 		content = d.replies[id-1]
 	}
-	return agentrequest.Result{RequestID: id, Message: json.RawMessage(content)}, nil
+	finish := "stop"
+	if int(id) <= len(d.finishReasons) {
+		finish = d.finishReasons[id-1]
+	}
+	afterWait := d.afterWait
+	d.mu.Unlock()
+	if afterWait != nil {
+		afterWait(id)
+	}
+	return agentrequest.Result{RequestID: id, Message: json.RawMessage(content), FinishReason: finish}, nil
 }
 func (d *fakeDriver) Cancel(context.Context, int64) error { return nil }
 func (d *fakeDriver) AckInTransaction(_ context.Context, _ *sql.Tx, id int64) error {
@@ -431,7 +445,7 @@ func TestCompactionKeepsToolCallResultPairAndOriginals(t *testing.T) {
 		t.Fatal(err)
 	}
 	c, err := f.s.Conversation(ctx, f.actor)
-	if err != nil || c.Summary == "" || count(t, f.db, "ai_agent_messages") != before+1 {
+	if err != nil || c.Summary == "" || count(t, f.db, "ai_agent_messages") != before {
 		t.Fatal(c, err)
 	}
 	if got := f.driver.inputs[len(f.driver.inputs)-1].Kind; got != "compaction" {
