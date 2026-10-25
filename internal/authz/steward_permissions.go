@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
 var ErrPermissionDenied = errors.New("steward_permission_denied")
@@ -119,22 +120,19 @@ func DecodeStewardPermissions(level int, revision int64, permissions, limits, do
 		return p, nil
 	}
 	p.Permissions, p.Limits = nil, nil
-	if revision < 0 || json.Unmarshal([]byte(permissions), &p.Permissions) != nil || json.Unmarshal([]byte(limits), &p.Limits) != nil {
+	if revision < 0 || strictjson.ValidateObject([]byte(permissions)) != nil || strictjson.ValidateObject([]byte(limits)) != nil || json.Unmarshal([]byte(limits), &p.Limits) != nil {
 		return StewardPermissions{}, ErrInvalidRequirement
 	}
-	// Previously configured policies do not acquire new privileges implicitly.
-	if len(p.Permissions) == len(stewardDefaults)-3 {
-		legacy := true
-		for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit"} {
-			if _, ok := p.Permissions[key]; ok {
-				legacy = false
-			}
+	var values map[string]*bool
+	if json.Unmarshal([]byte(permissions), &values) != nil {
+		return StewardPermissions{}, ErrInvalidRequirement
+	}
+	p.Permissions = make(map[string]bool, len(values))
+	for key, value := range values {
+		if value == nil {
+			return StewardPermissions{}, ErrInvalidRequirement
 		}
-		if legacy {
-			for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit"} {
-				p.Permissions[key] = false
-			}
-		}
+		p.Permissions[key] = *value
 	}
 	p.Revision = strconv.FormatInt(revision, 10)
 	p.DonationScope = DonationScope(donationScope)

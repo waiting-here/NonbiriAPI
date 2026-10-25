@@ -8,7 +8,7 @@ import (
 
 func dropAgentFoundationForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
-	for _, table := range []string{"agent_request_response_chunks", "agent_request_settings", "agent_requests", "agent_request_usage", "agent_request_usage_totals", "agent_request_usage_hours"} {
+	for _, table := range []string{"ai_agent_plans", "ai_agent_model_results", "ai_agent_review_events", "ai_agent_jobs", "ai_agent_messages", "ai_agent_conversations", "ai_agent_memory_history", "ai_agent_memories", "ai_agent_settings", "agent_request_response_chunks", "agent_request_settings", "agent_requests", "agent_request_usage", "agent_request_usage_totals", "agent_request_usage_hours"} {
 		hostileMustExec(t, database, "DROP TABLE "+table)
 	}
 }
@@ -43,7 +43,7 @@ func TestAgentStartupUpgradePreservesExactSchema36(t *testing.T) {
 	if err = upgraded.DB().QueryRow("SELECT username,(SELECT value FROM site_config WHERE key='site_name') FROM users WHERE id=?", user).Scan(&username, &site); err != nil || username != originalName || site != "preserved instance" {
 		t.Fatal("original facts changed", username, site, err)
 	}
-	for _, table := range []string{"agent_request_response_chunks", "agent_request_settings", "agent_requests", "agent_request_usage", "agent_request_usage_totals", "agent_request_usage_hours"} {
+	for _, table := range []string{"ai_agent_plans", "ai_agent_model_results", "ai_agent_review_events", "ai_agent_jobs", "ai_agent_messages", "ai_agent_conversations", "ai_agent_memory_history", "ai_agent_memories", "ai_agent_settings", "agent_request_response_chunks", "agent_request_settings", "agent_requests", "agent_request_usage", "agent_request_usage_totals", "agent_request_usage_hours"} {
 		var count int
 		if err = upgraded.DB().QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil || count != 0 {
 			t.Fatal("new table not empty", table, count, err)

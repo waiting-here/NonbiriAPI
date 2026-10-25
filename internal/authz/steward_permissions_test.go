@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -78,7 +79,7 @@ func TestStewardPermissionsRejectUnknownMissingAndNumericOverflow(t *testing.T) 
 	}
 }
 
-func TestAIPermissionsDefaultsLegacyAndRoutes(t *testing.T) {
+func TestAIPermissionsDefaultsCurrentFormatAndRoutes(t *testing.T) {
 	p := DefaultStewardPermissions(5)
 	if !p.Permissions["ai.chat"] || p.Permissions["ai.review.read"] || p.Permissions["ai.memory.edit"] || len(p.Permissions) != 51 {
 		t.Fatal("AI defaults", p)
@@ -91,17 +92,22 @@ func TestAIPermissionsDefaultsLegacyAndRoutes(t *testing.T) {
 	}
 	grants, _ := json.Marshal(p.Permissions)
 	limits, _ := json.Marshal(p.Limits)
-	old, err := DecodeStewardPermissions(5, 1, string(grants), string(limits), "none")
-	if err != nil || len(old.Permissions) != 51 {
-		t.Fatal(old, err)
-	}
-	for key, value := range old.Permissions {
-		if value {
-			t.Fatal("legacy policy acquired grant", key)
-		}
+	if _, err := DecodeStewardPermissions(5, 1, string(grants), string(limits), "none"); err == nil {
+		t.Fatal("runtime accepted unconverted stored policy")
 	}
 	if ValidateStewardPermissions(p) == nil {
 		t.Fatal("PUT accepted incomplete catalog")
+	}
+	current := DefaultStewardPermissions(5)
+	currentBody, _ := json.Marshal(current.Permissions)
+	for _, malformed := range []string{
+		strings.Replace(string(currentBody), `"ai.chat":true`, `"ai.chat":null`, 1),
+		strings.Replace(string(currentBody), `"ai.chat":true`, `"ai.chat":true,"ai.chat":false`, 1),
+		strings.Replace(string(currentBody), `"ai.chat":true`, `"unknown":true`, 1),
+	} {
+		if _, err := DecodeStewardPermissions(5, 1, malformed, string(limits), "standard"); err == nil {
+			t.Fatal("malformed current row accepted")
+		}
 	}
 	for path, want := range map[string]string{
 		"/ai/chat": "ai.chat", "/ai/chat/sessions/1/messages": "ai.chat", "/ai/chat/plans/1/approve": "ai.chat",
