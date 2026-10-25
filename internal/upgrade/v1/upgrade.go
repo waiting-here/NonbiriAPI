@@ -63,7 +63,12 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 	{from: 34, version: 35, manifest: db.Schema35ManifestHash, sql: db.DonationDiscoveryAuthorizationSQL, impact: &migrationImpact{
 		constraintTables: []string{"discovery_runs", "charity_model_catalog"}, credentials: credentialsUnchanged}},
 	{from: 35, version: 36, manifest: db.Schema36ManifestHash, sql: db.StewardPermissionsSQL + db.StewardAuditRolesSQL + db.EndpointTagsSQL, impact: &migrationImpact{rebuiltTables: []string{"risk_client_rules", "client_rule_auto_bans", "discord_blacklist_origins", "discord_blacklist_events", "admin_endpoint_tags"}, addedTables: []string{"steward_permissions", "steward_permission_audits"}, credentials: credentialsUnchanged}},
-	{from: 36, version: 37, manifest: db.PinnedGenerationTwoManifestHash, sql: db.AgentRequestsSQL + db.AgentWorkflowSQL, apply: func(ctx context.Context, tx *sql.Tx) error { return db.UpgradeStewardAIPermissions(ctx, tx) }, impact: &migrationImpact{controlTables: []string{"steward_permissions"}, addedTables: []string{"ai_agent_plans", "ai_agent_model_results", "ai_agent_review_events", "ai_agent_jobs", "ai_agent_messages", "ai_agent_conversations", "ai_agent_memory_history", "ai_agent_memories", "ai_agent_settings", "agent_request_response_chunks", "agent_request_settings", "agent_requests", "agent_request_usage", "agent_request_usage_totals", "agent_request_usage_hours"}, credentials: credentialsUnchanged}},
+	{from: 36, version: 37, manifest: db.PinnedGenerationTwoManifestHash, sql: db.AgentRequestsSQL + db.AgentWorkflowSQL, apply: func(ctx context.Context, tx *sql.Tx) error {
+		if err := db.UpgradeModelTypes(ctx, tx); err != nil {
+			return err
+		}
+		return db.UpgradeStewardAIPermissions(ctx, tx)
+	}, impact: &migrationImpact{controlTables: []string{"steward_permissions", "models", "charity_models"}, addedTables: []string{"ai_agent_plans", "ai_agent_model_results", "ai_agent_review_events", "ai_agent_jobs", "ai_agent_messages", "ai_agent_conversations", "ai_agent_memory_history", "ai_agent_memories", "ai_agent_settings", "agent_request_response_chunks", "agent_request_settings", "agent_requests", "agent_request_usage", "agent_request_usage_totals", "agent_request_usage_hours"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {

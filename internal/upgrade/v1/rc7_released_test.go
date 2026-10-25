@@ -165,6 +165,9 @@ func retainedFacts(t *testing.T, database *sql.DB, sourceColumns map[string][]st
 			}
 			var retained []any
 			for i, column := range columns {
+				if sourceColumns == nil {
+					values[i] = legacyModelInterfaceFact(t, table, column, values[i])
+				}
 				if table == "models" && column == "session_headers" {
 					if values[i] != "[]" {
 						t.Fatal("upgrade personal session headers are not disabled by default")

@@ -1,22 +1,34 @@
 package modeltype
 
 import (
-	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"slices"
 	"testing"
+
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
-func TestChatResponseCategoryAndPersistedBits(t *testing.T) {
-	for _, input := range []Set{{contract.OperationChatCompletions}, {contract.OperationResponses}, {contract.OperationChatCompletions, contract.OperationResponses}, Default()} {
-		mask, err := input.Mask()
-		if err != nil || mask != 17 || !input.Supports(contract.OperationChatCompletions) || !input.Supports(contract.OperationResponses) || input.Supports(contract.OperationEmbeddings) {
-			t.Fatalf("input=%v mask=%d err=%v", input, mask, err)
-		}
-	}
-	for _, mask := range []int64{1, 16, 17} {
-		var s Set
-		if err := s.Scan(mask); err != nil || len(s) != 2 || !s.Supports(contract.OperationChatCompletions) || !s.Supports(contract.OperationResponses) {
-			t.Fatalf("mask=%d set=%v", mask, s)
-		}
+func TestIndependentChatResponseTypesAndPersistedBits(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		input           Set
+		mask            int64
+		chat, responses bool
+	}{
+		{"chat", Set{contract.OperationChatCompletions}, 1, true, false},
+		{"responses", Set{contract.OperationResponses}, 16, false, true},
+		{"both", Set{contract.OperationChatCompletions, contract.OperationResponses}, 17, true, true},
+		{"default", Default(), 17, true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mask, err := tc.input.Mask()
+			if err != nil || mask != tc.mask || tc.input.Supports(contract.OperationChatCompletions) != tc.chat || tc.input.Supports(contract.OperationResponses) != tc.responses || tc.input.Supports(contract.OperationEmbeddings) {
+				t.Fatalf("input=%v mask=%d err=%v", tc.input, mask, err)
+			}
+			var stored Set
+			if err := stored.Scan(tc.mask); err != nil || !slices.Equal(stored, tc.input) {
+				t.Fatalf("stored mask=%d set=%v err=%v", tc.mask, stored, err)
+			}
+		})
 	}
 	if _, err := (Set{contract.OperationChatCompletions, contract.OperationChatCompletions}).Mask(); err == nil {
 		t.Fatal("identical duplicates accepted")
