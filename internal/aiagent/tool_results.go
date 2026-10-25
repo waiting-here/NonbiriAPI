@@ -38,6 +38,9 @@ func toolResultTooLarge(name, reason string) json.RawMessage {
 	case "charity_models":
 		filters = []string{"model_id", "query"}
 		retry = "请指定 model_id 或名称子串 query 缩小范围后重试。"
+	case "charity_binding_presets":
+		filters = []string{"donation_id", "channel_id"}
+		retry = "请指定 donation_id，或加上已读取的 channel_id 缩小预设范围后重试。"
 	case "users":
 		filters = []string{"user_id", "query"}
 		retry = "请指定站内 user_id 读取一个账号详情，或用用户名/Discord ID query 缩小列表范围后重试。"
@@ -49,7 +52,7 @@ func toolResultTooLarge(name, reason string) json.RawMessage {
 	}
 	limits := map[string]int{"max_bytes": agentplan.ReadMaxBytes}
 	switch name {
-	case "donations", "donation_models", "review_history", "charity_models", "users":
+	case "donations", "donation_models", "review_history", "charity_models", "charity_binding_presets", "users":
 		limits["max_items"] = agentplan.ReadMaxItems
 	}
 	raw, _ := json.Marshal(map[string]any{"error": map[string]any{

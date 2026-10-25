@@ -27,6 +27,9 @@ type agentInput struct {
 	patch                        ModelPatch
 	remove                       ModelDelete
 	binding                      agentBindingInput
+	preset                       ApplyBindingPreset
+	revisions                    map[string]int64
+	donationID                   int64
 	modelID, bindingID, expected int64
 }
 
@@ -52,7 +55,12 @@ func agentDecode(data []byte, out any) error {
 func parseAgentOperation(op agentplan.Operation) (agentInput, error) {
 	var in agentInput
 	var err error
-	if op.Kind != "charity.model.create" {
+	if op.Kind == "charity.binding.apply_preset" {
+		in.donationID, err = parsePositiveID(op.TargetID)
+		if err != nil {
+			return in, ErrInvalidRequest
+		}
+	} else if op.Kind != "charity.model.create" {
 		in.modelID, err = parsePositiveID(op.TargetID)
 		if err != nil {
 			return in, ErrInvalidRequest
@@ -61,6 +69,11 @@ func parseAgentOperation(op agentplan.Operation) (agentInput, error) {
 		return in, ErrInvalidRequest
 	}
 	switch op.Kind {
+	case "charity.binding.apply_preset":
+		err = agentDecode(op.Input, &in.preset)
+		if err == nil {
+			in.expected, in.revisions, err = parsePresetApplication(in.preset)
+		}
 	case "charity.model.create":
 		var wire modelCreateWire
 		if err = agentDecode(op.Input, &wire); err == nil {
@@ -155,6 +168,8 @@ func (s *Service) agentScope(ctx context.Context, tx *sql.Tx, actor agentplan.Ac
 		switch op.Kind {
 		case "charity_models":
 			grant = "charity.read"
+		case "charity_binding_presets", "charity.binding.apply_preset":
+			grant = "charity.presets"
 		case "charity.model.create":
 			grant = "charity.create"
 		case "charity.model.delete":
@@ -164,6 +179,11 @@ func (s *Service) agentScope(ctx context.Context, tx *sql.Tx, actor agentplan.Ac
 		}
 		if grant != "" {
 			if err := authz.RequireStewardPermission(ctx, tx, actor.ID, grant); err != nil {
+				return role, scope, err
+			}
+		}
+		if op.Kind == "charity_binding_presets" || op.Kind == "charity.binding.apply_preset" {
+			if err := authz.RequireStewardPermission(ctx, tx, actor.ID, "charity.manage"); err != nil {
 				return role, scope, err
 			}
 		}
@@ -208,6 +228,17 @@ func (s *Service) AgentPreview(ctx context.Context, tx *sql.Tx, actor agentplan.
 	now, err := s.nowUnix()
 	if err != nil {
 		return out, err
+	}
+	if op.Kind == "charity.binding.apply_preset" {
+		value, _, err := s.agentPresetApplicationTx(ctx, tx, actor, scope, in, now, authorize)
+		if err != nil {
+			return out, err
+		}
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return out, err
+		}
+		return agentplan.Preview{Title: op.Kind, Description: "Apply the saved channel preset to this donation. Missing upstream models and existing bindings are skipped; any other failure rolls back the complete plan.", Before: string(raw), After: string(op.Input)}, nil
 	}
 	if strings.HasPrefix(op.Kind, "charity.binding.") {
 		if err = s.agentValidateBindingTx(ctx, tx, scope, op.Kind, in, now, false); err != nil {
@@ -262,6 +293,8 @@ func (s *Service) AgentApply(ctx context.Context, tx *sql.Tx, actor agentplan.Ac
 			err = requireOne(result)
 		}
 		value = struct{}{}
+	case "charity.binding.apply_preset":
+		value, err = s.agentApplyPresetTx(ctx, tx, actor, scope, in, now, authorize)
 	default:
 		value, err = s.agentBindingTx(ctx, tx, scope, op.Kind, in, now)
 	}

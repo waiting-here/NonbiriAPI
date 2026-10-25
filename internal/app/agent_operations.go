@@ -65,7 +65,7 @@ func (o *agentOperations) Tools(ctx context.Context, actor agentplan.Actor, auto
 			}
 			return nil, err
 		}
-		out = append(out, aiagent.Tool{Name: name, Description: agentSchemaDescription(schemas[name]), Parameters: schemas[name]})
+		out = append(out, aiagent.Tool{Name: name, Description: agentSchemaDescription(schemas[name]), Parameters: schemas[name], ChatOnly: name == "charity_binding_presets"})
 	}
 	if automatic {
 		return out, nil
@@ -126,7 +126,7 @@ func (o *agentOperations) Read(ctx context.Context, actor agentplan.Actor, name 
 	switch name {
 	case "donations", "donation_models", "review_history":
 		raw, err = o.donations.AgentRead(ctx, tx, actor, name, args, o.authority.Authorize)
-	case "charity_models":
+	case "charity_models", "charity_binding_presets":
 		raw, err = o.charity.AgentRead(ctx, tx, actor, name, args, o.authority.Authorize)
 	case "users":
 		raw, err = o.users.Read(ctx, tx, actor, args, o.authority.Authorize)

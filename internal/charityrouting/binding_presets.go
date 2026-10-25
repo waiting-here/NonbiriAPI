@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
@@ -245,29 +246,9 @@ func (s *Service) applyBindingPreset(ctx context.Context, role roleKind, actorID
 	if role == roleSteward {
 		route = routeStewardApplyBindingPreset
 	}
-	expected, err := parsePositiveID(input.ExpectedDonationRevision)
-	if ctx == nil || err != nil || !db.ValidateOpaqueID(input.ChannelID, "mch_") || len(input.Models) > maxChannelBindingMappings || !validMutation(mutation, http.MethodPost, route, donationID) {
+	expected, revisions, err := parsePresetApplication(input)
+	if ctx == nil || err != nil || !validMutation(mutation, http.MethodPost, route, donationID) {
 		return empty, ErrInvalidRequest
-	}
-	if _, err := parsePositiveID(input.ExpectedChannelRevision); err != nil {
-		return empty, err
-	}
-	if _, err := parsePositiveID(input.ExpectedPresetRevision); err != nil {
-		return empty, err
-	}
-	revisions := map[string]int64{}
-	for _, model := range input.Models {
-		if _, err := parsePositiveID(model.CharityModelID); err != nil {
-			return empty, err
-		}
-		revision, err := parseNonnegativeRevision(model.ExpectedBindingRevision)
-		if err != nil {
-			return empty, err
-		}
-		if _, ok := revisions[model.CharityModelID]; ok {
-			return empty, ErrInvalidRequest
-		}
-		revisions[model.CharityModelID] = revision
 	}
 	now, err := s.nowUnix()
 	if err != nil {
@@ -303,35 +284,10 @@ func (s *Service) applyBindingPreset(ctx context.Context, role roleKind, actorID
 	if err != nil {
 		return empty, err
 	}
-	checkedSources := false
-	if scope.DonationScope == "none" {
-		return empty, authz.ErrPermissionDenied
-	}
-	for _, mapping := range preset.Mappings {
-		if (!scope.Trainee && !scope.RestrictedKeys()) || mapping.BindingRevision == nil {
-			continue
-		}
-		modelID, err := parsePositiveID(mapping.CharityModelID)
-		if err != nil {
-			return empty, ErrInvariant
-		}
-		scope, err := s.managementScope(ctx, tx, role, actor, modelID, false)
-		if err != nil {
-			return empty, err
-		}
-		checkedSources = true
-		for _, key := range keys {
-			if err := scope.RequireKey(ctx, tx, donationID, key.id, now, true); err != nil {
-				return empty, managementScopeError(err)
-			}
-		}
-	}
-	if scope.RestrictedKeys() && !checkedSources {
-		for _, key := range keys {
-			if err := scope.RequireKey(ctx, tx, donationID, key.id, now, true); err != nil {
-				return empty, managementScopeError(err)
-			}
-		}
+	if err := authorizePresetSourcesTx(ctx, tx, scope, donationID, preset, keys, now, func(modelID int64) (charityscope.Scope, error) {
+		return s.managementScope(ctx, tx, role, actor, modelID, false)
+	}); err != nil {
+		return empty, err
 	}
 	decision, err := beginMutation(ctx, tx, role, actor, mutation, now)
 	if err != nil {
@@ -346,25 +302,9 @@ func (s *Service) applyBindingPreset(ctx context.Context, role roleKind, actorID
 	if len(preset.Mappings) == 0 {
 		return empty, ErrConflict
 	}
-	targets := make([]bindingTarget, 0, len(preset.Mappings))
-	used := map[string]bool{}
-	for _, mapping := range preset.Mappings {
-		id, _ := parsePositiveID(mapping.CharityModelID)
-		expected := int64(0)
-		if mapping.BindingRevision != nil {
-			var ok bool
-			expected, ok = revisions[mapping.CharityModelID]
-			if !ok {
-				return empty, ErrConflict
-			}
-			used[mapping.CharityModelID] = true
-		} else if _, ok := revisions[mapping.CharityModelID]; ok {
-			used[mapping.CharityModelID] = true
-		}
-		targets = append(targets, bindingTarget{modelID: id, upstream: mapping.UpstreamModelID, expected: expected, legacy: true})
-	}
-	if len(used) != len(revisions) {
-		return empty, ErrInvalidRequest
+	targets, err := presetTargets(preset, revisions)
+	if err != nil {
+		return empty, err
 	}
 	value, err := applyBindingMatrix(ctx, tx, targets, keys, now)
 	if err != nil {
