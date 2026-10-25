@@ -6,7 +6,8 @@ This standard applies to every existing and future Gacha Simulator card. Rarity 
 
 `internal/artwork/catalog.json` is the shared Go and browser classification
 registry. Every card, illustration, cover and appearance has an explicit
-`general` or `r18` rating; all current entries are `general`. Asset ownership
+`general` or `r18` rating. Sweet Hide-and-Seek's two cards, theme illustration
+and pool cover are `r18`, including all their derivatives. Asset ownership
 rules cover the corresponding previews, full-size images, layers and variants.
 Shared textures have one owner, and artwork that reuses them declares `uses`
 dependencies so its effective rating includes those sources. Card `scene`
@@ -17,6 +18,13 @@ coverage validation. Keep default appearance and fallback cover general. The
 administrator's R-18 switch controls both rendering and direct asset delivery;
 candidate labels are separate from the artwork, so allowed detail views and
 applied appearances remain unobstructed.
+
+Sweet Hide-and-Seek retains two animated SSR character portraits over static
+backgrounds. Its group illustration and independent pool cover stay static;
+the theme grants no SP site appearance. The character-free backgrounds and
+retained foregrounds share the theme's R-18 classification, including standard,
+thumbnail and high-resolution WebP exports. Its adult artwork is included in
+the public source distribution and remains disabled by default in the product.
 
 ## Artwork and identity
 

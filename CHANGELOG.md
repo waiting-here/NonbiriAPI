@@ -24,6 +24,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Add the single-card ChatGPT SP theme “Tomorrow, Still Unwritten”, with an
   unpublished limited-pool template, animated card, cover, collection illustration
   and unlockable light/dark site appearance. Its artwork is classified as general.
+- Add the adult-only R-18 theme “Sweet Hide-and-Seek”, with ChatGPT and Claude
+  limited SSR cards, a collection illustration and an independent pool cover.
+  Its unpublished pool template uses standard limited SSR rules and gives both
+  featured cards equal weight. R-18 artwork remains disabled by default.
 - Add an experimental management assistant with a dedicated encrypted Chat
   Completions endpoint/key, configurable templates/tools and separate shared
   memories. Chat defaults to closed until enabled with a ready driver; each

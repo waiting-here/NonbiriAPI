@@ -186,3 +186,38 @@ func TestTomorrowArtworkRemainsAvailableWithR18Disabled(t *testing.T) {
 		}
 	}
 }
+
+func TestSweetHideAndSeekArtworkIsRestricted(t *testing.T) {
+	for _, key := range []string{"card:s-chatgpt", "card:s-claude", "illustration:s", "cover:s"} {
+		definition, ok := builtIn.definitions[key]
+		if !ok || definition.Rating != R18 || Allowed(key, true) || !Allowed(key, false) {
+			t.Error("restricted theme classification or allowance changed", key, definition)
+		}
+		if MomentAllowed(key, true) || !MomentAllowed(key, false) {
+			t.Error("restricted moment ignored artwork policy", key)
+		}
+	}
+	for _, file := range []string{
+		"cards/s-chatgpt.webp", "hires/cards/s-chatgpt.webp", "thumbs/s-chatgpt.webp",
+		"cards/s-claude.webp", "hires/cards/s-claude.webp", "thumbs/s-claude.webp",
+		"groups/s.webp", "hires/groups/s.webp", "backgrounds/s.webp", "hires/backgrounds/s.webp",
+		"layers/groups/s.webp", "hires/layers/groups/s.webp",
+		"covers/s.webp", "hires/covers/s.webp",
+		"backgrounds/covers/s.webp", "hires/backgrounds/covers/s.webp",
+		"layers/covers/s.webp", "hires/layers/covers/s.webp",
+	} {
+		if rating, ok := AssetRating(file); !ok || rating != R18 {
+			t.Error("restricted derivative is unclassified", file, rating, ok)
+		}
+	}
+	for _, id := range []string{"s-chatgpt", "s-claude"} {
+		for _, prefix := range []string{"motion/", "hires/motion/"} {
+			for _, layer := range []string{"background", "hero", "half", "closed"} {
+				file := prefix + id + "/" + layer + ".webp"
+				if rating, ok := AssetRating(file); !ok || rating != R18 {
+					t.Error("restricted motion layer is unclassified", file, rating, ok)
+				}
+			}
+		}
+	}
+}
