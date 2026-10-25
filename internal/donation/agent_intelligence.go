@@ -158,7 +158,7 @@ func (s *Service) AgentIntelligence(ctx context.Context, tx *sql.Tx, donationID 
 	// Bound catalog data to this donation's manual entries and pinned pending
 	// discovery runs; never read credentials or unrelated catalog history.
 	rows, err := tx.QueryContext(ctx, `SELECT CAST(dk.id AS TEXT),m.normalized_model_id,m.display_name,'manual' FROM donation_key_manual_models m JOIN donation_keys dk ON dk.id=m.donation_key_id WHERE dk.donation_id=?
- UNION SELECT CAST(dk.id AS TEXT),c.normalized_model_id,c.normalized_model_id,'automatic' FROM donation_keys dk JOIN donation_uses u ON u.donation_key_id=dk.id JOIN donation_use_revisions ur ON ur.id=u.current_pending_revision_id JOIN endpoint_grant_authorizations a ON a.grant_revision_id=ur.grant_revision_id JOIN discovery_source_states st ON st.source_revision_id=`+connectionstore.DiscoverySourceRevisionSQL+` JOIN model_catalog_entries c ON c.discovery_run_id=st.current_run_id AND c.source_type='automatic' WHERE dk.donation_id=? ORDER BY 1,2,4 LIMIT 4097`, donationID, donationID)
+ UNION SELECT CAST(dk.id AS TEXT),c.normalized_model_id,c.normalized_model_id,'automatic' FROM donation_keys dk JOIN donation_uses u ON u.donation_key_id=dk.id JOIN donation_use_revisions ur ON ur.id=u.current_pending_revision_id JOIN endpoint_grant_authorizations a ON a.grant_revision_id=ur.grant_revision_id JOIN discovery_source_states st ON st.source_revision_id=`+connectionstore.DiscoverySourceRevisionSQL+` JOIN model_catalog_entries c ON c.discovery_run_id=st.current_run_id AND c.source_type='automatic' WHERE dk.donation_id=? ORDER BY 1,2,4`, donationID, donationID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -175,18 +175,13 @@ func (s *Service) AgentIntelligence(ctx context.Context, tx *sql.Tx, donationID 
 	if err != nil {
 		return nil, "", err
 	}
-	truncated := len(models) > 4096
-	if truncated {
-		models = models[:4096]
-	}
 	data, err := json.Marshal(struct {
-		Donation        AdminDonation        `json:"donation"`
-		Version         agentPendingSnapshot `json:"version"`
-		Uses            []Use                `json:"uses"`
-		Models          []catalogModel       `json:"models"`
-		ModelsTruncated bool                 `json:"models_truncated"`
-		Signature       string               `json:"signature"`
-	}{header, snapshot, uses, models, truncated, signature})
+		Donation  AdminDonation        `json:"donation"`
+		Version   agentPendingSnapshot `json:"version"`
+		Uses      []Use                `json:"uses"`
+		Models    []catalogModel       `json:"models"`
+		Signature string               `json:"signature"`
+	}{header, snapshot, uses, models, signature})
 	return data, signature, err
 }
 

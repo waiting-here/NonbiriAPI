@@ -1,10 +1,12 @@
 package adminusers
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/waiting-here/NonbiriAPI/internal/agentplan"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"strconv"
@@ -170,5 +172,80 @@ func TestAgentUserActiveBanAndActualDelegationBoundaries(t *testing.T) {
 		if _, err = ParseAgentOperation(agentplan.Operation{Kind: kind, TargetID: strconv.FormatInt(id, 10), Input: json.RawMessage(`{"expected_revision":"1","password":"never accepted"}`)}); !errors.Is(err, ErrInvalidRequest) {
 			t.Fatalf("credential field accepted by %s", kind)
 		}
+	}
+}
+
+func TestAgentUserCompleteProfileSearchAndSensitiveReadPermissions(t *testing.T) {
+	f := newAdminUsersFixture(t)
+	var first int64
+	for i := 0; i < 105; i++ {
+		id := f.seedUser(fmt.Sprintf("complete-profile-%03d", i), false)
+		if i == 0 {
+			first = id
+		}
+	}
+	if _, err := f.store.DB().Exec(`UPDATE users SET username='complete-profile-admin' WHERE id=?`, f.adminID); err != nil {
+		t.Fatal(err)
+	}
+	actor := agentplan.Actor{ID: f.adminID, Role: "admin"}
+	in, err := ParseAgentRead(json.RawMessage(`{"query":"complete-profile"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := f.store.DB().BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	raw, err := f.service.AgentRead(t.Context(), tx, actor, in, allowAgent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Data  []AdminUser `json:"data"`
+		Total string      `json:"total"`
+	}
+	if err = json.Unmarshal(raw, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Data) != 105 || result.Total != "105" || bytes.Contains(raw, []byte(`"page"`)) || bytes.Contains(raw, []byte(`"page_size"`)) {
+		t.Fatal("incomplete profiles", result.Total, len(result.Data))
+	}
+	for _, item := range result.Data {
+		if item.Revision != "1" || item.IsAdmin {
+			t.Fatal("unsafe/incomplete profile", item.ID, item.Revision)
+		}
+	}
+	t.Logf("users complete rows=%d bytes=%d", len(result.Data), len(raw))
+	for _, bad := range []string{`{"page":1}`, `{"page_size":100}`, `{"kind":"caller_key"}`, `{"kind":"permissions"}`, `{"kind":"mfa"}`} {
+		if _, err := ParseAgentRead(json.RawMessage(bad)); !errors.Is(err, ErrInvalidRequest) {
+			t.Fatal("invalid old pagination or sensitive target accepted", bad, err)
+		}
+	}
+	in, err = ParseAgentRead(json.RawMessage(`{"kind":"caller_key","user_id":"` + strconv.FormatInt(first, 10) + `"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	deny := func(_ context.Context, _ *sql.Tx, _ agentplan.Actor, permission string) error {
+		if permission != "users.caller_keys.read" {
+			t.Fatal("wrong sensitive permission", permission)
+		}
+		return authz.ErrPermissionDenied
+	}
+	if _, err = f.service.AgentRead(t.Context(), tx, actor, in, deny); !errors.Is(err, authz.ErrPermissionDenied) {
+		t.Fatal("sensitive read bypass", err)
+	}
+	in, _ = ParseAgentRead(json.RawMessage(`{"query":"absent-profile"}`))
+	raw, err = f.service.AgentRead(t.Context(), tx, actor, in, allowAgent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(raw, &result); err != nil || len(result.Data) != 0 || result.Total != "0" {
+		t.Fatal("empty result", string(raw), err)
+	}
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err = f.service.AgentRead(canceled, tx, actor, in, allowAgent); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancellation ignored", err)
 	}
 }

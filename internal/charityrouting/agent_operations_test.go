@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -270,5 +271,96 @@ func TestAgentSchemasPreserveUpstreamNamesAndStrictJSON(t *testing.T) {
 	}
 	if _, err := parseAgentOperation(agentplan.Operation{Kind: "charity.binding.delete", TargetID: "1", Input: json.RawMessage(`{"expected_binding_revision":"1","expected_binding_revision":"2","binding_id":"1"}`)}); !errors.Is(err, ErrInvalidRequest) {
 		t.Fatal("duplicate JSON fields accepted", err)
+	}
+}
+
+func TestAgentCharityCompleteReadIncludesAuthorizedBindings(t *testing.T) {
+	e := newRoutingTestEnv(t)
+	admin := e.seedUser(t, true, nil)
+	owner := e.seedUser(t, false, nil)
+	five := int64(5)
+	steward := e.seedUser(t, false, &five)
+	_, key, _ := e.seedCandidate(t, owner, 'p', "upstream")
+	actor := agentplan.Actor{ID: admin, Role: "admin"}
+	tx, err := e.store.DB().BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	var first string
+	for i := 0; i < 105; i++ {
+		input := testModelCreate()
+		input.Model = fmt.Sprintf("complete-%03d", i)
+		raw, err := e.service.AgentApply(t.Context(), tx, actor, agentOp(t, "charity.model.create", "", input), allowAgent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var model AdminCharityModel
+		if err = json.Unmarshal(raw, &model); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			first = model.ID
+		}
+	}
+	if _, err = tx.Exec(`UPDATE charity_models SET is_mainstream=1 WHERE id=?`, first); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = e.service.AgentApply(t.Context(), tx, actor, agentOp(t, "charity.binding.add", first, agentBindingInput{ExpectedBindingRevision: "0", Targets: []BindingTargetInput{targetForTest(key, "upstream", contract.NativeServiceChatCompletions)}}), allowAgent); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		args  string
+		actor agentplan.Actor
+		count int
+	}{{`{}`, actor, 105}, {`{"model_id":"` + first + `"}`, actor, 1}, {`{"query":"complete-10"}`, actor, 5}, {`{}`, agentplan.Actor{ID: steward, Role: "level5"}, 1}} {
+		raw, err := e.service.AgentRead(t.Context(), tx, tc.actor, "charity_models", json.RawMessage(tc.args), allowAgent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var result struct {
+			Data []struct {
+				Model    json.RawMessage `json:"model"`
+				Bindings *AdminBindings  `json:"bindings"`
+			} `json:"data"`
+			Total string `json:"total"`
+		}
+		if err = json.Unmarshal(raw, &result); err != nil {
+			t.Fatal(err)
+		}
+		if len(result.Data) != tc.count || result.Total != fmt.Sprint(tc.count) || strings.Contains(string(raw), `"has_more"`) {
+			t.Fatal("incomplete models", tc.count, result.Total, len(result.Data))
+		}
+		for _, item := range result.Data {
+			if item.Bindings == nil {
+				t.Fatal("list omitted bindings")
+			}
+		}
+		if tc.args == `{}` && (result.Data[0].Bindings.BindingRevision != "1" || len(result.Data[0].Bindings.Bindings) != 1) {
+			t.Fatal("list cannot construct versioned binding update")
+		}
+		if strings.Contains(string(raw), `"display_head"`) || strings.Contains(string(raw), `"display_tail"`) {
+			t.Fatal("credential hints exposed")
+		}
+		t.Logf("charity_models rows=%d bytes=%d", len(result.Data), len(raw))
+	}
+	for _, bad := range []string{`{"page":1}`, `{"page_size":100}`} {
+		if _, err = e.service.AgentRead(t.Context(), tx, actor, "charity_models", json.RawMessage(bad), allowAgent); !errors.Is(err, ErrInvalidRequest) {
+			t.Fatal("obsolete pagination accepted", err)
+		}
+	}
+	var schema struct {
+		Properties map[string]any `json:"properties"`
+	}
+	if err = json.Unmarshal(AgentReadSchemas()["charity_models"], &schema); err != nil {
+		t.Fatal(err)
+	}
+	if schema.Properties["page"] != nil || schema.Properties["page_size"] != nil {
+		t.Fatal("pagination exposed")
+	}
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err = e.service.AgentRead(canceled, tx, actor, "charity_models", json.RawMessage(`{}`), allowAgent); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancellation ignored", err)
 	}
 }
