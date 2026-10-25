@@ -598,23 +598,8 @@ function normalizeDonationCommon(root: ReturnType<typeof record>, label: string)
       reviewed_at: unixSecond(value.reviewed_at, `${label} review time`),
     };
   }
-  if (reviewer !== null && review === null) {
-    invalidResponse(`${label} attributed review`);
-  }
-  if (status === 'pending' && review !== null) invalidResponse(`${label} pending review`);
-  if (status === 'approved' && review?.decision !== 'approve')
-    invalidResponse(`${label} approved review`);
-  if (
-    (status === 'expired' || status === 'deleted') &&
-    (review?.decision === 'reject' || review?.decision === 'force_reject')
-  )
-    invalidResponse(`${label} terminal review`);
-  if (status === 'rejected' && review?.decision !== 'reject' && review?.decision !== 'force_reject')
-    invalidResponse(`${label} rejected review`);
   return {
-    ...(root.use_summary === undefined
-      ? {}
-      : { use_summary: normalizeUseSummary(root.use_summary) }),
+    ...(root.use_summary == null ? {} : { use_summary: normalizeUseSummary(root.use_summary) }),
     first_approval_origin:
       root.first_approval_origin === undefined
         ? 'unknown'

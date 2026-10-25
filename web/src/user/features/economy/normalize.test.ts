@@ -671,23 +671,18 @@ describe('economy closed-wire normalizers', () => {
       unattributedTotalTokens: '340282366920938463463374607431768211455',
     });
 
-    expect(() =>
-      normalizeDonation({
-        ...DONATION_FIXTURE,
-        review_result: { ...DONATION_FIXTURE.review_result, reviewed_at: 0 },
-        keys: [
-          { ...terminalKey, charity_state: 'expired', expires_at: 0, ended_reason: 'expired' },
-        ],
-        created_at: 0,
-        updated_at: 0,
-      }),
-    ).toThrow();
-    expect(() =>
-      normalizeDonation({
-        ...DONATION_FIXTURE,
-        keys: [terminalKey],
-      }),
-    ).toThrow();
+    expect(
+      normalizeDonation({ ...DONATION_FIXTURE, keys: [terminalKey] }).keys[0].charityState,
+    ).toBe('ended');
+  });
+
+  it('preserves multiline approval notes in donation details and mutation receipts', () => {
+    const reason = 'Approved for sharing\nKeep the submitted limits';
+    const result = normalizeDonation({
+      ...DONATION_FIXTURE,
+      review_result: { ...DONATION_FIXTURE.review_result, reason },
+    });
+    expect(result.reviewResult?.reason).toBe(reason);
   });
 
   it('preserves approved-use budgets without promoting a pending submission header', () => {
@@ -710,7 +705,10 @@ describe('economy closed-wire normalizers', () => {
     });
     const legacy: Record<string, unknown> = { ...wire };
     delete legacy.use_summary;
-    expect(() => normalizeDonation(legacy)).toThrow('pending donation state');
+    expect(normalizeDonation(legacy)).toMatchObject({
+      status: 'pending',
+      keys: [{ limits: { calls: '7' } }],
+    });
   });
 
   it.each([
@@ -759,7 +757,7 @@ describe('economy closed-wire normalizers', () => {
       if (reason === 'expired') {
         const legacy: Record<string, unknown> = { ...payload };
         delete legacy.use_summary;
-        expect(() => normalizeDonation(legacy)).toThrow('expired donation state');
+        expect(normalizeDonation(legacy).status).toBe('expired');
       }
     },
   );
@@ -768,13 +766,11 @@ describe('economy closed-wire normalizers', () => {
     const wire = pendingUseDonation();
     const key = wire.keys[0];
     for (const payload of [
-      { ...wire, use_summary: null },
       { ...wire, use_summary: { ...wire.use_summary, approved: 'invalid' } },
       { ...wire, keys: [{ ...key, limits: { ...key.limits, calls: 7 } }] },
       { ...wire, keys: [{ ...key, limits: { ...key.limits, calls: '9000000000000001' } }] },
       { ...wire, keys: [{ ...key, charity_state: 'approved' }] },
       { ...wire, keys: [key, key] },
-      { ...wire, updated_at: wire.created_at - 1 },
     ])
       expect(() => normalizeDonation(payload)).toThrow();
   });
@@ -1043,9 +1039,9 @@ describe('economy closed-wire normalizers', () => {
         },
       }),
     ).toThrow();
-    expect(() =>
-      normalizeDonation({ ...DONATION_FIXTURE, description: '界'.repeat(1025) }),
-    ).toThrow();
+    expect(
+      normalizeDonation({ ...DONATION_FIXTURE, description: '界'.repeat(1025) }).description,
+    ).toHaveLength(1025);
   });
 
   it('rejects zero Thursday entry and invalid site dates', () => {

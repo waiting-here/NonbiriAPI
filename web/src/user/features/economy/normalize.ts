@@ -1,3 +1,4 @@
+import { string as responseString } from '@shared/operations/wire';
 import { normalizeUseSummary } from '@shared/operations/donationUses';
 import { normalizeServiceStatuses } from '@shared/operations/resourceHealth';
 import {
@@ -516,7 +517,7 @@ function normalizeReviewResult(value: unknown): DonationReviewResult | null {
   if (decision !== 'approve' && decision !== 'reject') invalid('donation review decision');
   return {
     decision,
-    reason: text(result.reason, 'donation review reason', 1024),
+    reason: responseString(result.reason, 'donation review reason', { multiline: true }),
     reviewedAt: timestamp(result.reviewed_at, 'donation reviewed timestamp'),
   };
 }
@@ -739,80 +740,12 @@ export function normalizeDonation(value: unknown): Donation {
   );
   const status = enumValue(item.status, 'donation status', DONATION_STATUSES);
   const reviewResult = normalizeReviewResult(item.review_result);
-  const useSummary =
-    item.use_summary === undefined ? undefined : normalizeUseSummary(item.use_summary);
+  const useSummary = item.use_summary == null ? undefined : normalizeUseSummary(item.use_summary);
   const keys = array(item.keys, 'donation keys', 100).map(normalizeDonationKey);
   if (keys.length === 0) invalid('donation keys');
   requireUnique(keys, (key) => key.id, 'donation key identities');
   const createdAt = timestamp(item.created_at, 'donation created timestamp');
   const updatedAt = timestamp(item.updated_at, 'donation updated timestamp');
-  requireOrderedTimestamps(createdAt, updatedAt, 'donation timestamps');
-  if (
-    reviewResult &&
-    (reviewResult.reviewedAt < createdAt || reviewResult.reviewedAt > updatedAt)
-  ) {
-    invalid('donation review timestamp');
-  }
-  // Use-level review preserves the submission header and its budget history.
-  if (useSummary === undefined) {
-    if (status === 'pending' && reviewResult !== null) invalid('pending donation review result');
-    if (status === 'approved' && reviewResult?.decision !== 'approve')
-      invalid('approved donation review result');
-    if (status === 'rejected' && reviewResult?.decision !== 'reject')
-      invalid('rejected donation review result');
-    if (status === 'pending') {
-      if (
-        keys.some(
-          (key) =>
-            key.charityState !== 'pending' ||
-            key.limits.price !== null ||
-            key.limits.calls !== null ||
-            key.limits.tokens !== null ||
-            key.usage.priceUsed !== '0' ||
-            key.usage.priceInflight !== '0' ||
-            key.usage.callsUsed !== '0' ||
-            key.usage.callsInflight !== '0' ||
-            key.usage.tokensUsed !== '0' ||
-            key.usage.tokensInflight !== '0' ||
-            key.tokenReserve !== 0 ||
-            key.streak.generation !== '1' ||
-            key.streak.count !== '0' ||
-            key.streak.failureDisabled ||
-            key.endedReason !== null,
-        )
-      ) {
-        invalid('pending donation state');
-      }
-    } else if (keys.some((key) => key.charityState === 'pending')) {
-      invalid('terminal donation key state');
-    }
-    if (
-      status === 'approved' &&
-      keys.every((key) => key.charityState === 'ended' || key.charityState === 'expired')
-    ) {
-      invalid('approved donation keys');
-    }
-    if (status === 'rejected') {
-      if (keys.some((key) => key.charityState !== 'ended')) {
-        invalid('rejected donation state');
-      }
-    }
-    if (
-      status === 'deleted' &&
-      (reviewResult?.decision === 'reject' ||
-        keys.some((key) => key.charityState !== 'ended' && key.charityState !== 'expired'))
-    ) {
-      invalid('deleted donation state');
-    }
-    if (
-      status === 'expired' &&
-      (reviewResult?.decision !== 'approve' ||
-        keys.some((key) => key.charityState !== 'ended' && key.charityState !== 'expired') ||
-        !keys.some((key) => key.charityState === 'expired'))
-    ) {
-      invalid('expired donation state');
-    }
-  }
   return {
     ...(useSummary === undefined ? {} : { useSummary }),
     id: decimalID(item.id, 'donation id'),
@@ -822,7 +755,7 @@ export function normalizeDonation(value: unknown): Donation {
     revision: positiveDecimal(item.revision, 'donation revision'),
     discordPublicThanks:
       item.discord_public_thanks == null ? null : bool(item.discord_public_thanks, 'public thanks'),
-    description: text(item.description, 'donation description', 1024),
+    description: responseString(item.description, 'donation description', { multiline: true }),
     reviewResult,
     keys,
     createdAt,

@@ -1,6 +1,5 @@
 import {
   DONATION_DISPLAY_STATUSES,
-  donationDisplayStatus,
   normalizeUseSummary,
   type DonationDisplayStatus,
   type UseSummary,
@@ -402,12 +401,6 @@ function sharedSource(value: unknown, label: string): DonationPageSafeSource {
   };
 }
 
-function sourceIdentity(value: DonationPageSafeSource): string {
-  return value.kind === 'custom'
-    ? `custom\0${value.connector_type}\0${value.base_url}`
-    : `mainstream\0${value.channel_id}`;
-}
-
 function pageHandling(value: unknown, label: string, status?: DonationStatus): DonationHandling {
   const root = record(value, HANDLING_FIELDS, label);
   if (
@@ -455,77 +448,31 @@ function pageReviewer(value: unknown, label: string): DonationPageReviewer | nul
   };
 }
 
-function stateCounts(value: unknown, label: string, keyCount: string): DonationStateCounts {
+function stateCounts(value: unknown, label: string): DonationStateCounts {
   const root = record(value, DONATION_STATES, label);
-  const result = {} as DonationStateCounts;
-  let total = 0n;
-  for (const state of DONATION_STATES) {
-    const count = decimal(root[state], `${label} ${state}`);
-    result[state] = count;
-    total += BigInt(count);
-  }
-  if (total !== BigInt(keyCount)) invalidResponse(`${label} total`);
-  return result;
+  return Object.fromEntries(
+    DONATION_STATES.map((state) => [state, decimal(root[state], `${label} ${state}`)]),
+  ) as DonationStateCounts;
 }
 
-function donationCommon(
-  root: ReturnType<typeof record>,
-  label: string,
-  filters: Required<ManagedDonationPageFilters>,
-): DonationPageCommon {
+function donationCommon(root: ReturnType<typeof record>, label: string): DonationPageCommon {
   const status = oneOf(
     root.status,
     ['pending', 'approved', 'rejected', 'deleted', 'expired'] as const,
     `${label} status`,
   );
-  const useSummary =
-    root.use_summary === undefined ? undefined : normalizeUseSummary(root.use_summary);
-  if (
-    filters.status !== '' &&
-    status !== filters.status &&
-    !(filters.status === 'pending' && useSummary && BigInt(useSummary.pending) > 0n)
-  )
-    invalidResponse(`${label} status filter`);
-  if (filters.review_status && donationDisplayStatus(status, useSummary) !== filters.review_status)
-    invalidResponse(label + ' review status filter');
+  const useSummary = root.use_summary == null ? undefined : normalizeUseSummary(root.use_summary);
+  // The lifecycle, review history and filter semantics are server-owned.
   const review = pageReview(root.review_result, `${label} review`);
   const reviewer = pageReviewer(root.reviewer, `${label} reviewer`);
-  if (reviewer !== null && review === null) invalidResponse(`${label} attributed review`);
-  if (status === 'pending' && review !== null) invalidResponse(`${label} pending review`);
-  if (status === 'approved' && review?.decision !== 'approve') {
-    invalidResponse(`${label} approved review`);
-  }
-  if (
-    (status === 'expired' || status === 'deleted') &&
-    (review?.decision === 'reject' || review?.decision === 'force_reject')
-  ) {
-    invalidResponse(`${label} terminal review`);
-  }
-  if (
-    status === 'rejected' &&
-    review?.decision !== 'reject' &&
-    review?.decision !== 'force_reject'
-  ) {
-    invalidResponse(`${label} rejected review`);
-  }
   const keyCount = decimal(root.key_count, `${label} key count`);
   const handling = pageHandling(root.handling, `${label} handling`, status);
-  if (filters.handling !== '' && handling.state !== filters.handling) {
-    invalidResponse(`${label} handling filter`);
-  }
   const sourceCount = decimal(root.source_count, `${label} source count`);
-  const sources = array(root.sources, `${label} sources`, 3).map((entry, index) =>
+  const sources = array(root.sources, `${label} sources`).map((entry, index) =>
     sharedSource(entry, `${label} source ${index + 1}`),
   );
-  const expectedSources = BigInt(sourceCount) < 3n ? Number(sourceCount) : 3;
-  if (sources.length !== expectedSources) invalidResponse(`${label} source count`);
-  if (new Set(sources.map(sourceIdentity)).size !== sources.length) {
-    invalidResponse(`${label} source identities`);
-  }
   return {
-    ...(root.use_summary === undefined
-      ? {}
-      : { use_summary: normalizeUseSummary(root.use_summary) }),
+    ...(useSummary === undefined ? {} : { use_summary: useSummary }),
     discord_public_thanks:
       root.discord_public_thanks == null
         ? null
@@ -538,7 +485,7 @@ function donationCommon(
     created_at: unixSecond(root.created_at, `${label} creation time`),
     updated_at: unixSecond(root.updated_at, `${label} update time`),
     key_count: keyCount,
-    state_counts: stateCounts(root.state_counts, `${label} state counts`, keyCount),
+    state_counts: stateCounts(root.state_counts, `${label} state counts`),
     source_count: sourceCount,
     sources,
     handling,
@@ -566,34 +513,26 @@ function stewardOwner(value: unknown, label: string): StewardDonationPageOwner |
   };
 }
 
-function normalizeAdminDonationPageItem(
-  value: unknown,
-  index: number,
-  filters: Required<ManagedDonationPageFilters>,
-): AdminDonationPageItem {
+function normalizeAdminDonationPageItem(value: unknown, index: number): AdminDonationPageItem {
   const label = `administrator donation ${index + 1}`;
   const root = record(value, [...DONATION_COMMON_FIELDS, 'owner', 'use_summary'], label, [
     ...DONATION_COMMON_FIELDS.filter((field) => field !== 'discord_public_thanks'),
     'owner',
   ]);
   return {
-    ...donationCommon(root, label, filters),
+    ...donationCommon(root, label),
     owner: adminOwner(root.owner, `${label} owner`),
   };
 }
 
-function normalizeStewardDonationPageItem(
-  value: unknown,
-  index: number,
-  filters: Required<ManagedDonationPageFilters>,
-): StewardDonationPageItem {
+function normalizeStewardDonationPageItem(value: unknown, index: number): StewardDonationPageItem {
   const label = `steward donation ${index + 1}`;
   const root = record(value, [...DONATION_COMMON_FIELDS, 'owner', 'use_summary'], label, [
     ...DONATION_COMMON_FIELDS.filter((field) => field !== 'discord_public_thanks'),
     'owner',
   ]);
   return {
-    ...donationCommon(root, label, filters),
+    ...donationCommon(root, label),
     owner: stewardOwner(root.owner, `${label} owner`),
   };
 }
@@ -669,10 +608,7 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
     positive: true,
   });
   const ruleCount = decimal(root.rule_count, `${label} rule count`);
-  if (BigInt(ruleCount) > 16n) invalidResponse(`${label} rule count`);
-  const rawRules = array(root.rules, `${label} rules`, 3);
-  const expectedRules = BigInt(ruleCount) < 3n ? Number(ruleCount) : 3;
-  if (rawRules.length !== expectedRules) invalidResponse(`${label} rule count`);
+  const rawRules = array(root.rules, `${label} rules`);
   const rules = rawRules.map((entry, ruleIndex) =>
     normalizeRuleView(entry, `${label} rule ${ruleIndex + 1}`),
   );
@@ -681,11 +617,6 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
     `${label} rule ids`,
   );
   if (rules.some((rule) => rule.id === null)) invalidResponse(`${label} rule ids`);
-  let sawNonLimited = false;
-  for (const rule of rules) {
-    if (rule.state === 'limited' && sawNonLimited) invalidResponse(`${label} rule order`);
-    if (rule.state !== 'limited') sawNonLimited = true;
-  }
   return {
     ...key,
     ...(root.maintenance_scope_required === undefined
@@ -775,13 +706,6 @@ function normalizeDonationSource(value: unknown, index: number): DonationSourceS
     root.pending_donation_count,
     `${label} pending donation count`,
   );
-  if (
-    BigInt(donationCount) > BigInt(keyCount) ||
-    BigInt(pendingDonationCount) > BigInt(donationCount) ||
-    BigInt(usableKeyCount) > BigInt(keyCount)
-  ) {
-    invalidResponse(`${label} count relationships`);
-  }
   return {
     source_key: canonicalSourceKey(root.source_key, `${label} key`),
     safe_source: sharedSource(root.safe_source, `${label} source`),
@@ -817,7 +741,7 @@ export function normalizeManagedDonationsPage(
   basePath(role);
   pageArguments(page, pageSize);
   const normalizedRole = role;
-  const normalizedFilters = donationFilters(filters);
+  donationFilters(filters);
   const result = normalizePage(
     value,
     `${normalizedRole} donation page`,
@@ -825,8 +749,8 @@ export function normalizeManagedDonationsPage(
     pageSize,
     (entry, index) =>
       normalizedRole === 'admin'
-        ? normalizeAdminDonationPageItem(entry, index, normalizedFilters)
-        : normalizeStewardDonationPageItem(entry, index, normalizedFilters),
+        ? normalizeAdminDonationPageItem(entry, index)
+        : normalizeStewardDonationPageItem(entry, index),
   );
   unique(
     result.data.map((item) => item.id),
@@ -894,7 +818,7 @@ export function normalizeDonationSourceKeysPage(
 ): DonationPageResult<ManagedDonationKeySummary> {
   pageArguments(page, pageSize);
   canonicalSourceKey(sourceKey, 'source page key');
-  const normalizedFilters = sourceFilters(filters, true);
+  sourceFilters(filters, true);
   const result = normalizePage(
     value,
     'donation source key page',
@@ -906,16 +830,6 @@ export function normalizeDonationSourceKeysPage(
     result.data.map((item) => item.key_id),
     'donation source key ids',
   );
-  if (
-    result.data.some(
-      (item) =>
-        (normalizedFilters.idle === 'yes' && !item.idle) ||
-        (normalizedFilters.idle === 'no' && item.idle) ||
-        (normalizedFilters.handling === 'pending' && item.handling.state !== 'pending'),
-    )
-  ) {
-    invalidResponse('donation source key filters');
-  }
   return result;
 }
 

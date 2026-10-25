@@ -109,35 +109,26 @@ describe.each([normalizeAdminDonation, normalizeStewardDonation])(
       },
     );
 
-    it.each(['pending', 'approved', 'rejected', 'expired', 'deleted'])(
-      'rejects contradictory %s reviews',
-      (status) => {
-        const review = { decision: 'reject', reason: 'rejected', reviewed_at: 1 };
-        if (status === 'rejected') {
-          expect(
-            normalize({ ...common, owner: null, status, review_result: review }).review_result,
-          ).toEqual(review);
-        } else {
-          expect(() =>
-            normalize({ ...common, owner: null, status, review_result: review }),
-          ).toThrow(/review/i);
-        }
-        expect(() =>
-          normalize({ ...common, owner: null, status, reviewer: { role: 'admin', user_id: '2' } }),
-        ).toThrow(/review/i);
-        if (status !== 'rejected') {
-          expect(() =>
-            normalize({
-              ...common,
-              owner: null,
-              status,
-              review_result: review,
-              reviewer: { role: 'admin', user_id: '2' },
-            }),
-          ).toThrow(/review/i);
-        }
-      },
-    );
+    it('preserves historical approval fields without promoting a pending receipt', () => {
+      const review = {
+        decision: 'approve',
+        reason: 'Earlier approval\nOriginal receipt note',
+        reviewed_at: 1,
+      };
+      const out = normalize({
+        ...common,
+        owner: null,
+        status: 'pending',
+        review_result: review,
+        reviewer: { role: 'steward', user_id: null },
+      });
+      expect(out.status).toBe('pending');
+      expect(out.review_result).toEqual(review);
+      expect(out.reviewer).toEqual({ role: 'steward', user_id: null });
+      expect(() =>
+        normalize({ ...common, owner: null, review_result: { ...review, reason: 7 } }),
+      ).toThrow();
+    });
   },
 );
 
@@ -231,9 +222,9 @@ describe('role-safe charity wire', () => {
           owner: { user_id: '2', discord_id: 'steward-discord', display_name: 'Owner' },
         }).reviewer?.role,
       ).toBe(expected);
-      expect(() =>
-        normalizeAdminDonation({ ...reviewed, owner: null, review_result: null }),
-      ).toThrow(/review/i);
+      expect(
+        normalizeAdminDonation({ ...reviewed, owner: null, review_result: null }).review_result,
+      ).toBeNull();
     },
   );
 

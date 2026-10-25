@@ -116,6 +116,12 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 		return f.call("POST", "/api/donations", map[string]any{"description": description, "discord_public_thanks": false, "ownership_authorized": true, "keys": []map[string]any{appFixtureSharedCatalog(t, f.store, key, nil, now)}}, owner, false)
 	}
 	automatic := donate("synthetic-auto-donation", "Automatically approved browser donation")
+	multiline := donate("synthetic-multiline-review", "Multiline approval fixture")
+	multilineKey := multiline["keys"].([]any)[0].(map[string]any)["id"]
+	f.call("POST", "/admin/api/donations/"+multiline["id"].(string)+"/review", map[string]any{
+		"decision": "approve", "expected_revision": multiline["revision"], "reason": "First approval line\nSecond approval line",
+		"key_settings": []map[string]any{{"donation_key_id": multilineKey, "enabled": true, "price_limit": nil, "calls_limit": nil, "tokens_limit": nil, "token_reserve": 0, "safe_note": "", "expires_at": nil}},
+	}, f.adminCookie, true)
 	prior := donate("synthetic-reviewed-donation", "Initial review source")
 	f.call("POST", "/admin/api/donations/"+prior["id"].(string)+"/review", map[string]any{"decision": "force_reject", "expected_revision": prior["revision"], "reason": "Synthetic credential review required"}, f.adminCookie, true)
 	pending := donate("synthetic-reviewed-donation", "Browser donation awaiting credential review")
@@ -138,9 +144,10 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 		t.Fatal(err)
 	}
 	return map[string]any{"recurring_discount": recurring, "automatic_backoff_donation_id": backoff["donation_id"], "automatic_backoff_key_ids": backoff["key_ids"], "automatic_backoff_model_id": backoff["model_id"], "binding_donation_id": bindings["donation_id"], "binding_key_ids": bindings["key_ids"], "binding_model_ids": bindings["model_ids"], "binding_channel_id": bindings["channel_id"], "old_user_id": old.ID, "current_user": current, "history_discord_id": historyDiscord, "history_record_id": historyID, "request_ids": requests,
-		"account_export":     map[string]any{"user_id": f.users[0].ID, "elevated_token": exportToken},
-		"resource_health":    resourceHealth,
-		"gemini_endpoint_id": geminiEndpoint, "gemini_key_id": geminiKey,
+		"account_export":               map[string]any{"user_id": f.users[0].ID, "elevated_token": exportToken},
+		"resource_health":              resourceHealth,
+		"multiline_review_donation_id": multiline["id"],
+		"gemini_endpoint_id":           geminiEndpoint, "gemini_key_id": geminiKey,
 		"disposable_user_id": disposable.ID,
 		"trainee_target_id":  traineeTarget.ID,
 		"denials":            denials, "channel_id": channel, "endpoint_id": endpoint, "automatic_donation_id": automatic["id"], "pending_donation_id": pending["id"], "charity_model_id": model["id"]}

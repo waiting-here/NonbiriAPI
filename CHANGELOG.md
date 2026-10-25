@@ -44,6 +44,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Keep donation lists and details readable with multiline approval notes and
+  preserved review history. Parse lifecycle, counts and preview data independently
+  instead of rejecting complete pages based on frontend business-state guesses.
 - Show current approved service health on donation keys, source summaries and
   model connections. Distinguish manual recovery after consecutive failures from
   timed backoff, retain partial availability, and align key details with filters.

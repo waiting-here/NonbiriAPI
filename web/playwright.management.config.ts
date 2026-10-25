@@ -19,6 +19,7 @@ export default defineConfig({
     'discovery-errors.spec.ts',
     'smart-backoff.spec.ts',
     'resource-health.spec.ts',
+    'donation-compatibility.spec.ts',
     'recurring-discounts.spec.ts',
     'charity-binding-batch.spec.ts',
     'connection-experience.spec.ts',
