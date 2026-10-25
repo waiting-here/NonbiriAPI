@@ -8,6 +8,7 @@ import (
 
 func restoreSchema35ForTest(t *testing.T, store *Store) {
 	t.Helper()
+	dropAgentFoundationForTest(t, store.DB())
 	old := strings.ReplaceAll(strings.ReplaceAll(StewardAuditRolesSQL, "'admin','level5','level6'", "'admin','level6'"), "'admin','steward5','steward6'", "'admin','steward6'")
 	hostileMustExec(t, store.DB(), strings.ReplaceAll(old, "level IN (5,6)", "level=6"))
 	hostileMustExec(t, store.DB(), strings.ReplaceAll(EndpointTagsSQL, ",'user_gateway','steward_gateway','invalid_entry'", ""))
@@ -29,6 +30,7 @@ INSERT INTO discord_blacklist_events(id,discord_id,operation_key,actor_kind,reas
 INSERT INTO admin_endpoint_tags(base_url,tag) VALUES('https://historical.example/v1','community_charity');`); err != nil {
 		t.Fatal(err)
 	}
+	dropAgentFoundationForTest(t, store.DB())
 	if _, err := store.DB().Exec(strings.ReplaceAll(EndpointTagsSQL, ",'user_gateway','steward_gateway','invalid_entry'", "")); err != nil {
 		t.Fatal(err)
 	}

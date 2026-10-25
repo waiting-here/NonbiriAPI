@@ -20,8 +20,10 @@ type GenerationTwoCompatibility struct {
 	SourceSchemaVersions []int    `json:"source_schema_versions"`
 }
 
-const CurrentSchemaVersion = 36
+const CurrentSchemaVersion = 37
 const MinimumSchemaVersion = 33
+
+const Schema36ManifestHash = "3997a42c32621f190343be2bf5a9268e3640fd696a36343404739f9de06a771a"
 
 // Schema33ManifestHash pins the published source accepted for an index-only upgrade.
 const Schema33ManifestHash = "bf3821c938fba16a863df866b801621068722c97c57acb67191075cb3c89f550"
@@ -45,7 +47,7 @@ func GenerationTwoCompatibilityDescriptor() GenerationTwoCompatibility {
 	return GenerationTwoCompatibility{
 		SchemaHash: PinnedGenerationTwoSchemaHash, ManifestHash: PinnedGenerationTwoManifestHash,
 		SchemaVersion: CurrentSchemaVersion, MinimumSchemaVersion: MinimumSchemaVersion,
-		SourceManifestHashes: []string{Schema33ManifestHash, Schema34ManifestHash, Schema35ManifestHash}, SourceSchemaVersions: []int{33, 34, 35},
+		SourceManifestHashes: []string{Schema33ManifestHash, Schema34ManifestHash, Schema35ManifestHash, Schema36ManifestHash}, SourceSchemaVersions: []int{33, 34, 35, 36},
 	}
 }
 
@@ -54,7 +56,7 @@ func upgradeStartupSchema(ctx context.Context, database *sql.DB, codec secret.Ge
 	if err != nil || version == CurrentSchemaVersion {
 		return err
 	}
-	if version != 33 && version != 34 && version != 35 {
+	if version != 33 && version != 34 && version != 35 && version != 36 {
 		return errors.New("unsupported startup schema version")
 	}
 	RecordStartupStage(ctx, StageSchemaUpgrade)
@@ -109,7 +111,12 @@ func upgradeStartupSchema(ctx context.Context, database *sql.DB, codec secret.Ge
 			return err
 		}
 	}
-	if _, err := conn.ExecContext(ctx, StewardPermissionsSQL+StewardAuditRolesSQL+EndpointTagsSQL); err != nil {
+	if version < 36 {
+		if _, err := conn.ExecContext(ctx, StewardPermissionsSQL+StewardAuditRolesSQL+EndpointTagsSQL); err != nil {
+			return err
+		}
+	}
+	if _, err := conn.ExecContext(ctx, AgentRequestsSQL); err != nil {
 		return err
 	}
 	changed, err := conn.ExecContext(ctx, "UPDATE schema_state SET version=? WHERE id=1 AND version=?", CurrentSchemaVersion, version)
