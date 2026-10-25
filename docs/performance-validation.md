@@ -4,6 +4,41 @@ Run synthetic experiments against temporary databases and a local mock upstream.
 Never point these tests at a deployed instance. Default admission limits remain
 enabled; a rejected request is not counted as accepted throughput.
 
+For focused read-path measurements, start with the bounded SQLite benchmarks:
+
+```sh
+CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 ./internal/game/blackjack \
+  -run '^$' -bench '^BenchmarkHistorySparseUser$' -benchtime=10x -count=1
+CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 ./internal/riskaudit \
+  -run '^$' -bench '^BenchmarkRiskUsersSQLite$' -benchtime=3x -count=1
+CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 ./internal/riskaudit \
+  -run '^$' -bench '^BenchmarkRiskSourceWatermarkSQLite$' -benchtime=10x -count=1
+NONBIRI_PERFORMANCE_SAMPLE=1 CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 \
+  ./internal/donation ./internal/resources \
+  -run '^Test(DonationPage|CallerKey)PerformanceSample$' -benchtime=3x -count=1 -v
+```
+
+The history benchmark keeps three owned entries while unrelated retained tables
+grow from 1,000 to 50,000. It measures the candidate query, excluding full history
+projection. The users benchmark measures the repository method with 10,000 or
+100,000 minute observations for 100 users. The watermark benchmark isolates the
+two maximum-ID queries with equivalent indexes; it excludes scan creation and
+its time-window count. Fixture creation is outside the timed work. Report these
+scopes explicitly and compare the same inputs before and after a change.
+
+The opt-in donation sample reads a full 100-row page with three sources per
+donation, then adds 2,000 unrelated historical donations. It records query count,
+elapsed time and allocations separately. The caller-key sample measures the two
+independent lookups performed during request authentication; it does not model
+writer contention.
+
+Read-pool regressions separately verify that a held, authorized read snapshot
+does not consume the writer, retains consistent counts and results through a
+concurrent commit, and rechecks current permissions on the next request. An
+uncontended lookup microbenchmark alone does not demonstrate reduced contention.
+
+For a broader mixed workload:
+
 ```sh
 NONBIRI_LOAD_TEST=1 CGO_ENABLED=0 go test ./internal/app \
   -run '^TestApplicationLakeMixedLoad$' -count=1 -v -timeout=8m

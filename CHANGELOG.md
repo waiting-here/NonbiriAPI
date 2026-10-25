@@ -58,6 +58,12 @@ Each version entry describes its source and compatibility boundary; a release ta
   when configuring bindings after review.
 - Move donation-source browsing to read-only database snapshots and calculate
   tagged donation scope once per candidate, reducing contention with writes.
+- Keep donation pages, blackjack history, risk statistics and caller-key lookups
+  off the writer connection. Batch donation summaries for the selected page,
+  locate blackjack history through the user's entries, and summarize risk
+  observations once per user while preserving live authorization and snapshots.
+- Load donation review material when expanded and reuse conversation history,
+  operation-plan indexes and parsed tool results while composing messages.
 - Limit charity binding, candidate and preset catalog checks to selected
   donation keys, avoiding repeated aggregation of unrelated catalogs inside
   write transactions while preserving scope, replay and atomicity.
