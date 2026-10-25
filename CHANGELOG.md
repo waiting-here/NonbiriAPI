@@ -34,6 +34,9 @@ Each version entry describes its source and compatibility boundary; a release ta
   for new or modified pending submissions only. Automatic approval requires
   valid bindings to existing charity models in the same transaction. Do not
   enqueue old pending records or promote earlier preview results after a mode change.
+- Include editable automatic-review and conversation presets, initial shared
+  memories and tool descriptions. Preserve existing saved content, including
+  explicitly empty memories, without enabling model calls.
 - Add shared FIFO scheduling per assistant model HTTP call, global RPM/concurrency
   accounting, cancellation and durable recovery. Add administrator-only complete
   request/response history with manual selected or filtered cleanup, plus

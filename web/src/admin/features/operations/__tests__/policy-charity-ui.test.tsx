@@ -307,6 +307,7 @@ function donationUsesPage(donation: AdminDonation | StewardDonation, url: URL) {
   const data = url.searchParams.get('state') === 'pending' && !pending ? [] : rows;
   return {
     data,
+    next_cursor: null,
     pagination: {
       page: '1',
       page_size: Number(url.searchParams.get('page_size')),
@@ -384,10 +385,13 @@ describe('Generation 2 charity management policy', () => {
       await screen.findByLabelText('Review reason'),
       'approved with retained expiry',
     );
-    await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    const approveButton = screen.getByRole('button', { name: 'Approve pending content' });
+    expect(approveButton).toBeEnabled();
+    await view.user.click(approveButton);
 
-    await waitFor(() => expect(screen.getAllByText('All approved').length).toBeGreaterThan(0));
-    expect(reviewRequests).toHaveLength(2);
+    await waitFor(() => expect(reviewRequests).toHaveLength(2));
+    expect(await screen.findByRole('cell', { name: 'All approved' })).toBeVisible();
+    expect((await screen.findAllByText('Review saved.')).length).toBeGreaterThan(0);
     expect(committedReviews).toBe(1);
     expect(JSON.parse(String(reviewRequests[0].body))).toEqual({
       expected_revision: '7',
@@ -475,9 +479,12 @@ describe('Generation 2 charity management policy', () => {
       }),
     ).not.toBeInTheDocument();
     expect(reviewRequests).toHaveLength(0);
-    await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    const approveButton = screen.getByRole('button', { name: 'Approve pending content' });
+    expect(approveButton).toBeEnabled();
+    await view.user.click(approveButton);
 
     await waitFor(() => expect(reviewRequests).toHaveLength(1));
+    expect((await screen.findAllByText('Review saved.')).length).toBeGreaterThan(0);
     expect(JSON.parse(String(reviewRequests[0].body))).toEqual({
       expected_revision: '7',
       decision: 'approve',
@@ -695,7 +702,9 @@ describe('Generation 2 charity management policy', () => {
       } else {
         expect(onCapabilityLoss).not.toHaveBeenCalled();
         expect(screen.getByRole('cell', { name: /^My donation/ })).toBeInTheDocument();
-        expect(screen.getByRole('alert')).toHaveTextContent(/forbidden|permission|access/i);
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          'This action is not allowed for the current account.',
+        );
       }
     },
   );
