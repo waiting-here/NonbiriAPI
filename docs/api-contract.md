@@ -2,7 +2,7 @@
 
 Service connection, shared credential, discovery-source and per-service donation semantics are described in [service connections](service-connections.md). Existing endpoint and single-target clients retain their original explicit scope.
 
-- Status: **v1.1.0 source contract**. Check an instance's deployed build before using routes or configuration added by an update.
+- Status: **v1.2.0 source contract**. Check an instance's deployed build before using routes or configuration added by an update.
 - Scope: model discovery and direct HTTP/SSE text, image, audio, embedding, moderation, rerank, Decisions and System One inference. See the [operation and connector matrix](direct-inference.md) for exact paths, conversion limits and the excluded persistent/realtime APIs. There is no Anthropic-native public ingress.
 - Authority: this document reflects the current source route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically. The session-authenticated picture-book activity has its own configuration and accounting, separate from the public image-generation model route.
 - Release boundary: new source behavior is listed in the [changelog](../CHANGELOG.md). This document does not assert that an instance has deployed it.
@@ -87,12 +87,12 @@ Session, administrator and steward automation routes have no cross-origin permis
 ### 1.2 Strict JSON, scalars, pagination, and replay
 
 - Control-plane request objects reject unknown or duplicate fields, trailing JSON, invalid UTF-8, control characters, invalid enum case, and values outside the documented range. GET/HEAD requests reject bodies. Query parameters are closed, single-valued sets. OpenAI-compatible model requests retain bounded extension fields under the operation-specific rules below.
-- Times are UTC Unix seconds as JSON numbers in `0..253402300799`. JSON booleans are true booleans. Omitted, `null`, empty, and zero are distinct.
+- Times are UTC Unix seconds as JSON numbers in `0..253402300799`, unless a section explicitly uses milliseconds. JSON booleans are true booleans. Omitted, `null`, empty, and zero are distinct.
 - Credit amounts are canonical decimal strings: `0|[1-9][0-9]*` with an optional 1–3 decimal places. A leading `-` is permitted only for fields explicitly described as signed. Floating point is never used for accounting.
 - Revisions, generations, sequences, exact counts, and values that may exceed the JSON safe-integer range are canonical decimal strings.
 - New opaque IDs use a documented prefix plus 22 canonical raw-base64url characters. Important prefixes include `ann_`, `op_`, `req_`, `clm_`, `pol_`, `thu_`, `fb_`, `ll_`, `rpsq_`, `rps_`, `rpc_`, `rpt_`, `iss_`, `lgh_`, `sse_`, `gle_`, `dbs_`, `dbt_`, `dbe_`, `scn_`, and `mch_`.
 - List endpoints retain the legacy `cursor` and `limit` mode and return `{data:[...],next_cursor:null|string}` unless a section states a different closed envelope. Numbered mode is selected by `page` or `page_size`; `page` is a canonical positive decimal from 1 through 2147483647 and `page_size` is 10, 20, 50, or 100, defaulting to 1 and 20. The modes are mutually exclusive, repeated/unknown values are rejected, and numbered responses add the route's `pagination` metadata with `next_cursor:null`; an excessive page clamps to the last page (empty results use page 1 of 1). Count, filters, decision time, and rows come from one authorized read snapshot. Cursors are authenticated, route/owner/filter-bound, expiring, and at most 512 bytes. A malformed, expired, or cross-scope cursor is `400 invalid_request`.
-- State-changing routes require `Idempotency-Key` unless they are authentication/session/elevation/logout, CallerKey plaintext mutation, OpenAI-compatible model calls, an explicitly business-unique ACK/lease/check-in/tutorial mutation, alert set-state, or the per-item steward binding automation in §6.3. Control replay keys contain 22–128 URL-safe ASCII characters. Same key and same canonical request replay the stored status/body; the same key with a different request is `409 conflict`. Replay records last 24 hours.
+- State-changing routes require `Idempotency-Key` unless they are authentication/session/elevation/logout, CallerKey plaintext mutation, OpenAI-compatible model calls, an explicitly business-unique ACK/lease/check-in/tutorial mutation, alert set-state, the per-item steward binding automation in §6.3, or the assistant operations in §7.8. Control replay keys contain 22–128 URL-safe ASCII characters. Same key and same canonical request replay the stored status/body; the same key with a different request is `409 conflict`. Replay records last 24 hours.
 - Dynamic API responses and every error carry `Cache-Control: no-store`.
 
 Shared numbered-page metadata is `{page:string,page_size:number,total_items:string,total_pages:string}`. `page`, `total_items`, and `total_pages` use exact canonical decimal strings; only `total_items` may be zero. Nested `attempt_pagination` and `materials_pagination` use the same shape. Credit history retains its separately documented top-level pagination envelope.
@@ -142,7 +142,7 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 36. Normal startup accepts fresh storage, current schema 36 and exact published schema 33–35 manifests. Atomic upgrades add history indexes and donation catalog authorization changes where needed, then steward permission tables and data-preserving audit-role table rebuilds. Exact published schema 16–26 structures require the separate offline converter. Unknown or partial structures are rejected before writes. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for source/target versions and rollback requirements.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 37. Normal startup accepts fresh storage, the exact current structure and supported schema 33–36 manifests. Atomic forward upgrades preserve existing facts while applying the intervening indexes, donation authorization, steward permissions/audit changes and assistant storage. Unknown, partial or newer structures are rejected before writes; this binary advertises no offline conversions. Upgrades are one-way: an upgraded database cannot be opened by an older server, and no downgrade or reverse migration is provided. Startup validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
 
 Current account export `schema_version=30` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v30.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
@@ -327,7 +327,7 @@ Decisions uses the existing CallerKey, ownership, admission, original-input clie
 
 All routes in this section require a user session unless marked anonymous.
 
-Request-log and Debug model-call `route_kind` values use `openai_` or `charity_` followed by one of the 16 operation names in §3.4, including `responses_compact`, `responses_input_tokens`, `rerank` and `systemone`. Discovery retains `model_discovery`. Debug accepts registered model-call kinds only. Log clients using a closed enum must handle the complete set. Existing model/status/time filters, pagination, role-specific projections and exports include every registered operation. Personal and charity records retain their corresponding privacy boundary; request logs do not store prompts, vectors, uploaded files or generated media.
+Request-log and Debug model-call `route_kind` values use `openai_` or `charity_` followed by one of the 16 operation names in §3.4, including `responses_compact`, `responses_input_tokens`, `rerank` and `systemone`. Discovery retains `model_discovery`. Debug accepts registered model-call kinds only. Log clients using a closed enum must handle the complete set. Existing model/status/time filters, pagination, role-specific projections and exports include every registered operation. Personal and charity records retain their corresponding privacy boundary; these ordinary request logs do not store prompts, vectors, uploaded files or generated media. The separate administrator-only assistant request history in §7.8 deliberately retains complete model input and responses.
 
 Request and attempt `usage` may add optional `search_units`, `modalities` and
 `pricing`. Search units are decimal strings with at most six fractional digits
@@ -343,6 +343,22 @@ Older rows can omit these fields; absence is not a reported zero. Ordinary
 user logs show caller pricing only, never donor reward decisions.
 
 Request logs and JSON/CSV exports include nullable `requested_streaming` (the caller's validated original mode before upstream overrides) and nullable `automatic_actions`. Actions are `short_content_deduction`, `short_content_ban`, `short_content_suspension`, `rpm_ban`, `client_rule_ban` and `context_penalty`. The list records effects in the same transaction as their application; a matched rule or ordinary rejection alone is not a punishment. An empty array means no recorded automatic action; null means historical information is unavailable. Missing or invalid request bodies can leave the mode null. These safe facts share existing log access, export, deletion and retention rules and reveal no rule definitions or request body.
+
+Request-log list/detail and JSON exports may include safe `rejection_detail:{field,reason,suggestion?}` for a recorded pre-handler validation refusal. Administrators, authorized stewards and the ordinary caller viewing **their own** log receive the same server-authored check and corrective suggestion, subject to existing display privacy. For example:
+
+```json
+{
+  "rejection_detail": {
+    "field": "stream",
+    "reason": "expected a boolean or null",
+    "suggestion": "Use a supported streaming value and valid stream options."
+  }
+}
+```
+
+These fields describe validated field names, type/format/capability requirements and bounded length facts; they never echo submitted values, request bodies, credentials or raw upstream diagnostics. Typed protocol-conversion refusals retain their actual safe field/reason instead of being flattened to a generic `invalid_request`. CSV exports append `rejection_field,rejection_detail,rejection_suggestion`; the CSV `rejection_detail` cell contains the reason text. Existing `rejection_stage,rejection_reason,caller_error_code` remain stable and separate.
+
+An older log without a recorded cause omits `rejection_detail` and leaves these CSV cells empty. Clients should say that the detailed cause was not recorded, never infer one from the route, streaming flag or error code. New generic validation fallbacks explicitly state that no field was recorded and offer only general corrective guidance. These safe diagnostics follow ordinary request-log ownership, retention and export rules and do not open the restricted raw-error/header routes in §11.
 
 Personal requests reserve no general credits and remain available with a negative general-credit balance. Their zero-value accounting lifecycle and resource limits still apply; charity admission retains its balance requirements.
 
@@ -427,7 +443,7 @@ In the editor, header names have no slash or colon: `User-Agent` with plain-text
 
 The complete configuration is limited to 64 KiB and depth 16, at most 64 header names and 128 body paths. Each header name is at most 128 bytes, each value 4,096 bytes, added headers 16 KiB in total, and each JSON Pointer at most 512 bytes. Protected protocol/authentication headers and server-owned model, safety, stream, usage, tool structure, routing, accounting and credential fields cannot be overridden. Header matching is case-insensitive; an unlisted client header is never forwarded. Defaults fill only absent object fields, forced values replace their leaves, and the resulting request is validated again before dispatch. Unsupported native fields require an explicit declared path for Anthropic-compatible or Gateway v3 conversion; no adaptation expands picture-book or discovery request bodies. A 409 means the revision or effective rules conflict; refetch before retrying with a new body. The same key and identical body replay under the existing control-plane rules.
 
-Authorized donation-key projections include numeric `max_concurrency,max_rpm` and decimal-string `key_limits_revision`; all three are null after the physical key is gone. Their shared binding menu/candidate/binding `source` includes the current integer limits. Management PATCH accepts either or both limits, as integers 0–2147483647, plus required `expected_key_limits_revision` whenever either is present and the ordinary donation `expected_revision`. Null is invalid for these new fields. Omitted limits stay unchanged; 0 adds no per-key limit. The final transaction compares both donation and physical-key revisions, updates the shared `endpoint_key_limits`, advances both revisions and records safe old/new limit values in the donation audit. An owner edit to the physical key can therefore produce a 409; refetch both revisions. Suspended physical resources return `resource_locked`. Administrators and stewards with `donations.manage_keys` may use this capability; the configured donation scope applies, with `charity_model_id` required for the standard maintenance path. Enhanced tagged donations and full scope allow direct maintenance without that selector. The shared physical limits affect personal and charity calls using the key. The mutation grants no secret, endpoint or private-note access. Ordinary charity callers do not receive underlying key configuration. Owner resource exports include the values; key deletion cascades to its configuration. Historical idempotent responses may omit these additive fields; an authoritative read returns current values.
+Authorized donation-key projections include numeric `max_concurrency,max_rpm` and decimal-string `key_limits_revision`; all three are null after the physical key is gone. Their shared binding menu/candidate/binding `source` includes the current integer limits. Management PATCH accepts either or both limits, as integers 0–2147483647, plus required `expected_key_limits_revision` whenever either is present and the ordinary donation `expected_revision`. Null is invalid for these new fields. Omitted limits stay unchanged; 0 adds no per-key limit. The final transaction compares both donation and physical-key revisions, updates the shared `endpoint_key_limits`, advances both revisions and records safe old/new limit values in the donation audit. An owner edit to the physical key can therefore produce a 409; refetch both revisions. Suspended physical resources return `resource_locked`. Administrators and stewards with `donations.manage_keys` may use this capability; the whole-donation scope in §6.4 applies. Standard, enhanced and full scopes permit direct maintenance of qualifying donations; an optional model selector cannot expand source authority. The shared physical limits affect personal and charity calls using the key. The mutation grants no secret, endpoint or private-note access. Ordinary charity callers do not receive underlying key configuration. Owner resource exports include the values; key deletion cascades to its configuration. Historical idempotent responses may omit these additive fields; an authoritative read returns current values.
 
 ### 3.2 Personal models and bindings
 
@@ -644,9 +660,29 @@ Receipts use the original fixed 24-hour replay window. Missing or expired receip
 
 Donation list and detail projections include `use_summary:{total,pending,approved,rejected,withdrawn,review_status}`. Counts are canonical decimal strings. `pending` and `approved` count current pointers independently; one use can have both. `rejected` and `withdrawn` count uses whose latest submitted revision has that result, including a rejected replacement whose previous approval remains valid. `review_status` is a display-only value: `pending|approved_pending|approved|partially_approved|rejected|withdrawn|mixed|none`. Pending with any existing approval is `approved_pending`; otherwise pending takes priority, then all/partial approval, all rejected, all withdrawn, or mixed completed outcomes. `none` means there are no uses. It never replaces the actual donation `status` or its authorization and termination checks.
 
-Numbered owner, administrator and steward donation lists accept optional `review_status` to filter the displayed state. It uses those review states except `none`, plus `deleted|expired` for lifecycle results. Real terminal state and logical expiry take precedence; donations without uses fall back to their lifecycle status. Existing `status` filtering remains compatible. At standard donation scope, the approval queue requires a current pending use and accepts only pending review filters. Enhanced and full scope use their wider resource predicates independently of identity projection.
+Numbered owner, administrator and steward donation lists accept optional `review_status` to filter the displayed state. It uses those review states except `none`, plus `deleted|expired` for lifecycle results. Real terminal state and logical expiry take precedence; donations without uses fall back to their lifecycle status. Existing `status` filtering remains compatible. All steward list filters combine with the whole-donation resource predicate in §6.4; standard scope has no separate pending-use filter exception. Identity projection does not expand that range.
 
-Administrator and steward `POST {prefix}/donations/{id}/uses/review` accepts at most 100 explicit items per request. Each item names the stable use, `expected_revision`, `expected_review_revision`, decision and visible review note; existing permissions, exact pending material, forced body review, and independent atomic results apply. The UI offers one approval or rejection decision for the current donation or one explicitly opened `donation_key_id`, with an optional note and expandable use details. It reads all pending pages and submits sequential bounded batches without individual selection or a second confirmation. Every batch keeps its own idempotency key and receipt; uncertain results replay the original batch, and pause/resume keeps the same scope and decision. Changed versions and partial failures remain visible for review instead of being reported as complete success. Rejection removes only the pending proposal and retains any previous approved version. Approval does not create a charity binding; model configuration chooses the services to use.
+Administrator and steward sessions retain `POST {prefix}/donations/{id}/uses/review` for at most 100 explicit items per request. Each item names the stable use, `expected_revision,expected_review_revision`, decision and visible review note; its existing per-item results and replay contract remain unchanged.
+
+The ordinary approval page uses `POST {prefix}/donations/{id}/pending-review` for one decision on the **entire current pending submission**. The prefix is `/admin/api` or `/api/steward`; steward callers require `donations.review` and the whole-donation scope in §6.4. This cookie-session route requires `Idempotency-Key`, accepts no query and has a 256 KiB JSON body limit. Read the donation revision and every page of `GET {prefix}/donations/{id}/uses?state=pending&page=1&page_size=100` without a key filter before forming the request:
+
+```json
+{
+  "expected_revision": "8",
+  "decision": "approve",
+  "reason": "Reviewed the current submission",
+  "uses": [
+    {"use_id": "11", "expected_revision": "3", "expected_review_revision": null},
+    {"use_id": "12", "expected_revision": "2", "expected_review_revision": "1"}
+  ]
+}
+```
+
+`decision` is `approve|reject`; `reason` is the visible review note. IDs and revisions are canonical positive decimal strings, and `expected_review_revision` is the current body-review revision or null. The unique `uses` list must exactly match the complete pending set, with at most 1900 items within the body limit. Do not submit `key_settings`: the server derives approval settings from the pending snapshot and existing key settings. A changed donation revision, use revision or pending set returns 409 and applies nothing.
+
+Success returns HTTP 200 with the current role's donation projection, not an item-result array. All use decisions, donation state, audit and replay receipt commit together or all roll back. Rejecting a replacement retains the previous approved version; forced revocation remains a separate authorized operation. Ordinary approval does not create a charity binding; subsequent configuration selects the models and services.
+
+After an uncertain response, replay the original path, body and idempotency key. After a definite revision conflict, reread the entire pending set before forming a new decision. A failed refresh after success retries only the read. Existing `/review`, `/uses/review` and CallerKey creation/approval routes keep their own input and atomicity contracts; sequential item batches do not provide the whole-submission guarantee.
 
 Creation and pending edits require a non-whitespace donor description, with the existing 1,024-code-point / 4,096-byte limit and LF normalization. Historical blank descriptions remain readable, reviewable and usable; review notes may still be empty. Creation also requires the explicit boolean `discord_public_thanks`, with no default. It records permission for an administrator or full steward to thank the donor manually in Discord. The value cannot change after submission. Old null values mean unconfirmed, cannot be backfilled, and are not consent. A pending edit cannot change this choice; omission preserves it. No automated Discord message is sent.
 
@@ -1178,19 +1214,20 @@ Dry mode intercepts before upstream dispatch. Live mode captures bounded safe pr
 
 ### 6.2 Steward
 
-The browser routes below require a currently effective level-5 or level-6 user session on the user host and the corresponding live action grant. Level 6 has all steward actions; level 5 uses per-account defaults or configuration. Reads and final mutations recheck current authority in their transaction. See the [48-action permission catalog, limits and composite checks](steward-permissions.md). Source scope and private donor projection are independent. The dedicated charity CallerKey routes are in §6.3; personal routes are in §3.4.
+The browser routes below require a currently effective level-5 or level-6 user session on the user host and the corresponding live action grant. Level 6 has all steward actions; level 5 uses per-account defaults or configuration. Reads and final mutations recheck current authority in their transaction. See the [51-action permission catalog, limits and composite checks](steward-permissions.md). Source scope and private donor projection are independent. The dedicated charity CallerKey routes are in §6.3; personal routes are in §3.4.
 
 | Surface | Routes |
 | --- | --- |
 | Logs | `GET /api/steward/logs`, `GET /api/steward/logs/{id}`, `GET /api/steward/logs/export.csv`, `GET /api/steward/logs/export.json` |
 | Maintenance | `GET /api/steward/maintenance`, `POST /api/steward/maintenance/enable` |
-| Shared donation management | `GET /api/steward/donations`, `GET /api/steward/donations/{id}`, `POST /api/steward/donations/{id}/review`, `PATCH /api/steward/donations/{id}/keys/{keyId}` |
+| Shared donation management | `GET /api/steward/donations`, `GET /api/steward/donations/{id}`, `POST /api/steward/donations/{id}/review`, `POST /api/steward/donations/{id}/pending-review`, `PATCH /api/steward/donations/{id}/keys/{keyId}` |
 | Charity models | Exact route family in the table below |
 | Users | `GET /api/steward/users`; `GET|PATCH /api/steward/users/{id}`; `POST /api/steward/users/{id}/ban`; `POST /api/steward/users/{id}/unban`; `GET|PUT /api/steward/users/{id}/steward-permissions` (actual L6 only) |
 | Announcements | The eight routes in §7.3 with `/api/steward/announcements` replacing `/admin/api/announcements` |
 | Failure reset | Shared batch and selection routes in §4.2 |
 | Endpoints | `GET /api/steward/overview/endpoints`, `GET /api/steward/overview/endpoints/users` (`endpoints.read`); `PATCH /api/steward/overview/endpoints/tags` (`endpoints.tags`) |
 | Endpoint policies | Backoff options, policy reads/updates (`charity.backoff`); loaded Cloudflare route reads (`egress.read`) |
+| AI assistant | Shared `/api/steward/ai` conversation, automatic-review and memory routes in §7.8, with their corresponding grants |
 
 Authorized stewards can review and manage charity settings across donations according to their grants and source scope. They can enable but cannot disable maintenance, and have no report, legal-hold management, account-export or account-deletion route. They cannot change cumulative donation credit or grant level 6. User mutations and managed CallerKey reads/revocations require a target below the actor's actual level. Only actual level 6 may appoint/remove level-5 trainees or configure their permissions. Known-ID donation and request-log details under an active legal hold require the corresponding live read grant and record the exact steward identity in a separate read audit. Shared management does not widen owner exports.
 
@@ -1208,7 +1245,7 @@ Donation review is independent of its current terminal status. Approved donation
 
 Management donation lists accept `status=pending|approved|rejected|deleted|expired`, `handling=legacy|pending|processed|closed`, `q`, exact donor `user_id` and exact donor `discord_id`, alongside legacy `cursor,limit` or numbered `page,page_size`. Numbered lists additionally accept `review_status`. Filters combine with AND before counting and pagination and bind cursor identity. Donor `user_id` is a canonical positive signed-64-bit decimal string; donor `discord_id` is 1–20 decimal digits with no leading zero. Discord filtering resolves the current donor account; it does not search immutable request-log origins. Empty, repeated or noncanonical donor filters fail. Owner lists reject donor and handling filters. Search uses donation ID and description with the existing 128-code-point/512-byte/no-NUL limit. Each management key adds decimal-string `binding_count` and boolean `idle`; all bindings count, including disabled models. Owner DTOs and exports omit these management fields. Historical receipts add safe handling/count fields on replay without rewriting the immutable result.
 
-`GET {prefix}/users/{userId}/donations` and `GET {prefix}/users/{userId}/donations/{id}` expose complete retained target-user donation history through a safe summary. The prefix is `/admin/api` or `/api/steward`; steward reads require `users.donations.read`, independently of donation scope, including `none`. Lists accept numbered `page,page_size` and `status,review_status,q`; detail accepts no query. Owner-hidden rows remain included with `owner_hidden_at`. Pending, approved and retained terminal records are available without the pending-review restriction. The summary includes safe donation/use/key counts and handling state, with no key controls or credential material. Without `donations.read_all`, donor/reviewer identity remains redacted. Reads are no-store and share a five-second budget. This route does not widen key-management authority or the 400-day terminal retention period.
+`GET {prefix}/users/{userId}/donations` and `GET {prefix}/users/{userId}/donations/{id}` expose complete retained target-user donation history through a safe summary. The prefix is `/admin/api` or `/api/steward`; steward reads require `users.donations.read`, independently of donation scope, including `none`. Lists accept numbered `page,page_size` and `status,review_status,q`; detail accepts no query. Owner-hidden rows remain included with `owner_hidden_at`. Pending, approved and retained terminal records are available independently of the ordinary steward donation-scope predicate. The summary includes safe donation/use/key counts and handling state, with no key controls or credential material. Without `donations.read_all`, donor/reviewer identity remains redacted. Reads are no-store and share a five-second budget. This route does not widen key-management authority or the 400-day terminal retention period.
 
 Administrator and steward log list/detail/export entries contain nullable `user_id` and `caller_identity: {discord_nickname,discord_id}`. Current display-name identity is present only for charity requests with a surviving caller account. Separate management fields `origin_user_id,origin_discord_id,origin_deleted,origin_unknown` preserve the request's original known identity for both personal and charity requests; an optional `history_record_id` links an authorized deleted-account record. Missing historical identity remains unknown. Both members are nullable, with UTF-8 byte limits of 256 and 128 respectively. The name uses the current guild nickname, falling back to the stored username, from the latest synced profile. Unlinked/deleted callers produce null current display identity; this does not erase the immutable original identity fields. Both roles can read known-ID details retained by an active legal hold; ordinary lists and exports remain limited to 30 days. This grants no legal-hold management permission.
 
@@ -1234,27 +1271,11 @@ Log reads have a five-second budget, including connection waits. Timeouts and ca
 | `GET /api/steward/donation-sources` | Numbered `page,page_size` only; filters `q,scope=active|all` (default `active`; browser default `all`), `handling=pending`. |
 | `GET /api/steward/donation-sources/{source_key}/keys` | Numbered `page,page_size` only; filters `q,scope=active|all` (default `active`; browser default `all`), `handling=pending`, `idle=yes|no`. |
 
-Browser sessions with `donations.handle` can also read `GET /api/steward/donation-handling`.
-It accepts numbered `page,page_size`, `handling=pending|processed|all` (default
-`pending`), and optional exact `donation_id`. Its `{data,pagination}` contains only
-`donation_id,created_at,key_count,bound_key_count,handling`; counts are decimal
-strings and handling exposes safe role/time/state fields. No donor identity,
-description, source URL, secret fragment, physical-key ID or review materials are
-returned. At standard scope, only approved, logically live donations appear, from every source,
-including automatic approvals. Disabled, exhausted or unbound keys do not by
-themselves exclude an otherwise-live approved donation.
-
-With its default scope, L5 may use the existing processed POST above on that same set. Enhanced scope additionally includes logically active tagged pending donations, and full scope uses the full handling range. It marks the whole
-donation, including all its keys; it is not a per-key or per-manager operation.
-Pending/rejected/expired/deleted donations and closed/legacy handling are outside
-the standard handling capability. Expected handling revision, replay and final current session,
-role, approval and lifetime checks still apply. A losing concurrent revision
-returns 409. At standard scope, the handling action alone grants no full donation list/detail, review, model creation,
-pricing or template access and does not depend on a mainstream-source flag.
+Handling uses the ordinary donation list/detail and the processed POST above, with `donations.handle` plus the same whole-donation scope as review and maintenance. The former `/api/steward/donation-handling` read route is no longer registered. Processing marks the whole donation, including all keys; current lifecycle, pending handling state, revision and replay checks still apply. A losing concurrent revision returns 409. Handling permission does not grant unrelated browsing, review, model creation, pricing or template actions.
 
 ### 6.3 Steward CallerKey automation
 
-`GET|PATCH /api/steward/automation/donation-key-failure-policy` uses current steward `automation` and corresponding key-action grants, CallerKey, lifecycle, maintenance and four-global/one-per-user concurrency gates. GET accepts only `donation_id` and `donation_key_id` query parameters and no body. PATCH requires those IDs, `expected_revision` and `failure_disable_threshold`, requires `Idempotency-Key`, and returns the safe policy receipt described in §4.2. Its 30-second bound and shared mutation limits apply. This fixed failure-policy route has no model selector: standard-scope L5 receives `403 steward_permission_denied`; enhanced scope needs a current tagged donation and full scope permits the full resource range. Policy management follows ordinary retained donation-management visibility; it cannot access or modify another user's private credentials. Unknown fields, noncanonical values and forbidden methods fail; stale revision gives 409, missing/unavailable objects 404 and revoked authority 401/403. Current authority and object visibility are checked before replay.
+`GET|PATCH /api/steward/automation/donation-key-failure-policy` uses current steward `automation` and corresponding key-action grants, CallerKey, lifecycle, maintenance and four-global/one-per-user concurrency gates. GET accepts only `donation_id` and `donation_key_id` query parameters and no body. PATCH requires those IDs, `expected_revision` and `failure_disable_threshold`, requires `Idempotency-Key`, and returns the safe policy receipt described in §4.2. Its 30-second bound and shared mutation limits apply. This fixed failure-policy route has no model selector and uses the same whole-donation predicate as other key management: standard requires all live keys to qualify; enhanced additionally accepts a currently tagged donation; full permits the level-6 resource range. Policy management follows ordinary retained donation-management visibility; it cannot access or modify another user's private credentials. Unknown fields, noncanonical values and forbidden methods fail; stale revision gives 409, missing/unavailable objects 404 and revoked authority 401/403. Current authority and object visibility are checked before replay.
 
 `POST /api/steward/automation/donations` atomically creates one custom endpoint and 1–100 owned keys, submits them in one donation and approves it as the calling steward. It requires `Idempotency-Key` and returns 201 `{endpoint_id,donation_id,keys:[{endpoint_key_id,donation_key_id}]}`. Explicit `connector_type` and URL are required; custom sources use the closed connector registry in [direct inference](direct-inference.md). Optional per-key settings include recurring limits and `failure_disable_threshold` (canonical U128 string, default `"10"`). Smart backoff is automatic and accepts no per-key configuration (§4.1.3). Channel IDs and ownership-confirmation fields are not accepted by this dedicated operation.
 
@@ -1272,44 +1293,47 @@ Level-5 automation is disabled by default. Explicit `automation` permission enab
 
 ### 6.4 Configurable steward scope
 
-Level-5 accounts retain their actual identity. Their default policy preserves
-pending review, mainstream-model maintenance and existing lower-level user
-operations. Separate grants enable model creation/deletion, settings, pricing,
-non-mainstream targets and other steward workflows; administrator-only operations
-remain exclusive. See the [complete permission catalog](steward-permissions.md).
+Level-5 accounts retain their actual identity, target hierarchy and individual
+action grants. Their default donation scope is `standard`; separate grants
+enable model creation/deletion, settings, pricing, non-mainstream targets and
+other workflows. Administrator-only actions remain exclusive. See the
+[complete permission catalog](steward-permissions.md).
 
-The required `donation_scope` is `none`, `standard` (default L5), `enhanced`
-or `full` (L6). None prevents steward donation browsing and operations. Standard
-preserves pending-use review, safe handling and mainstream-model maintenance.
-Enhanced additionally includes every key of a donation when any of its canonical
-endpoint URLs has any management tag, without requiring a model selector for
-direct maintenance. Full covers the level-6 donation resource range. Every action
-still needs its grant. `users.donations.read` independently permits safe retained
-user history, even at none.
+`donation_scope` qualifies a whole donation, including its keys:
 
-At standard scope, `GET /api/steward/donations` requires `donations.review` and
-a logically active pending use. It accepts omitted/pending status and handling
-filters, and omitted, `pending` or `approved_pending` review filters. Enhanced
-and full scopes use their current resource predicates before counts and pagination.
-`donations.read_all` only controls donor/reviewer identity, thanks consent and
-physical `endpoint_key_id` fields. It never widens this range.
+| Scope | Resource qualification |
+| --- | --- |
+| `none` | No steward donation browsing or operation. |
+| `standard` | At least one unended, unexpired key, and **every** such key has either a saved mainstream-channel source or a current binding to a mainstream charity model. |
+| `enhanced` | Standard qualification, or any key's canonical endpoint URL has a current management tag. |
+| `full` | The level-6 donation resource range, subject to ordinary lifecycle/retention checks. |
 
-Review writes recheck the current action, scope, session and revision. Successful
-approve/reject receipts for the same actor and input can replay after the final
-pending use is resolved, while current action and non-none scope remain required.
-Returned identities use current projection grants; old whole-donation receipts are
-narrowed to requested keys when needed. Force rejection and maintenance receipts
-require current resource scope. Removing tags or grants also affects workers and
-automation before protected completion.
+Pending, paused and failed keys still participate in the all-key check; approval
+or availability does not decide source qualification. Ended/expired keys do not
+participate in that standard check. One qualifying key never opens a donation
+whose other live key is unqualified. Enhanced tagging qualifies the whole donation,
+not only its tagged key.
 
-Within a mainstream model, standard maintenance can manage eligible mainstream
-sources and existing bindings from other sources; it cannot newly bind those other
-sources after removal. `charity.non_mainstream` only expands eligible charity
-model targets. Binding requires both current model and source authority.
-Key/source/discovery routes use `charity_model_id` for standard maintenance;
-enhanced tagged and full-scope direct maintenance may omit it. Shared key changes
-still affect all bindings, with impact summaries restricted to authorized models.
-Physical credentials and private owner settings remain outside stewardship.
+Browsing, approval, handling, key maintenance, discovery, binding candidates and
+automation apply the same current donation predicate before counts/pages or
+protected writes. There is no pending-review exception or different add-versus-
+maintain source rule. The action grant and business state are checked separately.
+`users.donations.read` independently permits safe retained target-user history,
+including at none. `donations.read_all` controls identity/physical-resource
+projection only and never expands the resource range.
+
+`charity.non_mainstream` expands eligible charity-model targets only. An optional
+`charity_model_id` selects and checks a target; it is not required to maintain
+an otherwise qualifying standard donation and cannot make an unqualified
+donation eligible. Bindings require both source and target authority. Shared
+physical-key changes still affect all bindings, while impact summaries show only
+authorized models. Credentials and private owner settings remain outside stewardship.
+
+Final transactions and protected worker completion recheck current session,
+grants, tags, scope, target authority and resource revisions. Successful retries
+retain their recorded operation outcome under the applicable replay checks and
+current identity projection; they do not run a new operation or grant broader
+access. Removing a tag or grant affects subsequent access and pending work.
 
 ## 7. Administrator API
 
@@ -1338,7 +1362,7 @@ All routes below are available only on the administrator host with an administra
 
 User lists additionally accept `level=1|2|3|4|5|6` and exact `user_id` (canonical positive signed-64-bit decimal string). Filters combine with AND before pagination/counting and bind cursor identity. Steward account, loan, penalty and deleted-account reads require their individual grants and retain existing read visibility. User mutations require a target strictly below the actor's actual effective level: L5 may act on L1–L4, L6 on L1–L5. Profile, inference limits, level, general/game balance, ban, permanent ban and unban actions have separate permissions and configured numeric bounds. Replacing an active ban requires unban authority; an expired ban does not prevent a new ban. Final transactions recheck authority before replay or writes. Hidden administrator targets return 404; forbidden targets return 403. Missing grants or numeric allowance violations return `403 steward_permission_denied` without invalidating the session. Ban request revisions, idempotency and 204 response remain unchanged.
 
-`GET|PUT {prefix}/users/{id}/steward-permissions` is limited to administrators and actual level-6 stewards targeting current L5 accounts. GET returns `{revision,donation_scope,permissions,limits}`; PUT requires `Idempotency-Key` and full `{expected_revision,donation_scope,permissions,limits}`, returning the updated policy. The `donation_scope` value (`none|standard|enhanced|full`), all 48 booleans and six canonical decimal-string limits are required. Default L5 scope is standard, L6 full and ordinary accounts none. Stale revisions return 409; edits are atomic and never replace sessions. `GET /api/me` exposes `user.steward_permissions`. Stored configuration applies only at L5 and survives level changes. See the [complete schema and defaults](steward-permissions.md).
+`GET|PUT {prefix}/users/{id}/steward-permissions` is limited to administrators and actual level-6 stewards targeting current L5 accounts. GET returns `{revision,donation_scope,permissions,limits}`; PUT requires `Idempotency-Key` and full `{expected_revision,donation_scope,permissions,limits}`, returning the updated policy. The `donation_scope` value (`none|standard|enhanced|full`), all 51 booleans and six canonical decimal-string limits are required. Default L5 scope is standard, L6 full and ordinary accounts none. Stale revisions return 409; edits are atomic and never replace sessions. `GET /api/me` exposes `user.steward_permissions`. Stored configuration applies only at L5 and survives level changes. See the [complete schema and defaults](steward-permissions.md).
 
 Managed CallerKey reads and revocation use the administrator host/session or the corresponding `/api/steward/users/{id}/caller-key` user-station session route, with existing same-origin, MFA and mutation safeguards. Administrators may target any non-administrator user. Current L5/L6 stewards may target only another user whose effective level is strictly lower than their own, for both metadata and revocation. Administrator accounts have no CallerKeys and return 404 through user management; disallowed steward targets return 403. No Bearer automation path is added.
 
@@ -1370,7 +1394,7 @@ The optional management filter `endpoint_key_id` is a canonical positive decimal
 
 Administrator and level-5/6 steward log rows, details and management exports include optional `charity_model` for charity calls: the requested public model name recorded with the logical request, independent of each attempt's `upstream_model_id`. Missing snapshots omit the field. Self-use model names retain their existing private projection; ordinary-user permissions are unchanged. CSV adds the spreadsheet-safe `charity_model` column.
 
-Management charity log rows and JSON/CSV exports also expose optional `charity_model_id` when the exact retained reservation still identifies an existing model. Each management attempt may expose the paired `donation_id` and `donation_key_id` through its exact retained dispatch claim. These decimal-string IDs support direct management links; they are not inferred from model names or physical-key snapshots. Missing or deleted relations have no navigation target. The destination rechecks current management authority; level-5 key management keeps its model scope. Ordinary-user log projections and account exports do not gain these fields.
+Management charity log rows and JSON/CSV exports also expose optional `charity_model_id` when the exact retained reservation still identifies an existing model. Each management attempt may expose the paired `donation_id` and `donation_key_id` through its exact retained dispatch claim. These decimal-string IDs support direct management links; they are not inferred from model names or physical-key snapshots. Missing or deleted relations have no navigation target. The destination rechecks current management authority and the whole-donation scope; a model link does not grant broader source access. Ordinary-user log projections and account exports do not gain these fields.
 
 `PATCH /admin/api/site-config` accepts the closed body `{expected_revision:string,values:object}` with 1–64 known generic configuration keys and a 256 KiB request limit. Values use the catalog's scalar types. It validates the combined configuration and commits all changes with one site revision increment and one idempotency receipt. Stale revisions return `409`; invalid combinations return an actionable dependency error. Unchanged values do not advance the revision. The response is `{revision:string,changed_keys:string[]}`; clients may read the complete configuration after saving. The existing single-key route remains available.
 
@@ -1426,7 +1450,7 @@ Thursday `literature` accepts empty text or up to 1,024 Unicode characters and 4
 
 | Surface | Routes |
 | --- | --- |
-| Donations | `GET /admin/api/donations`; `GET /admin/api/donations/{id}`; `GET /admin/api/donations/{id}/keys`; `GET /admin/api/donation-sources`; `GET /admin/api/donation-sources/{source_key}/keys`; `POST /admin/api/donations/{id}/review`; `PATCH /admin/api/donations/{id}/keys/{keyId}` |
+| Donations | `GET /admin/api/donations`; `GET /admin/api/donations/{id}`; `GET /admin/api/donations/{id}/keys`; `GET /admin/api/donation-sources`; `GET /admin/api/donation-sources/{source_key}/keys`; `POST /admin/api/donations/{id}/review`, `POST /admin/api/donations/{id}/pending-review`; `PATCH /admin/api/donations/{id}/keys/{keyId}` |
 | Charity models | Exact route family in the table below |
 
 Review and key-management requests include expected revisions and the complete effective limits/expiry needed for that decision. Authorized donation-key projections add `donation_note` and nullable `approval_note` beside `safe_note`, without exposing a secret. Binding/candidate projections otherwise retain their safe resource boundary. Models support per-request, per-search-unit and four-bucket per-token prices, optional per-side modality prices/rewards, promotions, visibility, flattening, ordered bindings and the existing 100-result management statistic; the public 24-hour `recent_success` is a separate calculation. Administrators and authorized stewards can open a binding's key while preserving the originating model and page.
@@ -1579,7 +1603,7 @@ a database snapshot across the whole multi-step operation.
 
 ### 7.5 Recurring donation-key limits
 
-`GET /admin/api/donations/{id}/keys/{keyId}/recurring-limits` and the matching `/api/steward/` path return `{donation_id,key_id,donation_revision,server_now,rules}`. The owner-only `/api/donations/{id}/keys/{keyId}/recurring-limits` path reads the same safe rule projection for the caller's own donation. Administrator/owner GET accepts no query or body; steward calls using the standard maintenance path require the `charity_model_id` query scope; enhanced tagged donations and full scope may omit it. Administrators and stewards with `donations.recurring` within current scope can PUT the complete set on their management paths; ordinary owners cannot write it. Pending keys may be configured, while ended or expired keys cannot.
+`GET /admin/api/donations/{id}/keys/{keyId}/recurring-limits` and the matching `/api/steward/` path return `{donation_id,key_id,donation_revision,server_now,rules}`. The owner-only `/api/donations/{id}/keys/{keyId}/recurring-limits` path reads the same safe rule projection for the caller's own donation. Administrator/owner GET accepts no query or body. Steward reads use the whole-donation scope in §6.4; `charity_model_id` is optional and cannot make an unqualified donation eligible. Administrators and stewards with `donations.recurring` within current scope can PUT the complete set on their management paths; ordinary owners cannot write it. Pending keys may be configured, while ended or expired keys cannot.
 
 PUT requires `Idempotency-Key`, has a 16 KiB body limit, and accepts exactly `{expected_revision,rules}`. Up to 16 rules are replaced atomically under the donation revision; the response is `{donation_id,key_id,donation_revision}`. Rule fields are `{id,mode,interval,alignment,anchor_local,time_zone,week_starts_on,metric,limit}`. `anchor_local` is required for exact-time alignment; other modes accept omission or null. New IDs are `null`; saved IDs are canonical `qlr_` opaque IDs. Omitted old IDs remove those rules. Duplicate IDs or IDs belonging to another key are rejected.
 
@@ -1622,6 +1646,93 @@ Recent records include actual participant/payment information. Anonymous records
 | `POST /admin/api/legal-holds/{id}/release` | Elevated release. |
 
 Lineage items are exactly `{donation_id,donation_key_id,donation_status,key_state,expires_at,ended_reason,ended_at}`. They exclude donor identity, descriptions, safe notes, fingerprint, source key ID, and provenance. Legal holds cover only the documented object roots, never identity/session/account deletion, and last at most 365 days. The ordinary list/export window and new-report matching period do not change. An active hold can retain its object beyond ordinary expiry for authorized reads by known ID until the hold ends.
+
+### 7.8 Experimental AI assistant
+
+The assistant uses a dedicated OpenAI-compatible Chat Completions endpoint and encrypted key, separate from user credentials. Browser-session routes use `/admin/api/ai` for administrators and `/api/steward/ai` for stewards. CallerKeys cannot use these routes. Model output, tool results and proposed operations are untrusted data; they never confer permission.
+
+Level 6 has the shared assistant capabilities. Level 5 needs the corresponding live grants: `ai.chat` for its conversation, `ai.review.read` for automatic-review records and `ai.memory.edit` for reading or editing shared memories. New default policies enable only `ai.chat`; upgrading an explicitly configured L5 policy leaves all three new grants false. Configuration, complete model-request logs, usage summaries and other operators' archives are administrator-only. Ordinary users have no assistant route. Existing target hierarchy, donation scope, field grants, numeric allowances and administrator-only actions still apply to every tool and final write.
+
+#### Chat, plans and shared memories
+
+In this table, `{ai}` is either authenticated assistant prefix above.
+
+| Method and path | Request / response |
+| --- | --- |
+| `GET {ai}/chat` | `{enabled,id,generation,messages,summary,job?,plans,has_older}`; the latest 100 active messages and their plans. Before a first conversation, IDs/generation are `"0"` and collections are empty. |
+| `POST {ai}/chat/messages` | `{content,expected_generation,request_key}`; returns the durable job. `/compact`, optionally followed by focus text, requests context summarization. |
+| `GET {ai}/chat/messages` | Optional `before_id`; returns `{items}`, at most 100 active messages in chronological order. Omit the cursor for the latest window. |
+| `PUT {ai}/chat/messages/{id}` | Same body as sending; edits from that message and returns the replacement job. |
+| `POST {ai}/chat/clear` | `{expected_generation}`; resets active context and returns `{}`. |
+| `POST {ai}/chat/jobs/{id}/cancel` | Cancels the caller's job; returns `{}`. |
+| `GET {ai}/chat/plans` | Optional positive `before_id`; omit it for the first page. Returns `{items,has_older}`, up to 100 plans in descending ID order. |
+| `POST {ai}/chat/plans/{id}/decision` | `{approve,feedback,elevation_token?}`; returns the exact plan and its persisted outcome. |
+| `GET {ai}/reviews`, `GET {ai}/reviews/{id}` | Numbered automatic-review page or one review, described below. |
+| `GET {ai}/memories/{kind}` | `kind=chat|auto_review`; returns `{kind,content,revision,updated_at,updated_by}`. |
+| `PUT {ai}/memories/{kind}` | `{content,expected_revision}`; compare-and-swap update returning the memory. |
+
+Assistant IDs, generations, revisions, persisted counts and token totals are decimal strings; queue counters and configuration limits are JSON numbers. Assistant timestamps, including usage `as_of`, are UTC Unix **milliseconds**. Numbered assistant lists use `page=1..1000000` and `page_size=1..100`, default 1/20, and return `{items,total,page,page_size}`; `total` is a string while page and size are numbers. They do not use the shared `pagination` envelope or clamp an excessive page. Message and plan cursors are decimal IDs, not the opaque cursors used by other API families.
+
+These assistant mutations use their documented request keys, revisions or persisted plan identity instead of the general `Idempotency-Key` header. Send/edit `content` must be nonblank and at most 4 MiB; `request_key` is 16–128 bytes. Keep the exact key, path and body after an uncertain response. The key is bound to the actual actor, operation, edited message when applicable, generation and content. An identical authorized replay returns the original job even after the edit archived its original message; conflicting reuse returns `409 conflict`. A new request with a stale generation also returns 409. Only one active chat job or pending confirmation may occupy a conversation.
+
+`chat_enabled` is an administrator setting, default false. `GET /chat` first checks the caller's current conversation grant, then reports `enabled` only when that switch is on and the driver has an endpoint, key and model. New messages, edit/regenerate, compaction, model dispatch and pending-plan execution enforce the same gate; an unavailable chat returns `503 service_unavailable`. Turning it off cancels active chat work and supersedes unapproved plans. It preserves readable history, memories and execution records and does not change the independent automatic-review mode. Replaying a completed receipt does not restart work.
+
+There is one current conversation per operator. Messages contain `id,role,content,created_at,active,generation` and optional `tool_calls,tool_call_id`. Jobs contain `id,kind,actor_id,actor_role,actor_label,conversation_id,generation,donation_id,state,request_id,error,created_at,updated_at,queue`. Job kinds are `chat|compact|auto_review`; states are `pending|running|waiting_confirmation|completed|failed|cancelled|interrupted`. Queue information is `{length,active,limit,position}`, with a one-based pending position and zero otherwise; it is an advisory snapshot.
+
+Administrators can edit any active user/assistant message; stewards can edit only their latest user message. Editing archives that message and its following context, cancels active work and unapproved plans, increments the generation and regenerates from the replacement. Clear archives the active context without deleting original messages. Neither action reverses completed business operations. Context compaction keeps originals and complete recent tool-call/result pairs; editing summarized material invalidates the affected summary. Compaction uses the same request queue and token accounting.
+
+A plan contains `id,job_id,state,operations,preview,tool_call_ids,result?,created_at,decided_at?`. Operations are ordered `{kind,target_id,input}` objects. Their corresponding previews contain `title,description,before?,after?,dangerous,requires_elevation`, including memory text before/after. Plan states are `pending|approved|rejected|failed|superseded`. A decision applies only to the exact persisted plan; retrying a completed decision reads its outcome rather than executing it again.
+
+Model-proposed business and memory writes in conversation mode require human approval. The plan can combine existing donation review/maintenance, charity model/binding management, user profile/limits/economy/ban/delegation/CallerKey/authentication/deletion actions and shared-memory changes. Every operation retains its domain's authorization and expected versions. All business changes, memory changes, audit and the execution receipt commit in one transaction or all roll back. Model calls, discovery and human waiting take place outside that write transaction. Rejection or failure is recorded as a tool result so the conversation can continue; editing chat text cannot alter the actual audit.
+
+Sensitive administrator actions require fresh elevation. Obtain it through the existing administrator elevation route and send `elevation_token` with approval; `403 elevated_required` preserves the pending plan for identity confirmation. Passwords, OTPs, session credentials and dedicated endpoint keys are never model-tool inputs. User deletion/authentication changes retain the existing lifecycle barriers and post-commit invalidation. Current session, role, grants, resource scope and revisions are rechecked before execution.
+
+Memory PUT accepts at most 4 MiB. A stale `expected_revision` returns 409; clients must reread and compare rather than overwrite a newer edit. Memories and their change history remain independent of model-request log cleanup. Model-suggested memory edits require the same explicit plan decision as other writes.
+
+#### Automatic review and administrator configuration
+
+Automatic review processes only new or modified pending submissions recorded while enabled, after the existing deterministic approval rules. Enabling it never scans old pending donations, and no manual enqueue API exists. Results are bound to the reviewed material versions. `mode=off` is the default; `preview` saves advice without applying it; `auto` may apply a valid decision. Turning off stops further work and application. Changing auto to preview makes outstanding work reference-only; changing back never promotes earlier preview results into executable approvals.
+
+A review is `{job,intelligence,result?,execution?,turns?}`. Both list and detail include `job.queue`. The result is `{decision,internal_reason,user_note,bindings}`, with `decision=approve|reject|manual`. Approval requires at least one valid binding to an **existing** charity model; reject/manual decisions require an empty bindings array. Each binding identifies `charity_model_id,expected_binding_revision,donation_key_id,upstream_model_id,native_services`. Approval and every binding succeed together or leave the business state unchanged; automatic review cannot create or alter charity models. Invalid or stale output records the failure for manual handling. Review evidence follows its associated donation/approval lifecycle and is unaffected by model-request log cleanup.
+
+| Administrator route | Request / response |
+| --- | --- |
+| `GET /admin/api/ai/config` | `{revision,mode,chat_enabled,auto_template,chat_template,auto_prefill,chat_prefill,tools,search_url,search_has_key}`. |
+| `PUT /admin/api/ai/config` | Complete configuration values plus `expected_revision`; optional `search_api_key`. Returns the saved configuration. |
+| `GET /admin/api/ai/driver` | `{revision,base_url,has_key,model,context_window,max_output_tokens,output_token_parameter,temperature?,top_p?,extra_parameters,concurrency,timeout_seconds}`. |
+| `PUT /admin/api/ai/driver` | Editable driver fields plus `expected_revision`; optional `api_key`. Omit the read-only `revision,has_key` fields. Returns the saved settings. |
+| `POST /admin/api/ai/driver/models` | Discovers `{models:[string,...]}` using saved endpoint/key settings; choosing a model is not a prerequisite. |
+
+Configuration updates replace the submitted configuration and use revision CAS; stale saves return 409. Omitted key fields retain the encrypted key, an empty string removes it, and a nonempty string replaces it. Reads expose only `has_key`/`search_has_key`, never saved key text. The driver key is not a user's endpoint key and is not charged through a user's credits.
+
+Driver defaults are context window 32768, output limit 4096, shared concurrency 1 and timeout 600 seconds. Context window accepts 1024–10000000, output limit 1 through the context window, concurrency 1–128 and timeout 1–1200 seconds. Optional temperature is 0–2 and top-p 0–1. `output_token_parameter` is `max_tokens` by default or `max_completion_tokens`. `extra_parameters` is a JSON object of at most 32768 bytes and cannot override model/messages/tools, tool choice, response format, streaming, URL/authentication/headers, either output-token parameter or the dedicated sampling fields. Calls use nonstreaming Chat Completions with one choice. Optional assistant prefill depends on upstream support.
+
+Templates are ordered `{role,content}` arrays with `system|user|assistant` roles, up to 100 messages and 1 MiB combined content each. Both include `{{memory}}`; the review template also includes `{{intelligence}}`. The chat template contains exactly one standalone `{{conversation}}` node preserving original roles and tool IDs. Optional auto/chat prefill is appended as an assistant message. The closed `tools` map contains `donations,donation_models,review_history,charity_models,users,site_status,web_search,propose_operations,edit_memory`; defaults enable all, while actual tools remain restricted by current human authority. Search uses the configured full endpoint URL, Bearer key and POST JSON query; external text never changes authorization.
+
+The shared FIFO limit applies to each model HTTP call, including compaction. Waiting for tools or a human decision releases that slot; another model turn joins the queue again. Actual calls also consume the global RPM and outbound concurrency budgets, with no personal RPM or credit charge. Exhausted global RPM waits for the next available window without holding an HTTP slot or database transaction. Restart recovery marks interrupted in-flight calls explicitly and does not automatically resend them; unstarted queued work can resume. Committed operation receipts prevent duplicate business execution.
+
+#### Model-request history, cleanup and archives
+
+These routes are administrator-only and separate from ordinary user request logs.
+
+| Method and path | Request / response |
+| --- | --- |
+| `GET /admin/api/ai/requests` | Numbered page; optional `source,kind,state,actor_id` filters. Adds decimal-string `cutoff_id`. |
+| `GET /admin/api/ai/requests/{id}` | Complete saved request detail. |
+| `POST /admin/api/ai/requests/cleanup` | Exactly one selection: nonempty `ids:[string,...]` (at most 1000) or positive `through_id`; optional matching filters. Returns string `deleted_count,skipped_count`. |
+| `GET /admin/api/ai/usage` | `{total,last_24_hours,as_of}`, independent of retained request rows. |
+| `GET /admin/api/ai/archives` | Numbered operator page with `{actor_id,role,label,updated_at}` items. |
+| `GET /admin/api/ai/archives/{owner}/messages` | Optional `before_id`; `{items}` includes active and archived originals, up to 100 in chronological order. |
+| `GET /admin/api/ai/archives/{owner}/plans` | Optional positive `before_id`, omitted for the first page; `{items,has_older}` includes retained plans. |
+| `GET /admin/api/ai/archives/{owner}/results` | Numbered independent model-result page. |
+
+Request filters are `source=auto_review|admin_chat|steward_chat`, `kind=model|compaction`, `state=pending|running|succeeded|failed|cancelled|interrupted` and an exact actor ID; omit a filter for all. Rows include `id,client_request_id,source,kind,actor_id,actor_role,actor_label,state,base_url,model,created_at,started_at?,completed_at?,consumed_at?,status_code,error_code,content_redacted,response_complete,usage`. Actor snapshots remain after account deletion. Detail adds `queued_input`, the exact serialized `request_body` when prepared for dispatch, saved `response_body` and optional `response_body_base64` for non-UTF-8 content. A request cancelled before preparation may have an empty wire body while retaining its queued input. Incomplete/error/interrupted responses retain received content and an explicit completeness flag; no missing response is fabricated. Request/response capture remains bounded by transport limits. Authorization headers and the dedicated raw key are excluded; recognized key reflections are redacted.
+
+Model-request logs have no automatic expiry. Cleanup is an explicit irreversible administrator action: freeze the list's `cutoff_id` and filters when confirming a range, or retain the exact selected IDs. Never replace that cutoff with a fresh value on retry. Newer rows are excluded. Only terminal requests whose reply or failure has been durably handed to the independent workflow records are eligible; pending/running or still-needed rows are skipped. Cleanup runs in bounded batches, so an interrupted call may already have removed some rows; retrying the same selection is safe but returned counts describe only that call.
+
+Usage entries group by `source,kind,actor_id` and include actor role/label, string `requests`, and `usage:{input_tokens,cached_input_tokens,cache_write_input_tokens,output_tokens,reasoning_tokens,unknown}`. `last_24_hours` covers the exact rolling 24-hour interval ending at `as_of`, not whole-hour buckets. Unknown or incomplete reporting is not zero usage. Historic totals and usage records survive request cleanup and account deletion.
+
+Conversation originals, their model/tool results and execution receipts, shared memories and memory history, and token statistics are independent administrator assets without automatic expiry. Request cleanup cannot erase them; clear/edit changes only the active context. Automatic-review evidence remains with its associated donation/approval records. These management assets are not added to ordinary account exports, and stewards cannot browse other operators' archives.
 
 ## 8. Server-sent events
 
@@ -1710,7 +1821,10 @@ Principal retention periods are:
 
 | Data | Retention |
 | --- | --- |
-| Request/log identity and detailed log material | 30 days; minimal request/claim/accounting facts continue only while required by unsettled work or their domain deadline |
+| Ordinary model-request/log identity and detailed log material | 30 days; minimal request/claim/accounting facts continue only while required by unsettled work or their domain deadline |
+| Assistant full model-request logs | No automatic expiry; administrator-selected cleanup, skipping unfinished or still-needed rows (§7.8) |
+| Assistant conversation originals, memories/history and token statistics | Independent administrator assets without automatic expiry; unaffected by model-log cleanup or operator account deletion |
+| Assistant automatic-review evidence | Follows its associated donation/approval lifecycle; model-log cleanup does not delete it |
 | Idempotency replays and accepted-operation technical records | 24 hours after a queryable domain result; non-terminal work remains |
 | Closed issues | 90 days, at most 1,000 per account |
 | Donation/review/reservation records | 400 days after terminal/finalized state |
@@ -1731,7 +1845,7 @@ Expired endpoint secrets become unclaimable immediately and are physically remov
 
 ## 11. Restricted diagnostics and manual risk auditing
 
-Log and diagnostic browser-session reads require a current administrator on the administrator host or a current level-5/6 steward on the user host. Steward abuse-audit routes require the corresponding `risk.read`, `risk.manage` or `access_events.read` grant; configuration writes remain administrator-only. Ordinary users and CallerKeys cannot use these management routes, including for their own requests. Sensitive reads revalidate the actor and session in the same read transaction. They do not add these fields to personal exports or ordinary log exports.
+Management log and raw-diagnostic browser-session reads require a current administrator on the administrator host or a current level-5/6 steward on the user host. Steward abuse-audit routes require the corresponding `risk.read`, `risk.manage` or `access_events.read` grant; configuration writes remain administrator-only. Ordinary users and CallerKeys cannot use these management routes, including for their own requests. Sensitive reads revalidate the actor and session in the same read transaction. They do not add restricted fields to personal exports or ordinary log exports. The safe server-authored `rejection_detail` in §3 remains available through the caller's own log routes.
 
 | Method and path | Purpose |
 | --- | --- |
