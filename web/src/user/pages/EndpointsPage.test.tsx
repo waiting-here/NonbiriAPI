@@ -129,17 +129,37 @@ describe('connection entry list', () => {
         const path = new URL(String(input), window.location.origin).pathname;
         if (path === '/api/session') return Promise.resolve(response(session));
         if (path === '/api/connections') return Promise.resolve(response(page([])));
+        if (path === '/api/endpoint-create-options')
+          return Promise.resolve(
+            response({
+              base_connector_types: ['openai-compatible'],
+              mainstream_channels: [],
+              native_service_options: [
+                {
+                  connector_type: 'openai-compatible',
+                  configuration_type: 'openai-compatible',
+                  native_services: ['chat_completions', 'responses'],
+                  default_native_services: ['chat_completions'],
+                  rerank_formats: [],
+                },
+              ],
+            }),
+          );
         throw Error(path);
       }),
     );
-    await renderWithProviders(<EndpointsPage />, {
+    const view = await renderWithProviders(<EndpointsPage />, {
       station: 'user',
       role: 'user',
       route: '/endpoints',
     });
     expect(await screen.findByText('Nothing here yet')).toBeVisible();
     expect(screen.queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Add connection' })).toHaveLength(2);
+    const createButtons = screen.getAllByRole('button', { name: 'Add service' });
+    expect(createButtons).toHaveLength(2);
+    await view.user.click(createButtons[1]);
+    const form = screen.getByRole('region', { name: 'Add service' });
+    expect(await within(form).findByRole('textbox', { name: 'Service name' })).toBeVisible();
   });
   it('returns to the same connection search and page from a real detail route', async () => {
     vi.stubGlobal(
