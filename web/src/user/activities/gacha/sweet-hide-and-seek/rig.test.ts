@@ -28,7 +28,7 @@ function coefficients(mesh: MotionMesh, [x, y]: Point): number[] {
     d = c + 1;
   const triangle = u + v <= 1 ? [a, b, c] : [c, b, d];
   const weights = u + v <= 1 ? [1 - u - v, u, v] : [1 - u, 1 - v, u + v - 1];
-  return Array.from({ length: 10 }, (_, channel) =>
+  return Array.from({ length: vertexStride - 2 }, (_, channel) =>
     triangle.reduce(
       (sum, vertex, i) => sum + mesh.vertices[vertex * vertexStride + 2 + channel] * weights[i],
       0,
@@ -38,7 +38,7 @@ function coefficients(mesh: MotionMesh, [x, y]: Point): number[] {
 function displacement(values: readonly number[], drivers: Float32Array): Point {
   let x = 0,
     y = 0;
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < drivers.length; i++) {
     x += values[i * 2] * drivers[i];
     y += values[i * 2 + 1] * drivers[i];
   }
@@ -106,7 +106,7 @@ it('pins source face, candy, fingers, supporting knees and feet independently of
   for (const id of ids)
     for (const point of contacts[id])
       expect(coefficients(meshes[id], point), id + ' ' + point.join(',')).toEqual(
-        Array(10).fill(0),
+        Array(vertexStride - 2).fill(0),
       );
 });
 
@@ -116,8 +116,8 @@ it('binds the complete ribcage to one lift and expansion with a fixed waist', ()
   const right = coefficients(meshes['s-chatgpt'], [636, 704]);
   expect(left[9]).toBeCloseTo(center[9], 6);
   expect(right[9]).toBeCloseTo(center[9], 6);
-  expect(right[8] - left[8]).toBeCloseTo((636 - 440) * 0.009, 5);
-  expect(center[9]).toBeLessThan(-4);
+  expect(right[8] - left[8]).toBeCloseTo((636 - 440) * 0.018, 5);
+  expect(center[9]).toBeLessThan(-12);
   expect(coefficients(meshes['s-chatgpt'], [510, 952])[9]).toBe(0);
   const shoulder = coefficients(meshes['s-claude'], [562, 296])[9];
   const ribs = coefficients(meshes['s-claude'], [545, 440])[9];
@@ -125,24 +125,46 @@ it('binds the complete ribcage to one lift and expansion with a fixed waist', ()
   expect(Math.abs(ribs)).toBeGreaterThan(Math.abs(shoulder) * 2);
 });
 
+it('lets the lower chest follow the same breath with a slower, bounded return', () => {
+  const upper = coefficients(meshes['s-chatgpt'], [540, 560]);
+  const lower = coefficients(meshes['s-chatgpt'], [540, 800]);
+  expect(upper[11]).toBe(0);
+  expect(lower[11] / lower[9]).toBeCloseTo(0.65, 5);
+  const drivers = new Float32Array(6);
+  motionDrivers(1.2, drivers);
+  expect(drivers[5]).toBeLessThan(0);
+  const inhale = displacement(lower, drivers)[1];
+  expect(inhale).toBeGreaterThan(lower[9] * drivers[4]);
+  motionDrivers(4.2, drivers);
+  expect(drivers[5]).toBeGreaterThan(0);
+  const exhale = displacement(lower, drivers)[1];
+  expect(exhale).toBeLessThan(lower[9] * drivers[4]);
+  for (let time = 0; time <= 6.8; time += 0.04) {
+    motionDrivers(time, drivers);
+    const lift = displacement(lower, drivers)[1];
+    expect(lift).toBeGreaterThanOrEqual(lower[9] - 0.00001);
+    expect(lift).toBeLessThanOrEqual(0.00001);
+  }
+});
+
 it.each(ids)(
   '%s stays finite and preserves triangle orientation across combined motion phases',
   (id) => {
     const { vertices, indices } = meshes[id];
     const positions = new Float32Array((vertices.length / vertexStride) * 2);
-    const drivers = new Float32Array(5);
+    const drivers = new Float32Array(6);
     let smallestArea = Infinity,
       largestArea = 0,
       largestStretch = 0;
     // The joint period is 163.2 s; include respiratory extrema as well as its beat with wind.
-    const times = [2.584, 6.8, ...Array.from({ length: 103 }, (_, i) => i * 1.6)];
+    const times = [2.584, 2.864, 6.8, 7.08, ...Array.from({ length: 103 }, (_, i) => i * 1.6)];
     for (const time of times) {
       motionDrivers(time, drivers);
       for (let i = 0; i < vertices.length / vertexStride; i++) {
         const base = i * vertexStride;
         let x = vertices[base],
           y = vertices[base + 1];
-        for (let driver = 0; driver < 5; driver++) {
+        for (let driver = 0; driver < drivers.length; driver++) {
           x += vertices[base + 2 + driver * 2] * drivers[driver];
           y += vertices[base + 3 + driver * 2] * drivers[driver];
         }
@@ -183,7 +205,7 @@ it('retains a useful displacement budget on real hair and free hem landmarks', (
     ['s-claude', 'left free hem', [222, 1211], 14],
     ['s-claude', 'right free hem', [591, 1232], 12],
   ];
-  const drivers = new Float32Array(5);
+  const drivers = new Float32Array(6);
   for (const [id, name, point, minimum] of landmarks) {
     const values = coefficients(meshes[id], point);
     let min = Infinity,

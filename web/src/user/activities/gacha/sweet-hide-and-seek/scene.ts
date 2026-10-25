@@ -149,6 +149,7 @@ export async function createSweetScene(
       ['primary', 4, 2],
       ['secondary', 4, 6],
       ['ribs', 2, 10],
+      ['follow', 2, 12],
     ] as const) {
       const attribute = gl.getAttribLocation(program, name);
       gl.enableVertexAttribArray(attribute);
@@ -242,7 +243,8 @@ export async function createSweetScene(
   }
   const flowUniform = gl.getUniformLocation(program!, 'flow');
   const breathUniform = gl.getUniformLocation(program!, 'breath');
-  const drivers = new Float32Array(5);
+  const settleUniform = gl.getUniformLocation(program!, 'settle');
+  const drivers = new Float32Array(6);
   const blinkUniform = gl.getUniformLocation(program!, 'blink');
   layer.addEventListener('webglcontextlost', lost);
   return {
@@ -260,6 +262,7 @@ export async function createSweetScene(
         motionDrivers(time, drivers);
         gl.uniform4f(flowUniform, drivers[0], drivers[1], drivers[2], drivers[3]);
         gl.uniform1f(breathUniform, drivers[4]);
+        gl.uniform1f(settleUniform, drivers[5]);
         gl.uniform1f(blinkUniform, blink);
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.drawElements(gl.TRIANGLES, elementCount, gl.UNSIGNED_SHORT, 0);

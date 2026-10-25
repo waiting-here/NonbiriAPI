@@ -16,6 +16,7 @@ type RibSection = readonly [
   right: number,
   lift: number,
   expansion: number,
+  follow: number,
 ];
 type BreathingRig = {
   /** Neck, shoulder, ribs and waist sections share one respiratory driver. */
@@ -210,26 +211,28 @@ export const motionRegions: Record<SweetCard, readonly MotionRegion[]> = {
 export const breathingRigs: Record<SweetCard, BreathingRig> = {
   's-chatgpt': {
     sections: [
-      [448, 420, 662, 0, 0],
-      [492, 270, 740, 0.8, 0.0025],
-      [590, 300, 758, 2.6, 0.006],
-      [680, 335, 749, 4.2, 0.009],
-      [800, 334, 743, 4.4, 0.009],
-      [866, 328, 701, 2.4, 0.006],
-      [936, 340, 680, 0, 0],
+      [448, 420, 662, 0, 0, 0],
+      [492, 270, 740, 2, 0.004, 0],
+      [590, 300, 758, 7.2, 0.012, 0],
+      [680, 335, 749, 12, 0.018, 0.25],
+      [800, 334, 743, 13, 0.018, 0.65],
+      [866, 328, 701, 6.4, 0.01, 0.2],
+      [936, 340, 680, 0, 0, 0],
     ],
-    feather: 18,
+    feather: 32,
   },
   's-claude': {
     sections: [
-      [240, 477, 624, 0, 0],
-      [280, 470, 634, 0.8, 0.002],
-      [350, 435, 655, 2.8, 0.006],
-      [420, 445, 727, 3.5, 0.008],
-      [480, 450, 726, 2.8, 0.007],
-      [536, 397, 588, 0, 0],
+      [240, 477, 624, 0, 0, 0],
+      [280, 470, 634, 2, 0.003, 0],
+      [350, 435, 745, 8.4, 0.011, 0.1],
+      [420, 445, 745, 11, 0.015, 0.4],
+      [480, 450, 744, 9.4, 0.012, 0.65],
+      [496, 440, 740, 7, 0.01, 0.45],
+      [520, 410, 715, 2.5, 0.005, 0.1],
+      [536, 397, 588, 0, 0, 0],
     ],
-    feather: 18,
+    feather: 32,
   },
 };
 
@@ -390,7 +393,7 @@ export function regionWeight(region: MotionRegion, point: Point): number {
   );
 }
 
-function breathingOffset(id: SweetCard, [x, y]: Point): Point {
+function breathingOffset(id: SweetCard, [x, y]: Point): readonly [number, number, number] {
   const { sections, feather } = breathingRigs[id];
   for (let i = 1; i < sections.length; i++) {
     const a = sections[i - 1],
@@ -402,13 +405,17 @@ function breathingOffset(id: SweetCard, [x, y]: Point): Point {
     const weight = smooth(0, feather, Math.min(x - left, right - x));
     const lift = a[3] + (b[3] - a[3]) * t;
     const expansion = a[4] + (b[4] - a[4]) * t;
-    return [(x - (left + right) * 0.5) * expansion * weight, -lift * weight];
+    return [
+      (x - (left + right) * 0.5) * expansion * weight,
+      -lift * weight,
+      a[5] + (b[5] - a[5]) * t,
+    ];
   }
-  return [0, 0];
+  return [0, 0, 0];
 }
 
 export const meshStep = 8;
-export const vertexStride = 12;
+export const vertexStride = 14;
 export const meshColumns = 1024 / meshStep + 1;
 export type MotionMesh = { vertices: Float32Array; indices: Uint16Array };
 
@@ -427,7 +434,7 @@ export function createMotionMesh(id: SweetCard): MotionMesh {
       for (const polygon of fixedRegions[id]) {
         const distance = -polygonDistance(polygon, point);
         protection = Math.min(protection, smooth(12, 76, distance));
-        bodyProtection = Math.min(bodyProtection, smooth(12, 36, distance));
+        bodyProtection = Math.min(bodyProtection, smooth(12, 60, distance));
       }
       if (protection === 0) continue;
       let totalWeight = 0;
@@ -454,6 +461,8 @@ export function createMotionMesh(id: SweetCard): MotionMesh {
       const ribs = breathingOffset(id, point);
       vertices[index + 10] = ribs[0] * bodyProtection;
       vertices[index + 11] = ribs[1] * bodyProtection;
+      vertices[index + 12] = vertices[index + 10] * ribs[2];
+      vertices[index + 13] = vertices[index + 11] * ribs[2];
     }
   }
   let index = 0;
@@ -473,6 +482,12 @@ export function createMotionMesh(id: SweetCard): MotionMesh {
   return { vertices, indices };
 }
 
+const breathingCycle = (seconds: number) => {
+  const cycle = (((seconds % 6.8) + 6.8) % 6.8) / 6.8;
+  const breath = cycle < 0.38 ? cycle / 0.38 : (1 - cycle) / 0.62;
+  return 0.5 - Math.cos(Math.PI * breath) * 0.5;
+};
+
 /** Caller-owned storage is reused on every frame. */
 export function motionDrivers(seconds: number, result: Float32Array): void {
   const angle = (seconds * Math.PI * 2) / 9.6;
@@ -480,7 +495,8 @@ export function motionDrivers(seconds: number, result: Float32Array): void {
   result[1] = Math.cos(angle);
   result[2] = Math.sin(angle * 2);
   result[3] = Math.cos(angle * 2);
-  const cycle = (((seconds % 6.8) + 6.8) % 6.8) / 6.8;
-  const breath = cycle < 0.38 ? cycle / 0.38 : (1 - cycle) / 0.62;
-  result[4] = 0.5 - Math.cos(Math.PI * breath) * 0.5;
+  const breath = breathingCycle(seconds);
+  result[4] = breath;
+  // Lower contours follow the same breath, settling toward their original rest shape.
+  result[5] = breathingCycle(seconds - 0.28) - breath;
 }

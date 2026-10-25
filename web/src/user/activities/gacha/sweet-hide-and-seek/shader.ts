@@ -1,15 +1,15 @@
 import { eyelidShader } from './eyelid';
 
 export const vertexShader = `
-attribute vec2 position,ribs;
+attribute vec2 position,ribs,follow;
 attribute vec4 primary,secondary;
 uniform vec4 flow;
-uniform float breath;
+uniform float breath,settle;
 varying vec2 uv;
 void main(){
   uv=position/vec2(1024.,1536.);
   vec2 offset=primary.xy*flow.x+primary.zw*flow.y+
-    secondary.xy*flow.z+secondary.zw*flow.w+ribs*breath;
+    secondary.xy*flow.z+secondary.zw*flow.w+ribs*breath+follow*settle;
   vec2 p=(position+offset)/vec2(1024.,1536.);
   gl_Position=vec4(p.x*2.-1.,1.-p.y*2.,0.,1.);
 }
