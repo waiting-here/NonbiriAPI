@@ -6,6 +6,8 @@ import type { AgentJob, AgentMessage, AgentPlan, Conversation } from './api';
 import { ChatPanel } from './ChatPanel';
 import { OperationPlan } from './OperationPlan';
 import { planMessageID } from './toolActivityData';
+import * as activityData from './toolActivityData';
+import { ToolActivity } from './ToolActivity';
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -114,6 +116,120 @@ async function mount(role: 'admin' | 'steward' = 'admin') {
   return view;
 }
 describe('Agent conversation and plans', () => {
+  it('keeps loaded history indexes stable while composing and refreshes them for a delivered message', async () => {
+    const history = Array.from({ length: 100 }, (_, index) => {
+      const id = index * 3 + 1;
+      return [
+        message(String(id), 'user', 'Question ' + index),
+        {
+          ...message(String(id + 1), 'assistant', ''),
+          tool_calls: [{ id: 'read-' + index, function: { name: 'donations', arguments: '{}' } }],
+        },
+        {
+          ...message(
+            String(id + 2),
+            'tool',
+            JSON.stringify({
+              items: [{ description: 'Result ' + index, detail: 'x'.repeat(1024) }],
+            }),
+          ),
+          tool_call_id: 'read-' + index,
+        },
+      ];
+    }).flat();
+    const plans = Array.from({ length: 30 }, (_, index) => ({
+      ...plan,
+      id: String(index + 1000),
+      state: 'approved',
+      tool_call_ids: ['read-' + index],
+      operations: [],
+      preview: [],
+    }));
+    const current = {
+      ...conversation(history.slice(200)),
+      has_older: true,
+      job: { ...job, state: 'completed' },
+    };
+    mocks.get.mockResolvedValue(current);
+    mocks.older
+      .mockResolvedValueOnce(history.slice(100, 200))
+      .mockResolvedValueOnce(history.slice(0, 100));
+    mocks.plans
+      .mockResolvedValueOnce({ items: plans, has_older: false })
+      .mockResolvedValue({ items: [], has_older: false });
+    const indexes = vi.spyOn(activityData, 'indexToolResults');
+    const calls = vi.spyOn(activityData, 'readToolCalls');
+    try {
+      const view = await mount();
+      await view.user.click(screen.getByRole('button', { name: 'Load older messages' }));
+      await waitFor(() => expect(mocks.older).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Load older messages' })).toBeEnabled(),
+      );
+      await view.user.click(screen.getByRole('button', { name: 'Load older messages' }));
+      await screen.findByText('Question 0');
+      expect(indexes.mock.calls.at(-1)![0]).toHaveLength(300);
+      const indexCount = indexes.mock.calls.length;
+      const callCount = calls.mock.calls.length;
+      await view.user.type(screen.getByRole('textbox', { name: 'Message' }), 'Keep composing now');
+      expect(indexes).toHaveBeenCalledTimes(indexCount);
+      expect(calls).toHaveBeenCalledTimes(callCount);
+      expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Keep composing now');
+      await act(async () => {
+        view.queryClient.setQueryData(['admin', 'ai', 'synthetic-operator', 'chat'], {
+          ...current,
+          messages: [...current.messages, message('301', 'assistant', 'Live reply arrived')],
+        });
+      });
+      await screen.findByText('Live reply arrived');
+      expect(indexes).toHaveBeenCalledTimes(indexCount + 1);
+      expect(indexes.mock.calls.at(-1)![0]).toHaveLength(301);
+      expect(screen.getByText('Question 0')).toBeVisible();
+      expect(mocks.send).not.toHaveBeenCalled();
+    } finally {
+      indexes.mockRestore();
+      calls.mockRestore();
+    }
+  });
+  it('parses tool payloads once across state renders and displays an updated result', async () => {
+    const input = JSON.stringify({ query: 'Stable synthetic input' });
+    const output = JSON.stringify({
+      items: [{ description: 'Synthetic tool result', detail: 'x'.repeat(8192) }],
+    });
+    const updated = JSON.stringify({ items: [{}, {}] });
+    const assistant = {
+      ...message('1', 'assistant', ''),
+      tool_calls: [{ id: 'read-stable', function: { name: 'donations', arguments: input } }],
+    };
+    const response = { ...message('2', 'tool', output), tool_call_id: 'read-stable' };
+    const results = new Map([[0, response]]);
+    const parse = vi.spyOn(JSON, 'parse');
+    const count = (value: string) => parse.mock.calls.filter(([text]) => text === value).length;
+    try {
+      const view = await renderWithProviders(
+        <ToolActivity message={assistant} results={results} />,
+        { station: 'admin', role: 'admin' },
+      );
+      expect(screen.getByText('Stable synthetic input · Items returned: 1')).toBeVisible();
+      expect(count(input)).toBe(1);
+      expect(count(output)).toBe(1);
+      view.rerender(<ToolActivity message={assistant} results={results} running />);
+      expect(count(input)).toBe(1);
+      expect(count(output)).toBe(1);
+      view.rerender(
+        <ToolActivity
+          message={assistant}
+          results={new Map([[0, { ...response, content: updated }]])}
+        />,
+      );
+      expect(screen.getByText('Stable synthetic input · Items returned: 2')).toBeVisible();
+      expect(count(output)).toBe(1);
+      expect(count(updated)).toBe(1);
+      expect(screen.queryByText(/Synthetic tool result/)).not.toBeInTheDocument();
+    } finally {
+      parse.mockRestore();
+    }
+  });
   it('presents compact as a command and uses a distinct submit action', async () => {
     mocks.get.mockResolvedValue(
       conversation([message('1', 'user', '/compact keep pending plans')]),

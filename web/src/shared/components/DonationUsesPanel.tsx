@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DonationUsesReviewAll, DonationUseReviewResults } from './DonationUsesPanelReview';
@@ -40,6 +40,7 @@ export function DonationUsesPanel({
   const { t } = useTranslation();
   const client = useQueryClient();
   const root = role === 'admin' ? ['admin', 'operations'] : ['user'];
+  const [materialsOpen, setMaterialsOpen] = useState(false);
   const [locked, setLocked] = useState(false);
   const [receipt, setReceipt] = useState<{
     results: UseReviewResult[];
@@ -54,6 +55,7 @@ export function DonationUsesPanel({
       donationKeyId ?? 'all',
       'materials',
     ],
+    enabled: materialsOpen || (role === 'owner' && Boolean(donationKeyId)),
     queryFn: async ({ signal }) => {
       const rows: DonationUse[] = [];
       let last = 1;
@@ -73,12 +75,15 @@ export function DonationUsesPanel({
       return rows;
     },
   });
-  const groups = [
-    ...new Map((query.data ?? []).map((row) => [row.donation_key_id, row])).keys(),
-  ].map((id) => ({
-    id,
-    rows: (query.data ?? []).filter((row) => row.donation_key_id === id),
-  }));
+  const groups = useMemo(() => {
+    const grouped = new Map<string, DonationUse[]>();
+    for (const row of query.data ?? []) {
+      const rows = grouped.get(row.donation_key_id) ?? [];
+      rows.push(row);
+      grouped.set(row.donation_key_id, rows);
+    }
+    return [...grouped].map(([id, rows]) => ({ id, rows }));
+  }, [query.data]);
   const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
     listType: 'donation-materials',
@@ -136,7 +141,12 @@ export function DonationUsesPanel({
       {!onReviewed ? (
         <DonationUseReviewResults results={receipt.results} labels={receipt.labels} />
       ) : null}
-      <Fold title={t('common.connections.donationMaterials')}>
+      <Fold
+        title={t('common.connections.donationMaterials')}
+        open={materialsOpen}
+        onOpenChange={setMaterialsOpen}
+        lazy
+      >
         {query.isPending ? (
           <LoadingState />
         ) : query.error ? (

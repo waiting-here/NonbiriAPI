@@ -1,5 +1,5 @@
 import { compactInstructions, roleLabels } from './presentation';
-import { Fragment, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -40,7 +40,9 @@ type Intent =
   | { kind: 'send' | 'edit'; id?: string; body: SendMessage }
   | { kind: 'clear'; generation: string }
   | { kind: 'cancel'; id: string };
-export function ChatMessage({
+const noPlans: AgentPlan[] = [];
+const MemoOperationPlan = memo(OperationPlan);
+export const ChatMessage = memo(function ChatMessage({
   message,
   editable,
   onEdit,
@@ -99,7 +101,7 @@ export function ChatMessage({
       ) : null}
     </article>
   );
-}
+});
 export function ChatPanel({
   role,
   account,
@@ -180,19 +182,43 @@ export function ChatPanel({
     },
     role === 'admin' ? ['admin'] : ['user'],
   );
-  const rows = [
-    ...new Map([...older, ...(query.data?.messages ?? [])].map((row) => [row.id, row])).values(),
-  ].sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
-  const plans = [
-    ...new Map([...olderPlans, ...(query.data?.plans ?? [])].map((row) => [row.id, row])).values(),
-  ];
-  const toolResults = indexToolResults(rows);
-  const planMessages = new Map(
-    plans.map((plan) => [plan.id, planMessageID(plan, rows, query.data?.job)]),
+  const rows = useMemo(
+    () =>
+      [
+        ...new Map(
+          [...older, ...(query.data?.messages ?? [])].map((row) => [row.id, row]),
+        ).values(),
+      ].sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1)),
+    [older, query.data?.messages],
   );
-  const plansFor = (message: AgentMessage) =>
-    plans.filter((plan) => planMessages.get(plan.id) === message.id);
-  const lastUser = [...rows].reverse().find((row) => row.role === 'user');
+  const plans = useMemo(
+    () => [
+      ...new Map(
+        [...olderPlans, ...(query.data?.plans ?? [])].map((row) => [row.id, row]),
+      ).values(),
+    ],
+    [olderPlans, query.data?.plans],
+  );
+  const toolResults = useMemo(() => indexToolResults(rows), [rows]);
+  const { plansByMessage, unattachedPlans } = useMemo(() => {
+    const plansByMessage = new Map<string, AgentPlan[]>();
+    const unattachedPlans: AgentPlan[] = [];
+    for (const plan of plans) {
+      const messageID = planMessageID(plan, rows, query.data?.job);
+      if (!messageID) unattachedPlans.push(plan);
+      else {
+        const attached = plansByMessage.get(messageID) ?? [];
+        attached.push(plan);
+        plansByMessage.set(messageID, attached);
+      }
+    }
+    return { plansByMessage, unattachedPlans };
+  }, [plans, rows, query.data?.job]);
+  const lastUser = useMemo(() => [...rows].reverse().find((row) => row.role === 'user'), [rows]);
+  const edit = useCallback((message: AgentMessage) => {
+    setEditing(message);
+    setDraft(message.content);
+  }, []);
   const locked =
     operation.isPending || operation.outcome === 'unknown' || Boolean(operation.refreshError);
   const running = activeJob(query.data?.job) || query.data?.job?.state === 'waiting_confirmation';
@@ -304,7 +330,7 @@ export function ChatPanel({
                       <ChatMessage
                         message={row}
                         toolResults={toolResults.results.get(row.id)}
-                        plans={plansFor(row)}
+                        plans={plansByMessage.get(row.id) ?? noPlans}
                         running={Boolean(
                           running &&
                           query.data.job &&
@@ -318,13 +344,10 @@ export function ChatPanel({
                             (row.role === 'user' || row.role === 'assistant')) ||
                             (role === 'steward' && row.id === lastUser?.id))
                         }
-                        onEdit={(message) => {
-                          setEditing(message);
-                          setDraft(message.content);
-                        }}
+                        onEdit={edit}
                       />
-                      {plansFor(row).map((plan) => (
-                        <OperationPlan
+                      {(plansByMessage.get(row.id) ?? noPlans).map((plan) => (
+                        <MemoOperationPlan
                           key={plan.id}
                           role={role}
                           account={account}
@@ -336,17 +359,15 @@ export function ChatPanel({
                   ))
               )}
             </div>
-            {plans
-              .filter((plan) => !planMessages.get(plan.id))
-              .map((plan) => (
-                <OperationPlan
-                  key={plan.id}
-                  role={role}
-                  account={account}
-                  plan={plan}
-                  readOnly={!query.data.enabled}
-                />
-              ))}
+            {unattachedPlans.map((plan) => (
+              <MemoOperationPlan
+                key={plan.id}
+                role={role}
+                account={account}
+                plan={plan}
+                readOnly={!query.data.enabled}
+              />
+            ))}
             {editing ? (
               <Note>
                 <p>{t('common.agent.editingHelp')}</p>
