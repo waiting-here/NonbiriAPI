@@ -58,7 +58,9 @@ func newAgentWireFixture(t *testing.T) (*imageBrowserFixture, chan map[string]an
 func configureAgentDriver(t *testing.T, f *imageBrowserFixture) {
 	t.Helper()
 	old := f.call("GET", "/admin/api/ai/driver", nil, f.adminCookie, true)
-	f.call("PUT", "/admin/api/ai/driver", map[string]any{"expected_revision": old["revision"], "base_url": f.upstream.URL + "/agent/v1", "api_key": agentFixtureSecret, "model": "fixture-assistant", "context_window": 8192, "max_output_tokens": 1024, "extra_parameters": map[string]any{}, "concurrency": 1, "timeout_seconds": 30}, f.adminCookie, true)
+	// Leave room for the built-in tools so workflow log assertions do not depend
+	// on incidental compaction. Compaction has its own context-budget tests.
+	f.call("PUT", "/admin/api/ai/driver", map[string]any{"expected_revision": old["revision"], "base_url": f.upstream.URL + "/agent/v1", "api_key": agentFixtureSecret, "model": "fixture-assistant", "context_window": 32768, "max_output_tokens": 1024, "extra_parameters": map[string]any{}, "concurrency": 1, "timeout_seconds": 30}, f.adminCookie, true)
 }
 
 func configureAgentWorkflow(t *testing.T, f *imageBrowserFixture, mode string, chat bool) {
