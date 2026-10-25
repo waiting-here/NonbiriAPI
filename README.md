@@ -166,8 +166,9 @@ Inspecting loaded egress routes requires the separate egress-read permission. [G
 covers AI Studio and Vertex AI's OpenAI-compatible Chat endpoints.
 
 The experimental [management assistant](docs/api-contract.md#78-experimental-ai-assistant)
-uses a dedicated encrypted Chat Completions key. Chat is closed by default and
-requires a configured endpoint, key and model. Each authorized operator has one
+uses a dedicated encrypted Chat Completions key. [Built-in presets](docs/ai-agent-presets.md)
+provide editable messages, initial shared memories and tool descriptions. Chat
+is closed by default and requires a configured endpoint, key and model. Each authorized operator has one
 conversation, with editable context, retained originals and context compaction.
 In conversation mode, business and memory changes require approval of an exact
 plan; all operations
