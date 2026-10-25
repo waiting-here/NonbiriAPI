@@ -100,7 +100,7 @@ func userDonationHistoryTx(ctx context.Context, tx *sql.Tx, targetID int64, ids 
 		if !full {
 			header = traineeReviewProjection(header)
 		}
-		summary, err := donationSummaryTx(ctx, tx, header, now, false)
+		summary, err := donationSummaryTx(ctx, tx, header, now)
 		if err != nil {
 			return nil, err
 		}

@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"strconv"
 
-	"github.com/waiting-here/NonbiriAPI/internal/authz"
-	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -25,16 +23,14 @@ type AutomationPage[T any] struct {
 	Pagination *pagination.Metadata `json:"pagination"`
 }
 
-func automationDonation(ctx context.Context, tx *sql.Tx, id, now int64, pendingOnly ...bool) (AutomationDonation, error) {
+func automationDonation(ctx context.Context, tx *sql.Tx, id, now int64) (AutomationDonation, error) {
 	header, err := logicalHeaderTx(ctx, tx, id, now)
 	if err != nil {
 		return AutomationDonation{}, err
 	}
 	var count int64
 	query := `SELECT COUNT(*) FROM donation_keys dk WHERE donation_id=?`
-	if len(pendingOnly) > 0 && pendingOnly[0] {
-		query += ` AND EXISTS(SELECT 1 FROM donation_uses u WHERE u.donation_key_id=dk.id AND u.current_pending_revision_id IS NOT NULL)`
-	}
+
 	err = tx.QueryRowContext(ctx, query, id).Scan(&count)
 	return AutomationDonation{ID: header.ID, Status: header.Status, Revision: header.Revision, Description: header.Description, KeyCount: strconv.FormatInt(count, 10), CreatedAt: header.CreatedAt, UpdatedAt: header.UpdatedAt}, err
 }
@@ -60,15 +56,7 @@ func (s *Service) AutomationDonations(ctx context.Context, userID int64, q strin
 	args = append(args, values...)
 
 	if q != "" {
-		keyScope := ""
-		if access.mode != authz.DonationScopeFull {
-			keyScope = ` AND (EXISTS(SELECT 1 FROM donation_uses qu WHERE qu.donation_key_id=qk.id AND qu.current_pending_revision_id IS NOT NULL)`
-			if access.mode == authz.DonationScopeEnhanced {
-				keyScope += " OR " + charityscope.TaggedDonationSQL
-			}
-			keyScope += ")"
-		}
-		selection += ` AND (d.description LIKE ? ESCAPE '\' OR EXISTS(SELECT 1 FROM donation_keys qk WHERE qk.donation_id=d.id` + keyScope + ` AND (qk.safe_note LIKE ? ESCAPE '\' OR qk.canonical_base_url LIKE ? ESCAPE '\' OR qk.connector_type LIKE ? ESCAPE '\')))`
+		selection += ` AND (d.description LIKE ? ESCAPE '\' OR EXISTS(SELECT 1 FROM donation_keys qk WHERE qk.donation_id=d.id` + ` AND (qk.safe_note LIKE ? ESCAPE '\' OR qk.canonical_base_url LIKE ? ESCAPE '\' OR qk.connector_type LIKE ? ESCAPE '\')))`
 		pattern := "%" + escapeAutomationLike(q) + "%"
 		args = append(args, pattern, pattern, pattern, pattern)
 	}
@@ -78,11 +66,7 @@ func (s *Service) AutomationDonations(ctx context.Context, userID int64, q strin
 	}
 	out.Pagination = &meta
 	for _, id := range ids {
-		whole, e := access.wholeTx(ctx, tx, id)
-		if e != nil {
-			return out, e
-		}
-		value, err := automationDonation(ctx, tx, id, now, !whole)
+		value, err := automationDonation(ctx, tx, id, now)
 		if err != nil {
 			return out, err
 		}
@@ -131,15 +115,7 @@ func (s *Service) AutomationDonation(ctx context.Context, userID, id int64) (Aut
 		return AutomationDonation{}, err
 	}
 	defer tx.Rollback()
-	access, err := readDonationAccessScope(ctx, tx, reviewerSteward, userID)
-	if err != nil {
-		return AutomationDonation{}, err
-	}
-	whole, err := access.wholeTx(ctx, tx, id)
-	if err != nil {
-		return AutomationDonation{}, err
-	}
-	out, err := automationDonation(ctx, tx, id, now, !whole)
+	out, err := automationDonation(ctx, tx, id, now)
 	if err != nil {
 		return out, err
 	}
@@ -162,13 +138,6 @@ func (s *Service) AutomationKeys(ctx context.Context, userID, donationID int64, 
 	if err != nil {
 		return out, err
 	}
-	whole, err := access.wholeTx(ctx, tx, donationID)
-	if err != nil {
-		return out, err
-	}
-	if !whole {
-		selection += ` AND EXISTS(SELECT 1 FROM donation_uses u WHERE u.donation_key_id=dk.id AND u.current_pending_revision_id IS NOT NULL)`
-	}
 
 	if q != "" {
 		selection += ` AND (dk.safe_note LIKE ? ESCAPE '\' OR dk.canonical_base_url LIKE ? ESCAPE '\' OR dk.connector_type LIKE ? ESCAPE '\')`
@@ -187,8 +156,9 @@ func (s *Service) AutomationKeys(ctx context.Context, userID, donationID int64, 
 	for i := range out.Data {
 		if access.redact {
 			out.Data[i].EndpointKeyID = nil
+			out.Data[i].OwnerEndpointID = nil
 		}
-		if !whole || !access.manage {
+		if !access.manage {
 			out.Data[i].CanManage = false
 		}
 	}
@@ -208,19 +178,6 @@ func (s *Service) AutomationKey(ctx context.Context, userID, donationID, keyID i
 	if err != nil {
 		return AdminDonationKey{}, err
 	}
-	whole, err := access.wholeTx(ctx, tx, donationID)
-	if err != nil {
-		return AdminDonationKey{}, err
-	}
-	if !whole {
-		var pending bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donation_uses WHERE donation_key_id=? AND current_pending_revision_id IS NOT NULL)`, keyID).Scan(&pending); err != nil {
-			return AdminDonationKey{}, err
-		}
-		if !pending {
-			return AdminDonationKey{}, ErrNotFound
-		}
-	}
 	keys, err := readDonationKeySelectionTx(ctx, tx, donationID, header.Status, now, []int64{keyID})
 	if err != nil {
 		return AdminDonationKey{}, err
@@ -230,8 +187,9 @@ func (s *Service) AutomationKey(ctx context.Context, userID, donationID, keyID i
 	}
 	if access.redact {
 		keys[0].EndpointKeyID = nil
+		keys[0].OwnerEndpointID = nil
 	}
-	if !whole || !access.manage {
+	if !access.manage {
 		keys[0].CanManage = false
 	}
 	return keys[0], tx.Commit()

@@ -46,6 +46,7 @@ var stewardDefaults = map[string]bool{
 	"access_events.read": false, "risk.read": false, "risk.manage": false,
 	"announcements.read": false, "announcements.manage": false, "maintenance.read": false,
 	"maintenance.enable": false, "egress.read": false, "automation": false,
+	"ai.chat": true, "ai.review.read": false, "ai.memory.edit": false,
 }
 
 var stewardLimitMaxima = map[string]int64{
@@ -120,6 +121,20 @@ func DecodeStewardPermissions(level int, revision int64, permissions, limits, do
 	p.Permissions, p.Limits = nil, nil
 	if revision < 0 || json.Unmarshal([]byte(permissions), &p.Permissions) != nil || json.Unmarshal([]byte(limits), &p.Limits) != nil {
 		return StewardPermissions{}, ErrInvalidRequirement
+	}
+	// Previously configured policies do not acquire new privileges implicitly.
+	if len(p.Permissions) == len(stewardDefaults)-3 {
+		legacy := true
+		for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit"} {
+			if _, ok := p.Permissions[key]; ok {
+				legacy = false
+			}
+		}
+		if legacy {
+			for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit"} {
+				p.Permissions[key] = false
+			}
+		}
 	}
 	p.Revision = strconv.FormatInt(revision, 10)
 	p.DonationScope = DonationScope(donationScope)
@@ -228,6 +243,14 @@ func StewardRoutePermission(method, path string) string {
 	p := strings.TrimPrefix(path, "/api/steward/")
 	read := method == "GET" || method == "HEAD"
 	switch {
+	case (read || method == "POST" || method == "PUT") && (p == "ai/chat" || strings.HasPrefix(p, "ai/chat/")):
+		return "ai.chat"
+	case read && (p == "ai/reviews" || strings.HasPrefix(p, "ai/reviews/")):
+		return "ai.review.read"
+	case (read || method == "PUT") && (p == "ai/memories/auto_review" || p == "ai/memories/chat"):
+		return "ai.memory.edit"
+	case strings.HasPrefix(p, "ai/"):
+		return "unconfigured"
 	case strings.HasPrefix(p, "automation/"):
 		inner := strings.TrimPrefix(p, "automation/")
 		if strings.HasPrefix(inner, "donations") {
@@ -330,8 +353,6 @@ func StewardRoutePermission(method, path string) string {
 			return "charity.read"
 		}
 		return "charity.manage"
-	case p == "donation-handling":
-		return "donations.handle"
 	case strings.HasPrefix(p, "donation-sources"):
 		return "donations.manage_keys"
 	case strings.HasPrefix(p, "donation-keys"):

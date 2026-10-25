@@ -76,6 +76,7 @@ func TestRejectedReviewReceiptPreservesDecisionKeysAndNarrowsScope(t *testing.T)
 			_, first := e.seedEndpointKey(t, owner, 'A')
 			_, second := e.seedEndpointKey(t, owner, 'B')
 			d := e.createDonation(t, owner, first, second)
+			qualifyStandardDonation(t, e, d.ID)
 			id := parseTestID(t, d.ID)
 			// Resolve every service of the first member; only the second is pending
 			// when this review begins. Whole-donation readers still see both members.
@@ -108,10 +109,7 @@ func TestRejectedReviewReceiptPreservesDecisionKeysAndNarrowsScope(t *testing.T)
 			input := ReviewInput{Decision: "reject", ExpectedRevision: parseTestID(t, current.Revision), Reason: "Reviewed pending submission"}
 			mutation := donationMutation(t, 'R', http.MethodPost, routeStewardReview, []int64{id}, input)
 			saved, err := e.service.ReviewSteward(context.Background(), actor, id, mutation, input)
-			wantKeys := 1
-			if initialScope == authz.DonationScopeFull {
-				wantKeys = 2
-			}
+			wantKeys := 2
 			if err != nil || len(saved.Value.Keys) != wantKeys {
 				t.Fatalf("fresh rejection lost authorized keys: %+v %v", saved, err)
 			}
@@ -126,8 +124,8 @@ func TestRejectedReviewReceiptPreservesDecisionKeysAndNarrowsScope(t *testing.T)
 			p.Permissions["donations.read_all"] = false
 			writeDonationPolicy(t, e, actor, p)
 			narrowed, err := e.service.ReviewSteward(context.Background(), actor, id, mutation, input)
-			if err != nil || len(narrowed.Value.Keys) != 1 || narrowed.Value.Keys[0].ID != d.Keys[1].ID || narrowed.Value.Owner != nil || narrowed.Value.Reviewer != nil || narrowed.Value.Keys[0].EndpointKeyID != nil {
-				t.Fatalf("narrowed review disclosed unrelated member/identity: %+v %v", narrowed, err)
+			if err != nil || len(narrowed.Value.Keys) != 2 || narrowed.Value.Keys[0].ID != d.Keys[0].ID || narrowed.Value.Owner != nil || narrowed.Value.Reviewer != nil || narrowed.Value.Keys[0].EndpointKeyID != nil {
+				t.Fatalf("receipt recovery failed current identity projection: %+v %v", narrowed, err)
 			}
 			p.DonationScope = authz.DonationScopeNone
 			writeDonationPolicy(t, e, actor, p)

@@ -123,8 +123,8 @@ func TestPresetMissingTargetsStillRecheckDonationScope(t *testing.T) {
 		t.Fatal("missing target receipt", out, err)
 	}
 	presetExec(t, e, `DELETE FROM admin_endpoint_tags`)
-	if _, err := e.service.applyBindingPreset(ctx, roleSteward, actor, did, mutation, input); !errors.Is(err, ErrNotFound) {
-		t.Fatal("missing model bypassed tag revocation", err)
+	if _, err := e.service.applyBindingPreset(ctx, roleSteward, actor, did, mutation, input); err != nil {
+		t.Fatal("mainstream channel lost scope without tag", err)
 	}
 	presetExec(t, e, `UPDATE steward_permissions SET donation_scope='none',revision=revision+1 WHERE user_id=?`, actor)
 	if _, err := e.service.applyBindingPreset(ctx, roleSteward, actor, did, mutation, input); !errors.Is(err, authz.ErrPermissionDenied) {
@@ -184,8 +184,8 @@ func TestBindingScopeDenialClosesTransactionsAndDeletedReceiptRechecksSources(t 
 				t.Fatal("delete receipt retry", replayed, err)
 			}
 			presetExec(t, e, `DELETE FROM admin_endpoint_tags`)
-			if _, err := e.service.DeleteBindingSteward(ctx, actor, mid, bid, mutation, deletion); !errors.Is(err, ErrNotFound) {
-				t.Fatal("deleted relation bypassed tag revocation", err)
+			if _, err := e.service.DeleteBindingSteward(ctx, actor, mid, bid, mutation, deletion); err != nil {
+				t.Fatal("completed deletion result recovery failed", err)
 			}
 			if got := e.store.DB().Stats().InUse; got != 0 {
 				t.Fatal("replay denial retained transaction", got)

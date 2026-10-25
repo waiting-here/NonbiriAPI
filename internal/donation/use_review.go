@@ -62,11 +62,10 @@ func (s *Service) reviewUseTx(ctx context.Context, tx *sql.Tx, access useAccess,
 		if err != nil {
 			return err
 		}
-		whole, err := rangeScope.requireTx(ctx, tx, donationID, now)
+		_, err = rangeScope.requireTx(ctx, tx, donationID, now)
 		if err != nil {
 			return err
 		}
-		access.reviewOnly = !whole
 	}
 	if err := requireUseAccessTx(ctx, tx, access, donationID, item.UseID, now, true); err != nil {
 		return err
@@ -181,7 +180,7 @@ func (s *Service) reviewUses(ctx context.Context, role reviewerRole, actorID, do
 	}
 	committed := false
 	defer finishTx(tx, &committed)
-	access := useAccess{role: actualRole, actorID: actorID, reviewOnly: actualRole == reviewerTrainee}
+	access := useAccess{role: actualRole, actorID: actorID}
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
@@ -189,19 +188,18 @@ func (s *Service) reviewUses(ctx context.Context, role reviewerRole, actorID, do
 	if err := requireManagedDonationTx(ctx, tx, actualRole, donationID, now); err != nil {
 		return empty, err
 	}
-	rangeErr := requireDonationRangeTx(ctx, tx, actualRole, actorID, donationID, now)
 	decision, err := beginMutation(ctx, tx, string(actualRole), actorID, idempotency.ScopeControlMutation, mutation, now)
 	if err != nil {
 		return empty, err
 	}
 	if decision.Kind == idempotency.Replay {
-		if rangeErr != nil && !errors.Is(rangeErr, ErrForbidden) {
-			return empty, rangeErr
+		if _, err := readDonationAccessScope(ctx, tx, actualRole, actorID); err != nil {
+			return empty, err
 		}
 		return replay[UseReviewReceipt](decision)
 	}
-	if rangeErr != nil {
-		return empty, rangeErr
+	if err := requireDonationRangeTx(ctx, tx, actualRole, actorID, donationID, now); err != nil {
+		return empty, err
 	}
 	receipt := UseReviewReceipt{Results: make([]UseReviewResult, 0, len(items))}
 	for _, item := range items {
@@ -278,7 +276,7 @@ FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donat
 			return err
 		}
 		for _, item := range items {
-			if err := s.reviewUseTx(ctx, tx, useAccess{role: reviewerRole(role), actorID: actorID, reviewOnly: reviewerRole(role) == reviewerTrainee}, donationID, item, now); err != nil {
+			if err := s.reviewUseTx(ctx, tx, useAccess{role: reviewerRole(role), actorID: actorID}, donationID, item, now); err != nil {
 				return err
 			}
 		}

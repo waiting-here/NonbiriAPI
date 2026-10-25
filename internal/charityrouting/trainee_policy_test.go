@@ -101,3 +101,40 @@ func TestRequestPolicyAndCallerSnapshotUseCurrentAuthority(t *testing.T) {
 		t.Fatal("request policy ignored access", err)
 	}
 }
+
+func TestStandardQualifiedCustomSourceCanAddAcrossMainstreamModels(t *testing.T) {
+	e := newRoutingTestEnv(t)
+	e.seedUser(t, true, nil)
+	five := int64(5)
+	actor := e.seedUser(t, false, &five)
+	owner := e.seedUser(t, false, nil)
+	first := e.createModel(t, 'A')
+	secondInput := testModelCreate()
+	secondInput.Model = "second-scope-target"
+	secondResult, err := e.service.CreateAdmin(context.Background(), routingMutation(t, 'B', http.MethodPost, routeAdminModels, nil, secondInput), secondInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := secondResult.Value
+	a, _ := parsePositiveID(first.ID)
+	b, _ := parsePositiveID(second.ID)
+	if _, err := e.store.DB().Exec(`UPDATE charity_models SET is_mainstream=1 WHERE id IN (?,?)`, a, b); err != nil {
+		t.Fatal(err)
+	}
+	_, key, _ := e.seedCandidate(t, owner, 'q', "upstream")
+	batch := BindingBatch{ExpectedBindingRevision: "0", Selections: []BindingSelection{{DonationKeyID: fmt.Sprint(key), UpstreamModelID: "upstream"}}}
+	ctx := context.Background()
+	if _, err := e.service.AddBindingsAdmin(ctx, a, routingMutation(t, 'C', http.MethodPost, routeAdminBindingBatch, []int64{a}, batch), batch); err != nil {
+		t.Fatal(err)
+	}
+	result, err := e.service.AddBindingsSteward(ctx, actor, b, routingMutation(t, 'D', http.MethodPost, routeStewardBindingBatch, []int64{b}, batch), batch)
+	if err != nil || len(result.Value.Bindings) != 1 {
+		t.Fatal("qualified custom source cannot add target", result, err)
+	}
+	if _, err := e.store.DB().Exec(`UPDATE charity_models SET is_mainstream=0 WHERE id=?`, b); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := e.service.BindingCandidatesSteward(ctx, actor, b, CandidateQuery{Limit: 10}); !errors.Is(err, ErrNotFound) {
+		t.Fatal("target scope expanded", err)
+	}
+}

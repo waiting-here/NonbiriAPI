@@ -246,12 +246,6 @@ func (s *Service) listRole(ctx context.Context, userID int64, filter ManagementF
 	if err != nil {
 		return nil, 0, err
 	}
-	if access.mode == "standard" {
-		filter, err = pendingReviewFilter(filter)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
 
 	query := `SELECT d.id FROM donations d JOIN donation_handling h ON h.donation_id=d.id WHERE d.id>?
  AND (d.status IN ('pending','approved') OR d.terminal_at>?)`
