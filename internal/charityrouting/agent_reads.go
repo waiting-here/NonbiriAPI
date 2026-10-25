@@ -43,7 +43,7 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 			return nil, err
 		}
 	}
-	role, scope, err := agentScope(ctx, tx, actor, agentplan.Operation{Kind: tool}, parsed, authorize)
+	role, scope, err := s.agentScope(ctx, tx, actor, agentplan.Operation{Kind: tool}, parsed, authorize)
 	if err != nil {
 		return nil, err
 	}

@@ -120,7 +120,7 @@ func (a agentAuthority) AuthorizeStewardMutation(ctx context.Context, tx *sql.Tx
 	return a.check(ctx, tx, id, false)
 }
 
-func agentAccess(ctx context.Context, tx *sql.Tx, actor agentplan.Actor, op agentplan.Operation, authorize agentplan.Authorize) (useAccess, error) {
+func (s *Service) agentAccess(ctx context.Context, tx *sql.Tx, actor agentplan.Actor, op agentplan.Operation, authorize agentplan.Authorize) (useAccess, error) {
 	a := useAccess{actorID: actor.ID, role: reviewerSteward, scope: charityscope.Scope{ActorID: actor.ID, DonationScope: authz.DonationScopeFull}}
 	if ctx == nil || tx == nil || authorize == nil || actor.ID <= 0 {
 		return a, ErrInvalidRequest
@@ -133,7 +133,11 @@ func agentAccess(ctx context.Context, tx *sql.Tx, actor agentplan.Actor, op agen
 	}
 	var admin, banned bool
 	var level int
-	if err := tx.QueryRowContext(ctx, `SELECT is_admin,is_banned,COALESCE(level,auto_level) FROM users WHERE id=?`, actor.ID).Scan(&admin, &banned, &level); errors.Is(err, sql.ErrNoRows) {
+	now, err := s.nowUnix()
+	if err != nil {
+		return a, err
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT is_admin,is_banned AND (banned_until IS NULL OR banned_until>?),COALESCE(level,auto_level) FROM users WHERE id=?`, now, actor.ID).Scan(&admin, &banned, &level); errors.Is(err, sql.ErrNoRows) {
 		return a, ErrUnauthorized
 	} else if err != nil {
 		return a, err
@@ -259,7 +263,7 @@ func (s *Service) AgentPreview(ctx context.Context, tx *sql.Tx, actor agentplan.
 	if err != nil {
 		return out, err
 	}
-	access, err := agentAccess(ctx, tx, actor, op, authorize)
+	access, err := s.agentAccess(ctx, tx, actor, op, authorize)
 	if err != nil {
 		return out, err
 	}
@@ -285,7 +289,7 @@ func (s *Service) AgentApply(ctx context.Context, tx *sql.Tx, actor agentplan.Ac
 	if err != nil {
 		return nil, err
 	}
-	access, err := agentAccess(ctx, tx, actor, op, authorize)
+	access, err := s.agentAccess(ctx, tx, actor, op, authorize)
 	if err != nil {
 		return nil, err
 	}

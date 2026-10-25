@@ -92,6 +92,43 @@ func TestAgentCharityModelAndBindingTransactions(t *testing.T) {
 	}
 }
 
+func TestAgentCharityHonorsTemporaryBanExpiry(t *testing.T) {
+	e := newRoutingTestEnv(t)
+	level := int64(6)
+	id := e.seedUser(t, false, &level)
+	actor := agentplan.Actor{ID: id, Role: "level6"}
+	ctx := context.Background()
+	op := agentOp(t, "charity.model.create", "", testModelCreate())
+	now, err := e.service.nowUnix()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name    string
+		until   any
+		allowed bool
+	}{{"permanent", nil, false}, {"active", now + 1, false}, {"expired", now, true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := e.store.DB().Exec(`UPDATE users SET is_banned=1,banned_until=? WHERE id=?`, tc.until, id); err != nil {
+				t.Fatal(err)
+			}
+			tx, err := e.store.DB().BeginTx(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback()
+			_, readErr := e.service.AgentRead(ctx, tx, actor, "charity_models", json.RawMessage(`{}`), allowAgent)
+			_, previewErr := e.service.AgentPreview(ctx, tx, actor, op, allowAgent)
+			_, applyErr := e.service.AgentApply(ctx, tx, actor, op, allowAgent)
+			for _, err := range []error{readErr, previewErr, applyErr} {
+				if tc.allowed && err != nil || !tc.allowed && !errors.Is(err, ErrForbidden) {
+					t.Fatal("ban authority", err)
+				}
+			}
+		})
+	}
+}
+
 func TestAgentBindingLateSourceAndTargetScope(t *testing.T) {
 	e := newRoutingTestEnv(t)
 	admin := e.seedUser(t, true, nil)

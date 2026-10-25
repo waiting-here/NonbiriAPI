@@ -107,7 +107,7 @@ func parseAgentOperation(op agentplan.Operation) (agentInput, error) {
 
 // agentScope deliberately uses the supplied authorization boundary instead of
 // a browser-route context. It still derives every resource rule from live data.
-func agentScope(ctx context.Context, tx *sql.Tx, actor agentplan.Actor, op agentplan.Operation, in agentInput, authorize agentplan.Authorize) (roleKind, charityscope.Scope, error) {
+func (s *Service) agentScope(ctx context.Context, tx *sql.Tx, actor agentplan.Actor, op agentplan.Operation, in agentInput, authorize agentplan.Authorize) (roleKind, charityscope.Scope, error) {
 	scope := charityscope.Scope{ActorID: actor.ID, ModelID: in.modelID, DonationScope: authz.DonationScopeFull}
 	role := roleSteward
 	if ctx == nil || tx == nil || authorize == nil || actor.ID <= 0 {
@@ -121,7 +121,11 @@ func agentScope(ctx context.Context, tx *sql.Tx, actor agentplan.Actor, op agent
 	}
 	var admin, banned bool
 	var level int
-	if err := tx.QueryRowContext(ctx, `SELECT is_admin,is_banned,COALESCE(level,auto_level) FROM users WHERE id=?`, actor.ID).Scan(&admin, &banned, &level); err != nil {
+	now, err := s.nowUnix()
+	if err != nil {
+		return role, scope, err
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT is_admin,is_banned AND (banned_until IS NULL OR banned_until>?),COALESCE(level,auto_level) FROM users WHERE id=?`, now, actor.ID).Scan(&admin, &banned, &level); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return role, scope, ErrUnauthorized
 		}
@@ -197,7 +201,7 @@ func (s *Service) AgentPreview(ctx context.Context, tx *sql.Tx, actor agentplan.
 	if err != nil {
 		return out, err
 	}
-	_, scope, err := agentScope(ctx, tx, actor, op, in, authorize)
+	_, scope, err := s.agentScope(ctx, tx, actor, op, in, authorize)
 	if err != nil {
 		return out, err
 	}
@@ -237,7 +241,7 @@ func (s *Service) AgentApply(ctx context.Context, tx *sql.Tx, actor agentplan.Ac
 	if err != nil {
 		return nil, err
 	}
-	role, scope, err := agentScope(ctx, tx, actor, op, in, authorize)
+	role, scope, err := s.agentScope(ctx, tx, actor, op, in, authorize)
 	if err != nil {
 		return nil, err
 	}

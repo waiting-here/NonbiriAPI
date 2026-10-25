@@ -41,7 +41,7 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 	if in.Page < 1 || in.Page > 10000 || in.PageSize < 1 || in.PageSize > 100 {
 		return nil, ErrInvalidRequest
 	}
-	access, err := agentAccess(ctx, tx, actor, agentplan.Operation{Kind: tool}, authorize)
+	access, err := s.agentAccess(ctx, tx, actor, agentplan.Operation{Kind: tool}, authorize)
 	if err != nil {
 		return nil, err
 	}
