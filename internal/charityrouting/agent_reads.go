@@ -19,6 +19,9 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 	if s == nil {
 		return nil, ErrUnavailable
 	}
+	if tool == "charity_binding_presets" {
+		return s.agentReadPresets(ctx, tx, actor, args, authorize)
+	}
 	if tool != "charity_models" {
 		return nil, ErrInvalidRequest
 	}

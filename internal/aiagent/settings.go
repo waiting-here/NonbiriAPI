@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-var toolNames = []string{"donations", "donation_models", "review_history", "charity_models", "users", "site_status", "web_search", "propose_operations", "edit_memory"}
+var toolNames = []string{"donations", "donation_models", "review_history", "charity_models", "charity_binding_presets", "users", "site_status", "web_search", "propose_operations", "edit_memory"}
 
 func defaultSettings() Settings {
 	tools := make(map[string]bool, len(toolNames))
@@ -44,6 +44,12 @@ func readSettings(ctx context.Context, query interface {
 		return Settings{}, nil, Actor{}, err
 	}
 	result.ToolDescriptions = mergeToolDescriptions(defaultToolDescriptions(), result.ToolDescriptions)
+	if result.Tools == nil {
+		result.Tools = map[string]bool{}
+	}
+	if _, configured := result.Tools["charity_binding_presets"]; !configured {
+		result.Tools["charity_binding_presets"] = true
+	}
 	result.Revision, result.Mode, result.SearchHasKey = revision, mode, len(secret) > 0
 	return result, secret, Actor{ID: owner, Role: "admin", Label: label}, nil
 }

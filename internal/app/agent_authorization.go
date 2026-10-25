@@ -34,6 +34,8 @@ func agentPermission(action string) string {
 		return "donations.browse"
 	case "charity_models":
 		return "charity.read"
+	case "charity_binding_presets", "charity.binding.apply_preset":
+		return "charity.presets"
 	case "users":
 		return "users.read"
 	case "site_status":
@@ -107,6 +109,9 @@ func (a agentAuthority) Authorize(ctx context.Context, tx *sql.Tx, actor agentpl
 		ctx = authz.WithStewardPermission(ctx, permission)
 	}
 	_, err := a.authorizer.Authorize(ctx, tx, sessionAgentActor(actor), authz.Requirement{Role: role, FreshElevation: action == "fresh_elevation"})
+	if err == nil && actor.Role != "admin" && (action == "charity_binding_presets" || action == "charity.binding.apply_preset") {
+		err = authz.RequireStewardPermission(ctx, tx, actor.ID, "charity.manage")
+	}
 	return err
 }
 

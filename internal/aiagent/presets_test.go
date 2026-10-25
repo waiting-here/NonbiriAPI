@@ -131,6 +131,7 @@ func TestPresetsLegacySettingsAndPartialDescriptions(t *testing.T) {
 	legacy := defaultSettings()
 	legacy.ChatEnabled = true
 	legacy.Tools["donations"] = false
+	delete(legacy.Tools, "charity_binding_presets")
 	legacy.AutoTemplate = []TemplateMessage{{Role: "system", Content: "Existing auto {{memory}}"}, {Role: "user", Content: "{{intelligence}}"}}
 	legacy.ChatTemplate = []TemplateMessage{{Role: "system", Content: "Existing chat {{memory}}"}, {Role: "user", Content: "{{conversation}}"}}
 	raw, _ := json.Marshal(legacy)
@@ -142,7 +143,7 @@ func TestPresetsLegacySettingsAndPartialDescriptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	current, err := f.s.Settings(ctx, f.actor)
-	if err != nil || current.Revision != 7 || current.Mode != "preview" || !current.ChatEnabled || current.Tools["donations"] ||
+	if err != nil || current.Revision != 7 || current.Mode != "preview" || !current.ChatEnabled || current.Tools["donations"] || !current.Tools["charity_binding_presets"] ||
 		!reflect.DeepEqual(current.AutoTemplate, legacy.AutoTemplate) || !reflect.DeepEqual(current.ChatTemplate, legacy.ChatTemplate) ||
 		!reflect.DeepEqual(current.ToolDescriptions, defaultToolDescriptions()) {
 		t.Fatal("legacy settings changed", current, err)
