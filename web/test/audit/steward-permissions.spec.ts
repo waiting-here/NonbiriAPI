@@ -120,7 +120,13 @@ test('admin and level 6 configure actual level-5 permissions while the shared UI
     await expect(page.getByText(copy.common.outcome.saved, { exact: true })).toBeVisible();
     const full = (await get(admin, state.admin_url, path)) as Policy;
     expect(full.donation_scope).toBe('full');
-    expect(Object.keys(full.permissions)).toHaveLength(48);
+    expect(Object.keys(full.permissions)).toHaveLength(51);
+    expect(Object.values(full.permissions).every((value) => value)).toBe(true);
+    expect(full.permissions).toMatchObject({
+      'ai.chat': true,
+      'ai.review.read': true,
+      'ai.memory.edit': true,
+    });
     await visitor.goto(`${state.user_url}/steward/endpoints`);
     await expect(
       visitor.getByRole('heading', { name: copy.management.endpoints.title, exact: true }),

@@ -245,6 +245,10 @@ test('approve pending content, page 240 targets and bind 144 cross-page selectio
         '/admin/api/donations/' + data.pending_donation_id + '/uses?page=1&page_size=20',
       )
     ).data as DonationUse[];
+    const availableServices = pendingUses
+      .filter((use) => use.donation_key_id === data.pending_key_id)
+      .map((use) => use.native_service);
+    expect(availableServices).toHaveLength(3);
     const chat = pendingUses.find(
       (use) =>
         use.donation_key_id === data.pending_key_id && use.native_service === 'chat_completions',
@@ -399,7 +403,7 @@ test('approve pending content, page 240 targets and bind 144 cross-page selectio
     };
     expect(submitted.targets).toHaveLength(144);
     expect(submitted.targets.map((target) => target.native_services)).toEqual(
-      Array.from({ length: 144 }, () => ['chat_completions']),
+      Array.from({ length: 144 }, () => availableServices),
     );
     expect(await response.json()).toEqual({
       items: [
@@ -422,7 +426,7 @@ test('approve pending content, page 240 targets and bind 144 cross-page selectio
     expect(saved.bindings).toHaveLength(144);
     for (const binding of saved.bindings)
       expect(binding.targets).toEqual([
-        expect.objectContaining({ native_services: ['chat_completions'] }),
+        expect.objectContaining({ native_services: availableServices }),
       ]);
     expect(
       new Set(saved.bindings.map((entry: { upstream_model_id: string }) => entry.upstream_model_id))
@@ -893,14 +897,47 @@ test('owner current and ended defaults, mobile numbered controls, single and bat
   }
 });
 
-test('level 5 handles all four custom-source keys and edits shared limits only in model scope; level 6 applies templates', async ({
+test('level 5 with full donation scope handles four custom-source keys and edits shared limits; level 6 applies templates', async ({
   browser,
 }) => {
   const state = fixture(),
     data = state.management.workflow;
   const context = await session(browser, 5);
+  const policyAdmin = await session(browser, 'admin');
+  const policyPath = `/admin/api/users/${state.users.find((user) => user.level === 5)!.id}/steward-permissions`;
+  const originalPolicy = await read(policyAdmin, state.admin_url, policyPath);
   try {
+    expect(originalPolicy.donation_scope).toBe('standard');
+    const outsideScope = await context.request.get(
+      state.user_url + '/api/steward/donations/' + data.processing_donation_id,
+    );
+    expect(outsideScope.status()).toBe(404);
+    expect((await outsideScope.json()).error.code).toBe('not_found');
+    const granted = await policyAdmin.request.put(state.admin_url + policyPath, {
+      headers: { Origin: state.admin_url, 'Idempotency-Key': randomUUID() },
+      data: {
+        expected_revision: originalPolicy.revision,
+        donation_scope: 'full',
+        permissions: originalPolicy.permissions,
+        limits: originalPolicy.limits,
+      },
+    });
+    expect(granted.ok()).toBe(true);
+    expect((await granted.json()).donation_scope).toBe('full');
     const page = await context.newPage();
+    const snapshot = (key: ManagedDonationKey) => ({
+      id: key.id,
+      charity_state: key.charity_state,
+      physical_enabled: key.physical_enabled,
+      streak: key.streak,
+      limits: key.limits,
+      usage: key.usage,
+      token_reserve: key.token_reserve,
+      input_token_reserve: key.input_token_reserve,
+      output_token_reserve: key.output_token_reserve,
+      binding_count: key.binding_count,
+    });
+    let memberSnapshot: ReturnType<typeof snapshot>[] = [];
     const reviewContext = await session(browser, 'admin');
     try {
       const donationPath = '/admin/api/donations/' + data.processing_donation_id;
@@ -908,19 +945,8 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
       expect(original.status).toBe('approved');
       expect(original.keys).toHaveLength(4);
       expect(original.use_summary.approved).toBe('0');
-      const snapshot = (key: ManagedDonationKey) => ({
-        id: key.id,
-        charity_state: key.charity_state,
-        physical_enabled: key.physical_enabled,
-        streak: key.streak,
-        limits: key.limits,
-        usage: key.usage,
-        token_reserve: key.token_reserve,
-        input_token_reserve: key.input_token_reserve,
-        output_token_reserve: key.output_token_reserve,
-        binding_count: key.binding_count,
-      });
       const members = original.keys as ManagedDonationKey[];
+      memberSnapshot = members.map(snapshot);
       for (const key of members) {
         expect(key.charity_state).toBe('disabled');
         expect(key.physical_enabled).toBe(true);
@@ -948,19 +974,17 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
         state.user_url +
           `/steward?tab=charity&charity_section=donations&donation_id=${data.processing_donation_id}`,
       );
-      const summaries = page.locator('summary').filter({
-        has: page.getByText(common.common.modelTypes.chat_completions, { exact: true }),
-      });
+      const materials = await openUseFold(page);
+      await expect(materials.getByRole('checkbox')).toHaveCount(0);
       for (const row of chats) {
         expect(row.pending).not.toBeNull();
         expect(row.capabilities.can_review).toBe(true);
         const material = row.pending!;
-        const fold = summaries.locator('..').filter({
-          hasText: material.display_head + '…' + material.display_tail,
-        });
-        await expect(fold).toHaveCount(1);
-        if ((await fold.getAttribute('open')) === null)
-          await fold.locator(':scope > summary').click();
+        await expect(
+          materials.locator('strong.nb-mono').filter({
+            hasText: material.display_head + '…' + material.display_tail,
+          }),
+        ).toHaveCount(1);
       }
       await page
         .getByLabel(connections.reviewReason, { exact: true })
@@ -969,22 +993,26 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
         (response) =>
           response.request().method() === 'POST' &&
           new URL(response.url()).pathname ===
-            '/api/steward/donations/' + data.processing_donation_id + '/uses/review',
+            '/api/steward/donations/' + data.processing_donation_id + '/pending-review',
       );
       await page.getByRole('button', { name: connections.approveAllUses, exact: true }).click();
       const response = await approval;
       expect(response.status()).toBe(200);
+      expect(response.request().headers()['idempotency-key']).toBeTruthy();
       expect(response.request().postDataJSON()).toEqual({
-        items: pending.map((row) => ({
+        expected_revision: original.revision,
+        decision: 'approve',
+        reason: 'Synthetic paused member service approval',
+        uses: pending.map((row) => ({
           use_id: row.id,
           expected_revision: row.revision,
           expected_review_revision: row.pending!.expected_review_revision,
-          decision: 'approve',
-          review_note: 'Synthetic paused member service approval',
         })),
       });
-      expect(await response.json()).toEqual({
-        results: pending.map((row) => ({ use_id: row.id, ok: true })),
+      expect(await response.json()).toMatchObject({
+        id: data.processing_donation_id,
+        status: 'approved',
+        use_summary: { pending: '0', approved: '12' },
       });
       const prepared = await read(reviewContext, state.admin_url, donationPath);
       expect(prepared.status).toBe(original.status);
@@ -995,15 +1023,30 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
     }
     await page.goto(
       state.user_url +
-        `/steward?tab=charity&charity_section=handling&handling_donation=${data.processing_donation_id}`,
+        `/steward?tab=charity&charity_section=donations&donation_id=${data.processing_donation_id}`,
     );
-    await expect(page.getByText('4 keys, 0 with connections.', { exact: true })).toBeVisible();
     await expect(
-      page.getByText('This action marks the whole donation, including all 4 keys.', {
-        exact: true,
-      }),
+      page.getByRole('heading', { name: common.common.donationReview.title, exact: true }),
     ).toBeVisible();
-    await page.getByRole('button', { name: workflow.processWhole, exact: true }).click();
+    const handling = page.getByRole('region', {
+      name: common.common.donationHandling.title,
+      exact: true,
+    });
+    const processed = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname ===
+          `/api/steward/donations/${data.processing_donation_id}/handling/processed`,
+    );
+    await handling
+      .getByRole('button', { name: common.common.donationHandling.process, exact: true })
+      .click();
+    const processResponse = await processed;
+    expect(processResponse.status()).toBe(200);
+    expect(await processResponse.json()).toMatchObject({
+      donation_id: data.processing_donation_id,
+      handling: { state: 'processed' },
+    });
     const admin = await session(browser, 'admin');
     try {
       await expect
@@ -1018,6 +1061,13 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
             ).handling.state,
         )
         .toBe('processed');
+      const handled = await read(
+        admin,
+        state.admin_url,
+        '/admin/api/donations/' + data.processing_donation_id,
+      );
+      expect(handled.keys).toHaveLength(4);
+      expect(handled.keys.map(snapshot)).toEqual(memberSnapshot);
     } finally {
       await admin.close();
     }
@@ -1095,8 +1145,13 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
     const keyPath = `/api/steward/donations/${paused.donation_id}/keys/${pausedID}`;
     const scopePath = `${keyPath}?charity_model_id=${data.models[0]}`;
     const unscoped = await context.request.get(state.user_url + keyPath);
-    expect(unscoped.status()).toBe(403);
-    expect((await unscoped.json()).error.code).toBe('steward_permission_denied');
+    expect(unscoped.status()).toBe(200);
+    expect(await unscoped.json()).toMatchObject({
+      key_id: pausedID,
+      donation_id: paused.donation_id,
+      can_manage: true,
+      endpoint_key_id: null,
+    });
     const before = await read(context, state.user_url, scopePath);
     expect(before).toMatchObject({
       key_id: pausedID,
@@ -1170,7 +1225,21 @@ test('level 5 handles all four custom-source keys and edits shared limits only i
       binding_count: before.binding_count,
     });
   } finally {
-    await context.close();
+    try {
+      const currentPolicy = await read(policyAdmin, state.admin_url, policyPath);
+      const restored = await policyAdmin.request.put(state.admin_url + policyPath, {
+        headers: { Origin: state.admin_url, 'Idempotency-Key': randomUUID() },
+        data: {
+          expected_revision: currentPolicy.revision,
+          donation_scope: originalPolicy.donation_scope,
+          permissions: originalPolicy.permissions,
+          limits: originalPolicy.limits,
+        },
+      });
+      expect.soft(restored.ok(), `Restore donation scope: HTTP ${restored.status()}`).toBe(true);
+    } finally {
+      await Promise.all([context.close(), policyAdmin.close()]);
+    }
   }
   const six = await session(browser, 6);
   try {
@@ -1381,7 +1450,7 @@ test('level 5 reviews independent pending sources, retains receipts after refres
       expect(pending.native_service).toBe('chat_completions');
       expect(pending.endpoint_key_id).toBeNull();
       expect(pending.capabilities.can_review).toBe(true);
-      expect(pending.capabilities.can_manage).toBe(false);
+      expect(pending.capabilities.can_manage).toBe(true);
       expect(pending.pending).not.toBeNull();
       const expectedBody = {
         expected_revision: pendingDonation.revision,
@@ -1517,7 +1586,7 @@ test('level 5 reviews independent pending sources, retains receipts after refres
       );
       await expect(
         page.getByRole('button', { name: connections.configureReviewedUse, exact: true }),
-      ).toHaveCount(0);
+      ).toHaveCount(decision === 'approve' ? 1 : 0);
 
       await expect(
         page.getByRole('button', {

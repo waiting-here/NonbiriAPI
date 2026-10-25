@@ -693,7 +693,7 @@ test('shared versions keep old charity approval and survive deletion of their or
   }
 });
 
-test('additional services stay pending with their old budget and use-only trainee authority', async ({
+test('additional services stay pending with their old budget and redacted steward management', async ({
   browser,
 }, info) => {
   const owner = await session(browser, 'owner');
@@ -813,14 +813,14 @@ test('additional services stay pending with their old budget and use-only traine
     for (const row of projected.data) {
       expect(row.endpoint_key_id).toBeNull();
       expect(row.capabilities.can_review).toBe(true);
-      expect(row.capabilities.can_manage).toBe(false);
+      expect(row.capabilities.can_manage).toBe(true);
     }
     await expect(reviewer.getByRole('button', { name: c.pauseSharedKey, exact: true })).toHaveCount(
       0,
     );
     await expect(
       reviewer.getByRole('button', { name: c.modelsAndBindings, exact: true }),
-    ).toHaveCount(0);
+    ).toBeEnabled();
     await openFold(reviewer, c.donationMaterials);
     await reviewer.getByLabel(c.reviewReason, { exact: true }).fill('Synthetic pending approval');
     const accepted = responseFor(
