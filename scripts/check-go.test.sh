@@ -28,7 +28,7 @@ list ./...
 build example/fast example/slow
 vet example/fast example/slow
 run ./internal/citools/testorder
-test -timeout=30m example/slow example/fast
+test -vet=off -timeout=30m example/slow example/fast
 EXPECTED
 diff -u "$temporary/expected-calls" "$FAKE_GO_LOG"
 printf '%s\n' example/fast example/slow > "$temporary/expected-input"

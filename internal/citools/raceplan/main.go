@@ -90,7 +90,7 @@ type commandGroup struct {
 func main() {
 	if err := runCLI(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintf(os.Stderr, "raceplan: %v\n", err)
-		os.Exit(1)
+		os.Exit(commandExitCode(err))
 	}
 }
 
@@ -114,8 +114,15 @@ func runCLI(args []string, stdout, stderr io.Writer) (resultErr error) {
 	prepareTemplate := flags.String("prepare-template", "", "build the shared ordinary/race template")
 	exportTemplate := flags.String("export-template", "", "print verified template environment")
 	githubOutput := flags.String("github-output", "", "append dynamic shard outputs")
+	direct := flags.Bool("direct", false, "run explicit go test arguments with one ordinary-process template")
 	if err := flags.Parse(args); err != nil {
 		return err
+	}
+	if *direct {
+		if *shardSpec != "" || *planOnly || *packageSelection != "" || *prepare != "" || *prepared != "" || *template != "" || *prepareTemplate != "" || *exportTemplate != "" || *githubOutput != "" {
+			return errors.New("direct execution cannot change the catalog or prepared run")
+		}
+		return executeDirect(*goTool, *timeout, flags.Args(), stdout, stderr)
 	}
 	if flags.NArg() != 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
@@ -172,7 +179,7 @@ func runCLI(args []string, stdout, stderr io.Writer) (resultErr error) {
 		return err
 	}
 	hints = catalogHints(listed, hints, stderr, !selectionSpecified)
-	catalog, err := buildCatalog(*goTool, listed, hints)
+	catalog, err := buildCatalog(*goTool, listed, hints, stderr)
 	if err != nil {
 		return err
 	}
@@ -347,7 +354,13 @@ func listPackages(goTool string) ([]listedPackage, error) {
 	return packages, nil
 }
 
-func buildCatalog(goTool string, listed []listedPackage, hints timingHints) ([]catalogPackage, error) {
+func buildCatalog(goTool string, listed []listedPackage, hints timingHints, output io.Writer) ([]catalogPackage, error) {
+	return discoverCatalog(listed, hints, output, func(packagePath string) ([]string, error) {
+		return listTopLevelTests(goTool, packagePath)
+	})
+}
+
+func discoverCatalog(listed []listedPackage, hints timingHints, output io.Writer, listTests func(string) ([]string, error)) ([]catalogPackage, error) {
 	split := map[string]bool{}
 	for _, pkg := range hints.SplitPackages {
 		split[pkg] = true
@@ -378,7 +391,10 @@ func buildCatalog(goTool string, listed []listedPackage, hints timingHints) ([]c
 			if hasMain {
 				return nil, fmt.Errorf("split/excluded package %s declares TestMain", item.ImportPath)
 			}
-			entry.Tests, err = listTopLevelTests(goTool, item.ImportPath)
+			fmt.Fprintf(output, "raceplan: catalog listing %s\n", item.ImportPath)
+			started := time.Now()
+			entry.Tests, err = listTests(item.ImportPath)
+			fmt.Fprintf(output, "raceplan: catalog finished %s in %s tests=%d\n", item.ImportPath, time.Since(started).Round(time.Millisecond), len(entry.Tests))
 			if err != nil {
 				return nil, err
 			}
@@ -749,7 +765,7 @@ func executeGroups(groups []commandGroup, workers int, runner func(commandGroup,
 			outputMu.Lock()
 			fmt.Fprintf(output, "raceplan: running %s\n", group.Label)
 			outputMu.Unlock()
-			var commandOutput bytes.Buffer
+			commandOutput := progressOutput{label: group.Label, output: output, outputMu: &outputMu}
 			err := runner(group, &commandOutput)
 			outputMu.Lock()
 			if commandOutput.Len() > 0 {
