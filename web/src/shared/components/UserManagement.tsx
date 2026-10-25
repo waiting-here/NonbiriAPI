@@ -308,7 +308,9 @@ function UserAuthority({
   const [confirmedUser, setConfirmedUser] = useState<AdminUser | null>(null);
   const [confirm, setConfirm] = useState<'ban' | 'unban' | null>(null);
   const [economyConfirm, setEconomyConfirm] = useState<EconomyIntent | null>(null);
-  const editable = role === 'admin' || (user.id !== account && user.level.effective < actorLevel);
+  const editable =
+    role === 'admin' ||
+    (!user.is_admin && user.id !== account && user.level.effective < actorLevel);
   const limitsEditable = canEditInferenceLimits(user, role, account, actorLevel === 5);
   const callerKeyEditable =
     !user.is_admin &&
