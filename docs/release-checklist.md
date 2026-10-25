@@ -20,10 +20,14 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh schema 36, the exact schema 33–35 startup upgrades and supported
-  schema 16–26 offline conversions: target equality, rollback/cancellation, re-entry
-  and zero-write unsupported-source rejection. Check that endpoint-key deletion
-  uses indexes for its referencing history tables and preserves cascading behavior.
+- Validate fresh/exact-current schema 37 startup and explicit offline conversion
+  of registered schema 16–26 and 33–36 sources: target equality,
+  rollback/cancellation, re-entry and upgrade-then-start. Verify older, newer,
+  unknown and incomplete storage is rejected by the service before migration,
+  repair, checkpoint or recovery writes. Check descriptor source coverage and
+  that startup/deployment paths never invoke the upgrader implicitly.
+  Preserve current-schema validation and business recovery. Check that
+  endpoint-key deletion uses indexes for its referencing history tables and preserves cascading behavior.
   Preserve credentials, operator settings, legal overrides, balances, game saves,
   activities and receipts. Exercise successive stable migrations; see
   [database upgrades](database-upgrades.md).
@@ -89,8 +93,8 @@ has passed.
    final artifact from the exact merge commit; a tag is not required.
 3. Follow the [deployment procedure](deployment.md): validate source compatibility,
    rehearse changed storage behavior on a consistent copy, close admission, stop,
-   take one complete recovery snapshot, convert if required, clean deprecated
-   environment keys and start the target once.
+   take one complete recovery snapshot, explicitly invoke the matching offline
+   upgrader if required, clean deprecated environment keys and start the target once.
 4. Verify local identity/readiness, then both public stations and changed pages
    alongside about 60 seconds of observation. After reopening, preserve newly
    accepted data; never automatically overwrite it with an old snapshot.

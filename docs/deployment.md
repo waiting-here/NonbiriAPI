@@ -307,28 +307,34 @@ This fallback also covers proxy timeouts or invalid upstream responses before re
 
 ## Database compatibility and version changes
 
-The application creates fresh schema **36** databases and opens current schema 36.
-Exact published schema **33–35** receives atomic upgrades before requests:
-history indexes and donation catalog authorization changes where needed, then
-steward permission tables and audit-role table rebuilds that preserve existing
-rows and constraints. Allow index creation and audit-table copying to complete.
-Exact registered schema **16–26** structures use the standalone
-[v1 converter](../cmd/nonbiri-upgrade-v1/README.md). Other prereleases and unknown
-structures are rejected. SQLite identity remains Generation 2; exports use
-format **30**. See [database upgrades](database-upgrades.md) for manifests,
-migration guarantees and content versions.
+The service initializes absent storage as schema **37** and opens only the exact
+current schema. Older, newer, unknown and incomplete databases are rejected
+before migration, repair, WAL checkpoint or recovery writes. Exact registered
+schema **16–26** and **33–36** sources use the matching standalone
+[v1 upgrader](../cmd/nonbiri-upgrade-v1/README.md). Other intermediate structures,
+including schema 27–32, are unsupported. SQLite identity remains Generation 2;
+exports use format **30**. See [database upgrades](database-upgrades.md) for
+manifests, preserved data and content versions.
 
-Run `./nonbiriapi maintenance schema-info --json` without a production environment
-or database to inspect the target's compatibility descriptor. Deployment helpers
-must consume this output and the matching converter's `--schema-info --json`
-instead of parsing Go files. The service descriptor declares the exact schema 33–35
-startup sources and manifests; the converter declares its exact offline sources. Use
-`./nonbiriapi maintenance verify` on a stopped current database or consistent copy
-for a full offline audit; normal startup performs the current checks and recovers
-unfinished work. Historical cleanup commands are retired from the running binary.
+Run `./nonbiriapi maintenance schema-info --json` and the matching tool's
+`--schema-info --json` without application configuration or a database.
+The service declares `startup_policy="exact"`,
+`upgrade_tool="nonbiri-upgrade-v1"`, current/minimum schema 37 and empty source
+and conversion arrays. The tool declares its 15 exact offline sources.
+Deployment scripts must honor that policy and stop on mismatches, leaving the
+operator time to preserve the old database and deliberately invoke the tool.
+Do not run `--apply` from a service, startup hook or automatic deployment path.
+An advertised conversion is not permission to execute it.
+
+Current-schema validation and unfinished-work recovery remain part of startup.
+Use `./nonbiriapi maintenance verify` on a stopped current database or consistent
+copy when a full historical/credential audit is needed. Historical conversion
+commands remain outside the running service. A software patch need not change
+the schema; exact-current deployments do not need a converter.
 
 Preserve the database, master key, encrypted instance matching material,
-configuration and matching binary together. A binary-only downgrade is unsupported.
+configuration and matching binary together. Switching binaries cannot reverse a
+schema upgrade; a server expecting an older or different schema cannot open it.
 Fresh creation requires the database and sidecars to be absent and starts with
 maintenance on and public features closed. Opening features and publishing
 instance legal text remain separate operator actions.
@@ -348,7 +354,15 @@ instance legal text remain separate operator actions.
    protected recovery snapshot containing the database and existing sidecars,
    exact source release, environment, master key, unit, manifest and checksums.
    An unchanged stopped-state retry reuses that snapshot.
-4. For exact registered schemas 16–26, run the converter with `--apply` under exclusive database access.
+4. If the schema differs, verify that the matching upgrader declares the exact
+   source. After the recovery set is ready, deliberately invoke
+   `./nonbiri-upgrade-v1 --apply --database /path/to/database.sqlite` under
+   exclusive database access with the existing key. Use `--check` instead for a
+   full offline audit; reuse an already-valid audit rather than repeat it without
+   a new reason. Exact registered schemas 16–26 and 33–36 are supported.
+   No service or deployment hook performs this step for you. After a manual
+   upgrade, finish this manual release switch; do not retry an automatic path
+   that still identifies the source through its old server's schema descriptor.
    After any eligible legacy Gateway import, remove
    `NONBIRI_GATEWAY_MODEL_CAPABILITIES` and the six
    `NONBIRI_SMTP_HOST/PORT/USER/PASS/FROM/TLS` keys. Preserve other environment

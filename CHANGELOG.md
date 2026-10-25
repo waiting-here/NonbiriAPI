@@ -105,16 +105,21 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Storage
 
-- Fresh storage uses schema 37. Exact supported schema 33–36 databases receive
-  atomic startup upgrades through history indexes, donation authorization,
-  steward permission/scope storage, expanded tags/audit roles and assistant tables.
+- Fresh storage uses schema 37. The service opens only the exact current schema
+  and rejects mismatched storage before migration, repair or recovery writes.
+  Supported sources receive explicit offline upgrades through history indexes,
+  donation authorization, steward permission/scope storage, expanded tags/audit
+  roles and assistant tables.
   Risk-rule, automatic-ban, blacklist and endpoint-tag rebuilds preserve existing
   facts and constraints. Stored custom steward policies add the three assistant
   permissions as false without changing existing grants, revisions or audit history.
-- Preserve the separate schema 16–26 converter, now targeting schema 37; the
-  normal service advertises only its own startup paths. Upgrades are one-way,
-  with no old-server startup on an upgraded database or reverse migration.
-  Account export remains format 30.
+- Extend the standalone upgrader descriptor to include exact schema 33–36 sources
+  alongside 16–26, all targeting schema 37. Upgrades require a deliberate
+  `--apply` after preserving a matching recovery set; the service, startup scripts
+  and deployment helpers must not invoke it implicitly. `--check` remains a
+  separate offline audit. Upgrades are one-way: a server expecting an older or
+  different schema cannot open the upgraded database. No reverse migration is
+  provided. Account export remains format 30.
 - Keep assistant request logs until administrator cleanup. Conversations, memory
   history and token statistics are separate administrator assets unaffected by
   request cleanup or operator deletion; automatic-review evidence follows its

@@ -2,40 +2,50 @@
 
 ## Supported databases
 
-The application accepts a new database, current schema **37**, or the exact
-supported schema **33–36** manifests. Startup upgrades these sources atomically
-before request handling and unfinished-work recovery. Sources receive history
-indexes, donation catalog authorization, steward permission/scope storage and
-data-preserving audit/tag rebuilds where needed, then assistant storage and the
-current permission catalog. Allow index creation and table copying to finish.
-Cancellation or failure rolls back the upgrade; these sources need no converter.
+The service opens only the exact current schema **37**, or initializes current
+storage when the database and its sidecars are absent. An existing zero-byte,
+partial or unknown database is not a fresh instance. Older and newer schemas are
+rejected before migration, repair, WAL checkpoint or unfinished-work recovery.
+The startup error identifies the required version and, when readable, the actual
+version, with the explicit upgrade entry point. Current-schema identity,
+structure, configuration and encryption-root checks remain required.
 
-The separate one-time converter remains available for exact registered schema
-16–26 sources and targets schema 37. The normal service contains current DDL,
-validation and its schema 33–36 startup steps; it does not import that historical
-conversion chain. An empty service `offline_conversions` list does not remove or
-describe the separate converter.
+The standalone Go upgrader accepts exact registered schema **16–26** and
+**33–36** sources and targets schema 37. Schemas 27–32 and unregistered layouts
+are not supported. A developer or deployer must deliberately invoke the matching
+tool; the service, startup scripts and deployment helpers must not run
+`--apply` implicitly. Preserve the complete matching recovery set before any
+upgrade. `--check` is an explicit offline audit; `--apply` performs the
+conversion. The service does not import the historical conversion chain.
 
-Upgrades are one-way. An upgraded database cannot be started by an older server;
-no downgrade or reverse migration is provided. A database newer than a binary
-supports is rejected before writes. Preserve a complete matching recovery set
-before upgrading, and do not replace newly accepted data with an old snapshot.
+Upgrades are one-way. A server expecting an older or different schema cannot
+open the upgraded database; no schema downgrade or reverse migration is provided. A newer or unrecognized source is
+also rejected by the upgrader. Failure or cancellation rolls back the conversion.
+Do not replace newly accepted data with an old snapshot.
 
 SQLite identity remains `application_id=0x4E425249`, `user_version=2`. Account
-exports use format **30**, independently of the storage schema. An unknown
-identity, version or structural manifest is rejected before writes.
+exports use format **30**, independently of the storage schema. Schema versions
+advance when storage changes require it, not with every software patch.
 
 ```sh
 ./nonbiriapi maintenance schema-info --json
 ./nonbiri-upgrade-v1 --schema-info --json
 ```
 
-These commands load no application configuration or database. Each machine-readable descriptor
-contains the current identity and accepted versions. The application descriptor
-reports schema 37, minimum schema 33 and the exact accepted source versions and
-manifest hashes, with no offline conversions. The converter descriptor lists its
-exact offline sources and target. Deployment tools use both
-descriptors instead of parsing Go source or deriving versions from array lengths.
+Both commands read compiled metadata without loading application configuration
+or opening a database. Their format-version-1 descriptors identify the same
+target schema and hashes. The service reports `schema_version=37`,
+`minimum_schema_version=37`, `startup_policy="exact"` and
+`upgrade_tool="nonbiri-upgrade-v1"`, with empty `source_schema_versions`,
+`source_manifest_hashes` and `offline_conversions` arrays. The upgrader adds
+15 `offline_conversions` entries, one for each supported source, with its tool
+name, source commit, source version, pinned manifest hash and target version.
+An empty service list does not remove the separate upgrader.
+
+Deployment tooling must honor the exact-startup policy and stop on mismatches,
+leaving the operator an opportunity to back up and invoke the tool explicitly.
+It must not infer permission to migrate from the upgrader's advertised sources,
+parse Go files or derive schema versions from array lengths.
 
 ## Schema changes
 
@@ -43,8 +53,8 @@ The upgrade to schema 37 normalizes legacy personal and charity model interface
 bits once, preserving their effective Chat Completions and Responses support.
 Old selections containing either interface keep both, with other interface bits,
 model revisions and timestamps unchanged. New schema-37 selections are exact;
-reopening a schema-37 database does not expand them again. This applies to both
-startup upgrades and the final converter upgrade step.
+reopening a schema-37 database does not expand them again. This runs only in the
+explicit upgrader, not during service startup.
 
 Schema 37 adds dedicated assistant transport settings, encrypted credentials,
 durable request/response history, response chunks and independent token usage.
@@ -98,9 +108,9 @@ Schema 34 adds complete `endpoint_key_id` indexes on `request_logs`,
 history scans during endpoint-key deletion, shortening the write transaction
 that can otherwise delay session reads and other writes. Foreign-key actions,
 retained rows, credentials, accounting and account export 29 are unchanged.
-Startup validates the exact schema 33 source and encryption root, builds all four
-indexes and validates the target within one transaction. Modified source
-structures and partial upgrades are rejected.
+The schema-34 migration validates the exact schema-33 source and encryption root,
+builds all four indexes and validates its target within the upgrade transaction.
+Modified source structures and partial upgrades are rejected.
 
 Schema 33 introduces service connections, independently versioned credentials,
 explicit endpoint grants, independent discovery sources and ordered model targets.
@@ -143,8 +153,8 @@ review HMACs, generated session headers, deployment settings and internal dispat
 authorizations. See [service connections](service-connections.md) and the
 [data lifecycle](data-lifecycle-checklist.md).
 
-Only published schema 16–26 sources are registered for offline conversion.
-Unreleased intermediate database layouts are not supported sources.
+The registered offline sources are schemas 16–26 and 33–36 with their exact
+manifests. Other intermediate database layouts are not supported sources.
 
 Schema 26 adds shared channel binding presets and their ordered upstream-model
 mappings. Existing channels start without a preset. Saving or applying a preset
@@ -175,9 +185,10 @@ configuration and current state. Existing retry-header cooldowns, failure counts
 credentials and accounting retain their meanings.
 
 `internal/db/generation_two.sql` and registered extensions form the complete fresh
-schema. Exact schema 33–36 source manifests and startup steps live in `internal/db`;
-older source manifests and transformations live under `internal/upgrade/`, outside the normal
-application dependency graph. Released source definitions are immutable.
+schema. Registered source manifests and transformations are maintained for the
+standalone tool under `internal/upgrade/`, with shared DDL and validation helpers
+in `internal/db`. The normal service has no startup migration path. Released
+source definitions are immutable.
 
 For a change to persistent semantics:
 
@@ -243,13 +254,16 @@ donation terminal clocks, expiry, balances or historical settlements.
 ## One-time conversion
 
 Build `./cmd/nonbiri-upgrade-v1` from the same commit as the target application.
-The converter accepts exact registered schema 16–26 structures. For rc.7,
+The converter accepts exact registered schema 16–26 and 33–36 structures. For rc.7,
 the reference source is `82f1711b674425745a768f781e0e0c34dcb37ac3`. The database
 manifest determines eligibility, not a guess based on a release label.
 
-Use `--check` when a full offline credential, integrity and foreign-key audit is
-needed. Ordinary `--apply` validates the exact source, encryption-root identity,
-required configuration and migration-affected relationships, without scanning
+Stop the service and preserve one complete matching recovery set before an
+upgrade; reuse a valid snapshot of the same unchanged stopped state. Invoke the
+tool explicitly after that preparation. Use `--check` when a full offline
+credential, integrity and foreign-key audit is needed; a valid audit need not be
+repeated immediately before conversion. Ordinary `--apply` validates the exact
+source, encryption-root identity, required configuration and migration-affected relationships, without scanning
 unrelated historical tables. Run it with the service stopped and its existing
 master key available. The converter acquires exclusive
 database access and converts the source to schema 37 in one transaction. A matching
@@ -268,9 +282,9 @@ final JSON result to stdout. Heartbeats indicate that the process can report its
 state; they do not claim row progress or extend the configured deadline.
 
 The conversion preserves accounts, encrypted credentials, configuration, instance
-legal text, game progress, activities, balances and financial receipts. It moves
-remaining prerelease backfills out of normal startup. Existing database Gateway
-configuration remains authoritative; legacy environment import runs only when its
+legal text, game progress, activities, balances and financial receipts. All
+registered historical backfills run only in this explicit conversion. Existing
+database Gateway configuration remains authoritative; legacy environment import runs only when its
 import marker is absent. Remove obsolete environment keys after that step.
 
 See the [converter instructions](../cmd/nonbiri-upgrade-v1/README.md) for commands
