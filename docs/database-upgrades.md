@@ -39,6 +39,13 @@ descriptors instead of parsing Go source or deriving versions from array lengths
 
 ## Schema changes
 
+The upgrade to schema 37 normalizes legacy personal and charity model interface
+bits once, preserving their effective Chat Completions and Responses support.
+Old selections containing either interface keep both, with other interface bits,
+model revisions and timestamps unchanged. New schema-37 selections are exact;
+reopening a schema-37 database does not expand them again. This applies to both
+startup upgrades and the final converter upgrade step.
+
 Schema 37 adds dedicated assistant transport settings, encrypted credentials,
 durable request/response history, response chunks and independent token usage.
 Workflow tables store configuration, two shared memories and their history,

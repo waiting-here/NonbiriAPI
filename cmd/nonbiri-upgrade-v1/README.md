@@ -47,6 +47,10 @@ reports current schema 37, minimum schema 33, the exact schema 33–36 startup
 sources and manifests, and an empty `offline_conversions` list. These describe
 different executables; the empty server list does not remove the converter.
 
+The final upgrade to schema 37 preserves the effective Chat/Responses support
+of existing personal and charity models by normalizing their legacy interface
+bits once; new schema-37 selections remain independent on subsequent starts.
+
 Upgrades are one-way: the upgraded database cannot run on an older server. No
 downgrade or reverse migration is provided, and newer database versions are
 rejected before writes. Recovery requires a complete matching stopped snapshot,
