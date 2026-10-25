@@ -1,10 +1,11 @@
 # Prepare existing storage
 
-The server creates fresh schema 36 databases and opens current schema 36. Exact
-published schema 33–35 receives atomic upgrades during normal startup: history
-indexes and donation catalog authorization changes where needed, then steward
-permissions with donation scope, expanded endpoint tags and data-preserving
-audit-role/tag table rebuilds.
+The server creates fresh schema 37 databases and opens exact current schema 37.
+Supported schema 33–36 manifests receive atomic startup upgrades through the
+intervening history indexes, donation authorization, steward scope/audit/tag
+changes and assistant storage. Existing stored policies receive the three new
+assistant grants as false without changing previous grants or audit history.
+
 `nonbiri-upgrade-v1` is the separate, one-time offline converter for the following
 exact source structures:
 
@@ -24,13 +25,13 @@ exact source structures:
 
 The machine-readable descriptor is authoritative for these exact source commits
 and their pinned manifest hashes. All supported sources convert atomically to
-schema 36. Unreleased intermediate layouts are not supported sources.
+schema 37. Unreleased intermediate layouts are not supported sources.
 
 The executable that last used a database may differ from the listed commit if
 its stored application identity, generation, schema version and complete
 structure match. Unknown or modified structures are rejected. The server does
 not import the converter or its historical DDL; it only retains the exact schema
-33–35 manifests and their startup migrations.
+33–36 manifests and their startup migrations.
 
 Build the converter from the same reviewed source as the target server:
 
@@ -41,8 +42,15 @@ CGO_ENABLED=0 go build -trimpath -o nonbiri-upgrade-v1 ./cmd/nonbiri-upgrade-v1
 ```
 
 Both metadata commands need no database or environment. The converter reports
-its exact sources in `offline_conversions`. The server reports current schema
-34, the exact schema 33 startup source and manifest, and no offline conversions.
+its exact sources in `offline_conversions` and target schema 37. The server
+reports current schema 37, minimum schema 33, the exact schema 33–36 startup
+sources and manifests, and an empty `offline_conversions` list. These describe
+different executables; the empty server list does not remove the converter.
+
+Upgrades are one-way: the upgraded database cannot run on an older server. No
+downgrade or reverse migration is provided, and newer database versions are
+rejected before writes. Recovery requires a complete matching stopped snapshot,
+not an old binary applied to the upgraded database.
 
 1. Rehearse on a consistent copy of the intended source using its existing
    encryption root and the reviewed target binaries.
@@ -101,7 +109,10 @@ existing rows. The current application produces account export format 30, includ
 stored/effective steward permissions and retained policy history. Schema 36
 rebuilds the risk-rule/automatic-ban and blacklist audit tables with existing
 rows, labels, indexes and constraints preserved; new actions can record actual
-level-5 actors. See the [upgrade contract](../../docs/database-upgrades.md).
+level-5 actors. Schema 37 adds independent assistant request and workflow assets;
+request cleanup does not remove conversation originals, memories or token usage.
+Automatic-review evidence follows its associated donation lifecycle. See the
+[upgrade contract](../../docs/database-upgrades.md).
 
 Schema 17 additionally receives the protocol and fishing presentation changes
 already present in schema 18. Existing probabilities and outcomes remain:
@@ -121,7 +132,7 @@ conversion, remove the retired Gateway variable and `NONBIRI_SMTP_HOST`,
 `NONBIRI_SMTP_FROM` and `NONBIRI_SMTP_TLS` from the deployment environment.
 
 The [rc.7 command](../nonbiri-upgrade-rc7/README.md) remains a narrow wrapper
-accepting schema 16 and current schema 36. Both commands use one engine.
+accepting schema 16 and current schema 37. Both commands use one engine.
 `scripts/check-upgrade.sh` creates a populated synthetic source with the pinned
 rc.7 program, converts it, compares retained facts and resumes economy checks.
 The offline suite also covers the registered schema 17–26 fixtures. No

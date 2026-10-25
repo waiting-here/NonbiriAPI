@@ -19,7 +19,7 @@ personal exports. The read-only deployment mode is not persisted per account.
 Worker and legacy gateway tokens remain private deployment configuration and
 never enter account exports. Routing preferences do not extend log retention.
 
-Current account export format 30 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v30.json`; SQLite `user_version` remains 2 and the current storage schema is 36. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+Current account export format 30 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v30.json`; SQLite `user_version` remains 2 and the current storage schema is 37. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
 
 ## Steward permission data
 
@@ -28,12 +28,52 @@ Current account export format 30 includes safe `gacha` balances, owned cards, gu
 | `steward_permissions` | One current policy, including donation scope, per account; administrator/actual L6 management of current L5 targets. Own export 30 includes stored and effective policy. | Stored across level changes, effective only at L5; cascades with target-account deletion. |
 | `steward_permission_audits` | Previous/next complete policy including donation scope, revisions, timestamp and editor reference. Own export includes retained previous/next policy and time, excluding editor identity. | Bounded cleanup deletes at 90 days; target deletion cascades, editor deletion sets its reference null. |
 
-The live action grants and numeric limits are independent of actual account
-level. Reads, writes, replay and protected background completion recheck current
-authority. Full grants do not permit delegation by L5 or mutations of an equal
+The 51 live action grants and six numeric limits are independent of actual
+account level. Schema 37 adds the three assistant grants as false to existing
+custom policies without rewriting their revisions or historical audits. Reads,
+writes, replay and protected background completion recheck current authority. Full grants do not permit delegation by L5 or mutations of an equal
 or higher-level account. See [steward permissions](steward-permissions.md).
 Schema 36 preserves existing risk-rule, automatic-ban and blacklist audit rows
 while widening actor labels to record actual L5 actions; it does not relabel history.
+
+## Management assistant assets
+
+The experimental assistant is an administrator-managed content store separate
+from ordinary request logs. Dedicated model/search keys are encrypted and never
+returned in settings or supplied as tool arguments. Model input, replies, search
+results and proposed plans remain untrusted text. The live actor and each domain
+permission are rechecked before reads, dispatch and final writes; saved role
+labels and model output cannot grant authority.
+
+| Tables / family | Access and export | Deletion, late work and retention |
+| --- | --- | --- |
+| `agent_request_settings`; `ai_agent_settings` | Administrator-only configuration; saved keys expose presence only. Excluded from account export. | Shared configuration is independent of operator accounts. Chat defaults off; disabling it stops new chat work and invalidates pending plans without deleting history. Automatic-review mode is separate. |
+| `agent_requests`; `agent_request_response_chunks` | Administrator-only queued input, actual serialized model request, received response/error bytes, status, operator snapshots and usage. No Authorization headers or raw dedicated key. Excluded from account export. | No automatic expiry or account cascade. Manual cleanup selects exact IDs or a fixed cutoff and filters, in bounded batches. Only terminal records durably handed to workflow storage are eligible; pending/running or still-needed records are skipped. Chunks follow their request. Incomplete response facts remain explicitly marked. |
+| `agent_request_usage`; `agent_request_usage_totals`; `agent_request_usage_hours` | Administrator-only usage grouped by source, request kind and actor, including role/label snapshots and unknown reporting. Excluded from account export. | Independent records have no request/account deletion cascade and no automatic expiry. Request cleanup does not reduce historical totals. Rolling 24-hour summaries use exact event times. |
+| `ai_agent_memories`; `ai_agent_memory_history` | Two shared memories; current reads/edits need the corresponding management grant. Model-proposed edits require human approval of the exact diff. History is an administrator asset, excluded from account export. | No automatic expiry or operator-account cascade. Compare-and-swap preserves newer edits. Request cleanup, conversation clear and disabling chat do not delete memory or its change history. |
+| `ai_agent_conversations`; `ai_agent_messages`; chat/compact rows in `ai_agent_jobs`, `ai_agent_plans` and `ai_agent_model_results` | One current conversation per operator; current authorized access plus administrator archives. Original messages, summaries, tool results, decisions and execution receipts are excluded from account export. | No automatic expiry or operator-account cascade. Edit/clear archives the affected context and supersedes pending work without undoing executed operations. Actor snapshots remain; account deletion or revocation blocks subsequent protected work. Request cleanup does not remove these records. |
+| Automatic-review rows in `ai_agent_jobs`, `ai_agent_plans` and `ai_agent_model_results`; `ai_agent_review_events` | Review evidence needs the review grant and existing resource projections; no credential access is added. Excluded from account export. | Evidence follows its associated donation/approval lifecycle: deleting the donation cascades the job and its results/plans. Intake events are consumed when queued, cleared when automatic review is disabled, or removed with the donation. Request cleanup does not delete review evidence. |
+
+Chat and automatic-review results are copied to their independent workflow
+records before the transport request is acknowledged for cleanup. Cleanup may
+partially complete before an interrupted response; retry the original IDs or
+cutoff and filters. Never use a fresh maximum ID to expand an approved selection.
+
+Atomic approved plans commit all business mutations, memory changes, audit and
+the execution receipt together. Existing user-deletion barriers and post-commit
+session/key invalidation remain authoritative. Network calls and human waiting
+do not hold the write transaction. Restart recovery records interrupted calls
+without blindly repeating them; late results cannot restore revoked authority
+or repeat a committed plan.
+
+Full model request/response capture is bounded by transport limits and preserves
+received partial content with explicit completeness/redaction status. Transport
+authentication headers and the dedicated model key are excluded, but conversations
+may contain sensitive
+operator-entered material. Instance privacy text must disclose this intentional
+retention and the configured external model/search processors. The
+[assistant API contract](api-contract.md#78-experimental-ai-assistant) describes
+role gates, edit/replay rules, cleanup selection and queue behavior.
 
 ## Connections and versioned authorization
 
@@ -60,14 +100,26 @@ backoff receipts and request-attempt service facts remain internal and follow
 existing claim/request retention. Existing budgets, review history, legal holds
 and deidentified late-settlement obligations retain their original boundaries.
 Mainstream entries, directory suggestions and model mappings are shared operator
-configuration and are excluded from personal exports.
+configuration and are excluded from personal exports. New or edited service and
+donation submissions explicitly authorize the protocol's complete service set.
+Migration does not widen old grants or approved snapshots; a donor's next edit
+creates the new authorization and pending versions. Model bindings keep their
+explicit service selections, with at least one compatible target service.
 
 ## Direct inference usage and admission
 
 Every registered model operation uses the existing request, claim, reservation,
 export and deletion lifecycle. Multipart files and binary/media responses are
 bounded request-time data, not persistent file or conversation resources.
-This version adds no WebSocket/Realtime store, background job or batch resource.
+The public model API adds no WebSocket/Realtime store, background job or batch resource.
+
+Safe `rejection_detail:{field,reason,suggestion?}` contains server-authored
+validation facts and fixed corrective guidance, never submitted values, prompts
+or secrets. It is available in the caller's own request logs and authorized
+management list/detail/JSON/CSV views. It follows the request root's existing
+retention, deletion and display-privacy rules, without creating another history
+table or exposing raw upstream diagnostics. Missing historical causes remain
+absent; they are not inferred or backfilled from the route or error code.
 
 `request_attempts`, `request_logs` and `charity_reservations` add bounded
 `usage_details` JSON (at most 4,096 bytes). It contains standard modality and
@@ -211,7 +263,7 @@ state is cleared immediately on 401/403, demotion, ban, logout, or session repla
 
 ## New diagnostic, governance and activity families
 
-The service does not actively persist request bodies or successful response bodies. The restricted original-error store can nevertheless contain upstream-echoed input, prompts or credentials. It captures HTTP-decoded entity/error-event bytes, with a 1 MiB event limit and explicit truncation, unavailable and capacity states. Ordinary retention is 30 days. The default 1 GiB payload budget is configurable from 1 MiB to 64 GiB, includes held bodies, and omits new bodies instead of evicting unexpired ones. It does not include SQLite or backup overhead. JSON/text/base64 views remain untrusted text/bytes and require current administrator or L5/L6 session authority in the read transaction. Administrator and steward log views with `logs.unredacted` preserve complete authorized saved text and bytes, including IP addresses; without that grant, L5 upstream error payloads and error-text projections replace IPv4 with `[redacted]`, including decoded binary payloads before base64 encoding, copying and downloading. Diagnostic text and error bodies additionally redact non-mainstream endpoint DNS identifiers; ordinary user request-log fields use the same endpoint-based projection across list/detail/export. A complete endpoint address and connector match in the current active, enabled mainstream channel registry exempts the DNS projection, including historical requests. Disabling or retiring the channel removes that exemption. Separately displayed level-5 source IPs and endpoint addresses, IPv6 and stored originals remain unchanged; capture byte counts still describe the original. Ordinary user display protection remains. This does not expand collection, retention or the fields a role may access. Editable endpoint/IP-rule values and normal model output retain their values.
+Ordinary model-request logs do not actively persist request bodies or successful response bodies. The separate management-assistant store intentionally retains its full model input and received output. The restricted original-error store can nevertheless contain upstream-echoed input, prompts or credentials. It captures HTTP-decoded entity/error-event bytes, with a 1 MiB event limit and explicit truncation, unavailable and capacity states. Ordinary retention is 30 days. The default 1 GiB payload budget is configurable from 1 MiB to 64 GiB, includes held bodies, and omits new bodies instead of evicting unexpired ones. It does not include SQLite or backup overhead. JSON/text/base64 views remain untrusted text/bytes and require current administrator or L5/L6 session authority in the read transaction. Administrator and steward log views with `logs.unredacted` preserve complete authorized saved text and bytes, including IP addresses; without that grant, L5 upstream error payloads and error-text projections replace IPv4 with `[redacted]`, including decoded binary payloads before base64 encoding, copying and downloading. Diagnostic text and error bodies additionally redact non-mainstream endpoint DNS identifiers; ordinary user request-log fields use the same endpoint-based projection across list/detail/export. A complete endpoint address and connector match in the current active, enabled mainstream channel registry exempts the DNS projection, including historical requests. Disabling or retiring the channel removes that exemption. Separately displayed level-5 source IPs and endpoint addresses, IPv6 and stored originals remain unchanged; capture byte counts still describe the original. Ordinary user display protection remains. This does not expand collection, retention or the fields a role may access. Editable endpoint/IP-rule values and normal model output retain their values.
 
 | Canonical family | Export | Deletion and late work | Retention and privacy |
 | --- | --- | --- | --- |
@@ -337,7 +389,18 @@ manifest, and checksums. Snapshot retention/deletion is operator-controlled and 
 be disclosed by the instance policy; the service does not promise per-user erasure inside
 historical snapshots.
 
-Normal startup accepts fresh storage, current schema 36 or exact published schema 33–35. Atomic upgrades add history indexes and donation catalog authorization changes where needed, then steward permission/scope storage and data-preserving audit-role and endpoint-tag table rebuilds. Pending catalog reads do not grant inference access. Current export format is 30. Exact schema 16–26 structures use the independent converter. Unknown or partial sources are rejected before writes. Fresh creation requires the main database and sidecars to be absent. Conversion preserves accounts, economic facts, credentials, saved games, configuration and instance legal text. Full historical audits use offline `maintenance verify`. The [database upgrade guide](database-upgrades.md) identifies source and restore requirements.
+Normal startup accepts fresh storage, exact current schema 37 or supported schema
+33–36 manifests. Atomic upgrades apply the intervening indexes, authorization,
+steward scope/audit/tag changes and assistant storage; pending catalog reads do
+not grant inference access. Current export format is 30. The independent converter
+still handles its exact schema 16–26 sources and targets schema 37. Unknown,
+partial and newer sources are rejected before writes. Upgrades are one-way;
+there is no old-server startup on an upgraded database or reverse migration.
+Fresh creation requires the main database and sidecars to be absent. Conversion
+preserves accounts, economic facts, credentials, saved games, configuration and
+instance legal text. Full historical audits use offline `maintenance verify`.
+The [database upgrade guide](database-upgrades.md) identifies exact sources and
+matching-snapshot recovery requirements.
 
 Starting fresh from an unsupported version uses a separate empty path and resets active application state. A complete old recovery set remains sensitive until its retention purpose ends. Never combine an old binary with a newer database or restore a stale snapshot over newly accepted data automatically.
 
