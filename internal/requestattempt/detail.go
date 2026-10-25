@@ -8,11 +8,48 @@ import (
 
 // RejectionDetail contains server-authored checks, never caller values.
 type RejectionDetail struct {
-	Field  string `json:"field"`
-	Reason string `json:"reason"`
+	Field      string `json:"field"`
+	Reason     string `json:"reason"`
+	Suggestion string `json:"suggestion,omitempty"`
 }
 
 var rejectionFieldsAllowed = map[string]bool{
+	"tools":                   true,
+	"tool_calls":              true,
+	"tool_call_id":            true,
+	"response_format":         true,
+	"parallel_tool_calls":     true,
+	"prompt_cache_key":        true,
+	"prompt_cache_retention":  true,
+	"flatten_tool_calls":      true,
+	"native_extensions":       true,
+	"content":                 true,
+	"image_url":               true,
+	"extra_content":           true,
+	"reasoning_content":       true,
+	"refusal":                 true,
+	"messages[].role":         true,
+	"messages[].tool_calls":   true,
+	"messages[].tool_call_id": true,
+	"questions":               true,
+	"safety_identifier":       true,
+	"size":                    true,
+	"quality":                 true,
+	"background":              true,
+	"output_format":           true,
+	"output_compression":      true,
+	"moderation":              true,
+	"prompt":                  true,
+	"instruction":             true,
+	"documents":               true,
+	"top_n":                   true,
+	"file":                    true,
+	"audio":                   true,
+	"language":                true,
+	"timestamp_granularities": true,
+	"stream_format":           true,
+	"search_domain_filter":    true,
+
 	"messages[]": true, "messages[].content[]": true,
 	"cache_control": true, "tools[].cache_control": true, "messages[].content[].cache_control": true, "providerOptions.anthropic.cacheControl": true,
 	"request":                          true,
@@ -49,6 +86,98 @@ var rejectionFieldsAllowed = map[string]bool{
 }
 
 var rejectionReasonsAllowed = map[string]bool{
+	"expected valid and consistent output-token limits":                                                         true,
+	"Gateway image generation does not support streaming":                                                       true,
+	"Gateway images require b64_json":                                                                           true,
+	"Responses fields cannot be represented by the selected Chat protocol":                                      true,
+	"Responses input cannot be represented as complete Chat messages":                                           true,
+	"System One option headers require a single true value; images and box questions require the images opt-in": true,
+	"a nonempty prompt is required":                                                                             true,
+	"a query and 1 to 1000 documents are required":                                                              true,
+	"a query is required":                           true,
+	"a required inference field cannot be excluded": true,
+	"a text prompt is required":                     true,
+	"an uploaded audio file is required":            true,
+	"decisions do not support streaming":            true,
+	"dimensions require Gateway v4":                 true,
+	"duplicate multipart field":                     true,
+	"expected 1 to 1000 documents":                  true,
+	"expected 1 to 400 predicate, choice, or score questions within request limits": true,
+	"expected a Gateway embedding request":                                          true,
+	"expected a Gateway endpoint":                                                   true,
+	"expected a count no larger than documents":                                     true,
+	"expected a nonempty message array with matching tool calls":                    true,
+	"expected a nonempty query":                                                     true,
+	"expected a nonempty string":                                                    true,
+	"expected a number":                                                             true,
+	"expected a number within the supported sampling range":                         true,
+	"expected a positive count no larger than documents":                            true,
+	"expected a safely representable integer":                                       true,
+	"expected a string of at most 128 characters or null":                           true,
+	"expected a string of at most 64 characters or null":                            true,
+	"expected a string without control characters":                                  true,
+	"expected a supported tool choice":                                              true,
+	"expected a valid model name":                                                   true,
+	"expected an array of supported function tools":                                 true,
+	"expected an image count from 1 to 10":                                          true,
+	"expected an image generation request":                                          true,
+	"expected an integer from 1 to 128":                                             true,
+	"expected an integer in the supported range":                                    true,
+	"expected audio or sse":                                                         true,
+	"expected false for this connector":                                             true,
+	"expected inline text or input items":                                           true,
+	"expected multipart/form-data with a boundary":                                  true,
+	"expected one JSON object":                                                      true,
+	"expected only include_usage with a boolean value":                              true,
+	"expected strings or document objects":                                          true,
+	"expected supported messages or matching tool history with at most 128 images":  true,
+	"expected supported stop sequences":                                             true,
+	"expected text, tokens, or a nonempty batch":                                    true,
+	"expected the integer 1":                                                        true,
+	"expected two positive integers separated by x":                                 true,
+	"expected two positive integers separated by :":                                 true,
+	"field cannot be represented by this connector":                                 true,
+	"inline image URLs or uploaded image parts are required":                        true,
+	"inline input is required":                                                      true,
+	"invalid System One request field":                                              true,
+	"invalid multipart body":                                                        true,
+	"invalid multipart field":                                                       true,
+	"invalid number of uploaded files":                                              true,
+	"invalid upload":                                                                true,
+	"invalid upload content type":                                                   true,
+	"mixed text and object documents cannot be represented":                         true,
+	"model does not support this request type":                                      true,
+	"moderations do not support streaming":                                          true,
+	"multipart text fields must be UTF-8":                                           true,
+	"native extension conflicts with translated input":                              true,
+	"only rerank is supported by this entry point":                                  true,
+	"only text embedding inputs are supported":                                      true,
+	"persistent and background requests are not supported":                          true,
+	"persistent resource references are not supported":                              true,
+	"request validation failed without a recorded field":                            true,
+	"rerank does not support streaming":                                             true,
+	"rerank field is not supported by the selected protocol":                        true,
+	"stored prompt references are not supported":                                    true,
+	"text input and a built-in voice name are required":                             true,
+	"text or image input is required":                                               true,
+	"the first multipart part must contain the JSON request":                        true,
+	"the selected protocol requires text documents":                                 true,
+	"this operation does not support streaming":                                     true,
+	"too many completion results":                                                   true,
+	"tool flattening is unavailable for Responses conversion":                       true,
+	"tools requiring hosted resources are not supported":                            true,
+	"translations do not support streaming":                                         true,
+	"unsupported Gateway image field":                                               true,
+	"unsupported Gateway rerank field":                                              true,
+	"unsupported audio upload field":                                                true,
+	"unsupported cache options":                                                     true,
+	"unsupported decisions field":                                                   true,
+	"unsupported embedding field":                                                   true,
+	"unsupported image upload field":                                                true,
+	"unsupported message role or content":                                           true,
+	"use only one result count field":                                               true,
+	"variations do not support streaming":                                           true,
+
 	"expected an array of message objects":        true,
 	"expected a message object":                   true,
 	"content block type and text must be strings": true,
@@ -122,7 +251,7 @@ func NewDetail(field, reason string) *RejectionDetail {
 	if !rejectionFieldsAllowed[field] {
 		field = "request"
 	}
-	return &RejectionDetail{Field: field, Reason: reason}
+	return &RejectionDetail{Field: field, Reason: reason, Suggestion: rejectionSuggestion(field, reason)}
 }
 func Detail(ctx context.Context, detail *RejectionDetail) {
 	if detail == nil {
@@ -156,7 +285,7 @@ func DecodeDetail(data string) *RejectionDetail {
 	var detail RejectionDetail
 	if json.Unmarshal([]byte(data), &detail) != nil {
 		if validContentLengthReason(data) {
-			return &RejectionDetail{Field: "messages", Reason: data}
+			return NewDetail("messages", data)
 		}
 		return nil
 	}

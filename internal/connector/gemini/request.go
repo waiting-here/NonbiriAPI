@@ -59,21 +59,21 @@ func Compile(request *openai.ChatRequest, model string, policy contract.AttemptP
 		return nil, chatwire.Rejection("request")
 	}
 	if !chatwire.Keys(root, "model", "messages", "stream", "stream_options", "max_tokens", "max_completion_tokens", "temperature", "top_p", "stop", "n", "tools", "tool_choice", "parallel_tool_calls", "response_format", "safety_identifier") {
-		return nil, chatwire.Rejection("request")
+		return nil, chatwire.RejectionReason("request", "unsupported top-level field")
 	}
 	if !chatwire.Null(root["n"]) {
 		n, ok := chatwire.Integer(root["n"])
 		if !ok || n != 1 {
-			return nil, chatwire.Rejection("n")
+			return nil, chatwire.RejectionReason("n", "expected the integer 1")
 		}
 	}
 	if !chatwire.Null(root["stream_options"]) {
 		options, err := chatwire.Object(root["stream_options"])
 		if err != nil || !chatwire.Keys(options, "include_usage") {
-			return nil, chatwire.Rejection("stream_options")
+			return nil, chatwire.RejectionReason("stream_options", "expected only include_usage with a boolean value")
 		}
 		if value, ok := options["include_usage"]; ok && !bytes.Equal(value, []byte("true")) && !bytes.Equal(value, []byte("false")) {
-			return nil, chatwire.Rejection("stream_options")
+			return nil, chatwire.RejectionReason("stream_options", "expected only include_usage with a boolean value")
 		}
 	}
 	config := map[string]any{}
@@ -81,8 +81,11 @@ func Compile(request *openai.ChatRequest, model string, policy contract.AttemptP
 	for _, key := range []string{"max_tokens", "max_completion_tokens"} {
 		if !chatwire.Null(root[key]) {
 			value, ok := chatwire.Integer(root[key])
-			if !ok || value < 1 || value > 2147483647 || maxTokens != 0 && maxTokens != value {
-				return nil, chatwire.Rejection(key)
+			if !ok || value < 1 || value > 2147483647 {
+				return nil, chatwire.RejectionReason(key, "expected an integer from 1 to 2147483647")
+			}
+			if maxTokens != 0 && maxTokens != value {
+				return nil, chatwire.RejectionReason("max_completion_tokens/max_tokens", "conflicting output budgets")
 			}
 			maxTokens = value
 		}
@@ -98,7 +101,7 @@ func Compile(request *openai.ChatRequest, model string, policy contract.AttemptP
 				max = 1
 			}
 			if !ok || value < 0 || value > max {
-				return nil, chatwire.Rejection(pair[0])
+				return nil, chatwire.RejectionReason(pair[0], "expected a number within the supported sampling range")
 			}
 			config[pair[1]] = value
 		}

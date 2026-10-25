@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"regexp"
@@ -104,9 +105,24 @@ type outboundMetadata struct {
 // resolving a physical target, reading a site setting, or touching a secret.
 // It is safe to call before selection for both personal and charity routes.
 func SupportsRequest(request *openai.ChatRequest) bool {
+	return ValidateRequest(request) == nil
+}
+
+// ValidateRequest reports the same fidelity checks as SupportsRequest, retaining
+// fixed field diagnostics without reading settings or accessing credentials.
+func ValidateRequest(request *openai.ChatRequest) error {
 	body, err := compileRequest(request, "placeholder-model", "nbu_v3_placeholder", BuiltInDefaultMaxTokens)
 	clear(body)
-	return err == nil
+	return err
+}
+func fieldRejection(field, reason string) error {
+	return fmt.Errorf("%w: %w", ErrInvalidRequest, &connectorcontract.RequestRejection{Stage: "protocol preflight", Field: field, Reason: reason})
+}
+func describeInvalid(err error, field, reason string) error {
+	if errors.Is(err, ErrInvalidRequest) {
+		return fieldRejection(field, reason)
+	}
+	return err
 }
 
 func resolveDefaultMaxTokens(ctx context.Context, provider connectorcontract.AnthropicDefaultMaxTokensProvider) (int64, error) {
@@ -142,7 +158,7 @@ func compileRequestWithDefaultResolver(request *openai.ChatRequest, upstreamMode
 	// This protocol requires max_tokens. An explicit exclusion cannot be
 	// satisfied by silently adding a default or translating another field.
 	if request.FieldExcluded("max_tokens") {
-		return nil, ErrInvalidRequest
+		return nil, fieldRejection("max_tokens", "a required inference field cannot be excluded")
 	}
 	fields := request.Requirements().TopLevelFields()
 	allowed := map[string]bool{
@@ -161,7 +177,7 @@ func compileRequestWithDefaultResolver(request *openai.ChatRequest, upstreamMode
 	}()
 	for _, name := range fields {
 		if !allowed[name] {
-			return nil, ErrInvalidRequest
+			return nil, fieldRejection("request", "unsupported top-level field")
 		}
 		value, ok := request.RawField(name)
 		if !ok || validateJSON(value) != nil {
@@ -176,43 +192,43 @@ func compileRequestWithDefaultResolver(request *openai.ChatRequest, upstreamMode
 
 	maxTokens, err := parseMaxTokensWithDefaultResolver(raw["max_tokens"], raw["max_completion_tokens"], resolve)
 	if err != nil {
-		return nil, err
+		return nil, describeInvalid(err, "max_completion_tokens/max_tokens", "expected valid and consistent output-token limits")
 	}
 	stream, err := parseNullableBool(raw["stream"], false)
 	if err != nil {
-		return nil, err
+		return nil, describeInvalid(err, "stream", "expected a boolean or null")
 	}
 	if err := validateStreamOptions(raw["stream_options"]); err != nil {
-		return nil, err
+		return nil, describeInvalid(err, "stream_options", "expected only include_usage with a boolean value")
 	}
 	temperature, err := parseUnitNumber(raw["temperature"])
 	if err != nil {
-		return nil, err
+		return nil, describeInvalid(err, "temperature", "configured provider requires a value from 0 to 1")
 	}
 	topP, err := parseUnitNumber(raw["top_p"])
 	if err != nil {
 		clear(temperature)
-		return nil, err
+		return nil, describeInvalid(err, "top_p", "configured provider requires a value from 0 to 1")
 	}
 	stop, err := parseStop(raw["stop"])
 	if err != nil {
 		clear(temperature)
 		clear(topP)
-		return nil, err
+		return nil, describeInvalid(err, "stop", "expected supported stop sequences")
 	}
 
 	tools, toolNames, err := parseTools(raw["tools"])
 	if err != nil {
 		clear(temperature)
 		clear(topP)
-		return nil, err
+		return nil, describeInvalid(err, "tools", "expected an array of supported function tools")
 	}
 	choice, omitTools, err := parseToolChoice(raw["tool_choice"], toolNames)
 	if err != nil {
 		clear(temperature)
 		clear(topP)
 		clearTools(tools)
-		return nil, err
+		return nil, describeInvalid(err, "tool_choice", "expected a supported tool choice")
 	}
 	parallel, parallelPresent, err := parseOptionalBool(raw["parallel_tool_calls"])
 	if err != nil {
@@ -244,7 +260,7 @@ func compileRequestWithDefaultResolver(request *openai.ChatRequest, upstreamMode
 		clear(temperature)
 		clear(topP)
 		clearTools(tools)
-		return nil, err
+		return nil, describeInvalid(err, "messages", "expected a nonempty message array with matching tool calls")
 	}
 	out := outboundRequest{
 		Model: upstreamModel, MaxTokens: maxTokens, Messages: messages, System: system,
