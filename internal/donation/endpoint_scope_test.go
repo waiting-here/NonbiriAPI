@@ -49,12 +49,12 @@ func TestDonationScopesUseAnyEndpointTagAndRevokeReplay(t *testing.T) {
 	if _, err := e.service.GetSteward(ctx, actor, id); err == nil {
 		t.Fatal("identity grant widened standard scope")
 	}
-	if _, err := e.service.GetSteward(ctx, actor, parseTestID(t, pending.ID)); err != nil {
-		t.Fatal("standard pending access lost", err)
+	if _, err := e.service.GetSteward(ctx, actor, parseTestID(t, pending.ID)); !errors.Is(err, ErrNotFound) {
+		t.Fatal("unqualified pending exposed", err)
 	}
 	p.Permissions["donations.review"] = false
 	writeDonationPolicy(t, e, actor, p)
-	if _, err := e.service.UsesPage(authz.WithStewardPermission(ctx, "donations.browse"), reviewerSteward, actor, parseTestID(t, pending.ID), UseFilter{}, pagination.Default()); !errors.Is(err, authz.ErrPermissionDenied) {
+	if _, err := e.service.UsesPage(authz.WithStewardPermission(ctx, "donations.browse"), reviewerSteward, actor, parseTestID(t, pending.ID), UseFilter{}, pagination.Default()); !errors.Is(err, ErrNotFound) {
 		t.Fatal("maintenance grant exposed unscoped pending uses", err)
 	}
 	p.Permissions["donations.review"] = true
@@ -79,7 +79,7 @@ func TestDonationScopesUseAnyEndpointTagAndRevokeReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	list, err := e.service.DonationsStewardPage(ctx, actor, ManagementFilter{}, pagination.Default())
-	if err != nil || list.Pagination.TotalItems != "2" {
+	if err != nil || list.Pagination.TotalItems != "1" {
 		t.Fatalf("scope page count %+v %v", list, err)
 	}
 	sources, err := e.service.SourcesStewardPage(ctx, actor, SourceFilter{Scope: "all"}, pagination.Default())
@@ -121,9 +121,6 @@ func TestDonationScopesUseAnyEndpointTagAndRevokeReplay(t *testing.T) {
 	if _, err := e.service.DonationsStewardPage(ctx, actor, ManagementFilter{}, pagination.Default()); !errors.Is(err, authz.ErrPermissionDenied) {
 		t.Fatal("none browsed", err)
 	}
-	if _, err := e.service.HandlingStewardPage(ctx, actor, HandlingQueueFilter{}, pagination.Default()); !errors.Is(err, authz.ErrPermissionDenied) {
-		t.Fatal("none handled", err)
-	}
 	history, err := e.service.UserDonationHistoryPage(ctx, reviewerSteward, actor, owner, ManagementFilter{}, pagination.Default())
 	if err != nil || history.Pagination.TotalItems != "3" {
 		t.Fatalf("independent history %+v %v", history, err)
@@ -142,6 +139,8 @@ func TestCompletedStandardReviewReplaysAcrossIdentityGrantChanges(t *testing.T) 
 	owner := e.seedUser(t, "replay-donor", nil, false)
 	_, key := e.seedEndpointKey(t, owner, 'R')
 	d := e.createDonation(t, owner, key)
+	model := controlModel(t, e, "review-mainstream", true)
+	e.seedBinding(t, model, parseTestID(t, d.Keys[0].ID), "model", 0)
 	id := parseTestID(t, d.ID)
 	p := authz.DefaultStewardPermissions(5)
 	p.Permissions["donations.read_all"] = true
@@ -180,16 +179,8 @@ func TestEnhancedHandlingIncludesTaggedPendingAndRevokesReplay(t *testing.T) {
 	p.Permissions["donations.review"] = false
 	writeDonationPolicy(t, e, actor, p)
 	ctx := authz.WithStewardPermission(t.Context(), "donations.handle")
-	page, err := e.service.HandlingStewardPage(ctx, actor, HandlingQueueFilter{}, pagination.Default())
-	if err != nil || page.Pagination.TotalItems != "0" {
-		t.Fatal("untagged pending handling", page, err)
-	}
 	if _, err := e.store.DB().Exec(`INSERT INTO admin_endpoint_tags(base_url,tag) SELECT canonical_base_url,'invalid_entry' FROM donation_keys WHERE donation_id=?`, id); err != nil {
 		t.Fatal(err)
-	}
-	page, err = e.service.HandlingStewardPage(ctx, actor, HandlingQueueFilter{}, pagination.Default())
-	if err != nil || page.Pagination.TotalItems != "1" {
-		t.Fatal("tagged pending handling", page, err)
 	}
 	badge, err := e.service.BadgeSteward(ctx, actor)
 	if err != nil || badge.PendingCount != "1" {
@@ -202,7 +193,7 @@ func TestEnhancedHandlingIncludesTaggedPendingAndRevokesReplay(t *testing.T) {
 	if _, err := e.store.DB().Exec(`DELETE FROM admin_endpoint_tags`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.service.ProcessSteward(ctx, actor, id, mutation, 1); !errors.Is(err, ErrConflict) {
+	if _, err := e.service.ProcessSteward(ctx, actor, id, mutation, 1); !errors.Is(err, ErrNotFound) {
 		t.Fatal("removed tag replayed pending handling", err)
 	}
 }

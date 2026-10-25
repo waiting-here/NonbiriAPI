@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -75,5 +76,56 @@ func TestStewardPermissionsRejectUnknownMissingAndNumericOverflow(t *testing.T) 
 	p := DefaultStewardPermissions(5)
 	if !p.Permissions["users.donations.read"] || p.Permissions["logs.unredacted"] || p.Permissions["automation"] || p.Permissions["endpoints.read"] || p.Permissions["endpoints.tags"] || p.DonationScope != DonationScopeStandard {
 		t.Fatal("default contract drift")
+	}
+}
+
+func TestAIPermissionsDefaultsCurrentFormatAndRoutes(t *testing.T) {
+	p := DefaultStewardPermissions(5)
+	if !p.Permissions["ai.chat"] || p.Permissions["ai.review.read"] || p.Permissions["ai.memory.edit"] || len(p.Permissions) != 51 {
+		t.Fatal("AI defaults", p)
+	}
+	for key := range p.Permissions {
+		p.Permissions[key] = false
+	}
+	for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit"} {
+		delete(p.Permissions, key)
+	}
+	grants, _ := json.Marshal(p.Permissions)
+	limits, _ := json.Marshal(p.Limits)
+	if _, err := DecodeStewardPermissions(5, 1, string(grants), string(limits), "none"); err == nil {
+		t.Fatal("runtime accepted unconverted stored policy")
+	}
+	if ValidateStewardPermissions(p) == nil {
+		t.Fatal("PUT accepted incomplete catalog")
+	}
+	current := DefaultStewardPermissions(5)
+	currentBody, _ := json.Marshal(current.Permissions)
+	for _, malformed := range []string{
+		strings.Replace(string(currentBody), `"ai.chat":true`, `"ai.chat":null`, 1),
+		strings.Replace(string(currentBody), `"ai.chat":true`, `"ai.chat":true,"ai.chat":false`, 1),
+		strings.Replace(string(currentBody), `"ai.chat":true`, `"unknown":true`, 1),
+	} {
+		if _, err := DecodeStewardPermissions(5, 1, malformed, string(limits), "standard"); err == nil {
+			t.Fatal("malformed current row accepted")
+		}
+	}
+	for path, want := range map[string]string{
+		"/ai/chat": "ai.chat", "/ai/chat/sessions/1/messages": "ai.chat", "/ai/chat/plans/1/approve": "ai.chat",
+		"/ai/reviews": "ai.review.read", "/ai/reviews/1": "ai.review.read",
+		"/ai/memories/chat": "ai.memory.edit", "/ai/memories/auto_review": "ai.memory.edit",
+		"/ai/config": "unconfigured", "/ai/requests": "unconfigured", "/ai/usage": "unconfigured", "/ai/archives": "unconfigured", "/ai/cleanup": "unconfigured",
+	} {
+		if got := StewardRoutePermission("GET", "/api/steward"+path); got != want {
+			t.Fatal(path, got, want)
+		}
+	}
+	if StewardRoutePermission("PUT", "/api/steward/ai/chat/messages/1") != "ai.chat" {
+		t.Fatal("chat message edit mapping")
+	}
+	if StewardRoutePermission("PUT", "/api/steward/ai/memories/chat") != "ai.memory.edit" {
+		t.Fatal("memory write mapping")
+	}
+	if StewardRoutePermission("POST", "/api/steward/ai/reviews") != "unconfigured" {
+		t.Fatal("review write mapping")
 	}
 }

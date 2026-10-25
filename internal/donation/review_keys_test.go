@@ -3,16 +3,14 @@ package donation
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
-func TestDefaultStewardCommonReviewReadsPendingKeysAndUsesWithoutMaintenanceScope(t *testing.T) {
+func TestDefaultStewardReadsAllUsesWithinUnifiedDonationScope(t *testing.T) {
 	e := newDonationTestEnv(t)
 	e.seedUser(t, "", nil, true)
 	five := int64(5)
@@ -21,6 +19,7 @@ func TestDefaultStewardCommonReviewReadsPendingKeysAndUsesWithoutMaintenanceScop
 	_, physical := e.seedEndpointKey(t, owner, 'r')
 	donation := e.createDonation(t, owner, physical)
 	id := parseTestID(t, donation.ID)
+	qualifyStandardDonation(t, e, donation.ID)
 	uses := ownerUsesForTest(t, e, owner, id)
 	item := []UseReviewItem{{UseID: parseTestID(t, uses[0].ID), ExpectedRevision: parseTestID(t, uses[0].Revision), Decision: "approve", ReviewNote: "accepted"}}
 	if _, err := e.service.reviewUses(context.Background(), reviewerAdmin, 0, id, item, donationMutation(t, 'c', http.MethodPost, routeAdminUses+"/review", []int64{id}, item)); err != nil {
@@ -46,7 +45,7 @@ func TestDefaultStewardCommonReviewReadsPendingKeysAndUsesWithoutMaintenanceScop
 		t.Fatalf("key subset differs: %+v %+v", keys, detail)
 	}
 	for index, key := range keys.Data {
-		if key.ID != detail.Keys[index].ID || key.EndpointKeyID != nil || key.CanManage || !key.MaintenanceScopeRequired || len(key.VisibleModels) != 0 {
+		if key.ID != detail.Keys[index].ID || key.EndpointKeyID != nil || !key.CanManage || key.MaintenanceScopeRequired || len(key.VisibleModels) != 1 {
 			t.Fatalf("review key scope: %+v", key)
 		}
 	}
@@ -61,11 +60,11 @@ func TestDefaultStewardCommonReviewReadsPendingKeysAndUsesWithoutMaintenanceScop
 	if err := json.Unmarshal(w.Body.Bytes(), &pending); err != nil {
 		t.Fatal(err)
 	}
-	if len(pending.Data) != len(uses)-1 {
-		t.Fatalf("approved uses leaked into default review: %+v", pending)
+	if len(pending.Data) != len(uses) {
+		t.Fatalf("unified use list omitted approved uses: %+v", pending)
 	}
-	if _, err := e.service.KeyStewardSession(context.Background(), reviewer, id, parseTestID(t, keys.Data[0].ID)); !errors.Is(err, authz.ErrPermissionDenied) {
-		t.Fatalf("review read granted maintenance: %v", err)
+	if _, err := e.service.KeyStewardSession(context.Background(), reviewer, id, parseTestID(t, keys.Data[0].ID)); err != nil {
+		t.Fatalf("qualified maintenance denied: %v", err)
 	}
 	page, err := e.service.DonationsStewardPage(context.Background(), reviewer, ManagementFilter{}, pagination.Default())
 	if err != nil || len(page.Data) != 1 || page.Data[0].Owner != nil {

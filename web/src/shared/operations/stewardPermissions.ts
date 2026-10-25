@@ -51,6 +51,9 @@ export const STEWARD_PERMISSION_DEFAULTS = {
   'maintenance.enable': false,
   'egress.read': false,
   automation: false,
+  'ai.chat': true,
+  'ai.review.read': false,
+  'ai.memory.edit': false,
 } as const;
 
 export const STEWARD_LIMIT_MAXIMUMS = {

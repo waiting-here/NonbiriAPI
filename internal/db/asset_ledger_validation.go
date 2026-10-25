@@ -71,13 +71,21 @@ ORDER BY o.ledger_seq,e.line_no`)
 	if !balanced() {
 		return errors.New("ledger asset conservation mismatch")
 	}
-	return ValidateAssetBalances(ctx, tx)
+	return validateAssetBalances(ctx, tx, true)
 }
 
 // ValidateAssetBalances replays each surviving account from its retained opening
-// balance, including signed user debt, without collecting the ledger in RAM.
+// balance in the current schema, including signed user debt, without collecting the ledger in RAM.
 func ValidateAssetBalances(ctx context.Context, tx *sql.Tx) error {
-	through, _, compacted, err := LedgerCompactionState(ctx, tx)
+	return validateAssetBalances(ctx, tx, false)
+}
+
+func validateAssetBalances(ctx context.Context, tx *sql.Tx, historical bool) error {
+	readState := LedgerCompactionState
+	if historical {
+		readState = historicalLedgerCompactionState
+	}
+	through, _, compacted, err := readState(ctx, tx)
 	if err != nil {
 		return err
 	}
@@ -167,7 +175,7 @@ func validateAssetCapacity(ctx context.Context, tx *sql.Tx) error {
 	if err := tx.QueryRowContext(ctx, `SELECT last_ledger_seq,reserved_future_rows FROM credit_capacity WHERE id=1`).Scan(&last, &reservedRaw); err != nil {
 		return err
 	}
-	through, _, _, err := LedgerCompactionState(ctx, tx)
+	through, _, _, err := historicalLedgerCompactionState(ctx, tx)
 	if err != nil {
 		return err
 	}

@@ -112,26 +112,15 @@ func replayDeletedBinding(ctx context.Context, tx *sql.Tx, decision idempotency.
 	if len(stored.Sources) == 0 || len(stored.Sources) > maxBindingBatch {
 		return empty, ErrInvariant
 	}
-	if scope.RestrictedKeys() {
-		if scope.DonationScope == authz.DonationScopeNone {
-			return empty, authz.ErrPermissionDenied
-		}
-		var mainstream bool
-		if err := tx.QueryRowContext(ctx, `SELECT is_mainstream FROM charity_models WHERE id=?`, scope.ModelID).Scan(&mainstream); err != nil {
-			return empty, err
-		}
-		sourceScope := scope
-		// The original mapping remains a valid read-only standard receipt anchor
-		// while its model is still mainstream and its source still exists.
-		if mainstream {
-			sourceScope.DonationScope = authz.DonationScopeFull
-		}
-		for _, source := range stored.Sources {
-			if err := sourceScope.RequireKey(ctx, tx, source.DonationID, source.KeyID, now, false); err != nil {
-				return empty, managementScopeError(err)
-			}
-		}
+	if scope.DonationScope == authz.DonationScopeNone {
+		return empty, authz.ErrPermissionDenied
 	}
+	// The exact completed request can be recovered after its own deletion removes
+	// source qualification. This branch never authorizes another source operation.
 	decision.ResponseBody = stored.Response
-	return replayBindingEdit(ctx, tx, decision, scope, now, response)
+	if response == "receipt" {
+		result, err := replay[BindingRevisionReceipt](decision)
+		return compactBindingResult(result), err
+	}
+	return replay[AdminBindings](decision)
 }

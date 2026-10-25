@@ -13,7 +13,7 @@ import { parseStewardLimitInput } from '../components/StewardPermissionEditor';
 describe('per-user steward permissions', () => {
   it('keeps default review and history access while full diagnostic and delegation scopes stay absent', () => {
     const policy = defaultStewardPermissions(5);
-    expect(stewardPermissionKeys).toHaveLength(48);
+    expect(stewardPermissionKeys).toHaveLength(51);
     expect(policy.donation_scope).toBe('standard');
     expect(policy.permissions['endpoints.read']).toBe(false);
     expect(policy.permissions['endpoints.tags']).toBe(false);
