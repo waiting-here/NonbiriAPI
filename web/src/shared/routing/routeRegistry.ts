@@ -464,6 +464,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     layout: 'wide',
     nav: true,
     navGroup: 'operations',
+    icon: 'assistant',
     labelKey: 'common.agent.title',
     registered: true,
   }),
