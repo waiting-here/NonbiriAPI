@@ -1574,7 +1574,7 @@ test('connection lists return to the requested page and mainstream mappings use 
     const mappedEntry = (name: string) =>
       savedMapping
         .locator(':scope > div.nb-stack')
-        .filter({ has: reread.getByLabel(name, { exact: true }) });
+        .filter({ has: manager.getByLabel(name, { exact: true }) });
     const savedChat = mappedEntry(channel.entries[0]!.name);
     const savedResponses = mappedEntry(channel.entries[1]!.name);
     await expect(savedChat.getByLabel(c.upstreamModel, { exact: true })).toHaveValue('mapped-chat');

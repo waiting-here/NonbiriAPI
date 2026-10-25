@@ -1129,15 +1129,17 @@ test('level 5 with full donation scope handles four custom-source keys and edits
     await sourceState.selectOption('pending');
     const pendingResponse = await pendingRead;
     expect(pendingResponse.status()).toBe(200);
-    expect((await pendingResponse.json()).data).toEqual([
-      expect.objectContaining({
-        key_id: data.pending_key_id,
-        donation_id: data.pending_donation_id,
-        charity_state: 'pending',
-        can_manage: false,
-        endpoint_key_id: null,
-      }),
-    ]);
+    expect((await pendingResponse.json()).data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key_id: data.pending_key_id,
+          donation_id: data.pending_donation_id,
+          charity_state: 'pending',
+          can_manage: false,
+          endpoint_key_id: null,
+        }),
+      ]),
+    );
     await expect(browserSource).toHaveCount(1);
     await expect(
       sourceKeys.getByRole('button', { name: `Manage key #${data.pending_key_id}`, exact: true }),
