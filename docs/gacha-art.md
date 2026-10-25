@@ -25,6 +25,8 @@ the theme grants no SP site appearance. The character-free backgrounds and
 retained foregrounds share the theme's R-18 classification, including standard,
 thumbnail and high-resolution WebP exports. Its adult artwork is included in
 the public source distribution and remains disabled by default in the product.
+Heartfelt moments retain each card's aligned static scenery behind the animated
+character so the hand-to-door and foreground contact points remain supported.
 
 ## Artwork and identity
 

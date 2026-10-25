@@ -1,0 +1,97 @@
+.seasonal-review {
+  max-width: var(--nb-content-wide);
+  margin: auto;
+  padding: var(--nb-space-6);
+}
+.seasonal-review__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--nb-space-4);
+}
+.seasonal-review__header h1 {
+  font-size: var(--nb-font-size-2xl);
+}
+.seasonal-review__header p {
+  color: var(--nb-color-text-muted);
+}
+.seasonal-review__controls {
+  display: grid;
+  gap: var(--nb-space-4);
+  padding: var(--nb-space-5);
+  background: var(--nb-color-surface);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-lg);
+}
+.seasonal-review__controls .nb-toggle {
+  max-width: 32rem;
+}
+.seasonal-review__cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--nb-space-6);
+  max-width: 52rem;
+  margin: var(--nb-space-6) auto;
+}
+.seasonal-review figure {
+  margin: 0;
+  min-width: 0;
+}
+.seasonal-review figcaption {
+  padding: var(--nb-space-3);
+  text-align: center;
+  color: var(--nb-color-text-muted);
+}
+.seasonal-review__art {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: var(--nb-radius-xl);
+  background: var(--nb-color-surface-muted);
+}
+.seasonal-review__art > img,
+.seasonal-review__art > canvas,
+.seasonal-review__art > .nb-artwork-placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.seasonal-review__art > canvas {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+.seasonal-review__art > canvas.is-ready {
+  opacity: 1;
+}
+.seasonal-review__tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 12rem));
+  gap: var(--nb-space-4);
+  justify-content: center;
+  margin: var(--nb-space-6) 0;
+}
+.seasonal-review__landscapes {
+  display: grid;
+  gap: var(--nb-space-6);
+}
+.seasonal-review__landscapes img,
+.seasonal-review__landscapes .nb-artwork-placeholder {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1672 / 941;
+  object-fit: contain;
+  border-radius: var(--nb-radius-lg);
+}
+@media (width < 40rem) {
+  .seasonal-review {
+    padding: var(--nb-space-3);
+  }
+  .seasonal-review__cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .seasonal-review__controls {
+    padding: var(--nb-space-3);
+  }
+}

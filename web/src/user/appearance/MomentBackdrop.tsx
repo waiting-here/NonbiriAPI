@@ -23,6 +23,8 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
       ? '/assets/gacha/motion/' + card.id + '/hero.webp'
       : '/assets/gacha/layers/' + card.id + '.webp'
     : undefined;
+  const registeredScene =
+    card?.theme === 's' ? '/assets/gacha/motion/' + card.id + '/background.webp' : undefined;
   useEffect(() => {
     const surface = canvas.current;
     if (!surface || !card || !rare) return;
@@ -76,19 +78,38 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
       release?.();
     };
   }, [card, rare]);
-  const background = card ? '/assets/gacha/backgrounds/' + card.theme + '.webp' : artwork.art;
+  const background =
+    registeredScene ?? (card ? '/assets/gacha/backgrounds/' + card.theme + '.webp' : artwork.art);
   return (
-    <div className="nb-moment-backdrop" aria-hidden="true" data-moment={artwork.key}>
+    <div
+      className="nb-moment-backdrop"
+      aria-hidden="true"
+      data-moment={artwork.key}
+      data-registered={!!registeredScene}
+    >
       <img
         ref={scene}
         className="nb-moment-backdrop__scene"
         src={background}
-        srcSet={artSourceSet(background)}
-        sizes="(max-aspect-ratio: 16/9) 177.78vh, 100vw"
+        srcSet={registeredScene ? artSourceSet(background, 1024, 2560) : artSourceSet(background)}
+        sizes={
+          registeredScene
+            ? '(max-aspect-ratio: 2/3) 66.67vh, 100vw'
+            : '(max-aspect-ratio: 16/9) 177.78vh, 100vw'
+        }
         alt=""
       />
       {hero && (
         <div className="nb-moment-character">
+          {registeredScene && (
+            <img
+              className="nb-moment-character__plate"
+              src={registeredScene}
+              srcSet={artSourceSet(registeredScene, 1024, 2560)}
+              sizes="(width < 40rem) 100vw, 66.67vh"
+              alt=""
+            />
+          )}
           <img
             src={hero}
             srcSet={artSourceSet(hero, 1024, 2560)}

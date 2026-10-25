@@ -1,8 +1,9 @@
 import type { DrawReceipt, Preferences } from '../user/activities/gacha/types';
 
-export type Scenario = 'ten' | 'plain' | 'ssr' | 'sp2' | 'n';
+export type Scenario = 'ten' | 'plain' | 'ssr' | 'sp2' | 'n' | 'seasonal';
 export function sampleReceipt(scenario: Scenario): DrawReceipt {
   const sets: Record<Scenario, string[]> = {
+    seasonal: ['s-chatgpt', 's-claude'],
     ten: [
       'a-chatgpt',
       'b-glm',

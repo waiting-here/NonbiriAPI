@@ -80,7 +80,7 @@ function initial(): Saved {
       donation: '0',
       pools: [
         common,
-        ...(['i', 'j', 'l', 'm'] as const).map((theme) => ({
+        ...(['i', 'j', 'l', 'm', 's'] as const).map((theme) => ({
           ...common,
           id: theme,
           name: themeById[theme].name,
@@ -94,7 +94,9 @@ function initial(): Saved {
               : { ...defaultRules },
           starts_at: at - 3600,
           ends_at: at + 30 * 86400,
-          featured: cards.filter((c) => c.theme === theme || c.theme === 'h').map((c) => c.id),
+          featured: cards
+            .filter((c) => c.theme === theme || (theme !== 's' && c.theme === 'h'))
+            .map((c) => c.id),
         })),
       ],
       shop: {
@@ -407,8 +409,8 @@ export const appearancePreviewPort: AppearancePort = {
     return {
       selected: previewAppearance,
       unlocked: appearanceIDs,
-      moment: 'cover:permanent',
-      moments: ['cover:permanent'],
+      moment: appearanceState().moment,
+      moments: appearanceState().moments,
       updated_at: null,
     };
   },

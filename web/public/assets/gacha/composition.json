@@ -980,6 +980,15 @@
         2160
       ],
       "fit": "full-canvas"
+    },
+    "s": {
+      "background": "backgrounds/s.webp",
+      "foreground": "layers/groups/s.webp",
+      "canvas": [
+        1672,
+        941
+      ],
+      "fit": "full-canvas"
     }
   },
   "covers": {
@@ -1045,6 +1054,15 @@
         2160
       ],
       "fit": "full-canvas"
+    },
+    "s": {
+      "background": "backgrounds/covers/s.webp",
+      "foreground": "layers/covers/s.webp",
+      "canvas": [
+        1672,
+        941
+      ],
+      "fit": "full-canvas"
     }
   },
   "sampling": "Lanczos3; generated native 1024x1536 portraits and approximately 1672x941 landscapes; larger derivatives do not add native detail.",
@@ -1085,7 +1103,7 @@
       "closed.webp"
     ],
     "eyeRegistration": "Same full-canvas coordinates; half and closed layers retain only the face region.",
-    "scaling": "01/04/07: same-source Lanczos resampling; 08: previously adopted enhanced foreground with cleaned current alpha and the adopted same-version background. Large dimensions do not imply native added detail.",
+    "scaling": "Portraits and group: same-source Lanczos resampling. Cover: existing enhanced foreground with the cleaned current alpha and the same adopted background. Large dimensions do not imply native added detail.",
     "contentRating": "r18"
   }
 }

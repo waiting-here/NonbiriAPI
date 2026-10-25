@@ -201,6 +201,43 @@ it('does not preload rated draw art or fetch rated closeup scenery', async () =>
   view.unmount();
 });
 
+it('keeps the seasonal contact scenery aligned with its character and hides both when restricted', () => {
+  vi.stubGlobal('matchMedia', () => ({
+    matches: true,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+  for (const id of ['s-chatgpt', 's-claude']) {
+    const tree = (disabled: boolean) => (
+      <ArtworkPolicyProvider disabled={disabled}>
+        <MomentBackdrop moment={'card:' + id} />
+      </ArtworkPolicyProvider>
+    );
+    const view = render(tree(false));
+    expect(view.container.querySelector('.nb-moment-backdrop__scene')).toHaveAttribute(
+      'src',
+      `/assets/gacha/motion/${id}/background.webp`,
+    );
+    const character = view.container.querySelector('.nb-moment-character');
+    expect(character?.querySelector('.nb-moment-character__plate')).toHaveAttribute(
+      'src',
+      `/assets/gacha/motion/${id}/background.webp`,
+    );
+    expect(character?.querySelector('img:not(.nb-moment-character__plate)')).toHaveAttribute(
+      'src',
+      `/assets/gacha/motion/${id}/hero.webp`,
+    );
+    expect(view.container.querySelector('canvas')).toHaveAttribute('data-ready', 'false');
+    view.rerender(tree(true));
+    expect(view.container.querySelector('.nb-moment-character')).toBeNull();
+    expect(view.container.querySelector('.nb-moment-backdrop__scene')).toHaveAttribute(
+      'src',
+      '/assets/gacha/covers/permanent.webp',
+    );
+    view.unmount();
+  }
+});
+
 it('filters mixed responsive sources and retains only the permanent fallback while disabled', () => {
   const registry = catalog('card:g-chatgpt');
   const src = cardById['a-chatgpt'].art;
