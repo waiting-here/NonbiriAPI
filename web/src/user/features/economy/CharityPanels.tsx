@@ -945,7 +945,7 @@ export function DonationKeyPanel({
       ) : null}
       {accountID && donationId && donationRevision ? (
         <OwnerFailureReset
-          key={`${accountID}:${donationId}:${donationKey.id}`}
+          key={`failure-reset:${accountID}:${donationId}:${donationKey.id}`}
           donationID={donationId}
           keyID={donationKey.id}
           revision={donationRevision}
@@ -957,7 +957,7 @@ export function DonationKeyPanel({
       ) : null}
       {accountID && donationId ? (
         <RecurringLimitsDisclosure
-          key={`${accountID}:${donationId}:${donationKey.id}`}
+          key={`recurring:${accountID}:${donationId}:${donationKey.id}`}
           role="owner"
           accountId={accountID}
           donationId={donationId}
