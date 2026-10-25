@@ -40,6 +40,7 @@ type ContinuationAuthorizer interface {
 type KeyDeriver interface{ DeriveGenerationTwoSubkey([]byte) ([]byte, error) }
 type Options struct {
 	Database        *sql.DB
+	ReadDatabase    *sql.DB
 	Finance         finance.Blackjack
 	UserAuthorizer  resources.FinalTxAuthorizer
 	AdminAuthorizer host.AdminAuthorizer
@@ -56,6 +57,7 @@ type Options struct {
 }
 type Service struct {
 	database          *sql.DB
+	readDB            *sql.DB
 	finance           finance.Blackjack
 	authorizer        resources.FinalTxAuthorizer
 	adminAuthorizer   host.AdminAuthorizer
@@ -81,6 +83,10 @@ func New(o Options) (*Service, error) {
 		return nil, ErrInvariant
 	}
 	s := &Service{database: o.Database, finance: o.Finance, authorizer: o.UserAuthorizer, adminAuthorizer: o.AdminAuthorizer, continuation: o.Continuation, limiter: o.Limiter, pools: o.Pools, publisher: o.Publisher, now: o.Now, generateID: o.GenerateID, reportError: o.ReportError, random: o.Random}
+	s.readDB = o.ReadDatabase
+	if s.readDB == nil {
+		s.readDB = o.Database
+	}
 	s.adminAudit = o.AdminAudit
 	if s.now == nil {
 		s.now = time.Now
@@ -110,22 +116,46 @@ func (s *Service) begin(ctx context.Context) (*sql.Tx, int64, error) {
 		tx.Rollback()
 		return nil, 0, classify(err)
 	}
-	now := s.now().UTC().Unix()
-	if now < 0 || now > maxTime {
-		tx.Rollback()
-		return nil, 0, ErrInvariant
-	}
-	var observed int64
-	if err := tx.QueryRowContext(ctx, `SELECT observed_at FROM game_blackjack_clock WHERE id=1`).Scan(&observed); err != nil {
+	now, err := s.observedNow(ctx, tx)
+	if err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}
-	now = max(now, observed)
 	if _, err := tx.ExecContext(ctx, `UPDATE game_blackjack_clock SET observed_at=? WHERE id=1`, now); err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}
 	return tx, now, nil
+}
+
+// History never advances the game clock or settles a table. Keep its live
+// authorization and projections together without taking the writer position.
+func (s *Service) beginRead(ctx context.Context) (*sql.Tx, int64, error) {
+	if s == nil || s.closed.Load() {
+		return nil, 0, ErrUnavailable
+	}
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, 0, classify(err)
+	}
+	now, err := s.observedNow(ctx, tx)
+	if err != nil {
+		tx.Rollback()
+		return nil, 0, err
+	}
+	return tx, now, nil
+}
+
+func (s *Service) observedNow(ctx context.Context, tx *sql.Tx) (int64, error) {
+	now := s.now().UTC().Unix()
+	if now < 0 || now > maxTime {
+		return 0, ErrInvariant
+	}
+	var observed int64
+	if err := tx.QueryRowContext(ctx, `SELECT observed_at FROM game_blackjack_clock WHERE id=1`).Scan(&observed); err != nil {
+		return 0, err
+	}
+	return max(now, observed), nil
 }
 
 func (s *Service) generate(prefix string) (string, error) {
