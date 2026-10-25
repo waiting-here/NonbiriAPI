@@ -802,7 +802,11 @@ describe('CharityManagement corrective controls', () => {
     });
     await view.user.click(await screen.findByRole('tab', { name: /Charity models and/ }));
     expect(await screen.findByText('[公益]provider/model')).toBeVisible();
-    expect(screen.getAllByRole('tab')).toHaveLength(4);
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Donation review queue',
+      'Charity models and sources',
+      'Browse by source',
+    ]);
     expect(
       fetchMock.mock.calls.every(([input]) => !String(input).includes('/donation-sources')),
     ).toBe(true);
@@ -1482,7 +1486,8 @@ describe('CharityManagement corrective controls', () => {
 
     await view.user.click(await screen.findByRole('tab', { name: 'Charity models and bindings' }));
     await view.user.click(screen.getByRole('button', { name: 'Create charity model' }));
-    expect(screen.getByRole('checkbox', { name: 'Chat Completions / Responses' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Responses', exact: true })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Embeddings' })).not.toBeChecked();
     await view.user.click(screen.getByRole('checkbox', { name: 'Image generation' }));
     expect(screen.getByRole('checkbox', { name: 'L1' })).toBeChecked();
@@ -2095,24 +2100,30 @@ it.each(['approve', 'reject'] as const)(
           return completed ? error(403, 'forbidden') : jsonResponse(current);
         if (url.pathname === '/api/steward/donations/1/uses')
           return completed ? error(403, 'forbidden') : jsonResponse(numberedPage([use], url));
-        if (url.pathname === '/api/steward/donations/1/uses/review') {
+        if (url.pathname === '/api/steward/donations/1/pending-review') {
           expect(init?.method).toBe('POST');
           writes++;
           expect(JSON.parse(String(init?.body))).toEqual({
-            items: [
+            expected_revision: current.revision,
+            decision,
+            reason: '',
+            uses: [
               {
                 use_id: '6',
                 expected_revision: '9',
                 expected_review_revision: null,
-                decision,
-                review_note: '',
               },
             ],
           });
           expect(new Headers(init?.headers).get('Idempotency-Key')).toBeTruthy();
           await writeGate;
           completed = true;
-          return jsonResponse({ results: [{ use_id: '6', ok: true }] });
+          return jsonResponse({
+            ...current,
+            revision: '2',
+            status: decision === 'approve' ? 'approved' : 'rejected',
+            use_summary: { total: '1', pending: '0', approved: decision === 'approve' ? '1' : '0' },
+          });
         }
         throw new Error('Unexpected request: ' + url.pathname);
       }),
@@ -2129,7 +2140,7 @@ it.each(['approve', 'reject'] as const)(
       ...stewardSession,
       user: { ...stewardSession.user, effective_level: 5 },
     });
-    await view.user.click(await screen.findByText('Chat completions', { exact: true }));
+    await screen.findByRole('button', { name: 'Approve pending content' });
     await view.user.click(
       screen.getByRole('button', {
         name: decision === 'approve' ? 'Approve pending content' : 'Return pending content',
@@ -2138,7 +2149,7 @@ it.each(['approve', 'reject'] as const)(
     await waitFor(() => expect(writes).toBe(1));
     expect(screen.getByRole('button', { name: 'Return to list' })).toBeDisabled();
     finishWrite();
-    await screen.findByText('Use 6 saved');
+    await screen.findByText('Review saved.');
     await screen.findByText('Refresh temporarily unavailable');
     expect(screen.queryByRole('heading', { name: 'Donation uses' })).not.toBeInTheDocument();
     failQueue = false;
@@ -2146,10 +2157,10 @@ it.each(['approve', 'reject'] as const)(
     await screen.findByText(
       'This donation has already been reviewed. Return to the pending queue.',
     );
-    expect(screen.getByText('Use 6 saved')).toBeVisible();
+    expect(screen.getByText('Review saved.')).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Return to list' }));
     await screen.findByRole('heading', { name: 'No donations' });
-    expect(screen.getByText('Use 6 saved')).toBeVisible();
+    expect(screen.getByText('Review saved.')).toBeVisible();
     expect(writes).toBe(1);
     expect(capabilityLost).not.toHaveBeenCalled();
   },

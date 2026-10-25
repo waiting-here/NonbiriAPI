@@ -399,14 +399,6 @@ async function clickDonationCheckbox(user: TestUser, checkbox: HTMLElement) {
     await user.click(screen.getByRole('button', { name: charityCopy.presentation.openPicker }));
   }
   await user.click(checkbox);
-  if (
-    checkbox.getAttribute('aria-label')?.startsWith('Select resource key') &&
-    (checkbox as HTMLInputElement).checked
-  ) {
-    for (const service of screen.getAllByRole('checkbox', { name: 'Chat completions' })) {
-      if (!(service as HTMLInputElement).checked) await user.click(service);
-    }
-  }
 }
 
 async function declinePublicThanks(user: TestUser) {
@@ -485,7 +477,10 @@ describe('donation composer recovery', () => {
       station: 'user',
       role: 'user',
     });
-    await view.user.type(screen.getByRole('textbox', { name: /donation description/i }), 'keep the original intent');
+    await view.user.type(
+      screen.getByRole('textbox', { name: /donation description/i }),
+      'keep the original intent',
+    );
     const checkboxes = donationCheckboxes();
     await clickDonationCheckbox(view.user, checkboxes[0]);
     await clickDonationCheckbox(view.user, checkboxes[1]);
@@ -493,7 +488,9 @@ describe('donation composer recovery', () => {
     await view.user.click(screen.getByRole('button', { name: /submit for review/i }));
     const original = structuredClone(mutation.mutateAsync.mock.calls[0]![0]);
     view.rerender(<Host epoch="second" />);
-    expect(screen.getByRole('textbox', { name: /donation description/i })).toHaveValue('keep the original intent');
+    expect(screen.getByRole('textbox', { name: /donation description/i })).toHaveValue(
+      'keep the original intent',
+    );
     expect(checkboxes[0]).toBeChecked();
     expect(checkboxes[1]).toBeChecked();
     expect(screen.getByRole('button', { name: /submit for review/i })).toBeDisabled();
@@ -510,13 +507,18 @@ describe('donation composer recovery', () => {
       withPickerChoices(<DonationComposer draftNamespace="conflict" />),
       { station: 'user', role: 'user' },
     );
-    await view.user.type(screen.getByRole('textbox', { name: /donation description/i }), 'keep my draft');
+    await view.user.type(
+      screen.getByRole('textbox', { name: /donation description/i }),
+      'keep my draft',
+    );
     const checkboxes = donationCheckboxes();
     await clickDonationCheckbox(view.user, checkboxes[0]);
     await clickDonationCheckbox(view.user, checkboxes[1]);
     await declinePublicThanks(view.user);
     await view.user.click(screen.getByRole('button', { name: /submit for review/i }));
-    expect(screen.getByRole('textbox', { name: /donation description/i })).toHaveValue('keep my draft');
+    expect(screen.getByRole('textbox', { name: /donation description/i })).toHaveValue(
+      'keep my draft',
+    );
     expect(checkboxes[0]).toBeChecked();
     expect(checkboxes[1]).toBeChecked();
     const remove = screen.getByRole('button', { name: /remove/i });
@@ -531,7 +533,10 @@ describe('donation composer recovery', () => {
       withPickerChoices(<DonationComposer draftNamespace="browse-failed" />),
       { station: 'user', role: 'user' },
     );
-    await view.user.type(screen.getByRole('textbox', { name: /donation description/i }), 'selected valid resource');
+    await view.user.type(
+      screen.getByRole('textbox', { name: /donation description/i }),
+      'selected valid resource',
+    );
     const checkboxes = donationCheckboxes();
     await clickDonationCheckbox(view.user, checkboxes[0]);
     await clickDonationCheckbox(view.user, checkboxes[1]);
@@ -687,13 +692,17 @@ describe('donation composer recovery', () => {
       ]),
       { station: 'user', role: 'user' },
     );
-    expect(screen.getByRole('textbox', { name: /donation description/i })).toHaveValue('return-safe draft');
+    expect(screen.getByRole('textbox', { name: /donation description/i })).toHaveValue(
+      'return-safe draft',
+    );
     rendered.rerender(withPickerChoices(<DonationComposer draftNamespace="account-10" />));
-    expect(screen.getByRole('textbox', { name: /donation description/i })).toHaveValue('return-safe draft');
+    expect(screen.getByRole('textbox', { name: /donation description/i })).toHaveValue(
+      'return-safe draft',
+    );
     expect(rendered.container.querySelector('input[type="password"]')).toBeNull();
   });
 
-  it('defaults mainstream donations to their available services and exact catalog, preserving cancellations across reselection', async () => {
+  it('keeps all authorized services and the exact catalog snapshot across mainstream key reselection', async () => {
     const mutation = successfulMutation();
     vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
     const source = {
@@ -729,14 +738,13 @@ describe('donation composer recovery', () => {
       screen.getByRole('button', { name: charityCopy.presentation.openPicker }),
     );
     await rendered.user.click(screen.getByLabelText('Select resource key 62'));
-    expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: 'Chat completions' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Responses' })).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox', { name: 'Share this catalog' })).toBeNull();
-    await rendered.user.click(screen.getByRole('checkbox', { name: 'Responses' }));
     await rendered.user.click(screen.getByLabelText('Select resource key 62'));
     await rendered.user.click(screen.getByLabelText('Select resource key 62'));
     await rendered.queryClient.invalidateQueries({ queryKey: ['user'] });
-    expect(screen.getByRole('checkbox', { name: 'Responses' })).not.toBeChecked();
+    expect(screen.getByLabelText('Select resource key 62')).toBeChecked();
     await rendered.user.type(
       screen.getByRole('textbox', { name: /donation description/i }),
       'Share selected services',
@@ -752,7 +760,7 @@ describe('donation composer recovery', () => {
         keys: [
           {
             endpointKeyId: '62',
-            nativeServices: ['chat_completions'],
+            nativeServices: ['chat_completions', 'responses'],
             credentialId: '81',
             credentialVersion: '1',
             grantRevision: '1',
@@ -765,7 +773,8 @@ describe('donation composer recovery', () => {
   });
 
   it('defaults mainstream donations without a catalog to available services only and custom donations to their authorized services', async () => {
-    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(successfulMutation() as never);
+    const mutation = successfulMutation();
+    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
     const rendered = await renderWithProviders(
       withPickerChoices(<DonationComposer draftNamespace="defaults-without-catalog" />, [
         mainstreamChoice,
@@ -777,12 +786,35 @@ describe('donation composer recovery', () => {
       screen.getByRole('button', { name: charityCopy.presentation.openPicker }),
     );
     await rendered.user.click(screen.getByLabelText('Select resource key 62'));
-    expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: 'Responses' })).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox', { name: 'Share this catalog' })).toBeNull();
     await rendered.user.click(screen.getByLabelText('Select resource key 62'));
     await rendered.user.click(screen.getByLabelText('Select resource key 61'));
-    expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
+    expect(screen.getByLabelText('Select resource key 61')).toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: 'Chat completions' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Responses' })).not.toBeInTheDocument();
+    await rendered.user.type(
+      screen.getByRole('textbox', { name: /donation description/i }),
+      'Share authorized services',
+    );
+    await declinePublicThanks(rendered.user);
+    await rendered.user.click(screen.getByLabelText(charityCopy.ownershipAuthorization));
+    await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
+    await waitFor(() =>
+      expect(mutation.mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          keys: [
+            expect.objectContaining({
+              endpointKeyId: '61',
+              nativeServices: choices[0].key.nativeServices,
+              credentialId: '81',
+              credentialVersion: '1',
+              grantRevision: '1',
+            }),
+          ],
+        }),
+      ),
+    );
   });
 
   it('requires a pure mainstream channel or a custom-only selection', async () => {
@@ -1083,7 +1115,9 @@ describe('donation composer recovery', () => {
       conflict.reconcileGeneration = 1;
       conflict.reconcileError = null;
       rendered.rerender(<DonationCard donation={donation} showDetailLink={showDetailLink} />);
-      expect(screen.getByRole('textbox', { name: /donation description/i })).toHaveValue('preserved safe edit');
+      expect(screen.getByRole('textbox', { name: /donation description/i })).toHaveValue(
+        'preserved safe edit',
+      );
       expect(screen.getByRole('button', { name: /save/i })).toBeEnabled();
       expect(screen.getByText(charityCopy.mutationReconciled)).toBeInTheDocument();
     },

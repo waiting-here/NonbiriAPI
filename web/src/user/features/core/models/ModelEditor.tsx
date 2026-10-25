@@ -109,7 +109,7 @@ export function ModelEditor({
     initialStrategy ?? initial?.route_strategy ?? 'cache_balanced',
   );
   const [modelTypes, setModelTypes] = useState<ModelType[]>(
-    initial?.model_types ?? ['chat_completions'],
+    initial?.model_types ?? ['chat_completions', 'responses'],
   );
   const [showTypeError, setShowTypeError] = useState(false);
   const [cloudflareProxy, setCloudflareProxy] = useState(initial?.cloudflare_proxy_enabled ?? true);
