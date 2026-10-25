@@ -1,19 +1,12 @@
 package db
 
 import (
-	"context"
 	"database/sql"
-	"database/sql/driver"
 	"errors"
-	"fmt"
-	"reflect"
-	"runtime"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
-	"modernc.org/sqlite"
 )
 
 var endpointKeyHistoryIndexes = []string{
@@ -152,163 +145,7 @@ func endpointKeyHistoryDigests(t *testing.T, database *sql.DB) map[string]intera
 	return interactionTableDigests(t, database, selected)
 }
 
-func TestSchema33StartupUpgradePreservesHistoryAndDeletion(t *testing.T) {
-	path, vault, source := schema33Fixture(t)
-	key := seedEndpointKeyHistory(t, source.DB(), vault, 'A')
-	other := seedEndpointKeyHistory(t, source.DB(), vault, 'C')
-	before := endpointKeyHistoryDigests(t, source.DB())
-	if err := source.Close(); err != nil {
-		t.Fatal(err)
-	}
-	{
-		store, err := Open(path, vault)
-		if err != nil {
-			t.Fatal(err)
-		}
-		assertEndpointKeyDeletionIndexes(t, store.DB())
-		if after := endpointKeyHistoryDigests(t, store.DB()); !reflect.DeepEqual(before, after) {
-			t.Fatal("index upgrade or reopen changed preserved rows")
-		}
-		if version, err := readSchemaVersion(t.Context(), store.DB()); err != nil || version != CurrentSchemaVersion {
-			t.Fatalf("schema version=%d, err=%v", version, err)
-		}
-		if err := store.Close(); err != nil {
-			t.Fatal(err)
-		}
-	}
-	store, err := Open(path, vault)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	assertEndpointKeyDeletionIndexes(t, store.DB())
-	if after := endpointKeyHistoryDigests(t, store.DB()); !reflect.DeepEqual(before, after) {
-		t.Fatal("current-schema reopen changed preserved rows")
-	}
-	hostileMustExec(t, store.DB(), "DELETE FROM endpoint_keys WHERE id=?", key)
-	for table, total := range map[string]int{"request_logs": 2, "dispatch_claims": 4, "report_targets": 2, "donation_keys": 2} {
-		if got := countRows(t, store, "SELECT count(*) FROM "+table); got != total {
-			t.Fatalf("%s lost history: %d", table, got)
-		}
-		if got := countRows(t, store, "SELECT count(*) FROM "+table+" WHERE endpoint_key_id IS NULL"); got != total/2 {
-			t.Fatalf("%s did not detach matching history: %d", table, got)
-		}
-		if got := countRows(t, store, "SELECT count(*) FROM "+table+" WHERE endpoint_key_id=?", other); got != total/2 {
-			t.Fatalf("%s changed unrelated history: %d", table, got)
-		}
-	}
-	if countRows(t, store, "SELECT count(*) FROM endpoint_key_grant_revisions WHERE endpoint_key_id=?", key) != 0 || countRows(t, store, "SELECT count(*) FROM endpoint_key_grant_revisions WHERE endpoint_key_id=?", other) != 1 {
-		t.Fatal("grant cascade changed unrelated grants or retained the deleted key")
-	}
-	if countRows(t, store, "SELECT count(*) FROM request_attempts WHERE endpoint_key_id_snapshot=?", key) != 2 || countRows(t, store, "SELECT count(*) FROM donation_keys WHERE source_endpoint_key_id=? AND ended_at=2 AND report_match_until=7776002 AND report_fingerprint IS NOT NULL AND display_head='head'", key) != 1 {
-		t.Fatal("deletion changed attempt snapshots or donation tombstones")
-	}
-	if err := foreignKeyCheck(t.Context(), store.DB()); err != nil {
-		t.Fatal(err)
-	}
-}
-
-type cancelIndexUpgradeCodec struct {
-	*secret.Vault
-	cancel context.CancelFunc
-	checks int
-}
-
-func (codec *cancelIndexUpgradeCodec) ValidateDatabaseMaterial(value []byte) error {
-	if err := codec.Vault.ValidateDatabaseMaterial(value); err != nil {
-		return err
-	}
-	codec.checks++
-	// Read-only preflight, transaction source, then post-DDL target validation.
-	if codec.checks == 3 {
-		codec.cancel()
-	}
-	return nil
-}
-
-var indexCancellationFunctionID atomic.Uint64
-
-func TestSchema33StartupUpgradeRollsBackAndRetries(t *testing.T) {
-	for _, failure := range []string{"partial-ddl", "target-mismatch", "cancel-during-index", "cancel-before-commit"} {
-		t.Run(failure, func(t *testing.T) {
-			testSchema33StartupUpgradeRollback(t, failure)
-		})
-	}
-}
-
-func testSchema33StartupUpgradeRollback(t *testing.T, failure string) {
-	t.Helper()
-	path, vault, source := schema33Fixture(t)
-	seedEndpointKeyHistory(t, source.DB(), vault, 'A')
-	before := endpointKeyHistoryDigests(t, source.DB())
-	if err := source.Close(); err != nil {
-		t.Fatal(err)
-	}
-	original := startupSchemaUpgradeSQL
-	t.Cleanup(func() { startupSchemaUpgradeSQL = original })
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-	var codec secret.GenerationTwoContextCodec = vault
-	var indexedRows atomic.Int64
-	switch failure {
-	case "partial-ddl":
-		startupSchemaUpgradeSQL = strings.Split(original, ";")[0] + "; SELECT missing_migration_function();"
-	case "target-mismatch":
-		startupSchemaUpgradeSQL = strings.Split(original, ";")[0] + ";"
-	case "cancel-during-index":
-		function := fmt.Sprintf("cancel_endpoint_key_index_%d", indexCancellationFunctionID.Add(1))
-		if err := sqlite.RegisterDeterministicScalarFunction(function, 1, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
-			indexedRows.Add(1)
-			cancel()
-			runtime.Gosched()
-			return args[0], nil
-		}); err != nil {
-			t.Fatal(err)
-		}
-		// The first real index has already been created when SQLite evaluates
-		// this expression while constructing the next index from stored rows.
-		startupSchemaUpgradeSQL = strings.Split(original, ";")[0] + "; CREATE INDEX interrupted_history_index ON request_logs(" + function + "(endpoint_key_id));"
-	case "cancel-before-commit":
-		codec = &cancelIndexUpgradeCodec{Vault: vault, cancel: cancel}
-	}
-	store, err := OpenContext(ctx, path, codec)
-	if store != nil {
-		store.Close()
-		t.Fatal("partial migration succeeded")
-	}
-	var startup *StartupError
-	cancelled := strings.HasPrefix(failure, "cancel-")
-	if cancelled && !errors.Is(err, context.Canceled) || !cancelled && (!errors.As(err, &startup) || startup.Kind != StartupSchemaMismatch) {
-		t.Fatalf("unexpected migration error: %v", err)
-	}
-	if failure == "cancel-during-index" && indexedRows.Load() == 0 {
-		t.Fatal("cancellation did not occur during index construction")
-	}
-	if err := InspectContext(t.Context(), path, vault, func(ctx context.Context, read *sql.DB) error {
-		version, err := readSchemaVersion(ctx, read)
-		if err != nil || version != 33 {
-			t.Fatalf("failed migration version=%d, err=%v", version, err)
-		}
-		hash, err := SchemaManifestHash(ctx, read)
-		if err != nil || hash != Schema33ManifestHash {
-			t.Fatalf("partial DDL survived rollback: %s, %v", hash, err)
-		}
-		if !reflect.DeepEqual(before, endpointKeyHistoryDigests(t, read)) {
-			t.Fatal("failed upgrade changed preserved rows")
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	startupSchemaUpgradeSQL = original
-	store, err = Open(path, vault)
-	if err != nil {
-		t.Fatalf("retry failed: %v", err)
-	}
-	store.Close()
-}
-
-func TestSchema33StartupUpgradeRejectsUnknownOrModifiedSources(t *testing.T) {
+func TestExactStartupRejectsUnknownOrModifiedHistoricalSources(t *testing.T) {
 	for _, change := range []string{
 		"UPDATE schema_state SET version=36", "UPDATE schema_state SET version=32",
 		"DROP INDEX idx_users_created", "CREATE INDEX unexpected_index ON users(username)",

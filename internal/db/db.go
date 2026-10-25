@@ -31,9 +31,9 @@ type Store struct {
 	connectionObserver *connectionObserverSlot
 }
 
-// Open classifies path as fresh or a supported Generation 2 schema.
+// Open initializes a missing database or opens the exact current schema.
 // Existing databases receive read-only identity, schema and credential checks
-// before an index-only upgrade and recovery. Older schemas require the offline tool.
+// before recovery. Other schema versions require a matching server or offline tool.
 func Open(path string, secrets secret.GenerationTwoContextCodec) (*Store, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultStartupTimeout)
 	defer cancel()

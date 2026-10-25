@@ -22,7 +22,7 @@ func TestSchemaInfoDoesNotLoadEnvironmentOrOpenDatabase(t *testing.T) {
 	if descriptor.FormatVersion != 1 || descriptor.SchemaVersion != db.CurrentSchemaVersion || descriptor.MinimumSchemaVersion != db.MinimumSchemaVersion || descriptor.ManifestHash == "" {
 		t.Fatal(descriptor)
 	}
-	if len(descriptor.OfflineConversions) != 0 || len(descriptor.SourceSchemaVersions) != 4 || descriptor.SourceSchemaVersions[0] != 33 || descriptor.SourceSchemaVersions[1] != 34 || descriptor.SourceSchemaVersions[2] != 35 || descriptor.SourceSchemaVersions[3] != 36 || len(descriptor.SourceManifestHashes) != 4 || descriptor.SourceManifestHashes[0] != db.Schema33ManifestHash || descriptor.SourceManifestHashes[1] != db.Schema34ManifestHash || descriptor.SourceManifestHashes[2] != db.Schema35ManifestHash || descriptor.SourceManifestHashes[3] != db.Schema36ManifestHash {
+	if descriptor.StartupPolicy != "exact" || descriptor.UpgradeTool != "nonbiri-upgrade-v1" || len(descriptor.OfflineConversions) != 0 || len(descriptor.SourceSchemaVersions) != 0 || len(descriptor.SourceManifestHashes) != 0 {
 		t.Fatal("schema compatibility metadata", descriptor)
 	}
 }
