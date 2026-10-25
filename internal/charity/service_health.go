@@ -77,34 +77,20 @@ WHERE m.claim_id=? AND dk.ended_at IS NULL`, claimID).Scan(&healthID, &useID, &d
 	if err != nil {
 		return claim.ErrInvariant
 	}
-	disabledNow := false
-	var disablingStreak, disablingFold db.U128
-	for {
-		var state string
-		var success sql.NullInt64
-		var disposition, origin sql.NullString
-		err := tx.QueryRowContext(ctx, `SELECT r.state,r.protocol_success,r.streak_disposition,r.failure_origin
+	rows, err := tx.QueryContext(ctx, `SELECT m.claim_seq,r.state,r.protocol_success,r.streak_disposition,r.failure_origin,1
 FROM dispatch_service_health m JOIN donation_usage_reservations r ON r.claim_id=m.claim_id
-WHERE m.health_id_snapshot=? AND m.streak_generation=? AND m.claim_seq=?`, healthID, currentGeneration, db.EncodeU128(next)).Scan(&state, &success, &disposition, &origin)
-		if errors.Is(err, sql.ErrNoRows) || state == "reserved" {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		var justDisabled bool
-		streak, disabled, justDisabled, err = foldFailureOutcome(streak, disabled, threshold, state, success, disposition, origin, true)
-		if err != nil {
-			return err
-		}
-		if justDisabled {
-			disabledNow, disablingStreak, disablingFold = true, streak, next
-		}
-		next, err = addU128(next, big.NewInt(1))
-		if err != nil {
-			return err
-		}
+WHERE m.health_id_snapshot=? AND m.streak_generation=? AND m.claim_seq>=? ORDER BY m.claim_seq`,
+		healthID, currentGeneration, db.EncodeU128(next))
+	if err != nil {
+		return err
 	}
+	folded, err := foldFailureRows(rows, next, streak, threshold, disabled)
+	if err != nil {
+		return err
+	}
+	next, streak, disabled = folded.next, folded.streak, folded.disabled
+	disabledNow, disablingStreak, disablingFold := folded.disabledNow, folded.disablingStreak, folded.disablingFold
+
 	result, err := tx.ExecContext(ctx, `UPDATE donation_service_health SET next_fold_seq=?,failure_streak=?,failure_disabled=?,updated_at=? WHERE id=? AND streak_generation=? AND next_fold_seq=? AND failure_streak=?`, db.EncodeU128(next), db.EncodeU128(streak), disabled, at, healthID, currentGeneration, nextBlob, streakBlob)
 	if err != nil {
 		return err

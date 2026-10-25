@@ -52,6 +52,7 @@ type Config struct {
 
 type Service struct {
 	db          *sql.DB
+	readDB      *sql.DB
 	keyDeletion EndpointKeyDeletionOwner
 	now         func() time.Time
 }
@@ -66,7 +67,7 @@ func New(config Config) (*Service, error) {
 	if config.Now == nil {
 		config.Now = time.Now
 	}
-	return &Service{db: config.Store.DB(), keyDeletion: config.KeyDeletion, now: config.Now}, nil
+	return &Service{db: config.Store.DB(), readDB: config.Store.ReadDB(), keyDeletion: config.KeyDeletion, now: config.Now}, nil
 }
 
 func (s *Service) PrepareEndpointKeyDeletion(
@@ -1080,37 +1081,21 @@ FROM donation_keys WHERE id=?`, keyID).Scan(&currentGenerationBlob, &nextFoldBlo
 	if err != nil {
 		return err
 	}
-	disabledNow := false
-	var disablingStreak db.U128
-	var disablingFold db.U128
-	for {
-		var state string
-		var success sql.NullInt64
-		var disposition, origin sql.NullString
-		var serviceEvent bool
-		err := tx.QueryRowContext(ctx, `SELECT state,protocol_success,streak_disposition,failure_origin,
-EXISTS(SELECT 1 FROM dispatch_service_health h WHERE h.claim_id=donation_usage_reservations.claim_id) FROM donation_usage_reservations
-WHERE donation_key_id=? AND streak_generation=? AND claim_seq=?`,
-			keyID, db.EncodeU128(generation), db.EncodeU128(next)).Scan(&state, &success, &disposition, &origin, &serviceEvent)
-		if errors.Is(err, sql.ErrNoRows) || state == "reserved" {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("charity: read streak result: %w", err)
-		}
-		var justDisabled bool
-		streak, failureDisabled, justDisabled, err = foldFailureOutcome(streak, failureDisabled, threshold, state, success, disposition, origin, !serviceEvent)
-		if err != nil {
-			return err
-		}
-		if justDisabled {
-			disabledNow, disablingStreak, disablingFold = true, streak, next
-		}
-		next, err = addU128(next, big.NewInt(1))
-		if err != nil {
-			return err
-		}
+	rows, err := tx.QueryContext(ctx, `SELECT claim_seq,state,protocol_success,streak_disposition,failure_origin,
+NOT EXISTS(SELECT 1 FROM dispatch_service_health h WHERE h.claim_id=donation_usage_reservations.claim_id)
+FROM donation_usage_reservations
+WHERE donation_key_id=? AND streak_generation=? AND claim_seq>=? ORDER BY claim_seq`,
+		keyID, db.EncodeU128(generation), db.EncodeU128(next))
+	if err != nil {
+		return fmt.Errorf("charity: read streak results: %w", err)
 	}
+	folded, err := foldFailureRows(rows, next, streak, threshold, failureDisabled)
+	if err != nil {
+		return err
+	}
+	next, streak, failureDisabled = folded.next, folded.streak, folded.disabled
+	disabledNow, disablingStreak, disablingFold := folded.disabledNow, folded.disablingStreak, folded.disablingFold
+
 	result, err := tx.ExecContext(ctx, `UPDATE donation_keys SET next_fold_seq=?,failure_streak=?,failure_disabled=?,updated_at=?
 WHERE id=? AND streak_generation=? AND next_fold_seq=? AND failure_streak=?`,
 		db.EncodeU128(next), db.EncodeU128(streak), failureDisabled, at, keyID,
@@ -1238,11 +1223,11 @@ func (s *Service) RequestCharge(ctx context.Context, tx *sql.Tx, requestID strin
 // CalculateRequestCharge previews the caller settlement after all attempts
 // are terminal. Completion recomputes it in the transaction that posts it.
 func (s *Service) CalculateRequestCharge(ctx context.Context, requestID string, disposition claim.AccountingDisposition) (int64, error) {
-	if s == nil || s.db == nil || ctx == nil || !db.ValidateOpaqueID(requestID, "req_") ||
+	if s == nil || s.readDB == nil || ctx == nil || !db.ValidateOpaqueID(requestID, "req_") ||
 		(disposition != claim.AccountingCommit && disposition != claim.AccountingRelease) {
 		return 0, claim.ErrInvalidInput
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return 0, fmt.Errorf("charity: begin charge read: %w", err)
 	}
