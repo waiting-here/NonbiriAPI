@@ -251,6 +251,7 @@ func (s *Service) run(ctx context.Context, id int64) error {
 			return e
 		}
 		settings.Tools = live.Tools
+		settings.ToolDescriptions = live.ToolDescriptions
 		tools, allowed, err = s.tools(ctx, actor, settings, job.Kind == "auto_review")
 		if err != nil {
 			return err

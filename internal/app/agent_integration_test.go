@@ -153,6 +153,7 @@ func TestAgentRealPlanRollsBackAccountAndMemoryAndRetainsLogs(t *testing.T) {
 	f, replies := newAgentWireFixture(t)
 	configureAgentDriver(t, f)
 	configureAgentWorkflow(t, f, "off", true)
+	beforeMemory := f.call("GET", "/admin/api/ai/memories/chat", nil, f.adminCookie, true)
 	target := f.call("GET", "/admin/api/users/"+f.users[0].ID, nil, f.adminCookie, true)
 	revision := target["revision"]
 	operations := []map[string]any{
@@ -160,7 +161,7 @@ func TestAgentRealPlanRollsBackAccountAndMemoryAndRetainsLogs(t *testing.T) {
 		{"kind": "users.profile", "target_id": f.users[0].ID, "input": map[string]any{"expected_revision": revision, "endpoint_limit": "12"}},
 	}
 	replies <- map[string]any{"role": "assistant", "content": "请确认整套修改。", "tool_calls": []any{
-		agentToolCall(t, "memory-1", "edit_memory", map[string]any{"action": "write", "kind": "chat", "content": "只在全部操作成功后保存", "expected_revision": "0"}),
+		agentToolCall(t, "memory-1", "edit_memory", map[string]any{"action": "write", "kind": "chat", "content": "只在全部操作成功后保存", "expected_revision": beforeMemory["revision"]}),
 		agentToolCall(t, "profile-1", "propose_operations", map[string]any{"operations": operations}),
 	}}
 	f.call("POST", "/admin/api/ai/chat/messages", map[string]any{"content": "测试整套修改的原子性", "expected_generation": "0", "request_key": "real-atomic-plan-001"}, f.adminCookie, true)
@@ -182,8 +183,8 @@ func TestAgentRealPlanRollsBackAccountAndMemoryAndRetainsLogs(t *testing.T) {
 		t.Fatal("partial account mutation", target, after)
 	}
 	memory := f.call("GET", "/admin/api/ai/memories/chat", nil, f.adminCookie, true)
-	if memory["revision"] != "0" || memory["content"] != "" {
-		t.Fatal("partial memory mutation", memory)
+	if memory["revision"] != beforeMemory["revision"] || memory["content"] != beforeMemory["content"] {
+		t.Fatal("partial memory mutation", beforeMemory, memory)
 	}
 	waitAgentChat(t, f, "completed")
 	logs := f.call("GET", "/admin/api/ai/requests?page=1&page_size=20", nil, f.adminCookie, true)
