@@ -59,7 +59,7 @@ func newGuardFixture(t *testing.T) *guardFixture {
 	}
 	f.exec(`CREATE TABLE guard_game_cancels(user_id INTEGER PRIMARY KEY)`)
 	f.service, err = New(Config{
-		Database: store.DB(), Rejections: claims,
+		Database: store.DB(), ReadDatabase: store.ReadDB(), Rejections: claims,
 		BeginUserRetirement: func(context.Context, int64) (Retirement, error) {
 			f.gateCalls++
 			if f.beforeGate != nil {

@@ -147,7 +147,7 @@ func newPublicForwardRuntime(
 		return fail(fmt.Errorf("create forward claim adapter: %w", err))
 	}
 	clientGuard, err := clientguard.New(clientguard.Config{
-		Database: store.DB(), Rejections: claims, OnBan: invalidate,
+		Database: store.DB(), ReadDatabase: store.ReadDB(), Rejections: claims, OnBan: invalidate,
 		CancelUserGamesTx: cancelUserDuelsTx,
 		BeginUserRetirement: func(ctx context.Context, userID int64) (clientguard.Retirement, error) {
 			return beginRestrictionRetirement(ctx, lifecycle, flow, userID)

@@ -31,6 +31,7 @@ var adminCredentialPurpose = []byte("NonbiriAPI/admin-session-credential-generat
 
 type Runtime struct {
 	db                                *sql.DB
+	readDB                            *sql.DB
 	mfaCodec                          secret.AccountMFACodec
 	provider                          DiscordProvider
 	clientID, redirectURI, siteOrigin string
@@ -156,7 +157,7 @@ func NewRuntime(c RuntimeConfig) (*Runtime, error) {
 	if now == nil {
 		now = time.Now
 	}
-	r := &Runtime{db: c.Store.DB(), provider: c.Provider, clientID: c.DiscordClientID, redirectURI: redirect, siteOrigin: origin, adminUsername: c.AdminUsername, adminPasswordDigest: sha256.Sum256([]byte(c.AdminPassword)), adminCredentialGeneration: generation, authorizer: c.Authorizer, maintenance: c.Maintenance, states: states, elevation: elev, oauthThrottle: oauthThrottle, adminThrottle: adminThrottle, now: now, idleTTL: idle, absoluteTTL: absolute, userMux: http.NewServeMux(), adminMux: http.NewServeMux(), routes: make(map[string]struct{})}
+	r := &Runtime{db: c.Store.DB(), readDB: c.Store.ReadDB(), provider: c.Provider, clientID: c.DiscordClientID, redirectURI: redirect, siteOrigin: origin, adminUsername: c.AdminUsername, adminPasswordDigest: sha256.Sum256([]byte(c.AdminPassword)), adminCredentialGeneration: generation, authorizer: c.Authorizer, maintenance: c.Maintenance, states: states, elevation: elev, oauthThrottle: oauthThrottle, adminThrottle: adminThrottle, now: now, idleTTL: idle, absoluteTTL: absolute, userMux: http.NewServeMux(), adminMux: http.NewServeMux(), routes: make(map[string]struct{})}
 	var codecOK bool
 	r.mfaCodec, codecOK = c.CredentialKeyDeriver.(secret.AccountMFACodec)
 	if !codecOK {
@@ -476,6 +477,15 @@ func (r *Runtime) wrapOptionalUser(next OptionalUserHandler) http.Handler {
 	})
 }
 
+// Pure identity checks keep live authority in one reader snapshot. Session
+// renewal and account projection may write and continue using db.
+func (r *Runtime) readDatabase() *sql.DB {
+	if r.readDB != nil {
+		return r.readDB
+	}
+	return r.db
+}
+
 func (r *Runtime) admitUserLifecycle(ctx context.Context, actor authz.Actor, identityOnly bool) (context.Context, func(), error) {
 	actorContext := withActor(ctx, actor)
 	validate := func(validateContext context.Context, userID int64, binding string) (bool, error) {
@@ -485,7 +495,7 @@ func (r *Runtime) admitUserLifecycle(ctx context.Context, actor authz.Actor, ide
 		}
 		// Check the session, live level policy, and proof together after acquiring
 		// the lifecycle lease; final business transactions still authorize again.
-		tx, err := r.db.BeginTx(validateContext, &sql.TxOptions{ReadOnly: true})
+		tx, err := r.readDatabase().BeginTx(validateContext, &sql.TxOptions{ReadOnly: true})
 		if err != nil {
 			return false, err
 		}

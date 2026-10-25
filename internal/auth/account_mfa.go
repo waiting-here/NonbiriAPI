@@ -74,7 +74,7 @@ func (r *Runtime) VerifyUserSessionMFA(ctx context.Context, userID int64, bindin
 	if r == nil || ctx == nil || userID <= 0 || binding == "" {
 		return 0, authz.ErrUnauthorized
 	}
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := r.readDatabase().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return 0, err
 	}
@@ -129,7 +129,11 @@ func (r *Runtime) InvalidateUnverifiedMFASessions(ctx context.Context) error {
 }
 
 func (r *Runtime) mfaBegin(ctx context.Context, actor authz.Actor, write bool) (*sql.Tx, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
+	database := r.db
+	if !write {
+		database = r.readDatabase()
+	}
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: !write})
 	if err != nil {
 		return nil, err
 	}
@@ -161,6 +165,11 @@ func (r *Runtime) mfaStatusHTTP(w http.ResponseWriter, req *http.Request) {
 	defer tx.Rollback()
 	state, err := authz.ReadMFAState(req.Context(), tx, actor, r.now().Unix())
 	if err != nil {
+		_ = tx.Rollback()
+		writeMFAError(w, err)
+		return
+	}
+	if err = tx.Commit(); err != nil {
 		writeMFAError(w, err)
 		return
 	}

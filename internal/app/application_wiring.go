@@ -512,7 +512,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		return nil, fmt.Errorf("create check-in service: %w", err)
 	}
 	homeGameService := gameRuntimes.Service
-	rankingService, err := ranking.New(store.DB(), authRuntime, gameNow)
+	rankingService, err := ranking.NewWithReader(store.DB(), store.ReadDB(), authRuntime, gameNow)
 	if err != nil {
 		return nil, err
 	}

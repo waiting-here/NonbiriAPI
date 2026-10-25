@@ -42,8 +42,9 @@ type RejectionRecorder interface {
 }
 
 type Config struct {
-	Database   *sql.DB
-	Rejections RejectionRecorder
+	Database     *sql.DB
+	ReadDatabase *sql.DB
+	Rejections   RejectionRecorder
 	// The gate must serialize stable identity and user retirement while
 	// excluding this request from cancellation and drain waits.
 	BeginUserRetirement func(context.Context, int64) (Retirement, error)
@@ -57,6 +58,9 @@ type Service struct{ config Config }
 func New(config Config) (*Service, error) {
 	if config.Database == nil || config.Rejections == nil || config.BeginUserRetirement == nil || config.CancelUserGamesTx == nil {
 		return nil, ErrInvalid
+	}
+	if config.ReadDatabase == nil {
+		config.ReadDatabase = config.Database
 	}
 	return &Service{config: config}, nil
 }
@@ -216,7 +220,7 @@ func (s *Service) CheckCall(parent context.Context, userID int64, model string, 
 	defer cancel()
 	// This consistent read avoids disturbing unrelated calls. It is advisory;
 	// the account and all rules are rechecked inside the effects transaction.
-	readTx, err := s.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	readTx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Decision{}, fmt.Errorf("%w: begin precheck: %v", ErrUnavailable, err)
 	}

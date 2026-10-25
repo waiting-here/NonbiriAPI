@@ -81,6 +81,7 @@ func TestAccountMFAAdmissionUsesOneLiveAuthorityQuery(t *testing.T) {
 	traced := sql.OpenDB(admissionConnector{dsn: path, trace: trace})
 	defer traced.Close()
 	f.runtime.db = traced
+	f.runtime.readDB = traced
 	response := mfaRequest(t, f, cookie, http.MethodGet, "/api/mfa-admission-probe", "")
 	if response.Code != http.StatusNoContent {
 		t.Fatal(response.Code, response.Body)
