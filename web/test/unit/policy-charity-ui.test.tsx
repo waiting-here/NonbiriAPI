@@ -19,7 +19,7 @@ import {
 } from '../../src/shared/charityManagement';
 import { CharityManagement } from '../../src/shared/components/CharityManagement';
 import { roleLogKeys } from '../../src/shared/components/log/data';
-import { charityKeys } from '../../src/shared/operations/charity';
+import { charityKeys, type AdminDonation } from '../../src/shared/operations/charity';
 import { ApiError } from '../../src/shared/query/http';
 import { userKeys, useUserSession } from '../../src/user/data';
 import { coreKeys } from '../../src/user/features/core/queries';
@@ -380,8 +380,12 @@ function pendingDonationFixture(id: string, description: string) {
 type ManagedKeyFixture = Omit<typeof managedKeyFixture, 'ended_reason'> & {
   ended_reason: string | null;
 };
-type ManagedDonationFixture = Omit<ReturnType<typeof pendingDonationFixture>, 'keys'> & {
+type ManagedDonationFixture = Omit<
+  ReturnType<typeof pendingDonationFixture>,
+  'keys' | 'review_result'
+> & {
   keys: ManagedKeyFixture[];
+  review_result: AdminDonation['review_result'];
 };
 
 function managementNumberedPage<T>(data: T[]) {
