@@ -20,7 +20,7 @@ import (
 )
 
 type auditFixture struct {
-	t          *testing.T
+	t          testing.TB
 	store      *db.Store
 	repository *Repository
 	now        int64
@@ -51,7 +51,7 @@ func (r *auditAdminRoutes) RegisterAdminRoute(method, path string, h http.Handle
 	return nil
 }
 
-func newAuditFixture(t *testing.T) *auditFixture {
+func newAuditFixture(t testing.TB) *auditFixture {
 	t.Helper()
 	vault, err := secret.New(make([]byte, secret.MasterKeyBytes))
 	if err != nil {
@@ -72,7 +72,7 @@ func newAuditFixture(t *testing.T) *auditFixture {
 	actor := f.authority.actors[f.admin]
 	actor.Kind = authz.ActorAdminSession
 	f.authority.actors[f.admin] = actor
-	f.repository, err = NewRepository(store.DB(), RepositoryOptions{Now: func() time.Time { return time.Unix(f.now, 0) }, FinalAuth: f.authority})
+	f.repository, err = NewRepository(store.DB(), RepositoryOptions{ReadDB: store.ReadDB(), Now: func() time.Time { return time.Unix(f.now, 0) }, FinalAuth: f.authority})
 	if err != nil {
 		t.Fatal(err)
 	}
