@@ -44,6 +44,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Let the management assistant discover and apply saved channel binding presets
   through a human-approved plan. Report missing upstream models and existing
   bindings as normal skips; roll back the whole plan on actual errors.
+- Let authorized managers choose channel binding presets for custom-endpoint
+  donations, including other channels' templates. Rank address/protocol matches
+  first in the management page and assistant tools, while preserving original
+  donation sources and permissions.
 
 ### Fixed
 

@@ -67,7 +67,9 @@ pauses the recurring schedule. Accepted requests keep their captured price.
 Binding selectors show existing connections. Authorized managers can bind one
 donated key to several charity models in one operation. Administrators and
 stewards with the required preset and binding permissions can maintain channel
-presets and apply them to every key in an approved donation; missing models and existing bindings are reported individually.
+presets and apply them to every key in an approved donation. Custom-endpoint
+donations can choose other channels' templates, with matching addresses and
+protocols suggested first. Missing models and existing bindings are reported individually.
 
 Models can use a [Cloudflare Worker](docs/cloudflare-egress.md) to forward
 requests across providers without adding a mapping for each upstream. Personal

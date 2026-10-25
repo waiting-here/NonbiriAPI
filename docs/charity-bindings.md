@@ -9,7 +9,10 @@ marked and cannot be selected again.
 Administrators and stewards with `charity.presets` also have a separate **Channel presets** view.
 Choose a mainstream channel and save up to 16 exact upstream-model-to-charity-model
 pairs. From an approved donation for that channel, apply the preset to all its keys
-in one operation. A missing upstream model skips only that pair for that key.
+in one operation. Custom-endpoint donations can choose another channel's preset
+as a model-mapping template. Matching addresses and protocols appear first;
+other templates remain available through search and pagination. A missing
+upstream model skips only that pair for that key.
 Existing bindings keep their order; applying or editing a preset never enables a
 key, approves a donation, refreshes discovery or changes saved model pricing.
 
@@ -20,7 +23,7 @@ These are authenticated browser-session routes, with the existing CSRF,
 `Idempotency-Key`, current-role and revision requirements. They are not CallerKey
 automation routes. Stewards require `charity.manage` for ordinary binding options
 and key-to-model batch binding. Preset reads/edits require `charity.presets`;
-applying a preset requires both grants. Current model/source scope is checked for every
+listing presets for a donation or applying one requires both grants. Current model/source scope is checked for every
 target and key. See [steward permissions](steward-permissions.md).
 
 IDs, revisions and counts below are canonical decimal strings, except opaque
@@ -40,7 +43,7 @@ live snapshot; refresh the read endpoint after a mutation.
 | --- | --- |
 | `GET /donations/{id}/keys/{keyId}/binding-options` | `q,page,page_size`; `{data:[{charity_model_id,full_name,enabled,binding_revision}],pagination,next_cursor:null}` |
 | `POST /donations/{id}/keys/{keyId}/bindings/batch` | `{expected_donation_revision,targets:[{charity_model_id,expected_binding_revision,upstream_model_id,native_services?}]}`; at most 256 distinct pairs within a 256 KiB request |
-| `GET /charity-binding-presets` | `q,page,page_size,state=active\|retired\|all`; channel page with `channel_id,name,connector_type,base_url,enabled,state,channel_revision,preset_revision,mapping_count` |
+| `GET /charity-binding-presets` | `q,page,page_size,state=active\|retired\|all`, optional `donation_id`; channel page with `channel_id,name,connector_type,base_url,enabled,state,channel_revision,preset_revision,mapping_count`. Donation candidates also include `recommended`. |
 | `GET /charity-binding-presets/{channelId}` | `{channel_id,channel_revision,preset_revision,mappings:[{upstream_model_id,charity_model_id,full_name,binding_revision}]}` |
 | `PUT /charity-binding-presets/{channelId}` | `{expected_channel_revision,expected_preset_revision,mappings:[{upstream_model_id,charity_model_id}]}`; at most 16 distinct pairs |
 | `POST /donations/{id}/bindings/apply-preset` | `{channel_id,expected_channel_revision,expected_preset_revision,expected_donation_revision,models:[{charity_model_id,expected_binding_revision}]}` |
@@ -66,11 +69,9 @@ For example, a target can retain only an approved text service:
 }
 ```
 
-After approving a service use, reviewers with current maintenance permission can
-continue from the result to charity-model configuration with the same donation,
-key and service selected. They can adjust the selection before saving. Reviewers
-without maintenance permission receive an explanation instead of an unavailable
-operation.
+After approving a donation, reviewers with current maintenance permission can
+continue to charity-model configuration with the donation selected. They can
+adjust bindings and their supported services before saving.
 
 An unconfigured preset has revision `"0"`; its first save produces `"1"`.
 Saving `mappings:[]` clears it and advances the revision. Preset detail includes
@@ -78,9 +79,20 @@ current target names and binding revisions; both are null when a target no longe
 exists. Deleted targets remain identifiable in the preset so they can be repaired.
 Preset changes affect future applications only.
 
+With `donation_id`, the list contains authorized, active, enabled channels with
+nonempty presets. Custom sources can select any of these templates. Candidates
+whose declared entries match a current donated key's canonical address and protocol
+have `recommended:true` and sort first, then by channel name and ID. The name
+filter `q` and page controls apply to this authorized selection. Without
+`donation_id`, the existing channel-management list remains unchanged.
+
 Apply requires a live approved donation, an active enabled channel and a nonempty
-preset. The server verifies the donation's channel identity and each key's source
-snapshot. The `models` revision set must exactly cover the preset's existing
+preset. Custom keys need not share the template's address or protocol; their
+actual model catalog, approved services and target compatibility are still checked.
+Mainstream keys retain their channel identity and source-snapshot checks, including
+in donations containing both source kinds. Using a template never changes the
+donation's source, donor authorization or steward eligibility. The `models`
+revision set must exactly cover the preset's existing
 distinct target models. It is not a way to select only some preset entries.
 A target deleted after preview may still carry its previous revision; that
 mapping is skipped as `invalid_resource`.

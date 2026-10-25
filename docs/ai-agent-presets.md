@@ -77,7 +77,7 @@ management pages keep their own pagination.
 | `donation_models` | Donation, key, model/name query and catalog-source filters; each result identifies its donation. Reads saved discovery and manual entries without refreshing upstream discovery. |
 | `review_history` | Donation and decision filters; each result identifies its donation. |
 | `charity_models` | Model and name-query filters; includes authorized bindings so a separate detail request is unnecessary. |
-| `charity_binding_presets` | Requires a donation ID; an optional channel ID narrows the saved presets available to that donation. Includes channel, donation and preset revisions, ordered mappings and current model binding revisions. Conversation only. |
+| `charity_binding_presets` | Requires a donation ID; optional channel ID and channel-name query narrow the available saved presets. Custom sources can use other channels' templates, with address/protocol matches recommended first. Includes channel, donation and preset revisions, ordered mappings and current model binding revisions. Conversation only. |
 | `users` | Profile summaries with optional query; an exact user selection returns the full requested profile or authorized sensitive detail as an object. Sensitive detail still requires a target and the corresponding permission. |
 
 List summaries include the information needed to identify records and plan the
@@ -87,7 +87,7 @@ review signatures and charity bindings remain included because they are needed
 to form valid operation plans. These tools do not expose a request-log search;
 request-log HTTP pages are separate from the model's available tools.
 
-For a mainstream donation, the assistant can read `charity_binding_presets`
+For an approved donation, the assistant can read `charity_binding_presets`
 and propose `charity.binding.apply_preset`, with the donation ID as `target_id`
 and the exact versions returned by the read. The operator approves the plan
 before anything changes. Missing upstream models and existing bindings are
@@ -96,6 +96,9 @@ Other errors, changed versions, revoked permissions or a later failed operation
 roll back the complete plan. Stewards need both preset and binding-management
 permissions, plus authority over the donation and mapped models. This does not
 change automatic review or the ordinary management page's batch behavior.
+Custom-source templates do not reclassify a donation or grant access to resources
+outside the operator's existing scope. A mixed donation's mainstream keys still
+require their original channel; an incompatible key is an actual plan error.
 
 Site-data results have a limit of 5,000 records and 1 MiB. The configured model
 window also limits the combined tool results in a model turn. An oversized result

@@ -22,6 +22,10 @@ interface Fixture {
     binding_key_ids: string[];
     binding_model_ids: string[];
     binding_channel_id: string;
+    custom_binding_donation_id: string;
+    custom_binding_key_ids: string[];
+    custom_binding_model_ids: string[];
+    custom_binding_channel_id: string;
   };
 }
 const batch = common.common.bindingBatch;
@@ -541,6 +545,107 @@ test('administrator and level 6 configure channel presets and apply missing or r
     } finally {
       await context.close();
     }
+  }
+});
+
+test('custom donations select matching or other channel templates without changing their source', async ({
+  browser,
+}, info) => {
+  const state = fixture();
+  const data = state.management;
+  const admin = await session(browser, 'admin');
+  try {
+    for (const [channelId, modelIds] of [
+      [data.custom_binding_channel_id, data.custom_binding_model_ids],
+      [data.binding_channel_id, data.binding_model_ids],
+    ] as const) {
+      const path = `/admin/api/charity-binding-presets/${channelId}`;
+      const saved = await read(admin, state.admin_url, path);
+      const response = await admin.request.put(state.admin_url + path, {
+        headers: { Origin: state.admin_url, 'Idempotency-Key': randomUUID() },
+        data: {
+          expected_channel_revision: saved.channel_revision,
+          expected_preset_revision: saved.preset_revision,
+          mappings: [0, 3].map((index) => ({
+            upstream_model_id: `binding-up-${index}`,
+            charity_model_id: modelIds[index],
+          })),
+        },
+      });
+      expect(response.status()).toBe(200);
+    }
+    const before = await read(
+      admin,
+      state.admin_url,
+      `/admin/api/donations/${data.custom_binding_donation_id}`,
+    );
+    for (const role of ['admin', 6] as const) {
+      const context = role === 'admin' ? admin : await session(browser, role);
+      try {
+        const origin = role === 'admin' ? state.admin_url : state.user_url;
+        const page = await context.newPage();
+        const route =
+          role === 'admin'
+            ? '/charity?charity_section=donations'
+            : '/steward?tab=charity&charity_section=donations';
+        await page.goto(`${origin}${route}&donation_id=${data.custom_binding_donation_id}`);
+        await page.getByText(presets.applyTitle, { exact: true }).click();
+        const picker = page.getByRole('region', { name: presets.choosePreset });
+        await expect(picker.getByText(presets.recommended, { exact: true })).toBeVisible();
+        await expect(picker.getByRole('row').nth(1)).toContainText(
+          'Custom preset browser service',
+        );
+        if (role === 'admin') {
+          await visuals(page, info, 'custom-preset-candidates', () =>
+            picker.getByRole('heading').scrollIntoViewIfNeeded(),
+          );
+          await picker
+            .getByRole('searchbox', { name: presets.searchChannels })
+            .fill('No such template');
+          await picker.getByRole('button', { name: common.common.search, exact: true }).click();
+          await expect(picker.getByRole('heading', { name: presets.noCandidates })).toBeVisible();
+          await picker.getByRole('searchbox', { name: presets.searchChannels }).fill('');
+          await picker.getByRole('button', { name: common.common.search, exact: true }).click();
+        }
+        const other = picker.getByRole('row').filter({
+          has: page.getByText('Binding browser service', { exact: true }),
+        });
+        await expect(other.getByText(presets.recommended, { exact: true })).toHaveCount(0);
+        await other.getByRole('button', { name: presets.selectPreset }).click();
+        const apply = page.getByRole('region', { name: presets.applyTitle });
+        await expect(apply).toContainText('Binding browser service');
+        await apply.getByRole('button', { name: presets.changePreset }).click();
+        await other.getByRole('button', { name: presets.selectPreset }).click();
+        await apply.getByRole('button', { name: presets.apply, exact: true }).click();
+        const results = page.getByRole('region', { name: batch.results });
+        await expect(results).toContainText(batch.status.missing_model);
+        await expect(results).toContainText(
+          role === 'admin' ? batch.status.added : batch.status.already_bound,
+        );
+        if (role === 'admin')
+          await visuals(page, info, 'custom-preset-results', () =>
+            results.scrollIntoViewIfNeeded(),
+          );
+        await page.close();
+      } finally {
+        if (role !== 'admin') await context.close();
+      }
+    }
+    const after = await read(
+      admin,
+      state.admin_url,
+      `/admin/api/donations/${data.custom_binding_donation_id}`,
+    );
+    const sources = (donation: { keys: { safe_source: unknown }[] }) =>
+      donation.keys.map((key) => key.safe_source);
+    expect(sources(after)).toEqual(sources(before));
+    expect(
+      after.keys.every(
+        (key: { safe_source: { kind: string } }) => key.safe_source.kind === 'custom',
+      ),
+    ).toBe(true);
+  } finally {
+    await admin.close();
   }
 });
 
