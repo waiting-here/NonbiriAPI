@@ -112,6 +112,13 @@ export const USER_ROUTE_DESCRIPTORS = [
     registered: true,
   }),
   user({
+    id: 'steward-agent',
+    path: '/steward/ai',
+    access: 'user',
+    layout: 'wide',
+    registered: true,
+  }),
+  user({
     id: 'endpoint-policies',
     path: '/endpoint-policies',
     access: 'user',
@@ -449,6 +456,16 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     navGroup: 'operations',
     icon: 'endpoints',
     labelKey: 'admin.endpoints.nav',
+  }),
+  admin({
+    id: 'admin-agent',
+    path: '/ai',
+    access: 'admin',
+    layout: 'wide',
+    nav: true,
+    navGroup: 'operations',
+    labelKey: 'common.agent.title',
+    registered: true,
   }),
   admin({
     id: 'admin-alerts',

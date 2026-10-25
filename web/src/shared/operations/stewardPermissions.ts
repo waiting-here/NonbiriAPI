@@ -3,6 +3,9 @@ import { boolean, decimal, decimalID, oneOf, record } from './wire';
 import type { ManagementRole } from './managedUsers';
 
 export const STEWARD_PERMISSION_DEFAULTS = {
+  'ai.chat': true,
+  'ai.review.read': false,
+  'ai.memory.edit': false,
   'users.read': true,
   'users.profile': false,
   'users.limits': true,
