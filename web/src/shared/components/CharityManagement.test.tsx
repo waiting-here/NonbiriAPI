@@ -2026,6 +2026,7 @@ it.each(['approve', 'reject'] as const)(
   async (decision) => {
     const current: AdminDonation = {
       ...pendingDonation(),
+      keys: [managedKey({ charity_state: 'pending', can_manage: false })],
       owner: null,
       reviewer: null,
       can_force_reject: false,
@@ -2063,7 +2064,7 @@ it.each(['approve', 'reject'] as const)(
         can_review: true,
         can_manage: false,
         can_reset_failures: false,
-        can_discover: false,
+        can_discover: true,
         can_bind: false,
         unavailable_reason: 'not_approved',
       },
@@ -2098,6 +2099,15 @@ it.each(['approve', 'reject'] as const)(
         }
         if (url.pathname === '/api/steward/donations/1')
           return completed ? error(403, 'forbidden') : jsonResponse(current);
+        if (url.pathname === '/api/steward/donations/1/keys')
+          return completed
+            ? error(403, 'forbidden')
+            : jsonResponse(
+                numberedPage(
+                  current.keys.map((key) => keySummary(current, key)),
+                  url,
+                ),
+              );
         if (url.pathname === '/api/steward/donations/1/uses')
           return completed ? error(403, 'forbidden') : jsonResponse(numberedPage([use], url));
         if (url.pathname === '/api/steward/donations/1/pending-review') {
@@ -2142,6 +2152,7 @@ it.each(['approve', 'reject'] as const)(
       user: { ...stewardSession.user, effective_level: 5 },
     });
     await screen.findByRole('button', { name: 'Approve pending content' });
+    expect(await screen.findByRole('button', { name: 'Fetch model list' })).toBeEnabled();
     await view.user.click(
       screen.getByRole('button', {
         name: decision === 'approve' ? 'Approve pending content' : 'Return pending content',
