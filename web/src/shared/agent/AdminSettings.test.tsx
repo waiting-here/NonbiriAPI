@@ -50,6 +50,7 @@ const settings: AgentSettings = {
     donation_models: true,
     review_history: true,
     charity_models: true,
+    charity_binding_presets: true,
     users: true,
     site_status: true,
     web_search: true,
@@ -148,6 +149,9 @@ describe('Agent administrator settings', () => {
     const view = await mount();
     await screen.findByLabelText('Automatic review mode');
     await view.user.click(screen.getByText(common.common.agent.toolsTitle, { selector: 'strong' }));
+    expect(
+      screen.getByRole('checkbox', { name: common.common.agent.tools.charity_binding_presets }),
+    ).toBeChecked();
     await view.user.click(
       screen.getAllByText(common.common.agent.toolDescription, { selector: 'strong' })[0]!,
     );

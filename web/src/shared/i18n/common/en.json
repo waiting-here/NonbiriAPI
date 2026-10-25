@@ -2565,6 +2565,7 @@
         "donation_models": "Read donated model catalogs",
         "review_history": "Read review history",
         "charity_models": "Read charity models and bindings",
+        "charity_binding_presets": "Read channel binding presets",
         "users": "Read user management data",
         "site_status": "Read site status",
         "web_search": "Search the web",
@@ -2605,8 +2606,12 @@
         "deleteModel": "Delete charity model",
         "addBinding": "Add upstream model binding",
         "updateBinding": "Update upstream model binding",
-        "deleteBinding": "Remove upstream model binding"
+        "deleteBinding": "Remove upstream model binding",
+        "applyPreset": "Apply channel binding preset"
       },
+      "presetSkips": "Missing upstream models and existing bindings are skipped. Other invalid operations cause the entire plan to roll back.",
+      "presetChannel": "Channel",
+      "presetMappings": "View preset mappings ({{count}})",
       "changeFields": {
         "endpoints": "Endpoint limit",
         "rpm": "Requests per minute",

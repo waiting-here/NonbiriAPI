@@ -2565,6 +2565,7 @@
         "donation_models": "查看捐赠模型目录",
         "review_history": "查看历史审核",
         "charity_models": "查看公益模型和绑定",
+        "charity_binding_presets": "查看渠道绑定预设",
         "users": "查看用户管理资料",
         "site_status": "查看站点运行摘要",
         "web_search": "搜索网页",
@@ -2605,8 +2606,12 @@
         "deleteModel": "删除公益模型",
         "addBinding": "添加上游模型绑定",
         "updateBinding": "修改上游模型绑定",
-        "deleteBinding": "移除上游模型绑定"
+        "deleteBinding": "移除上游模型绑定",
+        "applyPreset": "应用渠道绑定预设"
       },
+      "presetSkips": "缺失的上游模型和已有绑定会跳过；其他操作不合法时，整份计划均不执行。",
+      "presetChannel": "渠道",
+      "presetMappings": "查看预设映射（{{count}} 项）",
       "changeFields": {
         "endpoints": "端点上限",
         "rpm": "每分钟请求上限",

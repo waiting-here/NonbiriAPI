@@ -58,8 +58,8 @@ preserved. Each template permits up to 100 messages and 1 MiB of combined
 content. `auto_prefill` and `chat_prefill` append optional assistant text and
 default to empty.
 
-The nine description keys are `donations`, `donation_models`, `review_history`,
-`charity_models`, `users`, `site_status`, `web_search`, `propose_operations` and
+The ten description keys are `donations`, `donation_models`, `review_history`,
+`charity_models`, `charity_binding_presets`, `users`, `site_status`, `web_search`, `propose_operations` and
 `edit_memory`. Read tools provide only authorized data. Search additionally
 requires its configured service and key. Plans and memory writes are available
 only in conversation mode, with the corresponding authority. Descriptions are
@@ -77,6 +77,7 @@ management pages keep their own pagination.
 | `donation_models` | Donation, key, model/name query and catalog-source filters; each result identifies its donation. Reads saved discovery and manual entries without refreshing upstream discovery. |
 | `review_history` | Donation and decision filters; each result identifies its donation. |
 | `charity_models` | Model and name-query filters; includes authorized bindings so a separate detail request is unnecessary. |
+| `charity_binding_presets` | Requires a donation ID; an optional channel ID narrows the saved presets available to that donation. Includes channel, donation and preset revisions, ordered mappings and current model binding revisions. Conversation only. |
 | `users` | Profile summaries with optional query; an exact user selection returns the full requested profile or authorized sensitive detail as an object. Sensitive detail still requires a target and the corresponding permission. |
 
 List summaries include the information needed to identify records and plan the
@@ -85,6 +86,16 @@ use an exact user selection for full profile details. Donation uses,
 review signatures and charity bindings remain included because they are needed
 to form valid operation plans. These tools do not expose a request-log search;
 request-log HTTP pages are separate from the model's available tools.
+
+For a mainstream donation, the assistant can read `charity_binding_presets`
+and propose `charity.binding.apply_preset`, with the donation ID as `target_id`
+and the exact versions returned by the read. The operator approves the plan
+before anything changes. Missing upstream models and existing bindings are
+normal skips; the receipt lists each outcome and separate added/skipped counts.
+Other errors, changed versions, revoked permissions or a later failed operation
+roll back the complete plan. Stewards need both preset and binding-management
+permissions, plus authority over the donation and mapped models. This does not
+change automatic review or the ordinary management page's batch behavior.
 
 Site-data results have a limit of 5,000 records and 1 MiB. The configured model
 window also limits the combined tool results in a model turn. An oversized result
@@ -109,7 +120,7 @@ retained originals or reverse completed operations.
 
 Existing saved templates, switches and tool choices are preserved. If an older
 configuration has no tool descriptions, reads supply the built-in defaults.
-`GET /admin/api/ai/config` returns the effective descriptions for all nine tools.
+`GET /admin/api/ai/config` returns the effective descriptions for all ten tools.
 
 `PUT /admin/api/ai/config` keeps its revision check and other configuration
 fields. Its optional `tool_descriptions` object is a partial update:

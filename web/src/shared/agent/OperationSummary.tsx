@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { Fold } from '@shared/components/ui';
 import type { ReactElement } from 'react';
 import { formatCredits } from '../../user/games/common/strict';
 import { formatCount } from '@shared/utils/formatNumber';
@@ -28,6 +29,7 @@ const operationNames: Record<string, string> = {
   'charity.binding.add': 'common.agent.operationNames.addBinding',
   'charity.binding.update': 'common.agent.operationNames.updateBinding',
   'charity.binding.delete': 'common.agent.operationNames.deleteBinding',
+  'charity.binding.apply_preset': 'common.agent.operationNames.applyPreset',
 };
 const fieldNames: Record<string, string> = {
   endpoint_limit: 'common.agent.changeFields.endpoints',
@@ -121,6 +123,8 @@ export function OperationSummary({
   if (input.key_id && Array.isArray(before.keys)) {
     before = object(before.keys.find((key) => object(key).id === input.key_id));
   }
+  const preset = object(before.preset);
+  const mappings = Array.isArray(preset.mappings) ? preset.mappings : [];
   const renderValue = (key: string, value: unknown) => {
     if (value === null)
       return t(
@@ -208,7 +212,8 @@ export function OperationSummary({
           {t(
             operation.kind.startsWith('users.')
               ? 'common.agent.targetUser'
-              : operation.kind.startsWith('donation.')
+              : operation.kind.startsWith('donation.') ||
+                  operation.kind === 'charity.binding.apply_preset'
                 ? 'common.agent.targetDonation'
                 : operation.kind.startsWith('charity.')
                   ? 'common.agent.targetModel'
@@ -225,6 +230,32 @@ export function OperationSummary({
         </p>
       ) : null}
       {fields(input, before)}
+      {operation.kind === 'charity.binding.apply_preset' ? (
+        <>
+          <p>
+            <strong>{t('common.agent.presetChannel')}: </strong>
+            {String(object(before.channel).name ?? input.channel_id ?? '')}
+          </p>
+          {mappings.length ? (
+            <Fold title={t('common.agent.presetMappings', { count: mappings.length })}>
+              {mappings.map((value, index) => {
+                const mapping = object(value);
+                return (
+                  <p key={index}>
+                    {String(mapping.upstream_model_id ?? '')} →{' '}
+                    {typeof mapping.full_name === 'string'
+                      ? mapping.full_name
+                      : t('common.agent.targetModel', {
+                          id: String(mapping.charity_model_id ?? ''),
+                        })}
+                  </p>
+                );
+              })}
+            </Fold>
+          ) : null}
+          <p className="nb-small nb-muted">{t('common.agent.presetSkips')}</p>
+        </>
+      ) : null}
       {Array.isArray(input.targets)
         ? input.targets.map((target, index) => (
             <div key={index}>{fields(object(target), {}, String(index + 1) + '. ')}</div>

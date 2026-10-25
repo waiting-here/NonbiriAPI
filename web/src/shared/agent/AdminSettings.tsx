@@ -27,6 +27,7 @@ const toolLabels: Record<string, string> = {
   donation_models: 'common.agent.tools.donation_models',
   review_history: 'common.agent.tools.review_history',
   charity_models: 'common.agent.tools.charity_models',
+  charity_binding_presets: 'common.agent.tools.charity_binding_presets',
   users: 'common.agent.tools.users',
   site_status: 'common.agent.tools.site_status',
   web_search: 'common.agent.tools.web_search',

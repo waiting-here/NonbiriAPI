@@ -41,6 +41,9 @@ Each version entry describes its source and compatibility boundary; a release ta
   accounting, cancellation and durable recovery. Add administrator-only complete
   request/response history with manual selected or filtered cleanup, plus
   independent historical and rolling 24-hour token usage for each operator.
+- Let the management assistant discover and apply saved channel binding presets
+  through a human-approved plan. Report missing upstream models and existing
+  bindings as normal skips; roll back the whole plan on actual errors.
 
 ### Fixed
 

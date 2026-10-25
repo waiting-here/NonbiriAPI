@@ -97,6 +97,7 @@ export const AGENT_TOOLS = [
   'donation_models',
   'review_history',
   'charity_models',
+  'charity_binding_presets',
   'users',
   'site_status',
   'web_search',

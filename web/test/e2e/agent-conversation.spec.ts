@@ -165,18 +165,19 @@ for (const scenario of [
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto(origin + (station === 'admin' ? '/ai' : '/steward/ai'));
-    const fits = async () => {
+    const fits = async (width: number = scenario.width) => {
       expect(
         await page.evaluate(() => ({
           width: innerWidth,
           scroll: document.documentElement.scrollWidth,
         })),
-      ).toEqual({ width: scenario.width, scroll: scenario.width });
+      ).toEqual({ width, scroll: width });
     };
     const evidence = async (name: string) => {
       if (!process.env.NONBIRI_VISUAL_DIR) return;
       mkdirSync(process.env.NONBIRI_VISUAL_DIR, { recursive: true });
       await page.screenshot({
+        animations: 'disabled',
         path: join(
           process.env.NONBIRI_VISUAL_DIR,
           `agent-${scenario.role}-${scenario.width}-${name}.png`,
@@ -234,6 +235,85 @@ for (const scenario of [
     await expect(page.getByRole('button', { name: copy.compactNow })).toBeEnabled();
     await fits();
     await evidence('compact-command');
+
+    plan.state = 'pending';
+    plan.result = undefined;
+    plan.operations = [
+      {
+        kind: 'charity.binding.apply_preset',
+        target_id: '42',
+        input: {
+          channel_id: 'mch_example',
+          expected_channel_revision: '1',
+          expected_preset_revision: '1',
+          expected_donation_revision: '1',
+          models: [{ charity_model_id: '9', expected_binding_revision: '0' }],
+        },
+      },
+    ];
+    plan.preview = [
+      {
+        title: 'Apply preset',
+        description: '',
+        dangerous: false,
+        requires_elevation: false,
+        before: JSON.stringify({
+          channel: { name: 'Example channel' },
+          preset: {
+            mappings: [
+              {
+                upstream_model_id: longModel,
+                charity_model_id: '9',
+                full_name: '[公益]example/model',
+              },
+            ],
+          },
+        }),
+      },
+    ];
+    messages[1]!.tool_calls = [
+      {
+        id: 'read-1',
+        type: 'function',
+        function: { name: 'charity_binding_presets', arguments: '{"donation_id":"42"}' },
+      },
+    ];
+    messages[3]!.tool_calls = [
+      {
+        id: 'write-1',
+        type: 'function',
+        function: {
+          name: 'propose_operations',
+          arguments: JSON.stringify({ operations: plan.operations }),
+        },
+      },
+    ];
+    data.messages = messages;
+    data.job = job;
+    await page.reload();
+    await expect(page.getByText(copy.tools.charity_binding_presets, { exact: true })).toBeVisible();
+    const presetPlan = page.getByRole('region', { name: copy.plan });
+    await expect(presetPlan).toContainText(copy.operationNames.applyPreset);
+    await expect(presetPlan).toContainText(copy.targetDonation.replace('{{id}}', '42'));
+    await expect(presetPlan).toContainText(copy.presetSkips);
+    await presetPlan
+      .getByText(copy.presetMappings.replace('{{count}}', '1'), { exact: true })
+      .click();
+    await expect(presetPlan).toContainText(longModel);
+    for (const width of [1440, 390]) {
+      for (const theme of ['light', 'dark']) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.evaluate((value) => {
+          document.documentElement.dataset.theme = value;
+        }, theme);
+        await presetPlan.scrollIntoViewIfNeeded();
+        await fits(width);
+        await evidence(`preset-${width}-${theme}`);
+      }
+    }
+    await presetPlan.getByRole('button', { name: copy.approvePlan }).click();
+    await expect.poll(() => decisions.length).toBe(3);
+    expect(decisions[2]).toEqual({ approve: true, feedback: '' });
     expect(errors).toEqual([]);
   });
 }
