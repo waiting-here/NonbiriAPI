@@ -119,6 +119,9 @@ func upgradeStartupSchema(ctx context.Context, database *sql.DB, codec secret.Ge
 	if _, err := conn.ExecContext(ctx, AgentRequestsSQL+AgentWorkflowSQL); err != nil {
 		return err
 	}
+	if err := UpgradeModelTypes(ctx, conn); err != nil {
+		return err
+	}
 	if err := UpgradeStewardAIPermissions(ctx, conn); err != nil {
 		return err
 	}

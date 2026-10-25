@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -92,6 +93,8 @@ func TestAgentPolicyUpgradeFailureRollsBackAndNewerSchemaRejects(t *testing.T) {
 	}{{valid, original}, {invalid, "{}"}} {
 		hostileMustExec(t, store.DB(), `INSERT INTO steward_permissions(user_id,revision,permissions,limits,created_at,updated_at) VALUES(?,1,?,'{}',1,1)`, p.id, p.body)
 	}
+	personal := hostileMustLastID(t, hostileMustExec(t, store.DB(), `INSERT INTO models(user_id,provider,model,full_name,model_types,revision,created_at,updated_at) VALUES(?,'p','rollback','p/rollback',1,7,2,3)`, valid))
+	charity := hostileMustLastID(t, hostileMustExec(t, store.DB(), `INSERT INTO charity_models(provider,model,full_name,pricing_mode,model_types,revision,created_at,updated_at) VALUES('p','rollback','[公益]p/rollback','per_request',16,7,2,3)`))
 	dropAgentFoundationForTest(t, store.DB())
 	hostileMustExec(t, store.DB(), "UPDATE schema_state SET version=36")
 	if err = store.Close(); err != nil {
@@ -108,6 +111,15 @@ func TestAgentPolicyUpgradeFailureRollsBackAndNewerSchemaRejects(t *testing.T) {
 	var body string
 	if err = raw.QueryRow("SELECT permissions FROM steward_permissions WHERE user_id=?", valid).Scan(&body); err != nil || body != original {
 		t.Fatal("partial policy update", body, err)
+	}
+	for _, model := range []struct {
+		table    string
+		id, mask int64
+	}{{"models", personal, 1}, {"charity_models", charity, 16}} {
+		var mask, revision, created, updated int64
+		if err := raw.QueryRow("SELECT model_types,revision,created_at,updated_at FROM "+model.table+" WHERE id=?", model.id).Scan(&mask, &revision, &created, &updated); err != nil || mask != model.mask || revision != 7 || created != 2 || updated != 3 {
+			t.Fatal("partial model interface update survived rollback", model.table, mask, revision, created, updated, err)
+		}
 	}
 	if hash, err := SchemaManifestHash(t.Context(), raw); err != nil || hash != Schema36ManifestHash {
 		t.Fatal("DDL did not roll back", hash, err)
@@ -225,5 +237,67 @@ func TestSchema36PolicyNormalizerRejectsUnexpectedFormat(t *testing.T) {
 	}
 	if reflect.DeepEqual(original, normalized) {
 		t.Fatal("migration did not normalize")
+	}
+}
+
+func TestModelInterfaceStartupMigrationPreservesLegacyMeaningOnce(t *testing.T) {
+	path := bootstrapTestPath(t, "model-interfaces.sqlite")
+	vault := bootstrapTestVault(t)
+	store, err := Open(path, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := hostileInsertUser(t, store.DB(), "model-interface-owner", 0, 0)
+	type modelFact struct {
+		table, name, fullName string
+		id, source, upgraded  int64
+	}
+	var facts []modelFact
+	for i, mask := range []int64{1, 16, 17, 2, 3, 18, 32768, 32769} {
+		name := fmt.Sprintf("model%d", i)
+		want := mask
+		if mask&17 != 0 {
+			want |= 17
+		}
+		personal := hostileMustLastID(t, hostileMustExec(t, store.DB(), `INSERT INTO models(user_id,provider,model,full_name,model_types,revision,binding_revision,created_at,updated_at) VALUES(?,'p',?,?,?,7,11,13,17)`, user, name, "p/"+name, mask))
+		charity := hostileMustLastID(t, hostileMustExec(t, store.DB(), `INSERT INTO charity_models(provider,model,full_name,pricing_mode,model_types,revision,binding_revision,created_at,updated_at) VALUES('p',?,?,'per_request',?,7,11,13,17)`, name, "[公益]p/"+name, mask))
+		facts = append(facts, modelFact{"models", name, "p/" + name, personal, mask, want}, modelFact{"charity_models", name, "[公益]p/" + name, charity, mask, want})
+	}
+	dropAgentFoundationForTest(t, store.DB())
+	hostileMustExec(t, store.DB(), "UPDATE schema_state SET version=36")
+	if hash, err := SchemaManifestHash(t.Context(), store.DB()); err != nil || hash != Schema36ManifestHash {
+		t.Fatal("source identity changed", hash, err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for pass := 0; pass < 2; pass++ {
+		store, err = Open(path, vault)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, fact := range facts {
+			want := fact.upgraded
+			if pass == 1 {
+				want = fact.source
+			}
+			var mask, revision, binding, created, updated int64
+			var name, fullName string
+			if err := store.DB().QueryRow("SELECT model_types,revision,binding_revision,created_at,updated_at,model,full_name FROM "+fact.table+" WHERE id=?", fact.id).Scan(&mask, &revision, &binding, &created, &updated, &name, &fullName); err != nil || mask != want || revision != 7 || binding != 11 || created != 13 || updated != 17 || name != fact.name || fullName != fact.fullName {
+				t.Fatalf("pass=%d fact=%+v got=%d/%d/%d/%d/%d/%s/%s err=%v", pass, fact, mask, revision, binding, created, updated, name, fullName, err)
+			}
+			if pass == 0 {
+				// Current-schema writes are independent selections, including
+				// the same single-bit values that had a shared legacy meaning.
+				hostileMustExec(t, store.DB(), "UPDATE "+fact.table+" SET model_types=? WHERE id=?", fact.source, fact.id)
+			}
+		}
+		if version, err := readSchemaVersion(t.Context(), store.DB()); err != nil || version != CurrentSchemaVersion {
+			t.Fatal(version, err)
+		}
+		assertRetainedManifest(t, store.DB(), PinnedGenerationTwoManifestHash)
+		if err := store.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
