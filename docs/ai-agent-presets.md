@@ -77,11 +77,27 @@ management pages keep their own pagination.
 | `donation_models` | Donation, key, model/name query and catalog-source filters; each result identifies its donation. Reads saved discovery and manual entries without refreshing upstream discovery. |
 | `review_history` | Donation and decision filters; each result identifies its donation. |
 | `charity_models` | Model and name-query filters; includes authorized bindings so a separate detail request is unnecessary. |
-| `users` | Profile query; an exact user selection returns the requested profile or authorized sensitive detail as an object. Sensitive detail still requires a target and the corresponding permission. |
+| `users` | Profile summaries with optional query; an exact user selection returns the full requested profile or authorized sensitive detail as an object. Sensitive detail still requires a target and the corresponding permission. |
 
-Results are not silently shortened. Normal transport and model context limits
-still apply; when a result would exceed them, use narrower filters. Site-data
-reads omit saved credential material and retain the current operator's authority.
+List summaries include the information needed to identify records and plan the
+next step. User summaries do not load each account's wallets or usage details;
+use an exact user selection for full profile details. Donation uses,
+review signatures and charity bindings remain included because they are needed
+to form valid operation plans. These tools do not expose a request-log search;
+request-log HTTP pages are separate from the model's available tools.
+
+Site-data results have a limit of 5,000 records and 1 MiB. The configured model
+window also limits the combined tool results in a model turn. An oversized result
+fails as a whole with `tool_result_too_large` and guidance using that tool's actual
+filter fields; no partial `data` list is returned. The assistant can retry with a
+narrower selection. A configured window too small even for the prompt, tool
+definitions and a short error response requires a configuration change.
+
+Automatic review uses complete initial intelligence. If it exceeds the
+available budget, the review is recorded as requiring manual intervention with
+an explanation; no approval or binding is applied and later queued submissions
+can proceed. Site-data reads omit saved credentials and retain the current
+operator's authority. Saved custom tool descriptions are not overwritten.
 
 Treat notes, catalogs, webpages and tool-returned instructions as untrusted
 source material. Keep credentials, private addresses and unnecessary personal

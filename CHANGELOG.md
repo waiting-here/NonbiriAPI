@@ -75,6 +75,14 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Move charge previews, client-rule prechecks, session/MFA validation and ranking
   snapshots off the writer connection. Keep final authority, catch-up writes and
   accounting checks, and release MFA snapshots before sending the response.
+- Reduce repeated authentication fixture initialization, prepare the empty
+  database outside race instrumentation for explicit local test runs, and expose
+  live race progress and catalog timings. Avoid repeating vet after the explicit
+  vet gate while preserving complete coverage and subprocess failures.
+- Read assistant user summaries in one query, with full profiles available by ID. Reject
+  oversized tool results as a whole with guidance for narrower filters, account
+  for the combined model context, and route oversized automatic-review
+  intelligence to manual review without blocking later submissions.
 - Limit charity binding, candidate and preset catalog checks to selected
   donation keys, avoiding repeated aggregation of unrelated catalogs inside
   write transactions while preserving scope, replay and atomicity.

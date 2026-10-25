@@ -4,6 +4,38 @@ Run synthetic experiments against temporary databases and a local mock upstream.
 Never point these tests at a deployed instance. Default admission limits remain
 enabled; a rejected request is not counted as accepted throughput.
 
+For a slow test package, record per-test progress before changing its timeout:
+
+```sh
+GOMAXPROCS=2 go test -p 1 -json -count=1 ./internal/auth > auth-tests.jsonl
+GOMAXPROCS=2 RACE_TIMEOUT=10m scripts/race-check.sh -p 1 ./internal/auth
+```
+
+Go's test timeout covers the whole package, including all fixture setup; the
+duration beside a running test in a timeout stack covers only that test. Choose
+the diagnostic budget from measured fixture counts and case times. Separate
+template construction, materialization, database opening and the tested work.
+Use CPU and block profiles on a representative subset to distinguish parser or
+initialization work from an application wait. Cumulative blocking samples sum
+across goroutines and are not elapsed time. If separate runs show machine-wide
+speed changes, compare warmed before/after fixtures in alternating order within
+one process.
+
+Explicit arguments to `race-check.sh` retain the complete requested test set and
+flags. When no template environment is inherited, its ordinary-process builder
+prepares one immutable empty database for that invocation; each test still gets
+an isolated copy and runs the normal database validation. Inherited template
+settings are preserved, including invalid settings that must fail validation.
+The runner removes its temporary template and wrapper after completion. Catalog
+and sharded runs report package discovery durations and current top-level tests
+as they run, while retaining their complete grouped logs for timing analysis.
+
+The ordinary and routine gates run an explicit `go vet` phase, so their following
+test phase disables only the duplicate automatic vet pass. Standalone test and
+race commands retain their own vet behavior. Timing hints balance the live test
+catalog; they do not select coverage. Keep complete checks and failure reporting
+when changing scheduling, and measure runner queue/setup costs before adding jobs.
+
 For focused read-path measurements, start with the bounded SQLite benchmarks:
 
 ```sh
