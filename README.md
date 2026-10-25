@@ -203,14 +203,18 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
 Fresh databases start in maintenance with public features closed and use schema 37.
-Exact supported schema 33–36 manifests receive atomic startup upgrades; current
-schema 37 opens directly. Account export remains format 30. The separate
-converter still accepts its exact registered schema 16–26 sources and targets
-schema 37; its historical conversion code is excluded from the normal service.
+The service opens only the exact current schema; older, newer, unknown or
+incomplete storage is rejected before migration, repair or recovery writes.
+For exact registered schema 16–26 and 33–36 sources, preserve a complete recovery
+set before deliberately running the matching standalone
+[upgrader](cmd/nonbiri-upgrade-v1/README.md) with `--check` or `--apply`.
+The service, startup scripts and deployment helpers must not apply upgrades
+implicitly. Account export remains format 30. Schema versions change when
+storage requires it, independently of software patch releases.
 Use the matching binaries' schema descriptors to check accepted sources.
-Upgrades are one-way: an upgraded database cannot run on an older server, and
-there is no downgrade migration. Preserve a complete matching recovery set
-before upgrading; do not overwrite newly accepted data with an old snapshot.
+Upgrades are one-way: a server expecting an older or different schema cannot
+open the upgraded database, and there is no schema downgrade migration. Do not overwrite newly accepted data with an
+old snapshot.
 Source documentation does not imply an instance deployment.
 
 [Deployment](docs/deployment.md) covers systemd, proxies, immutable artifacts, upgrades and complete-snapshot recovery. Startup variables and online settings have one reference in [configuration](docs/configuration.md).
