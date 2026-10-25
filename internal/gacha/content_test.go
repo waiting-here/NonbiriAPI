@@ -31,7 +31,7 @@ func TestCatalogSyncAddsOnlyMissingTemplatesWithoutSchemaOrPlayerChanges(t *test
 	if err := f.db.QueryRow("SELECT config FROM gacha_presets WHERE id='celestial'").Scan(&edited); err != nil {
 		t.Fatal(err)
 	}
-	f.exec(t, "DELETE FROM gacha_presets WHERE id IN ('theatre','tomorrow')")
+	f.exec(t, "DELETE FROM gacha_presets WHERE id IN ('theatre','tomorrow','sweet-hide-and-seek')")
 	version := f.scalar(t, "SELECT version FROM schema_state")
 	ddlVersion := f.scalar(t, "PRAGMA schema_version")
 	events := f.scalar(t, "SELECT count(*) FROM gacha_config_events")
@@ -44,6 +44,9 @@ func TestCatalogSyncAddsOnlyMissingTemplatesWithoutSchemaOrPlayerChanges(t *test
 	}
 	if f.scalar(t, "SELECT count(*) FROM gacha_presets WHERE id='tomorrow'") != 1 {
 		t.Fatal("restart did not add the new built-in template")
+	}
+	if f.scalar(t, "SELECT count(*) FROM gacha_presets WHERE id='sweet-hide-and-seek'") != 1 {
+		t.Fatal("default artwork policy blocked the restricted template")
 	}
 	content := presetCatalog{Version: defaultPresets.Version + 1, Presets: append([]Preset(nil), defaultPresets.Presets...)}
 	newPreset := content.Presets[0]

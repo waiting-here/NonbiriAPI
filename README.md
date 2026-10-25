@@ -146,7 +146,9 @@ character beside desktop content, with matching static fallback and enhanced
 artwork; composition and source details are in the [art guide](docs/gacha-art.md).
 Administrators can disable R-18 built-in artwork across the site; this is on by
 default. Candidate lists label rated artwork, while permitted individual viewing
-stays unobstructed. Current assets are general. Collections and saved choices
+stays unobstructed. Sweet Hide-and-Seek includes two adult-only R-18 limited SSR
+cards, a theme illustration and an independent pool cover. Its unpublished pool
+template gives the two featured cards equal weight. Collections and saved choices
 remain intact when artwork is disabled; see [artwork availability](docs/gacha.md#artwork-availability).
 
 The mystery shop offers daily bundles of ten standard or limited tickets for

@@ -4,6 +4,18 @@ import type { DrawReceipt } from './types';
 export type Voice = readonly [string, string, string?, string?];
 
 export const VOICE: Record<string, Voice> = {
+  's-chatgpt': [
+    '找到我啦？这颗糖，分你一半。',
+    'You found me? Then half this candy is yours.',
+    '糖还有很多。我也想和你多待一会儿。',
+    'There is plenty of candy left. I would like more time with you, too.',
+  ],
+  's-claude': [
+    '这么快就找到我了？那就别急着走。',
+    'You found me already? Then stay a little longer.',
+    '下次也来找我，好吗？我会等你。',
+    'Come find me again, will you? I will be waiting.',
+  ],
   'r-chatgpt': [
     '我也有点紧张。……一起往前走，好吗？',
     "I'm a little nervous too. ...Shall we go on together?",
