@@ -130,15 +130,16 @@ const (
 )
 
 type rpmEvent struct {
-	id       string
-	at       time.Time
-	expires  time.Time
-	user     string
-	state    atomic.Uint32
-	observer RPMObserver
-	decision RPMDecision
-	charity  bool
-	light    bool
+	globalOnly bool
+	id         string
+	at         time.Time
+	expires    time.Time
+	user       string
+	state      atomic.Uint32
+	observer   RPMObserver
+	decision   RPMDecision
+	charity    bool
+	light      bool
 }
 
 // RPM is a thread-safe, bounded sliding-window limiter. One instance must be
@@ -199,7 +200,7 @@ func (r *RPM) SampleGlobal() (current, peak, limit int) {
 	defer r.mu.Unlock()
 	now := r.clock.Now()
 	for _, event := range r.global {
-		if event != nil && event.expires.After(now) && event.state.Load() != uint32(rpmEventReleased) {
+		if event != nil && (event.expires.After(now) || (event.globalOnly && event.state.Load() == uint32(rpmEventActive))) && event.state.Load() != uint32(rpmEventReleased) {
 			current++
 		}
 	}
@@ -539,7 +540,7 @@ func (r *RPM) earliestExpiryLocked(events []*rpmEvent, now time.Time) time.Durat
 func (r *RPM) pruneLocked(now time.Time) {
 	globalWrite := 0
 	for _, event := range r.global {
-		if event != nil && event.expires.After(now) && event.state.Load() != uint32(rpmEventReleased) {
+		if event != nil && (event.expires.After(now) || (event.globalOnly && event.state.Load() == uint32(rpmEventActive))) && event.state.Load() != uint32(rpmEventReleased) {
 			r.global[globalWrite] = event
 			globalWrite++
 		}
@@ -550,6 +551,11 @@ func (r *RPM) pruneLocked(now time.Time) {
 	r.global = r.global[:globalWrite]
 
 	r.eventCount = 0
+	for _, event := range r.global {
+		if event.globalOnly {
+			r.eventCount++
+		}
+	}
 	for userKey, events := range r.users {
 		write := 0
 		for _, event := range events {

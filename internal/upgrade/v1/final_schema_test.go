@@ -308,7 +308,7 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 
 func TestOfflineDescriptorContainsOnlyExactSupportedSources(t *testing.T) {
 	descriptor := SchemaDescriptor()
-	if descriptor.SchemaVersion != db.CurrentSchemaVersion || descriptor.MinimumSchemaVersion != 33 || len(descriptor.SourceSchemaVersions) != 3 || descriptor.SourceSchemaVersions[0] != 33 || descriptor.SourceSchemaVersions[1] != 34 || descriptor.SourceSchemaVersions[2] != 35 || len(descriptor.OfflineConversions) != 11 {
+	if descriptor.SchemaVersion != db.CurrentSchemaVersion || descriptor.MinimumSchemaVersion != 33 || len(descriptor.SourceSchemaVersions) != 4 || descriptor.SourceSchemaVersions[0] != 33 || descriptor.SourceSchemaVersions[1] != 34 || descriptor.SourceSchemaVersions[2] != 35 || descriptor.SourceSchemaVersions[3] != 36 || len(descriptor.OfflineConversions) != 11 {
 		t.Fatal(descriptor)
 	}
 	for index, source := range descriptor.OfflineConversions {

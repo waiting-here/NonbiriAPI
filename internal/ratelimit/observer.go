@@ -58,6 +58,10 @@ func (r *RPM) transition(event *rpmEvent, state rpmEventState) bool {
 		return false
 	}
 	now := r.clock.Now()
+	if event.globalOnly && state == rpmEventCommitted {
+		event.at = now
+		event.expires = now.Add(r.window)
+	}
 	kind := "commit"
 	if state == rpmEventReleased {
 		kind = "release"

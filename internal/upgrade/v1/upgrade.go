@@ -62,7 +62,8 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 		indexedTables: []string{"request_logs", "dispatch_claims", "report_targets", "donation_keys"}, credentials: credentialsUnchanged}},
 	{from: 34, version: 35, manifest: db.Schema35ManifestHash, sql: db.DonationDiscoveryAuthorizationSQL, impact: &migrationImpact{
 		constraintTables: []string{"discovery_runs", "charity_model_catalog"}, credentials: credentialsUnchanged}},
-	{from: 35, version: 36, manifest: db.PinnedGenerationTwoManifestHash, sql: db.StewardPermissionsSQL + db.StewardAuditRolesSQL + db.EndpointTagsSQL, impact: &migrationImpact{rebuiltTables: []string{"risk_client_rules", "client_rule_auto_bans", "discord_blacklist_origins", "discord_blacklist_events", "admin_endpoint_tags"}, addedTables: []string{"steward_permissions", "steward_permission_audits"}, credentials: credentialsUnchanged}},
+	{from: 35, version: 36, manifest: db.Schema36ManifestHash, sql: db.StewardPermissionsSQL + db.StewardAuditRolesSQL + db.EndpointTagsSQL, impact: &migrationImpact{rebuiltTables: []string{"risk_client_rules", "client_rule_auto_bans", "discord_blacklist_origins", "discord_blacklist_events", "admin_endpoint_tags"}, addedTables: []string{"steward_permissions", "steward_permission_audits"}, credentials: credentialsUnchanged}},
+	{from: 36, version: 37, manifest: db.PinnedGenerationTwoManifestHash, sql: db.AgentRequestsSQL, impact: &migrationImpact{addedTables: []string{"agent_request_response_chunks", "agent_request_settings", "agent_requests", "agent_request_usage", "agent_request_usage_totals", "agent_request_usage_hours"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {
