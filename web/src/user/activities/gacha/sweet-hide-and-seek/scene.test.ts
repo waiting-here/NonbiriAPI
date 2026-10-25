@@ -45,6 +45,9 @@ beforeEach(() => {
     'COMPILE_STATUS',
     'LINK_STATUS',
     'ARRAY_BUFFER',
+    'ELEMENT_ARRAY_BUFFER',
+    'UNSIGNED_SHORT',
+    'COLOR_BUFFER_BIT',
     'STATIC_DRAW',
     'FLOAT',
     'TEXTURE0',
@@ -87,7 +90,8 @@ beforeEach(() => {
     'uniform1f',
     'pixelStorei',
     'viewport',
-    'drawArrays',
+    'drawElements',
+    'clear',
     'deleteTexture',
     'deleteShader',
     'deleteBuffer',
@@ -139,13 +143,17 @@ it('uploads only one full character and a cropped two-state eye atlas, and relea
   expect(images.slice(1).every((image) => image.src === '')).toBe(true);
   scene.resize();
   scene.paint(2.35, 1, true);
-  expect(gl.drawArrays).toHaveBeenCalledOnce();
+  expect(gl.drawElements).toHaveBeenCalledWith(gl.TRIANGLES, 147456, gl.UNSIGNED_SHORT, 0);
+  expect(gl.clear).toHaveBeenCalledWith(gl.COLOR_BUFFER_BIT);
+  const uploadsBeforePaint = vi.mocked(gl.bufferData).mock.calls.length;
+  scene.paint(4.7, 0, true);
+  expect(gl.bufferData).toHaveBeenCalledTimes(uploadsBeforePaint);
   scene.dispose();
   scene.dispose();
   expect(gl.deleteTexture).toHaveBeenCalledTimes(4);
   expect(gl.deleteShader).toHaveBeenCalledTimes(2);
   expect(gl.deleteProgram).toHaveBeenCalledOnce();
-  expect(gl.deleteBuffer).toHaveBeenCalledOnce();
+  expect(gl.deleteBuffer).toHaveBeenCalledTimes(2);
   expect(lose).toHaveBeenCalledOnce();
   expect(images.every((image) => image.src === '')).toBe(true);
 });
@@ -182,7 +190,7 @@ it('cleans partially compiled scenes on shader failure', async () => {
   );
   expect(gl.deleteShader).toHaveBeenCalledOnce();
   expect(gl.deleteProgram).toHaveBeenCalledOnce();
-  expect(gl.deleteBuffer).toHaveBeenCalledOnce();
+  expect(gl.deleteBuffer).toHaveBeenCalledTimes(2);
   expect(lose).toHaveBeenCalledOnce();
 });
 

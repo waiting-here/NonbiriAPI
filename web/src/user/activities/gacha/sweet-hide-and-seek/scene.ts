@@ -1,6 +1,7 @@
 import { highResolutionArt } from '../art-resolution';
 import { eyeTextures, faceCrops, profileWidth } from './eyelid';
 import { fragmentShader, vertexShader } from './shader';
+import { createMotionMesh, motionDrivers, vertexStride } from './motion';
 import type { SweetCard } from './motion';
 
 export type SceneOptions = {
@@ -95,7 +96,9 @@ export async function createSweetScene(
   const textures: WebGLTexture[] = [],
     shaders: WebGLShader[] = [];
   const program = gl.createProgram(),
-    buffer = gl.createBuffer();
+    buffer = gl.createBuffer(),
+    elements = gl.createBuffer();
+  let elementCount = 0;
   let disposed = false;
   const dispose = () => {
     if (disposed) return;
@@ -104,6 +107,7 @@ export async function createSweetScene(
     textures.forEach((texture) => gl.deleteTexture(texture));
     shaders.forEach((shader) => gl.deleteShader(shader));
     gl.deleteBuffer(buffer);
+    gl.deleteBuffer(elements);
     gl.deleteProgram(program);
     gl.getExtension('WEBGL_lose_context')?.loseContext();
     layer.width = layer.height = 0;
@@ -121,10 +125,10 @@ export async function createSweetScene(
   };
   const atlas = document.createElement('canvas');
   try {
-    if (!program || !buffer) throw new Error('renderer-unavailable');
+    if (!program || !buffer || !elements) throw new Error('renderer-unavailable');
     for (const [type, code] of [
       [gl.VERTEX_SHADER, vertexShader],
-      [gl.FRAGMENT_SHADER, fragmentShader(id)],
+      [gl.FRAGMENT_SHADER, fragmentShader()],
     ] as const) {
       const shader = gl.createShader(type);
       if (!shader) throw new Error('renderer-unavailable');
@@ -138,14 +142,21 @@ export async function createSweetScene(
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error('shader-unavailable');
     gl.useProgram(program);
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]),
-      gl.STATIC_DRAW,
-    );
-    const position = gl.getAttribLocation(program, 'position');
-    gl.enableVertexAttribArray(position);
-    gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+    const mesh = createMotionMesh(id);
+    gl.bufferData(gl.ARRAY_BUFFER, mesh.vertices, gl.STATIC_DRAW);
+    for (const [name, size, offset] of [
+      ['position', 2, 0],
+      ['primary', 4, 2],
+      ['secondary', 4, 6],
+      ['ribs', 2, 10],
+    ] as const) {
+      const attribute = gl.getAttribLocation(program, name);
+      gl.enableVertexAttribArray(attribute);
+      gl.vertexAttribPointer(attribute, size, gl.FLOAT, false, vertexStride * 4, offset * 4);
+    }
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, elements);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.STATIC_DRAW);
+    elementCount = mesh.indices.length;
     const texture = (name: string, unit: number) => {
       const texture = gl.createTexture();
       if (!texture) throw new Error('renderer-unavailable');
@@ -229,7 +240,9 @@ export async function createSweetScene(
     // The half/closed bitmaps are needed only for upload, not for animation.
     half.src = closed.src = '';
   }
-  const timeUniform = gl.getUniformLocation(program!, 'time');
+  const flowUniform = gl.getUniformLocation(program!, 'flow');
+  const breathUniform = gl.getUniformLocation(program!, 'breath');
+  const drivers = new Float32Array(5);
   const blinkUniform = gl.getUniformLocation(program!, 'blink');
   layer.addEventListener('webglcontextlost', lost);
   return {
@@ -244,9 +257,12 @@ export async function createSweetScene(
       output.clearRect(0, 0, canvas.width, canvas.height);
       if (background) output.drawImage(background, 0, 0, canvas.width, canvas.height);
       if (motion) {
-        gl.uniform1f(timeUniform, time);
+        motionDrivers(time, drivers);
+        gl.uniform4f(flowUniform, drivers[0], drivers[1], drivers[2], drivers[3]);
+        gl.uniform1f(breathUniform, drivers[4]);
         gl.uniform1f(blinkUniform, blink);
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.drawElements(gl.TRIANGLES, elementCount, gl.UNSIGNED_SHORT, 0);
         output.drawImage(layer, 0, 0);
       } else output.drawImage(hero, 0, 0, canvas.width, canvas.height);
     },
