@@ -53,5 +53,6 @@ ordered_pkgs="$(printf '%s\n' "$pkgs" | "$GO" run ./internal/citools/testorder)"
 
 printf 'Go tests started at %s\n' "$(date -u +%FT%TZ)"
 check_go_started=$SECONDS
-"$GO" test -timeout="$GO_TEST_TIMEOUT" $ordered_pkgs
+# The explicit vet phase already covers the complete package set and its tests.
+"$GO" test -vet=off -timeout="$GO_TEST_TIMEOUT" $ordered_pkgs
 printf 'Go tests completed in %s seconds\n' "$((SECONDS - check_go_started))"

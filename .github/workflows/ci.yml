@@ -120,6 +120,7 @@ jobs:
         run: |
           bash scripts/check-ci-results.test.sh
           bash scripts/check-go.test.sh
+          bash scripts/race-check.test.sh
       - name: Build, vet, and test
         env:
           MODE: ${{ needs.plan.outputs.mode }}
@@ -134,7 +135,7 @@ jobs:
             test "${#packages[@]}" -gt 0
             go build "${packages[@]}"
             go vet "${packages[@]}"
-            go test -timeout=30m "${packages[@]}" | tee .cache/ci/go-checks.log
+            go test -vet=off -timeout=30m "${packages[@]}" | tee .cache/ci/go-checks.log
           fi
       - name: Upgrade populated released databases
         if: needs.plan.outputs.upgrade == 'true'

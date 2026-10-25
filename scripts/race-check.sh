@@ -66,7 +66,22 @@ elif [ "${1:-}" = "--shard" ]; then
     -timeout "$RACE_TIMEOUT" \
     -workers "$RACE_WORKERS" "${selected_args[@]}"
 elif [ $# -gt 0 ]; then
-  "$GO" test -v -race -shuffle=on -count=1 -timeout="$RACE_TIMEOUT" "$@"
+  # Build the small wrapper so go run cannot replace a child's exit status.
+  # Each invocation owns its executable and the runner removes its DB template.
+  runner_directory=$(mktemp -d)
+  runner="$runner_directory/raceplan"
+  case "${OSTYPE:-}" in msys*|cygwin*) runner="$runner.exe" ;; esac
+  cleanup_direct_runner() {
+    local status=$?
+    trap - EXIT
+    if ! rm -f -- "$runner" || ! rmdir -- "$runner_directory"; then
+      if [ "$status" -eq 0 ]; then status=1; fi
+    fi
+    exit "$status"
+  }
+  trap cleanup_direct_runner EXIT
+  "$GO" build -o "$runner" ./internal/citools/raceplan
+  "$runner" -go "$GO" -timeout "$RACE_TIMEOUT" -direct -- "$@"
 else
   # Full means every ordinary test plus the complete risk-based race catalog.
   # A single local shard uses the same exact exclusions as CI.
