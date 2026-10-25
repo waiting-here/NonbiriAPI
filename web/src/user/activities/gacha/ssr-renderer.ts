@@ -70,6 +70,11 @@ export async function renderSSR(
   options: { characterOnly?: boolean; signal?: AbortSignal } = {},
 ) {
   if (options.signal?.aborted) return () => {};
+  if (id === 's-chatgpt' || id === 's-claude') {
+    const { renderSweetHideAndSeek } = await import('./sweet-hide-and-seek/renderer');
+    if (options.signal?.aborted) return () => {};
+    return renderSweetHideAndSeek(canvas, id, { ...options, frozenTime, paused, highResolution });
+  }
   const theme = specialCards[id];
   if (theme) {
     const { renderSpecial } = await import('./special-renderer');
