@@ -17,7 +17,8 @@
     "n": "backgrounds/n.webp",
     "o": "backgrounds/o.webp",
     "p": "backgrounds/p.webp",
-    "q": "backgrounds/q.webp"
+    "q": "backgrounds/q.webp",
+    "s": "backgrounds/s.webp"
   },
   "characters": {
     "a-chatgpt": "layers/a-chatgpt.webp",
@@ -81,7 +82,9 @@
     "o-claude": "motion/o-claude/hero.webp",
     "p-claude": "motion/p-claude/hero.webp",
     "q-glm": "motion/q-glm/hero.webp",
-    "r-chatgpt": "motion/r-chatgpt/hero.webp"
+    "r-chatgpt": "motion/r-chatgpt/hero.webp",
+    "s-chatgpt": "motion/s-chatgpt/hero.webp",
+    "s-claude": "motion/s-claude/hero.webp"
   },
   "cards": {
     "a-chatgpt": {
@@ -838,6 +841,26 @@
         ],
         "high_method": "resampling; no additional native detail"
       }
+    },
+    "s-chatgpt": {
+      "background": "motion/s-chatgpt/background.webp",
+      "character": "motion/s-chatgpt/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas"
+    },
+    "s-claude": {
+      "background": "motion/s-claude/background.webp",
+      "character": "motion/s-claude/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas"
     }
   },
   "groups": {
@@ -1025,5 +1048,44 @@
     }
   },
   "sampling": "Lanczos3; generated native 1024x1536 portraits and approximately 1672x941 landscapes; larger derivatives do not add native detail.",
-  "compositing": "Background first, then registered transparent foreground using source-over. Existing rare cards retain their registered motion composition."
+  "compositing": "Background first, then registered transparent foreground using source-over. Existing rare cards retain their registered motion composition.",
+  "seasonal": {
+    "theme": "s",
+    "nativeCards": [
+      1024,
+      1536
+    ],
+    "nativeGroup": [
+      1536,
+      864
+    ],
+    "nativeCover": [
+      1920,
+      1080
+    ],
+    "highCards": [
+      2560,
+      3840
+    ],
+    "highLandscapes": [
+      3840,
+      2160
+    ],
+    "groups": {
+      "background": "backgrounds/s.webp",
+      "foreground": "layers/groups/s.webp"
+    },
+    "cover": {
+      "background": "backgrounds/covers/s.webp",
+      "foreground": "layers/covers/s.webp"
+    },
+    "eyeStates": [
+      "hero.webp",
+      "half.webp",
+      "closed.webp"
+    ],
+    "eyeRegistration": "Same full-canvas coordinates; half and closed layers retain only the face region.",
+    "scaling": "01/04/07: same-source Lanczos resampling; 08: previously adopted enhanced foreground with cleaned current alpha and the adopted same-version background. Large dimensions do not imply native added detail.",
+    "contentRating": "r18"
+  }
 }
