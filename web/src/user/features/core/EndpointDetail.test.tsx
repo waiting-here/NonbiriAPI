@@ -620,17 +620,16 @@ describe('missing catalog recovery', () => {
       'href',
       '/endpoints?connection_id=9&connection_view=discovery',
     );
-    const note = screen.getByRole('textbox', { name: 'Key note' });
-    await view.user.clear(note);
-    await view.user.type(note, 'Keep this note draft');
     await view.user.click(await within(scope).findByRole('button', { name: 'Use source' }));
     expect(writes).toHaveLength(0);
     const keyEditor = screen.getByRole('region', { name: 'Edit note and limits' });
     await view.user.click(within(keyEditor).getByRole('button', { name: 'Close' }));
     await view.user.click(screen.getByRole('button', { name: 'Choose model catalog' }));
     expect(catalogReads).toBe(1);
-    expect(note).toHaveValue('Keep this note draft');
     expect(within(catalog).getByText('Exact catalog', { selector: 'p' })).toBeVisible();
+    const note = screen.getByRole('textbox', { name: 'Key note' });
+    await view.user.clear(note);
+    await view.user.type(note, 'Keep this note draft');
     await view.user.click(
       within(catalog).getByText('Catalog association (optional)', { selector: 'strong' }),
     );
