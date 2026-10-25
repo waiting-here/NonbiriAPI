@@ -43,5 +43,8 @@ func (s *Service) ApproveOwnNewInTransaction(ctx context.Context, tx *sql.Tx, us
 	if level == 5 {
 		role = reviewerGranted
 	}
+	if err := requireDonationRangeTx(ctx, tx, role, userID, donationID, now); err != nil {
+		return err
+	}
 	return s.reviewDonationTx(ctx, tx, donationID, userID, string(role), input, now)
 }

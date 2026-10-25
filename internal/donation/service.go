@@ -496,19 +496,18 @@ func (s *Service) review(
 	if err := requireManagedDonationTx(ctx, tx, role, donationID, now); err != nil {
 		return roleDonationMutation{}, err
 	}
-	rangeErr := requireDonationRangeTx(ctx, tx, role, actorID, donationID, now)
 	decision, err := beginMutation(ctx, tx, string(role), actorID, idempotency.ScopeControlMutation, mutation, now)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		if rangeErr != nil && (input.Decision == "force_reject" || !errors.Is(rangeErr, ErrForbidden)) {
-			return roleDonationMutation{}, rangeErr
+		if _, err := readDonationAccessScope(ctx, tx, role, actorID); err != nil {
+			return roleDonationMutation{}, err
 		}
-		return replayRoleDonation(ctx, tx, decision, role, actorID, donationID, input)
+		return replayRoleDonation(ctx, tx, decision, role, actorID, donationID)
 	}
-	if rangeErr != nil {
-		return roleDonationMutation{}, rangeErr
+	if err := requireDonationRangeTx(ctx, tx, role, actorID, donationID, now); err != nil {
+		return roleDonationMutation{}, err
 	}
 	expiry, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
 	if err != nil {
@@ -524,10 +523,6 @@ func (s *Service) review(
 		}
 		return roleDonationMutation{}, ErrConflict
 	}
-	standardKeys, err := pendingReviewKeysTx(ctx, tx, []int64{donationID})
-	if err != nil {
-		return roleDonationMutation{}, err
-	}
 	if err := s.reviewDonationTx(ctx, tx, donationID, actorID, string(role), input, now); err != nil {
 		return roleDonationMutation{}, err
 	}
@@ -535,7 +530,7 @@ func (s *Service) review(
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
-	out, err := finishRoleDonation(ctx, tx, decision, role, actorID, value, standardKeys)
+	out, err := finishRoleDonation(ctx, tx, decision, role, actorID, value)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
@@ -924,8 +919,8 @@ func (s *Service) manageKey(
 	return out, nil
 }
 
-func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, role reviewerRole, actorID, donationID int64, reviews ...ReviewInput) (roleDonationMutation, error) {
-	stored, standardKeys, err := unwrapReviewReceipt(decision.ResponseBody)
+func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, role reviewerRole, actorID, donationID int64) (roleDonationMutation, error) {
+	stored, _, err := unwrapReviewReceipt(decision.ResponseBody)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
@@ -960,28 +955,7 @@ func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.De
 		if err != nil {
 			return roleDonationMutation{}, err
 		}
-		whole, err := access.wholeTx(ctx, tx, donationID)
-		if err != nil {
-			return roleDonationMutation{}, err
-		}
-		if !whole && len(reviews) > 0 {
-			allowed := standardKeys
-			if allowed == nil {
-				// Legacy approvals identify their reviewed keys in the original input.
-				allowed = map[string]bool{}
-				for _, setting := range reviews[0].KeySettings {
-					allowed[strconv.FormatInt(setting.DonationKeyID, 10)] = true
-				}
-			}
-			kept := result.steward.Keys[:0]
-			for _, key := range result.steward.Keys {
-				if allowed[key.ID] {
-					kept = append(kept, key)
-				}
-			}
-			result.steward.Keys = kept
-		}
-		forceAllowed := whole && access.review && access.force
+		forceAllowed := access.review && access.force
 		result.steward.CanForceReject = result.steward.CanForceReject && forceAllowed
 		if !forceAllowed {
 			result.steward.ForceRejectUnavailableReason = nil
@@ -992,9 +966,10 @@ func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.De
 			result.steward.DiscordPublicThanks = nil
 		}
 		for i := range result.steward.Keys {
-			result.steward.Keys[i].CanManage = result.steward.Keys[i].CanManage && whole && access.manage
+			result.steward.Keys[i].CanManage = result.steward.Keys[i].CanManage && access.manage
 			if access.redact {
 				result.steward.Keys[i].EndpointKeyID = nil
+				result.steward.Keys[i].OwnerEndpointID = nil
 			}
 		}
 		result.body, err = json.Marshal(result.steward)
@@ -1062,7 +1037,7 @@ JOIN donation_keys dk ON dk.id=b.donation_key_id WHERE dk.donation_id=? AND dk.i
 	return count, nil
 }
 
-func finishRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, role reviewerRole, actorID int64, value AdminDonation, reviewKeys ...map[string]bool) (roleDonationMutation, error) {
+func finishRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, role reviewerRole, actorID int64, value AdminDonation) (roleDonationMutation, error) {
 	if role == reviewerSteward || role == reviewerGranted || role == reviewerTrainee {
 		access, err := readDonationAccessScope(ctx, tx, role, actorID)
 		if err != nil {
@@ -1072,33 +1047,14 @@ func finishRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.De
 		if err != nil {
 			return roleDonationMutation{}, err
 		}
-		if len(reviewKeys) > 0 {
-			id, err := strconv.ParseInt(value.ID, 10, 64)
-			if err != nil {
-				return roleDonationMutation{}, ErrInvariant
-			}
-			whole, err := access.wholeTx(ctx, tx, id)
-			if err != nil {
-				return roleDonationMutation{}, err
-			}
-			if !whole {
-				kept := value.Keys[:0]
-				for _, key := range value.Keys {
-					if reviewKeys[0][key.ID] {
-						kept = append(kept, key)
-					}
-				}
-				value.Keys = kept
-			}
-		}
 		steward := stewardFromAdmin(value, actorID)
-		out, err := finishJSON(ctx, tx, decision, http.StatusOK, steward, reviewKeys...)
+		out, err := finishJSON(ctx, tx, decision, http.StatusOK, steward)
 		if err != nil {
 			return roleDonationMutation{}, err
 		}
 		return roleDonationMutation{steward: out.Value, status: out.Status, body: out.Body}, nil
 	}
-	out, err := finishJSON(ctx, tx, decision, http.StatusOK, value, reviewKeys...)
+	out, err := finishJSON(ctx, tx, decision, http.StatusOK, value)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
@@ -1444,19 +1400,12 @@ func replay[T any](decision idempotency.Decision) (resources.MutationResult[T], 
 		Body: body, Replayed: true}, nil
 }
 
-func finishJSON[T any](ctx context.Context, tx *sql.Tx, decision idempotency.Decision, status int, value T, reviewKeys ...map[string]bool) (resources.MutationResult[T], error) {
+func finishJSON[T any](ctx context.Context, tx *sql.Tx, decision idempotency.Decision, status int, value T) (resources.MutationResult[T], error) {
 	body, err := json.Marshal(value)
 	if err != nil || len(body) > idempotency.MaxResponseBytes {
 		return resources.MutationResult[T]{}, ErrResourceLimit
 	}
-	stored := body
-	if len(reviewKeys) > 0 {
-		stored, err = json.Marshal(reviewReceipt{Version: 1, Response: body, StandardKeys: reviewKeys[0]})
-		if err != nil || len(stored) > idempotency.MaxResponseBytes {
-			return resources.MutationResult[T]{}, ErrResourceLimit
-		}
-	}
-	if err := idempotency.Complete(ctx, tx, decision, status, stored); err != nil {
+	if err := idempotency.Complete(ctx, tx, decision, status, body); err != nil {
 		return resources.MutationResult[T]{}, fmt.Errorf("donation: complete idempotency record: %w", err)
 	}
 	return resources.MutationResult[T]{Value: value, Status: status, Body: body}, nil

@@ -2,9 +2,8 @@ package donation
 
 import "encoding/json"
 
-// The original pending-key set survives the review changing its pending state.
-// It bounds a stored decision when the caller later loses whole-donation scope.
-// This metadata stays inside the existing bounded idempotency record.
+// Legacy receipts wrapped their decision snapshot with the original pending keys.
+// Decode the envelope without exposing internal metadata to clients.
 type reviewReceipt struct {
 	Version      int             `json:"donation_review_receipt"`
 	Response     json.RawMessage `json:"response"`

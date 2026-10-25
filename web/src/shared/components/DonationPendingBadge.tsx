@@ -71,7 +71,7 @@ export function DonationPendingBadge({
         to={
           role === 'admin'
             ? '/charity?handling=pending'
-            : '/steward?tab=charity&charity_section=handling&handling_view=pending'
+            : '/steward?tab=charity&charity_section=donations&handling=pending'
         }
         title={label}
         aria-label={label}

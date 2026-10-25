@@ -19,10 +19,9 @@ import (
 )
 
 type useAccess struct {
-	role       reviewerRole
-	actorID    int64
-	scope      charityscope.Scope
-	reviewOnly bool
+	role    reviewerRole
+	actorID int64
+	scope   charityscope.Scope
 }
 
 func (s *Service) beginUseTx(ctx context.Context, role reviewerRole, actorID, donationID int64, readOnly bool) (*sql.Tx, useAccess, error) {
@@ -31,41 +30,20 @@ func (s *Service) beginUseTx(ctx context.Context, role reviewerRole, actorID, do
 	var err error
 	if role == recurringOwner {
 		tx, err = s.beginOwnerTx(ctx, actorID)
-	} else if role == reviewerSteward && charityscope.ModelID(ctx) > 0 {
+	} else {
 		tx, a.scope, err = s.beginScopedTx(ctx, role, actorID, readOnly)
 		a.actorID = a.scope.ActorID
-	} else {
-		tx, a.role, a.actorID, err = s.beginReviewTx(ctx, role, actorID, readOnly)
-		if err == nil && role == reviewerSteward {
-			rangeScope, e := readDonationAccessScope(ctx, tx, role, actorID)
-			if e == nil {
-				var whole bool
-				whole, e = rangeScope.wholeTx(ctx, tx, donationID)
-				if e == nil && !whole && !rangeScope.review {
-					e = authz.ErrPermissionDenied
-				}
-				a.reviewOnly = !whole
-				level := 6
-				if a.role == reviewerTrainee || a.role == reviewerGranted {
-					level = 5
-				}
-				a.scope = charityscope.Scope{ActorID: actorID, ActorLevel: level, DonationScope: rangeScope.mode, Redact: rangeScope.redact}
-			}
-			if e != nil {
-				tx.Rollback()
-				return nil, a, e
-			}
+		if a.scope.ActorLevel == 5 {
+			a.role = reviewerTrainee
 		}
 	}
+
 	return tx, a, err
 }
 
 func (a useAccess) predicate() (string, []any) {
 	if a.role == recurringOwner {
 		return ` AND d.user_id=?`, []any{a.actorID}
-	}
-	if a.reviewOnly {
-		return ` AND du.current_pending_revision_id IS NOT NULL`, nil
 	}
 	return "", nil
 }
@@ -100,15 +78,12 @@ func (s *Service) UsesPage(ctx context.Context, role reviewerRole, actorID, dona
 			return empty, ErrNotFound
 		}
 	}
-	if access.reviewOnly {
-		var pending bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donations d JOIN donation_keys dk ON dk.donation_id=d.id JOIN donation_uses u ON u.donation_key_id=dk.id WHERE d.id=? AND d.status IN ('pending','approved') AND d.terminal_at IS NULL AND dk.ended_at IS NULL AND u.current_pending_revision_id IS NOT NULL)`, donationID).Scan(&pending); err != nil {
-			return empty, err
-		}
-		if !pending {
-			return empty, ErrNotFound
+	if role != recurringOwner {
+		if err := access.scope.RequireDonation(ctx, tx, donationID, now); err != nil {
+			return empty, scopeError(err)
 		}
 	}
+
 	if _, err := materializeDonationExpiryTx(ctx, tx, donationID, now); err != nil {
 		return empty, err
 	}
@@ -116,7 +91,7 @@ func (s *Service) UsesPage(ctx context.Context, role reviewerRole, actorID, dona
 	if err != nil {
 		return empty, err
 	}
-	if access.role == reviewerAdmin || !visible && (access.role == reviewerSteward || access.role == reviewerTrainee || access.role == reviewerGranted) && !access.reviewOnly {
+	if access.role == reviewerAdmin || !visible && (access.role == reviewerSteward || access.role == reviewerTrainee || access.role == reviewerGranted) {
 		held, err := s.managementHeldRead(ctx, tx, access.role, access.actorID, donationID, now)
 		if err != nil {
 			return empty, err
@@ -131,7 +106,7 @@ func (s *Service) UsesPage(ctx context.Context, role reviewerRole, actorID, dona
 	predicate, values := access.predicate()
 	query += predicate
 	args = append(args, values...)
-	if access.scope.RestrictedKeys() && !access.reviewOnly {
+	if access.scope.RestrictedKeys() {
 		predicate, values := access.scope.KeyPredicate(now, false)
 		query += " AND " + predicate
 		args = append(args, values...)
@@ -295,14 +270,13 @@ WHERE d.id=? AND du.id IN (` + strings.TrimRight(strings.Repeat("?,", len(ids)),
 		if state.approved.Valid && value.Approved == nil || state.pending.Valid && value.Pending == nil || state.latest.Valid && value.Latest == nil {
 			return nil, ErrInvariant
 		}
-		canMaintain := !access.reviewOnly
-		value.Capabilities.CanManage = canManage && canMaintain && state.active
+		value.Capabilities.CanManage = canManage && state.active
 		value.Capabilities.CanReview = canReview && access.role != recurringOwner && value.Pending != nil && state.active && value.Pending.Review.MaterialAvailable && value.Pending.available
-		value.Capabilities.CanResetFailures = canManage && canMaintain && state.active && value.Approved != nil
+		value.Capabilities.CanResetFailures = canManage && state.active && value.Approved != nil
 		usable := state.active && state.eligible && state.available && state.healthy && value.Approved != nil && !value.Approved.Review.Required
-		value.Capabilities.CanBind = canBind && canMaintain && usable
+		value.Capabilities.CanBind = canBind && usable
 		useID, _ := strconv.ParseInt(value.ID, 10, 64)
-		value.Capabilities.CanDiscover = canDiscover && canMaintain && state.active && state.eligible && discoverable[useID]
+		value.Capabilities.CanDiscover = canDiscover && state.active && state.eligible && discoverable[useID]
 		if !usable {
 			reason := "unavailable"
 			switch {
@@ -418,7 +392,7 @@ func requireUseAccessTx(ctx context.Context, tx *sql.Tx, access useAccess, donat
 	if err != nil {
 		return err
 	}
-	if access.scope.RestrictedKeys() && !access.reviewOnly {
+	if access.scope.RestrictedKeys() {
 		if err := access.scope.RequireKey(ctx, tx, donationID, keyID, now, false); err != nil {
 			return scopeError(err)
 		}

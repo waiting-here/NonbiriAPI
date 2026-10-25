@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
-	"strconv"
 )
 
 type donationAccessScope struct {
@@ -27,66 +26,23 @@ func readDonationAccessScope(ctx context.Context, tx *sql.Tx, role reviewerRole,
 	return donationAccessScope{mode: p.DonationScope, redact: !p.Permissions["donations.read_all"], review: p.Permissions["donations.review"], manage: p.Permissions["donations.manage_keys"], force: p.Permissions["donations.force_reject"]}, nil
 }
 func (a donationAccessScope) predicate(now int64) (string, []any) {
-	if a.mode == authz.DonationScopeFull {
-		return "1", nil
-	}
-	predicate := "0"
-	var args []any
-	if a.review {
-		predicate = "(" + pendingUseReviewSQL + ")"
-		args = []any{now}
-	}
-	if a.mode == authz.DonationScopeEnhanced {
-		predicate = "(" + predicate + " OR " + charityscope.TaggedDonationSQL + ")"
-	}
-	return predicate, args
+	return charityscope.DonationPredicate(a.mode, now)
 }
-func (a donationAccessScope) wholeTx(ctx context.Context, tx *sql.Tx, id int64) (bool, error) {
-	if a.mode == authz.DonationScopeFull {
-		return true, nil
-	}
-	if a.mode != authz.DonationScopeEnhanced {
-		return false, nil
-	}
-	var tagged bool
-	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donations d WHERE d.id=? AND `+charityscope.TaggedDonationSQL+`)`, id).Scan(&tagged)
-	return tagged, err
+func (a donationAccessScope) wholeTx(ctx context.Context, tx *sql.Tx, id, now int64) (bool, error) {
+	predicate, args := a.predicate(now)
+	args = append([]any{id}, args...)
+	var allowed bool
+	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donations d WHERE d.id=? AND `+predicate+`)`, args...).Scan(&allowed)
+	return allowed, err
 }
 func (a donationAccessScope) requireTx(ctx context.Context, tx *sql.Tx, id, now int64) (bool, error) {
-	whole, err := a.wholeTx(ctx, tx, id)
-	if err != nil || whole {
-		return whole, err
+	allowed, err := a.wholeTx(ctx, tx, id, now)
+	if err == nil && !allowed {
+		err = ErrNotFound
 	}
-	if !a.review {
-		return false, ErrNotFound
-	}
-	if err := requirePendingUseReviewTx(ctx, tx, id, now); err != nil {
-		return false, err
-	}
-	return false, nil
+	return allowed, err
 }
 func (a donationAccessScope) projectTx(ctx context.Context, tx *sql.Tx, value AdminDonation) (AdminDonation, error) {
-	id, err := strconv.ParseInt(value.ID, 10, 64)
-	if err != nil {
-		return value, ErrInvariant
-	}
-	whole, err := a.wholeTx(ctx, tx, id)
-	if err != nil {
-		return value, err
-	}
-	if !whole {
-		keys, err := pendingReviewKeysTx(ctx, tx, []int64{id})
-		if err != nil {
-			return value, err
-		}
-		kept := value.Keys[:0]
-		for _, key := range value.Keys {
-			if keys[key.ID] {
-				kept = append(kept, key)
-			}
-		}
-		value.Keys = kept
-	}
 	return a.projectReceiptTx(ctx, tx, value)
 }
 func requireDonationRangeTx(ctx context.Context, tx *sql.Tx, role reviewerRole, actorID, donationID, now int64) error {
@@ -101,27 +57,20 @@ func requireDonationRangeTx(ctx context.Context, tx *sql.Tx, role reviewerRole, 
 // projectReceiptTx changes identity and action affordances without hiding the
 // already-authorized decision snapshot from a successful review receipt.
 func (a donationAccessScope) projectReceiptTx(ctx context.Context, tx *sql.Tx, value AdminDonation) (AdminDonation, error) {
-	id, err := strconv.ParseInt(value.ID, 10, 64)
-	if err != nil {
-		return value, ErrInvariant
-	}
-	whole, err := a.wholeTx(ctx, tx, id)
-	if err != nil {
-		return value, err
-	}
-	forceAllowed := whole && a.review && a.force
+	forceAllowed := a.review && a.force
 	value.CanForceReject = value.CanForceReject && forceAllowed
 	if !forceAllowed {
 		value.ForceRejectUnavailableReason = nil
 	}
 	for i := range value.Keys {
-		value.Keys[i].CanManage = value.Keys[i].CanManage && whole && a.manage
+		value.Keys[i].CanManage = value.Keys[i].CanManage && a.manage
 	}
 	if a.redact {
 		value.Owner, value.Reviewer = nil, nil
 		value.DiscordPublicThanks = nil
 		for i := range value.Keys {
 			value.Keys[i].EndpointKeyID = nil
+			value.Keys[i].OwnerEndpointID = nil
 		}
 	}
 	return value, nil

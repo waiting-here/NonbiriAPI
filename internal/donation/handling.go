@@ -11,7 +11,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -21,7 +20,6 @@ const (
 	routeStewardBadge     = "/api/steward/donations/badge"
 	routeAdminProcessed   = "/admin/api/donations/{id}/handling/processed"
 	routeStewardProcessed = "/api/steward/donations/{id}/handling/processed"
-	routeStewardHandling  = "/api/steward/donation-handling"
 )
 
 // A disabled or unbound key does not end a donation. Logical expiry is checked
@@ -173,15 +171,7 @@ func (s *Service) badge(ctx context.Context, role reviewerRole, userID int64) (D
 		if err != nil {
 			return DonationBadge{}, err
 		}
-		policy, err := authz.ReadStewardPermissions(ctx, tx, userID)
-		if err != nil {
-			return DonationBadge{}, mapAuthorization(err)
-		}
 		predicate, values := access.predicate(now)
-		if access.mode != authz.DonationScopeFull && policy.Permissions["donations.handle"] {
-			predicate = "(" + predicate + " OR " + manageableDonationSQL + ")"
-			values = append(values, now)
-		}
 		query += " AND " + predicate
 		args = append(args, values...)
 	}
@@ -225,23 +215,8 @@ func (s *Service) process(ctx context.Context, role reviewerRole, userID, donati
 	if err := requireManagedDonationTx(ctx, tx, role, donationID, now); err != nil {
 		return empty, err
 	}
-	if actor.scope == "enhanced" {
-		access, err := readDonationAccessScope(ctx, tx, role, actor.id)
-		if err != nil {
-			return empty, err
-		}
-		whole, err := access.wholeTx(ctx, tx, donationID)
-		if err != nil {
-			return empty, err
-		}
-		if whole {
-			actor.trainee = false
-		}
-	}
-	if actor.trainee {
-		if err := requireApprovedHandlingTx(ctx, tx, donationID, now); err != nil {
-			return empty, err
-		}
+	if err := requireDonationRangeTx(ctx, tx, role, actor.id, donationID, now); err != nil {
+		return empty, err
 	}
 	decision, err := beginMutation(ctx, tx, actor.hashKind, actor.id, idempotency.ScopeControlMutation, mutation, now)
 	if err != nil {
@@ -250,7 +225,7 @@ func (s *Service) process(ctx context.Context, role reviewerRole, userID, donati
 	if decision.Kind == idempotency.Replay {
 		return replay[HandlingReceipt](decision)
 	}
-	if !actor.trainee {
+	{
 		expiry, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
 		if err != nil {
 			return empty, err

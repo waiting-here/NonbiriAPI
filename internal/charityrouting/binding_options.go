@@ -3,7 +3,6 @@ package charityrouting
 import (
 	"context"
 	"strconv"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
@@ -42,18 +41,10 @@ func (s *Service) keyBindingOptions(ctx context.Context, role roleKind, actorID,
 	if scope.Trainee {
 		query += ` AND cm.is_mainstream=1`
 	}
-	if scope.RestrictedKeys() {
-		selected := scope
-		selected.ModelID = 1
-		predicate, values := selected.KeyPredicate(now, true)
-		predicate = strings.Replace(predicate, "scope_binding.charity_model_id=?", "scope_binding.charity_model_id=cm.id", 1)
-		values = values[1:]
-		query += ` AND EXISTS(SELECT 1 FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id WHERE dk.id=? AND d.id=? AND ` + predicate + `)`
-		args = append(args, keyID, donationID)
-		args = append(args, values...)
-	} else if err := scope.RequireKey(ctx, tx, donationID, keyID, now, false); err != nil {
+	if err := scope.RequireKey(ctx, tx, donationID, keyID, now, false); err != nil {
 		return out, managementScopeError(err)
 	}
+
 	meta, offset, err := pageWindow(ctx, tx, query, args, page)
 	if err != nil {
 		return out, err

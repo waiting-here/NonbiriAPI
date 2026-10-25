@@ -156,29 +156,17 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 		tx, scope, err = s.beginScopedTx(ctx, role, userID, true)
 	}
 	if err != nil {
-		if role == reviewerSteward && charityscope.ModelID(ctx) == 0 && errors.Is(err, charityscope.ErrModelRequired) {
-			return s.reviewKeysPage(ctx, userID, donationID, page)
-		}
 		return empty, err
 	}
 	defer tx.Rollback()
-	if role == reviewerSteward && scope.ModelID == 0 && scope.RestrictedKeys() {
-		rangeScope, e := readDonationAccessScope(ctx, tx, role, userID)
-		if e != nil {
-			return empty, e
-		}
-		whole, e := rangeScope.wholeTx(ctx, tx, donationID)
-		if e != nil {
-			return empty, e
-		}
-		if !whole {
-			tx.Rollback()
-			return s.reviewKeysPage(ctx, userID, donationID, page)
-		}
-	}
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
+	}
+	if role != recurringOwner {
+		if err := scope.RequireDonation(ctx, tx, donationID, now); err != nil {
+			return empty, scopeError(err)
+		}
 	}
 	if role == recurringOwner {
 		var owned bool
@@ -193,18 +181,7 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 	if err != nil {
 		return empty, err
 	}
-	heldScope := !scope.RestrictedKeys()
-	if !visible && scope.DonationScope == "enhanced" {
-		access, scopeErr := readDonationAccessScope(ctx, tx, role, userID)
-		if scopeErr != nil {
-			return empty, scopeErr
-		}
-		heldScope, err = access.wholeTx(ctx, tx, donationID)
-		if err != nil {
-			return empty, err
-		}
-	}
-	if !visible && heldScope && (role == reviewerAdmin || role == reviewerSteward || role == reviewerGranted) {
+	if !visible && (role == reviewerAdmin || role == reviewerSteward || role == reviewerGranted) {
 		visible, err = s.managementHeldRead(ctx, tx, role, userID, donationID, now)
 		if err != nil {
 			return empty, err

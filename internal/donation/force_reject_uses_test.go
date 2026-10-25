@@ -50,6 +50,7 @@ func TestForceRejectReviewedUsesWithPendingHeader(t *testing.T) {
 				_, first := e.seedEndpointKey(t, owner, 'a')
 				_, second := e.seedEndpointKey(t, owner, 'b')
 				d := e.createDonation(t, owner, first, second)
+				qualifyStandardDonation(t, e, d.ID)
 				id := parseTestID(t, d.ID)
 				uses := approveForceRejectUses(t, e, owner, id, all)
 				if !all {
@@ -136,6 +137,7 @@ func TestForceRejectUseEligibilityAndUnknownOriginalMaterial(t *testing.T) {
 			owner := e.seedUser(t, "force-boundary-owner", nil, false)
 			_, key := e.seedEndpointKey(t, owner, 'a')
 			d := e.createDonation(t, owner, key)
+			qualifyStandardDonation(t, e, d.ID)
 			id := parseTestID(t, d.ID)
 			want := error(ErrConflict)
 			reason := "not_approved"
@@ -172,6 +174,7 @@ func TestForceRejectPendingHeaderHTTPProjectionAndAction(t *testing.T) {
 	owner := e.seedUser(t, "force-http-owner", nil, false)
 	_, key := e.seedEndpointKey(t, owner, 'a')
 	d := e.createDonation(t, owner, key)
+	qualifyStandardDonation(t, e, d.ID)
 	id := parseTestID(t, d.ID)
 	approveForceRejectUses(t, e, owner, id, true)
 	api := &httpAPI{service: e.service}
@@ -202,6 +205,7 @@ func TestForceRejectProjectionExcludesLogicallyExpiredApprovedUse(t *testing.T) 
 	owner := e.seedUser(t, "force-expired-owner", nil, false)
 	_, key := e.seedEndpointKey(t, owner, 'a')
 	d := e.createDonation(t, owner, key)
+	qualifyStandardDonation(t, e, d.ID)
 	id := parseTestID(t, d.ID)
 	approveForceRejectUses(t, e, owner, id, true)
 	if _, err := e.store.DB().Exec(`UPDATE donation_keys SET expires_at=? WHERE donation_id=?`, e.clock.Load(), id); err != nil {
@@ -233,6 +237,7 @@ func TestLegacyReviewCannotOverrideApprovedUses(t *testing.T) {
 			owner := e.seedUser(t, "legacy-use-owner", nil, false)
 			_, key := e.seedEndpointKey(t, owner, 'a')
 			d := e.createDonation(t, owner, key)
+			qualifyStandardDonation(t, e, d.ID)
 			id := parseTestID(t, d.ID)
 			before := approveForceRejectUses(t, e, owner, id, false)
 			for i, decision := range []string{"reject", "approve"} {
