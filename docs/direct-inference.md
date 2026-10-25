@@ -1,9 +1,18 @@
 # Direct inference
 
-This contract describes the v1.1.0 source. An instance must run that version to
-provide these additions. All routes use the existing CallerKey, ownership,
-model selection, outbound protection, cancellation, accounting and log rules in
-the [HTTP contract](api-contract.md).
+This contract describes the v1.2.0 source. Check the instance's deployed build
+before using newly added configuration behavior. All routes use the existing
+CallerKey, ownership, model selection, outbound protection, cancellation,
+accounting and log rules in the [HTTP contract](api-contract.md).
+
+New or edited service and donation submissions authorize the selected protocol's
+complete service set. Existing grants and approved donations keep their saved
+scope until explicitly edited; omission on legacy APIs does not mean all services.
+At model binding, choose the upstream native services to use. New bindings start
+with all currently authorized services selected, while edits preserve the saved
+subset. At least one retained service must serve the target model through the
+existing routing matrix; extra authorized services may remain selected.
+See [service connections](service-connections.md) for setup and atomic review.
 
 ## Connector selection
 
@@ -42,12 +51,15 @@ base64 in both versions. V3 rejects `dimensions`; v4 validates the returned
 dimension. Standard Gateway rerank reports no usage, so existing per-call or
 conservative missing-usage settlement applies.
 
-Model `model_types` remains an array. Chat Completions and Responses form one
-service selection: either legacy name enables both, and responses return both
-`chat_completions` and `responses`. Creation without `model_types` uses this pair;
-PATCH omission preserves the selection. Other operations remain separate and
+Model `model_types` remains a nonempty array. `chat_completions` and `responses`
+are independent choices: an explicit single choice stays single on save and read,
+and only enabled platform operations may be called. Creation without
+`model_types` still defaults to both; PATCH omission preserves the saved selection.
+Existing stored dual-interface selections remain enabled for both. Other operations
 may be selected together, for example `images_generations` and `images_edits`.
-An enabled service does not add capabilities to its connector. The operation
+Native-service selection and bounded protocol conversion remain separate: an
+enabled platform operation may use a supported conversion, but conversion does
+not enable a disabled platform interface or add an upstream capability. Operation
 names are the path names below with `/v1/` removed and remaining slashes replaced
 by underscores, except `chat/completions`, which is `chat_completions`.
 

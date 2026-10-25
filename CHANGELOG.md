@@ -8,10 +8,12 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
-- Add per-account level-5 steward permissions with 48 actions, six numeric limits,
-  four donation scopes, revisioned updates and live revocation. Preserve default
-  workflows, actual actor hierarchy and administrator-only operations; include own policy and
-  retained change history in account export.
+- Add per-account level-5 steward permissions with 51 actions, six numeric limits,
+  four donation scopes, revisioned updates and live revocation. Use one whole-donation
+  scope for review, handling and maintenance: standard requires every live key
+  to qualify, enhanced also admits tagged donations, and identity visibility
+  stays separate. Preserve actual actor hierarchy and administrator-only actions;
+  include own policy and retained change history in account export.
 - Add shared endpoint and endpoint-policy management for level-6 stewards and
   explicitly authorized level-5 accounts. Add User-built gateway, Steward-built
   gateway and Incorrect entry tags; enhanced donation scope includes donations
@@ -22,6 +24,20 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Add the single-card ChatGPT SP theme “Tomorrow, Still Unwritten”, with an
   unpublished limited-pool template, animated card, cover, collection illustration
   and unlockable light/dark site appearance. Its artwork is classified as general.
+- Add an experimental management assistant with a dedicated encrypted Chat
+  Completions endpoint/key, configurable templates/tools and separate shared
+  memories. Chat defaults to closed until enabled with a ready driver; each
+  authorized operator has one conversation with editing, compaction and retained
+  originals. Exact human-approved plans apply all authorized business and memory
+  changes atomically, including existing user-management and deletion operations.
+- Add off/preview/automatic donation review after deterministic approval rules,
+  for new or modified pending submissions only. Automatic approval requires
+  valid bindings to existing charity models in the same transaction. Do not
+  enqueue old pending records or promote earlier preview results after a mode change.
+- Add shared FIFO scheduling per assistant model HTTP call, global RPM/concurrency
+  accounting, cancellation and durable recovery. Add administrator-only complete
+  request/response history with manual selected or filtered cleanup, plus
+  independent historical and rolling 24-hour token usage for each operator.
 
 ### Fixed
 
@@ -32,10 +48,11 @@ Each version entry describes its source and compatibility boundary; a release ta
   continuation to personal models or donation. Retain key/service context after
   approval and continue into authorized charity-model configuration. Preserve
   explicitly selected native services in key-to-model batch bindings.
-- Review pending donation content with one approval or return action and an
-  optional note. Choose service subsets when configuring charity bindings.
-  Preserve previous approvals, partial results and recovery after an unknown
-  response; avoid stale catalog queries reporting a successful review as failed.
+- Review the whole current pending donation submission with one approval or
+  return action and an optional note. Validate its complete versioned set and
+  commit all decisions, audit and receipt together. Preserve previous approvals
+  and recover unknown results with the original request; choose service subsets
+  when configuring bindings after review.
 - Move donation-source browsing to read-only database snapshots and calculate
   tagged donation scope once per candidate, reducing contention with writes.
 - Limit charity binding, candidate and preset catalog checks to selected
@@ -58,10 +75,12 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Restore whole-donation force rejection after per-service approval, including
   partially approved submissions. Prevent legacy review actions from bypassing
   the existing rejection safeguards or changing already approved uses.
-- Keep donation checkboxes, expiry fields and actions aligned on narrow and wide
-  screens. New mainstream donation drafts select available services by default,
-  while retaining the donor's manual exclusions. Remove the extra catalog-sharing
-  checkbox and pause-sharing action.
+- Keep checkboxes, expiry fields and actions aligned on narrow and wide screens.
+  New or edited service and donation submissions authorize the protocol's full
+  service set; existing authorizations and approved snapshots stay unchanged until
+  an explicit donor edit. Select native services at model binding, with separate
+  Chat Completions and Responses choices and a required compatible target service.
+  Remove the extra catalog-sharing checkbox and pause-sharing action.
 - Apply mainstream catalog suggestions during normal credential authorization,
   reusing an available catalog for the same credential version when possible.
 - Preserve each saved entry and its credential-authorization form when several
@@ -76,23 +95,33 @@ Each version entry describes its source and compatibility boundary; a release ta
   and donation keys so deleting a key avoids scanning unrelated history and
   holding up session loading and other writes. Existing deletion and retention
   behavior is preserved.
+- Preserve safe field/reason diagnostics for future request-validation and typed
+  protocol-conversion failures. Show fixed corrective guidance in the caller's
+  own log, management views and JSON/CSV exports without recording submitted
+  values or secrets. Older records without a saved cause remain unknown.
 
 ### Storage
 
-- Fresh storage uses schema 36. Exact published schema 33–35 databases receive
-  atomic startup upgrades: history indexes and donation catalog authorization
-  changes where needed, then steward permission/scope tables, expanded endpoint
-  tags and audit-role changes.
-  The risk-rule/automatic-ban and blacklist audit tables are rebuilt with their
-  rows, history, indexes and constraints preserved so actions record actual
-  level-5 identities. Endpoint-tag rows and indexes survive the expanded tag
-  constraint. The separate schema 16–26 converter targets schema 36;
-  account export uses format 30.
+- Fresh storage uses schema 37. Exact supported schema 33–36 databases receive
+  atomic startup upgrades through history indexes, donation authorization,
+  steward permission/scope storage, expanded tags/audit roles and assistant tables.
+  Risk-rule, automatic-ban, blacklist and endpoint-tag rebuilds preserve existing
+  facts and constraints. Stored custom steward policies add the three assistant
+  permissions as false without changing existing grants, revisions or audit history.
+- Preserve the separate schema 16–26 converter, now targeting schema 37; the
+  normal service advertises only its own startup paths. Upgrades are one-way,
+  with no old-server startup on an upgraded database or reverse migration.
+  Account export remains format 30.
+- Keep assistant request logs until administrator cleanup. Conversations, memory
+  history and token statistics are separate administrator assets unaffected by
+  request cleanup or operator deletion; automatic-review evidence follows its
+  associated donation lifecycle.
 
 ### Security
 
 - Update DOMPurify to 3.4.17 and Vitest to 4.1.12, including its matching mocker
   packages, to address the upstream sanitization and development-server advisories.
+- Update indirect development dependencies undici to 8.12.3 and zod to 4.6.7.
 
 ## 1.1.1 — 2026-10-23
 

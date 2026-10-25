@@ -2,21 +2,24 @@
 
 ## Supported databases
 
-The application accepts a new database, current schema **36**, or the exact
-published schema **33–35** manifests. These receive atomic upgrades during
-startup, before request handling and unfinished-work recovery. Schema 33 sources
-first receive history indexes; schema 34 sources receive the donation catalog
-authorization trigger/view changes. The final step from schema 35 adds steward
-permissions, donation scope and the expanded endpoint tags, and rebuilds the
-affected audit tables while preserving their data.
-Allow index creation and audit-table copying to finish. Cancellation or failure
-rolls back the upgrade. No external conversion is needed for these sources.
+The application accepts a new database, current schema **37**, or the exact
+supported schema **33–36** manifests. Startup upgrades these sources atomically
+before request handling and unfinished-work recovery. Sources receive history
+indexes, donation catalog authorization, steward permission/scope storage and
+data-preserving audit/tag rebuilds where needed, then assistant storage and the
+current permission catalog. Allow index creation and table copying to finish.
+Cancellation or failure rolls back the upgrade; these sources need no converter.
 
-Existing exact schema 16–26 databases require the separate one-time converter.
-The normal service contains current DDL, validation and the schema 33–35 startup steps;
-it does not import the historical conversion chain. Later v1.x releases must provide
-a complete upgrade path from every earlier stable v1.x database. An older binary
-is not required to read a newer database.
+The separate one-time converter remains available for exact registered schema
+16–26 sources and targets schema 37. The normal service contains current DDL,
+validation and its schema 33–36 startup steps; it does not import that historical
+conversion chain. An empty service `offline_conversions` list does not remove or
+describe the separate converter.
+
+Upgrades are one-way. An upgraded database cannot be started by an older server;
+no downgrade or reverse migration is provided. A database newer than a binary
+supports is rejected before writes. Preserve a complete matching recovery set
+before upgrading, and do not replace newly accepted data with an old snapshot.
 
 SQLite identity remains `application_id=0x4E425249`, `user_version=2`. Account
 exports use format **30**, independently of the storage schema. An unknown
@@ -29,12 +32,28 @@ identity, version or structural manifest is rejected before writes.
 
 These commands load no application configuration or database. Each machine-readable descriptor
 contains the current identity and accepted versions. The application descriptor
-reports schema 36, minimum schema 33 and the exact accepted source versions and
+reports schema 37, minimum schema 33 and the exact accepted source versions and
 manifest hashes, with no offline conversions. The converter descriptor lists its
 exact offline sources and target. Deployment tools use both
 descriptors instead of parsing Go source or deriving versions from array lengths.
 
 ## Schema changes
+
+Schema 37 adds dedicated assistant transport settings, encrypted credentials,
+durable request/response history, response chunks and independent token usage.
+Workflow tables store configuration, two shared memories and their history,
+one conversation per operator, original messages, jobs, plans, model results
+and new-submission review events. These tables begin empty; prior requests or
+conversation content are not reconstructed. Chat and automatic review default
+to disabled. Request-log cleanup is explicit and does not delete conversations,
+memories or usage. Review jobs and their evidence follow the associated donation
+lifecycle. See [data lifecycle](data-lifecycle-checklist.md#management-assistant-assets).
+
+Existing custom steward policies gain `ai.chat,ai.review.read,ai.memory.edit` as
+false, preserving their prior 48 grants, six limits, donation scope, revision,
+timestamps and audit history. The live catalog has 51 actions; accounts without
+a custom policy use defaults with only `ai.chat` enabled among the three.
+The separate chat switch and driver readiness remain required.
 
 Schema 36 adds per-account `steward_permissions` and revisioned
 `steward_permission_audits`. Existing level-5 accounts keep their legacy default
@@ -148,9 +167,9 @@ existing keys at that version, with no supplemental rules or active episode. Acc
 configuration and current state. Existing retry-header cooldowns, failure counts,
 credentials and accounting retain their meanings.
 
-`internal/db/generation_two.sql` is the complete fresh schema. The exact schema 33–35
-source manifests and startup steps live in `internal/db`; older source
-manifests and transformations live under `internal/upgrade/`, outside the normal
+`internal/db/generation_two.sql` and registered extensions form the complete fresh
+schema. Exact schema 33–36 source manifests and startup steps live in `internal/db`;
+older source manifests and transformations live under `internal/upgrade/`, outside the normal
 application dependency graph. Released source definitions are immutable.
 
 For a change to persistent semantics:
@@ -226,7 +245,7 @@ needed. Ordinary `--apply` validates the exact source, encryption-root identity,
 required configuration and migration-affected relationships, without scanning
 unrelated historical tables. Run it with the service stopped and its existing
 master key available. The converter acquires exclusive
-database access and converts the source to schema 36 in one transaction. A matching
+database access and converts the source to schema 37 in one transaction. A matching
 current schema is a no-op; structural drift, an unknown source or a wrong key is
 rejected. Failure or cancellation rolls back.
 
