@@ -131,6 +131,7 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 		"discount": map[string]any{"enabled": false, "percent": 100, "start_at": nil, "end_at": nil},
 	}, f.adminCookie, true)
 	bindings := seedBindingManagementBrowser(t, f, now)
+	customBindings := seedCustomBindingManagementBrowser(t, f, now)
 	backoff := seedAutomaticBackoffBrowser(t, f, now, channel)
 	resourceHealth := seedResourceHealthBrowser(t, f, now, channel)
 	recurring := seedRecurringDiscountBrowser(t, f, now, channel)
@@ -145,6 +146,10 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 	}
 	return map[string]any{"recurring_discount": recurring, "automatic_backoff_donation_id": backoff["donation_id"], "automatic_backoff_key_ids": backoff["key_ids"], "automatic_backoff_model_id": backoff["model_id"], "binding_donation_id": bindings["donation_id"], "binding_key_ids": bindings["key_ids"], "binding_model_ids": bindings["model_ids"], "binding_channel_id": bindings["channel_id"], "old_user_id": old.ID, "current_user": current, "history_discord_id": historyDiscord, "history_record_id": historyID, "request_ids": requests,
 		"account_export":               map[string]any{"user_id": f.users[0].ID, "elevated_token": exportToken},
+		"custom_binding_donation_id":   customBindings["donation_id"],
+		"custom_binding_channel_id":    customBindings["channel_id"],
+		"custom_binding_key_ids":       customBindings["key_ids"],
+		"custom_binding_model_ids":     customBindings["model_ids"],
 		"resource_health":              resourceHealth,
 		"multiline_review_donation_id": multiline["id"],
 		"gemini_endpoint_id":           geminiEndpoint, "gemini_key_id": geminiKey,
@@ -183,17 +188,36 @@ func seedPolicyHistoryBrowser(t *testing.T, f *imageBrowserFixture, now int64) {
 
 func seedBindingManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[string]any {
 	t.Helper()
+	return seedBindingSourceBrowser(t, f, now, false)
+}
+
+func seedCustomBindingManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[string]any {
+	t.Helper()
+	return seedBindingSourceBrowser(t, f, now, true)
+}
+
+func seedBindingSourceBrowser(t *testing.T, f *imageBrowserFixture, now int64, custom bool) map[string]any {
+	t.Helper()
+	name, provider, path, secretPrefix, description := "Binding browser service", "binding-browser", "/v1", "synthetic-binding-donation-", "Binding preset browser donation"
+	if custom {
+		name, provider, path, secretPrefix = "Custom preset browser service", "custom-preset-browser", "/custom-v1", "synthetic-custom-binding-"
+		description = "Custom preset browser donation"
+	}
 	channel, err := db.GenerateOpaqueID("mch_")
 	if err != nil {
 		t.Fatal(err)
 	}
-	appFixtureMainstreamChannel(t, f.store, channel, "Binding browser service", f.upstream.URL+"/v1", connectorcontract.TypeOpenAICompatible, now)
+	appFixtureMainstreamChannel(t, f.store, channel, name, f.upstream.URL+path, connectorcontract.TypeOpenAICompatible, now)
 	owner := f.users[0].Cookie
-	endpoint := f.call("POST", "/api/endpoints", map[string]any{"source": "mainstream", "channel_id": channel, "note": "Binding browser service", "enabled": true}, owner, false)["id"].(string)
+	input := map[string]any{"source": "mainstream", "channel_id": channel, "note": name, "enabled": true}
+	if custom {
+		input = map[string]any{"source": "custom", "connector_type": "openai-compatible", "base_url": f.upstream.URL + path, "note": name, "enabled": true}
+	}
+	endpoint := f.call("POST", "/api/endpoints", input, owner, false)["id"].(string)
 	physical := []string{}
 	donationKeys := []map[string]any{}
 	for i := range 3 {
-		key := f.call("POST", "/api/endpoints/"+endpoint+"/keys", map[string]any{"secret": fmt.Sprint("synthetic-binding-donation-", i), "note": fmt.Sprint("Binding credential ", i+1), "enabled": true, "force_store_false": false, "ownership_confirmed": true}, owner, false)["id"].(string)
+		key := f.call("POST", "/api/endpoints/"+endpoint+"/keys", map[string]any{"secret": fmt.Sprint(secretPrefix, i), "note": fmt.Sprint("Binding credential ", i+1), "enabled": true, "force_store_false": false, "ownership_confirmed": true}, owner, false)["id"].(string)
 		physical = append(physical, key)
 		models := []string{}
 		for j := range 6 {
@@ -204,7 +228,7 @@ func seedBindingManagementBrowser(t *testing.T, f *imageBrowserFixture, now int6
 		}
 		donationKeys = append(donationKeys, appFixtureSharedCatalog(t, f.store, key, models, now))
 	}
-	donation := f.call("POST", "/api/donations", map[string]any{"description": "Binding preset browser donation", "discord_public_thanks": false, "ownership_authorized": true, "keys": donationKeys}, owner, false)
+	donation := f.call("POST", "/api/donations", map[string]any{"description": description, "discord_public_thanks": false, "ownership_authorized": true, "keys": donationKeys}, owner, false)
 	did := donation["id"].(string)
 	keyIDs := []string{}
 	for _, key := range physical {
@@ -212,14 +236,31 @@ func seedBindingManagementBrowser(t *testing.T, f *imageBrowserFixture, now int6
 		if err := f.store.DB().QueryRow(`SELECT CAST(id AS TEXT) FROM donation_keys WHERE donation_id=? AND endpoint_key_id=?`, did, key).Scan(&id); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := f.store.DB().Exec(`UPDATE donation_keys SET safe_note=? WHERE id=?`, fmt.Sprint("Binding browser key ", len(keyIDs)+1), id); err != nil {
+		label := "Binding browser key "
+		if custom {
+			label = "Custom preset browser key "
+		}
+		if _, err := f.store.DB().Exec(`UPDATE donation_keys SET safe_note=? WHERE id=?`, fmt.Sprint(label, len(keyIDs)+1), id); err != nil {
 			t.Fatal(err)
 		}
 		keyIDs = append(keyIDs, id)
 	}
+	if custom && donation["status"] == "pending" {
+		detail := f.call("GET", "/admin/api/donations/"+did, nil, f.adminCookie, true)
+		settings := []map[string]any{}
+		for _, value := range detail["keys"].([]any) {
+			key := value.(map[string]any)
+			setting := map[string]any{"donation_key_id": key["id"], "price_limit": nil, "calls_limit": nil, "tokens_limit": nil, "token_reserve": 0, "enabled": true, "safe_note": key["safe_note"], "expires_at": nil}
+			if review := key["review"].(map[string]any); review["required"] == true {
+				setting["expected_review_revision"] = review["revision"]
+			}
+			settings = append(settings, setting)
+		}
+		f.call("POST", "/admin/api/donations/"+did+"/review", map[string]any{"decision": "approve", "expected_revision": detail["revision"], "reason": "Synthetic custom source approval", "key_settings": settings}, f.adminCookie, true)
+	}
 	modelIDs := []string{}
 	for i := range 6 {
-		model := f.call("POST", "/admin/api/charity-models", map[string]any{"provider": "binding-browser", "model": fmt.Sprint("target-", i), "enabled": true, "is_mainstream": i < 5, "flatten_tool_calls": false, "pricing": map[string]any{"mode": "per_request", "user_price": "0", "donor_reward": "0"}, "discount": map[string]any{"enabled": false, "percent": 100, "start_at": nil, "end_at": nil}}, f.adminCookie, true)
+		model := f.call("POST", "/admin/api/charity-models", map[string]any{"provider": provider, "model": fmt.Sprint("target-", i), "enabled": true, "is_mainstream": i < 5, "flatten_tool_calls": false, "pricing": map[string]any{"mode": "per_request", "user_price": "0", "donor_reward": "0"}, "discount": map[string]any{"enabled": false, "percent": 100, "start_at": nil, "end_at": nil}}, f.adminCookie, true)
 		modelIDs = append(modelIDs, model["id"].(string))
 	}
 	f.call("POST", "/admin/api/charity-models/"+modelIDs[0]+"/bindings/batch-receipt", map[string]any{"expected_binding_revision": "0", "selections": []map[string]any{{"donation_key_id": keyIDs[0], "upstream_model_id": "binding-up-0"}}}, f.adminCookie, true)

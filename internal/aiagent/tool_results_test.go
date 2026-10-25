@@ -266,7 +266,7 @@ func TestReadResultBudgetCountsTheWholeToolRound(t *testing.T) {
 }
 
 func TestReadResultFailureListsOnlySupportedFilters(t *testing.T) {
-	for name, want := range map[string]string{"review_history": "donation_id,decision", "users": "user_id,query", "donation_models": "donation_id,donation_key_id,source,query", "site_status": ""} {
+	for name, want := range map[string]string{"charity_binding_presets": "donation_id,channel_id,query", "review_history": "donation_id,decision", "users": "user_id,query", "donation_models": "donation_id,donation_key_id,source,query", "site_status": ""} {
 		var receipt struct {
 			Error struct {
 				Code    string   `json:"code"`

@@ -39,8 +39,8 @@ func toolResultTooLarge(name, reason string) json.RawMessage {
 		filters = []string{"model_id", "query"}
 		retry = "请指定 model_id 或名称子串 query 缩小范围后重试。"
 	case "charity_binding_presets":
-		filters = []string{"donation_id", "channel_id"}
-		retry = "请指定 donation_id，或加上已读取的 channel_id 缩小预设范围后重试。"
+		filters = []string{"donation_id", "channel_id", "query"}
+		retry = "请指定 donation_id，再用名称子串 query 或已读取的 channel_id 缩小预设范围后重试。"
 	case "users":
 		filters = []string{"user_id", "query"}
 		retry = "请指定站内 user_id 读取一个账号详情，或用用户名/Discord ID query 缩小列表范围后重试。"

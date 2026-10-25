@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/agentplan"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
@@ -17,6 +18,7 @@ import (
 type agentPresetReadInput struct {
 	DonationID string `json:"donation_id"`
 	ChannelID  string `json:"channel_id,omitempty"`
+	Query      string `json:"query,omitempty"`
 }
 
 // The same safe snapshot is used by the read tool and the human plan preview.
@@ -58,7 +60,7 @@ func (s *Service) agentReadPresets(ctx context.Context, tx *sql.Tx, actor agentp
 		return nil, err
 	}
 	donationID, err := parsePositiveID(input.DonationID)
-	if err != nil || input.ChannelID != "" && !db.ValidateOpaqueID(input.ChannelID, "mch_") {
+	if err != nil || input.ChannelID != "" && !db.ValidateOpaqueID(input.ChannelID, "mch_") || !utf8.ValidString(input.Query) || utf8.RuneCountInString(input.Query) > 128 {
 		return nil, ErrInvalidRequest
 	}
 	_, scope, err := s.agentScope(ctx, tx, actor, agentplan.Operation{Kind: "charity_binding_presets"}, agentInput{}, authorize)
@@ -69,27 +71,19 @@ func (s *Service) agentReadPresets(ctx context.Context, tx *sql.Tx, actor agentp
 	if err != nil {
 		return nil, err
 	}
-	// Authorize the donation before consulting its source snapshots or presets.
-	if err := scope.RequireDonation(ctx, tx, donationID, now); err != nil {
-		return nil, managementScopeError(err)
-	}
-	revision, err := donationBindingRevision(ctx, tx, donationID)
+	// Authorize the whole donation before consulting sources or presets.
+	revision, err := requirePresetDonationTx(ctx, tx, scope, donationID, now)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := tx.QueryContext(ctx, presetChannelSelect+` WHERE c.enabled=1 AND c.state='active'
- AND (?='' OR c.id=?)
- AND EXISTS(SELECT 1 FROM channel_charity_binding_mappings pm WHERE pm.channel_id=c.id)
- AND EXISTS(SELECT 1 FROM donation_keys dk WHERE dk.donation_id=? AND dk.ended_at IS NULL
-  AND (dk.expires_at IS NULL OR dk.expires_at>?) AND dk.mainstream_channel_id=c.id
-  AND dk.connector_type=e.connector_type AND dk.canonical_base_url=e.canonical_base_url)
- ORDER BY c.name,c.id`, input.ChannelID, input.ChannelID, donationID, now)
+	query, bind := presetCandidatesQuery(donationID, now, input.Query, "active", input.ChannelID, scope)
+	rows, err := tx.QueryContext(ctx, query+` ORDER BY recommended DESC,c.name,c.id`, bind...)
 	if err != nil {
 		return nil, err
 	}
 	channels := []BindingPresetChannel{}
 	for rows.Next() {
-		channel, err := scanPresetChannel(rows.Scan)
+		channel, err := scanPresetCandidate(rows.Scan)
 		if err != nil {
 			rows.Close()
 			return nil, err

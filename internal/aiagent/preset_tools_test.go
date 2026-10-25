@@ -3,10 +3,20 @@ package aiagent
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
 type presetToolsOperations struct{ *fakeOperations }
+
+func TestPresetToolDefaultDescriptionExplainsCustomCandidatesAndFilters(t *testing.T) {
+	description := defaultSettings().ToolDescriptions["charity_binding_presets"]
+	for _, fact := range []string{"query", "channel_id", "recommended=true", "模型映射", "授权服务", "5000", "1 MiB", "无分页"} {
+		if !strings.Contains(description, fact) {
+			t.Fatal("preset tool description missing", fact)
+		}
+	}
+}
 
 func (o *presetToolsOperations) Tools(context.Context, Actor, bool) ([]Tool, error) {
 	return []Tool{{Name: "charity_binding_presets", Parameters: json.RawMessage(`{"type":"object"}`), ChatOnly: true}}, nil
