@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -204,6 +204,7 @@ describe('owner donation pages', () => {
           return json(page([donation(account === '7' ? 21 : 1)], url.searchParams));
         if (url.pathname === '/api/donations/21/keys')
           return json(page([key(1)], url.searchParams));
+        if (url.pathname === '/api/donations/21/uses') return json(page([], url.searchParams));
         throw new Error(`Unexpected request: ${url.pathname}`);
       }),
     );
@@ -214,8 +215,13 @@ describe('owner donation pages', () => {
     });
     login(view.queryClient, account);
     await screen.findByText(/head1…tail/);
-    account = '8';
-    login(view.queryClient, account);
+    await waitFor(() =>
+      expect(requests).toContain('7:/api/donations/21/uses?page=1&page_size=100&donation_key_id=1'),
+    );
+    await act(async () => {
+      account = '8';
+      login(view.queryClient, account);
+    });
     await screen.findByText('Submission 1');
     expect(screen.queryByText(/head1…tail/)).not.toBeInTheDocument();
     expect(screen.getByTestId('location').textContent).not.toContain('donation_expanded');

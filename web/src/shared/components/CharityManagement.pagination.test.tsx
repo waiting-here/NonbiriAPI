@@ -300,7 +300,7 @@ function installBindingNavigation(
             },
           ],
         });
-      if (forbidden && url.pathname === `${root}/donations/7`)
+      if (forbidden && url.pathname === `${root}/donations/7/keys`)
         return json({ error: { code: 'forbidden', message: 'Permission lost' } }, 403);
       return previousFetch(input, init);
     }),
@@ -388,7 +388,7 @@ describe('managed donation page integration', () => {
 
   it('clears only workflow parameters on account and role changes even when only new parameters remain', async () => {
     const newParameters =
-      'source_key_state=disabled&handling_donation=7&handling_view=all&handling_page=3&handling_page_size=50&model_workspace=new&binding_donation=7&binding_key=21&binding_target=1&keep=other';
+      'source_key_state=disabled&donation_id=7&donation_key=21&donation_from=sources&donation_keys_page=3&donation_keys_page_size=50&model_workspace=new&binding_donation=7&binding_key=21&binding_target=1&keep=other';
     function IdentityHarness() {
       const [step, setStep] = useState(0);
       const navigate = useNavigate();
@@ -722,34 +722,25 @@ describe('managed donation page integration', () => {
     });
     const heading = await screen.findByRole('heading', { name: 'Review pending submission' });
     const card = heading.closest('section')!;
-    const firstReviewNote = () =>
-      within(card.querySelector('h4')!.closest('section')!).getByRole('textbox', {
-        name: 'Review note',
-      });
+    const firstReviewNote = () => within(card).getAllByRole('textbox', { name: 'Review note' })[0]!;
     const firstNote = firstReviewNote();
     fireEvent.change(firstNote, { target: { value: 'first page note' } });
     fireEvent.click(
-      within(card.querySelector('nav.page-pagination')!).getByRole('button', { name: 'Next' }),
+      within(within(card).getByRole('navigation', { name: 'Pagination' })).getByRole('button', {
+        name: 'Next',
+      }),
     );
     const lastNote = within(card).getByLabelText('Review note');
     fireEvent.change(lastNote, { target: { value: 'second page note' } });
     fireEvent.click(
-      within(card.querySelector('nav.page-pagination')!).getByRole('button', { name: 'Previous' }),
+      within(within(card).getByRole('navigation', { name: 'Pagination' })).getByRole('button', {
+        name: 'Previous',
+      }),
     );
     expect(firstReviewNote()).toHaveValue('first page note');
-    const reviewFields = [...card.children].find((child) => child.matches('div.ops-field-grid'));
-    if (!(reviewFields instanceof HTMLElement)) throw new Error('Review fields missing');
-    const reason = within(reviewFields).getByLabelText('Reason');
-    const confirmationLabel = [...card.children].find((child) =>
-      child.matches('label.checkbox-label'),
-    );
-    if (!(confirmationLabel instanceof HTMLElement)) throw new Error('Review confirmation missing');
-    const confirmation = within(confirmationLabel).getByRole('checkbox', {
-      name: 'I confirm this review result and its per-key consequences.',
-    });
+    const reason = within(card).getByLabelText('Reason');
     act(() => {
       fireEvent.change(reason, { target: { value: 'Reviewed all pages' } });
-      fireEvent.click(confirmation);
     });
     fireEvent.click(
       within(card).getByText('Approve donation', { selector: 'button', exact: true }),

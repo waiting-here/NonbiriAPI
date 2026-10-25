@@ -1640,9 +1640,8 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(await screen.findByRole('button', { name: 'Choose keys…' }));
     await rendered.user.click(await screen.findByRole('button', { name: /^primary/ }));
     await rendered.user.click(await screen.findByRole('checkbox', { name: /sk-a…tail/ }));
-    expect(await screen.findByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Embeddings' })).toBeChecked();
-    await rendered.user.click(screen.getByRole('checkbox', { name: 'Embeddings' }));
+    expect(screen.queryByRole('checkbox', { name: 'Chat completions' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Embeddings' })).not.toBeInTheDocument();
     await rendered.user.click(screen.getByRole('button', { name: 'Done' }));
     await rendered.user.type(screen.getByLabelText('Donation description'), 'fixture donation');
     await rendered.user.click(
@@ -1665,7 +1664,7 @@ describe('experimental policy and charity controls', () => {
         keys: [
           {
             endpoint_key_id: '2',
-            native_services: ['chat_completions'],
+            native_services: ['chat_completions', 'embeddings'],
             credential_id: '12',
             credential_version: '3',
             grant_revision: '4',
@@ -1929,13 +1928,13 @@ describe('experimental policy and charity controls', () => {
     );
   });
 
-  test('keeps maintenance scoped to the approved key after a partial review result and returns from bindings without reopening terminal keys', async () => {
+  test('reviews the whole pending set and returns from approved-key bindings without reopening terminal keys', async () => {
     let approved = false;
     let donation: Omit<ManagedDonationFixture, 'keys'> & {
       keys: (ManagedKeyFixture & { can_manage: boolean })[];
-      use_summary: { total: string; pending: string; approved: string };
+      use_summary: { total: string; pending: string; approved: string; rejected: string };
     } = {
-      ...pendingDonationFixture('9', 'Partial use review'),
+      ...pendingDonationFixture('9', 'Pending review with an ended key'),
       keys: [
         { ...managedKeyFixture, can_manage: false },
         {
@@ -1943,24 +1942,26 @@ describe('experimental policy and charity controls', () => {
           id: '7',
           endpoint_key_id: '3',
           display_head: 'sk-b',
+          charity_state: 'ended',
+          ended_reason: 'terminated',
           can_manage: false,
         },
       ],
-      use_summary: { total: '2', pending: '2', approved: '0' },
+      use_summary: { total: '2', pending: '1', approved: '0', rejected: '1' },
     };
-    const useVersion = (status: 'pending' | 'approved') => ({
+    const useVersion = (status: 'pending' | 'approved' | 'rejected') => ({
       credential_id: '8',
       credential_version: '1',
       grant_revision: '1',
       status,
       review_note: '',
       reviewed_at: null,
-      expected_review_revision: 'body-1',
+      expected_review_revision: null,
       discovery_source_id: null,
       discovery_source_revision: null,
       display_head: 'sk-a',
       display_tail: 'tail',
-      review: { required: false, revision: null, material_available: false },
+      review: { required: false, revision: null, material_available: true },
       discovery: null,
     });
     const uses = () =>
@@ -1974,11 +1975,11 @@ describe('experimental policy and charity controls', () => {
         discovery_enabled: false,
         revision: approved && !index ? '2' : '1',
         approved: approved && !index ? useVersion('approved') : null,
-        pending: approved && !index ? null : useVersion('pending'),
-        latest: useVersion(approved && !index ? 'approved' : 'pending'),
+        pending: !index && !approved ? useVersion('pending') : null,
+        latest: useVersion(index ? 'rejected' : approved ? 'approved' : 'pending'),
         health: null,
         capabilities: {
-          can_review: !(approved && !index),
+          can_review: !approved && !index,
           can_manage: approved && !index,
           can_reset_failures: false,
           can_discover: false,
@@ -1999,29 +2000,33 @@ describe('experimental policy and charity controls', () => {
           version: 'go1.26.6-zoneinfo',
           zones: ['America/Indianapolis', 'UTC'],
         });
-      if (path === '/admin/api/donations/9/uses/review' && method === 'POST') {
-        expect(JSON.parse(String(init?.body)).items).toMatchObject([
-          { use_id: '20', decision: 'approve' },
-          { use_id: '21', decision: 'approve' },
-        ]);
+      if (path === '/admin/api/donations/9/pending-review' && method === 'POST') {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          expected_revision: '1',
+          decision: 'approve',
+          reason: '',
+          uses: [{ use_id: '20', expected_revision: '1', expected_review_revision: null }],
+        });
+        expect(new Headers(init?.headers).get('Idempotency-Key')).toBeTruthy();
         approved = true;
         donation = {
           ...donation,
-          keys: donation.keys.map((key) => ({ ...key, can_manage: key.id === '6' })),
-          use_summary: { total: '2', pending: '1', approved: '1' },
+          revision: '2',
+          status: 'approved',
+          keys: donation.keys.map((key) => ({
+            ...key,
+            ...(key.id === '6' ? { charity_state: 'available' } : {}),
+            can_manage: key.id === '6',
+          })),
+          use_summary: { total: '2', pending: '0', approved: '1', rejected: '1' },
         };
-        return jsonResponse({
-          results: [
-            { use_id: '20', ok: true },
-            { use_id: '21', ok: false, error: { code: 'conflict', message: 'Use changed' } },
-          ],
-        });
+        return jsonResponse(donation);
       }
       if (path === '/admin/api/donations/9/keys/6' && method === 'PATCH') {
         const body = JSON.parse(String(init?.body));
         donation = {
           ...donation,
-          revision: '2',
+          revision: '3',
           keys: donation.keys.map((key) =>
             key.id === '6' ? { ...key, safe_note: body.safe_note } : key,
           ),
@@ -2029,7 +2034,9 @@ describe('experimental policy and charity controls', () => {
         return jsonResponse(donation);
       }
       if (path === '/admin/api/donations/9/uses') {
-        const page = managementNumberedPage(uses());
+        const page = managementNumberedPage(
+          uses().filter((row) => url.searchParams.get('state') !== 'pending' || row.pending),
+        );
         return jsonResponse({
           ...page,
           pagination: {
@@ -2069,16 +2076,20 @@ describe('experimental policy and charity controls', () => {
       station: 'admin',
       role: 'admin',
     });
-    await screen.findByRole('cell', { name: /Partial use review/ });
+    await screen.findByRole('cell', { name: /Pending review with an ended key/ });
     await view.user.click(screen.getByRole('button', { name: 'Review' }));
-    await screen.findByText('Chat completions', { exact: true });
+    await screen.findByRole('button', { name: 'Approve pending content' });
     expect(screen.queryByRole('button', { name: 'Models and bindings' })).toBeNull();
-    await view.user.click(screen.getByText('Chat completions', { exact: true }));
     await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
     const manage = await screen.findByRole('button', { name: 'Models and bindings' });
     expect(screen.getAllByRole('button', { name: 'Models and bindings' })).toHaveLength(1);
-    expect(donation.status).toBe('pending');
-    expect(donation.use_summary).toEqual({ total: '2', pending: '1', approved: '1' });
+    expect(donation.status).toBe('approved');
+    expect(donation.use_summary).toEqual({
+      total: '2',
+      pending: '0',
+      approved: '1',
+      rejected: '1',
+    });
     const keyCard = manage.closest('section')!;
     const note = within(keyCard).getByLabelText('Review note');
     await view.user.clear(note);
@@ -2086,11 +2097,11 @@ describe('experimental policy and charity controls', () => {
     await view.user.click(within(keyCard).getByRole('button', { name: 'Save key limits' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'PATCH', '/admin/api/donations/9/keys/6')).toMatchObject({
-        expected_revision: '1',
+        expected_revision: '2',
         safe_note: 'Reviewed use',
       }),
     );
-    await waitFor(() => expect(donation.revision).toBe('2'));
+    await waitFor(() => expect(donation.revision).toBe('3'));
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Models and bindings' })).toBeEnabled(),
     );

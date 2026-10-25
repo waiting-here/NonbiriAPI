@@ -139,7 +139,7 @@ describe('shared account management', () => {
     ).not.toBeChecked();
   });
 
-  it('lets a level-five steward change only inference limits and restore inherited values', async () => {
+  it('keeps the full level-five controls while saving only changed inference limits', async () => {
     let target = {
       ...userFixture('7', 4),
       global_rpm_limit: '80',
@@ -166,9 +166,9 @@ describe('shared account management', () => {
       locale: 'en',
     });
     await view.user.click(await screen.findByRole('tab', { name: 'Limits and level' }));
-    expect(screen.queryByLabelText('Endpoint limit')).toBeNull();
-    expect(screen.queryByLabelText('Set level')).toBeNull();
-    expect(screen.queryByLabelText('Language')).toBeNull();
+    expect(screen.getByLabelText('Endpoint limit')).toBeEnabled();
+    expect(screen.getByLabelText('Set level')).toBeEnabled();
+    expect(screen.getByLabelText('Language')).toBeEnabled();
     expect(screen.getByText('Current limit: 80')).toBeVisible();
     fireEvent.change(screen.getByLabelText('Global RPM per user'), { target: { value: '' } });
     fireEvent.change(screen.getByLabelText('Light charity RPM'), { target: { value: '40' } });
@@ -179,9 +179,7 @@ describe('shared account management', () => {
       mode: 'profile',
       expected_revision: '1',
       global_rpm_limit: null,
-      rpm_limit: null,
       light_rpm_limit: '40',
-      concurrency_limit: null,
       light_concurrency_limit: '20',
     });
   });
@@ -287,12 +285,20 @@ describe('shared account management', () => {
     expect(writes[2].headers.get('Idempotency-Key')).toBe(writes[1].headers.get('Idempotency-Key'));
   });
 
-  it('lets a level-five steward find an account and ban it without exposing other writes', async () => {
+  it('keeps level-five controls and drafts after permission denials while allowing an authorized ban', async () => {
     let target = userFixture('7', 4);
     const calls = install((call) => {
       if (call.path === '/api/session') return session(5);
       if (call.path.startsWith('/api/steward/users?')) return page([target]);
       if (call.path === '/api/steward/users/7' && call.method === 'GET') return target;
+      if (
+        (call.path === '/api/steward/users/7' && call.method === 'PATCH') ||
+        (call.path === '/api/steward/users/7/unban' && call.method === 'POST')
+      )
+        return json(
+          { error: { code: 'steward_permission_denied', message: 'Permission is not granted.' } },
+          403,
+        );
       if (call.path.startsWith('/api/steward/users/7/penalties')) return page([]);
       if (call.path === '/api/steward/users/7/ban' && call.method === 'POST') {
         target = {
@@ -313,12 +319,23 @@ describe('shared account management', () => {
     });
     await screen.findByRole('heading', { name: 'member-7' });
     expect(screen.getByRole('tab', { name: 'Users' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.queryByRole('tab', { name: 'Credits' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Inspect user IPs' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Credit adjustment' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Audit IPs for this user' })).toBeVisible();
     await view.user.click(screen.getByRole('tab', { name: 'Limits and level' }));
     expect(screen.getByRole('button', { name: 'Save settings' })).toBeDisabled();
     expect(screen.getByLabelText('Light charity RPM')).toBeEnabled();
-    expect(screen.queryByLabelText('Endpoint limit')).toBeNull();
+    const endpointLimit = screen.getByLabelText('Endpoint limit');
+    fireEvent.change(endpointLimit, { target: { value: '99' } });
+    await view.user.click(screen.getByRole('button', { name: 'Save settings' }));
+    await screen.findByText(view.i18n.t('management.permissions.denied'));
+    expect(screen.getByRole('heading', { name: 'member-7' })).toBeVisible();
+    expect(endpointLimit).toHaveValue('99');
+    expect(target.endpoint_limit).toBeNull();
+    expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({
+      mode: 'profile',
+      expected_revision: '1',
+      endpoint_limit: '99',
+    });
     await view.user.click(screen.getByRole('tab', { name: 'Penalties' }));
     await view.user.type(screen.getByLabelText('Reason'), 'Account review');
     await view.user.click(screen.getByRole('button', { name: 'Ban' }));
@@ -332,8 +349,30 @@ describe('shared account management', () => {
       duration_seconds: null,
     });
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Ban' })).toBeNull());
-    expect(screen.queryByRole('button', { name: 'Unban' })).toBeNull();
-    expect(calls.some((call) => call.method === 'PATCH')).toBe(false);
+    await view.user.click(screen.getByRole('button', { name: 'Unban', exact: true }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Unban user' }),
+    );
+    await waitFor(() =>
+      expect(calls.filter((call) => call.path === '/api/steward/users/7/unban')).toHaveLength(1),
+    );
+    expect(
+      await screen.findAllByText(view.i18n.t('management.permissions.denied')),
+    ).not.toHaveLength(0);
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Unban user' }),
+      ).toBeEnabled(),
+    );
+    await view.user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }),
+    );
+    expect(calls.find((call) => call.path === '/api/steward/users/7/unban')?.body).toEqual({
+      expected_revision: '2',
+    });
+    expect(target.is_banned).toBe(true);
+    expect(screen.getByRole('heading', { name: 'member-7' })).toBeVisible();
+    expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
     await view.user.click(screen.getByRole('button', { name: 'Back to list' }));
     await screen.findByRole('button', { name: 'member-7' });
   });
@@ -342,7 +381,6 @@ describe('shared account management', () => {
     { id: '7', level: 5, banned: false },
     { id: '7', level: 6, banned: false },
     { id: '9', level: 5, banned: false },
-    { id: '7', level: 4, banned: true },
   ])(
     'hides ban writes for a protected trainee target $id/$level/$banned',
     async ({ id, level, banned }) => {
@@ -670,12 +708,7 @@ describe('shared account management', () => {
         mode: 'profile',
         expected_revision: '1',
         endpoint_limit: '99',
-        global_rpm_limit: null,
-        rpm_limit: null,
-        light_rpm_limit: null,
         concurrency_limit: '999',
-        light_concurrency_limit: null,
-        lang: 'en',
       });
       expect(write.headers.get('Idempotency-Key')).toBeTruthy();
       if (role === 'steward') {
