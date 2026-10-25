@@ -49,29 +49,10 @@ func (s *Service) beginManagementAccess(ctx context.Context, actorID int64, role
 	if err != nil {
 		return nil, false, classifyDatabaseError("begin management transaction", err)
 	}
-	trainee := false
-	switch role {
-	case roleAdmin:
-		err = s.finalAuth.AuthorizeAdmin(ctx, tx, actorID)
-	case roleSteward:
-		trainee, err = s.finalAuth.AuthorizeUserManagement(ctx, tx, actorID)
-		if err == nil {
-			permission := authz.StewardPermissionFromContext(ctx)
-			if permission == "" {
-				if allowTrainee {
-					permission = "users.read"
-				} else {
-					permission = "delegate"
-				}
-			}
-			err = authz.RequireStewardPermission(ctx, tx, actorID, permission)
-		}
-	default:
-		err = ErrForbidden
-	}
+	trainee, err := s.authorizeManagementTx(ctx, tx, actorID, role, allowTrainee)
 	if err != nil {
 		tx.Rollback()
-		return nil, false, classifyAuthorizationError(err)
+		return nil, false, err
 	}
 	return tx, trainee, nil
 }
@@ -132,8 +113,8 @@ func (s *Service) beginUserMutationAccess(ctx context.Context, actorID, userID i
 	}
 	// Changing an existing ban could shorten it, effectively granting an unban.
 	// An identical replay remains valid after the target-level check above.
-	if err == nil && trainee && !limitsOnly && decision.Kind != idempotency.Replay && row.isBanned == 1 && (!row.bannedUntil.Valid || row.bannedUntil.Int64 > now) {
-		err = authz.RequireStewardPermission(ctx, tx, actorID, "users.unban")
+	if err == nil && decision.Kind != idempotency.Replay {
+		err = authorizeExistingBanChange(ctx, tx, actorID, row, trainee, limitsOnly, now)
 	}
 	if err == nil && role == roleAdmin && decision.Kind != idempotency.Replay {
 		row, err = readUserRow(ctx, tx, userID)
@@ -159,4 +140,41 @@ func usersCursorOwner(query UserListQuery, role managementRole, actorID int64) s
 		filter = strconv.FormatBool(*query.IsBanned)
 	}
 	return filterOwner("users", role.actorKind(), strconv.FormatInt(actorID, 10), filter, query.Q, strconv.Itoa(query.Level), strconv.FormatInt(query.UserID, 10))
+}
+
+func (s *Service) authorizeManagementTx(ctx context.Context, tx *sql.Tx, actorID int64, role managementRole, allowTrainee bool) (bool, error) {
+	var err error
+	trainee := false
+	switch role {
+	case roleAdmin:
+		err = s.finalAuth.AuthorizeAdmin(ctx, tx, actorID)
+	case roleSteward:
+		trainee, err = s.finalAuth.AuthorizeUserManagement(ctx, tx, actorID)
+		if err == nil {
+			permission := authz.StewardPermissionFromContext(ctx)
+			if permission == "" {
+				if allowTrainee {
+					permission = "users.read"
+				} else {
+					permission = "delegate"
+				}
+			}
+			err = authz.RequireStewardPermission(ctx, tx, actorID, permission)
+		}
+	default:
+		err = ErrForbidden
+	}
+	if err != nil {
+		return false, classifyAuthorizationError(err)
+	}
+	return trainee, nil
+}
+
+// authorizeExistingBanChange preserves the corrective-management prerequisite
+// for replacing an active ban or changing a banned account beyond its limits.
+func authorizeExistingBanChange(ctx context.Context, tx *sql.Tx, actorID int64, row userRow, trainee, limitsOnly bool, now int64) error {
+	if trainee && !limitsOnly && row.isBanned == 1 && (!row.bannedUntil.Valid || row.bannedUntil.Int64 > now) {
+		return authz.RequireStewardPermission(ctx, tx, actorID, "users.unban")
+	}
+	return nil
 }

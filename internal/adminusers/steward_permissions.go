@@ -137,21 +137,9 @@ func (s *Service) replaceStewardPermissions(ctx context.Context, actorID, userID
 	if decision.Kind == idempotency.Replay {
 		return replayJSON[authz.StewardPermissions](decision)
 	}
-	if previous.Revision != strconv.FormatInt(expected, 10) {
-		return MutationResult[authz.StewardPermissions]{}, ErrConflict
-	}
-	p.Revision = strconv.FormatInt(expected+1, 10)
-	permissions, _ := json.Marshal(p.Permissions)
-	limits, _ := json.Marshal(p.Limits)
-	_, err = tx.ExecContext(ctx, `INSERT INTO steward_permissions(user_id,revision,permissions,limits,donation_scope,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET revision=excluded.revision,permissions=excluded.permissions,limits=excluded.limits,donation_scope=excluded.donation_scope,updated_at=excluded.updated_at`, userID, expected+1, string(permissions), string(limits), string(p.DonationScope), now, now)
+	p, err = replaceStewardPermissionsTx(ctx, tx, actorID, userID, expected, p, previous, now)
 	if err != nil {
-		return MutationResult[authz.StewardPermissions]{}, classifyDatabaseError("save steward permissions", err)
-	}
-	oldJSON, _ := json.Marshal(previous)
-	nextJSON, _ := json.Marshal(p)
-	_, err = tx.ExecContext(ctx, `INSERT INTO steward_permission_audits(user_id,actor_user_id,from_revision,to_revision,previous_policy,next_policy,created_at) VALUES(?,?,?,?,?,?,?)`, userID, actorID, expected, expected+1, string(oldJSON), string(nextJSON), now)
-	if err != nil {
-		return MutationResult[authz.StewardPermissions]{}, classifyDatabaseError("audit steward permissions", err)
+		return MutationResult[authz.StewardPermissions]{}, err
 	}
 	out, err := finishJSONMutation(ctx, tx, decision, http.StatusOK, p)
 	if err != nil {
@@ -161,4 +149,24 @@ func (s *Service) replaceStewardPermissions(ctx context.Context, actorID, userID
 		return MutationResult[authz.StewardPermissions]{}, err
 	}
 	return out, nil
+}
+
+func replaceStewardPermissionsTx(ctx context.Context, tx *sql.Tx, actorID, userID, expected int64, p, previous authz.StewardPermissions, now int64) (authz.StewardPermissions, error) {
+	if previous.Revision != strconv.FormatInt(expected, 10) {
+		return authz.StewardPermissions{}, ErrConflict
+	}
+	p.Revision = strconv.FormatInt(expected+1, 10)
+	permissions, _ := json.Marshal(p.Permissions)
+	limits, _ := json.Marshal(p.Limits)
+	_, err := tx.ExecContext(ctx, `INSERT INTO steward_permissions(user_id,revision,permissions,limits,donation_scope,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET revision=excluded.revision,permissions=excluded.permissions,limits=excluded.limits,donation_scope=excluded.donation_scope,updated_at=excluded.updated_at`, userID, expected+1, string(permissions), string(limits), string(p.DonationScope), now, now)
+	if err != nil {
+		return authz.StewardPermissions{}, classifyDatabaseError("save steward permissions", err)
+	}
+	oldJSON, _ := json.Marshal(previous)
+	nextJSON, _ := json.Marshal(p)
+	_, err = tx.ExecContext(ctx, `INSERT INTO steward_permission_audits(user_id,actor_user_id,from_revision,to_revision,previous_policy,next_policy,created_at) VALUES(?,?,?,?,?,?,?)`, userID, actorID, expected, expected+1, string(oldJSON), string(nextJSON), now)
+	if err != nil {
+		return authz.StewardPermissions{}, classifyDatabaseError("audit steward permissions", err)
+	}
+	return p, nil
 }

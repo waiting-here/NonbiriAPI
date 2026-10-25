@@ -386,27 +386,8 @@ func (r *Runtime) mfaAdminHTTP(w http.ResponseWriter, req *http.Request) {
 		writeMFAError(w, err)
 		return
 	}
-	var isAdmin bool
-	if err = tx.QueryRowContext(req.Context(), `SELECT is_admin FROM users WHERE id=?`, target).Scan(&isAdmin); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			err = authz.ErrNotFound
-		}
-		writeMFAError(w, err)
-		return
-	}
-	if isAdmin {
-		writeMFAError(w, authz.ErrForbidden)
-		return
-	}
-	enrolled := false
-	if reset {
-		for _, query := range []string{`DELETE FROM account_mfa_credentials WHERE user_id=?`, `DELETE FROM account_mfa_pending WHERE user_id=?`, `DELETE FROM sessions WHERE user_id=?`} {
-			if _, err = tx.ExecContext(req.Context(), query, target); err != nil {
-				writeMFAError(w, err)
-				return
-			}
-		}
-	} else if err = tx.QueryRowContext(req.Context(), `SELECT EXISTS(SELECT 1 FROM account_mfa_credentials WHERE user_id=?)`, target).Scan(&enrolled); err != nil {
+	enrolled, err := managedMFATx(req.Context(), tx, target, reset)
+	if err != nil {
 		writeMFAError(w, err)
 		return
 	}
