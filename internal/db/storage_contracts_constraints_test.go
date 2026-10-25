@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -15,16 +14,8 @@ func TestStorageContractsCompatibilityRegistryIsDetachedAndClosed(t *testing.T) 
 	if descriptor.SchemaHash != GenerationTwoSchemaHash() || descriptor.ManifestHash != PinnedGenerationTwoManifestHash {
 		t.Fatal("descriptor drift", descriptor)
 	}
-	seen := map[string]bool{}
-	for _, hash := range descriptor.SourceManifestHashes {
-		decoded, err := hex.DecodeString(hash)
-		if err != nil || len(decoded) != 32 || seen[hash] || hash == descriptor.ManifestHash {
-			t.Fatal("invalid source registry", hash)
-		}
-		seen[hash] = true
-	}
-	if len(seen) != 4 || !seen[Schema33ManifestHash] || !seen[Schema34ManifestHash] || !seen[Schema35ManifestHash] || !seen[Schema36ManifestHash] || descriptor.MinimumSchemaVersion != 33 || descriptor.SchemaVersion != CurrentSchemaVersion || !reflect.DeepEqual(descriptor.SourceSchemaVersions, []int{33, 34, 35, 36}) || len(SchemaDescriptor().OfflineConversions) != 0 {
-		t.Fatal("runtime descriptor source registry drift", descriptor)
+	if descriptor.MinimumSchemaVersion != CurrentSchemaVersion || descriptor.SchemaVersion != CurrentSchemaVersion || len(descriptor.SourceSchemaVersions) != 0 || len(descriptor.SourceManifestHashes) != 0 || len(SchemaDescriptor().OfflineConversions) != 0 || SchemaDescriptor().StartupPolicy != "exact" || SchemaDescriptor().UpgradeTool != "nonbiri-upgrade-v1" {
+		t.Fatal("runtime descriptor must require its exact schema", descriptor)
 	}
 	descriptor.SourceManifestHashes = append(descriptor.SourceManifestHashes, "unknown")
 	descriptor.SourceSchemaVersions = append(descriptor.SourceSchemaVersions, 999)

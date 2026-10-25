@@ -78,9 +78,12 @@ type Options struct {
 }
 
 type Result struct {
-	Status              string `json:"status"`
-	SourceSchemaVersion int    `json:"source_schema_version"`
-	TargetSchemaVersion int    `json:"target_schema_version"`
+	Tool                          string `json:"tool"`
+	TargetManifestHash            string `json:"target_manifest_hash"`
+	SupportedSourceSchemaVersions []int  `json:"supported_source_schema_versions"`
+	Status                        string `json:"status"`
+	SourceSchemaVersion           int    `json:"source_schema_version"`
+	TargetSchemaVersion           int    `json:"target_schema_version"`
 }
 
 func SchemaDescriptor() db.StorageSchemaDescriptor {
@@ -100,6 +103,10 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{24, stableSchema24Manifest, "6f4ee67206eb6fb3a3f345ba06b2d85aba5abc83"},
 		{25, stableSchema25Manifest, "2b4f4f62ed5b01c247fcc3f79005358ef0237933"},
 		{26, stableSchema26Manifest, "361cb204e888de51901eecc993d3d52b1d156d3a"},
+		{33, db.Schema33ManifestHash, "a7ea261babd424470ff67d1d1b9a119c29437d2e"},
+		{34, db.Schema34ManifestHash, "8576d726e49bd76db6d191914cb4f3637b25f493"},
+		{35, db.Schema35ManifestHash, "2df56fe8814e6a9968380fc8461942065eed3f12"},
+		{36, db.Schema36ManifestHash, "1fc9527f0c9023542dfc7decf59789733a6a834f"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,
@@ -172,5 +179,14 @@ func run(ctx context.Context, path string, vault *secret.Vault, options Options,
 			status = "converted"
 		}
 	}
-	return Result{Status: status, SourceSchemaVersion: sourceVersion, TargetSchemaVersion: db.CurrentSchemaVersion}, nil
+	supported := make([]int, 0, len(sources))
+	for _, source := range sources {
+		supported = append(supported, source.Version)
+	}
+	tool := "nonbiri-upgrade-v1"
+	if rc7Only {
+		tool = "nonbiri-upgrade-rc7"
+	}
+	return Result{Tool: tool, Status: status, SourceSchemaVersion: sourceVersion, TargetSchemaVersion: db.CurrentSchemaVersion,
+		TargetManifestHash: db.PinnedGenerationTwoManifestHash, SupportedSourceSchemaVersions: supported}, nil
 }

@@ -1,7 +1,6 @@
 package db
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -30,49 +29,6 @@ func schema34CatalogFixture(t *testing.T) (string, *secret.Vault, *Store) {
 		t.Fatalf("source identity: %s %v", hash, err)
 	}
 	return path, vault, store
-}
-
-func TestSchema34CatalogUpgradePreservesRowsAndRetries(t *testing.T) {
-	for _, fail := range []bool{false, true} {
-		t.Run(map[bool]string{false: "success", true: "rollback"}[fail], func(t *testing.T) {
-			path, vault, source := schema34CatalogFixture(t)
-			seedEndpointKeyHistory(t, source.DB(), vault, 'A')
-			before := endpointKeyHistoryDigests(t, source.DB())
-			original := startupDiscoveryUpgradeSQL
-			defer func() { startupDiscoveryUpgradeSQL = original }()
-			if fail {
-				startupDiscoveryUpgradeSQL = "DROP TRIGGER discovery_run_version_guard; SELECT missing_catalog_migration();"
-			}
-			err := upgradeStartupSchema(t.Context(), source.DB(), vault)
-			if fail {
-				if err == nil {
-					t.Fatal("partial trigger replacement succeeded")
-				}
-				if hash, hashErr := SchemaManifestHash(t.Context(), source.DB()); hashErr != nil || hash != Schema34ManifestHash {
-					t.Fatalf("partial DDL survived: %s %v", hash, hashErr)
-				}
-				startupDiscoveryUpgradeSQL = original
-				err = upgradeStartupSchema(t.Context(), source.DB(), vault)
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if version, err := readSchemaVersion(t.Context(), source.DB()); err != nil || version != CurrentSchemaVersion {
-				t.Fatalf("target: %d %v", version, err)
-			}
-			if after := endpointKeyHistoryDigests(t, source.DB()); !reflect.DeepEqual(before, after) {
-				t.Fatal("catalog upgrade changed data")
-			}
-			if err := source.Close(); err != nil {
-				t.Fatal(err)
-			}
-			reopened, err := Open(path, vault)
-			if err != nil {
-				t.Fatal(err)
-			}
-			reopened.Close()
-		})
-	}
 }
 
 const previousCharityCatalogSQL = `CREATE VIEW charity_model_catalog AS

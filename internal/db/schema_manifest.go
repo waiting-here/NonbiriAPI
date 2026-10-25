@@ -664,10 +664,6 @@ func generationManifestDigest(manifest generationManifest) string {
 }
 
 func validateGenerationTwoManifest(ctx context.Context, q queryer) error {
-	return validateGenerationTwoManifestSource(ctx, q, false)
-}
-
-func validateGenerationTwoManifestSource(ctx context.Context, q queryer, allowStartupUpgrade bool) error {
 	if GenerationTwoSchemaHash() != PinnedGenerationTwoSchemaHash {
 		return errors.New("generation-two schema hash drift")
 	}
@@ -677,25 +673,17 @@ func validateGenerationTwoManifestSource(ctx context.Context, q queryer, allowSt
 	}
 	version, err := readSchemaVersion(ctx, q)
 	if err != nil {
-		return err
+		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
-	if allowStartupUpgrade && version == 33 {
-		expected = Schema33ManifestHash
-	} else if allowStartupUpgrade && version == 34 {
-		expected = Schema34ManifestHash
-	} else if allowStartupUpgrade && version == 35 {
-		expected = Schema35ManifestHash
-	} else if allowStartupUpgrade && version == 36 {
-		expected = Schema36ManifestHash
-	} else if version != CurrentSchemaVersion {
-		return errors.New("current schema data version mismatch")
+	if version != CurrentSchemaVersion {
+		return &StartupError{Kind: StartupSchemaMismatch, ExpectedSchemaVersion: CurrentSchemaVersion, ActualSchemaVersion: &version}
 	}
 	actual, err := readGenerationManifest(ctx, q)
 	if err != nil {
 		return err
 	}
 	if generationManifestDigest(actual) != expected {
-		return errors.New("generation-two schema manifest mismatch")
+		return &StartupError{Kind: StartupSchemaMismatch, ExpectedSchemaVersion: CurrentSchemaVersion, ActualSchemaVersion: &version}
 	}
 	return nil
 }

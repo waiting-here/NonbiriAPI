@@ -52,13 +52,15 @@ const (
 var ErrDatabaseStartup = errors.New("database startup rejected")
 
 // StartupError intentionally carries no path, SQL, endpoint, row identifier,
-// ciphertext, or cryptographic detail. Generation is safe to expose only for
-// the marker mismatch category.
+// ciphertext, or cryptographic detail. Storage generation and schema versions
+// are safe to expose for actionable compatibility errors.
 type StartupError struct {
-	Kind               StartupErrorKind
-	ExpectedGeneration uint32
-	ActualGeneration   uint32
-	Reason             string
+	Kind                  StartupErrorKind
+	ExpectedGeneration    uint32
+	ActualGeneration      uint32
+	Reason                string
+	ExpectedSchemaVersion int
+	ActualSchemaVersion   *int
 }
 
 func (e *StartupError) Error() string {
@@ -67,6 +69,21 @@ func (e *StartupError) Error() string {
 	}
 	if e.Kind == StartupWrongGeneration {
 		return fmt.Sprintf("database startup rejected: %s (expected generation %d, actual %d)", e.Kind, e.ExpectedGeneration, e.ActualGeneration)
+	}
+	if e.Kind == StartupSchemaMismatch {
+		required := e.ExpectedSchemaVersion
+		if required == 0 {
+			required = CurrentSchemaVersion
+		}
+		actual := "unknown or incomplete"
+		if e.ActualSchemaVersion != nil {
+			actual = fmt.Sprint(*e.ActualSchemaVersion)
+		}
+		summary := fmt.Sprintf("database startup rejected: %s (required schema %d, actual %s)", e.Kind, required, actual)
+		if e.ActualSchemaVersion != nil && *e.ActualSchemaVersion == required {
+			return summary + "; database structure does not match this server; a version upgrade cannot repair this mismatch; preserve the database and use a matching database/server pair"
+		}
+		return summary + "; stop the service and back up the database before running the matching nonbiri-upgrade-v1 --check to inspect or --apply to upgrade explicitly; unsupported or newer schemas require a matching server and cannot be downgraded"
 	}
 	return "database startup rejected: " + string(e.Kind)
 }
@@ -770,9 +787,6 @@ func openValidatedSource(ctx context.Context, path string, expected *sourceSnaps
 	RecordStartupCheckpoint(ctx, StageSourceOpen)
 	if err := inspectActiveDBFiles(path); err != nil {
 		return failError(startupError(StartupUnsafePath))
-	}
-	if err := upgradeStartupSchema(ctx, d, secrets); err != nil {
-		return nil, appendStartupError(startupSQLFailure(ctx, err, StartupSchemaMismatch), opened.Close())
 	}
 	RecordStartupStage(ctx, StageDomainRecovery)
 	if err := checkpointAndRecoverBeforeListener(ctx, d, secrets); err != nil {
