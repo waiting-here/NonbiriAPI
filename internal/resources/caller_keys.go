@@ -164,7 +164,7 @@ type CallerIdentity struct {
 }
 
 func (r *Repository) ResolveCallerKey(ctx context.Context, presented string) (CallerIdentity, error) {
-	if r == nil || !validCallerKey(presented) {
+	if r == nil || r.readDB == nil || !validCallerKey(presented) {
 		return CallerIdentity{}, ErrNotFound
 	}
 	now, err := r.nowUnix()
@@ -173,7 +173,7 @@ func (r *Repository) ResolveCallerKey(ctx context.Context, presented string) (Ca
 	}
 	digest := sha256.Sum256([]byte(presented))
 	var identity CallerIdentity
-	err = r.db.QueryRowContext(ctx, `
+	err = r.readDB.QueryRowContext(ctx, `
 SELECT c.user_id,c.generation
 FROM caller_keys c JOIN users u ON u.id=c.user_id
 WHERE c.key_hash=? AND u.is_admin=0

@@ -10,13 +10,18 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
-func donationSummaryTx(ctx context.Context, tx *sql.Tx, header AdminDonation, now int64) (DonationSummary, error) {
+func donationSummaryHeader(header AdminDonation) DonationSummary {
 	out := DonationSummary{UseSummary: header.UseSummary, DiscordPublicThanks: header.DiscordPublicThanks, ID: header.ID, Status: header.Status, Revision: header.Revision, Description: header.Description,
 		ReviewResult: header.ReviewResult, CreatedAt: header.CreatedAt, UpdatedAt: header.UpdatedAt,
 		StateCounts: map[string]string{}, Sources: []SafeSource{}}
 	for _, state := range []string{"available", "rate_limited", "pending", "disabled", "suspended", "exhausted", "expired", "ended"} {
 		out.StateCounts[state] = "0"
 	}
+	return out
+}
+
+func donationSummaryTx(ctx context.Context, tx *sql.Tx, header AdminDonation, now int64) (DonationSummary, error) {
+	out := donationSummaryHeader(header)
 	rows, err := tx.QueryContext(ctx, `SELECT `+donationstate.SQL()+` AS state,COUNT(*)
 FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id `+donationstate.PhysicalJoins+`
 WHERE dk.donation_id=? GROUP BY state`, now, now, now, now, header.ID)
@@ -74,14 +79,7 @@ func (s *Service) donationsPage(ctx context.Context, role reviewerRole, userID i
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	var tx *sql.Tx
-	var err error
-
-	if role == reviewerSteward {
-		tx, _, _, err = s.beginReviewTx(ctx, role, userID, true)
-	} else {
-		tx, err = s.beginBrowseTx(ctx, role, userID)
-	}
+	tx, err := s.beginDonationPageTx(ctx, role, userID)
 	if err != nil {
 		return empty, err
 	}
@@ -123,24 +121,27 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 			return empty, err
 		}
 	}
+	items, err := readDonationPageSummariesTx(ctx, tx, ids, now)
+	if err != nil {
+		return empty, err
+	}
 	for _, id := range ids {
-		header, err := logicalHeaderTx(ctx, tx, id, now)
-		if err != nil {
-			return empty, err
+		item, ok := items[strconv.FormatInt(id, 10)]
+		if !ok {
+			return empty, ErrInvariant
 		}
-		header.UseSummary = summaries[id]
+		header, summary := item.header, item.summary
+		summary.UseSummary = summaries[id]
 		if access.redact {
 			header = traineeReviewProjection(header)
-		}
-		summary, err := donationSummaryTx(ctx, tx, header, now)
-		if err != nil {
-			return empty, err
+			summary.DiscordPublicThanks = header.DiscordPublicThanks
 		}
 		if role == recurringOwner {
 			summary.OwnerHiddenAt = hidden[id]
 		}
 		result.Data = append(result.Data, AdminDonationSummary{DonationSummary: summary, Owner: header.Owner, Reviewer: header.Reviewer, Handling: header.Handling})
 	}
+
 	if err := tx.Commit(); err != nil {
 		return empty, err
 	}

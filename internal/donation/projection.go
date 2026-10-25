@@ -399,7 +399,31 @@ func getDonationProjectionTx(ctx context.Context, tx *sql.Tx, donationID, now in
 }
 
 // Header reads deliberately avoid loading a donation's complete key collection.
+const donationHeaderSelectSQL = `SELECT d.id,d.status,d.revision,d.description,d.review_note,
+d.reviewed_by_user_id,d.reviewed_by_role,d.reviewed_at,d.created_at,d.updated_at,
+d.user_id,u.discord_id,COALESCE(u.username,''),COALESCE(u.guild_nick,''),d.discord_public_thanks,d.first_approval_origin,
+(EXISTS(SELECT 1 FROM donation_keys dk WHERE dk.donation_id=d.id AND dk.key_body_review_hmac IS NULL)
+ OR EXISTS(SELECT 1 FROM donation_keys dk JOIN donation_uses u ON u.donation_key_id=dk.id
+ JOIN donation_use_revisions ur ON ur.use_id=u.id AND (ur.id=u.current_approved_revision_id OR ur.id=u.current_pending_revision_id)
+ WHERE dk.donation_id=d.id AND ur.key_body_review_hmac IS NULL)),` + manageableDonationSQL + `,
+COALESCE((SELECT action FROM donation_reviews dr WHERE dr.donation_id=d.id ORDER BY dr.id DESC LIMIT 1),'')
+FROM donations d LEFT JOIN users u ON u.id=d.user_id`
+
 func getDonationHeaderTx(ctx context.Context, tx *sql.Tx, donationID, now int64) (AdminDonation, error) {
+	out, err := scanDonationHeader(tx.QueryRowContext(ctx, donationHeaderSelectSQL+" WHERE d.id=?", now, donationID))
+	if err != nil {
+		return out, err
+	}
+	out.Handling, err = readHandlingTx(ctx, tx, donationID)
+	if err != nil {
+		return AdminDonation{}, err
+	}
+	return out, nil
+}
+
+type donationHeaderScanner interface{ Scan(...any) error }
+
+func scanDonationHeader(row donationHeaderScanner) (AdminDonation, error) {
 	var out AdminDonation
 	var id, revision int64
 	var userID, reviewedBy sql.NullInt64
@@ -410,15 +434,7 @@ func getDonationHeaderTx(ctx context.Context, tx *sql.Tx, donationID, now int64)
 	var thanks sql.NullBool
 	var unknown, approved bool
 	var lastAction string
-	err := tx.QueryRowContext(ctx, `SELECT d.id,d.status,d.revision,d.description,d.review_note,
-d.reviewed_by_user_id,d.reviewed_by_role,d.reviewed_at,d.created_at,d.updated_at,
-d.user_id,u.discord_id,COALESCE(u.username,''),COALESCE(u.guild_nick,''),d.discord_public_thanks,d.first_approval_origin,
-(EXISTS(SELECT 1 FROM donation_keys dk WHERE dk.donation_id=d.id AND dk.key_body_review_hmac IS NULL)
- OR EXISTS(SELECT 1 FROM donation_keys dk JOIN donation_uses u ON u.donation_key_id=dk.id
- JOIN donation_use_revisions ur ON ur.use_id=u.id AND (ur.id=u.current_approved_revision_id OR ur.id=u.current_pending_revision_id)
- WHERE dk.donation_id=d.id AND ur.key_body_review_hmac IS NULL)),`+manageableDonationSQL+`,
-COALESCE((SELECT action FROM donation_reviews dr WHERE dr.donation_id=d.id ORDER BY dr.id DESC LIMIT 1),'')
-FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, now, donationID).Scan(
+	err := row.Scan(
 		&id, &out.Status, &revision, &out.Description, &reviewNote, &reviewedBy, &reviewRole,
 		&reviewedAt, &out.CreatedAt, &out.UpdatedAt, &userID, &discordID, &username, &guildNick, &thanks, &out.FirstApprovalOrigin, &unknown, &approved, &lastAction)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -476,10 +492,6 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, now, donatio
 			reviewer.UserID = &value
 		}
 		out.Reviewer = &reviewer
-	}
-	out.Handling, err = readHandlingTx(ctx, tx, donationID)
-	if err != nil {
-		return AdminDonation{}, err
 	}
 	return out, nil
 }

@@ -18,13 +18,20 @@ func (s *Service) beginReviewTx(ctx context.Context, role reviewerRole, userID i
 		tx, id, err := s.beginRoleTx(ctx, role, userID)
 		return tx, role, id, err
 	}
-	if s == nil || s.db == nil || ctx == nil || nilDependency(s.roleAuth) {
+	if s == nil {
+		return nil, role, 0, ErrUnavailable
+	}
+	return s.beginStewardReviewTx(ctx, s.db, role, userID, readOnly)
+}
+
+func (s *Service) beginStewardReviewTx(ctx context.Context, database *sql.DB, role reviewerRole, userID int64, readOnly bool) (*sql.Tx, reviewerRole, int64, error) {
+	if s == nil || database == nil || ctx == nil || nilDependency(s.roleAuth) {
 		return nil, role, 0, ErrUnavailable
 	}
 	if role != reviewerSteward || userID <= 0 {
 		return nil, role, 0, ErrInvalidRequest
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: readOnly})
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: readOnly})
 	if err != nil {
 		return nil, role, 0, err
 	}
