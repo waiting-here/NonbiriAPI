@@ -20,10 +20,17 @@ func (s *Service) beginBrowseTx(ctx context.Context, role reviewerRole, userID i
 }
 
 func (s *Service) beginBrowseActorTx(ctx context.Context, role reviewerRole, userID int64) (*sql.Tx, int64, error) {
-	if s == nil || s.db == nil || ctx == nil {
+	if s == nil {
 		return nil, 0, ErrUnavailable
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	return s.beginBrowseActorTxOn(ctx, s.db, role, userID)
+}
+
+func (s *Service) beginBrowseActorTxOn(ctx context.Context, database *sql.DB, role reviewerRole, userID int64) (*sql.Tx, int64, error) {
+	if s == nil || database == nil || ctx == nil {
+		return nil, 0, ErrUnavailable
+	}
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, 0, err
 	}
