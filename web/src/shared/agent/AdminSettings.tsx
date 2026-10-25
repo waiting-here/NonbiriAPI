@@ -520,6 +520,7 @@ function AgentConfigForm({ initial, account }: { initial: AgentSettings; account
         auto_prefill: draft.auto_prefill,
         chat_prefill: draft.chat_prefill,
         tools: draft.tools,
+        tool_descriptions: draft.tool_descriptions,
         search_url: draft.search_url,
       };
       const value = await putSettings({
@@ -625,18 +626,42 @@ function AgentConfigForm({ initial, account }: { initial: AgentSettings; account
               </Field>
             </Fold>
             <Fold title={t('common.agent.toolsTitle')}>
+              <p className="nb-small nb-muted">{t('common.agent.toolDescriptionHelp')}</p>
               <div className="agent-field-grid">
                 {AGENT_TOOLS.map((name) => (
-                  <label key={name} className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={draft.tools[name] ?? true}
-                      onChange={(event) =>
-                        patch({ tools: { ...draft.tools, [name]: event.target.checked } })
-                      }
-                    />
-                    <span>{t(toolLabels[name]!)}</span>
-                  </label>
+                  <div key={name} className="nb-stack nb-stack--sm">
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={draft.tools[name] ?? true}
+                        onChange={(event) =>
+                          patch({ tools: { ...draft.tools, [name]: event.target.checked } })
+                        }
+                      />
+                      <span>{t(toolLabels[name]!)}</span>
+                    </label>
+                    <Fold title={t('common.agent.toolDescription')}>
+                      <Field
+                        label={t('common.agent.toolDescriptionFor', { tool: t(toolLabels[name]!) })}
+                      >
+                        {(props) => (
+                          <textarea
+                            {...props}
+                            rows={6}
+                            value={draft.tool_descriptions?.[name] ?? ''}
+                            onChange={(event) =>
+                              patch({
+                                tool_descriptions: {
+                                  ...draft.tool_descriptions,
+                                  [name]: event.target.value,
+                                },
+                              })
+                            }
+                          />
+                        )}
+                      </Field>
+                    </Fold>
+                  </div>
                 ))}
               </div>
             </Fold>

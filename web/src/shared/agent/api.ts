@@ -112,6 +112,7 @@ export interface AgentSettings {
   auto_prefill: string;
   chat_prefill: string;
   tools: Record<string, boolean>;
+  tool_descriptions?: Record<string, string>;
   search_url: string;
   search_has_key: boolean;
 }
@@ -335,18 +336,22 @@ function review(value: unknown): AgentReview {
   return { ...row, job: job(row.job) };
 }
 function settings(value: unknown): AgentSettings {
-  const row = object<AgentSettings>(value, [
-    'revision',
-    'chat_enabled',
-    'mode',
-    'auto_template',
-    'chat_template',
-    'auto_prefill',
-    'chat_prefill',
-    'tools',
-    'search_url',
-    'search_has_key',
-  ]);
+  const row = object<AgentSettings>(
+    value,
+    [
+      'revision',
+      'chat_enabled',
+      'mode',
+      'auto_template',
+      'chat_template',
+      'auto_prefill',
+      'chat_prefill',
+      'tools',
+      'search_url',
+      'search_has_key',
+    ],
+    ['tool_descriptions'],
+  );
   decimal(row.revision, 'settings revision');
   return row;
 }

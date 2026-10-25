@@ -56,6 +56,10 @@ const settings: AgentSettings = {
     propose_operations: true,
     edit_memory: true,
   },
+  tool_descriptions: {
+    donations: 'Read current donation details before proposing a review.',
+    edit_memory: 'Read the current revision before proposing a memory change.',
+  },
   search_url: '',
   search_has_key: false,
 };
@@ -139,6 +143,48 @@ describe('Agent administrator settings', () => {
     );
     await waitFor(() => expect(mocks.putSettings).toHaveBeenCalledTimes(1));
     expect(mocks.putSettings.mock.calls[0]![0].chat_enabled).toBe(true);
+  });
+  it('saves custom tool instructions without changing other tools or message templates', async () => {
+    const view = await mount();
+    await screen.findByLabelText('Automatic review mode');
+    await view.user.click(screen.getByText(common.common.agent.toolsTitle, { selector: 'strong' }));
+    await view.user.click(
+      screen.getAllByText(common.common.agent.toolDescription, { selector: 'strong' })[0]!,
+    );
+    const description = screen.getByLabelText(
+      `${common.common.agent.tools.donations}: instructions`,
+    );
+    expect(description).toHaveValue(settings.tool_descriptions!.donations);
+    await view.user.clear(description);
+    await view.user.type(
+      description,
+      'Read the specified donation and report facts missing from its catalog.',
+    );
+    await view.user.click(
+      screen
+        .getAllByRole('button', { name: 'Save' })
+        .find((button) => !button.hasAttribute('disabled'))!,
+    );
+    await waitFor(() => expect(mocks.putSettings).toHaveBeenCalledTimes(1));
+    expect(mocks.putSettings.mock.calls[0]![0]).toMatchObject({
+      expected_revision: '0',
+      chat_enabled: false,
+      tools: settings.tools,
+      auto_template: settings.auto_template,
+      chat_template: settings.chat_template,
+      tool_descriptions: {
+        ...settings.tool_descriptions,
+        donations: 'Read the specified donation and report facts missing from its catalog.',
+      },
+    });
+    await view.user.clear(description);
+    await view.user.click(
+      screen
+        .getAllByRole('button', { name: 'Save' })
+        .find((button) => !button.hasAttribute('disabled'))!,
+    );
+    await waitFor(() => expect(mocks.putSettings).toHaveBeenCalledTimes(2));
+    expect(mocks.putSettings.mock.calls[1]![0].tool_descriptions.donations).toBe('');
   });
   it('does not publish a late settings save into the cache after the session changes', async () => {
     let finish!: (value: AgentSettings) => void;

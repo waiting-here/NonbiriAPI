@@ -47,6 +47,7 @@ const settings = {
   auto_prefill: '',
   chat_prefill: '',
   tools: { donations: true },
+  tool_descriptions: { donations: 'Read the current donation and report missing facts.' },
   search_url: 'https://search.example/query',
   search_has_key: true,
 };
@@ -123,6 +124,7 @@ describe('Agent HTTP projections', () => {
     } as Parameters<typeof putSettings>[0]);
     expect(saved.chat_template).toEqual(settings.chat_template);
     expect(saved.tools).toEqual(settings.tools);
+    expect(saved.tool_descriptions).toEqual(settings.tool_descriptions);
     expect(saved.search_has_key).toBe(true);
     respond({
       revision: '1',
