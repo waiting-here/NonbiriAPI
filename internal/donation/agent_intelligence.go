@@ -155,6 +155,14 @@ func (s *Service) AgentIntelligence(ctx context.Context, tx *sql.Tx, donationID 
 		Source string `json:"source"`
 	}
 	models := []catalogModel{}
+	var budget agentplan.ReadBudget
+	if _, err = agentplan.MarshalRead(struct {
+		Donation AdminDonation
+		Version  agentPendingSnapshot
+		Uses     []Use
+	}{header, snapshot, uses}); err != nil {
+		return nil, signature, err
+	}
 	// Bound catalog data to this donation's manual entries and pinned pending
 	// discovery runs; never read credentials or unrelated catalog history.
 	rows, err := tx.QueryContext(ctx, `SELECT CAST(dk.id AS TEXT),m.normalized_model_id,m.display_name,'manual' FROM donation_key_manual_models m JOIN donation_keys dk ON dk.id=m.donation_key_id WHERE dk.donation_id=?
@@ -168,6 +176,10 @@ func (s *Service) AgentIntelligence(ctx context.Context, tx *sql.Tx, donationID 
 			rows.Close()
 			return nil, "", err
 		}
+		if err = budget.Add(v); err != nil {
+			rows.Close()
+			return nil, signature, err
+		}
 		models = append(models, v)
 	}
 	err = rows.Err()
@@ -175,7 +187,7 @@ func (s *Service) AgentIntelligence(ctx context.Context, tx *sql.Tx, donationID 
 	if err != nil {
 		return nil, "", err
 	}
-	data, err := json.Marshal(struct {
+	data, err := agentplan.MarshalRead(struct {
 		Donation  AdminDonation        `json:"donation"`
 		Version   agentPendingSnapshot `json:"version"`
 		Uses      []Use                `json:"uses"`

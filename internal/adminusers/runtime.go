@@ -188,24 +188,11 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 	if err != nil {
 		return AdminUser{}, classifyLedgerError("read game wallet", err)
 	}
-	automatic := row.autoLevel
-	if automatic < 1 || automatic > 4 {
-		return AdminUser{}, fmt.Errorf("%w: invalid automatic level", ErrInvariant)
+	level, err := projectUserLevel(row, config)
+	if err != nil {
+		return AdminUser{}, err
 	}
-	if !row.manualLevel.Valid {
-		automatic = authz.AutomaticLevel(automatic, donation, config.thresholds)
-	}
-	effective := automatic
-	var manual *int
-	if row.manualLevel.Valid {
-		if row.manualLevel.Int64 < 1 || row.manualLevel.Int64 > 6 {
-			return AdminUser{}, fmt.Errorf("%w: invalid manual level", ErrInvariant)
-		}
-		value := int(row.manualLevel.Int64)
-		manual = &value
-		effective = value
-	}
-	activeBan := row.isBanned == 1 && (!row.bannedUntil.Valid || row.bannedUntil.Int64 > now)
+	activeBan, bannedUntil := projectUserBan(row, now)
 	var automaticReason *observability.AutomaticReason
 	if activeBan {
 		var err error
@@ -215,13 +202,8 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 		}
 	}
 	bannedReason := ""
-	var bannedUntil *int64
 	if activeBan {
 		bannedReason = row.bannedReason
-		if row.bannedUntil.Valid {
-			value := row.bannedUntil.Int64
-			bannedUntil = &value
-		}
 	}
 	return AdminUser{
 		ID: strconv.FormatInt(row.id, 10), DiscordID: nullStringPointer(row.discordID),
@@ -237,10 +219,43 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 		LightConcurrencyLimit: nullableIntString(row.lightConcurrencyLimit), EffectiveLightConcurrencyLimit: effectiveLimit(row.lightConcurrencyLimit, db.DefaultUserLightConcurrencyLimit),
 		GlobalRPMLimit: nullableIntString(row.globalRPMLimit), EffectiveGlobalRPMLimit: effectiveLimit(row.globalRPMLimit, config.globalRPMDefault),
 		Lang: row.lang, Balance: formatMilliPoints(wallet.Balance.Big()), GameBalance: formatMilliPoints(gameWallet.Balance.Big()), DonationCredit: formatMilliPoints(donation.Big()),
-		Level:             AdminUserLevel{Manual: manual, Automatic: automatic, Effective: effective, DisplayName: config.display[effective]},
+		Level:             level,
 		GameProfilePublic: row.gamePublic == 1, Revision: revision.Decimal(), Usage: usage,
 		CreatedAt: row.createdAt, UpdatedAt: row.updatedAt,
 	}, nil
+}
+
+func projectUserLevel(row userRow, config projectionConfig) (AdminUserLevel, error) {
+	donation, err := db.DecodeU128(row.donation)
+	if err != nil {
+		return AdminUserLevel{}, fmt.Errorf("%w: decode donation credit", ErrInvariant)
+	}
+	automatic := row.autoLevel
+	if automatic < 1 || automatic > 4 {
+		return AdminUserLevel{}, fmt.Errorf("%w: invalid automatic level", ErrInvariant)
+	}
+	if !row.manualLevel.Valid {
+		automatic = authz.AutomaticLevel(automatic, donation, config.thresholds)
+	}
+	effective := automatic
+	var manual *int
+	if row.manualLevel.Valid {
+		if row.manualLevel.Int64 < 1 || row.manualLevel.Int64 > 6 {
+			return AdminUserLevel{}, fmt.Errorf("%w: invalid manual level", ErrInvariant)
+		}
+		value := int(row.manualLevel.Int64)
+		manual, effective = &value, value
+	}
+	return AdminUserLevel{Manual: manual, Automatic: automatic, Effective: effective, DisplayName: config.display[effective]}, nil
+}
+
+func projectUserBan(row userRow, now int64) (bool, *int64) {
+	active := row.isBanned == 1 && (!row.bannedUntil.Valid || row.bannedUntil.Int64 > now)
+	if active && row.bannedUntil.Valid {
+		value := row.bannedUntil.Int64
+		return true, &value
+	}
+	return active, nil
 }
 
 func (service *Service) ListUsers(ctx context.Context, adminID int64, query UserListQuery) (Page[AdminUser], error) {

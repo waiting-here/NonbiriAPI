@@ -556,7 +556,7 @@ func TestAgentDonationCompleteChildrenKeepScopeAndRetention(t *testing.T) {
 }
 
 func TestAgentIntelligenceKeepsCompleteCatalog(t *testing.T) {
-	e, _, d := agentReviewFixture(t)
+	e, actor, d := agentReviewFixture(t)
 	tx, err := e.store.DB().BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -585,4 +585,29 @@ func TestAgentIntelligenceKeepsCompleteCatalog(t *testing.T) {
 		t.Fatal("incomplete initial intelligence", len(result.Models), signature)
 	}
 	t.Logf("initial intelligence complete models=%d bytes=%d", len(result.Models), len(raw))
+	for i := 4101; i < 5001; i++ {
+		model := fmt.Sprintf("complete-catalog-%04d", i)
+		if _, err = tx.Exec(`INSERT INTO donation_key_manual_models(donation_key_id,normalized_model_id,display_name,revision,created_at,updated_at) VALUES(?,?,?,1,?,?)`, d.Keys[0].ID, model, model, e.clock.Load(), e.clock.Load()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if raw, signature, err = e.service.AgentIntelligence(t.Context(), tx, parseTestID(t, d.ID)); !agentplan.IsReadLimit(err) || raw != nil || signature == "" {
+		t.Fatal("oversized initial intelligence did not fail completely with its version", len(raw), signature, err)
+	}
+	if raw, err = e.service.AgentRead(t.Context(), tx, actor, "donation_models", json.RawMessage(`{}`), allowAgent); !agentplan.IsReadLimit(err) || raw != nil {
+		t.Fatal("oversized model list returned partial data", len(raw), err)
+	}
+	if _, err = tx.Exec(`UPDATE donation_key_manual_models SET display_name=? WHERE donation_key_id=?`, strings.Repeat("界", 512), d.Keys[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	// This selection has only 1000 rows; its legal UTF-8 display names exceed
+	// the byte budget independently of the item limit.
+	if raw, err = e.service.AgentRead(t.Context(), tx, actor, "donation_models", json.RawMessage(`{"query":"complete-catalog-0"}`), allowAgent); !agentplan.IsReadLimit(err) || raw != nil {
+		t.Fatal("oversized catalog bytes returned partial data", len(raw), err)
+	}
+	raw, err = e.service.AgentRead(t.Context(), tx, actor, "donation_models", json.RawMessage(`{"query":"complete-catalog-0000"}`), allowAgent)
+	if err != nil {
+		t.Fatal("narrow catalog retry failed", err)
+	}
+	decodeAgentReadResult(t, raw, 1)
 }

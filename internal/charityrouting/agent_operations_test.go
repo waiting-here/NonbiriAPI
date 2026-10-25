@@ -364,3 +364,26 @@ func TestAgentCharityCompleteReadIncludesAuthorizedBindings(t *testing.T) {
 		t.Fatal("cancellation ignored", err)
 	}
 }
+
+func TestAgentCharityReadBudgetCountsActualJSONBytes(t *testing.T) {
+	e := newRoutingTestEnv(t)
+	actor := agentplan.Actor{ID: e.seedUser(t, true, nil), Role: "admin"}
+	tx, err := e.store.DB().BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	for i := range 195 {
+		input := testModelCreate()
+		input.Model = fmt.Sprintf("large-summary-%03d", i)
+		input.PublicDescription = strings.Repeat("界", 1024)
+		if _, err = e.service.AgentApply(t.Context(), tx, actor, agentOp(t, "charity.model.create", "", input), allowAgent); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := e.service.AgentRead(t.Context(), tx, actor, "charity_models", json.RawMessage(`{}`), allowAgent)
+	if err != nil || len(raw) < 750<<10 || len(raw) > agentplan.ReadMaxBytes {
+		t.Fatal("valid large JSON was rejected", len(raw), err)
+	}
+	t.Logf("charity_models complete rows=195 bytes=%d", len(raw))
+}

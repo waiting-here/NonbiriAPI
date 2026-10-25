@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"github.com/waiting-here/NonbiriAPI/internal/agentplan"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 	"strconv"
 )
@@ -14,6 +15,18 @@ type AgentReadInput struct {
 	UserID string `json:"user_id,omitempty"`
 	Kind   string `json:"kind,omitempty"`
 	Query  string `json:"query,omitempty"`
+}
+
+type agentUserSummary struct {
+	ID                    string         `json:"id"`
+	Username              string         `json:"username"`
+	DiscordID             *string        `json:"discord_id"`
+	GuildNick             *string        `json:"guild_nick"`
+	Level                 AdminUserLevel `json:"level"`
+	IsBanned              bool           `json:"is_banned"`
+	BannedUntil           *int64         `json:"banned_until"`
+	CharitySuspendedUntil *int64         `json:"charity_suspended_until"`
+	Revision              string         `json:"revision"`
 }
 
 func ParseAgentRead(raw json.RawMessage) (AgentReadInput, error) {
@@ -101,38 +114,40 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 		return json.Marshal(value)
 	}
 	pattern := "%" + in.Query + "%"
-	rows, err := tx.QueryContext(ctx, "SELECT id FROM users WHERE is_admin=0 AND (username LIKE ? OR discord_id LIKE ?) ORDER BY id DESC", pattern, pattern)
+	rows, err := tx.QueryContext(ctx, `SELECT id,username,discord_id,guild_nick,level,auto_level,donation_credit_mag,is_banned,banned_until,charity_suspended_until,revision
+FROM users WHERE is_admin=0 AND (username LIKE ? OR discord_id LIKE ?) ORDER BY id DESC`, pattern, pattern)
 	if err != nil {
 		return nil, err
 	}
-	var ids []int64
+	defer rows.Close()
+	out := []agentUserSummary{}
+	var budget agentplan.ReadBudget
+	now := s.now().Unix()
 	for rows.Next() {
-		var id int64
-		if err = rows.Scan(&id); err != nil {
-			rows.Close()
+		var row userRow
+		if err = rows.Scan(&row.id, &row.username, &row.discordID, &row.guildNick, &row.manualLevel, &row.autoLevel, &row.donation, &row.isBanned, &row.bannedUntil, &row.charityUntil, &row.revision); err != nil {
 			return nil, err
 		}
-		ids = append(ids, id)
+		if err = agentplan.CheckReadCount(len(out) + 1); err != nil {
+			return nil, err
+		}
+		level, err := projectUserLevel(row, cfg)
+		if err != nil {
+			return nil, err
+		}
+		revision, err := db.DecodeU128(row.revision)
+		if err != nil {
+			return nil, ErrInvariant
+		}
+		banned, until := projectUserBan(row, now)
+		item := agentUserSummary{ID: strconv.FormatInt(row.id, 10), Username: row.username, DiscordID: nullStringPointer(row.discordID), GuildNick: stringPointer(row.guildNick), Level: level, IsBanned: banned, BannedUntil: until, CharitySuspendedUntil: futurePointer(row.charityUntil, now), Revision: revision.Decimal()}
+		if err = budget.Add(item); err != nil {
+			return nil, err
+		}
+		out = append(out, item)
 	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
+	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-	out := make([]AdminUser, 0, len(ids))
-	for _, id := range ids {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		row, err := readUserRow(ctx, tx, id)
-		if err != nil {
-			return nil, err
-		}
-		user, err := projectUser(ctx, tx, row, cfg, s.now().Unix())
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, user)
-	}
-	return json.Marshal(map[string]any{"data": out, "total": strconv.Itoa(len(out))})
+	return agentplan.MarshalRead(map[string]any{"data": out, "total": strconv.Itoa(len(out))})
 }

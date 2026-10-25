@@ -274,6 +274,9 @@ func (o *agentOperations) Intelligence(ctx context.Context, id int64) (json.RawM
 		return nil, "", aiagent.ErrNotFound
 	}
 	if err != nil {
+		if agentplan.IsReadLimit(err) {
+			return nil, signature, err
+		}
 		return nil, "", agentDomainError(err)
 	}
 	raw, err = safeAutomaticFacts(raw)
