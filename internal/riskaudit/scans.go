@@ -284,7 +284,7 @@ func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInpu
 		return ClientScan{}, ErrUnavailable
 	}
 	var upper, upperSource, total int64
-	if err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(request_log_id),0),COALESCE(MAX(source_id),0) FROM request_source_facts`).Scan(&upper, &upperSource); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT (SELECT COALESCE(MAX(request_log_id),0) FROM request_source_facts),(SELECT COALESCE(MAX(source_id),0) FROM request_source_facts)`).Scan(&upper, &upperSource); err != nil {
 		return ClientScan{}, err
 	}
 	where, args := scanPredicate(w.From, w.To, upperSource)

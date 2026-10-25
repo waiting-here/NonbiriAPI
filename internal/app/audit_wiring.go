@@ -59,6 +59,7 @@ func newAuditRuntime(ctx context.Context, store *db.Store, vault *secret.Vault, 
 		return nil, err
 	}
 	a.risk, err = riskaudit.NewRepository(store.DB(), riskaudit.RepositoryOptions{
+		ReadDB:        store.ReadDB(),
 		FinalAuth:     authorizer,
 		ConfigChanged: func(config riskaudit.Config) { a.collector.ApplyConfig(config) },
 	})

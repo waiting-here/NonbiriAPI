@@ -207,11 +207,24 @@ func (r *Repository) Users(ctx context.Context, actor Actor, window Window) (Pag
 	if err != nil {
 		return page, err
 	}
-	for _, user := range users {
-		page.Items = append(page.Items, SummarizeMinutes(user, minutes, gaps, config, w.To, w.Kind))
-	}
+	page.Items = summarizeUserMinutes(users, minutes, gaps, config, w.To, w.Kind)
 	page.Scanned = len(users)
 	return page, nil
+}
+
+// summarizeUserMinutes consumes readMinutes' user_id order once. Both the
+// selected users and their observations are ordered, including empty groups.
+func summarizeUserMinutes(users []int64, minutes []Minute, gaps map[int64]bool, config Config, now int64, kind string) []UserSummary {
+	items := make([]UserSummary, 0, len(users))
+	for _, user := range users {
+		end := 0
+		for end < len(minutes) && minutes[end].UserID == user {
+			end++
+		}
+		items = append(items, SummarizeMinutes(user, minutes[:end], gaps, config, now, kind))
+		minutes = minutes[end:]
+	}
+	return items
 }
 
 type SourceRequest struct {

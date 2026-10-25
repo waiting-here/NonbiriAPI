@@ -18,12 +18,14 @@ type FinalAuthorizer interface {
 }
 
 type RepositoryOptions struct {
+	ReadDB        *sql.DB
 	Now           func() time.Time
 	ConfigChanged func(Config)
 	FinalAuth     FinalAuthorizer
 }
 type Repository struct {
 	db            *sql.DB
+	readDB        *sql.DB
 	now           func() time.Time
 	configChanged func(Config)
 	finalAuth     FinalAuthorizer
@@ -37,11 +39,14 @@ func NewRepository(database *sql.DB, options RepositoryOptions) (*Repository, er
 	if database == nil || options.FinalAuth == nil {
 		return nil, ErrInvalid
 	}
+	if options.ReadDB == nil {
+		options.ReadDB = database
+	}
 	if options.Now == nil {
 		options.Now = time.Now
 	}
 	return &Repository{
-		db: database, now: options.Now, configChanged: options.ConfigChanged, finalAuth: options.FinalAuth,
+		db: database, readDB: options.ReadDB, now: options.Now, configChanged: options.ConfigChanged, finalAuth: options.FinalAuth,
 		scanSlots: make(chan struct{}, 2), scanWake: [2]chan struct{}{make(chan struct{}, 1), make(chan struct{}, 1)}, claimedScans: make(map[string]struct{}),
 	}, nil
 }
@@ -85,7 +90,11 @@ func (r *Repository) begin(ctx context.Context, actor Actor, write bool) (*sql.T
 	if r == nil || ctx == nil {
 		return nil, ErrInvalid
 	}
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: !write})
+	database := r.db
+	if !write {
+		database = r.readDB
+	}
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: !write})
 	if err != nil {
 		return nil, ErrUnavailable
 	}
@@ -109,7 +118,7 @@ func (r *Repository) CurrentConfig(ctx context.Context) (Config, error) {
 	if r == nil || ctx == nil {
 		return Config{}, ErrInvalid
 	}
-	return readConfig(ctx, r.db)
+	return readConfig(ctx, r.readDB)
 }
 func (r *Repository) GetConfig(ctx context.Context, actor Actor) (Config, error) {
 	tx, err := r.begin(ctx, actor, false)
