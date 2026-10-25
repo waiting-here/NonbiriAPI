@@ -121,5 +121,5 @@ func AgentOperationSchemas() map[string]json.RawMessage {
 	}
 }
 func AgentReadSchemas() map[string]json.RawMessage {
-	return map[string]json.RawMessage{"charity_models": agentSchema(agentReadInput{}, "Read authorized charity models; query is a literal substring. model_id includes safe bindings and binding_revision. page defaults 1, page_size 50, maximum 100.", nil)}
+	return map[string]json.RawMessage{"charity_models": agentSchema(agentReadInput{}, "Read all authorized charity models matching optional model_id/query filters; query is a literal substring. Every item includes safe authorized bindings and binding_revision when donation scope permits. Returns data plus decimal-string total in one complete result.", nil)}
 }

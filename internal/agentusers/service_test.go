@@ -174,3 +174,16 @@ func TestPreparedUserBatchRejectsAutomaticAndStaleBeforeGate(t *testing.T) {
 		t.Fatal("invalid plan acquired identity barrier")
 	}
 }
+
+func TestAgentUserReadSchemaHasOptionalFiltersWithoutPagination(t *testing.T) {
+	var schema struct {
+		Properties map[string]any `json:"properties"`
+		Required   []string       `json:"required"`
+	}
+	if err := json.Unmarshal(ReadSchema(), &schema); err != nil {
+		t.Fatal(err)
+	}
+	if schema.Properties["page"] != nil || schema.Properties["page_size"] != nil || len(schema.Required) != 0 || schema.Properties["kind"] == nil {
+		t.Fatal("wrong Agent account read contract", string(ReadSchema()))
+	}
+}

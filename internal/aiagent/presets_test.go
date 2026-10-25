@@ -272,3 +272,17 @@ func TestPresetsLiveDescriptionsReachDriverWithoutChangingAvailability(t *testin
 		}
 	}
 }
+
+func TestSiteReadDescriptionsUseCompleteFilteredResults(t *testing.T) {
+	for _, name := range []string{"donations", "donation_models", "review_history", "charity_models", "users"} {
+		description := defaultToolDescriptions()[name]
+		for _, obsolete := range []string{"page_size", "has_more", "第一页", "翻页"} {
+			if strings.Contains(description, obsolete) {
+				t.Fatal("obsolete model-visible paging guidance", name, obsolete)
+			}
+		}
+		if !strings.Contains(description, "total") || !strings.Contains(description, "全部") {
+			t.Fatal("complete result contract missing", name)
+		}
+	}
+}

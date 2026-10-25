@@ -4,15 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strconv"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/agentplan"
 )
 
 type agentReadInput struct {
-	ModelID  string `json:"model_id,omitempty"`
-	Query    string `json:"query,omitempty"`
-	Page     int    `json:"page,omitempty"`
-	PageSize int    `json:"page_size,omitempty"`
+	ModelID string `json:"model_id,omitempty"`
+	Query   string `json:"query,omitempty"`
 }
 
 func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Actor, tool string, args json.RawMessage, authorize agentplan.Authorize) (json.RawMessage, error) {
@@ -26,13 +26,7 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 	if err := agentDecode(args, &in); err != nil {
 		return nil, err
 	}
-	if in.Page == 0 {
-		in.Page = 1
-	}
-	if in.PageSize == 0 {
-		in.PageSize = 50
-	}
-	if in.Page < 1 || in.Page > 10000 || in.PageSize < 1 || in.PageSize > 100 || len(in.Query) > 256 {
+	if len(in.Query) > 256 {
 		return nil, ErrInvalidRequest
 	}
 	var parsed agentInput
@@ -51,32 +45,41 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 	if err != nil {
 		return nil, err
 	}
-	query := `SELECT id FROM charity_models WHERE (?=0 OR id=?) AND (?='' OR instr(full_name,?)>0)`
+	query := strings.TrimSuffix(modelProjectionSQL, " WHERE cm.id=?") + ` WHERE (?=0 OR cm.id=?) AND (?='' OR instr(cm.full_name,?)>0)`
 	bind := []any{parsed.modelID, parsed.modelID, in.Query, in.Query}
 	if scope.Trainee {
-		query += ` AND is_mainstream=1`
+		query += ` AND cm.is_mainstream=1`
 	}
-	query += ` ORDER BY id LIMIT ? OFFSET ?`
-	bind = append(bind, in.PageSize+1, (in.Page-1)*in.PageSize)
+	query += ` ORDER BY cm.id`
 	rows, err := tx.QueryContext(ctx, query, bind...)
 	if err != nil {
 		return nil, err
 	}
-	ids, err := scanIDs(rows)
+	models := []AdminCharityModel{}
+	for rows.Next() {
+		model, err := scanAdminModel(rows, now)
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		models = append(models, model)
+	}
+	err = rows.Err()
+	rows.Close()
 	if err != nil {
 		return nil, err
 	}
-	more := len(ids) > in.PageSize
-	if more {
-		ids = ids[:in.PageSize]
-	}
+	s.attachModelCloudflareMode(models)
 	type item struct {
 		Model    any            `json:"model"`
 		Bindings *AdminBindings `json:"bindings,omitempty"`
 	}
 	data := []item{}
-	for _, id := range ids {
-		model, err := s.getModelWithCloudflareMode(ctx, tx, id, now)
+	for _, model := range models {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		id, err := parsePositiveID(model.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -84,12 +87,14 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 		if role != roleAdmin {
 			v.Model = stewardModel(model)
 		}
-		if parsed.modelID > 0 && scope.DonationScope != "none" {
+		if scope.DonationScope != "none" {
 			bindings, err := readAdminBindingsTx(ctx, tx, id)
 			if err != nil {
 				return nil, err
 			}
-			bindings, err = scopedBindingsTx(ctx, tx, scope, bindings, now)
+			itemScope := scope
+			itemScope.ModelID = id
+			bindings, err = scopedBindingsTx(ctx, tx, itemScope, bindings, now)
 			if err != nil {
 				return nil, err
 			}
@@ -98,9 +103,9 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 		data = append(data, v)
 	}
 	raw, err := json.Marshal(struct {
-		Data    []item `json:"data"`
-		HasMore bool   `json:"has_more"`
-	}{data, more})
+		Data  []item `json:"data"`
+		Total string `json:"total"`
+	}{data, strconv.Itoa(len(data))})
 	if err != nil {
 		return nil, err
 	}

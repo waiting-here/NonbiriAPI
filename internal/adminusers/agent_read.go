@@ -11,29 +11,21 @@ import (
 )
 
 type AgentReadInput struct {
-	UserID   string `json:"user_id,omitempty"`
-	Kind     string `json:"kind,omitempty"`
-	Query    string `json:"query,omitempty"`
-	Page     int    `json:"page,omitempty"`
-	PageSize int    `json:"page_size,omitempty"`
+	UserID string `json:"user_id,omitempty"`
+	Kind   string `json:"kind,omitempty"`
+	Query  string `json:"query,omitempty"`
 }
 
 func ParseAgentRead(raw json.RawMessage) (AgentReadInput, error) {
 	var obj map[string]json.RawMessage
 	var in AgentReadInput
-	if strictjson.ValidateObject(raw) != nil || json.Unmarshal(raw, &obj) != nil || !allowedObject(obj, nil, []string{"user_id", "kind", "query", "page", "page_size"}) || json.Unmarshal(raw, &in) != nil {
+	if strictjson.ValidateObject(raw) != nil || json.Unmarshal(raw, &obj) != nil || !allowedObject(obj, nil, []string{"user_id", "kind", "query"}) || json.Unmarshal(raw, &in) != nil {
 		return in, ErrInvalidRequest
 	}
 	if in.Kind == "" {
 		in.Kind = "profile"
 	}
-	if in.Page == 0 {
-		in.Page = 1
-	}
-	if in.PageSize == 0 {
-		in.PageSize = 20
-	}
-	if in.Page < 1 || in.Page > 1000000 || in.PageSize < 1 || in.PageSize > 100 || (in.Query != "" && !validFilter(in.Query)) {
+	if in.Query != "" && !validFilter(in.Query) {
 		return in, ErrInvalidRequest
 	}
 	if in.Kind != "profile" && in.Kind != "caller_key" && in.Kind != "permissions" && in.Kind != "mfa" {
@@ -109,11 +101,7 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 		return json.Marshal(value)
 	}
 	pattern := "%" + in.Query + "%"
-	var count int64
-	if err = tx.QueryRowContext(ctx, "SELECT count(*) FROM users WHERE is_admin=0 AND (username LIKE ? OR discord_id LIKE ?)", pattern, pattern).Scan(&count); err != nil {
-		return nil, err
-	}
-	rows, err := tx.QueryContext(ctx, "SELECT id FROM users WHERE is_admin=0 AND (username LIKE ? OR discord_id LIKE ?) ORDER BY id DESC LIMIT ? OFFSET ?", pattern, pattern, in.PageSize, (in.Page-1)*in.PageSize)
+	rows, err := tx.QueryContext(ctx, "SELECT id FROM users WHERE is_admin=0 AND (username LIKE ? OR discord_id LIKE ?) ORDER BY id DESC", pattern, pattern)
 	if err != nil {
 		return nil, err
 	}
@@ -133,6 +121,9 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 	}
 	out := make([]AdminUser, 0, len(ids))
 	for _, id := range ids {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		row, err := readUserRow(ctx, tx, id)
 		if err != nil {
 			return nil, err
@@ -143,5 +134,5 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 		}
 		out = append(out, user)
 	}
-	return json.Marshal(map[string]any{"data": out, "total": strconv.FormatInt(count, 10), "page": in.Page, "page_size": in.PageSize})
+	return json.Marshal(map[string]any{"data": out, "total": strconv.Itoa(len(out))})
 }

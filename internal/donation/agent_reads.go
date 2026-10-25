@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strconv"
+	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/agentplan"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
@@ -13,12 +15,13 @@ import (
 )
 
 type agentReadInput struct {
-	DonationID string `json:"donation_id,omitempty"`
-	Status     string `json:"status,omitempty"`
-	OwnerID    string `json:"owner_id,omitempty"`
-	Decision   string `json:"decision,omitempty"`
-	Page       int    `json:"page,omitempty"`
-	PageSize   int    `json:"page_size,omitempty"`
+	DonationID    string `json:"donation_id,omitempty"`
+	DonationKeyID string `json:"donation_key_id,omitempty"`
+	Status        string `json:"status,omitempty"`
+	OwnerID       string `json:"owner_id,omitempty"`
+	Decision      string `json:"decision,omitempty"`
+	Query         string `json:"query,omitempty"`
+	Source        string `json:"source,omitempty"`
 }
 
 func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Actor, tool string, args json.RawMessage, authorize agentplan.Authorize) (json.RawMessage, error) {
@@ -32,13 +35,10 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 	if err := agentDecode(args, &in); err != nil {
 		return nil, err
 	}
-	if in.Page == 0 {
-		in.Page = 1
-	}
-	if in.PageSize == 0 {
-		in.PageSize = 50
-	}
-	if in.Page < 1 || in.Page > 10000 || in.PageSize < 1 || in.PageSize > 100 {
+	if !utf8.ValidString(in.Query) || utf8.RuneCountInString(in.Query) > 512 ||
+		(tool != "donations" && (in.OwnerID != "" || in.Status != "")) ||
+		(tool != "review_history" && in.Decision != "") ||
+		(tool != "donation_models" && (in.Query != "" || in.Source != "" || in.DonationKeyID != "")) {
 		return nil, ErrInvalidRequest
 	}
 	access, err := s.agentAccess(ctx, tx, actor, agentplan.Operation{Kind: tool}, authorize)
@@ -49,126 +49,48 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 	if err != nil {
 		return nil, err
 	}
-	var id, owner int64
-	if in.DonationID != "" {
-		id, err = parseID(in.DonationID)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if in.OwnerID != "" {
-		owner, err = parseID(in.OwnerID)
-		if err != nil {
-			return nil, err
-		}
-		if access.scope.Redact {
-			return nil, authz.ErrPermissionDenied
-		}
-	}
-	offset := (in.Page - 1) * in.PageSize
-	if tool == "donations" {
-		if in.Decision != "" {
-			return nil, ErrInvalidRequest
-		}
-		switch in.Status {
-		case "", "pending", "approved", "rejected", "deleted", "expired":
-		default:
-			return nil, ErrInvalidRequest
-		}
-		predicate, values := charityscope.DonationPredicate(access.scope.DonationScope, now)
-		query := `SELECT d.id FROM donations d WHERE ` + predicate
-		bind := values
-		if access.role != reviewerAdmin {
-			query += ` AND (d.status IN ('pending','approved') OR d.terminal_at>?)`
-			bind = append(bind, now-terminalRetention)
-		}
-		if id > 0 {
-			query += ` AND d.id=?`
-			bind = append(bind, id)
-		}
-		if owner > 0 {
-			query += ` AND d.user_id=?`
-			bind = append(bind, owner)
-		}
-		if in.Status != "" {
-			query += ` AND d.status=?`
-			bind = append(bind, in.Status)
-		}
-		query += ` ORDER BY d.id DESC LIMIT ? OFFSET ?`
-		bind = append(bind, in.PageSize+1, offset)
-		rows, err := tx.QueryContext(ctx, query, bind...)
-		if err != nil {
-			return nil, err
-		}
-		ids := []int64{}
-		for rows.Next() {
-			var n int64
-			if err = rows.Scan(&n); err != nil {
-				rows.Close()
+	var id, owner, keyID int64
+	for _, field := range []struct {
+		value  string
+		target *int64
+	}{{in.DonationID, &id}, {in.OwnerID, &owner}, {in.DonationKeyID, &keyID}} {
+		if field.value != "" {
+			*field.target, err = parseID(field.value)
+			if err != nil {
 				return nil, err
 			}
-			ids = append(ids, n)
 		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return nil, err
-		}
-		more := len(ids) > in.PageSize
-		if more {
-			ids = ids[:in.PageSize]
-		}
-		data := []json.RawMessage{}
-		for _, n := range ids {
-			raw, e := s.agentReceiptTx(ctx, tx, access, n, now)
-			if e != nil {
-				return nil, e
-			}
-			var v map[string]any
-			if e = json.Unmarshal(raw, &v); e != nil {
-				return nil, e
-			}
-			if keys, ok := v["keys"].([]any); ok {
-				for _, key := range keys {
-					if k, ok := key.(map[string]any); ok {
-						delete(k, "display_head")
-						delete(k, "display_tail")
-					}
-				}
-			}
-
-			if id > 0 {
-				_, signature, pendingErr := agentPendingTx(ctx, tx, n)
-				if pendingErr == nil {
-					v["signature"] = signature
-				} else if !errors.Is(pendingErr, ErrConflict) {
-					return nil, pendingErr
-				}
-				uses, e := agentSafeUsesTx(ctx, tx, access, n, now)
-				if e != nil {
-					return nil, e
-				}
-				v["uses"] = uses
-			}
-			raw, e = json.Marshal(v)
-			if e != nil {
-				return nil, e
-			}
-			data = append(data, raw)
-		}
-		return json.Marshal(struct {
-			Data    []json.RawMessage `json:"data"`
-			HasMore bool              `json:"has_more"`
-		}{data, more})
 	}
-	if id <= 0 || owner != 0 || in.Status != "" {
+	if owner > 0 && access.scope.Redact {
+		return nil, authz.ErrPermissionDenied
+	}
+	switch in.Status {
+	case "", "pending", "approved", "rejected", "deleted", "expired":
+	default:
 		return nil, ErrInvalidRequest
 	}
-	if err = requireManagedDonationTx(ctx, tx, access.role, id, now); err != nil {
-		return nil, err
+	// Every child read starts from the same authorized parent snapshot. A
+	// missing donation_id widens the filter, never the actor's resource scope.
+	predicate, values := charityscope.DonationPredicate(access.scope.DonationScope, now)
+	selection := `SELECT d.id FROM donations d WHERE ` + predicate
+	if access.role != reviewerAdmin {
+		selection += ` AND (d.status IN ('pending','approved') OR d.terminal_at>?)`
+		values = append(values, now-terminalRetention)
 	}
-	if err = access.scope.RequireDonation(ctx, tx, id, now); err != nil {
-		return nil, scopeError(err)
+	if id > 0 {
+		selection += ` AND d.id=?`
+		values = append(values, id)
+	}
+	if owner > 0 {
+		selection += ` AND d.user_id=?`
+		values = append(values, owner)
+	}
+	if in.Status != "" {
+		selection += ` AND d.status=?`
+		values = append(values, in.Status)
+	}
+	if tool == "donations" {
+		return agentDonationsTx(ctx, tx, access, selection, values, now)
 	}
 	if tool == "review_history" {
 		switch in.Decision {
@@ -176,17 +98,19 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 		default:
 			return nil, ErrInvalidRequest
 		}
-		query := `SELECT record_id,revision,reviewer_id,role,action,note,at,kind,use_id FROM (
- SELECT id AS sort_id,CAST(id AS TEXT) AS record_id,CAST(submission_revision AS TEXT) AS revision,CAST(reviewer_user_id AS TEXT) AS reviewer_id,reviewer_role AS role,action,note,created_at AS at,'donation' AS kind,NULL AS use_id FROM donation_reviews WHERE donation_id=?
- UNION ALL SELECT ur.id,CAST(ur.id AS TEXT),CAST(ur.use_revision AS TEXT),CAST(ur.reviewer_user_id AS TEXT),ur.reviewer_role,CASE ur.review_state WHEN 'approved' THEN 'approve' ELSE 'reject' END,ur.review_reason,ur.reviewed_at,'service',CAST(u.id AS TEXT) FROM donation_use_revisions ur JOIN donation_uses u ON u.id=ur.use_id JOIN donation_keys dk ON dk.id=u.donation_key_id WHERE dk.donation_id=? AND ur.review_state IN ('approved','rejected') AND ur.reviewed_at IS NOT NULL
- ) WHERE (?='' OR action=?) ORDER BY at DESC,kind,sort_id DESC LIMIT ? OFFSET ?`
-		bind := []any{id, id, in.Decision, in.Decision, in.PageSize + 1, offset}
-		rows, err := tx.QueryContext(ctx, query, bind...)
+		query := `WITH visible_donations AS (` + selection + `)
+SELECT donation_id,record_id,revision,reviewer_id,role,action,note,at,kind,use_id FROM (
+ SELECT dr.donation_id,dr.id AS sort_id,CAST(dr.id AS TEXT) AS record_id,CAST(dr.submission_revision AS TEXT) AS revision,CAST(dr.reviewer_user_id AS TEXT) AS reviewer_id,dr.reviewer_role AS role,dr.action,dr.note,dr.created_at AS at,'donation' AS kind,NULL AS use_id FROM donation_reviews dr JOIN visible_donations vd ON vd.id=dr.donation_id
+ UNION ALL SELECT dk.donation_id,ur.id,CAST(ur.id AS TEXT),CAST(ur.use_revision AS TEXT),CAST(ur.reviewer_user_id AS TEXT),ur.reviewer_role,CASE ur.review_state WHEN 'approved' THEN 'approve' ELSE 'reject' END,ur.review_reason,ur.reviewed_at,'service',CAST(u.id AS TEXT) FROM donation_use_revisions ur JOIN donation_uses u ON u.id=ur.use_id JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN visible_donations vd ON vd.id=dk.donation_id WHERE ur.review_state IN ('approved','rejected') AND ur.reviewed_at IS NOT NULL
+ ) WHERE (?='' OR action=?) ORDER BY at DESC,donation_id DESC,kind,sort_id DESC`
+		values = append(values, in.Decision, in.Decision)
+		rows, err := tx.QueryContext(ctx, query, values...)
 		if err != nil {
 			return nil, err
 		}
 		defer rows.Close()
 		type review struct {
+			DonationID string  `json:"donation_id"`
 			ID         string  `json:"id"`
 			Kind       string  `json:"kind"`
 			UseID      *string `json:"use_id,omitempty"`
@@ -201,7 +125,7 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 		for rows.Next() {
 			var v review
 			var reviewer, useID sql.NullString
-			if err = rows.Scan(&v.ID, &v.Revision, &reviewer, &v.Role, &v.Action, &v.Note, &v.At, &v.Kind, &useID); err != nil {
+			if err = rows.Scan(&v.DonationID, &v.ID, &v.Revision, &reviewer, &v.Role, &v.Action, &v.Note, &v.At, &v.Kind, &useID); err != nil {
 				return nil, err
 			}
 			if !access.scope.Redact && reviewer.Valid {
@@ -215,43 +139,120 @@ func (s *Service) AgentRead(ctx context.Context, tx *sql.Tx, actor agentplan.Act
 		if err = rows.Err(); err != nil {
 			return nil, err
 		}
-		more := len(data) > in.PageSize
-		if more {
-			data = data[:in.PageSize]
-		}
-		return json.Marshal(struct {
-			Data    []review `json:"data"`
-			HasMore bool     `json:"has_more"`
-		}{data, more})
+		return agentReadResult(data, len(data))
 	}
-	if in.Decision != "" {
+	if in.Source != "" && in.Source != "manual" && in.Source != "automatic" {
 		return nil, ErrInvalidRequest
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT CAST(dk.id AS TEXT),m.normalized_model_id,m.display_name,'manual' FROM donation_key_manual_models m JOIN donation_keys dk ON dk.id=m.donation_key_id WHERE dk.donation_id=?
- UNION SELECT CAST(dk.id AS TEXT),c.normalized_model_id,c.normalized_model_id,'automatic' FROM donation_keys dk JOIN donation_uses u ON u.donation_key_id=dk.id JOIN donation_use_revisions ur ON ur.id IN (u.current_pending_revision_id,u.current_approved_revision_id) JOIN endpoint_grant_authorizations a ON a.grant_revision_id=ur.grant_revision_id JOIN discovery_source_states st ON st.source_revision_id=`+connectionstore.DiscoverySourceRevisionSQL+` JOIN model_catalog_entries c ON c.discovery_run_id=st.current_run_id AND c.source_type='automatic' WHERE dk.donation_id=? ORDER BY 1,2,4 LIMIT ? OFFSET ?`, id, id, in.PageSize+1, offset)
+	query := `WITH visible_donations AS (` + selection + `), catalog AS (
+ SELECT dk.donation_id,dk.id AS key_id,m.normalized_model_id AS model,m.display_name AS name,'manual' AS source FROM donation_key_manual_models m JOIN donation_keys dk ON dk.id=m.donation_key_id JOIN visible_donations vd ON vd.id=dk.donation_id
+ UNION SELECT dk.donation_id,dk.id,c.normalized_model_id,c.normalized_model_id,'automatic' FROM donation_keys dk JOIN visible_donations vd ON vd.id=dk.donation_id JOIN donation_uses u ON u.donation_key_id=dk.id JOIN donation_use_revisions ur ON ur.id IN (u.current_pending_revision_id,u.current_approved_revision_id) JOIN endpoint_grant_authorizations a ON a.grant_revision_id=ur.grant_revision_id JOIN discovery_source_states st ON st.source_revision_id=` + connectionstore.DiscoverySourceRevisionSQL + ` JOIN model_catalog_entries c ON c.discovery_run_id=st.current_run_id AND c.source_type='automatic'
+ ) SELECT CAST(donation_id AS TEXT),CAST(key_id AS TEXT),model,name,source FROM catalog WHERE (?=0 OR key_id=?) AND (?='' OR source=?) AND (?='' OR instr(lower(model),lower(?))>0 OR instr(lower(name),lower(?))>0) ORDER BY donation_id DESC,key_id,model,source`
+	values = append(values, keyID, keyID, in.Source, in.Source, in.Query, in.Query, in.Query)
+	rows, err := tx.QueryContext(ctx, query, values...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	data := []map[string]string{}
 	for rows.Next() {
-		var key, model, name, source string
-		if err = rows.Scan(&key, &model, &name, &source); err != nil {
+		var donationID, key, model, name, source string
+		if err = rows.Scan(&donationID, &key, &model, &name, &source); err != nil {
 			return nil, err
 		}
-		data = append(data, map[string]string{"key_id": key, "model": model, "name": name, "source": source})
+		data = append(data, map[string]string{"donation_id": donationID, "key_id": key, "model": model, "name": name, "source": source})
 	}
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-	more := len(data) > in.PageSize
-	if more {
-		data = data[:in.PageSize]
-	}
+	return agentReadResult(data, len(data))
+}
+
+func agentReadResult(data any, count int) (json.RawMessage, error) {
 	return json.Marshal(struct {
-		Data    []map[string]string `json:"data"`
-		HasMore bool                `json:"has_more"`
-	}{data, more})
+		Data  any    `json:"data"`
+		Total string `json:"total"`
+	}{data, strconv.Itoa(count)})
+}
+
+func agentDonationsTx(ctx context.Context, tx *sql.Tx, access useAccess, selection string, args []any, now int64) (json.RawMessage, error) {
+	rows, err := tx.QueryContext(ctx, selection+` ORDER BY d.id DESC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	ids, err := scanIDs(rows)
+	if err != nil {
+		return nil, err
+	}
+	scope, err := readDonationAccessScope(ctx, tx, access.role, access.actorID)
+	if err != nil {
+		return nil, err
+	}
+	data := make([]json.RawMessage, 0, len(ids))
+	// Batches bound SQLite parameters and reuse summaries; every selected row
+	// still belongs to this one read transaction and the result is complete.
+	for start := 0; start < len(ids); start += 100 {
+		batch := ids[start:min(start+100, len(ids))]
+		summaries, err := readUseSummariesTx(ctx, tx, batch)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range batch {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			value, err := getAdminDonationTx(ctx, tx, id, now, summaries[id])
+			if err != nil {
+				return nil, err
+			}
+			value, err = scope.projectReceiptTx(ctx, tx, value)
+			if err != nil {
+				return nil, err
+			}
+			var receipt any = value
+			if access.role != reviewerAdmin {
+				receipt = stewardFromAdmin(value, access.actorID)
+			}
+			raw, err := json.Marshal(receipt)
+			if err != nil {
+				return nil, err
+			}
+			var v map[string]any
+			if err = json.Unmarshal(raw, &v); err != nil {
+				return nil, err
+			}
+			if keys, ok := v["keys"].([]any); ok {
+				for _, key := range keys {
+					if k, ok := key.(map[string]any); ok {
+						delete(k, "display_head")
+						delete(k, "display_tail")
+					}
+				}
+			}
+			if summaries[id].Pending != "0" {
+				_, signature, pendingErr := agentPendingTx(ctx, tx, id)
+				if pendingErr == nil {
+					v["signature"] = signature
+				} else if !errors.Is(pendingErr, ErrConflict) && !errors.Is(pendingErr, ErrNotFound) {
+					return nil, pendingErr
+				}
+			}
+			uses := []Use{}
+			if summaries[id].Total != "0" {
+				uses, err = agentSafeUsesTx(ctx, tx, access, id, now)
+				if err != nil {
+					return nil, err
+				}
+			}
+			v["uses"] = uses
+			raw, err = json.Marshal(v)
+			if err != nil {
+				return nil, err
+			}
+			data = append(data, raw)
+		}
+	}
+	return agentReadResult(data, len(data))
 }
 
 func agentSafeUsesTx(ctx context.Context, tx *sql.Tx, access useAccess, id, now int64) ([]Use, error) {
