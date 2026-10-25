@@ -66,7 +66,7 @@ describe('administrator charity page composition', () => {
           );
         }
         if (url.pathname === '/admin/api/donation-sources') {
-          expect(url.search).toBe('?scope=active&key_state=available&page=1&page_size=20');
+          expect(url.search).toBe('?scope=all&key_state=all&page=1&page_size=20');
           return new Response(
             JSON.stringify({
               data: [],
@@ -88,7 +88,8 @@ describe('administrator charity page composition', () => {
     expect(await screen.findByRole('button', { name: 'Review' })).toBeInTheDocument();
     await rendered.user.click(screen.getByRole('tab', { name: 'Browse by source' }));
     expect(await screen.findByRole('heading', { name: 'No source groups' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Source scope' })).toHaveValue('active');
+    expect(screen.getByRole('combobox', { name: 'Source scope' })).toHaveValue('all');
+    expect(screen.getByRole('combobox', { name: 'Key state' })).toHaveValue('all');
     expect(screen.queryByRole('combobox', { name: 'Handling status' })).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Donation status' })).not.toBeInTheDocument();
     expect(
