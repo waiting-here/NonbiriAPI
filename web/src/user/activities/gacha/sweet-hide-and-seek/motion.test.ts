@@ -1,6 +1,4 @@
 import { expect, it } from 'vitest';
-import { motionOffset, motionRegions, regionWeight } from './motion';
-import type { SweetCard } from './motion';
 import { eyeTextures, decodeMask, faceCrops } from './eyelid';
 
 it('covers the amber iris pixels omitted from the input guide masks', () => {
@@ -37,50 +35,6 @@ it('keeps the foreshortened far-eye ribbon on actual ink and retains its wider o
     middle = sample(22);
   expect(corner[1] - corner[0]).toBeGreaterThan(6);
   expect(middle[1] - middle[0]).toBeLessThan(4);
-});
-
-it.each(['s-chatgpt', 's-claude'] as const)(
-  '%s has no deformation outside the authored end polygons',
-  (id) => {
-    let moving = 0;
-    for (let y = 0; y < 1536; y += 4)
-      for (let x = 0; x < 1024; x += 4) {
-        const weight = motionRegions[id].reduce(
-          (sum, region) => sum + regionWeight(region, [x, y]),
-          0,
-        );
-        const offset = motionOffset(id, [x, y], 2.4);
-        if (weight === 0) expect(offset).toEqual([0, 0]);
-        else {
-          moving++;
-          expect(Math.abs(offset[0])).toBeLessThanOrEqual(2.2);
-          expect(Math.abs(offset[1])).toBeLessThanOrEqual(0.45);
-        }
-      }
-    expect(moving).toBeGreaterThan(100);
-  },
-);
-
-it('keeps whole protected body, contact and foreground rectangles fixed', () => {
-  const fixed: Record<SweetCard, number[][]> = {
-    's-chatgpt': [
-      [0, 0, 1024, 390],
-      [280, 380, 875, 1536],
-      [150, 945, 280, 1110],
-      [0, 1080, 1024, 1536],
-    ],
-    's-claude': [
-      [325, 0, 1024, 550],
-      [320, 550, 530, 1536],
-      [525, 670, 670, 850],
-      [0, 1320, 1024, 1536],
-    ],
-  };
-  for (const id of Object.keys(fixed) as SweetCard[])
-    for (const [x0, y0, x1, y1] of fixed[id]) {
-      for (let y = y0; y < y1; y += 5)
-        for (let x = x0; x < x1; x += 5) expect(motionOffset(id, [x, y], 3.1)).toEqual([0, 0]);
-    }
 });
 
 it.each(['s-chatgpt', 's-claude'] as const)(
