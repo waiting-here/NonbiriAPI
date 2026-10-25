@@ -1,4 +1,4 @@
-import type { AgentMessage } from './api';
+import type { AgentJob, AgentMessage, AgentPlan } from './api';
 
 interface ToolCall {
   id?: string;
@@ -36,6 +36,25 @@ export function readToolCalls(message: AgentMessage): ToolCall[] {
 interface PendingCall {
   messageID: string;
   index: number;
+}
+
+export function planMessageID(plan: AgentPlan, messages: AgentMessage[], job?: AgentJob) {
+  if (!job || plan.job_id !== job.id) return undefined;
+  const ids = new Set(plan.tool_call_ids);
+  if (!ids.size) return undefined;
+  const matches = messages.filter((message) => {
+    if (
+      message.role !== 'assistant' ||
+      message.generation !== job.generation ||
+      message.created_at < job.created_at ||
+      message.created_at > plan.created_at
+    )
+      return false;
+    const calls = new Set(readToolCalls(message).map((call) => call.id));
+    return [...ids].every((id) => calls.has(id));
+  });
+  // Historical, ambiguous or paged-out calls keep a separate plan record.
+  return matches.length === 1 ? matches[0]!.id : undefined;
 }
 
 export function indexToolResults(messages: readonly AgentMessage[]): {

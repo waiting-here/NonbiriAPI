@@ -45,17 +45,24 @@ export function AgentTime({ value }: { value?: number | null }) {
   );
 }
 export function RawData({ title, value }: { title: ReactNode; value: unknown }) {
+  return (
+    <Fold title={title} lazy>
+      <AgentData title={title} value={value} />
+    </Fold>
+  );
+}
+export function AgentData({ title, value }: { title: ReactNode; value: unknown }) {
   const { t } = useTranslation();
   const text = typeof value === 'string' ? value : (JSON.stringify(value, null, 2) ?? '');
   return (
-    <Fold title={title} lazy>
+    <>
       <CopyValue
         value={text}
         label={typeof title === 'string' ? title : t('common.agent.operationDetails')}
         showValue={false}
       />
       <pre className="agent-raw">{text}</pre>
-    </Fold>
+    </>
   );
 }
 export function AgentMarkdown({ children }: { children: string }) {

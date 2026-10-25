@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import { Button, Field, Note } from '@shared/components/ui';
+import { Button, Field, Fold, Note } from '@shared/components/ui';
+import { formatCount } from '@shared/utils/formatNumber';
 import { captureStationSession, stationSessionMatches } from '@shared/charityManagement';
 import { elevateAdmin, responseOutcomeUnknown } from '@shared/operations/api';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
@@ -95,11 +96,11 @@ export function OperationPlan({
     setConfirmation(false);
   };
   const [elevationError, setElevationError] = useState<unknown>(null);
-  return (
+  const content = (
     <section className="agent-plan nb-stack" aria-label={t('common.agent.plan')}>
       <div className="nb-inline">
         <h3>{t('common.agent.plan')}</h3>
-        <AgentState state={plan.state} />
+        <AgentState state={plan.state === 'pending' ? 'waiting_confirmation' : plan.state} />
       </div>
       <ol className="agent-operation-list">
         {plan.operations.map((op, index) => {
@@ -208,5 +209,19 @@ export function OperationPlan({
         {elevationError ? <AgentError error={elevationError} /> : null}
       </ConfirmDialog>
     </section>
+  );
+  return plan.state === 'pending' ? (
+    content
+  ) : (
+    <Fold
+      title={t('common.agent.plan')}
+      summary={t('common.agent.activity.operationCount', {
+        value: formatCount(plan.operations.length).display,
+      })}
+      meta={<AgentState state={plan.state} />}
+      lazy
+    >
+      {content}
+    </Fold>
   );
 }

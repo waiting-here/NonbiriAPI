@@ -2,9 +2,10 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { ApiError } from '@shared/query/http';
-import type { AgentMessage, AgentPlan, Conversation } from './api';
+import type { AgentJob, AgentMessage, AgentPlan, Conversation } from './api';
 import { ChatPanel } from './ChatPanel';
 import { OperationPlan } from './OperationPlan';
+import { planMessageID } from './toolActivityData';
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -76,6 +77,22 @@ const plan: AgentPlan = {
     },
   ],
 };
+const job: AgentJob = {
+  id: '9',
+  kind: 'chat',
+  actor_id: '0',
+  actor_role: 'admin',
+  actor_label: 'Operator',
+  conversation_id: '7',
+  generation: '1',
+  donation_id: '0',
+  state: 'waiting_confirmation',
+  request_id: '0',
+  error: '',
+  created_at: 1700000000000,
+  updated_at: 1700000000000,
+  queue: { length: 0, active: 0, limit: 1, position: 0 },
+};
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.get.mockResolvedValue(conversation());
@@ -97,6 +114,88 @@ async function mount(role: 'admin' | 'steward' = 'admin') {
   return view;
 }
 describe('Agent conversation and plans', () => {
+  it('only attaches plans to a complete call set in the known job', () => {
+    const later = {
+      ...message('2', 'assistant', ''),
+      created_at: plan.created_at + 1,
+      tool_calls: [{ id: 'call1' }],
+    };
+    const current = { ...later, created_at: plan.created_at };
+    expect(planMessageID(plan, [current], job)).toBe('2');
+    expect(planMessageID(plan, [current])).toBeUndefined();
+    expect(planMessageID(plan, [current], { ...job, id: '10' })).toBeUndefined();
+    expect(planMessageID(plan, [{ ...current, generation: '0' }], job)).toBeUndefined();
+    expect(
+      planMessageID(plan, [{ ...current, created_at: job.created_at - 1 }], job),
+    ).toBeUndefined();
+    expect(planMessageID(plan, [later], job)).toBeUndefined();
+    expect(
+      planMessageID({ ...plan, tool_call_ids: ['call1', 'call2'] }, [current], job),
+    ).toBeUndefined();
+  });
+  it('retains unknown call fields in its expanded detail', async () => {
+    mocks.get.mockResolvedValue(
+      conversation([
+        {
+          ...message('1', 'assistant', ''),
+          tool_calls: [
+            { function: { arguments: 'raw arguments' }, extra: 'retained unknown detail' },
+          ],
+        },
+      ]),
+    );
+    const view = await mount();
+    expect(screen.queryByText(/retained unknown detail/)).not.toBeInTheDocument();
+    await view.user.click(screen.getByText('Tool calls'));
+    expect(screen.getByText(/retained unknown detail/)).toBeInTheDocument();
+  });
+  it('summarizes a tool and reveals its paired full result only on demand', async () => {
+    mocks.get.mockResolvedValue(
+      conversation([
+        {
+          ...message('1', 'assistant', ''),
+          tool_calls: [
+            { id: 'read-1', type: 'function', function: { name: 'donations', arguments: '{}' } },
+          ],
+        },
+        {
+          ...message('2', 'tool', '{"items":[{"description":"synthetic-donation-result"}]}'),
+          tool_call_id: 'read-1',
+        },
+      ]),
+    );
+    const view = await mount();
+    expect(screen.getByText('Read donations')).toBeInTheDocument();
+    expect(screen.getByText('Items returned: 1')).toBeInTheDocument();
+    expect(screen.getByText('Result received')).toBeInTheDocument();
+    expect(screen.queryByText(/synthetic-donation-result/)).not.toBeInTheDocument();
+    await view.user.click(screen.getByText('Read donations'));
+    expect(screen.getAllByText(/synthetic-donation-result/)).toHaveLength(1);
+  });
+  it('shows the actual interruption instead of a successful tool result', async () => {
+    mocks.get.mockResolvedValue(
+      conversation([
+        {
+          ...message('1', 'assistant', ''),
+          tool_calls: [
+            { id: 'write-1', function: { name: 'propose_operations', arguments: '{}' } },
+          ],
+        },
+        {
+          ...message(
+            '2',
+            'tool',
+            '{"status":"interrupted","message":"Work was interrupted; nothing was applied."}',
+          ),
+          tool_call_id: 'write-1',
+        },
+      ]),
+    );
+    await mount();
+    expect(screen.getByText('Interrupted')).toBeInTheDocument();
+    expect(screen.getByText('Work was interrupted; nothing was applied.')).toBeInTheDocument();
+    expect(screen.queryByText('Result received')).not.toBeInTheDocument();
+  });
   it('keeps history readable while the server says chat is unavailable', async () => {
     mocks.get.mockResolvedValue({
       ...conversation([message('1', 'user', 'Retained request')]),
@@ -303,9 +402,12 @@ describe('Agent conversation and plans', () => {
         },
       ]),
       plans: [plan],
+      job,
     });
     const view = await mount();
     const card = screen.getByRole('region', { name: 'Operation plan' });
+    expect(screen.getByRole('log')).toContainElement(card);
+    expect(within(card).getByText('Awaiting your decision')).toBeInTheDocument();
     expect(
       within(card)
         .getAllByRole('listitem')

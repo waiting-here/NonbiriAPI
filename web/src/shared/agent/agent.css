@@ -22,6 +22,100 @@
 .agent-message--assistant {
   border-left-color: var(--nb-color-info);
 }
+.agent-message--activity {
+  padding: var(--nb-space-2) 0;
+  border: 0;
+  background: transparent;
+}
+.agent-tool-stack {
+  display: grid;
+  gap: var(--nb-space-2);
+  min-width: 0;
+}
+.agent-tool-activity {
+  min-width: 0;
+  background: var(--nb-color-surface);
+  border-inline-start: var(--nb-space-1) solid var(--nb-color-border);
+}
+.agent-tool-activity--ok {
+  border-inline-start-color: var(--nb-color-success);
+}
+.agent-tool-activity--bad {
+  border-inline-start-color: var(--nb-color-danger);
+}
+.agent-tool-activity--warn {
+  border-inline-start-color: var(--nb-color-warning);
+}
+.agent-tool-title,
+.agent-tool-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--nb-space-2);
+}
+.agent-tool-title > svg,
+.agent-tool-status > svg {
+  width: var(--nb-space-4);
+  height: var(--nb-space-4);
+  flex-shrink: 0;
+}
+.agent-tool-activity .nb-fold__title {
+  min-width: 0;
+  flex: 1;
+}
+.agent-tool-activity > summary {
+  padding: var(--nb-space-3) var(--nb-space-4);
+}
+.agent-tool-activity .agent-tool-title {
+  overflow-wrap: anywhere;
+  min-width: 0;
+  color: var(--nb-color-text);
+  font-weight: var(--nb-font-weight-semibold);
+}
+.agent-tool-summary {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.agent-tool-status {
+  white-space: nowrap;
+  font-size: var(--nb-font-size-sm);
+  color: var(--nb-color-text-muted);
+}
+.agent-tool-status--ok {
+  color: var(--nb-color-success);
+}
+.agent-tool-status--bad {
+  color: var(--nb-color-danger);
+}
+.agent-tool-status--warn {
+  color: var(--nb-color-warning);
+}
+.agent-tool-activity .nb-fold__body > h4 {
+  margin-block: var(--nb-space-3) var(--nb-space-2);
+  font-size: var(--nb-font-size-sm);
+}
+@media (width < 40rem) {
+  .agent-tool-activity > summary {
+    position: relative;
+    flex-wrap: wrap;
+    gap: var(--nb-space-2);
+  }
+  .agent-tool-activity .nb-fold__title {
+    flex-basis: 100%;
+    padding-inline-end: var(--nb-space-6);
+  }
+  .agent-tool-activity > summary::after {
+    position: absolute;
+    inset-inline-end: var(--nb-space-4);
+    top: var(--nb-space-5);
+  }
+  .agent-tool-activity .nb-fold__meta {
+    margin-inline-start: var(--nb-space-6);
+  }
+}
 .agent-message__head,
 .agent-job {
   display: flex;

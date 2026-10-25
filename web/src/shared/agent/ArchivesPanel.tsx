@@ -20,6 +20,7 @@ import {
 import { AgentEmpty, AgentError, AgentTime, RawData } from './AgentParts';
 import { ChatMessage } from './ChatPanel';
 import { OperationPlan } from './OperationPlan';
+import { indexToolResults } from './toolActivityData';
 
 function ArchiveMessages({
   account,
@@ -56,14 +57,7 @@ function ArchiveMessages({
       [...olderPlans, ...(planQuery.data?.items ?? [])].map((row) => [row.id, row]),
     ).values(),
   ];
-  const plansFor = (message: AgentMessage) => {
-    const ids = new Set(
-      Array.isArray(message.tool_calls)
-        ? message.tool_calls.map((call) => call?.id).filter((id: unknown) => typeof id === 'string')
-        : [],
-    );
-    return plans.filter((plan) => plan.tool_call_ids?.some((id) => ids.has(id)));
-  };
+  const toolResults = indexToolResults(rows);
   const load = async () => {
     setBusy(true);
     setError(null);
@@ -100,17 +94,19 @@ function ArchiveMessages({
         <AgentError error={planQuery.error} onRetry={() => void planQuery.refetch()} />
       ) : null}
       {rows.length ? (
-        rows.map((row) => (
-          <div key={row.id} className={!row.active ? 'agent-archived' : ''}>
-            <ChatMessage message={row} />
-            {plansFor(row).map((plan) => (
-              <OperationPlan key={plan.id} role="admin" account={account} plan={plan} readOnly />
-            ))}
-          </div>
-        ))
+        rows
+          .filter((row) => !toolResults.consumed.has(row.id))
+          .map((row) => (
+            <div key={row.id} className={!row.active ? 'agent-archived' : ''}>
+              <ChatMessage message={row} toolResults={toolResults.results.get(row.id)} />
+            </div>
+          ))
       ) : (
         <AgentEmpty body={t('common.agent.archiveEmpty')} />
       )}
+      {plans.map((plan) => (
+        <OperationPlan key={plan.id} role="admin" account={account} plan={plan} readOnly />
+      ))}
     </div>
   );
 }

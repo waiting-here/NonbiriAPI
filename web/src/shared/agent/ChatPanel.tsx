@@ -33,6 +33,8 @@ import {
   RawData,
 } from './AgentParts';
 import { OperationPlan } from './OperationPlan';
+import { ToolActivity } from './ToolActivity';
+import { indexToolResults, planMessageID } from './toolActivityData';
 
 type Intent =
   | { kind: 'send' | 'edit'; id?: string; body: SendMessage }
@@ -42,14 +44,26 @@ export function ChatMessage({
   message,
   editable,
   onEdit,
+  toolResults,
+  plans,
+  running,
 }: {
   message: AgentMessage;
   editable?: boolean;
   onEdit?: (message: AgentMessage) => void;
+  toolResults?: Map<number, AgentMessage>;
+  plans?: AgentPlan[];
+  running?: boolean;
 }) {
   const { t } = useTranslation();
   return (
-    <article className={'agent-message agent-message--' + message.role}>
+    <article
+      className={
+        'agent-message agent-message--' +
+        message.role +
+        (message.tool_calls && !message.content ? ' agent-message--activity' : '')
+      }
+    >
       <div className="agent-message__head">
         <strong>{t(roleLabels[message.role] ?? 'common.agent.roles.tool')}</strong>
         <AgentTime value={message.created_at} />
@@ -60,9 +74,11 @@ export function ChatMessage({
           </Button>
         ) : null}
       </div>
-      {message.content ? <AgentMarkdown>{message.content}</AgentMarkdown> : null}
-      {message.tool_calls ? (
-        <RawData title={t('common.agent.toolCalls')} value={message.tool_calls} />
+      {message.content && message.role !== 'tool' ? (
+        <AgentMarkdown>{message.content}</AgentMarkdown>
+      ) : null}
+      {message.tool_calls != null ? (
+        <ToolActivity message={message} results={toolResults} plans={plans} running={running} />
       ) : null}
       {message.role === 'tool' && message.content ? (
         <RawData title={t('common.agent.toolResult')} value={message.content} />
@@ -156,14 +172,12 @@ export function ChatPanel({
   const plans = [
     ...new Map([...olderPlans, ...(query.data?.plans ?? [])].map((row) => [row.id, row])).values(),
   ];
-  const plansFor = (message: AgentMessage) => {
-    const ids = new Set(
-      Array.isArray(message.tool_calls)
-        ? message.tool_calls.map((call) => call?.id).filter((id: unknown) => typeof id === 'string')
-        : [],
-    );
-    return plans.filter((plan) => plan.tool_call_ids?.some((id) => ids.has(id)));
-  };
+  const toolResults = indexToolResults(rows);
+  const planMessages = new Map(
+    plans.map((plan) => [plan.id, planMessageID(plan, rows, query.data?.job)]),
+  );
+  const plansFor = (message: AgentMessage) =>
+    plans.filter((plan) => planMessages.get(plan.id) === message.id);
   const lastUser = [...rows].reverse().find((row) => row.role === 'user');
   const locked =
     operation.isPending || operation.outcome === 'unknown' || Boolean(operation.refreshError);
@@ -224,18 +238,22 @@ export function ChatPanel({
             ) : null}
             {query.data.job ? (
               <div className="agent-job">
-                <AgentState state={query.data.job.state} />
+                <AgentState
+                  state={query.data.job.queue.position > 0 ? 'pending' : query.data.job.state}
+                />
                 {['compaction', 'compact'].includes(query.data.job.kind) ? (
-                  <span>{t('common.agent.compacting')}</span>
+                  <span>{t('common.agent.compaction')}</span>
                 ) : null}
                 {running ? (
                   <>
-                    <span className="agent-number">
-                      {t('common.agent.queue', {
-                        position: formatCount(query.data.job.queue.position).display,
-                        length: formatCount(query.data.job.queue.length).display,
-                      })}
-                    </span>
+                    {query.data.job.queue.position > 0 ? (
+                      <span className="agent-number">
+                        {t('common.agent.queue', {
+                          position: formatCount(query.data.job.queue.position).display,
+                          length: formatCount(query.data.job.queue.length).display,
+                        })}
+                      </span>
+                    ) : null}
                     <Button
                       variant="secondary"
                       disabled={locked}
@@ -264,36 +282,47 @@ export function ChatPanel({
               {!rows.length ? (
                 <AgentEmpty body={t('common.agent.chatEmpty')} />
               ) : (
-                rows.map((row) => (
-                  <Fragment key={row.id}>
-                    <ChatMessage
-                      message={row}
-                      editable={
-                        query.data.enabled &&
-                        !locked &&
-                        ((role === 'admin' && (row.role === 'user' || row.role === 'assistant')) ||
-                          (role === 'steward' && row.id === lastUser?.id))
-                      }
-                      onEdit={(message) => {
-                        setEditing(message);
-                        setDraft(message.content);
-                      }}
-                    />
-                    {plansFor(row).map((plan) => (
-                      <OperationPlan
-                        key={plan.id}
-                        role={role}
-                        account={account}
-                        plan={plan}
-                        readOnly={!query.data.enabled}
+                rows
+                  .filter((row) => !toolResults.consumed.has(row.id))
+                  .map((row) => (
+                    <Fragment key={row.id}>
+                      <ChatMessage
+                        message={row}
+                        toolResults={toolResults.results.get(row.id)}
+                        plans={plansFor(row)}
+                        running={Boolean(
+                          running &&
+                          query.data.job &&
+                          row.generation === query.data.generation &&
+                          row.created_at >= query.data.job.created_at,
+                        )}
+                        editable={
+                          query.data.enabled &&
+                          !locked &&
+                          ((role === 'admin' &&
+                            (row.role === 'user' || row.role === 'assistant')) ||
+                            (role === 'steward' && row.id === lastUser?.id))
+                        }
+                        onEdit={(message) => {
+                          setEditing(message);
+                          setDraft(message.content);
+                        }}
                       />
-                    ))}
-                  </Fragment>
-                ))
+                      {plansFor(row).map((plan) => (
+                        <OperationPlan
+                          key={plan.id}
+                          role={role}
+                          account={account}
+                          plan={plan}
+                          readOnly={!query.data.enabled}
+                        />
+                      ))}
+                    </Fragment>
+                  ))
               )}
             </div>
             {plans
-              .filter((plan) => !plan.tool_call_ids?.length)
+              .filter((plan) => !planMessages.get(plan.id))
               .map((plan) => (
                 <OperationPlan
                   key={plan.id}
