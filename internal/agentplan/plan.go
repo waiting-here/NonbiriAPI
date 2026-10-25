@@ -42,6 +42,13 @@ type Prepared interface {
 	Finalize(committed bool)
 }
 
+// PreparedBatch acquires shared lifecycle gates once, while allowing the root
+// to apply its operations in the original order among other domain operations.
+type PreparedBatch interface {
+	ApplyOperation(context.Context, *sql.Tx, int) (json.RawMessage, error)
+	Finalize(committed bool)
+}
+
 // Authorize checks the real actor and current grants in the same transaction
 // as the operation. The domain still owns target hierarchy, versions and rules.
 type Authorize func(context.Context, *sql.Tx, Actor, string) error
