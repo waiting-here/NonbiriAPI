@@ -3,6 +3,7 @@ package logapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -60,8 +61,8 @@ func TestPrehandlerPhaseFiltersAndManagementExport(t *testing.T) {
 	}
 }
 
-func TestManagementRejectionDetailListReadExportAndLegacyFallback(t *testing.T) {
-	f := newLogFixture(t)
+func TestSafeRejectionDetailAllRolesAndExports(t *testing.T) {
+	f := newNumberedLogFixture(t)
 	f.mustExec(`UPDATE request_logs SET rejection_stage='preflight',rejection_reason='invalid_request',request_method='POST',request_path='/v1/chat/completions',caller_result_class='failed',caller_status=400,caller_error_code='invalid_request',attempt_count=0,uncached_input_tokens=0,cache_write_input_tokens=0,cache_read_input_tokens=0,output_tokens=0,usage_unknown=0 WHERE logical_request_id=?`, f.charityID)
 	want := requestattempt.NewDetail("stream", "expected a boolean or null")
 	for _, diag := range []string{requestattempt.EncodeDetail(want), "", `raw error PRIVATE_INPUT`, `{"field":"PRIVATE_FIELD","reason":"PRIVATE_INPUT"}`} {
@@ -105,8 +106,46 @@ func TestManagementRejectionDetailListReadExportAndLegacyFallback(t *testing.T) 
 			t.Fatal(err)
 		}
 		body, _ := json.Marshal(user)
-		if strings.Contains(string(body), "rejection_detail") || strings.Contains(string(body), "expected a boolean") {
-			t.Fatal("user received management diagnostic", string(body))
+		if strings.Contains(string(body), "rejection_detail") != expected || strings.Contains(string(body), "PRIVATE_") {
+			t.Fatal("unsafe or missing owner diagnostic", string(body))
 		}
+		ownerPage, err := f.repo.ListUser(ctx, logUserOne, ListFilter{Phase: "pre_handler"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ownerRows, err := f.repo.ExportUser(ctx, logUserOne, ListFilter{Phase: "pre_handler"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ownerJSON, err := MarshalUserJSON(ownerRows)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ownerCSV, err := MarshalUserCSV(ownerRows)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pageJSON, _ := json.Marshal(ownerPage)
+		for _, projection := range []string{string(pageJSON), string(ownerJSON), string(ownerCSV)} {
+			if strings.Contains(projection, want.Reason) != expected || strings.Contains(projection, "PRIVATE_") {
+				t.Fatal("unsafe or missing owner export", projection)
+			}
+		}
+		if _, err := f.repo.GetUser(ctx, logUserTwo, f.charityID, AttemptFilter{}); !errors.Is(err, ErrNotFound) {
+			t.Fatal("cross-account diagnostic", err)
+		}
+	}
+}
+
+func TestHandlerErrorDiagnosticDoesNotBecomeUserRejectionDetail(t *testing.T) {
+	f := newLogFixture(t)
+	f.mustExec("UPDATE request_logs SET error_diag=? WHERE logical_request_id=?", requestattempt.EncodeDetail(requestattempt.NewDetail("stream", "expected a boolean")), f.charityID)
+	detail, err := f.repo.GetUser(context.Background(), logUserOne, f.charityID, AttemptFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(detail)
+	if strings.Contains(string(body), "rejection_detail") {
+		t.Fatal("handler error reclassified", string(body))
 	}
 }

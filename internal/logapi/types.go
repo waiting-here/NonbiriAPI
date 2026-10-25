@@ -11,7 +11,6 @@ import (
 	"net/http"
 
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
-	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -152,7 +151,6 @@ func (UserSelfLogDetail) userLogDetail()    {}
 func (UserCharityLogDetail) userLogDetail() {}
 
 type AdminLogRow struct {
-	RejectionDetail *requestattempt.RejectionDetail `json:"rejection_detail,omitempty"`
 	OriginIdentity
 	CharityModel   *string `json:"charity_model,omitempty"`
 	CharityModelID *string `json:"charity_model_id,omitempty"`
@@ -198,7 +196,6 @@ type AdminLogDetail struct {
 // Management projections expose the same facts to administrators and stewards.
 // Separate DTOs retain explicit role boundaries and independently bound cursors.
 type StewardLogRow struct {
-	RejectionDetail *requestattempt.RejectionDetail `json:"rejection_detail,omitempty"`
 	OriginIdentity
 	CharityModel   *string `json:"charity_model,omitempty"`
 	CharityModelID *string `json:"charity_model_id,omitempty"`

@@ -442,18 +442,20 @@ type rowScanner interface{ Scan(...any) error }
 
 func scanCommon(scanner rowScanner, extra ...any) (commonLogRecord, error) {
 	var record commonLogRecord
+	var detail sql.NullString
 	targets := []any{
 		&record.rowID, &record.id, &record.routeKind, &record.callerResultClass,
 		&record.callerStatus, &record.callerErrorCode, &record.startedAt, &record.completedAt,
 		&record.uncached, &record.cacheWrite, &record.cacheRead, &record.output,
 		&record.usageUnknown, &record.usageTotalMismatch, &record.attemptCount, &record.chargeMagnitude,
 		&record.rejectionStage, &record.rejectionReason, &record.requestMethod, &record.requestPath,
-		&record.requestedStreaming, &record.automaticActions, &record.usageDetails,
+		&record.requestedStreaming, &record.automaticActions, &record.usageDetails, &detail,
 	}
 	targets = append(targets, extra...)
 	if err := scanner.Scan(targets...); err != nil {
 		return commonLogRecord{}, err
 	}
+	record.rejectionDetail = requestattempt.DecodeDetail(detail.String)
 	if err := validateCommonRecord(record); err != nil {
 		return commonLogRecord{}, err
 	}

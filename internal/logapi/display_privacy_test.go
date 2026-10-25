@@ -16,7 +16,7 @@ func TestManagementLogDisplayAndExportsPreserveSavedText(t *testing.T) {
 	model := "backend-192.0.2.7"
 	nick := "peer 198.51.100.2"
 	detail := "person@example.invalid https://example.invalid/path?token=test Authorization: Bearer saved-value <script> & " + strings.Repeat("long ", 20000)
-	admin := []AdminLogRow{{ID: "1", CharityModel: &model, CallerIdentity: &CallerIdentity{DiscordNickname: &nick}, RejectionDetail: &requestattempt.RejectionDetail{Field: "input", Reason: detail}}}
+	admin := []AdminLogRow{{ID: "1", CharityModel: &model, CallerIdentity: &CallerIdentity{DiscordNickname: &nick}, RejectionFields: RejectionFields{RejectionDetail: &requestattempt.RejectionDetail{Field: "input", Reason: detail}}}}
 	output := httptest.NewRecorder()
 	writeManagementLogJSON(output, 200, admin)
 	bodies := [][]byte{output.Body.Bytes()}

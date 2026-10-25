@@ -139,7 +139,7 @@ func compileChatForType(kind contract.Type, request *openai.ChatRequest, attribu
 		case "model", "messages", "tools", "tool_choice", "safety_identifier":
 		case "stream":
 			if !bytes.Equal(raw, []byte("true")) && !bytes.Equal(raw, []byte("false")) {
-				return nil, errRequest
+				return nil, reject("native compile", "stream", "expected a boolean")
 			}
 		case "stream_options":
 			if isNull(raw) {
@@ -147,10 +147,10 @@ func compileChatForType(kind contract.Type, request *openai.ChatRequest, attribu
 			}
 			options, err := parseObject(raw)
 			if err != nil || !only(options, "include_usage") {
-				return nil, errRequest
+				return nil, reject("native compile", "stream_options", "expected only include_usage with a boolean value")
 			}
 			if value, ok := options["include_usage"]; ok && !bytes.Equal(value, []byte("true")) && !bytes.Equal(value, []byte("false")) {
-				return nil, errRequest
+				return nil, reject("native compile", "stream_options", "expected only include_usage with a boolean value")
 			}
 		case "max_tokens", "max_completion_tokens":
 		case "cache_control":

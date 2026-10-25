@@ -82,6 +82,7 @@ export const AUTOMATIC_ACTIONS = [
 export type AutomaticAction = (typeof AUTOMATIC_ACTIONS)[number];
 
 interface LogRowCommon {
+  rejection_detail?: RejectionDetail | null;
   requested_streaming?: boolean | null;
   automatic_actions?: AutomaticAction[] | null;
   phase: 'handler' | 'pre_handler';
@@ -135,12 +136,12 @@ export interface UserCharityLogRow extends LogRowCommon {
 export type UserLogRow = UserSelfLogRow | UserCharityLogRow;
 
 export interface RejectionDetail {
+  suggestion?: string | null;
   field: string;
   reason: string;
 }
 
 export interface AdminLogRow extends LogRowCommon, LogOrigin {
-  rejection_detail?: RejectionDetail | null;
   charity_model?: string | null;
   charity_model_id?: string | null;
   role: 'admin';
@@ -151,7 +152,6 @@ export interface AdminLogRow extends LogRowCommon, LogOrigin {
 }
 
 export interface StewardLogRow extends LogRowCommon, LogOrigin {
-  rejection_detail?: RejectionDetail | null;
   charity_model?: string | null;
   charity_model_id?: string | null;
   role: 'steward';
@@ -261,6 +261,7 @@ const COMMON_ROW_FIELDS = [
   ...REQUIRED_ROW_FIELDS,
   'requested_streaming',
   'automatic_actions',
+  'rejection_detail',
 ] as const;
 const ATTEMPT_FIELDS = [
   'attempt_seq',
@@ -512,6 +513,7 @@ function commonRow(root: WireRecord, redactedDisplay = false): LogRowCommon {
   }
   return {
     ...rejection(root),
+    rejection_detail: rejectionDetail(root),
     requested_streaming:
       root.requested_streaming == null
         ? null
@@ -569,7 +571,6 @@ export function normalizeAdminLogRow(value: unknown): AdminLogRow {
       'attempt_count',
       'charity_model',
       'charity_model_id',
-      'rejection_detail',
       'usage_total_mismatch',
     ],
     'administrator log row',
@@ -583,7 +584,6 @@ export function normalizeAdminLogRow(value: unknown): AdminLogRow {
   return {
     ...common,
     role: 'admin',
-    rejection_detail: managementRejectionDetail(root),
     ...normalizeLogOrigin(root),
     usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
     user_id: nullableDecimalID(root.user_id, 'log user id'),
@@ -594,12 +594,18 @@ export function normalizeAdminLogRow(value: unknown): AdminLogRow {
   };
 }
 
-function managementRejectionDetail(root: WireRecord): RejectionDetail | null {
+function rejectionDetail(root: WireRecord): RejectionDetail | null {
   if (root.rejection_detail === undefined || root.rejection_detail === null) return null;
-  const detail = record(root.rejection_detail, ['field', 'reason'], 'rejection detail');
+  const detail = record(
+    root.rejection_detail,
+    ['field', 'reason', 'suggestion'],
+    'rejection detail',
+    ['field', 'reason'],
+  );
   return {
     field: string(detail.field, 'rejection field', { min: 1 }),
     reason: string(detail.reason, 'rejection description', { min: 1 }),
+    suggestion: nullableString(detail.suggestion ?? null, 'rejection suggestion', { min: 1 }),
   };
 }
 
@@ -642,7 +648,6 @@ export function normalizeStewardLogRow(value: unknown): StewardLogRow {
       'attempt_count',
       'charity_model',
       'charity_model_id',
-      'rejection_detail',
       'usage_total_mismatch',
     ],
     'steward log row',
@@ -656,7 +661,6 @@ export function normalizeStewardLogRow(value: unknown): StewardLogRow {
   return {
     ...common,
     role: 'steward',
-    rejection_detail: managementRejectionDetail(root),
     ...normalizeLogOrigin(root),
     usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
     user_id: nullableDecimalID(root.user_id, 'log user id'),

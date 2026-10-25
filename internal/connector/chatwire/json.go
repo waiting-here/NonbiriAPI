@@ -146,5 +146,10 @@ func Completion(id, model string, created int64, message map[string]any, finish 
 	return json.Marshal(object)
 }
 func Rejection(field string) error {
-	return &contract.RequestRejection{Stage: "protocol preflight", Field: field, Reason: "field cannot be represented by this connector"}
+	return RejectionReason(field, "field cannot be represented by this connector")
+}
+
+// RejectionReason accepts only locally authored descriptions, never request values.
+func RejectionReason(field, reason string) error {
+	return &contract.RequestRejection{Stage: "protocol preflight", Field: field, Reason: reason}
 }
