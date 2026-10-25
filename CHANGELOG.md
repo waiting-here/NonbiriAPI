@@ -64,6 +64,17 @@ Each version entry describes its source and compatibility boundary; a release ta
   observations once per user while preserving live authorization and snapshots.
 - Load donation review material when expanded and reuse conversation history,
   operation-plan indexes and parsed tool results while composing messages.
+- Return all authorized matching records from assistant site-data tools using
+  optional filters, without model-facing pagination. Include safe donation
+  details and charity bindings in list results, and remove the automatic-review
+  catalog cutoff. Preserve saved custom tool descriptions and management-page
+  pagination. Add the missing assistant navigation icon.
+- Accumulate streamed response text and function arguments without repeatedly
+  copying the full prefix. Fold ordered donation failure results with indexed
+  range reads, retaining immediate threshold updates in the completion transaction.
+- Move charge previews, client-rule prechecks, session/MFA validation and ranking
+  snapshots off the writer connection. Keep final authority, catch-up writes and
+  accounting checks, and release MFA snapshots before sending the response.
 - Limit charity binding, candidate and preset catalog checks to selected
   donation keys, avoiding repeated aggregation of unrelated catalogs inside
   write transactions while preserving scope, replay and atomicity.

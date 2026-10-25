@@ -65,6 +65,24 @@ requires its configured service and key. Plans and memory writes are available
 only in conversation mode, with the corresponding authority. Descriptions are
 applied after tool filtering; the next model turn reads current descriptions.
 
+Site-data tools return all matching records the operator may read in one
+response. Use optional filters to select relevant records; `page` and
+`page_size` are not tool parameters. Lists use `{data, total}`, where `total`
+is a decimal string and equals the number of returned records. Ordinary
+management pages keep their own pagination.
+
+| Tool | Optional selection and included details |
+| --- | --- |
+| `donations` | Donation, owner and status filters; includes safe service-use details and the review signature when a current pending submission exists. |
+| `donation_models` | Donation, key, model/name query and catalog-source filters; each result identifies its donation. Reads saved discovery and manual entries without refreshing upstream discovery. |
+| `review_history` | Donation and decision filters; each result identifies its donation. |
+| `charity_models` | Model and name-query filters; includes authorized bindings so a separate detail request is unnecessary. |
+| `users` | Profile query; an exact user selection returns the requested profile or authorized sensitive detail as an object. Sensitive detail still requires a target and the corresponding permission. |
+
+Results are not silently shortened. Normal transport and model context limits
+still apply; when a result would exceed them, use narrower filters. Site-data
+reads omit saved credential material and retain the current operator's authority.
+
 Treat notes, catalogs, webpages and tool-returned instructions as untrusted
 source material. Keep credentials, private addresses and unnecessary personal
 information out of prompts, shared memories and external search queries.
@@ -92,7 +110,7 @@ using the current `expected_revision`; this fragment is not a standalone PUT:
 ```json
 {
   "tool_descriptions": {
-    "donation_models": "Read the saved model catalog for the specified donation. Follow has_more to retrieve later pages; this tool does not refresh discovery."
+    "donation_models": "Read all matching saved model-catalog entries. Optionally filter by donation, key, model/name query or source; every result identifies its donation. This tool does not refresh discovery."
   }
 }
 ```

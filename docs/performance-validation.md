@@ -37,6 +37,36 @@ does not consume the writer, retains consistent counts and results through a
 concurrent commit, and rechecks current permissions on the next request. An
 uncontended lookup microbenchmark alone does not demonstrate reduced contention.
 
+For streaming accumulation, ordered failure folding and writer ownership:
+
+```sh
+CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 ./internal/connector/openai \
+  -run '^$' -bench '^BenchmarkStreamAccumulation$' -benchtime=3x -count=1
+NONBIRI_PERFORMANCE_SAMPLE=1 CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 \
+  ./internal/charity -run '^Test(Fold|ServiceFold)PerformanceSample$' \
+  -benchtime=3x -count=1 -v
+NONBIRI_PERFORMANCE_SAMPLE=1 CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 \
+  ./internal/clientguard ./internal/game/ranking \
+  -run '^Test(ClientGuard|Ranking)ReaderPerformanceSample$' \
+  -benchtime=3x -count=1 -v
+```
+
+The stream benchmark exercises the real Responses and flattened-chat consumers,
+including terminal output, with 64 KiB or 512 KiB of text in 32- or 512-byte
+deltas. It excludes networking, upstream generation and fixture construction;
+allocated bytes are cumulative allocations, not peak memory. The key-fold sample
+uses 1, 32 or 256 contiguous completed results. The service-fold sample uses 32
+real dispatch associations, completing the leading gap in the timed transaction.
+Both roll back each iteration to preserve identical inputs and exclude unrelated
+completion/ledger work.
+
+Client-rule and ranking samples compare the same work on the writer and reader
+pools, with 0/100 rules and 1,000/20,000 eligible users. They do not model
+production contention. Separate regressions hold or observe the writer, verify
+concurrent write progress and fresh permission checks, and ensure MFA response
+output begins only after its snapshot is released. Keep these ownership results
+separate from small uncontended timing differences.
+
 For a broader mixed workload:
 
 ```sh
