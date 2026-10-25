@@ -16,6 +16,7 @@ import {
   DonationKeyPanel,
 } from './CharityPanels';
 import * as economyQueries from './queries';
+import * as coreQueries from '../core/queries';
 import type { CharityCapability, Donation, DonationKey, EndpointKeyChoice } from './types';
 
 installNativeDialog();
@@ -51,6 +52,11 @@ vi.mock('./queries', async (loadOriginal) => ({
   useEditDonation: vi.fn(),
   useWithdrawDonation: vi.fn(),
   useTerminateDonation: vi.fn(),
+}));
+
+vi.mock('../core/queries', async (loadOriginal) => ({
+  ...(await loadOriginal<typeof import('../core/queries')>()),
+  useEndpointCreateOptions: vi.fn(),
 }));
 
 vi.mock('./catalog', async (loadOriginal) => ({
@@ -117,6 +123,24 @@ vi.mock('./DonationResourcePicker', async () => {
   }
   return { DonationResourcePicker: TestDonationResourcePicker };
 });
+
+const protocolServices = [
+  'chat_completions',
+  'responses',
+  'responses_compact',
+  'responses_input_tokens',
+  'embeddings',
+  'images_generations',
+  'images_edits',
+  'images_variations',
+  'audio_speech',
+  'audio_transcriptions',
+  'audio_translations',
+  'completions',
+  'moderations',
+  'decisions',
+  'rerank',
+] as const;
 
 const choices: EndpointKeyChoice[] = [
   {
@@ -415,6 +439,24 @@ describe('donation composer recovery', () => {
     sessionStorage.clear();
     pickerHarness.choices = [...choices];
     pickerHarness.readBlocked = false;
+    vi.mocked(coreQueries.useEndpointCreateOptions).mockReturnValue({
+      data: {
+        base_connector_types: ['openai-compatible'],
+        mainstream_channels: [],
+        native_service_options: [
+          {
+            connector_type: 'openai-compatible',
+            configuration_type: 'openai-compatible',
+            native_services: [...protocolServices],
+            default_native_services: ['chat_completions', 'embeddings', 'images_generations'],
+            rerank_formats: ['generic', 'cohere', 'jina', 'voyage', 'siliconflow'],
+          },
+        ],
+      },
+      isPending: false,
+      isFetching: false,
+      error: null,
+    } as never);
     pageMocks.useUserSession.mockReturnValue({
       data: { user: { id: '7', username: 'owner', effective_level: 1, donation_credit: '0' } },
       error: null,
@@ -645,10 +687,12 @@ describe('donation composer recovery', () => {
     await declinePublicThanks(rendered.user);
     await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
     expect(mutation.mutateAsync).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent(/description is required/i);
+    expect(screen.getByRole('textbox', { name: /donation description/i })).toBeRequired();
+    expect(screen.getByRole('textbox', { name: /donation description/i })).toBeInvalid();
     await rendered.user.type(screen.getByRole('textbox', { name: /donation description/i }), '   ');
     await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
     expect(mutation.mutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/description is required/i);
     expect(checkboxes[0]).toBeChecked();
     expect(checkboxes[1]).toBeChecked();
     await rendered.user.clear(screen.getByRole('textbox', { name: /donation description/i }));
@@ -663,7 +707,7 @@ describe('donation composer recovery', () => {
         keys: [
           {
             endpointKeyId: '61',
-            nativeServices: ['chat_completions', 'responses'],
+            nativeServices: [...protocolServices],
             credentialId: '81',
             credentialVersion: '1',
             grantRevision: '1',
@@ -702,7 +746,7 @@ describe('donation composer recovery', () => {
     expect(rendered.container.querySelector('input[type="password"]')).toBeNull();
   });
 
-  it('keeps all authorized services and the exact catalog snapshot across mainstream key reselection', async () => {
+  it('keeps all protocol services and the exact catalog snapshot across mainstream key reselection', async () => {
     const mutation = successfulMutation();
     vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
     const source = {
@@ -760,7 +804,7 @@ describe('donation composer recovery', () => {
         keys: [
           {
             endpointKeyId: '62',
-            nativeServices: ['chat_completions', 'responses'],
+            nativeServices: [...protocolServices],
             credentialId: '81',
             credentialVersion: '1',
             grantRevision: '1',
@@ -772,7 +816,7 @@ describe('donation composer recovery', () => {
     );
   });
 
-  it('defaults mainstream donations without a catalog to available services only and custom donations to their authorized services', async () => {
+  it('uses all protocol services for mainstream and custom donations without a catalog', async () => {
     const mutation = successfulMutation();
     vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
     const rendered = await renderWithProviders(
@@ -806,7 +850,7 @@ describe('donation composer recovery', () => {
           keys: [
             expect.objectContaining({
               endpointKeyId: '61',
-              nativeServices: choices[0].key.nativeServices,
+              nativeServices: [...protocolServices],
               credentialId: '81',
               credentialVersion: '1',
               grantRevision: '1',
@@ -907,7 +951,7 @@ describe('donation composer recovery', () => {
         keys: [
           {
             endpointKeyId: '61',
-            nativeServices: ['chat_completions', 'responses'],
+            nativeServices: [...protocolServices],
             credentialId: '81',
             credentialVersion: '1',
             grantRevision: '1',

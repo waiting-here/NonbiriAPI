@@ -120,7 +120,7 @@ describe('personal model role editor', () => {
     await view.user.type(within(form).getByRole('textbox', { name: 'Prefix' }), 'personal');
     await view.user.type(screen.getByRole('textbox', { name: 'Model name' }), 'primary');
     expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Responses', exact: true })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
     expect(screen.queryByRole('radiogroup', { name: 'Streaming' })).not.toBeInTheDocument();
     expect(screen.queryByText('Advanced behavior')).not.toBeInTheDocument();
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
@@ -282,7 +282,7 @@ describe('personal model API selection', () => {
     const f = fixture();
     const view = await renderEditor();
     expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Responses', exact: true })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Responses' })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Embeddings' })).toBeChecked();
     await view.user.click(screen.getByRole('checkbox', { name: 'Image generation' }));
     await view.user.click(screen.getByRole('button', { name: 'Cancel' }));
