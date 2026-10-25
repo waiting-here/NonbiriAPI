@@ -221,7 +221,7 @@ for (const locale of ['en', 'zh'] as const) {
     const bound = new Set<string>();
     const manualEntries: (typeof entries)[number][] = [];
     const c = (locale === 'zh' ? zhCommon : enCommon).common.connections;
-    const chatLabel = (locale === 'zh' ? zhCommon : enCommon).common.modelTypes.chat_responses;
+    const chatLabel = (locale === 'zh' ? zhCommon : enCommon).common.modelTypes.chat_completions;
     const nativeResponse = (locale === 'zh' ? zhCommon : enCommon).common.modelTypes.responses;
     const source = () => ({
       id: '51',
@@ -620,8 +620,20 @@ for (const locale of ['en', 'zh'] as const) {
           .filter({ hasText: new RegExp('^' + name + '$') }),
       });
       await row.getByRole('checkbox', { name: new RegExp(name) }).check();
-      await row.getByRole('checkbox', { name: nativeResponse, exact: true }).check();
-      await row.getByRole('checkbox', { name: chatLabel, exact: true }).check();
+      await row
+        .getByRole('group', {
+          name: (locale === 'zh' ? zhCommon : enCommon).common.nativeServices.title,
+          exact: true,
+        })
+        .getByRole('checkbox', { name: nativeResponse, exact: true })
+        .check();
+      await row
+        .getByRole('group', {
+          name: (locale === 'zh' ? zhCommon : enCommon).common.modelTypes.title,
+          exact: true,
+        })
+        .getByRole('checkbox', { name: chatLabel, exact: true })
+        .check();
     }
     await shot('step-3');
     await page

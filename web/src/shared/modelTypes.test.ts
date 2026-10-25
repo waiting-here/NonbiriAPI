@@ -27,19 +27,19 @@ describe('model API capabilities', () => {
   });
 });
 
-it('groups legacy Chat or Responses values and writes the two compatible operations together', () => {
+it('keeps Chat Completions and Responses independently selectable', () => {
   expect(groupedModelTypes(['chat_completions', 'responses', 'images_edits'])).toEqual([
     'chat_completions',
+    'responses',
     'images_edits',
   ]);
-  expect(groupedModelTypes(['responses'])).toEqual(['chat_completions']);
-  expect(sameModelTypes(['responses'], ['chat_completions', 'responses'])).toBe(true);
+  expect(groupedModelTypes(['responses'])).toEqual(['responses']);
+  expect(sameModelTypes(['responses'], ['chat_completions', 'responses'])).toBe(false);
   expect(setModelTypeGroup(['responses'], 'images_edits', true)).toEqual([
-    'chat_completions',
     'responses',
     'images_edits',
   ]);
   expect(
     setModelTypeGroup(['chat_completions', 'responses', 'images_edits'], 'chat_completions', false),
-  ).toEqual(['images_edits']);
+  ).toEqual(['responses', 'images_edits']);
 });

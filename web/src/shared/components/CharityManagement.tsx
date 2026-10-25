@@ -6,11 +6,11 @@ import {
   type StewardPermissions,
 } from '@shared/operations/stewardPermissions';
 import { StewardPermissionNotice } from './StewardPermissionNotice';
-import { DonationStatusBadge, UseSummary } from './UseSummary';
+import { DonationStatusBadge } from './UseSummary';
+import { DonationKeyUseControls } from './DonationKeyUseControls';
 import { DonationUseReviewResults, DonationUsesPanel } from './DonationUsesPanel';
 import type { UseReviewResult } from '@shared/operations/donationUses';
 import type { ReviewedUseLabel } from '@shared/operations/donationUsesReview';
-import { NATIVE_SERVICES, type NativeService } from '@shared/nativeServices';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { NullableValue } from './charity/NullableValue';
@@ -95,7 +95,6 @@ import { CharitySourceBrowser } from './CharitySourceBrowser';
 import { DonationThanks } from './DonationControlFacts';
 import { DonationDiscoveryControl } from './DonationDiscoveryControl';
 import { DonationHandlingControl, DonationHandlingStatus } from './DonationHandling';
-import { DonationHandlingPanel } from './charity/DonationHandlingPanel';
 import { DonationBindingWorkflow } from './charity/DonationBindingWorkflow';
 import { DonationPresetApply } from './charity/DonationPresetApply';
 import './charity/workflow.css';
@@ -415,6 +414,7 @@ function KeyQuotaFields({
 
 function DonationKeyEditor(
   props: Parameters<typeof DonationKeySettings>[0] & {
+    accountId: string;
     refreshLimits: () => Promise<ManagedKeyLimitsAuthority>;
   },
 ) {
@@ -428,6 +428,12 @@ function DonationKeyEditor(
         })}
       </h4>
       <p>{safeSourceLabel(props.item.safe_source, t)}</p>
+      <DonationKeyUseControls
+        role={props.role}
+        accountId={props.accountId}
+        donationId={props.donation.id}
+        donationKeyId={props.item.id}
+      />
       {props.item.rate_limited_until !== null || props.item.smart_backoff ? (
         <KeyRateLimitTime
           until={props.item.rate_limited_until}
@@ -884,17 +890,18 @@ function DonationReview({
     );
   return (
     <fieldset className="ops-stack ops-unframed" disabled={busy || review.isPending}>
-      {item.use_summary ? (
-        <DonationUsesPanel
-          role={role}
-          accountId={accountId}
-          donationId={item.id}
-          onReviewed={onUsesReviewed}
-          onPendingChange={setUseReviewPending}
-        />
-      ) : null}
       <Card>
         <h3>{t('common.donationReview.title')}</h3>
+        {item.use_summary ? (
+          <DonationUsesPanel
+            role={role}
+            accountId={accountId}
+            donationId={item.id}
+            donationRevision={item.revision}
+            onReviewed={onUsesReviewed}
+            onPendingChange={setUseReviewPending}
+          />
+        ) : null}
         <DonationHandlingControl
           donationID={item.id}
           role={role}
@@ -1289,11 +1296,6 @@ function DonationKeyPages({
         accountId={accountId}
         item={bindingItem}
         initialTarget={selectedID(params, 'binding_target')}
-        reviewedService={
-          NATIVE_SERVICES.includes(oneParam(params, 'binding_service') as NativeService)
-            ? (oneParam(params, 'binding_service') as NativeService)
-            : undefined
-        }
         onCapabilityLoss={onCapabilityLoss}
         onBack={() =>
           setParams((current) => {
@@ -1406,6 +1408,7 @@ function DonationKeyPages({
                 ) : null}
                 <DonationKeyEditor
                   key={key.id}
+                  accountId={accountId}
                   item={key}
                   donation={item}
                   role={role}
@@ -1702,8 +1705,8 @@ function DonationsPanel({
               next.set('donation_id', useReceipt.donationId);
               next.set('donation_key', label.donation_key_id);
               next.set('binding_key', label.donation_key_id);
-              next.set('binding_use', label.use_id);
-              next.set('binding_service', label.native_service);
+              next.delete('binding_use');
+              next.delete('binding_service');
               next.delete('binding_target');
               next.delete('donation_keys_page');
               return next;
@@ -2044,7 +2047,6 @@ function DonationsPanel({
                     render: (item) => (
                       <div>
                         <DonationStatusBadge status={item.status} summary={item.use_summary} />
-                        <UseSummary value={item.use_summary} />
                       </div>
                     ),
                   },
@@ -2205,10 +2207,6 @@ const workflowSearchParameters = [
   'sources_page_size',
   'source_keys_page',
   'source_keys_page_size',
-  'handling_view',
-  'handling_donation',
-  'handling_page',
-  'handling_page_size',
 ] as const;
 
 export function CharityManagement(props: {
@@ -2273,7 +2271,6 @@ function CharityManagementAccount({
   const section =
     rawSection === 'models' ||
     rawSection === 'sources' ||
-    (frame === 'steward' && rawSection === 'handling') ||
     (frame === 'admin' && rawSection === 'templates')
       ? rawSection
       : 'donations';
@@ -2297,14 +2294,12 @@ function CharityManagementAccount({
           has('donations.handle') ||
           has('donations.discover') ||
           has('donations.recurring'))
-      : section === 'handling'
-        ? donationsAllowed && has('donations.handle')
-        : section === 'models'
-          ? has('charity.read') || has('charity.create')
-          : section === 'sources'
-            ? donationsAllowed && has('donations.manage_keys')
-            : has('charity.price_templates.read');
-  const setSection = (nextSection: 'donations' | 'models' | 'sources' | 'handling' | 'templates') =>
+      : section === 'models'
+        ? has('charity.read') || has('charity.create')
+        : section === 'sources'
+          ? donationsAllowed && has('donations.manage_keys')
+          : has('charity.price_templates.read');
+  const setSection = (nextSection: 'donations' | 'models' | 'sources' | 'templates') =>
     setParams((current) => {
       const next = new URLSearchParams(current);
       next.set('charity_section', nextSection);
@@ -2361,12 +2356,6 @@ function CharityManagementAccount({
           tabs={(
             [
               {
-                value: 'handling',
-                label: t('common.workflow.approvedDonations'),
-                id: 'charity-tab-handling',
-                panelId: 'charity-panel',
-              },
-              {
                 value: 'donations',
                 label: t(
                   frame === 'admin'
@@ -2397,17 +2386,11 @@ function CharityManagementAccount({
                 panelId: 'charity-panel',
               },
             ] as const
-          ).filter((tab) =>
-            tab.value === 'handling'
-              ? frame === 'steward'
-              : frame === 'admin' || tab.value !== 'templates',
-          )}
+          ).filter((tab) => frame === 'admin' || tab.value !== 'templates')}
         />
         <div id="charity-panel" role="tabpanel" aria-labelledby={`charity-tab-${section}`}>
           {!sectionAllowed ? <StewardPermissionNotice /> : null}
-          {sectionAllowed && section === 'handling' ? (
-            <DonationHandlingPanel accountId={accountId} onCapabilityLoss={clearCapability} />
-          ) : sectionAllowed && section === 'donations' ? (
+          {sectionAllowed && section === 'donations' ? (
             <DonationsPanel role={frame} accountId={accountId} onCapabilityLoss={clearCapability} />
           ) : null}
           <div hidden={section !== 'models'}>
@@ -2537,10 +2520,8 @@ function ScopedKeyBrowser({
               type="button"
               onClick={() =>
                 setParams((next) => {
-                  next.set('charity_section', 'handling');
-                  next.set('handling_donation', detail.data.donation_id);
-                  next.set('handling_view', 'all');
-                  next.delete('handling_page');
+                  next.set('charity_section', 'donations');
+                  next.set('donation_id', detail.data.donation_id);
                   return next;
                 })
               }
@@ -2563,6 +2544,7 @@ function ScopedKeyBrowser({
               <dd>{detail.data.approval_note ?? '—'}</dd>
             </dl>
             <DonationKeyEditor
+              accountId={accountId}
               item={detail.data}
               donation={{
                 id: detail.data.donation_id,
@@ -2688,6 +2670,7 @@ function PickerKeyManager({
         <Card>
           <DonationKeyEditor
             key={detail.data.key.id}
+            accountId={accountId}
             item={detail.data.key}
             donation={detail.data.donation}
             role={role}

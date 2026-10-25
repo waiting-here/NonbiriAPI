@@ -1,108 +1,91 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   collectPendingDonationUses,
-  prepareDonationUseReview,
-  runDonationUseReview,
   reviewedUseLabels,
-  type DonationUseReviewPlan,
   type ReviewedUseLabel,
 } from '@shared/operations/donationUsesReview';
 import {
   getDonationUses,
-  reviewDonationUses,
+  type DonationUse,
   type UseReviewResult,
 } from '@shared/operations/donationUses';
+import { reviewPendingDonation, type PendingDonationReviewInput } from '@shared/operations/charity';
 import {
   useRetainedOperation,
   type OperationContext,
 } from '@shared/operations/useRetainedOperation';
 import { responseOutcomeUnknown } from '@shared/operations/api';
-import { NATIVE_SERVICE_LABEL_KEYS } from '@shared/nativeServices';
-import { formatCount } from '@shared/utils/formatNumber';
 import { ErrorState, LoadingState } from './States';
-import { Field, Fold, Note, OutcomeNote } from './ui';
+import { Field, Note, OutcomeNote } from './ui';
 
+type ReviewPlan = { rows: DonationUse[]; body: PendingDonationReviewInput };
 export function DonationUsesReviewAll({
   role,
   donationId,
-  donationKeyId,
+  donationRevision,
   onLockedChange,
   onReviewed,
   refresh,
 }: {
   role: 'admin' | 'steward';
   donationId: string;
-  donationKeyId?: string;
+  donationRevision: string;
   onLockedChange: (locked: boolean) => void;
   onReviewed: (results: UseReviewResult[], labels: ReviewedUseLabel[]) => void;
   refresh: () => Promise<void>;
 }) {
   const { t } = useTranslation();
-  const [plan, setPlan] = useState<DonationUseReviewPlan | null>(null);
   const [note, setNote] = useState('');
-  const [results, setResults] = useState<UseReviewResult[]>([]);
-  const [checking, setChecking] = useState(false);
-  const [exitRefreshError, setExitRefreshError] = useState<unknown>(null);
-  const receipts = useRef(new Map<string, UseReviewResult[]>());
+  const [empty, setEmpty] = useState(false);
   const root = role === 'admin' ? ['admin', 'operations'] : ['user'];
   const prepare = useRetainedOperation<
-    { decision: 'approve' | 'reject'; note: string },
-    DonationUseReviewPlan
+    { decision: 'approve' | 'reject'; reason: string },
+    ReviewPlan
   >(
     async (value, _key, context) => {
       const rows = await collectPendingDonationUses(
-        (page) =>
-          getDonationUses(role, donationId, page, 100, 'pending', context.signal, donationKeyId),
+        (page) => getDonationUses(role, donationId, page, 100, 'pending', context.signal),
         context.signal,
       );
-      const snapshot = prepareDonationUseReview(rows, value.decision, value.note);
-      context.commit(() => setPlan(snapshot));
-      return snapshot;
+      return {
+        rows,
+        body: {
+          expected_revision: donationRevision,
+          ...value,
+          uses: rows.map((row) => ({
+            use_id: row.id,
+            expected_revision: row.revision,
+            expected_review_revision: row.pending!.expected_review_revision,
+          })),
+        },
+      };
     },
     () => undefined,
     root,
   );
-  const run = (snapshot: DonationUseReviewPlan, context: OperationContext, checkOnly = false) => {
-    let processed = false;
-    return runDonationUseReview(
-      snapshot,
-      receipts.current,
-      (items, key) => reviewDonationUses(role, donationId, items, key, context.signal),
-      {
-        assertCurrent: context.assertCurrent,
-        stopped: () => checkOnly && processed,
-        onProgress: (value) =>
-          context.commit(() => {
-            processed = true;
-            setResults(value);
-            onReviewed(value, reviewedUseLabels(snapshot.rows, snapshot.decision));
-          }),
-      },
+  const send = async (plan: ReviewPlan, key: string, context: OperationContext) => {
+    await reviewPendingDonation(role, donationId, plan.body, key, context.signal);
+    context.commit(() =>
+      onReviewed(
+        plan.rows.map((row) => ({ use_id: row.id, ok: true })),
+        reviewedUseLabels(plan.rows, plan.body.decision),
+      ),
     );
   };
-  const review = useRetainedOperation<DonationUseReviewPlan, UseReviewResult[]>(
-    async (snapshot, _key, context) => run(snapshot, context),
-    async (snapshot, error, context) => {
-      if (error && responseOutcomeUnknown(error)) await run(snapshot, context, true);
-      const value = snapshot.batches.flatMap((batch) => receipts.current.get(batch.key) ?? []);
-      context.commit(() => {
-        setResults(value);
-        onReviewed(value, reviewedUseLabels(snapshot.rows, snapshot.decision));
-      });
+  const review = useRetainedOperation<ReviewPlan, void>(
+    send,
+    async (plan, error, context) => {
+      if (error && responseOutcomeUnknown(error) && context.operationKey)
+        await send(plan, context.operationKey, context);
       await refresh();
       if (error && responseOutcomeUnknown(error)) return { operationConfirmed: true };
     },
     root,
   );
-  const incomplete = Boolean(
-    plan && results.length < plan.batches.reduce((total, batch) => total + batch.items.length, 0),
-  );
   const locked =
     prepare.isPending ||
     review.isPending ||
-    checking ||
-    incomplete ||
     review.outcome === 'unknown' ||
     Boolean(review.refreshError);
   useEffect(() => {
@@ -110,17 +93,18 @@ export function DonationUsesReviewAll({
     return () => onLockedChange(false);
   }, [locked, onLockedChange]);
   const begin = async (decision: 'approve' | 'reject') => {
-    setExitRefreshError(null);
-    setPlan(null);
-    setResults([]);
-    receipts.current.clear();
     prepare.reset();
     review.reset();
+    setEmpty(false);
     try {
-      const snapshot = await prepare.mutateAsync({ decision, note });
-      if (snapshot.batches.length) await review.mutateAsync(snapshot);
+      const plan = await prepare.mutateAsync({ decision, reason: note.trim() });
+      if (!plan.rows.length) {
+        setEmpty(true);
+        return;
+      }
+      await review.mutateAsync(plan);
     } catch {
-      // The retained operations present errors and keep the original review intent.
+      /* Retained operations keep the original request for recovery. */
     }
   };
   return (
@@ -156,118 +140,35 @@ export function DonationUsesReviewAll({
         >
           {t('common.connections.rejectAllUses')}
         </button>
-        {incomplete && !review.isPending && !checking && review.outcome !== 'unknown' ? (
+      </div>
+      {prepare.isPending || review.isPending ? <LoadingState /> : null}
+      {empty ? <Note>{t('common.connections.noPendingContent')}</Note> : null}
+      {prepare.error ? <ErrorState error={prepare.error} /> : null}
+      {review.error ? <ErrorState error={review.error} /> : null}
+      {review.outcome === 'unknown' ? (
+        <Note tone="warn">
+          <p>{t('common.connections.unknownResult')}</p>
           <button
             type="button"
             className="nb-btn nb-btn--secondary"
-            onClick={() => void review.mutateAsync(plan!).catch(() => undefined)}
+            disabled={review.isPending}
+            onClick={() => void review.check()}
           >
-            {t('common.connections.resumeUseReview')}
+            {t('common.connections.checkResult')}
           </button>
-        ) : null}
-      </div>
-      {prepare.isPending || review.isPending ? <LoadingState /> : null}
-      {prepare.error ? <ErrorState error={prepare.error} /> : null}
-      {exitRefreshError ? (
-        <ErrorState
-          error={exitRefreshError}
-          onRetry={() =>
-            void refresh()
-              .then(() => setExitRefreshError(null))
-              .catch(setExitRefreshError)
-          }
-        />
+        </Note>
       ) : null}
-      {plan ? (
-        <div className="nb-stack">
-          <Note
-            tone={
-              incomplete || plan.blocked.length || results.some((entry) => !entry.ok)
-                ? 'warn'
-                : 'info'
-            }
-          >
-            {plan.rows.length
-              ? t('common.connections.reviewProgress', {
-                  completed: formatCount(String(results.length)).display,
-                  total: formatCount(String(plan.rows.length)).display,
-                  succeeded: formatCount(String(results.filter((entry) => entry.ok).length))
-                    .display,
-                  failed: formatCount(String(results.filter((entry) => !entry.ok).length)).display,
-                })
-              : t('common.connections.noPendingContent')}
-          </Note>
-          {plan.blocked.length ? (
-            <Fold title={t('common.connections.blockedUses')}>
-              <ul className="nb-list">
-                {plan.blocked.map((row) => (
-                  <li key={row.id}>
-                    {t('common.connections.reviewUseLabel', {
-                      key: row.donation_key_id,
-                      service: t(NATIVE_SERVICE_LABEL_KEYS[row.native_service]),
-                    })}
-                    {' · '}
-                    {t(
-                      row.pending?.review.material_available
-                        ? 'common.connections.useReviewUnavailable'
-                        : 'common.connections.reviewMaterialUnavailable',
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </Fold>
-          ) : null}
-          {review.error ? <ErrorState error={review.error} /> : null}
-          {review.outcome === 'unknown' ? (
-            <Note tone="warn">
-              <p>{t('common.connections.unknownResult')}</p>
-              <button
-                type="button"
-                className="nb-btn nb-btn--secondary"
-                disabled={review.isPending || checking}
-                onClick={() => {
-                  setChecking(true);
-                  void review
-                    .check()
-                    .catch(() => undefined)
-                    .finally(() => setChecking(false));
-                }}
-              >
-                {t('common.connections.checkResult')}
-              </button>
-            </Note>
-          ) : null}
-          {review.refreshError ? (
-            review.isSuccess &&
-            !incomplete &&
-            !results.some((entry) => !entry.ok) &&
-            !plan.blocked.length ? (
-              <OutcomeNote
-                busy={review.isPending || checking}
-                outcome={{ kind: 'savedRefreshFailed', recheck: () => void review.refresh() }}
-              />
-            ) : (
-              <ErrorState
-                error={review.refreshError}
-                onRetry={review.isSuccess ? () => void review.refresh() : undefined}
-              />
-            )
-          ) : null}
-          {incomplete && !review.isPending && !checking && review.outcome !== 'unknown' ? (
-            <button
-              type="button"
-              className="nb-btn nb-btn--secondary"
-              onClick={() => {
-                setPlan(null);
-                receipts.current.clear();
-                review.reset();
-                void refresh().catch(setExitRefreshError);
-              }}
-            >
-              {t('common.connections.finishUseReview')}
-            </button>
-          ) : null}
-        </div>
+      {review.refreshError ? (
+        review.isSuccess ? (
+          <OutcomeNote
+            busy={review.isPending}
+            outcome={{ kind: 'savedRefreshFailed', recheck: () => void review.refresh() }}
+          />
+        ) : (
+          <ErrorState error={review.refreshError} />
+        )
+      ) : review.isSuccess ? (
+        <Note tone="ok">{t('common.connections.reviewSaved')}</Note>
       ) : null}
     </div>
   );
@@ -284,30 +185,43 @@ export function DonationUseReviewResults({
   configurationStatus?: (label: ReviewedUseLabel) => 'available' | 'denied' | undefined;
 }) {
   const { t } = useTranslation();
+  const groups = new Map<string, { label?: ReviewedUseLabel; results: UseReviewResult[] }>();
+  for (const result of results) {
+    const label = labels.find((row) => row.use_id === result.use_id);
+    const key = label?.donation_key_id ?? result.use_id;
+    const group = groups.get(key) ?? { label, results: [] };
+    group.results.push(result);
+    groups.set(key, group);
+  }
   return results.length ? (
     <>
       <ul className="nb-list" role="status">
-        {results.map((result) => {
-          const label = labels.find((row) => row.use_id === result.use_id);
+        {[...groups].map(([key, group]) => {
+          const { label } = group;
+          const expected = label
+            ? labels.filter((row) => row.donation_key_id === label.donation_key_id).length
+            : group.results.length;
+          const saved =
+            group.results.length === expected && group.results.every((result) => result.ok);
           return (
-            <li key={result.use_id}>
+            <li key={key}>
               <span>
                 {t(
-                  result.ok
-                    ? 'common.connections.useReviewSaved'
-                    : 'common.connections.useReviewFailed',
-                  { id: result.use_id },
+                  saved ? 'common.connections.reviewSaved' : 'common.connections.reviewIncomplete',
                 )}
               </span>
               {label ? (
                 <span>
                   {' '}
-                  · {t(NATIVE_SERVICE_LABEL_KEYS[label.native_service])} · {label.display_head}…
-                  {label.display_tail}
+                  · {label.display_head}…{label.display_tail}
                 </span>
               ) : null}
-              {result.error ? ' · ' + result.error.message : ''}
-              {result.ok &&
+              {group.results
+                .filter((result) => result.error)
+                .map((result) => (
+                  <p key={result.use_id}>{result.error!.message}</p>
+                ))}
+              {group.results.some((result) => result.ok) &&
               label?.decision === 'approve' &&
               onConfigure &&
               configurationStatus?.(label) === 'available' ? (

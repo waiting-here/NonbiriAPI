@@ -103,6 +103,9 @@ func replaceBindingTargetsTx(ctx context.Context, tx *sql.Tx, userID, modelID, b
 		return err
 	}
 	for ord, target := range targets {
+		if err := requireTargetModelRouteTx(ctx, tx, userID, modelID, target); err != nil {
+			return err
+		}
 		key := strconv.FormatInt(target.EndpointKeyID, 10) + "/" + target.UpstreamModelID
 		old, exists := previous[key]
 		if !exists {

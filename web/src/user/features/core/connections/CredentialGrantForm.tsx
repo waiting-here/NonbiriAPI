@@ -5,9 +5,8 @@ import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Field, Fold, Note, Segmented } from '@shared/components/ui';
 import type { DiscoveryPreset } from '@shared/connections';
-import { NativeServicesField } from '@shared/components/NativeServicesField';
 import { KeyLimitFields, KeyLimitSummary } from '@shared/components/KeyRoutingLimits';
-import type { NativeService } from '@shared/nativeServices';
+import { useEndpointCreateOptions } from '../queries';
 import type { Endpoint, EndpointKey } from '../types';
 import { CredentialCreateForm } from './CredentialForm';
 import { credentialLabel, CredentialPicker } from './CredentialPicker';
@@ -39,9 +38,11 @@ export function CredentialGrantForm({
   const [useSuggestion, setUseSuggestion] = useState(Boolean(discoveryPreset));
   const [saving, setSaving] = useState(false);
   const sourceOperation = useConnectionOperation(accountId, () => undefined);
-  const [services, setServices] = useState<NativeService[]>(
-    endpoint.native_services?.slice() ?? [],
-  );
+  const options = useEndpointCreateOptions(accountId);
+  const services =
+    options.data?.native_service_options?.find(
+      (row) => row.connector_type === endpoint.connector_type,
+    )?.native_services ?? [];
   const [concurrency, setConcurrency] = useState('0');
   const [rpm, setRPM] = useState('0');
   const [note, setNote] = useState('');
@@ -160,12 +161,6 @@ export function CredentialGrantForm({
             void save();
           }}
         >
-          <NativeServicesField
-            options={endpoint.native_services ?? []}
-            value={services}
-            onChange={setServices}
-            disabled={locked}
-          />
           <Field label={t('common.connections.note')} optional={t('common.connections.optional')}>
             {(props) => (
               <input

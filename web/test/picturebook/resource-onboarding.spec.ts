@@ -88,9 +88,6 @@ async function newService(page: Page, name: string, locale: Locale = 'en') {
     .getByRole('combobox', { name: c.protocol, exact: true })
     .selectOption({ label: (locale === 'zh' ? zh : en).user.core['connector.openai'] });
   await entry.getByLabel(c.entryURL, { exact: true }).fill(fixture().upstream_url + '/v1');
-  await entry
-    .getByRole('checkbox', { name: sharedCopy(locale).modelTypes.responses, exact: true })
-    .check();
   await entry.getByLabel(c.note + ' ' + c.optional, { exact: true }).fill(name);
   await entry.getByRole('button', { name: c.saveEntries, exact: true }).click();
   // Lost-response scenarios recover through the normal operation receipt.
@@ -242,14 +239,17 @@ async function manual(page: Page, upstream: string, prefix: string, locale: Loca
   }
   await row.getByRole('checkbox', { name: meta.name + ' · ' + upstream, exact: true }).check();
   await row
+    .getByRole('group', { name: sharedCopy(locale).nativeServices.title, exact: true })
     .getByRole('checkbox', { name: sharedCopy(locale).modelTypes.chat_completions, exact: true })
     .check();
   await row
+    .getByRole('group', { name: sharedCopy(locale).nativeServices.title, exact: true })
     .getByRole('checkbox', { name: sharedCopy(locale).modelTypes.responses, exact: true })
     .check();
   await row.getByLabel(c.provider, { exact: true }).fill(prefix);
   await row
-    .getByRole('checkbox', { name: sharedCopy(locale).modelTypes.chat_responses, exact: true })
+    .getByRole('group', { name: sharedCopy(locale).modelTypes.title, exact: true })
+    .getByRole('checkbox', { name: sharedCopy(locale).modelTypes.chat_completions, exact: true })
     .check();
   return row;
 }

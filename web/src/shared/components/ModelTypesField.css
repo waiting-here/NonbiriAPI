@@ -16,7 +16,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--nb-space-3);
 }
-.model-types-field__choices > .nb-field {
+.model-types-field__choices > .nb-field:has(> input[type='checkbox']) {
   min-width: 0;
   display: grid;
   grid-template-columns: var(--nb-space-10) minmax(0, 1fr);

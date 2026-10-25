@@ -429,6 +429,13 @@ func (r *Repository) PatchEndpoint(ctx context.Context, userID, endpointID int64
 	if input.NativeServices != nil {
 		selected = input.NativeServices
 	}
+	if input.NativeServices != nil && format == "" && connectorcontract.Type(current.ConnectorType).OpenAIServiceFamily() {
+		full, _ := connectorcontract.SupportedNativeServices(connectorcontract.Type(current.ConnectorType))
+		value, _ := connectorcontract.ParseNativeServices(*input.NativeServices)
+		if value.Mask() == full.Mask() {
+			format = connectorcontract.RerankFormatGeneric
+		}
+	}
 	services, err := endpointServiceSelection(connectorcontract.Type(current.ConnectorType), selected, format)
 	if err != nil {
 		return MutationResult[Endpoint]{}, err
@@ -465,7 +472,31 @@ WHERE id=? AND user_id=? AND revision=?`, note, boolInt(enabled), now, connectio
 	if updated != 1 {
 		return MutationResult[Endpoint]{}, ErrConflict
 	}
+	full, _ := connectorcontract.SupportedNativeServices(connectorcontract.Type(current.ConnectorType))
+	var pendingGrants []int64
+	if input.NativeServices != nil && services.Mask() == full.Mask() {
+		keyIDs, err := verifiedEndpointKeyIDsTx(ctx, tx, userID, endpointID)
+		if err != nil {
+			return MutationResult[Endpoint]{}, err
+		}
+		for _, keyID := range keyIDs {
+			var before int64
+			if err := tx.QueryRowContext(ctx, `SELECT current_grant_revision_id FROM endpoint_keys WHERE id=?`, keyID).Scan(&before); err != nil {
+				return MutationResult[Endpoint]{}, err
+			}
+			grantID, err := AuthorizeProtocolServicesTx(ctx, tx, userID, keyID, now, true)
+			if err != nil {
+				return MutationResult[Endpoint]{}, err
+			}
+			if grantID != before {
+				pendingGrants = append(pendingGrants, grantID)
+			}
+		}
+	}
 	if err := r.reconcileRoutingTargetsTx(ctx, tx, userID, affectedModels); err != nil {
+		return MutationResult[Endpoint]{}, err
+	}
+	if err := r.notifyPendingSubmissionsTx(ctx, tx, userID, pendingGrants); err != nil {
 		return MutationResult[Endpoint]{}, err
 	}
 	item, err := getEndpointTx(ctx, tx, userID, endpointID)
@@ -966,6 +997,10 @@ func (r *Repository) CreateEndpointKeyInTransaction(ctx context.Context, tx *sql
 	}
 	if keyCount >= keyLimit {
 		return EndpointKey{}, ErrResourceLimit
+	}
+	endpoint, err = authorizeEndpointProtocolTx(ctx, tx, userID, endpoint, input.NativeServices, now)
+	if err != nil {
+		return EndpointKey{}, err
 	}
 	services, err := keyServiceSelection(endpoint, input.NativeServices)
 	if err != nil {

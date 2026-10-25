@@ -225,7 +225,7 @@ describe('service setup as one task', () => {
       input: {
         source: 'mainstream',
         channel_entry_id: '1',
-        native_services: ['chat_completions'],
+        native_services: ['chat_completions', 'responses'],
       },
     });
     const sources = mocks.execute.mock.calls.filter(

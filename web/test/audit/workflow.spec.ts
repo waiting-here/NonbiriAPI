@@ -86,8 +86,11 @@ async function read(context: BrowserContext, origin: string, path: string) {
   expect(response.ok(), path + ': ' + response.status()).toBe(true);
   return response.json();
 }
-async function openUseFold(page: Page, title: string) {
-  const summary = page.locator('summary').filter({ has: page.getByText(title, { exact: true }) });
+async function openUseFold(page: Page) {
+  const summary = page
+    .locator('summary')
+    .filter({ has: page.getByText(connections.donationMaterials, { exact: true }) })
+    .first();
   const fold = summary.locator('..');
   if ((await fold.getAttribute('open')) === null) await summary.click();
   return fold;
@@ -248,7 +251,7 @@ test('approve pending content, page 240 targets and bind 144 cross-page selectio
     )!;
     expect(chat.pending).not.toBeNull();
     expect(chat.capabilities.can_review).toBe(true);
-    await openUseFold(page, common.common.modelTypes.chat_completions);
+    await openUseFold(page);
     await page
       .getByLabel(connections.reviewReason, { exact: true })
       .fill('Synthetic workflow approval');
@@ -256,28 +259,27 @@ test('approve pending content, page 240 targets and bind 144 cross-page selectio
       (response) =>
         response.request().method() === 'POST' &&
         new URL(response.url()).pathname ===
-          '/admin/api/donations/' + data.pending_donation_id + '/uses/review',
+          '/admin/api/donations/' + data.pending_donation_id + '/pending-review',
     );
     await page.getByRole('button', { name: connections.approveAllUses, exact: true }).click();
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
     const reviewResponse = await reviewed;
     expect(reviewResponse.status()).toBe(200);
-    expect(reviewResponse.request().postDataJSON()).toEqual({
-      items: pendingUses
+    const reviewedBody = reviewResponse.request().postDataJSON();
+    expect(reviewedBody).toMatchObject({
+      decision: 'approve',
+      reason: 'Synthetic workflow approval',
+    });
+    expect(reviewedBody.uses).toEqual(
+      pendingUses
         .filter((row) => row.pending)
         .map((row) => ({
           use_id: row.id,
           expected_revision: row.revision,
           expected_review_revision: row.pending!.expected_review_revision,
-          decision: 'approve',
-          review_note: 'Synthetic workflow approval',
         })),
-    });
-    expect(await reviewResponse.json()).toEqual({
-      results: pendingUses
-        .filter((row) => row.pending)
-        .map((row) => ({ use_id: row.id, ok: true })),
-    });
+    );
+    expect((await reviewResponse.json()).status).toBe('approved');
     await expect(
       page.getByRole('button', { name: common.common.connections.modelsAndBindings, exact: true }),
     ).toBeVisible();
@@ -286,7 +288,7 @@ test('approve pending content, page 240 targets and bind 144 cross-page selectio
       state.admin_url,
       '/admin/api/donations/' + data.pending_donation_id,
     );
-    expect(partial.status).toBe('pending');
+    expect(partial.status).toBe('approved');
     expect(partial.use_summary).toEqual({
       total: '3',
       pending: '0',
@@ -300,25 +302,16 @@ test('approve pending content, page 240 targets and bind 144 cross-page selectio
     ).toBe(true);
     await page
       .getByRole('listitem')
-      .filter({ hasText: connections.useReviewSaved.replace('{{id}}', chat.id) })
+      .filter({ hasText: connections.reviewSaved })
       .getByRole('button', { name: connections.configureReviewedUse, exact: true })
       .click();
     await expect(page).toHaveURL(
       (url) =>
         url.searchParams.get('donation_id') === data.pending_donation_id &&
         url.searchParams.get('binding_key') === data.pending_key_id &&
-        url.searchParams.get('binding_use') === chat.id &&
-        url.searchParams.get('binding_service') === 'chat_completions',
+        !url.searchParams.has('binding_use') &&
+        !url.searchParams.has('binding_service'),
     );
-    await expect(
-      page.getByText(
-        connections.reviewedServiceDefault.replace(
-          '{{service}}',
-          common.common.modelTypes.chat_completions,
-        ),
-        { exact: true },
-      ),
-    ).toBeVisible();
     const search = page.getByPlaceholder(workflow.modelSearch);
     await search.fill('workflow');
     await search.press('Enter');
@@ -1318,6 +1311,64 @@ test('level 5 reviews independent pending sources, retains receipts after refres
         ],
       });
       expect(donation.status).toBe('pending');
+      await write(admin, state.admin_url, `/admin/api/donations/${donation.id}/review`, {
+        expected_revision: donation.revision,
+        decision: 'approve',
+        reason: 'Synthetic initial approval',
+        key_settings: donation.keys.map((member: { id: string }) => ({
+          donation_key_id: member.id,
+          enabled: true,
+          expires_at: null,
+        })),
+      });
+      const catalogPath = `/admin/api/donations/${donation.id}/keys/${donation.keys[0].id}/models`;
+      const catalog = await read(admin, state.admin_url, catalogPath + '?page=1&page_size=20');
+      await write(admin, state.admin_url, catalogPath + '/manual', {
+        expected_manual_catalog_revision: catalog.manual_catalog_revision,
+        entries: ['synthetic-scope-model'],
+      });
+      const scopedModel = await write(admin, state.admin_url, '/admin/api/charity-models', {
+        provider: 'synthetic',
+        model: 'scope-' + randomUUID().slice(0, 8),
+        enabled: true,
+        is_mainstream: true,
+        flatten_tool_calls: false,
+        model_types: ['chat_completions'],
+        pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
+        discount: { enabled: false, percent: 100, start_at: null, end_at: null },
+      });
+      const bindingPath = `/admin/api/charity-models/${scopedModel.id}/bindings`;
+      const binding = await read(admin, state.admin_url, bindingPath);
+      await write(admin, state.admin_url, bindingPath + '/batch-receipt', {
+        expected_binding_revision: binding.binding_revision,
+        selections: [
+          {
+            targets: [
+              {
+                donation_key_id: donation.keys[0].id,
+                upstream_model_id: 'synthetic-scope-model',
+                native_services: ['chat_completions'],
+              },
+            ],
+          },
+        ],
+      });
+      const currentCredential = await read(
+        owner,
+        state.user_url,
+        `/api/credentials/${key.credential_id}`,
+      );
+      await write(owner, state.user_url, `/api/credentials/${key.credential_id}/versions`, {
+        expected_revision: currentCredential.revision,
+        secret: 'synthetic-pending-replacement-' + decision,
+        ownership_confirmed: true,
+      });
+      const pendingDonation = await read(
+        admin,
+        state.admin_url,
+        `/admin/api/donations/${donation.id}`,
+      );
+
       const projected = (
         await read(
           steward,
@@ -1333,13 +1384,14 @@ test('level 5 reviews independent pending sources, retains receipts after refres
       expect(pending.capabilities.can_manage).toBe(false);
       expect(pending.pending).not.toBeNull();
       const expectedBody = {
-        items: [
+        expected_revision: pendingDonation.revision,
+        decision,
+        reason: 'Synthetic independent pending review',
+        uses: [
           {
             use_id: pending.id,
             expected_revision: pending.revision,
             expected_review_revision: pending.pending!.expected_review_revision,
-            decision,
-            review_note: 'Synthetic independent pending review',
           },
         ],
       };
@@ -1366,7 +1418,7 @@ test('level 5 reviews independent pending sources, retains receipts after refres
           url = new URL(request.url());
         if (
           request.method() === 'POST' &&
-          url.pathname === `/api/steward/donations/${donation.id}/uses/review`
+          url.pathname === `/api/steward/donations/${donation.id}/pending-review`
         ) {
           writes++;
           identities.push(request.headers()['idempotency-key']);
@@ -1375,7 +1427,8 @@ test('level 5 reviews independent pending sources, retains receipts after refres
           const response = await route.fetch();
           expect(response.ok()).toBe(true);
           const receipt = await response.json();
-          expect(receipt).toEqual({ results: [{ use_id: pending.id, ok: true }] });
+          expect(receipt.id).toBe(donation.id);
+          expect(receipt.status).toBe('approved');
           if (!committed) {
             committedUse = (
               await read(
@@ -1415,7 +1468,7 @@ test('level 5 reviews independent pending sources, retains receipts after refres
       await expect(
         page.getByRole('button', { name: common.common.donationReview.forceTitle, exact: true }),
       ).toHaveCount(0);
-      await openUseFold(page, common.common.modelTypes.chat_completions);
+      await openUseFold(page);
       await page
         .getByLabel(connections.reviewReason, { exact: true })
         .fill('Synthetic independent pending review');
@@ -1431,7 +1484,7 @@ test('level 5 reviews independent pending sources, retains receipts after refres
           exact: true,
         })
         .click();
-      const savedText = connections.useReviewSaved.replace('{{id}}', pending.id);
+      const savedText = connections.reviewSaved;
       if (decision === 'reject') {
         await expect.poll(() => writes).toBe(2);
         expect(interrupted).toBe(true);
@@ -1455,47 +1508,29 @@ test('level 5 reviews independent pending sources, retains receipts after refres
         await refreshError.getByRole('button', { name: common.common.retry, exact: true }).click();
         expect((await refreshed).status()).toBe(200);
       }
-      await expect(
-        page.getByText(common.common.pendingReviews.noLongerPending, { exact: true }),
-      ).toBeVisible();
-      await expect(page.getByText(savedText, { exact: true })).toBeVisible();
-      const result = page.getByRole('status').filter({ hasText: savedText });
-      await expect(result).toContainText(common.common.modelTypes.chat_completions);
+
+      await expect(page.getByText(savedText, { exact: true }).first()).toBeVisible();
+      const result = page.locator('ul[role="status"]').filter({ hasText: savedText });
+      await expect(result).not.toContainText(common.common.modelTypes.chat_completions);
       await expect(result).toContainText(
         pending.pending!.display_head + '…' + pending.pending!.display_tail,
       );
       await expect(
         page.getByRole('button', { name: connections.configureReviewedUse, exact: true }),
       ).toHaveCount(0);
-      if (decision === 'approve')
-        await expect(
-          page.getByText(connections.reviewConfigurationDenied, { exact: true }),
-        ).toBeVisible();
+
       await expect(
         page.getByRole('button', {
           name: decision === 'approve' ? connections.approveAllUses : connections.rejectAllUses,
           exact: true,
         }),
-      ).toHaveCount(0);
-      await expect.poll(() => detailStatuses.includes(403)).toBe(true);
-      expect(detailStatuses.every((status) => status === 403)).toBe(true);
+      ).toBeEnabled();
+      expect(detailStatuses.every((status) => status === 200)).toBe(true);
       expect(writes).toBe(decision === 'approve' ? 1 : 2);
-      const denied = await steward.request.get(
-        state.user_url + `/api/steward/donations/${donation.id}`,
-      );
-      expect(denied.status()).toBe(403);
       const current = await read(admin, state.admin_url, `/admin/api/donations/${donation.id}`);
-      expect(current.status).toBe('pending');
-      // Per-use approval does not establish the legacy first-approval origin.
-      expect(current.first_approval_origin).toBe(decision === 'approve' ? 'unknown' : 'none');
-      expect(current.use_summary).toEqual({
-        total: '1',
-        pending: '0',
-        approved: decision === 'approve' ? '1' : '0',
-        rejected: decision === 'reject' ? '1' : '0',
-        withdrawn: '0',
-        review_status: decision === 'approve' ? 'approved' : 'rejected',
-      });
+      expect(current.status).toBe('approved');
+      expect(current.first_approval_origin).toBe('manual');
+      expect(current.use_summary.pending).toBe('0');
       const finalUses = (
         await read(
           admin,
@@ -1515,9 +1550,9 @@ test('level 5 reviews independent pending sources, retains receipts after refres
       expect(finalVersion!.review_note).toBe('Synthetic independent pending review');
       expect(finalVersion!.reviewed_at).toBe(recordedVersion!.reviewed_at);
       expect(current.keys[0].id).toBe(donation.keys[0].id);
-      expect(current.keys[0].limits).toEqual(donation.keys[0].limits);
-      expect(current.keys[0].usage).toEqual(donation.keys[0].usage);
-      expect(current.keys[0].token_reserve).toBe(donation.keys[0].token_reserve);
+      expect(current.keys[0].limits).toEqual(pendingDonation.keys[0].limits);
+      expect(current.keys[0].usage).toEqual(pendingDonation.keys[0].usage);
+      expect(current.keys[0].token_reserve).toBe(pendingDonation.keys[0].token_reserve);
       await page.getByRole('button', { name: operations.returnToList, exact: true }).click();
       await expect(page).toHaveURL((url) => !url.searchParams.has('donation_id'));
       await expect(
@@ -1526,7 +1561,7 @@ test('level 5 reviews independent pending sources, retains receipts after refres
           exact: true,
         }),
       ).toBeVisible();
-      await expect(page.getByText(savedText, { exact: true })).toBeVisible();
+      await expect(page.getByText(savedText, { exact: true }).first()).toBeVisible();
       expect(writes).toBe(decision === 'approve' ? 1 : 2);
       if (decision === 'approve') {
         const correctionID = state.management.workflow.processing_donation_id;

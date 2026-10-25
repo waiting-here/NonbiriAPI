@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Field, Fold, Note } from '@shared/components/ui';
 import { NativeServicesField } from '@shared/components/NativeServicesField';
+import { ProtocolRerankField } from '@shared/components/ProtocolRerankField';
 import {
   DISCOVERY_FORMATS,
   type DiscoveryPreset,
@@ -32,11 +33,28 @@ export function MainstreamEntries({
     (row, index, rows) =>
       rows.findIndex((other) => other.configuration_type === row.configuration_type) === index,
   );
-  const patch = (index: number, change: Partial<MainstreamEntry>) =>
+  const patch = (index: number, change: Partial<MainstreamEntry>) => {
+    const entry = value.entries[index]!;
+    const protocol = options.find(
+      (row) => row.connector_type === (change.connector_type ?? entry.connector_type),
+    );
     onChange({
       ...value,
-      entries: value.entries.map((row, i) => (i === index ? { ...row, ...change } : row)),
+      entries: value.entries.map((row, i) =>
+        i === index
+          ? {
+              ...row,
+              ...change,
+              native_services: protocol?.native_services.slice() ?? row.native_services,
+              rerank_format:
+                change.rerank_format ??
+                (entry.rerank_format ||
+                  (protocol?.rerank_formats.includes('generic') ? 'generic' : '')),
+            }
+          : row,
+      ),
     });
+  };
   return (
     <div className="nb-stack">
       <Note>{t('common.connections.presetNoAutoGrant')}</Note>
@@ -64,8 +82,8 @@ export function MainstreamEntries({
                     if (choice)
                       patch(index, {
                         connector_type: choice.connector_type,
-                        native_services: choice.default_native_services.slice(),
-                        rerank_format: '',
+                        native_services: choice.native_services.slice(),
+                        rerank_format: choice.rerank_formats.includes('generic') ? 'generic' : '',
                       });
                   }}
                 >
@@ -92,13 +110,11 @@ export function MainstreamEntries({
                 />
               )}
             </Field>
-            <NativeServicesField
-              options={metadata?.native_services ?? []}
-              value={entry.native_services}
-              onChange={(native_services) => patch(index, { native_services })}
-              rerankFormats={metadata?.rerank_formats}
-              rerankFormat={entry.rerank_format || null}
-              onRerankFormatChange={(format) => patch(index, { rerank_format: format ?? '' })}
+            <ProtocolRerankField
+              formats={metadata?.rerank_formats}
+              value={entry.rerank_format || null}
+              onChange={(format) => patch(index, { rerank_format: format })}
+              disabled={disabled}
             />
             <Field label={t('common.connections.enabled')}>
               {(props) => (
@@ -147,8 +163,8 @@ export function MainstreamEntries({
                 name: '',
                 connector_type: first.connector_type,
                 base_url: '',
-                native_services: first.default_native_services.slice(),
-                rerank_format: '',
+                native_services: first.native_services.slice(),
+                rerank_format: first.rerank_formats.includes('generic') ? 'generic' : '',
                 enabled: true,
               },
             ],
@@ -285,7 +301,7 @@ function Mappings({
                                 {
                                   entry_id: entry.id!,
                                   upstream_model_id: row.model_id,
-                                  native_services: [],
+                                  native_services: entry.native_services.slice(),
                                 },
                               ]
                             : row.entries.filter((item) => item.entry_id !== entry.id),

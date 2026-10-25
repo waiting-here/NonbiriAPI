@@ -130,6 +130,61 @@ const adminAPI = <T>(
   data?: unknown,
   status?: number,
 ) => api<T>(context, fixture().admin_url, path, method, data, status);
+async function protocolServices(owner: BrowserContext) {
+  const options = await userAPI<{
+    native_service_options: { connector_type: string; native_services: NativeService[] }[];
+  }>(owner, '/api/endpoint-create-options');
+  return options.native_service_options.find((row) => row.connector_type === 'openai-compatible')!
+    .native_services;
+}
+async function qualifyForSteward(
+  admin: BrowserContext,
+  donation: Donation,
+  member: string,
+  name: string,
+) {
+  const path = `/admin/api/donations/${donation.id}/keys/${member}/models`;
+  const catalog = await adminAPI<{ manual_catalog_revision: string }>(
+    admin,
+    path + '?page=1&page_size=20',
+  );
+  await adminAPI(
+    admin,
+    path + '/manual',
+    'POST',
+    {
+      expected_manual_catalog_revision: catalog.manual_catalog_revision,
+      entries: ['synthetic-scope-model'],
+    },
+    200,
+  );
+  const model = await adminAPI<Identity>(admin, '/admin/api/charity-models', 'POST', {
+    provider: 'synthetic',
+    model: 'scope-' + name,
+    enabled: true,
+    is_mainstream: true,
+    flatten_tool_calls: false,
+    model_types: ['chat_completions'],
+    pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
+    discount: { enabled: false, percent: 100, start_at: null, end_at: null },
+  });
+  const bindingPath = `/admin/api/charity-models/${model.id}/bindings`;
+  const before = await adminAPI<Bindings>(admin, bindingPath);
+  await adminAPI(admin, bindingPath + '/batch-receipt', 'POST', {
+    expected_binding_revision: before.binding_revision,
+    selections: [
+      {
+        targets: [
+          {
+            donation_key_id: member,
+            upstream_model_id: 'synthetic-scope-model',
+            native_services: ['chat_completions'],
+          },
+        ],
+      },
+    ],
+  });
+}
 function responseFor(page: Page, method: string, path: string) {
   return page.waitForResponse(
     (response) =>
@@ -261,8 +316,9 @@ test('connection search exposes entry context and separate System One setup', as
     await form
       .getByRole('combobox', { name: c.protocol, exact: true })
       .selectOption('typesafe-systemone');
-    await openFold(form, c.nativeServices);
-    await expect(form.getByRole('checkbox', { name: native.systemone, exact: true })).toBeChecked();
+    await expect(form.getByRole('checkbox', { name: native.systemone, exact: true })).toHaveCount(
+      0,
+    );
     await expect(form.getByRole('checkbox', { name: native.decisions, exact: true })).toHaveCount(
       0,
     );
@@ -357,24 +413,26 @@ async function uses(context: BrowserContext, id: string) {
 }
 async function approve(context: BrowserContext, owner: BrowserContext, donation: Donation) {
   const rows = await uses(owner, donation.id);
-  const result = await adminAPI<{ results: { ok: boolean }[] }>(
+  const current = await adminAPI<Donation>(context, '/admin/api/donations/' + donation.id);
+  const result = await adminAPI<Donation>(
     context,
-    '/admin/api/donations/' + donation.id + '/uses/review',
+    '/admin/api/donations/' + donation.id + '/pending-review',
     'POST',
     {
-      items: rows
+      expected_revision: current.revision,
+      decision: 'approve',
+      reason: 'Synthetic initial approval',
+      uses: rows
         .filter((row) => row.pending)
         .map((row) => ({
           use_id: row.id,
           expected_revision: row.revision,
           expected_review_revision: row.pending!.expected_review_revision,
-          decision: 'approve',
-          review_note: 'Synthetic initial approval',
         })),
     },
     200,
   );
-  expect(result.results.every((row) => row.ok)).toBe(true);
+  expect(result.status).toBe('approved');
 }
 
 for (const configuredCatalog of [false, true]) {
@@ -410,8 +468,16 @@ for (const configuredCatalog of [false, true]) {
       for (const status of ['pending', 'approved']) {
         if (status === 'approved') await approve(admin, owner, donation);
         await page.goto(origin + path + donation.id);
-        const use = await openFold(page, native.chat_completions);
-        const fetchButton = use.getByRole('button', { name: c.refreshSharedCatalog, exact: true });
+        const use = page.locator('.donation-discovery').filter({
+          has: page.getByRole('button', {
+            name: common.common.donationDiscovery.one,
+            exact: true,
+          }),
+        });
+        const fetchButton = use.getByRole('button', {
+          name: common.common.donationDiscovery.one,
+          exact: true,
+        });
         await expect(fetchButton).toBeEnabled();
         const result = responseFor(
           page,
@@ -425,8 +491,7 @@ for (const configuredCatalog of [false, true]) {
         );
         await fetchButton.click();
         expect((await result).status()).toBe(202);
-        await expect(use).toContainText('Catalog: Succeeded');
-        await expect(use.getByText(/^Catalog:/)).toHaveCount(1);
+        await expect(use).toContainText('Fetching complete');
         if (status === 'pending')
           for (const width of [1440, 390])
             for (const theme of ['light', 'dark'] as const) {
@@ -659,6 +724,7 @@ test('additional services stay pending with their old budget and use-only traine
       manager.getByRole('button', { name: c.modelsAndBindings, exact: true }),
     ).toHaveCount(0);
     await approve(admin, owner, donation);
+    await qualifyForSteward(admin, donation, donation.keys[0]!.id, randomUUID().slice(0, 8));
     let current = await adminAPI<Donation>(admin, '/admin/api/donations/' + donation.id);
     await adminAPI(
       admin,
@@ -683,21 +749,18 @@ test('additional services stay pending with their old budget and use-only traine
     );
     const page = await owner.newPage();
     await page.goto(fixture().user_url + '/charity/donations/' + donation.id);
-    const chat = await openFold(page, native.chat_completions);
+    const chat = page.locator('.economy-donation-key').first();
     const paused = responseFor(
       page,
       'PATCH',
       '/api/donations/' + donation.id + '/uses/' + (await uses(owner, donation.id))[0]!.id,
     );
-    await chat.getByRole('button', { name: c.pauseUse, exact: true }).click();
+    await chat.getByRole('button', { name: c.pauseSharedKey, exact: true }).click();
     expect((await paused).ok()).toBe(true);
     await page.reload();
     const addition = await openFold(page, c.addServices);
-    const form = addition.locator('form');
-    for (const box of await form.getByRole('checkbox').all()) await expect(box).not.toBeChecked();
-    await expect(form.getByRole('button', { name: c.submitServices, exact: true })).toBeDisabled();
-    await form.getByLabel(native.embeddings, { exact: true }).check();
-    await form.getByLabel(native.responses, { exact: true }).check();
+    await expect(addition.getByRole('checkbox')).toHaveCount(0);
+    const form = addition;
     const submitted = responseFor(page, 'POST', '/api/donations/' + donation.id + '/uses');
     await form.getByRole('button', { name: c.submitServices, exact: true }).click();
     const response = await submitted;
@@ -708,11 +771,16 @@ test('additional services stay pending with their old budget and use-only traine
       discovery_source_revision: string;
       credential_version: string;
     };
-    expect(input.items.map((row) => row.native_service).sort()).toEqual([
-      'embeddings',
-      'responses',
-    ]);
-    expect(input.items.every((row) => row.expected_revision === null)).toBe(true);
+    const fullServices = await protocolServices(owner);
+    expect(input.items.map((row) => row.native_service)).toEqual(fullServices);
+    expect(
+      input.items.find((row) => row.native_service === 'chat_completions')!.expected_revision,
+    ).not.toBeNull();
+    expect(
+      input.items
+        .filter((row) => row.native_service !== 'chat_completions')
+        .every((row) => row.expected_revision === null),
+    ).toBe(true);
     expect(input.discovery_source_id).toBeNull();
     expect(input.discovery_source_revision).toBeNull();
     const addedUses = await uses(owner, donation.id);
@@ -741,37 +809,39 @@ test('additional services stay pending with their old budget and use-only traine
       trainee,
       '/api/steward/donations/' + donation.id + '/uses?page=1&page_size=20',
     );
-    expect(projected.data).toHaveLength(2);
+    expect(projected.data).toHaveLength(fullServices.length);
     for (const row of projected.data) {
       expect(row.endpoint_key_id).toBeNull();
       expect(row.capabilities.can_review).toBe(true);
       expect(row.capabilities.can_manage).toBe(false);
     }
-    await expect(reviewer.getByRole('button', { name: c.pauseUse, exact: true })).toHaveCount(0);
+    await expect(reviewer.getByRole('button', { name: c.pauseSharedKey, exact: true })).toHaveCount(
+      0,
+    );
     await expect(
       reviewer.getByRole('button', { name: c.modelsAndBindings, exact: true }),
     ).toHaveCount(0);
-    await openFold(reviewer, native.embeddings);
+    await openFold(reviewer, c.donationMaterials);
     await reviewer.getByLabel(c.reviewReason, { exact: true }).fill('Synthetic pending approval');
     const accepted = responseFor(
       reviewer,
       'POST',
-      '/api/steward/donations/' + donation.id + '/uses/review',
+      '/api/steward/donations/' + donation.id + '/pending-review',
     );
     await reviewer.getByRole('button', { name: c.approveAllUses, exact: true }).click();
     const acceptedResponse = await accepted;
     expect(acceptedResponse.status()).toBe(200);
-    expect(
-      (acceptedResponse.request().postDataJSON() as { items: { decision: string }[] }).items,
-    ).toEqual(
-      projected.data.map((row) => ({
-        use_id: row.id,
-        expected_revision: row.revision,
-        expected_review_revision: row.pending!.expected_review_revision,
-        decision: 'approve',
-        review_note: 'Synthetic pending approval',
-      })),
-    );
+    expect(acceptedResponse.request().postDataJSON()).toMatchObject({
+      decision: 'approve',
+      reason: 'Synthetic pending approval',
+      uses: projected.data
+        .filter((row) => row.pending)
+        .map((row) => ({
+          use_id: row.id,
+          expected_revision: row.revision,
+          expected_review_revision: row.pending!.expected_review_revision,
+        })),
+    });
     const currentCredential = await userAPI<Credential>(owner, '/api/credentials/' + saved.id);
     await userAPI(owner, '/api/credentials/' + saved.id + '/versions', 'POST', {
       expected_revision: currentCredential.revision,
@@ -779,9 +849,9 @@ test('additional services stay pending with their old budget and use-only traine
       ownership_confirmed: true,
     });
     const replacements = (await uses(owner, donation.id)).filter((row) => row.pending);
-    expect(replacements).toHaveLength(3);
+    expect(replacements).toHaveLength(fullServices.length);
     await reviewer.reload();
-    await openFold(reviewer, native.responses);
+    await openFold(reviewer, c.donationMaterials);
     await reviewer
       .getByLabel(c.reviewReason, { exact: true })
       .fill('Synthetic pending replacement return');
@@ -803,20 +873,20 @@ test('additional services stay pending with their old budget and use-only traine
     const rejected = responseFor(
       reviewer,
       'POST',
-      '/api/steward/donations/' + donation.id + '/uses/review',
+      '/api/steward/donations/' + donation.id + '/pending-review',
     );
     await reviewer.getByRole('button', { name: c.rejectAllUses, exact: true }).click();
     const rejectedResponse = await rejected;
     expect(rejectedResponse.status()).toBe(200);
-    expect((rejectedResponse.request().postDataJSON() as { items: unknown[] }).items).toEqual(
-      replacements.map((row) => ({
+    expect(rejectedResponse.request().postDataJSON()).toMatchObject({
+      decision: 'reject',
+      reason: 'Synthetic pending replacement return',
+      uses: replacements.map((row) => ({
         use_id: row.id,
         expected_revision: row.revision,
         expected_review_revision: row.pending!.expected_review_revision,
-        decision: 'reject',
-        review_note: 'Synthetic pending replacement return',
       })),
-    );
+    });
     const decided = await uses(owner, donation.id);
     expect(decided.find((row) => row.native_service === 'embeddings')!.approved?.status).toBe(
       'approved',
@@ -981,11 +1051,7 @@ async function addGroup(page: Page, name: string, charity: boolean, path: string
   const selected = targetRows(editor);
   await expect(selected).toHaveCount(1);
   const chat = selected.getByLabel(native.chat_completions, { exact: true });
-  if (charity) await expect(chat).toBeChecked();
-  else {
-    await expect(chat).not.toBeChecked();
-    await chat.check();
-  }
+  await expect(chat).toBeChecked();
   const response = responseFor(page, 'POST', path + '/batch-receipt');
   await editor.getByRole('button', { name: c.addTargetGroup, exact: true }).click();
   const saved = await response;
@@ -1393,7 +1459,7 @@ test('connection lists return to the requested page and mainstream mappings use 
     await form.getByLabel(channels.form.name, { exact: true }).fill(name);
     await form.getByRole('button', { name: c.addEntry, exact: true }).click();
     await form.getByRole('button', { name: c.addEntry, exact: true }).click();
-    for (const [index, service] of ['chat_completions', 'responses'].entries()) {
+    for (const index of [0, 1]) {
       const group = form.getByRole('group', {
         name: c.presetEntry.replace('{{number}}', String(index + 1)),
         exact: true,
@@ -1405,14 +1471,9 @@ test('connection lists return to the requested page and mainstream mappings use 
         channels.connector.openaiCompatible,
       );
       await group.getByLabel(c.entryURL, { exact: true }).fill(base);
-      const options = group.getByRole('group', {
-        name: common.common.nativeServices.title,
-        exact: true,
-      });
-      for (const checkbox of await options.getByRole('checkbox').all()) await checkbox.uncheck();
-      await options
-        .getByLabel(native[service as 'chat_completions' | 'responses'], { exact: true })
-        .check();
+      await expect(
+        group.getByRole('group', { name: common.common.nativeServices.title, exact: true }),
+      ).toHaveCount(0);
     }
     const mappings = await openFold(form, c.modelMappings);
     await expect(mappings.getByRole('button', { name: c.addMapping, exact: true })).toBeDisabled();
@@ -1431,7 +1492,7 @@ test('connection lists return to the requested page and mainstream mappings use 
     expect(payload.entries).toHaveLength(2);
     expect(
       (payload.entries as { native_services: NativeService[] }[]).map((row) => row.native_services),
-    ).toEqual([['chat_completions'], ['responses']]);
+    ).toEqual([await protocolServices(owner), await protocolServices(owner)]);
     expect(payload.model_mappings).toEqual([]);
     const channel = (await createdResponse.json()) as Identity & {
       entries: { id: string; name: string; native_services: NativeService[] }[];
@@ -1450,13 +1511,21 @@ test('connection lists return to the requested page and mainstream mappings use 
       .fill('synthetic-' + randomUUID().slice(0, 8));
     await mappingEditor.getByLabel(channel.entries[0]!.name, { exact: true }).check();
     await mappingEditor.getByLabel(c.upstreamModel, { exact: true }).first().fill('mapped-chat');
-    await mappingEditor.getByLabel(native.chat_completions, { exact: true }).check();
+    const firstSelection = mappingEditor
+      .getByRole('group', { name: common.common.nativeServices.title, exact: true })
+      .first();
+    for (const option of await firstSelection.getByRole('checkbox').all()) await option.uncheck();
+    await firstSelection.getByLabel(native.chat_completions, { exact: true }).check();
     await mappingEditor.getByLabel(channel.entries[1]!.name, { exact: true }).check();
     await mappingEditor
       .getByLabel(c.upstreamModel, { exact: true })
       .nth(1)
       .fill('mapped-responses');
-    await mappingEditor.getByLabel(native.responses, { exact: true }).check();
+    const secondSelection = mappingEditor
+      .getByRole('group', { name: common.common.nativeServices.title, exact: true })
+      .nth(1);
+    for (const option of await secondSelection.getByRole('checkbox').all()) await option.uncheck();
+    await secondSelection.getByLabel(native.responses, { exact: true }).check();
     const edited = responseFor(manager, 'PATCH', '/admin/api/mainstream-channels/' + channel.id);
     await form.getByRole('button', { name: channels.actions.save, exact: true }).click();
     const savedResponse = await edited;
@@ -1590,14 +1659,14 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
     const reviewed = responseFor(
       page,
       'POST',
-      '/admin/api/donations/' + donation.id + '/uses/review',
+      '/admin/api/donations/' + donation.id + '/pending-review',
     );
     await page.getByRole('button', { name: c.rejectAllUses, exact: true }).click();
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
     const receipt = await reviewed;
     expect(receipt.status()).toBe(200);
-    expect((receipt.request().postDataJSON() as { items: unknown[] }).items).toHaveLength(24);
-    await expect(page.getByText('Processed 24 of 24 uses: 24 succeeded, 0 failed.')).toBeVisible();
+    expect((receipt.request().postDataJSON() as { uses: unknown[] }).uses).toHaveLength(24);
+    await expect(page.getByText(c.reviewSaved, { exact: true }).first()).toBeVisible();
     const rejected = await adminAPI<
       Numbered<{ id: string; use_summary: { review_status: string } }>
     >(admin, '/admin/api/donations?page=1&page_size=100&review_status=rejected');
@@ -1624,7 +1693,7 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
     );
     await page.getByRole('button', { name: c.approveAllUses, exact: true }).first().click();
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
-    await expect(page.getByText('Processed 2 of 2 uses: 2 succeeded, 0 failed.')).toBeVisible();
+    await expect(page.getByText(c.reviewSaved, { exact: true }).first()).toBeVisible();
     const rows = await uses(owner, approved.id);
     expect(rows).toHaveLength(2);
     expect(rows.every((row) => row.approved?.status === 'approved' && !row.pending)).toBe(true);
@@ -1764,8 +1833,8 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
       const option = selectedEntry.locator(
         'xpath=ancestor::div[contains(@class, "nb-stack--sm")][1]',
       );
-      await expect(option.getByLabel(native.chat_completions, { exact: true })).toBeChecked();
-      await expect(option.getByLabel(native.responses, { exact: true })).toBeChecked();
+      await expect(option.getByLabel(native.chat_completions, { exact: true })).toHaveCount(0);
+      await expect(option.getByLabel(native.responses, { exact: true })).toHaveCount(0);
       const defaultCatalog = option.getByLabel(c.useSuggestedCatalog, { exact: true });
       await expect(defaultCatalog).toBeChecked();
       if (index === 2) await defaultCatalog.uncheck();
@@ -1831,7 +1900,7 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
       const grant = keys.data[0]!;
       expect(grant.credential_id).toBe(saved.id);
       expect(grant.credential_version).toBe(saved.credential_version);
-      expect(grant.native_services).toEqual(['chat_completions', 'responses']);
+      expect(grant.native_services).toEqual(await protocolServices(owner));
       if (index === 0) expect(grant.discovery_source_id).not.toBeNull();
       else
         expect(grant.discovery_source_id).toBe(
@@ -1871,8 +1940,8 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
       name: userEn.user.charity.resourcePicker.selectedTitle,
       exact: true,
     });
-    await expect(selected.getByLabel(native.chat_completions, { exact: true })).toBeChecked();
-    await expect(selected.getByLabel(native.responses, { exact: true })).toBeChecked();
+    await expect(selected.getByLabel(native.chat_completions, { exact: true })).toHaveCount(0);
+    await expect(selected.getByLabel(native.responses, { exact: true })).toHaveCount(0);
     for (const width of [1440, 390])
       for (const theme of ['light', 'dark'] as const)
         await screenshot(draft, info, 'suggested-catalog-donation-draft', width, theme, selected, {
@@ -2125,10 +2194,16 @@ test('model imports reuse manual support after reopening and resume after a mode
         .click();
       const row = await openFold(page.locator('.connection-model-batch'), upstreamName);
       await row.getByRole('checkbox', { name: tag + ' · ' + upstreamName, exact: true }).check();
-      await row.getByRole('checkbox', { name: native.chat_completions, exact: true }).check();
+      await row
+        .getByRole('group', { name: common.common.nativeServices.title, exact: true })
+        .getByRole('checkbox', { name: native.chat_completions, exact: true })
+        .check();
       await row.getByLabel(c.provider, { exact: true }).fill(provider);
       await row.getByLabel(c.model, { exact: true }).fill(modelName);
-      await row.getByRole('checkbox', { name: native.chat_responses, exact: true }).check();
+      await row
+        .getByRole('group', { name: common.common.modelTypes.title, exact: true })
+        .getByRole('checkbox', { name: native.chat_completions, exact: true })
+        .check();
       return row;
     };
     const save = async (row: Locator, upstreamName: string) => {

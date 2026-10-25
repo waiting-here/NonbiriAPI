@@ -7,6 +7,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
 type useSubmission struct {
@@ -28,7 +29,7 @@ func connectionError(err error) error {
 	}
 }
 
-func attachSubmissionUsesTx(ctx context.Context, tx *sql.Tx, ownerID int64, inputs []CreateKeyInput, keys []submissionKey) error {
+func attachSubmissionUsesTx(ctx context.Context, tx *sql.Tx, ownerID int64, inputs []CreateKeyInput, keys []submissionKey, now int64) error {
 	ids := make([]int64, 0, len(keys))
 	byKey := make(map[int64]CreateKeyInput, len(inputs))
 	for _, input := range inputs {
@@ -63,6 +64,13 @@ func attachSubmissionUsesTx(ctx context.Context, tx *sql.Tx, ownerID int64, inpu
 		} else {
 			services, err = contract.ParseNativeServices(input.NativeServices)
 		}
+		full, fullErr := contract.SupportedNativeServices(grant.ConfiguredType)
+		if err == nil && fullErr == nil && input.NativeServices != nil && services.Mask() == full.Mask() && services.Mask() != grant.EffectiveServices.Mask() {
+			if _, err := resources.AuthorizeProtocolServicesTx(ctx, tx, ownerID, key.id, now, false); err != nil {
+				return protocolAuthorizationError(err)
+			}
+			grant, err = connectionstore.LoadSelfGrantTx(ctx, tx, ownerID, key.id)
+		}
 		if err != nil || services.Empty() || services.Intersect(grant.EffectiveServices).Mask() != services.Mask() {
 			return ErrInvalidRequest
 		}
@@ -89,6 +97,19 @@ func attachSubmissionUsesTx(ctx context.Context, tx *sql.Tx, ownerID int64, inpu
 		}
 	}
 	return nil
+}
+
+func protocolAuthorizationError(err error) error {
+	switch {
+	case errors.Is(err, resources.ErrNotFound):
+		return ErrNotFound
+	case errors.Is(err, resources.ErrConflict):
+		return ErrConflict
+	case errors.Is(err, resources.ErrInvalidRequest):
+		return ErrInvalidRequest
+	default:
+		return err
+	}
 }
 
 func createInitialUsesTx(ctx context.Context, tx *sql.Tx, keyID int64, submission useSubmission, approved bool, now int64) error {

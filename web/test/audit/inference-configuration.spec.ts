@@ -685,13 +685,17 @@ test('native Chat services retain storage policy and one Chat Responses group al
       exact: true,
     });
     await expect(
-      choices.getByRole('checkbox', { name: common.common.modelTypes.chat_responses, exact: true }),
+      choices.getByRole('checkbox', {
+        name: common.common.modelTypes.chat_completions,
+        exact: true,
+      }),
     ).toHaveCount(1);
     await expect(
       choices.getByRole('checkbox', { name: common.common.modelTypes.responses, exact: true }),
-    ).toHaveCount(0);
+    ).toHaveCount(1);
     for (const label of [
-      common.common.modelTypes.chat_responses,
+      common.common.modelTypes.chat_completions,
+      common.common.modelTypes.responses,
       common.common.modelTypes.images_generations,
       common.common.modelTypes.images_edits,
       common.common.modelTypes.systemone,

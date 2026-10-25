@@ -199,6 +199,19 @@ label > span {
   gap: 0.5rem;
 }
 
+label:has(> input[type='checkbox']):not(.nb-toggle):not(.nb-option) {
+  grid-template-columns: var(--nb-space-5) minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--nb-space-2);
+}
+label:has(> input[type='checkbox']):not(.nb-toggle):not(.nb-option) > input {
+  grid-column: 1;
+  grid-row: 1;
+}
+label:has(> input[type='checkbox']):not(.nb-toggle):not(.nb-option) > span {
+  grid-column: 2;
+}
+
 fieldset {
   min-width: 0;
   margin: 0;
