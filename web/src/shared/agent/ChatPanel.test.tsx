@@ -311,6 +311,39 @@ describe('Agent conversation and plans', () => {
     await view.user.click(screen.getByText('Read donations'));
     expect(screen.getAllByText(/synthetic-donation-result/)).toHaveLength(1);
   });
+  it.each([
+    { error: 'Read failed. Narrow the selection.', detail: 'Read failed. Narrow the selection.' },
+    {
+      error: {
+        code: 'tool_result_too_large',
+        message: 'Result exceeds the available budget.',
+        retry: 'Retry with a specific user_id.',
+        retryable: true,
+      },
+      detail: 'Result exceeds the available budget. Retry with a specific user_id.',
+    },
+  ])(
+    'shows a tool failure and recovery hint before expanding its result: $detail',
+    async ({ error, detail }) => {
+      mocks.get.mockResolvedValue(
+        conversation([
+          {
+            ...message('1', 'assistant', ''),
+            tool_calls: [{ id: 'read-limit', function: { name: 'users', arguments: '{}' } }],
+          },
+          {
+            ...message('2', 'tool', JSON.stringify({ error })),
+            tool_call_id: 'read-limit',
+          },
+        ]),
+      );
+      await mount();
+      expect(screen.getByText('Failed')).toBeInTheDocument();
+      expect(screen.getByText(detail)).toBeInTheDocument();
+      expect(screen.queryByText('Result received')).not.toBeInTheDocument();
+      expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
+    },
+  );
   it('shows the actual interruption instead of a successful tool result', async () => {
     mocks.get.mockResolvedValue(
       conversation([

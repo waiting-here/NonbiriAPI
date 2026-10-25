@@ -91,7 +91,15 @@ export function ToolActivity({
         );
         const output = object(outputValue);
         const plan = plans.find((item) => call.id && item.tool_call_ids?.includes(call.id));
-        const error = typeof output.error === 'string' ? output.error : '';
+        const errorInfo = object(output.error);
+        const error =
+          typeof output.error === 'string'
+            ? output.error
+            : typeof errorInfo.message === 'string'
+              ? [errorInfo.message, errorInfo.retry]
+                  .filter((part) => typeof part === 'string')
+                  .join(' ')
+              : '';
         const state =
           error || output.status === 'failed'
             ? 'failed'
