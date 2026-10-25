@@ -73,6 +73,7 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		{http.MethodGet, routeAdminRecurring, api.recurringAdmin},
 		{http.MethodPut, routeAdminRecurring, api.replaceRecurringAdmin},
 		{http.MethodPost, routeAdminReview, api.reviewAdmin},
+		{http.MethodPost, routeAdminPendingReview, api.adminUseHandler(api.pendingReviewHandler(reviewerAdmin))},
 		{http.MethodPatch, routeAdminKey, api.manageKeyAdmin},
 		{http.MethodPatch, routeAdminFailurePolicy, api.failurePolicyAdmin},
 	}
@@ -111,6 +112,7 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodGet, routeStewardRecurring, api.recurringSteward},
 		{http.MethodPut, routeStewardRecurring, api.replaceRecurringSteward},
 		{http.MethodPost, routeStewardReview, api.reviewSteward},
+		{http.MethodPost, routeStewardPendingReview, api.pendingReviewHandler(reviewerSteward)},
 		{http.MethodPatch, routeStewardKey, api.manageKeySteward},
 		{http.MethodGet, routeStewardKey, api.keySteward},
 		{http.MethodPatch, routeStewardFailurePolicy, api.failurePolicySteward},
