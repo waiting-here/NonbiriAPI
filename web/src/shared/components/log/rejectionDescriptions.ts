@@ -21,6 +21,7 @@ export const rejectionDescriptionKeys: Record<string, string> = {
   'expected a boolean or null': 'logs.rejectionDescriptions.expected a boolean or null',
   'expected false; embeddings do not support streaming':
     'logs.rejectionDescriptions.expected false; embeddings do not support streaming',
+  'expected a nonempty string': 'logs.rejectionDescriptions.expected a nonempty string',
   'expected a nonempty string, token array, or batch of at most 2048 inputs':
     'logs.rejectionDescriptions.expected a nonempty string, token array, or batch of at most 2048 inputs',
   'expected float or base64': 'logs.rejectionDescriptions.expected float or base64',
