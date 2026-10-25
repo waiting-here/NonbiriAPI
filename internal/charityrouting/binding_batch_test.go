@@ -26,6 +26,10 @@ func presetExec(t *testing.T, e *routingTestEnv, q string, args ...any) {
 }
 func presetFixture(t *testing.T) (*routingTestEnv, string, int64, []int64, []string) {
 	t.Helper()
+	return presetSourceFixture(t, true)
+}
+func presetSourceFixture(t *testing.T, mainstream bool) (*routingTestEnv, string, int64, []int64, []string) {
+	t.Helper()
 	e := newRoutingTestEnv(t)
 	e.seedUser(t, true, nil)
 	owner := e.seedUser(t, false, nil)
@@ -37,8 +41,12 @@ func presetFixture(t *testing.T) (*routingTestEnv, string, int64, []int64, []str
 	var donationID int64
 	keys := []int64{}
 	models := []string{}
+	channels := []string{}
+	if mainstream {
+		channels = append(channels, channel)
+	}
 	for i := range 3 {
-		did, key, physical := e.seedPresetCandidate(t, owner, donationID, fmt.Sprint(i), "up-0", connectorcontract.TypeOpenAICompatible, channel)
+		did, key, physical := e.seedPresetCandidate(t, owner, donationID, fmt.Sprint(i), "up-0", connectorcontract.TypeOpenAICompatible, channels...)
 		donationID = did
 		keys = append(keys, key)
 		catalog := []testseed.DiscoveryModel{{ID: "up-0"}}

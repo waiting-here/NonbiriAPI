@@ -112,7 +112,7 @@ func TestAgentPresetDiscoveryPreviewAndSuccessfulSkips(t *testing.T) {
 func TestAgentPresetRealFailuresRollBackWholePlan(t *testing.T) {
 	for _, reason := range []string{"invalid_resource", "capacity_exceeded", "deleted_target", "later_operation"} {
 		t.Run(reason, func(t *testing.T) {
-			e, channel, did, keys, models := presetFixture(t)
+			e, channel, did, keys, models := presetSourceFixture(t, false)
 			savePresetFixture(t, e, channel, models)
 			actor := presetAgent(t, e)
 			initial := 0
@@ -172,8 +172,8 @@ func TestAgentPresetRealFailuresRollBackWholePlan(t *testing.T) {
 	}
 }
 
-func TestAgentPresetStaleVersionsAndCurrentPermission(t *testing.T) {
-	e, channel, did, _, models := presetFixture(t)
+func TestAgentPresetCustomStaleVersions(t *testing.T) {
+	e, channel, did, _, models := presetSourceFixture(t, false)
 	savePresetFixture(t, e, channel, models)
 	actor := presetAgent(t, e)
 	for _, field := range []string{"donation", "channel", "preset", "binding"} {
@@ -201,6 +201,12 @@ func TestAgentPresetStaleVersionsAndCurrentPermission(t *testing.T) {
 		}
 		tx.Rollback()
 	}
+}
+
+func TestAgentPresetCurrentPermission(t *testing.T) {
+	e, channel, did, _, models := presetFixture(t)
+	savePresetFixture(t, e, channel, models)
+	actor := presetAgent(t, e)
 	five := int64(5)
 	id := e.seedUser(t, false, &five)
 	policy := authz.DefaultStewardPermissions(5)
@@ -264,5 +270,12 @@ func TestAgentPresetSchemaUsesOpaqueChannelsAndMappedVersions(t *testing.T) {
 		if pattern, ok := wire.Properties["channel_id"]["pattern"]; ok && strings.Contains(fmt.Sprint(pattern), "0-9") {
 			t.Fatal("opaque channel constrained to decimal", string(schema))
 		}
+	}
+	var read struct {
+		Properties map[string]map[string]any `json:"properties"`
+		Required   []string                  `json:"required"`
+	}
+	if err := json.Unmarshal(AgentReadSchemas()["charity_binding_presets"], &read); err != nil || read.Properties["query"]["type"] != "string" || strings.Join(read.Required, ",") != "donation_id" {
+		t.Fatal("preset query schema", read, err)
 	}
 }

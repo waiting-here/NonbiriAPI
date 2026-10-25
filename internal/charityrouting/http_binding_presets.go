@@ -21,7 +21,7 @@ func (api *httpAPI) listBindingPresets(w http.ResponseWriter, r *http.Request, r
 		return
 	}
 	for name, v := range values {
-		if len(v) != 1 || (name != "q" && name != "state" && name != "page" && name != "page_size") {
+		if len(v) != 1 || (name != "q" && name != "state" && name != "page" && name != "page_size" && name != "donation_id") {
 			writeRoutingError(w, ErrInvalidRequest)
 			return
 		}
@@ -35,7 +35,17 @@ func (api *httpAPI) listBindingPresets(w http.ResponseWriter, r *http.Request, r
 	if values.Has("state") {
 		state = values.Get("state")
 	}
-	out, err := api.service.bindingPresets(r.Context(), role, actor, values.Get("q"), state, page)
+	var out Page[BindingPresetChannel]
+	if values.Has("donation_id") {
+		donationID, parseErr := parsePositiveID(values.Get("donation_id"))
+		if parseErr != nil {
+			writeRoutingError(w, ErrInvalidRequest)
+			return
+		}
+		out, err = api.service.donationBindingPresets(r.Context(), role, actor, donationID, values.Get("q"), state, page)
+	} else {
+		out, err = api.service.bindingPresets(r.Context(), role, actor, values.Get("q"), state, page)
+	}
 	if err != nil {
 		writeRoutingError(w, err)
 		return

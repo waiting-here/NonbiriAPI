@@ -33,6 +33,7 @@ type BindingPresetChannel struct {
 	ChannelRevision string `json:"channel_revision"`
 	PresetRevision  string `json:"preset_revision"`
 	MappingCount    string `json:"mapping_count"`
+	Recommended     *bool  `json:"recommended,omitempty"`
 }
 type BindingPresetMapping struct {
 	UpstreamModelID string  `json:"upstream_model_id"`
@@ -56,7 +57,9 @@ type BindingPresetInput struct {
 	Mappings                []BindingPresetPair `json:"mappings"`
 }
 
-const presetChannelSelect = `SELECT c.id,c.name,e.connector_type,e.canonical_base_url,c.enabled,c.state,c.revision,COALESCE(p.revision,0),(SELECT COUNT(*) FROM channel_charity_binding_mappings WHERE channel_id=c.id) FROM mainstream_channels c JOIN mainstream_channel_primary_entries e ON e.channel_id=c.id LEFT JOIN channel_charity_binding_presets p ON p.channel_id=c.id`
+const presetChannelColumns = `c.id,c.name,e.connector_type,e.canonical_base_url,c.enabled,c.state,c.revision,COALESCE(p.revision,0),(SELECT COUNT(*) FROM channel_charity_binding_mappings WHERE channel_id=c.id)`
+const presetChannelFrom = ` FROM mainstream_channels c JOIN mainstream_channel_primary_entries e ON e.channel_id=c.id LEFT JOIN channel_charity_binding_presets p ON p.channel_id=c.id`
+const presetChannelSelect = `SELECT ` + presetChannelColumns + presetChannelFrom
 
 func scanPresetChannel(scan func(...any) error) (BindingPresetChannel, error) {
 	var out BindingPresetChannel
@@ -261,11 +264,13 @@ func (s *Service) applyBindingPreset(ctx context.Context, role roleKind, actorID
 	defer tx.Rollback()
 	actor := scope.ActorID
 	if role != roleAdmin {
-		if err := authz.RequireStewardPermission(ctx, tx, actor, "charity.manage"); err != nil {
-			return empty, err
+		for _, permission := range []string{"charity.presets", "charity.manage"} {
+			if err := authz.RequireStewardPermission(ctx, tx, actor, permission); err != nil {
+				return empty, err
+			}
 		}
 	}
-	revision, err := donationBindingRevision(ctx, tx, donationID)
+	revision, err := requirePresetDonationTx(ctx, tx, scope, donationID, now)
 	if err != nil {
 		return empty, err
 	}

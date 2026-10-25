@@ -150,7 +150,7 @@ func readBindingKeys(ctx context.Context, tx *sql.Tx, donationID, keyID, now int
 		if err := rows.Scan(&key.id, &key.physicalID, &key.valid, &source, &connector, &base); err != nil {
 			return nil, err
 		}
-		if channel != nil && (source != channel.ChannelID || connector != channel.ConnectorType || base != channel.BaseURL) {
+		if channel != nil && source != "" && (source != channel.ChannelID || connector != channel.ConnectorType || base != channel.BaseURL) {
 			key.valid = false
 		}
 		out = append(out, key)
