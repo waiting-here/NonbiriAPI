@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { useMemo } from 'react';
 import { Icon, type IconName } from '@shared/components/Icon';
 import { Fold } from '@shared/components/ui';
 import { formatCount } from '@shared/utils/formatNumber';
@@ -67,19 +68,28 @@ export function ToolActivity({
   running?: boolean;
 }) {
   const { t } = useTranslation();
-  const calls = readToolCalls(message);
+  const calls = useMemo(() => readToolCalls(message), [message]);
+  const callData = useMemo(
+    () =>
+      calls.map((call, index) => ({
+        call,
+        response: results?.get(index),
+        inputValue: parsed(call.arguments),
+        outputValue: parsed(results?.get(index)?.content),
+      })),
+    [calls, results],
+  );
   if (!calls.length)
     return <RawData title={t('common.agent.toolCalls')} value={message.tool_calls} />;
   return (
     <div className="agent-tool-stack">
-      {calls.map((call, index) => {
-        const input = object(parsed(call.arguments));
+      {callData.map(({ call, response, inputValue, outputValue }, index) => {
+        const input = object(inputValue);
         const showRaw = !toolIcons[call.name] || !call.id || call.arguments === undefined;
         const inputTitle = t(
           showRaw ? 'common.agent.toolCalls' : 'common.agent.activity.arguments',
         );
-        const response = results?.get(index);
-        const output = object(parsed(response?.content));
+        const output = object(outputValue);
         const plan = plans.find((item) => call.id && item.tool_call_ids?.includes(call.id));
         const error = typeof output.error === 'string' ? output.error : '';
         const state =
@@ -187,11 +197,11 @@ export function ToolActivity({
             lazy
           >
             <h4>{inputTitle}</h4>
-            <AgentData title={inputTitle} value={showRaw ? call.raw : parsed(call.arguments)} />
+            <AgentData title={inputTitle} value={showRaw ? call.raw : inputValue} />
             {response ? (
               <>
                 <h4>{t('common.agent.toolResult')}</h4>
-                <AgentData title={t('common.agent.toolResult')} value={parsed(response.content)} />
+                <AgentData title={t('common.agent.toolResult')} value={outputValue} />
               </>
             ) : null}
           </Fold>

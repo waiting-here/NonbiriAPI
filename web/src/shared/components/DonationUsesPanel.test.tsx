@@ -1,10 +1,11 @@
 import { ApiError } from '@shared/query/http';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { useQuery } from '@tanstack/react-query';
 import { charityKeys } from '@shared/operations/charity';
 import { DonationUseReviewResults, DonationUsesPanel } from './DonationUsesPanel';
+import { NATIVE_SERVICES } from '@shared/nativeServices';
 const mocks = vi.hoisted(() => ({ get: vi.fn(), review: vi.fn(), start: vi.fn(), read: vi.fn() }));
 vi.mock('@shared/operations/donationDiscovery', async (original) => ({
   ...(await original<typeof import('@shared/operations/donationDiscovery')>()),
@@ -73,6 +74,62 @@ async function setup(extra?: React.ReactNode) {
   return view;
 }
 describe('normal donation review details', () => {
+  it('does not read closed materials and loads every page when they are opened', async () => {
+    const rows = Array.from({ length: 180 }, (_, index) => ({
+      ...row(String(index + 100), '9'),
+      donation_key_id: String(4 + Math.floor(index / 15)),
+      native_service: NATIVE_SERVICES[index % 15],
+    }));
+    mocks.get.mockImplementation(async (_role, _donation, requested, size) => ({
+      data: rows.slice((Number(requested) - 1) * size, Number(requested) * size),
+      pagination: {
+        page: requested,
+        page_size: size,
+        total_items: String(rows.length),
+        total_pages: String(Math.ceil(rows.length / size)),
+      },
+    }));
+    const view = await setup();
+    expect(mocks.get).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Approve pending content' })).toBeEnabled();
+    await view.user.click(screen.getByText('Review material'));
+    expect(await screen.findAllByText('Pending version')).toHaveLength(12);
+    expect(mocks.get.mock.calls.map((call) => call.slice(0, 5))).toEqual([
+      ['admin', '3', '1', 100, ''],
+      ['admin', '3', '2', 100, ''],
+    ]);
+    await view.user.click(screen.getByText('Review material'));
+    await act(async () =>
+      view.queryClient.invalidateQueries({ queryKey: ['admin', 'operations', 'donation-uses'] }),
+    );
+    expect(mocks.get).toHaveBeenCalledTimes(2);
+    expect(mocks.review).not.toHaveBeenCalled();
+  });
+  it('retries an opened material read without submitting a review', async () => {
+    mocks.get
+      .mockRejectedValueOnce(new Error('Material read unavailable'))
+      .mockResolvedValue(page([row('6', '9')]));
+    const view = await setup();
+    expect(mocks.get).not.toHaveBeenCalled();
+    await view.user.click(screen.getByText('Review material'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The service could not complete this request. Try again later.',
+    );
+    await view.user.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByText('head-2…tail · Version 2');
+    expect(mocks.get).toHaveBeenCalledTimes(2);
+    expect(mocks.review).not.toHaveBeenCalled();
+  });
+  it('keeps the owner key controls loaded while materials are closed', async () => {
+    mocks.get.mockResolvedValue(page([row('6', '9')]));
+    await renderWithProviders(
+      <DonationUsesPanel role="owner" accountId="1" donationId="3" donationKeyId="4" />,
+      { station: 'user', role: 'user' },
+    );
+    await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(1));
+    expect(mocks.get.mock.calls[0]!.slice(0, 5)).toEqual(['owner', '3', '1', 100, '']);
+    expect(mocks.get.mock.calls[0]![6]).toBe('4');
+  });
   it('groups review receipts by key without exposing individual service decisions', async () => {
     const configure = vi.fn();
     const label = {
@@ -201,6 +258,8 @@ describe('normal donation review details', () => {
       return [{ use_id: '6', ok: true }];
     });
     const view = await setup();
+    await view.user.click(screen.getByText('Review material'));
+    await screen.findByText('Pending version');
     await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
     const retry = await screen.findByRole('button', { name: 'Check again' });
     await view.user.click(retry);
