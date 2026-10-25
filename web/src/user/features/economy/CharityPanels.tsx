@@ -1,9 +1,10 @@
 import { DonationStatusBadge } from '@shared/components/UseSummary';
+import { DonationUsesPanel } from '@shared/components/DonationUsesPanel';
 import { OwnerUseAddition } from './OwnerUseAddition';
-import { DonationShareFields, type DonationShare } from './DonationShareFields';
+import { DonationShareFields } from './DonationShareFields';
 import { contextPriceProps, contextRows } from './contextPrices';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
-import { NativeServicesSummary } from '@shared/components/ServiceRoutesSummary';
+import { useEndpointCreateOptions } from '../core/queries';
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useTranslation } from 'react-i18next';
@@ -253,6 +254,11 @@ export function DonationComposer({
   const { t } = useTranslation();
   const donationNotice = notice?.trim() ? notice : t('user.charity.donationNoticeDefault');
   const formID = useId();
+  const protocolOptions = useEndpointCreateOptions(draftNamespace);
+  const sharedServices = (choice: EndpointKeyChoice) =>
+    protocolOptions.data?.native_service_options?.find(
+      (row) => row.connector_type === choice.endpoint.connectorType,
+    )?.native_services ?? [];
   const mutation = useCreateDonation();
   const location = useLocation();
   const [description, setDescription] = useState(() => parseDraft(draftNamespace));
@@ -262,7 +268,6 @@ export function DonationComposer({
   );
   const controlCopy = charityControlCopy(useTranslation().i18n.language);
   const [selectedChoices, setSelectedChoices] = useState<readonly EndpointKeyChoice[]>([]);
-  const [shares, setShares] = useState<Record<string, DonationShare>>({});
   const [expiryByKey, setExpiryByKey] = useState<Record<string, TimeDraft>>({});
   const [thresholdByKey, setThresholdByKey] = useState<Record<string, string>>({});
   const [authorized, setAuthorized] = useState(false);
@@ -281,7 +286,7 @@ export function DonationComposer({
       (choice) =>
         choice.eligibility !== 'eligible' ||
         choice.snapshotStale ||
-        !shares[choice.key.id]?.services.length ||
+        !sharedServices(choice).length ||
         !choice.key.credentialId ||
         !choice.key.credentialVersion ||
         !choice.key.grantRevision,
@@ -339,7 +344,7 @@ export function DonationComposer({
         ? undefined
         : {
             endpointKeyId: choice.key.id,
-            nativeServices: shares[choice.key.id]!.services,
+            nativeServices: sharedServices(choice),
             credentialId: choice.key.credentialId,
             credentialVersion: choice.key.credentialVersion,
             grantRevision: choice.key.grantRevision,
@@ -364,7 +369,6 @@ export function DonationComposer({
       await mutation.mutateAsync(input);
       setDescription('');
       setSelectedChoices([]);
-      setShares({});
       setExpiryByKey({});
       setThresholdByKey({});
       setAuthorized(false);
@@ -409,7 +413,6 @@ export function DonationComposer({
                         {choice.key.note ||
                           maskedKey(choice.key.displayHead, choice.key.displayTail)}
                       </span>
-                      <NativeServicesSummary value={shares[choice.key.id]?.services ?? []} />
                     </span>
                     <button
                       type="button"
@@ -464,29 +467,12 @@ export function DonationComposer({
             selected={selectedChoices}
             onChange={(choices) => {
               setSelectedChoices(choices);
-              setShares((previous) => {
-                const next = { ...previous };
-                for (const choice of choices) {
-                  if (next[choice.key.id]) continue;
-                  next[choice.key.id] = {
-                    services: choice.key.nativeServices?.slice() ?? [],
-                  };
-                }
-                return next;
-              });
             }}
             disabled={locked}
             enabled={enabled}
             renderSelected={(choice) => (
               <div className="economy-key-expiry">
-                <DonationShareFields
-                  choice={choice}
-                  value={shares[choice.key.id] ?? { services: [] }}
-                  disabled={locked}
-                  onChange={(value) =>
-                    setShares((current) => ({ ...current, [choice.key.id]: value }))
-                  }
-                />
+                <DonationShareFields choice={choice} />
                 <Fold title={t('user.workflows.donationOptions')}>
                   <Field label={t('user.charity.keyExpiry')} help={t('user.charity.expiryHint')}>
                     {(props) => (
@@ -805,6 +791,14 @@ export function DonationKeyPanel({
         until={donationKey.rateLimitedUntil}
         smartBackoff={donationKey.smartBackoff}
       />
+      {accountID && donationId && donationKey.endedReason === null ? (
+        <DonationUsesPanel
+          role="owner"
+          accountId={accountID}
+          donationId={donationId}
+          donationKeyId={donationKey.id}
+        />
+      ) : null}
       <dl className="detail-grid economy-key-status-details">
         {blockingReasons.length > 0 ? (
           <div className="detail-row">

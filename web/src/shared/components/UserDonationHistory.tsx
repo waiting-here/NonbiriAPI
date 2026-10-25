@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Card, EmptyState, ErrorState, LoadingState, SectionHead } from './States';
 import { Button, DataTable, Field, FilterBar, Note } from './ui';
 import { MarkdownText } from './MarkdownText';
-import { DonationStatusBadge, UseSummary } from './UseSummary';
+import { DonationStatusBadge } from './UseSummary';
 import { DonationHandlingStatus } from './DonationHandling';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { usePagePager } from '@shared/operations/usePagePager';
@@ -104,7 +104,6 @@ export function UserDonationHistory({
   const view = (row: UserDonationHistoryItem) => (
     <div className="nb-stack nb-stack--sm">
       <strong>{row.description || t('common.operations.charity.noDescription')}</strong>
-      <UseSummary value={row.use_summary} />
       {row.owner_hidden_at !== null ? <small>{t('common.donationHistory.hidden')}</small> : null}
     </div>
   );
@@ -281,7 +280,6 @@ export function UserDonationHistory({
                     status={detail.data.status}
                     summary={detail.data.use_summary}
                   />
-                  <UseSummary value={detail.data.use_summary} />
                   <MarkdownText>
                     {detail.data.description || t('common.operations.charity.noDescription')}
                   </MarkdownText>

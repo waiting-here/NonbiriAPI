@@ -49,23 +49,25 @@ const (
 )
 
 type Config struct {
-	Review     *secret.DonationReview
-	Store      *db.Store
-	OwnerAuth  OwnerFinalTxAuthorizer
-	RoleAuth   RoleFinalTxAuthorizer
-	CursorKeys resources.CursorKeyDeriver
-	Now        func() time.Time
+	PendingSubmission func(context.Context, *sql.Tx, int64) error
+	Review            *secret.DonationReview
+	Store             *db.Store
+	OwnerAuth         OwnerFinalTxAuthorizer
+	RoleAuth          RoleFinalTxAuthorizer
+	CursorKeys        resources.CursorKeyDeriver
+	Now               func() time.Time
 }
 
 type Service struct {
-	reviewMaterial *secret.DonationReview
-	db             *sql.DB
-	readDB         *sql.DB
-	ownerAuth      OwnerFinalTxAuthorizer
-	roleAuth       RoleFinalTxAuthorizer
-	heldRead       AdminHeldReadAuthorizer
-	cursorKeys     resources.CursorKeyDeriver
-	now            func() time.Time
+	pendingSubmission func(context.Context, *sql.Tx, int64) error
+	reviewMaterial    *secret.DonationReview
+	db                *sql.DB
+	readDB            *sql.DB
+	ownerAuth         OwnerFinalTxAuthorizer
+	roleAuth          RoleFinalTxAuthorizer
+	heldRead          AdminHeldReadAuthorizer
+	cursorKeys        resources.CursorKeyDeriver
+	now               func() time.Time
 }
 
 func New(config Config) (*Service, error) {
@@ -75,7 +77,7 @@ func New(config Config) (*Service, error) {
 	if config.Now == nil {
 		config.Now = time.Now
 	}
-	return &Service{db: config.Store.DB(), readDB: config.Store.ReadDB(), ownerAuth: config.OwnerAuth, roleAuth: config.RoleAuth,
+	return &Service{pendingSubmission: config.PendingSubmission, db: config.Store.DB(), readDB: config.Store.ReadDB(), ownerAuth: config.OwnerAuth, roleAuth: config.RoleAuth,
 		cursorKeys: config.CursorKeys, now: config.Now, reviewMaterial: config.Review}, nil
 }
 
@@ -155,7 +157,7 @@ func (s *Service) CreateInTransaction(ctx context.Context, tx *sql.Tx, userID in
 		return Donation{}, ErrFeatureDisabled
 	}
 
-	keys, err := validateSubmissionKeys(ctx, tx, userID, input.Keys)
+	keys, err := validateSubmissionKeys(ctx, tx, userID, input.Keys, now)
 	if err != nil {
 		return Donation{}, err
 	}
@@ -246,6 +248,11 @@ VALUES(?,1,NULL,'','approve','',?)`, donationID, now); err != nil {
 			return Donation{}, err
 		}
 	}
+	if !autoApprove && s.pendingSubmission != nil {
+		if err := s.pendingSubmission(ctx, tx, donationID); err != nil {
+			return Donation{}, err
+		}
+	}
 	value, err := getOwnerDonationTx(ctx, tx, userID, donationID, now)
 	if err != nil {
 		return Donation{}, err
@@ -282,7 +289,13 @@ WHERE id=? AND user_id=? AND status='pending' AND revision=?`,
 		if err := requireOne(result); err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO donation_reviews(donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at) VALUES(?,?,NULL,'','note_update','',?)`, donationID, input.ExpectedRevision+1, now)
+		if _, err = tx.ExecContext(ctx, `INSERT INTO donation_reviews(donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at) VALUES(?,?,NULL,'','note_update','',?)`, donationID, input.ExpectedRevision+1, now); err != nil {
+			return err
+		}
+		changed, err := resubmitDonationProtocolTx(ctx, tx, userID, donationID, now)
+		if err == nil && changed && s.pendingSubmission != nil {
+			err = s.pendingSubmission(ctx, tx, donationID)
+		}
 		return err
 	})
 }
@@ -1338,7 +1351,7 @@ func submissionAutoApproval(keys []submissionKey) (bool, error) {
 	return mainstream, nil
 }
 
-func validateSubmissionKeys(ctx context.Context, tx *sql.Tx, userID int64, inputs []CreateKeyInput) ([]submissionKey, error) {
+func validateSubmissionKeys(ctx context.Context, tx *sql.Tx, userID int64, inputs []CreateKeyInput, now int64) ([]submissionKey, error) {
 	ids := make([]int64, len(inputs))
 	expiries := make(map[int64]*int64, len(inputs))
 	thresholds := make(map[int64]db.U128, len(inputs))
@@ -1394,7 +1407,7 @@ ORDER BY k.id`, args...)
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
-	if err := attachSubmissionUsesTx(ctx, tx, userID, inputs, keys); err != nil {
+	if err := attachSubmissionUsesTx(ctx, tx, userID, inputs, keys, now); err != nil {
 		return nil, err
 	}
 	return keys, nil

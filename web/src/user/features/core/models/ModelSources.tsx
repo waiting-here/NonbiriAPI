@@ -76,6 +76,8 @@ function BindingSelector({
   const [selectionDetails, setSelectionDetails] = useState<Record<string, BindingCandidate>>({});
   const [invalidSelection, setInvalidSelection] = useState(false);
   const [nativeSelections, setNativeSelections] = useState<Record<string, NativeService[]>>({});
+  const servicesFor = (id: string) =>
+    nativeSelections[id] ?? selectionDetails[id]?.native_services ?? [];
   const endpointPager = usePagePager({
     station: 'user',
     listType: 'models-binding-endpoints',
@@ -313,7 +315,7 @@ function BindingSelector({
           ...candidate,
           ...(selectionDetails[candidateIdentity(candidate)]?.native_services === undefined
             ? {}
-            : { native_services: nativeSelections[candidateIdentity(candidate)] ?? [] }),
+            : { native_services: servicesFor(candidateIdentity(candidate)) }),
         })),
       })
       .catch(() => undefined);
@@ -594,7 +596,7 @@ function BindingSelector({
                 {detail?.native_services ? (
                   <NativeServicesField
                     options={detail.native_services}
-                    value={nativeSelections[candidateIdentity(candidate)] ?? []}
+                    value={servicesFor(candidateIdentity(candidate))}
                     onChange={(value) =>
                       setNativeSelections((previous) => ({
                         ...previous,
@@ -658,7 +660,7 @@ function BindingSelector({
                 draft.selections.some(
                   (candidate) =>
                     selectionDetails[candidateIdentity(candidate)]?.native_services !== undefined &&
-                    !nativeSelections[candidateIdentity(candidate)]?.length,
+                    !servicesFor(candidateIdentity(candidate)).length,
                 )))
           }
           onClick={() => void submit()}

@@ -79,6 +79,11 @@ func (r *Repository) updateKeyAuthorizationTx(ctx context.Context, tx *sql.Tx, u
 	grantChanged := input.CredentialID != nil || input.NativeServices != nil
 	var grantID int64
 	if grantChanged {
+		var err error
+		endpoint, err = authorizeEndpointProtocolTx(ctx, tx, userID, endpoint, input.NativeServices, now)
+		if err != nil {
+			return err
+		}
 		selected := input.NativeServices
 		if selected == nil {
 			selected = &current.NativeServices
@@ -138,7 +143,19 @@ func (r *Repository) updateKeyAuthorizationTx(ctx context.Context, tx *sql.Tx, u
 		if err := r.stageKeyPendingUsesTx(ctx, tx, userID, keyID, grantID, input.CredentialID != nil, now); err != nil {
 			return err
 		}
+		if input.NativeServices != nil {
+			full, _ := contract.SupportedNativeServices(contract.Type(endpoint.ConnectorType))
+			selected, _ := contract.ParseNativeServices(*input.NativeServices)
+			if selected.Mask() == full.Mask() {
+				if err := stageMissingProtocolUsesTx(ctx, tx, userID, keyID, grantID, now); err != nil {
+					return err
+				}
+			}
+		}
 		if err := r.keyCreation.ProtectNewEndpointKey(ctx, tx, userID, keyID, now); err != nil {
+			return err
+		}
+		if err := r.notifyPendingSubmissionsTx(ctx, tx, userID, []int64{grantID}); err != nil {
 			return err
 		}
 	}

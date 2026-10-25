@@ -183,7 +183,6 @@ interface CharityBindingPickerProps {
   capacity?: number;
   role: CharityRole;
   modelId: string;
-  preferredServices?: readonly NativeService[];
   selected: Record<string, CharitySelection>;
   onChange: (next: Record<string, CharitySelection>) => void;
   locked: boolean;
@@ -239,7 +238,6 @@ function CharityBindingPickerBody({
   showSelectionSummary = true,
   role,
   modelId,
-  preferredServices,
   selected,
   onChange,
   locked,
@@ -1004,11 +1002,7 @@ function CharityBindingPickerBody({
                                         ...entry,
                                         note: selectedKey.safe_note,
                                         selected_native_services: entry.capabilities?.can_bind
-                                          ? entry.native_services?.filter(
-                                              (service) =>
-                                                !preferredServices ||
-                                                preferredServices.includes(service),
-                                            )
+                                          ? entry.native_services?.slice()
                                           : undefined,
                                       };
                                     } else {
@@ -1105,10 +1099,7 @@ function CharityBindingPickerBody({
                             ...entry,
                             note: selectedKey.safe_note,
                             selected_native_services: entry.capabilities?.can_bind
-                              ? entry.native_services?.filter(
-                                  (service) =>
-                                    !preferredServices || preferredServices.includes(service),
-                                )
+                              ? entry.native_services?.slice()
                               : undefined,
                           };
                         onChange(next);

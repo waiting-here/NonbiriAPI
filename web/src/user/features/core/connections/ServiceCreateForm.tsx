@@ -2,7 +2,7 @@ import { useId, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Field, Fold, Note, Segmented } from '@shared/components/ui';
-import { NativeServicesField } from '@shared/components/NativeServicesField';
+import { ProtocolRerankField } from '@shared/components/ProtocolRerankField';
 import type { NativeService, RerankFormat } from '@shared/nativeServices';
 import { DISCOVERY_FORMATS, type DiscoveryPreset } from '@shared/connections';
 import { useEndpointCreateOptions } from '../queries';
@@ -44,7 +44,6 @@ export function ServiceCreateForm({
   const [connector, setConnector] = useState('');
   const [address, setAddress] = useState('');
   const [name, setName] = useState<string | null>(null);
-  const [services, setServices] = useState<NativeService[]>([]);
   const [format, setFormat] = useState<RerankFormat | null>(null);
   const [discoveryOverride, setDiscoveryOverride] = useState<DiscoveryPreset | null | undefined>();
   const [selected, setSelected] = useState<Record<string, NativeService[]>>({});
@@ -90,6 +89,9 @@ export function ServiceCreateForm({
   const channel = options.data?.mainstream_channels.find((row) => row.id === channelId);
   const nativeOptions = options.data?.native_service_options ?? [];
   const chosenProtocol = nativeOptions.find((row) => row.connector_type === connector);
+  const services = chosenProtocol?.native_services ?? [];
+  const protocolServices = (type: string) =>
+    nativeOptions.find((row) => row.connector_type === type)?.native_services.slice() ?? [];
   const customDiscovery =
     discoveryOverride === undefined
       ? defaultDiscovery(chosenProtocol?.configuration_type, address)
@@ -117,7 +119,8 @@ export function ServiceCreateForm({
               note: serviceName.trim(),
               enabled: true,
               native_services: services,
-              rerank_format: format ?? '',
+              rerank_format:
+                format ?? (chosenProtocol?.rerank_formats.includes('generic') ? 'generic' : ''),
             },
           },
         ]
@@ -131,8 +134,14 @@ export function ServiceCreateForm({
               channel_id: channel!.id,
               channel_entry_id: entry.id,
               channel_revision: channel!.revision,
-              native_services: selected[entry.id!],
-              rerank_format: entry.rerank_format,
+              native_services: protocolServices(entry.connector_type),
+              rerank_format:
+                entry.rerank_format ||
+                (nativeOptions
+                  .find((row) => row.connector_type === entry.connector_type)
+                  ?.rerank_formats.includes('generic')
+                  ? 'generic'
+                  : ''),
               note: entry.name,
               enabled: true,
             },
@@ -321,7 +330,7 @@ export function ServiceCreateForm({
                       Object.fromEntries(
                         (value?.entries ?? [])
                           .filter((row) => row.id && row.enabled)
-                          .map((row) => [row.id!, row.native_services.slice()]),
+                          .map((row) => [row.id!, protocolServices(row.connector_type)]),
                       ),
                     );
                   }}
@@ -352,7 +361,7 @@ export function ServiceCreateForm({
                               setSelected((previous) => {
                                 const next = { ...previous };
                                 if (event.target.checked)
-                                  next[entry.id!] = entry.native_services.slice();
+                                  next[entry.id!] = protocolServices(entry.connector_type);
                                 else delete next[entry.id!];
                                 return next;
                               })
@@ -360,16 +369,6 @@ export function ServiceCreateForm({
                           />
                         )}
                       </Field>
-                      {selected[entry.id!] ? (
-                        <NativeServicesField
-                          options={entry.native_services}
-                          value={selected[entry.id!]!}
-                          disabled={locked || started}
-                          onChange={(value) =>
-                            setSelected((previous) => ({ ...previous, [entry.id!]: value }))
-                          }
-                        />
-                      ) : null}
                       {selected[entry.id!] && channel.discovery_source ? (
                         <Field label={t('common.connections.useSuggestedCatalog')}>
                           {(props) => (
@@ -404,11 +403,7 @@ export function ServiceCreateForm({
                   disabled={locked || started}
                   required
                   onChange={(event) => {
-                    const option = nativeOptions.find(
-                      (row) => row.connector_type === event.target.value,
-                    );
                     setConnector(event.target.value);
-                    setServices(option?.default_native_services.slice() ?? []);
                     setFormat(null);
                     setDiscoveryOverride(undefined);
                   }}
@@ -443,17 +438,12 @@ export function ServiceCreateForm({
                 />
               )}
             </Field>
-            <Fold title={t('common.connections.nativeServices')}>
-              <NativeServicesField
-                options={chosenProtocol?.native_services ?? []}
-                value={services}
-                rerankFormats={chosenProtocol?.rerank_formats}
-                rerankFormat={format}
-                onRerankFormatChange={setFormat}
-                onChange={setServices}
-                disabled={locked || started}
-              />
-            </Fold>
+            <ProtocolRerankField
+              formats={chosenProtocol?.rerank_formats}
+              value={format}
+              onChange={setFormat}
+              disabled={locked || started}
+            />
             <Fold title={t('common.connections.discoveryOptional')}>
               <Field label={t('user.workflows.discoverModels')}>
                 {(props) => (

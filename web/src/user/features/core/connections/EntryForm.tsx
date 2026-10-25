@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { PresetModels } from './PresetModels';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { NativeServicesField } from '@shared/components/NativeServicesField';
+import { ProtocolRerankField } from '@shared/components/ProtocolRerankField';
 import { Field, Note, Segmented } from '@shared/components/ui';
 import type { NativeService, RerankFormat } from '@shared/nativeServices';
 import type { DiscoveryPreset, NativeServiceOption } from '@shared/connections';
@@ -15,7 +15,6 @@ import { ConnectionOperationNotice } from './OperationNotice';
 import { useConnectionOperation } from './useConnectionOperation';
 import { CredentialGrantForm } from './CredentialGrantForm';
 import { MainstreamMatches } from './MainstreamMatches';
-import { useMainstreamMatchingCopy } from './mainstreamMatchingCopy';
 import { useMainstreamMatches } from './useMainstreamMatches';
 
 export function EntryForm({
@@ -29,14 +28,12 @@ export function EntryForm({
 }) {
   const { t } = useTranslation();
   const { t: coreText } = useCoreCopy();
-  const copy = useMainstreamMatchingCopy();
   const client = useQueryClient();
   const options = useEndpointCreateOptions(accountId);
   const [mode, setMode] = useState<'custom' | 'mainstream'>('custom');
   const [connector, setConnector] = useState('');
   const [baseURL, setBaseURL] = useState('');
   const [note, setNote] = useState('');
-  const [services, setServices] = useState<NativeService[]>([]);
   const [format, setFormat] = useState<RerankFormat | null>(null);
   const [channelId, setChannelId] = useState('');
   const [selected, setSelected] = useState<Record<string, NativeService[]>>({});
@@ -51,6 +48,9 @@ export function EntryForm({
       items.findIndex((other) => other.configuration_type === item.configuration_type) === index,
   );
   const selectedOption = nativeOptions.find((item) => item.connector_type === connector);
+  const services = selectedOption?.native_services ?? [];
+  const protocolServices = (type: string) =>
+    nativeOptions.find((row) => row.connector_type === type)?.native_services.slice() ?? [];
   const channel = options.data?.mainstream_channels.find((item) => item.id === channelId);
   const pendingEntries = (channel?.entries ?? []).filter(
     (entry) => entry.enabled && entry.id && selected[entry.id] && !saved[entry.id],
@@ -74,7 +74,6 @@ export function EntryForm({
   );
   const chooseConnector = (item: NativeServiceOption | undefined) => {
     setConnector(item?.connector_type ?? '');
-    setServices(item?.default_native_services.slice() ?? []);
     setFormat(null);
   };
   const save = async () => {
@@ -91,7 +90,8 @@ export function EntryForm({
                 enabled: true,
                 connection_id: connectionId,
                 native_services: services,
-                rerank_format: format ?? '',
+                rerank_format:
+                  format ?? (selectedOption?.rerank_formats.includes('generic') ? 'generic' : ''),
               },
             },
           ]
@@ -105,8 +105,14 @@ export function EntryForm({
               note: entry.name,
               enabled: true,
               connection_id: connectionId,
-              native_services: selected[entry.id!],
-              rerank_format: entry.rerank_format,
+              native_services: protocolServices(entry.connector_type),
+              rerank_format:
+                entry.rerank_format ||
+                (nativeOptions
+                  .find((row) => row.connector_type === entry.connector_type)
+                  ?.rerank_formats.includes('generic')
+                  ? 'generic'
+                  : ''),
             },
           }));
     for (const item of inputs) {
@@ -202,14 +208,11 @@ export function EntryForm({
               )}
             </Field>
             {selectedOption ? (
-              <NativeServicesField
-                options={selectedOption.native_services}
-                value={services}
-                onChange={setServices}
+              <ProtocolRerankField
+                formats={selectedOption.rerank_formats}
+                value={format}
+                onChange={setFormat}
                 disabled={locked || Boolean(saved.custom)}
-                rerankFormats={selectedOption.rerank_formats}
-                rerankFormat={format}
-                onRerankFormatChange={setFormat}
               />
             ) : null}
             <MainstreamMatches
@@ -219,9 +222,7 @@ export function EntryForm({
                 client.setQueryData(coreKeys.endpointCreateOptions(accountId), snapshot);
                 setChannelId(matchingChannel.id);
                 setSelected({
-                  [entry.id!]: services.filter((service) =>
-                    entry.native_services.includes(service),
-                  ),
+                  [entry.id!]: protocolServices(entry.connector_type),
                 });
                 setMode('mainstream');
               }}
@@ -263,7 +264,7 @@ export function EntryForm({
                           const enabled = event.target.checked;
                           setSelected((current) => {
                             const next = { ...current };
-                            if (enabled) next[entry.id!] = entry.native_services.slice();
+                            if (enabled) next[entry.id!] = protocolServices(entry.connector_type);
                             else delete next[entry.id!];
                             return next;
                           });
@@ -271,19 +272,6 @@ export function EntryForm({
                       />
                     )}
                   </Field>
-                  {selected[entry.id] ? (
-                    <>
-                      {selected[entry.id].length === 0 ? <Note>{copy.chooseServices}</Note> : null}
-                      <NativeServicesField
-                        options={entry.native_services}
-                        value={selected[entry.id]}
-                        onChange={(value) =>
-                          setSelected((current) => ({ ...current, [entry.id!]: value }))
-                        }
-                        disabled={locked || Boolean(saved[entry.id])}
-                      />
-                    </>
-                  ) : null}
                 </div>
               ) : null,
             )}

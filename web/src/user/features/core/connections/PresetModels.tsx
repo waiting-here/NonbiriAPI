@@ -106,9 +106,7 @@ export function PresetModelRow({
     if (entry.entry_id in services) return services[entry.entry_id] ?? undefined;
     const endpoint = entries[entry.entry_id];
     const key = endpoint ? grants[grantsByEntry ? entry.entry_id : endpoint.id] : undefined;
-    const known = entry.native_services.filter((service) =>
-      key?.native_services?.includes(service),
-    );
+    const known = key?.native_services ?? [];
     return known.length ? known : undefined;
   };
   const targets = mapping.entries.flatMap((entry) => {
@@ -223,9 +221,7 @@ export function PresetModelRow({
                     setServices((previous) => {
                       const next = { ...previous };
                       if (event.target.checked)
-                        next[entry.entry_id] = entry.native_services.filter((service) =>
-                          key?.native_services?.includes(service),
-                        );
+                        next[entry.entry_id] = key?.native_services?.slice() ?? [];
                       else next[entry.entry_id] = null;
                       return next;
                     })

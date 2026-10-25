@@ -28,7 +28,6 @@ import { CharityModelScope } from '../CharityModelScope';
 import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '../States';
 import { Button, DataTable, Field, FilterBar, Note, OutcomeNote } from '../ui';
 import { BindingBatchResults, type BindingResultLabel } from './BindingBatchResults';
-import { NATIVE_SERVICE_LABEL_KEYS, type NativeService } from '@shared/nativeServices';
 
 interface Selection extends BindingResultLabel {
   target: BindingOption;
@@ -47,7 +46,6 @@ export function MultiTargetBindingWorkflow({
   onBack,
   onCreate,
   initialTarget = '',
-  reviewedService,
   onCapabilityLoss,
 }: {
   role: CharityRole;
@@ -56,7 +54,6 @@ export function MultiTargetBindingWorkflow({
   onBack: () => void;
   onCreate: () => void;
   initialTarget?: string;
-  reviewedService?: NativeService;
   onCapabilityLoss?: () => void;
 }) {
   const { t } = useTranslation();
@@ -318,13 +315,6 @@ export function MultiTargetBindingWorkflow({
           </>
         }
       />
-      {reviewedService ? (
-        <Note>
-          {t('common.connections.reviewedServiceDefault', {
-            service: t(NATIVE_SERVICE_LABEL_KEYS[reviewedService]),
-          })}
-        </Note>
-      ) : null}
       {target ? (
         <div className="nb-form" ref={detailRef} tabIndex={-1}>
           <Button type="button" variant="ghost" disabled={locked} onClick={() => setTarget(null)}>
@@ -333,7 +323,6 @@ export function MultiTargetBindingWorkflow({
           <h2 className="nb-workflow-id">{target.full_name}</h2>
           <CharityModelScope modelID={role === 'steward' ? target.charity_model_id : undefined}>
             <CharityBindingPicker
-              preferredServices={reviewedService ? [reviewedService] : undefined}
               key={target.charity_model_id}
               role={role}
               modelId={target.charity_model_id}

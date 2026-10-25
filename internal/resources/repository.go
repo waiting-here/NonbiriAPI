@@ -34,6 +34,7 @@ const (
 )
 
 type Config struct {
+	PendingSubmission   func(context.Context, *sql.Tx, int64) error
 	Store               *db.Store
 	Adaptations         *requestadaptation.Store
 	Connectors          *connector.Registry
@@ -55,6 +56,7 @@ type Config struct {
 }
 
 type Repository struct {
+	pendingSubmission   func(context.Context, *sql.Tx, int64) error
 	db                  *sql.DB
 	adaptations         *requestadaptation.Store
 	connectors          *connector.Registry
@@ -98,7 +100,8 @@ func New(config Config) (*Repository, error) {
 		config.MainstreamChannelID = func() (string, error) { return db.GenerateOpaqueID("mch_") }
 	}
 	return &Repository{
-		db: config.Store.DB(), connectors: config.Connectors, baseURLs: config.BaseURLs,
+		pendingSubmission: config.PendingSubmission,
+		db:                config.Store.DB(), connectors: config.Connectors, baseURLs: config.BaseURLs,
 		adaptations: config.Adaptations,
 		secrets:     config.Secrets, keyDeletion: config.KeyDeletion, keyCreation: config.KeyCreation,
 		projection: config.Projection, discoveryRail: config.DiscoveryRail,

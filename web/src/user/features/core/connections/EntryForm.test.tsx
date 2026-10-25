@@ -137,7 +137,7 @@ async function renderForm(fetchMock: typeof fetch, onChanged?: () => void) {
 }
 
 describe('mainstream entry suggestions', () => {
-  it('shows every match and explicitly adopts only the chosen entry with its revision and compatible services', async () => {
+  it('shows every match and explicitly adopts only the chosen entry with its revision and all protocol services', async () => {
     const writes: { body: Record<string, unknown>; key: string | null }[] = [];
     const view = await renderForm(async (input, init) => {
       const url = new URL(String(input), 'https://app.example');
@@ -179,8 +179,7 @@ describe('mainstream entry suggestions', () => {
     expect(screen.getByRole('radio', { name: 'Mainstream preset' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Matching entry' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Other entry' })).not.toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Responses' })).not.toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: 'Chat completions' })).not.toBeInTheDocument();
     await view.user.click(screen.getByRole('button', { name: 'Save selected entries' }));
     await screen.findByText('Entry saved. Choose a credential and authorize it next.', {
       exact: false,
@@ -201,7 +200,7 @@ describe('mainstream entry suggestions', () => {
       note: 'Matching entry',
       enabled: true,
       connection_id: '9',
-      native_services: ['chat_completions'],
+      native_services: ['chat_completions', 'responses'],
       rerank_format: '',
     });
   });
@@ -227,7 +226,6 @@ describe('mainstream entry suggestions', () => {
       'https://example.com/v1',
     );
     await view.user.type(screen.getByRole('textbox', { name: 'Note Optional' }), 'My custom draft');
-    await view.user.click(screen.getByRole('checkbox', { name: 'Responses' }));
     await view.user.click(
       await screen.findByRole('button', {
         name: 'Use this preset: First channel · Matching entry',
@@ -239,7 +237,7 @@ describe('mainstream entry suggestions', () => {
     );
     expect(screen.getByRole('textbox', { name: 'Note Optional' })).toHaveValue('My custom draft');
     expect(screen.getByRole('combobox', { name: 'Protocol' })).toHaveValue('openai-compatible');
-    expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: 'Responses' })).not.toBeInTheDocument();
     await view.user.click(screen.getByRole('button', { name: 'Save selected entries' }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toEqual({
@@ -254,7 +252,7 @@ describe('mainstream entry suggestions', () => {
     });
   });
 
-  it('requires a service choice when the adopted entry has no compatible custom selection', async () => {
+  it('adopts a different protocol without requiring another service selection', async () => {
     const view = await renderForm(async (input) =>
       json(
         options(new URL(String(input), 'https://app.example').searchParams.has('match_base_url')),
@@ -269,11 +267,7 @@ describe('mainstream entry suggestions', () => {
         name: 'Use this preset: Second channel · Another match',
       }),
     );
-    expect(screen.getByText('Choose which services to use from this preset.')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Save selected entries' })).toBeDisabled();
-    const messages = screen.getByRole('checkbox', { name: 'Anthropic Messages' });
-    expect(messages).not.toBeChecked();
-    await view.user.click(messages);
+    expect(screen.queryByRole('checkbox', { name: 'Anthropic Messages' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save selected entries' })).toBeEnabled();
   });
 
@@ -484,10 +478,9 @@ it('keeps every saved entry associated with its own selection during batched ren
   expect(screen.getByRole('button', { name: 'Save selected entries' })).toBeDisabled();
 });
 
-it('shows System One services when the Typesafe System One protocol is selected', async () => {
+it('uses the complete System One protocol without a sub-service choice', async () => {
   const supplied = options();
   supplied.base_connector_types.push('typesafe-systemone');
-  supplied.native_service_options[0]!.native_services.push('decisions');
   supplied.native_service_options.push({
     connector_type: 'typesafe-systemone',
     configuration_type: 'typesafe-systemone',
@@ -495,15 +488,31 @@ it('shows System One services when the Typesafe System One protocol is selected'
     default_native_services: ['systemone'],
     rerank_formats: [],
   });
-  const view = await renderForm(async () => json(supplied));
-  expect(screen.getByRole('checkbox', { name: 'Decisions' })).toBeVisible();
+  const writes: Record<string, unknown>[] = [];
+  const view = await renderForm(async (_input, init) => {
+    if (init?.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      writes.push(body);
+      return json(
+        { ...endpointWire, connector_type: 'typesafe-systemone', native_services: ['systemone'] },
+        201,
+      );
+    }
+    return json(supplied);
+  });
+  await view.user.selectOptions(
+    screen.getByRole('combobox', { name: 'Protocol' }),
+    'typesafe-systemone',
+  );
+  await view.user.type(
+    screen.getByRole('textbox', { name: 'Entry URL' }),
+    'https://system.example/v1',
+  );
   expect(screen.queryByRole('checkbox', { name: 'System One' })).not.toBeInTheDocument();
-  const protocol = screen.getByRole('combobox', { name: 'Protocol' });
-  await view.user.selectOptions(protocol, 'typesafe-systemone');
-  expect(screen.getByRole('checkbox', { name: 'System One' })).toBeChecked();
-  expect(screen.queryByRole('checkbox', { name: 'Decisions' })).not.toBeInTheDocument();
-  expect(screen.queryByRole('checkbox', { name: 'Chat completions' })).not.toBeInTheDocument();
-  await view.user.selectOptions(protocol, 'openai-compatible');
-  expect(screen.queryByRole('checkbox', { name: 'System One' })).not.toBeInTheDocument();
-  expect(screen.getByRole('checkbox', { name: 'Decisions' })).toBeVisible();
+  await view.user.click(screen.getByRole('button', { name: 'Save selected entries' }));
+  await waitFor(() => expect(writes).toHaveLength(1));
+  expect(writes[0]).toMatchObject({
+    connector_type: 'typesafe-systemone',
+    native_services: ['systemone'],
+  });
 });

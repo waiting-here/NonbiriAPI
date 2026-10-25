@@ -125,8 +125,23 @@ WHERE d.id=? AND d.user_id=? AND dk.id=?`, now, donationID, userID, input.Donati
 	if err != nil {
 		return empty, connectionError(err)
 	}
-	if grant.CredentialID != input.CredentialID || grant.CredentialVersion != input.CredentialVersion || grant.GrantRevision != input.GrantRevision ||
-		!services.IsSubsetOf(grant.EffectiveServices) {
+	if grant.CredentialID != input.CredentialID || grant.CredentialVersion != input.CredentialVersion || grant.GrantRevision != input.GrantRevision {
+		return empty, ErrConflict
+	}
+	full, err := contract.SupportedNativeServices(grant.ConfiguredType)
+	if err != nil {
+		return empty, ErrInvariant
+	}
+	wholeProtocol := services.Mask() == full.Mask()
+	if wholeProtocol {
+		if _, err := resources.AuthorizeProtocolServicesTx(ctx, tx, userID, keyID.Int64, now, false); err != nil {
+			return empty, protocolAuthorizationError(err)
+		}
+		grant, err = connectionstore.LoadSelfGrantTx(ctx, tx, userID, keyID.Int64)
+		if err != nil {
+			return empty, connectionError(err)
+		}
+	} else if !services.IsSubsetOf(grant.EffectiveServices) {
 		return empty, ErrConflict
 	}
 	sourceRevisionID, err := connectionstore.ConfiguredDiscoverySourceRevisionTx(ctx, tx, grant)
@@ -147,7 +162,7 @@ WHERE d.id=? AND d.user_id=? AND dk.id=?`, now, donationID, userID, input.Donati
 	}
 	value := AppendUsesReceipt{DonationRevision: strconv.FormatInt(revision+1, 10), Uses: make([]AppendedUse, 0, len(input.Items))}
 	for _, item := range input.Items {
-		use, err := appendUseTx(ctx, tx, input.DonationKeyID, item, grant.GrantRevisionID, sourceRevisionID, now)
+		use, err := appendUseTx(ctx, tx, input.DonationKeyID, item, grant.GrantRevisionID, sourceRevisionID, now, wholeProtocol)
 		if err != nil {
 			return empty, err
 		}
@@ -160,6 +175,11 @@ WHERE d.id=? AND d.user_id=? AND dk.id=?`, now, donationID, userID, input.Donati
 	if err := requireOne(result); err != nil {
 		return empty, err
 	}
+	if s.pendingSubmission != nil {
+		if err := s.pendingSubmission(ctx, tx, donationID); err != nil {
+			return empty, err
+		}
+	}
 	out, err := finishJSON(ctx, tx, decision, http.StatusCreated, value)
 	if err != nil {
 		return empty, err
@@ -170,7 +190,7 @@ WHERE d.id=? AND d.user_id=? AND dk.id=?`, now, donationID, userID, input.Donati
 	return out, nil
 }
 
-func appendUseTx(ctx context.Context, tx *sql.Tx, donationKeyID int64, item AppendUseItem, grantID int64, sourceRevisionID *int64, now int64) (AppendedUse, error) {
+func appendUseTx(ctx context.Context, tx *sql.Tx, donationKeyID int64, item AppendUseItem, grantID int64, sourceRevisionID *int64, now int64, wholeProtocol bool) (AppendedUse, error) {
 	service, err := contract.ParseNativeServices([]contract.NativeService{item.NativeService})
 	if err != nil {
 		return AppendedUse{}, ErrInvalidRequest
@@ -186,7 +206,8 @@ func appendUseTx(ctx context.Context, tx *sql.Tx, donationKeyID int64, item Appe
 		}
 		result, err := tx.ExecContext(ctx, `INSERT INTO donation_uses(
 donation_key_id,native_service_bit,enabled,discovery_enabled,revision,created_at,updated_at)
-VALUES(?,?,1,?,1,?,?)`, donationKeyID, service.Mask(), sourceRevisionID != nil, now, now)
+VALUES(?,?,CASE WHEN ? THEN COALESCE((SELECT MAX(enabled) FROM donation_uses WHERE donation_key_id=?),1) ELSE 1 END,
+CASE WHEN ? THEN CASE WHEN ? THEN COALESCE((SELECT MAX(discovery_enabled) FROM donation_uses WHERE donation_key_id=?),1) ELSE 1 END ELSE 0 END,1,?,?)`, donationKeyID, service.Mask(), wholeProtocol, donationKeyID, sourceRevisionID != nil, wholeProtocol, donationKeyID, now, now)
 		if err != nil {
 			return AppendedUse{}, err
 		}
@@ -198,12 +219,12 @@ VALUES(?,?,1,?,1,?,?)`, donationKeyID, service.Mask(), sourceRevisionID != nil, 
 	case err != nil:
 		return AppendedUse{}, err
 	default:
-		if item.ExpectedRevision == nil || revision != *item.ExpectedRevision || pending.Valid || approved.Valid {
+		if item.ExpectedRevision == nil || revision != *item.ExpectedRevision || !wholeProtocol && (pending.Valid || approved.Valid) {
 			return AppendedUse{}, ErrConflict
 		}
 		// Keep pause state. Sharing and the subsequent pending pointer each
 		// require their own CAS increment under the existing database guard.
-		if sharing := sourceRevisionID != nil; discoveryEnabled != sharing {
+		if sharing := sourceRevisionID != nil; !wholeProtocol && discoveryEnabled != sharing {
 			if revision >= math.MaxInt64-1 {
 				return AppendedUse{}, ErrConflict
 			}

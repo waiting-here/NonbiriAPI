@@ -40,13 +40,27 @@ const emptyPage = {
   pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
 };
 describe('persistent entry metadata drafts', () => {
-  it('edits the service name with one patch without rewriting unchanged authorization fields', async () => {
+  it('edits the service name with one patch while explicitly authorizing the complete protocol', async () => {
     let endpoint = endpointWire();
     const writes: Record<string, unknown>[] = [];
     vi.stubGlobal(
       'fetch',
       vi.fn<typeof fetch>(async (input, init) => {
         const url = new URL(String(input), 'https://app.example');
+        if (url.pathname === '/api/endpoint-create-options')
+          return json({
+            base_connector_types: ['openai-compatible'],
+            mainstream_channels: [],
+            native_service_options: [
+              {
+                connector_type: 'openai-compatible',
+                configuration_type: 'openai-compatible',
+                native_services: ['chat_completions'],
+                default_native_services: ['chat_completions'],
+                rerank_formats: [],
+              },
+            ],
+          });
         if (init?.method === 'PATCH') {
           const body = JSON.parse(String(init.body));
           writes.push(body);
@@ -85,7 +99,9 @@ describe('persistent entry metadata drafts', () => {
     await view.user.type(name, 'Renamed service');
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findByText('Saved');
-    expect(writes).toEqual([{ note: 'Renamed service', expected_revision: '1' }]);
+    expect(writes).toEqual([
+      { note: 'Renamed service', native_services: ['chat_completions'], expected_revision: '1' },
+    ]);
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
   it.each(['entry', 'key'] as const)(
@@ -98,6 +114,20 @@ describe('persistent entry metadata drafts', () => {
         'fetch',
         vi.fn<typeof fetch>(async (input, init) => {
           const url = new URL(String(input), 'https://app.example');
+          if (url.pathname === '/api/endpoint-create-options')
+            return json({
+              base_connector_types: ['openai-compatible'],
+              mainstream_channels: [],
+              native_service_options: [
+                {
+                  connector_type: 'openai-compatible',
+                  configuration_type: 'openai-compatible',
+                  native_services: ['chat_completions', 'responses', 'embeddings'],
+                  default_native_services: ['chat_completions'],
+                  rerank_formats: [],
+                },
+              ],
+            });
           if (init?.method === 'PATCH') {
             const body = JSON.parse(String(init.body));
             writes.push(body);
@@ -159,11 +189,12 @@ describe('persistent entry metadata drafts', () => {
           { exact: true },
         ),
       );
-      const responses = await screen.findByRole('checkbox', { name: 'Responses' });
-      await view.user.click(responses);
+      if (kind === 'entry')
+        await view.user.type(screen.getByRole('textbox', { name: 'Service name' }), ' first');
       await view.user.click(screen.getByRole('button', { name: 'Save' }));
       await screen.findByText('Saved');
-      await view.user.click(screen.getByRole('checkbox', { name: 'Embeddings' }));
+      if (kind === 'entry')
+        await view.user.type(screen.getByRole('textbox', { name: 'Service name' }), ' second');
       await view.user.click(screen.getByRole('button', { name: 'Save' }));
       await waitFor(() => expect(writes).toHaveLength(2));
       expect(writes.map((row) => row.expected_revision)).toEqual(['1', '2']);
@@ -179,6 +210,20 @@ describe('persistent entry metadata drafts', () => {
       'fetch',
       vi.fn<typeof fetch>(async (input, init) => {
         const url = new URL(String(input), 'https://app.example');
+        if (url.pathname === '/api/endpoint-create-options')
+          return json({
+            base_connector_types: ['openai-compatible'],
+            mainstream_channels: [],
+            native_service_options: [
+              {
+                connector_type: 'openai-compatible',
+                configuration_type: 'openai-compatible',
+                native_services: ['chat_completions', 'responses', 'embeddings'],
+                default_native_services: ['chat_completions'],
+                rerank_formats: [],
+              },
+            ],
+          });
         if (url.pathname === '/api/endpoints/11/keys/5' && init?.method === 'PATCH') {
           const body = JSON.parse(String(init.body));
           writes.push({ body, key: new Headers(init.headers).get('Idempotency-Key') });
@@ -219,20 +264,17 @@ describe('persistent entry metadata drafts', () => {
     await view.user.click(
       screen.getByText('Credential and service authorization', { exact: true }),
     );
-    await view.user.click(screen.getByRole('checkbox', { name: 'Responses' }));
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
     const reread = await screen.findByRole('button', { name: 'Retry' });
     expect(writes).toHaveLength(1);
     expect(reads).toBe(1);
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Embeddings' })).toBeDisabled();
+    expect(screen.queryByRole('checkbox', { name: 'Responses' })).not.toBeInTheDocument();
     await view.user.click(reread);
     await screen.findByText('Saved');
     expect(writes).toHaveLength(1);
     expect(reads).toBe(2);
-    expect(screen.getByRole('checkbox', { name: 'Embeddings' })).toBeEnabled();
-    await view.user.click(screen.getByRole('checkbox', { name: 'Embeddings' }));
+    expect(screen.queryByRole('checkbox', { name: 'Responses' })).not.toBeInTheDocument();
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(writes).toHaveLength(2));
     expect(writes.map((row) => row.body.expected_revision)).toEqual(['1', '2']);
@@ -265,6 +307,20 @@ describe('persistent entry metadata drafts', () => {
       'fetch',
       vi.fn<typeof fetch>(async (input, init) => {
         const url = new URL(String(input), 'https://app.example');
+        if (url.pathname === '/api/endpoint-create-options')
+          return json({
+            base_connector_types: ['openai-compatible'],
+            mainstream_channels: [],
+            native_service_options: [
+              {
+                connector_type: 'openai-compatible',
+                configuration_type: 'openai-compatible',
+                native_services: ['chat_completions', 'responses', 'embeddings'],
+                default_native_services: ['chat_completions'],
+                rerank_formats: [],
+              },
+            ],
+          });
         if (init?.method === 'PATCH') {
           const body = JSON.parse(String(init.body));
           writes.push(body);
@@ -289,16 +345,15 @@ describe('persistent entry metadata drafts', () => {
     await view.user.click(
       screen.getByText('Credential and service authorization', { exact: true }),
     );
-    await view.user.click(screen.getByRole('checkbox', { name: 'Responses' }));
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findByText('The data changed. Review the latest values and try again.');
-    expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: 'Responses' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     await view.user.click(screen.getByRole('button', { name: 'Continue with current revision' }));
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(writes).toHaveLength(2));
     expect(writes[1]).toEqual({
-      native_services: ['chat_completions', 'responses'],
+      native_services: ['chat_completions', 'responses', 'embeddings'],
       expected_revision: '2',
     });
     expect(writes[1]).not.toHaveProperty('discovery_source_id');

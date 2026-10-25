@@ -1460,6 +1460,28 @@ export const reviewManagedDonation = (
     (value) => decodeDonation(role, value),
     idempotentOptions(key, { method: 'POST', json: body }),
   );
+export interface PendingDonationReviewInput {
+  expected_revision: string;
+  decision: 'approve' | 'reject';
+  reason: string;
+  uses: { use_id: string; expected_revision: string; expected_review_revision: string | null }[];
+}
+export const reviewPendingDonation = (
+  role: CharityRole,
+  id: string,
+  body: PendingDonationReviewInput,
+  key: string,
+  signal?: AbortSignal,
+): Promise<AdminDonation | StewardDonation> =>
+  decoded(
+    `${base(role)}/donations/${encodeURIComponent(decimalID(id, `${role} donation id`))}/pending-review`,
+    (value) => {
+      const item = decodeDonation(role, value);
+      if (item.id !== id) invalidResponse('donation identity');
+      return item;
+    },
+    idempotentOptions(key, { method: 'POST', json: body, signal }),
+  );
 export const patchManagedDonationKey = (
   role: CharityRole,
   id: string,

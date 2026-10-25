@@ -3,8 +3,7 @@ import {
   type DonationDisplayStatus,
   type UseSummary as DonationUseSummary,
 } from '@shared/operations/donationUses';
-import { DonationStatusBadge, UseSummary } from '@shared/components/UseSummary';
-import { DonationUsesPanel } from '@shared/components/DonationUsesPanel';
+import { DonationStatusBadge } from '@shared/components/UseSummary';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
@@ -365,9 +364,6 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
             }
           />
           <PanelBody>
-            {query.data?.data.find((item) => item.id === expanded)?.useSummary ? (
-              <DonationUsesPanel role="owner" accountId={accountID} donationId={expanded} />
-            ) : null}
             <OwnerDonationKeys
               key={`${accountID}:${expanded}`}
               accountID={accountID}
@@ -415,7 +411,6 @@ function DonationSummary({
               available: item.stateCounts.available,
             })}
           </span>
-          <UseSummary value={item.useSummary} />
           <DonationThanks value={item.discordPublicThanks} />
           <p className="item-meta">{formatDateTime(item.createdAt)}</p>
         </div>
