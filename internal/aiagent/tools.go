@@ -41,6 +41,9 @@ func (s *Service) tools(ctx context.Context, actor Actor, settings Settings, aut
 		if allowed[tool.Name] {
 			continue
 		}
+		if description, exists := settings.ToolDescriptions[tool.Name]; exists {
+			tool.Description = description
+		}
 		allowed[tool.Name] = true
 		items = append(items, map[string]any{"type": "function", "function": map[string]any{"name": tool.Name, "description": tool.Description, "parameters": tool.Parameters}})
 	}

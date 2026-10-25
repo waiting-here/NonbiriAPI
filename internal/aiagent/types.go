@@ -34,16 +34,17 @@ type TemplateMessage struct {
 // A conversation placeholder is a separate node so original tool messages
 // retain their roles and call identifiers rather than becoming quoted text.
 type Settings struct {
-	Revision     int64             `json:"revision,string"`
-	Mode         string            `json:"mode"`
-	ChatEnabled  bool              `json:"chat_enabled"`
-	AutoTemplate []TemplateMessage `json:"auto_template"`
-	ChatTemplate []TemplateMessage `json:"chat_template"`
-	AutoPrefill  string            `json:"auto_prefill"`
-	ChatPrefill  string            `json:"chat_prefill"`
-	Tools        map[string]bool   `json:"tools"`
-	SearchURL    string            `json:"search_url"`
-	SearchHasKey bool              `json:"search_has_key"`
+	Revision         int64             `json:"revision,string"`
+	Mode             string            `json:"mode"`
+	ChatEnabled      bool              `json:"chat_enabled"`
+	AutoTemplate     []TemplateMessage `json:"auto_template"`
+	ChatTemplate     []TemplateMessage `json:"chat_template"`
+	AutoPrefill      string            `json:"auto_prefill"`
+	ChatPrefill      string            `json:"chat_prefill"`
+	Tools            map[string]bool   `json:"tools"`
+	ToolDescriptions map[string]string `json:"tool_descriptions"`
+	SearchURL        string            `json:"search_url"`
+	SearchHasKey     bool              `json:"search_has_key"`
 }
 
 type SettingsUpdate struct {
