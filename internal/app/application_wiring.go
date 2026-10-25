@@ -14,6 +14,9 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/adminalerts"
 	"github.com/waiting-here/NonbiriAPI/internal/adminapi"
 	"github.com/waiting-here/NonbiriAPI/internal/adminusers"
+	"github.com/waiting-here/NonbiriAPI/internal/agentrequest"
+	"github.com/waiting-here/NonbiriAPI/internal/agentusers"
+	"github.com/waiting-here/NonbiriAPI/internal/aiagent"
 	"github.com/waiting-here/NonbiriAPI/internal/announcements"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
@@ -199,6 +202,8 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	var audits *auditRuntime
 	var returnAlerts *returnmarker.Recorder
 	var claimService *claim.Service
+	var assistant *aiagent.Service
+	var assistantRequests *agentrequest.Runtime
 	performance := observability.NewPerformance()
 	store.SetConnectionObserver(performance)
 	defer func() {
@@ -206,6 +211,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 			return
 		}
 		partial := &application{
+			agent: assistant, agentRequests: assistantRequests,
 			activityRuntime: activityEngines, accountEvents: accountConnections,
 			debug: debugHub, reports: reportRepository, lifecycle: lifecycleCoordinator,
 			games: gameRuntimes, forward: forwardRuntime, audits: audits,
@@ -319,6 +325,12 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		RoleAuth:   roleAuthorizer,
 		CursorKeys: vault,
 		Review:     donationReview,
+		PendingSubmission: func(ctx context.Context, tx *sql.Tx, id int64) error {
+			if assistant == nil {
+				return aiagent.ErrUnavailable
+			}
+			return assistant.PendingSubmission(ctx, tx, id)
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create donation service: %w", err)
@@ -414,6 +426,12 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		CursorKeys:       vault,
 		FinalAuth:        authRuntime,
 		AdminFinalAuth:   roleAuthorizer,
+		PendingSubmission: func(ctx context.Context, tx *sql.Tx, id int64) error {
+			if assistant == nil {
+				return aiagent.ErrUnavailable
+			}
+			return assistant.PendingSubmission(ctx, tx, id)
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create resource repository: %w", err)
@@ -573,7 +591,45 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create account lifecycle coordinator: %w", err)
 	}
+	assistantAuthority := agentAuthority{authorizer: authorizer}
+	assistantUsers, err := agentusers.New(agentusers.Config{Users: adminUserService, Accounts: lifecycleCoordinator, Auth: authRuntime})
+	if err != nil {
+		return nil, fmt.Errorf("create assistant account operations: %w", err)
+	}
+	assistantRequests, err = agentrequest.New(agentrequest.Config{
+		DB: store.DB(), ReadDB: store.ReadDB(), Stack: outbound, Flow: forwardRuntime.flow, Secrets: vault,
+		Authorize: func(ctx context.Context, attr agentrequest.Attribution) error {
+			if assistant == nil {
+				return aiagent.ErrUnavailable
+			}
+			return assistant.AuthorizeRequest(ctx, attr)
+		},
+		AdminAuthorize: func(ctx context.Context, tx *sql.Tx) error {
+			actor, ok := auth.ActorFromContext(ctx)
+			if !ok {
+				return authz.ErrUnauthorized
+			}
+			_, err := authorizer.Authorize(ctx, tx, actor, authz.Requirement{Role: authz.RoleAdministrator})
+			return err
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create assistant model runtime: %w", err)
+	}
+	assistant, err = aiagent.New(aiagent.Config{
+		DB: store.DB(), ReadDB: store.ReadDB(), Driver: assistantRequests, Authorize: assistantAuthority.Authorize,
+		Operations: &agentOperations{read: store.ReadDB(), donations: donationService, charity: charityRoutingService, users: assistantUsers, authority: assistantAuthority, pressure: audits.pressure},
+		Search:     agentSearch(store.ReadDB(), outbound, forwardRuntime.flow, assistantAuthority), Secrets: vault,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create assistant workflows: %w", err)
+	}
+	userInvalidations.agentChanged = assistant.InvalidateActor
+	if err = aiagent.RegisterRoutes(agentRouteRegistrar{runtime: authRuntime, database: store.ReadDB()}, assistant, assistantRequests); err != nil {
+		return nil, fmt.Errorf("register assistant routes: %w", err)
+	}
 	app := &application{
+		agent: assistant, agentRequests: assistantRequests,
 		workerCancel:    workerCancel,
 		audits:          audits,
 		activityRuntime: activityEngines,
@@ -630,6 +686,9 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err := recoverRankingsAndLifecycleBeforeListener(startupContext, rankingService, lifecycleCoordinator, gameNow().Unix()); err != nil {
 		return nil, fmt.Errorf("recover account lifecycle before listener: %w", err)
 	}
+	if err := assistant.Recover(startupContext); err != nil {
+		return nil, fmt.Errorf("recover assistant workflows: %w", err)
+	}
 
 	automationHandler, err := newAutomationHandler(automationService, resourceRepository, forwardRuntime.lifecycle, gate)
 	if err != nil {
@@ -654,6 +713,10 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	}
 	readiness := &readinessState{}
 	mux.HandleFunc("/readyz", readiness.serveHTTP)
+	if err := assistantRequests.Start(); err != nil {
+		return nil, fmt.Errorf("start assistant model runtime: %w", err)
+	}
+	assistant.Start()
 	if err := gameRuntimes.StartWorker(workerContext); err != nil {
 		return nil, fmt.Errorf("start game workers: %w", err)
 	}

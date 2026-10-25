@@ -20,6 +20,12 @@ func (r *Runtime) Settings(ctx context.Context) (Settings, error) {
 	return s, err
 }
 
+// Ready reads the same snapshot as the operation that depends on the driver.
+func (r *Runtime) Ready(ctx context.Context, tx *sql.Tx) (bool, error) {
+	s, _, err := loadSettings(ctx, tx)
+	return s.BaseURL != "" && s.Model != "" && s.HasKey, err
+}
+
 type settingsReader interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }

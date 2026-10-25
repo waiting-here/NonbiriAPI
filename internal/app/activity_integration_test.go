@@ -25,6 +25,10 @@ import (
 )
 
 func newActivityWireFixture(t *testing.T) *imageBrowserFixture {
+	return newActivityWireFixtureWithUpstream(t, nil)
+}
+
+func newActivityWireFixtureWithUpstream(t *testing.T, wrap func(http.Handler) http.Handler) *imageBrowserFixture {
 	t.Helper()
 	vault, err := secret.New(bytes.Repeat([]byte{0x37}, secret.MasterKeyBytes))
 	if err != nil {
@@ -33,7 +37,11 @@ func newActivityWireFixture(t *testing.T) *imageBrowserFixture {
 	f := &imageBrowserFixture{t: t, vault: vault, cfg: auditConfig(), path: filepath.Join(t.TempDir(), "activity.db")}
 	dbfixture.Materialize(t, f.path, vault)
 	f.upstreamState = newImageFixtureUpstream(t)
-	f.upstream = httptest.NewServer(f.upstreamState)
+	var upstream http.Handler = f.upstreamState
+	if wrap != nil {
+		upstream = wrap(upstream)
+	}
+	f.upstream = httptest.NewServer(upstream)
 	if err := f.open(); err != nil {
 		f.upstream.Close()
 		vault.Close()
