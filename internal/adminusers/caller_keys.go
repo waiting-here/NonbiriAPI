@@ -40,23 +40,8 @@ func (s *Service) beginCallerKeyManagement(ctx context.Context, actorID, userID 
 	if err != nil {
 		return nil, err
 	}
-	var targetLevel int
-	err = tx.QueryRowContext(ctx, "SELECT COALESCE(level,auto_level) FROM users WHERE id=? AND is_admin=0", userID).Scan(&targetLevel)
-	if errors.Is(err, sql.ErrNoRows) {
-		err = ErrNotFound
-	} else if err != nil {
-		err = classifyDatabaseError("read caller key target", err)
-	} else if role == roleSteward {
-		actorLevel := 6
-		if trainee {
-			actorLevel = 5
-		}
-		if userID == actorID || targetLevel >= actorLevel {
-			err = ErrForbidden
-		}
-	}
-	if err != nil {
-		_ = tx.Rollback()
+	if err := authorizeCallerKeyTargetTx(ctx, tx, actorID, userID, role, trainee); err != nil {
+		tx.Rollback()
 		return nil, err
 	}
 	return tx, nil
@@ -124,32 +109,9 @@ func (s *Service) revokeManagedCallerKey(ctx context.Context, actorID, userID in
 		}
 		return result, nil
 	}
-	state, generation, err := readManagedCallerKey(ctx, tx, userID)
+	receipt, active, err := revokeManagedCallerKeyTx(ctx, tx, userID, expectedGeneration, now)
 	if err != nil {
 		return MutationResult[CallerKeyRevocation]{}, err
-	}
-	if generation != expectedGeneration {
-		return MutationResult[CallerKeyRevocation]{}, ErrConflict
-	}
-	receipt := CallerKeyRevocation{Generation: state.Generation, Revoked: state.Active}
-	if state.Active {
-		if generation == math.MaxInt64 {
-			return MutationResult[CallerKeyRevocation]{}, ErrResourceLimit
-		}
-		result, err := tx.ExecContext(ctx, `
-UPDATE caller_keys SET generation=generation+1,key_hash=NULL,display_head='',display_tail='',key_created_at=NULL,updated_at=?
-WHERE user_id=? AND generation=? AND key_hash IS NOT NULL`, now, userID, generation)
-		if err != nil {
-			return MutationResult[CallerKeyRevocation]{}, classifyDatabaseError("revoke managed caller key", err)
-		}
-		changed, err := result.RowsAffected()
-		if err != nil {
-			return MutationResult[CallerKeyRevocation]{}, classifyDatabaseError("observe caller key revocation", err)
-		}
-		if changed != 1 {
-			return MutationResult[CallerKeyRevocation]{}, ErrConflict
-		}
-		receipt.Generation = strconv.FormatInt(generation+1, 10)
 	}
 	result, err := finishJSONMutation(ctx, tx, decision, http.StatusOK, receipt)
 	if err != nil {
@@ -158,7 +120,7 @@ WHERE user_id=? AND generation=? AND key_hash IS NOT NULL`, now, userID, generat
 	if err := commitTx(tx, "commit managed caller key revocation"); err != nil {
 		return MutationResult[CallerKeyRevocation]{}, err
 	}
-	if state.Active {
+	if active {
 		s.invalidator.InvalidateUserAuthority(userID)
 	}
 	return result, nil
@@ -211,4 +173,58 @@ func (api *httpAPI) revokeCallerKey(writer http.ResponseWriter, request *http.Re
 		return
 	}
 	writeMutation(writer, result.Status, result.Body)
+}
+
+func authorizeCallerKeyTargetTx(ctx context.Context, tx *sql.Tx, actorID, userID int64, role managementRole, trainee bool) error {
+	var err error
+	var targetLevel int
+	err = tx.QueryRowContext(ctx, "SELECT COALESCE(level,auto_level) FROM users WHERE id=? AND is_admin=0", userID).Scan(&targetLevel)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = ErrNotFound
+	} else if err != nil {
+		err = classifyDatabaseError("read caller key target", err)
+	} else if role == roleSteward {
+		actorLevel := 6
+		if trainee {
+			actorLevel = 5
+		}
+		if userID == actorID || targetLevel >= actorLevel {
+			err = ErrForbidden
+		}
+	}
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func revokeManagedCallerKeyTx(ctx context.Context, tx *sql.Tx, userID, expectedGeneration, now int64) (CallerKeyRevocation, bool, error) {
+	state, generation, err := readManagedCallerKey(ctx, tx, userID)
+	if err != nil {
+		return CallerKeyRevocation{}, false, err
+	}
+	if generation != expectedGeneration {
+		return CallerKeyRevocation{}, false, ErrConflict
+	}
+	receipt := CallerKeyRevocation{Generation: state.Generation, Revoked: state.Active}
+	if state.Active {
+		if generation == math.MaxInt64 {
+			return CallerKeyRevocation{}, false, ErrResourceLimit
+		}
+		result, err := tx.ExecContext(ctx, `
+UPDATE caller_keys SET generation=generation+1,key_hash=NULL,display_head='',display_tail='',key_created_at=NULL,updated_at=?
+WHERE user_id=? AND generation=? AND key_hash IS NOT NULL`, now, userID, generation)
+		if err != nil {
+			return CallerKeyRevocation{}, false, classifyDatabaseError("revoke managed caller key", err)
+		}
+		changed, err := result.RowsAffected()
+		if err != nil {
+			return CallerKeyRevocation{}, false, classifyDatabaseError("observe caller key revocation", err)
+		}
+		if changed != 1 {
+			return CallerKeyRevocation{}, false, ErrConflict
+		}
+		receipt.Generation = strconv.FormatInt(generation+1, 10)
+	}
+	return receipt, state.Active, nil
 }

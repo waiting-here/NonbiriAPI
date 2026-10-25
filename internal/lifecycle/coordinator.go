@@ -10,8 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/waiting-here/NonbiriAPI/internal/adminalerts"
-	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
@@ -845,40 +843,9 @@ func (coordinator *Coordinator) deleteAccountWithControl(ctx context.Context, re
 			return tx.Commit()
 		}
 	}
-	var actor *int64
-	if request.ActorUserID > 0 {
-		actor = &request.ActorUserID
-	}
-	request.Before, err = adminalerts.CaptureAccountDeletionTx(ctx, tx, userID, decisionNow, string(request.Source), actor)
+	finalizers, err := coordinator.prepareDeletionTx(ctx, tx, request)
+	abortFinalizers := func() { finishDeleteFinalizers(finalizers, false) }
 	if err != nil {
-		return err
-	}
-	finalizers := make([]DeleteFinalizer, 0, len(coordinator.delete.ordered()))
-	abortFinalizers := func() {
-		for index := len(finalizers) - 1; index >= 0; index-- {
-			if finalizers[index] != nil {
-				finalizers[index].Abort()
-			}
-		}
-	}
-	for _, adapter := range coordinator.delete.ordered() {
-		finalizer, prepareErr := adapter.PrepareDelete(ctx, tx, request)
-		if prepareErr != nil {
-			abortFinalizers()
-			return prepareErr
-		}
-		finalizers = append(finalizers, finalizer)
-	}
-	if err := connectionstore.PrepareAccountDeletionTx(ctx, tx, userID, decisionNow); err != nil {
-		abortFinalizers()
-		return err
-	}
-	operationID, err := coordinator.newID("op_")
-	if err != nil || !db.ValidateOpaqueID(operationID, "op_") {
-		abortFinalizers()
-		return ErrUnavailable
-	}
-	if err := coordinator.ledger.ZeroAndDeleteAccount(ctx, tx, request, operationID); err != nil {
 		abortFinalizers()
 		return err
 	}
