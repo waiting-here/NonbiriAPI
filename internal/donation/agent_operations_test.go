@@ -338,4 +338,8 @@ func TestAgentPendingRejectionPreservesApprovedVersionsAndSettings(t *testing.T)
 	if status != "approved" || after != approved || enabled || reserve != 77 {
 		t.Fatal("prior approval or settings changed", status, after, enabled, reserve)
 	}
+	projected, err := e.service.GetAdmin(ctx, parseTestID(t, d.ID))
+	if err != nil || projected.FirstApprovalOrigin != "manual" {
+		t.Fatalf("prior approval origin changed: %s, err=%v", projected.FirstApprovalOrigin, err)
+	}
 }

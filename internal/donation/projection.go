@@ -428,8 +428,8 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, now, donatio
 		return AdminDonation{}, fmt.Errorf("donation: read projection: %w", err)
 	}
 	out.ID = strconv.FormatInt(id, 10)
-	// A pending submission without approved uses has no first approval.
-	if out.Status == "pending" && !approved || lastAction == "reject" {
+	// Rejecting a pending replacement does not erase the original approval.
+	if out.FirstApprovalOrigin == "unknown" && !approved && (out.Status == "pending" || lastAction == "reject") {
 		out.FirstApprovalOrigin = "none"
 	}
 	out.CanForceReject = approved && !unknown
