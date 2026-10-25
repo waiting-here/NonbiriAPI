@@ -138,7 +138,7 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `redemption_ban_threshold` | integer `[0,4096]` | `5`; counted redemption-code errors before an automatic ban; `0` disables |
 | `redemption_ban_window_seconds` | integer `[1,316224000]` | `86400`; persisted rolling redemption violation window |
 | `redemption_ban_duration_seconds` | integer `[1,316224000]` | `86400`; redemption automatic ban duration |
-| `charity_min_chars` | integer `[0,1048576]` | `20`; counted Unicode message runes before a charity request is dispatched; `0` disables |
+| `charity_min_chars` | integer `[0,1048576]` | `20`; Unicode characters in chat message text, tool descriptions/parameter schemas and prior function-call arguments before dispatch; `0` disables |
 | `charity_violation_deduct_milli` | canonical non-negative decimal string | `"0"`; per-violation penalty, allowed to make credits negative |
 | `charity_violation_ban_seconds` | integer `[0,316224000]` | `0`; single-violation automatic ban duration |
 | `charity_violation_window_seconds` | integer `[1,316224000]` | `86400`; persisted rolling short-content window; unexpired counts survive restart and same-Discord re-registration |

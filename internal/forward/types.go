@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/clientguard"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
@@ -191,6 +192,10 @@ type DebugCapture interface {
 	DecideAfterAdmission(context.Context, debug.CaptureInput) (debug.CaptureDecision, error)
 }
 
+type ShortContentRecorder interface {
+	RecordShort(context.Context, int64, string, int) (*charityrouting.ContentTooShortError, error)
+}
+
 type ClientCallGuard interface {
 	CheckCall(context.Context, int64, string, int64) (clientguard.Decision, error)
 }
@@ -206,6 +211,7 @@ type Config struct {
 	Claims         ClaimRail
 	CharityCharges CharityChargeCalculator
 	ClientGuard    ClientCallGuard
+	ShortContent   ShortContentRecorder
 	Debug          DebugCapture
 	Registry       *connector.Registry
 	Connectors     []connector.Connector

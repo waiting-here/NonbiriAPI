@@ -44,6 +44,12 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Count tool descriptions, parameter schemas and prior function-call arguments
+  toward charity input length, so tool-wrapped prompts are not mistaken for
+  short messages. Keep genuine short-input checks and request contents intact.
+- Capture and warn about short charity input in dry debug without deducting
+  points or advancing automatic restriction counters. Keep short-input
+  enforcement for live debug and ordinary requests.
 - Keep donation lists and details readable with multiline approval notes and
   preserved review history. Parse lifecycle, counts and preview data independently
   instead of rejecting complete pages based on frontend business-state guesses.

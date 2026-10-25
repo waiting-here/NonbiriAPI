@@ -21,7 +21,6 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/clientguard"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
-	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
@@ -188,9 +187,9 @@ func newPublicForwardRuntime(
 	forwardConfig := forward.Config{
 		Adaptations:   adaptations,
 		GatewayModels: gatewaypolicy.NewStore(store.ReadDB()),
-		Personal:      personal, Charity: charityPolicyRouter{CharityRouter: charity, InferenceCharityRouter: charity, abuse: abuse}, Claims: claimRail, CharityCharges: charityService,
+		Personal:      personal, Charity: charity, Claims: claimRail, CharityCharges: charityService,
 		Debug: debugHub, Registry: registry, Connectors: connectors, Safety: safety,
-		ClientGuard: clientGuard,
+		ClientGuard: clientGuard, ShortContent: abuse,
 	}
 	if audits != nil {
 		forwardConfig.ErrorScope = audits.observations.DiscoveryScope
@@ -226,12 +225,6 @@ func newPublicForwardRuntime(
 	return &publicForwardRuntime{callerKey: callerKey, service: service, flow: flow, abuse: abuse, clientGuard: clientGuard, adaptations: adaptations, lifecycle: lifecycle, handler: handler}, nil
 }
 
-type charityPolicyRouter struct {
-	forward.CharityRouter
-	forward.InferenceCharityRouter
-	abuse *antiabuse.Service
-}
-
 func applyPublicRPMDenial(ctx context.Context, userID int64, reason ratelimit.RPMReason, abuse *antiabuse.Service) error {
 	if abuse != nil && reason == ratelimit.RPMCharityUserLimit {
 		err := abuse.RPMDenied(ctx, userID, reason)
@@ -253,25 +246,6 @@ func publicFlowHandler(flow *flowcontrol.Controller, next http.Handler) (http.Ha
 	}
 	return middleware.WrapClassified(next, forward.RPMClassifier()), nil
 }
-
-func (router charityPolicyRouter) Preflight(ctx context.Context, userID int64, model string, request *openai.ChatRequest, now int64) (forward.CharityPreflight, error) {
-	value, err := router.CharityRouter.Preflight(ctx, userID, model, request, now)
-	var short *charityrouting.ContentTooShortError
-	if !errors.As(err, &short) {
-		return value, err
-	}
-	rejection, recordErr := router.abuse.RecordShort(ctx, userID, model, short.Actual)
-	if recordErr != nil {
-		return forward.CharityPreflight{}, recordErr
-	}
-	if rejection == nil {
-		return router.CharityRouter.Preflight(ctx, userID, model, request, now)
-	}
-	return forward.CharityPreflight{}, rejection
-}
-
-var _ forward.CharityRouter = charityPolicyRouter{}
-var _ forward.InferenceCharityRouter = charityPolicyRouter{}
 
 func (runtime *publicForwardRuntime) BeginShutdown() {
 	if runtime != nil && runtime.lifecycle != nil {

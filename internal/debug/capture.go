@@ -21,7 +21,8 @@ const maxSnapshotTraceBytes = MaxEventBytes - 8*1024
 
 // CaptureInput is intentionally named for its required position in the model
 // pipeline. Callers must invoke DecideAfterAdmission only after CallerKey,
-// account, flow-control, body/JSON, model, and policy admission. The value has
+// account, flow-control, body/JSON, model, and policy admission. A short-content
+// rejection may be deferred as a warning until the debug mode is frozen. The value has
 // no candidate, credential, claim, egress, accounting, log, or health
 // dependency, making a Dry return structurally able to precede all of them.
 type CaptureInput struct {
@@ -34,6 +35,11 @@ type CaptureInput struct {
 	Charity         bool
 	IdentityCertain bool
 	Language        string
+	ShortContent    *ShortContentWarning
+}
+
+type ShortContentWarning struct {
+	Actual, Minimum int
 }
 
 type CaptureDecision struct {
@@ -42,6 +48,7 @@ type CaptureDecision struct {
 	ClaimPurpose claim.Purpose
 	Trace        *TraceHandle
 	Language     string
+	ShortContent *ShortContentWarning
 }
 
 func (decision CaptureDecision) DryIntercepted() bool {
@@ -51,7 +58,7 @@ func (decision CaptureDecision) DryIntercepted() bool {
 // WriteDryResult writes the frozen non-stream response even when the admitted
 // request asked for streaming. It does not invoke any execution dependency.
 func (decision CaptureDecision) WriteDryResult(writer http.ResponseWriter) {
-	WriteDryIntercepted(writer, decision.Language)
+	writeDryIntercepted(writer, decision.Language, decision.ShortContent)
 }
 
 type TraceHandle struct {
@@ -186,12 +193,12 @@ func (hub *Hub) DecideAfterAdmission(ctx context.Context, input CaptureInput) (C
 		// dependency is reachable, although the exhausted session cannot retain
 		// another body/trace and the caller receives the fixed safe response.
 		if errors.Is(err, ErrCapacity) {
-			return CaptureDecision{Active: true, Mode: ModeDry, Language: language}, nil
+			return CaptureDecision{Active: true, Mode: ModeDry, Language: language, ShortContent: input.ShortContent}, nil
 		}
 		return CaptureDecision{}, err
 	}
 	handle := &TraceHandle{hub: hub, userID: input.UserID, sessionID: current.id, traceID: record.trace.TraceID}
-	decision := CaptureDecision{Active: true, Mode: mode, Trace: handle, Language: language}
+	decision := CaptureDecision{Active: true, Mode: mode, Trace: handle, Language: language, ShortContent: input.ShortContent}
 	if mode == ModeLive {
 		if input.RouteKind.IsCharity() {
 			decision.ClaimPurpose = claim.PurposeCharity
@@ -201,6 +208,7 @@ func (hub *Hub) DecideAfterAdmission(ctx context.Context, input CaptureInput) (C
 	}
 	if mode == ModeDry {
 		caller := fixedCallerResult(httperr.CodeDebugDryRunIntercepted, http.StatusUnprocessableEntity, language, now.Unix())
+		caller.Message = wirePlatformMessage(dryContentMessage(language, input.ShortContent))
 		if err := hub.completeTraceLocked(current, record, caller); err != nil {
 			return CaptureDecision{}, err
 		}
@@ -571,6 +579,16 @@ func dryMessage(value string) string {
 	return language.Select(value, "调试 Dry run 已拦截本次请求；请求已在调试页面捕获，未发送到上游。", "Debug dry run intercepted this request. It was captured on the Debug page and was not sent upstream.")
 }
 
+func dryContentMessage(value string, short *ShortContentWarning) string {
+	message := dryMessage(value)
+	if short == nil {
+		return message
+	}
+	return message + " " + fmt.Sprintf(language.Select(value,
+		"公益请求内容过短（%d < %d）；本次仅提醒，未扣分，也未计入自动封禁次数。Live 模式和普通请求仍执行短内容限制及处罚。",
+		"The charity input is too short (%d < %d). This is a warning only: no points were deducted and no automatic-ban counter was incremented. Live mode and ordinary requests still enforce short-content limits and penalties."), short.Actual, short.Minimum)
+}
+
 func liveCapturedMessage(value string) string {
 	return language.Select(value, "上游响应已被调试页捕获。", "The upstream response was captured by the Debug page.")
 }
@@ -588,8 +606,12 @@ func wirePlatformMessage(message string) string {
 }
 
 func WriteDryIntercepted(writer http.ResponseWriter, language string) {
+	writeDryIntercepted(writer, language, nil)
+}
+
+func writeDryIntercepted(writer http.ResponseWriter, language string, short *ShortContentWarning) {
 	writer.Header().Set("X-Nonbiri-Debug-Mode", "dry-run")
-	httperr.WriteError(writer, httperr.New(httperr.CodeDebugDryRunIntercepted, dryMessage(language)))
+	httperr.WriteError(writer, httperr.New(httperr.CodeDebugDryRunIntercepted, dryContentMessage(language, short)))
 }
 
 func WriteLiveCaptured(writer http.ResponseWriter, language string) {

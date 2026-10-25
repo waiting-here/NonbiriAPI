@@ -57,6 +57,7 @@ type Service struct {
 	claims         ClaimRail
 	charityCharges CharityChargeCalculator
 	clientGuard    ClientCallGuard
+	shortContent   ShortContentRecorder
 	debug          DebugCapture
 	registry       *connector.Registry
 	connectors     map[connectorcontract.Type]connector.Connector
@@ -119,8 +120,8 @@ func NewService(config Config) (*Service, error) {
 		errorScope: config.ErrorScope, classify: config.Classify,
 		personal: config.Personal, charity: config.Charity, claims: config.Claims,
 		charityCharges: config.CharityCharges, debug: config.Debug, registry: config.Registry,
-		clientGuard: config.ClientGuard,
-		connectors:  instances, safety: config.Safety, observer: config.Observer,
+		clientGuard: config.ClientGuard, shortContent: config.ShortContent,
+		connectors: instances, safety: config.Safety, observer: config.Observer,
 		adaptations:   config.Adaptations,
 		gatewayModels: config.GatewayModels,
 		now:           config.Now, timeout: config.ForwardTimeout, settlement: config.Settlement,
@@ -269,17 +270,22 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 	if clearAttempt != nil {
 		defer clearAttempt()
 	}
-	if err != nil {
+	var short *charityrouting.ContentTooShortError
+	if err != nil && !errors.As(err, &short) {
 		service.writePreAcceptanceFailure(parent, writer, nil, nil, err, admission.charity, language)
 		return
 	}
 	routeKind := requestkind.ForOperation(request.operation, admission.charity)
-	// Debug needs the admitted identity; a dry interception must stop before
-	// any live request claim or credential dispatch.
+	// Identity, access and client rules have passed. A short-content rejection
+	// is held until Debug freezes the mode, so dry capture never records a penalty.
+	var warning *debug.ShortContentWarning
+	if short != nil {
+		warning = &debug.ShortContentWarning{Actual: short.Actual, Minimum: short.Minimum}
+	}
 	decision, err := service.debug.DecideAfterAdmission(bounded, debug.CaptureInput{
 		UserID: userID, RouteKind: routeKind, Model: request.Model, Stream: request.Stream,
 		MediaType: mediaType, Body: body, Charity: admission.charity,
-		IdentityCertain: true, Language: language,
+		IdentityCertain: true, Language: language, ShortContent: warning,
 	})
 	if err != nil {
 		service.writePreAcceptanceFailure(parent, writer, nil, nil, err, admission.charity, language)
@@ -301,6 +307,29 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		suppressor, err = debug.NewCallerSuppressor(parent, writer, decision.Language)
 		if err != nil {
 			service.writePreAcceptanceFailure(parent, writer, nil, decision.Trace, err, admission.charity, language)
+			return
+		}
+	}
+	if short != nil {
+		var rejection error = short
+		if service.shortContent != nil {
+			current, recordErr := service.shortContent.RecordShort(bounded, userID, request.Model, short.Actual)
+			switch {
+			case recordErr != nil:
+				rejection = recordErr
+			case current != nil:
+				rejection = current
+			default:
+				// The administrator may have lowered the threshold since preflight.
+				// Refresh admission while preserving this request's frozen debug mode.
+				admission, attemptRequest, clearAttempt, rejection = service.preflight(bounded, userID, request)
+				if clearAttempt != nil {
+					defer clearAttempt()
+				}
+			}
+		}
+		if rejection != nil {
+			service.writePreAcceptanceFailure(parent, writer, suppressor, decision.Trace, rejection, admission.charity, language)
 			return
 		}
 	}

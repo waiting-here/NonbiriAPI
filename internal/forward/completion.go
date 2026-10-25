@@ -157,19 +157,25 @@ func (service *Service) writePreAcceptanceFailure(
 	if parent != nil && parent.Err() != nil {
 		return
 	}
+	var rejected *charityrouting.ContentTooShortError
+	recordedShort := errors.As(err, &rejected) && db.ValidateOpaqueID(rejected.RequestID, "req_")
 	if trace != nil && executionCancelled(parent, trace.Context()) {
-		debug.WriteLiveCancelled(writer, language, false)
-		return
+		if !recordedShort {
+			debug.WriteLiveCancelled(writer, language, false)
+			return
+		}
+		// Recording this rejection may itself ban the account and terminate its
+		// debug session. Preserve the committed rejection and request identity.
+		trace = nil
 	}
 	failure := failureForError(err, charity)
 	requestattempt.Detail(parent, failure.detail)
-	var rejected *charityrouting.ContentTooShortError
-	if errors.As(err, &rejected) && db.ValidateOpaqueID(rejected.RequestID, "req_") {
+	if recordedShort {
 		writer.Header().Set("X-Request-ID", rejected.RequestID)
 	}
 	if trace != nil {
 		result := debugCallerResult(failure, service.mustNowUnix())
-		if completeErr := trace.CompleteCaller(result); completeErr != nil {
+		if completeErr := trace.CompleteCaller(result); completeErr != nil && !recordedShort {
 			debug.WriteLiveCancelled(writer, language, false)
 			return
 		}
