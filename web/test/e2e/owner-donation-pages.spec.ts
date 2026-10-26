@@ -163,6 +163,12 @@ for (const [width, locale, theme] of [
       }
       expect(url.searchParams.has('page')).toBe(true);
       expect(url.searchParams.has('cursor')).toBe(false);
+      if (url.pathname === '/api/donations/21/uses') {
+        expect(url.searchParams.get('page_size')).toBe('100');
+        expect(url.searchParams.get('donation_key_id')).toMatch(/^[1-9][0-9]*$/);
+        await route.fulfill({ json: pageWindow([], url.searchParams) });
+        return;
+      }
       if (url.pathname === '/api/donations') {
         const rows = url.searchParams.get('q')
           ? [summary(21)]
