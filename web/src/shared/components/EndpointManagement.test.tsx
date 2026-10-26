@@ -6,7 +6,7 @@ import { EndpointManagement } from './EndpointManagement';
 import copy from '../i18n/common/en.json';
 
 const baseURL = 'https://provider.example/v1?region=eu%2Fwest';
-function fixture() {
+function fixture(managed = false) {
   const requests: { path: string; method: string; body?: unknown }[] = [];
   const page = (data: unknown[]) => ({
     data,
@@ -32,6 +32,10 @@ function fixture() {
             {
               base_url: baseURL,
               tags: ['user_gateway'],
+              manual_tags: ['user_gateway'],
+              tag_rules: managed
+                ? [{ pattern: '*.example', action: 'add', tags: ['user_gateway'] }]
+                : [],
               user_count: '1',
               endpoint_count: '1',
               key_count: '1',
@@ -71,6 +75,17 @@ function Page({
 }
 
 describe('shared endpoint management', () => {
+  it('explains matched rules and prevents manual selection of managed endpoints', async () => {
+    const requests = fixture(true);
+    await renderWithProviders(<Page level={6} />, { station: 'user', route: '/steward/endpoints' });
+    await screen.findByText(baseURL);
+    expect(screen.getByText('Manual editing unavailable · Managed by *.example')).toBeVisible();
+    expect(screen.getByRole('checkbox', { name: `Select ${baseURL}` })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Select endpoints on this page' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add tag' })).toBeDisabled();
+    expect(requests.every((request) => request.method === 'GET')).toBe(true);
+  });
+
   it.each([false, true])(
     'requires read permission even when tag permission is %s',
     async (tags) => {

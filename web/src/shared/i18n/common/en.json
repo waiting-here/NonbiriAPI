@@ -3255,7 +3255,7 @@
         },
         "standard": {
           "label": "Standard",
-          "description": "At least one key must be unended and unexpired. Every such key must come from a mainstream channel or be connected to a mainstream charity model. Paused, pending and failed keys still count."
+          "description": "At least one key must be unended and unexpired. Every such key must come from a mainstream channel, have a mainstream endpoint tag, or be connected to a mainstream charity model. Paused, pending and failed keys still count."
         },
         "enhanced": {
           "label": "Enhanced",
@@ -3295,13 +3295,41 @@
       "userPlaceholder": "Site user ID",
       "readOnly": "You can view endpoints. Editing tags requires a separate permission.",
       "backManagement": "Back to steward workspace",
+      "rules": {
+        "title": "Wildcard tag rules",
+        "summary": "Apply tags automatically by domain",
+        "description": "Rules apply to existing and future endpoints. A matched endpoint is managed by its rules and cannot be tagged manually.",
+        "precedence": "Rules run from broader to more specific domains. Clear removes earlier tags; later add rules can add tags again. Removing a rule restores the result of the remaining rules and original manual tags.",
+        "search": "Find a domain rule",
+        "add": "Add rule",
+        "edit": "Edit rule",
+        "delete": "Delete rule",
+        "save": "Save rule",
+        "saved": "Rules updated",
+        "pattern": "Domain pattern",
+        "patternHelp": "Use *.example.com to cover example.com and every level of subdomain. Do not include a protocol, port or path.",
+        "action": "Tag action",
+        "addTags": "Add tags",
+        "clearTags": "Clear tags",
+        "chooseTags": "Tags to add",
+        "mainstreamHelp": "Donations whose endpoints all qualify as mainstream can be approved automatically when next submitted and fall within standard steward access. Existing reviews are unchanged.",
+        "clearHelp": "Clear effective tags on matching endpoints. Original manual tags are kept and can return when the rule is removed.",
+        "empty": "No matching rules",
+        "emptyBody": "Add a wildcard rule to manage a domain and its subdomains together.",
+        "managedBy": "Manual editing unavailable · Managed by {{patterns}}",
+        "sources": "Tag sources",
+        "manualOriginal": "Original manual tags"
+      },
       "tag": {
         "abusive_third_party": "Abusive third party",
         "community_charity": "Community charity",
         "noncommercial_gateway": "Non-commercial aggregation gateway",
         "user_gateway": "User-built gateway",
         "steward_gateway": "Steward-built gateway",
-        "invalid_entry": "Incorrect entry"
+        "invalid_entry": "Incorrect entry",
+        "mainstream": "Mainstream channels and derivatives",
+        "mysterious": "Unspecified channel",
+        "other_third_party": "Other third party"
       }
     }
   },
