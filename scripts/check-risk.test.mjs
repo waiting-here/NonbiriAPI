@@ -25,7 +25,7 @@ fi
       env: { ...process.env, GO: go, COMMAND_LOG: log, TEST_STATUS: String(status) },
     });
     assert.equal(run(0).status, 0);
-    assert.match(readFileSync(log, 'utf8'), /build example\/changed\nvet example\/changed\ntest -timeout=30m example\/changed/);
+    assert.match(readFileSync(log, 'utf8'), /build example\/changed\nvet example\/changed\ntest -vet=off -timeout=30m example\/changed/);
     const failed = run(7);
     assert.equal(failed.status, 7, failed.stderr);
   } finally {

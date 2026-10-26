@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SpecialTheme } from '../activities/gacha/special-scenes';
+import { TomorrowArtwork } from '../activities/gacha/tomorrow/Artwork';
 import { AmberStill } from './AmberStill';
 import { RomanceStill } from './RomanceStill';
 import { MirrorSeaStill } from './MirrorSeaStill';
@@ -80,7 +81,15 @@ function PermittedSpecialBackdrop({ theme }: { theme: SpecialTheme }) {
   }, [theme, quality]);
   return (
     <>
-      {theme === 'amber' ? (
+      {theme === 'tomorrow' ? (
+        <TomorrowArtwork
+          walking
+          variant="appearance"
+          dark={quality.dark}
+          animated={false}
+          className="nb-tomorrow-still"
+        />
+      ) : theme === 'amber' ? (
         <AmberStill dark={quality.dark} />
       ) : theme === 'elopement' || theme === 'heart-thief' ? (
         <RomanceStill theme={theme} dark={quality.dark} />

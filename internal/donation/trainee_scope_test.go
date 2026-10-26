@@ -48,8 +48,18 @@ func TestTraineeKeyScopeAllowsUnboundMainstreamAndOnlyBoundCustom(t *testing.T) 
 	model := controlModel(t, e, "managed", true)
 	other := controlModel(t, e, "private-model-name", false)
 	ctx := charityscope.WithModel(context.Background(), model)
-	if _, err := e.service.KeyStewardSession(context.Background(), trainee, mainID, mainKey); !errors.Is(err, ErrNotFound) {
-		t.Fatal("missing model context", err)
+	if _, err := e.store.DB().Exec(`UPDATE mainstream_channels SET enabled=0 WHERE id=?`, channel); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.service.KeyStewardSession(context.Background(), trainee, mainID, mainKey); err != nil {
+		t.Fatal("saved channel source lost authorization when channel disabled", err)
+	}
+	if _, err := e.store.DB().Exec(`UPDATE mainstream_channels SET enabled=1 WHERE id=?`, channel); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.service.KeyStewardSession(context.Background(), trainee, mainID, mainKey); err != nil {
+		t.Fatal("qualified source without model", err)
 	}
 	if _, err := e.service.KeyStewardSession(charityscope.WithModel(ctx, other), trainee, mainID, mainKey); !errors.Is(err, ErrNotFound) {
 		t.Fatal("ordinary model accepted", err)
@@ -80,8 +90,8 @@ func TestTraineeKeyScopeAllowsUnboundMainstreamAndOnlyBoundCustom(t *testing.T) 
 			t.Fatal("scope disclosed", forbidden)
 		}
 	}
-	if _, err := e.service.GetSteward(ctx, trainee, customID); !errors.Is(err, ErrForbidden) {
-		t.Fatal("full donation exposed", err)
+	if _, err := e.service.GetSteward(ctx, trainee, customID); err != nil {
+		t.Fatal("qualified whole donation unavailable", err)
 	}
 	sources, err := e.service.SourcesStewardPage(ctx, trainee, SourceFilter{}, pagination.Default())
 	if err != nil || sources.Pagination.TotalItems != "2" {

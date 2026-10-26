@@ -27,12 +27,20 @@ type AutomationBindings struct {
 
 func (s *Service) AutomationBindings(ctx context.Context, userID, modelID int64, q string, page pagination.Request) (AutomationBindings, error) {
 	out := AutomationBindings{AutomationPage: AutomationPage[AutomationBinding]{Data: []AutomationBinding{}}}
-	tx, _, err := s.beginManagementTx(ctx, roleSteward, userID, modelID, false, true)
+	tx, scope, err := s.beginManagementTx(ctx, roleSteward, userID, modelID, false, true)
 	if err != nil {
 		return out, err
 	}
 	defer tx.Rollback()
 	current, err := readAdminBindingsTx(ctx, tx, modelID)
+	if err != nil {
+		return out, err
+	}
+	now, err := s.nowUnix()
+	if err != nil {
+		return out, err
+	}
+	current, err = scopedBindingsTx(ctx, tx, scope, current, now)
 	if err != nil {
 		return out, err
 	}
@@ -48,10 +56,6 @@ func (s *Service) AutomationBindings(ctx context.Context, userID, modelID int64,
 		return out, ErrInvalidRequest
 	}
 	out.Pagination = &meta
-	now, err := s.nowUnix()
-	if err != nil {
-		return out, err
-	}
 	gate, err := capabilityGateTx(ctx, tx, "charity_enabled")
 	if err != nil {
 		return out, err

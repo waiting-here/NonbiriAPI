@@ -365,35 +365,46 @@ func projectMessageCapabilities(raw json.RawMessage) connectorcontract.Capabilit
 	return required
 }
 
-// CharityTextRuneCount counts only caller-provided message text for the
-// charity pre-dispatch guard. The accepted range is deliberately narrow and
-// deterministic: messages[].content when it is a string, plus text parts in
-// messages[].content arrays where {"type":"text","text":"..."}. Roles,
-// names, tool calls, image URLs, and all other fields do not count. Counting
-// is Unicode-rune based, not token based, and never calls a tokenizer.
+// CharityTextRuneCount counts caller-provided prompt text, including function
+// definitions and prior tool-call arguments. It does not count message roles,
+// call IDs, media payloads or unrelated request metadata. Counting is based on
+// decoded Unicode runes, not tokens, and does not change the forwarded request.
 func (r *ChatRequest) CharityTextRuneCount() (int, error) {
 	if r == nil {
 		return 0, ErrInvalidRequest
 	}
 	var raw json.RawMessage
+	count := 0
 	for _, field := range r.fields {
-		if field.name == "messages" {
+		switch field.name {
+		case "messages":
 			raw = field.value
-			break
+		case "tools":
+			count += charityToolDefinitionsRunes(field.value)
+		case "functions":
+			for _, definition := range charityJSONArray(field.value) {
+				count += charityFunctionDefinitionRunes(definition)
+			}
 		}
 	}
 	if len(raw) == 0 {
-		return 0, nil
+		return count, nil
 	}
 	var messages []json.RawMessage
 	if err := json.Unmarshal(raw, &messages); err != nil {
 		return 0, invalidField("messages", "expected an array of message objects")
 	}
-	count := 0
 	for _, messageRaw := range messages {
 		var message map[string]json.RawMessage
 		if err := json.Unmarshal(messageRaw, &message); err != nil {
 			return 0, invalidField("messages[]", "expected a message object")
+		}
+		count += charityFunctionArgumentsRunes(message["function_call"])
+		for _, callRaw := range charityJSONArray(message["tool_calls"]) {
+			var call map[string]json.RawMessage
+			if json.Unmarshal(callRaw, &call) == nil {
+				count += charityFunctionArgumentsRunes(call["function"])
+			}
 		}
 		content, ok := message["content"]
 		if !ok {

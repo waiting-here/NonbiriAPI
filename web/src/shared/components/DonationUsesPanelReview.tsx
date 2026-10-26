@@ -1,371 +1,250 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   collectPendingDonationUses,
-  prepareDonationUseReview,
-  runDonationUseReview,
-  type DonationUseReviewPlan,
+  reviewedUseLabels,
+  type ReviewedUseLabel,
 } from '@shared/operations/donationUsesReview';
 import {
   getDonationUses,
-  reviewDonationUses,
+  type DonationUse,
   type UseReviewResult,
 } from '@shared/operations/donationUses';
+import { reviewPendingDonation, type PendingDonationReviewInput } from '@shared/operations/charity';
 import {
   useRetainedOperation,
   type OperationContext,
 } from '@shared/operations/useRetainedOperation';
 import { responseOutcomeUnknown } from '@shared/operations/api';
-import { NATIVE_SERVICE_LABEL_KEYS } from '@shared/nativeServices';
-import { formatCount } from '@shared/utils/formatNumber';
-import { ConfirmDialog } from './ConfirmDialog';
 import { ErrorState, LoadingState } from './States';
-import { Field, Fold, Note, OutcomeNote } from './ui';
+import { Field, Note, OutcomeNote } from './ui';
 
+type ReviewPlan = { rows: DonationUse[]; body: PendingDonationReviewInput };
 export function DonationUsesReviewAll({
   role,
   donationId,
-  donationKeyId,
-  disabled,
+  donationRevision,
   onLockedChange,
   onReviewed,
   refresh,
 }: {
   role: 'admin' | 'steward';
   donationId: string;
-  donationKeyId?: string;
-  disabled: boolean;
+  donationRevision: string;
   onLockedChange: (locked: boolean) => void;
-  onReviewed: (results: UseReviewResult[]) => void;
+  onReviewed: (results: UseReviewResult[], labels: ReviewedUseLabel[]) => void;
   refresh: () => Promise<void>;
 }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const [decision, setDecision] = useState<'approve' | 'reject'>('approve');
-  const [plan, setPlan] = useState<DonationUseReviewPlan | null>(null);
   const [note, setNote] = useState('');
-  const [started, setStarted] = useState(false);
-  const [results, setResults] = useState<UseReviewResult[]>([]);
-  const [stopping, setStopping] = useState(false);
-  const [checking, setChecking] = useState(false);
-  const [exitRefreshError, setExitRefreshError] = useState<unknown>(null);
-  const receipts = useRef(new Map<string, UseReviewResult[]>());
-  const stop = useRef(false);
+  const [empty, setEmpty] = useState(false);
   const root = role === 'admin' ? ['admin', 'operations'] : ['user'];
-  const prepare = useRetainedOperation<'approve' | 'reject', DonationUseReviewPlan>(
+  const prepare = useRetainedOperation<
+    { decision: 'approve' | 'reject'; reason: string },
+    ReviewPlan
+  >(
     async (value, _key, context) => {
       const rows = await collectPendingDonationUses(
-        (page) =>
-          getDonationUses(role, donationId, page, 100, 'pending', context.signal, donationKeyId),
+        (page) => getDonationUses(role, donationId, page, 100, 'pending', context.signal),
         context.signal,
       );
-      const snapshot = prepareDonationUseReview(rows, value, '');
-      context.commit(() => setPlan(snapshot));
-      return snapshot;
+      return {
+        rows,
+        body: {
+          expected_revision: donationRevision,
+          ...value,
+          uses: rows.map((row) => ({
+            use_id: row.id,
+            expected_revision: row.revision,
+            expected_review_revision: row.pending!.expected_review_revision,
+          })),
+        },
+      };
     },
     () => undefined,
     root,
   );
-  const run = (snapshot: DonationUseReviewPlan, context: OperationContext, checkOnly = false) => {
-    let processed = false;
-    return runDonationUseReview(
-      snapshot,
-      receipts.current,
-      (items, key) => reviewDonationUses(role, donationId, items, key, context.signal),
-      {
-        assertCurrent: context.assertCurrent,
-        stopped: () => (checkOnly ? processed : stop.current),
-        onProgress: (value) =>
-          context.commit(() => {
-            processed = true;
-            setResults(value);
-          }),
-      },
+  const send = async (plan: ReviewPlan, key: string, context: OperationContext) => {
+    await reviewPendingDonation(role, donationId, plan.body, key, context.signal);
+    context.commit(() =>
+      onReviewed(
+        plan.rows.map((row) => ({ use_id: row.id, ok: true })),
+        reviewedUseLabels(plan.rows, plan.body.decision),
+      ),
     );
   };
-  const review = useRetainedOperation<DonationUseReviewPlan, UseReviewResult[]>(
-    async (snapshot, _key, context) => run(snapshot, context),
-    async (snapshot, error, context) => {
-      if (error && responseOutcomeUnknown(error)) await run(snapshot, context, true);
-      const value = snapshot.batches.flatMap((batch) => receipts.current.get(batch.key) ?? []);
-      context.commit(() => {
-        setResults(value);
-        onReviewed(value);
-      });
+  const review = useRetainedOperation<ReviewPlan, void>(
+    send,
+    async (plan, error, context) => {
+      if (error && responseOutcomeUnknown(error) && context.operationKey)
+        await send(plan, context.operationKey, context);
       await refresh();
       if (error && responseOutcomeUnknown(error)) return { operationConfirmed: true };
     },
     root,
   );
-  const incomplete = Boolean(
-    started &&
-    plan &&
-    results.length < plan.batches.reduce((total, batch) => total + batch.items.length, 0),
-  );
   const locked =
-    open ||
     prepare.isPending ||
     review.isPending ||
-    checking ||
-    incomplete ||
-    review.outcome === 'unknown';
+    review.outcome === 'unknown' ||
+    Boolean(review.refreshError);
   useEffect(() => {
     onLockedChange(locked);
     return () => onLockedChange(false);
   }, [locked, onLockedChange]);
-  const begin = (value: 'approve' | 'reject') => {
-    setExitRefreshError(null);
-    setDecision(value);
-    setPlan(null);
-    setNote('');
-    setStarted(false);
-    setResults([]);
-    setStopping(false);
-    receipts.current.clear();
-    stop.current = false;
+  const begin = async (decision: 'approve' | 'reject') => {
     prepare.reset();
     review.reset();
-    setOpen(true);
-    void prepare.mutateAsync(value).catch(() => undefined);
+    setEmpty(false);
+    try {
+      const plan = await prepare.mutateAsync({ decision, reason: note.trim() });
+      if (!plan.rows.length) {
+        setEmpty(true);
+        return;
+      }
+      await review.mutateAsync(plan);
+    } catch {
+      /* Retained operations keep the original request for recovery. */
+    }
   };
-  const execute = () => {
-    if (!plan) return;
-    const snapshot = started ? plan : prepareDonationUseReview(plan.rows, decision, note);
-    setPlan(snapshot);
-    setStarted(true);
-    setStopping(false);
-    stop.current = false;
-    void review.mutateAsync(snapshot).catch(() => undefined);
-  };
-  const eligible = plan ? plan.rows.length - plan.blocked.length : 0;
-  const title = t(
-    decision === 'approve'
-      ? 'common.connections.approveAllUses'
-      : 'common.connections.rejectAllUses',
-  );
   return (
-    <>
+    <div className="nb-stack">
+      <Field
+        label={t('common.connections.reviewReason')}
+        help={t('common.connections.reviewReasonVisible')}
+      >
+        {(props) => (
+          <textarea
+            {...props}
+            rows={2}
+            value={note}
+            disabled={locked}
+            onChange={(event) => setNote(event.target.value)}
+          />
+        )}
+      </Field>
       <div className="nb-actions">
         <button
           type="button"
-          className="nb-btn nb-btn--secondary"
-          disabled={disabled || locked}
-          onClick={() => begin('approve')}
+          className="nb-btn nb-btn--primary"
+          disabled={locked}
+          onClick={() => void begin('approve')}
         >
           {t('common.connections.approveAllUses')}
         </button>
         <button
           type="button"
           className="nb-btn nb-btn--danger-outline"
-          disabled={disabled || locked}
-          onClick={() => begin('reject')}
+          disabled={locked}
+          onClick={() => void begin('reject')}
         >
           {t('common.connections.rejectAllUses')}
         </button>
-        {!open && (incomplete || review.outcome === 'unknown') ? (
-          <button type="button" className="nb-btn nb-btn--secondary" onClick={() => setOpen(true)}>
-            {t('common.connections.resumeUseReview')}
-          </button>
-        ) : null}
       </div>
-      {exitRefreshError ? (
-        <ErrorState
-          error={exitRefreshError}
-          onRetry={() =>
-            void refresh()
-              .then(() => setExitRefreshError(null))
-              .catch(setExitRefreshError)
-          }
-        />
+      {prepare.isPending || review.isPending ? <LoadingState /> : null}
+      {empty ? <Note>{t('common.connections.noPendingContent')}</Note> : null}
+      {prepare.error ? <ErrorState error={prepare.error} /> : null}
+      {review.error ? <ErrorState error={review.error} /> : null}
+      {review.outcome === 'unknown' ? (
+        <Note tone="warn">
+          <p>{t('common.connections.unknownResult')}</p>
+          <button
+            type="button"
+            className="nb-btn nb-btn--secondary"
+            disabled={review.isPending}
+            onClick={() => void review.check()}
+          >
+            {t('common.connections.checkResult')}
+          </button>
+        </Note>
       ) : null}
-      <ConfirmDialog
-        open={open}
-        title={title}
-        description={t(
-          donationKeyId
-            ? 'common.connections.reviewKeyScope'
-            : 'common.connections.reviewDonationScope',
-          { donation: donationId, key: donationKeyId },
-        )}
-        confirmLabel={started ? t('common.connections.resumeUseReview') : title}
-        cancelLabel={started ? t('common.close') : undefined}
-        danger={decision === 'reject'}
-        busy={prepare.isPending || review.isPending || checking}
-        confirmDisabled={
-          !plan || eligible === 0 || review.outcome === 'unknown' || (started && !incomplete)
-        }
-        onCancel={() => setOpen(false)}
-        onConfirm={execute}
-      >
-        {prepare.isPending ? (
-          <>
-            <LoadingState />
-            <button
-              type="button"
-              className="nb-btn nb-btn--secondary"
-              onClick={() => {
-                prepare.cancel();
-                setOpen(false);
-              }}
-            >
-              {t('common.connections.cancelUseReviewLoading')}
-            </button>
-          </>
-        ) : null}
-        {prepare.error ? (
-          <ErrorState
-            error={prepare.error}
-            onRetry={() => void prepare.mutateAsync(decision).catch(() => undefined)}
+      {review.refreshError ? (
+        review.isSuccess ? (
+          <OutcomeNote
+            busy={review.isPending}
+            outcome={{ kind: 'savedRefreshFailed', recheck: () => void review.refresh() }}
           />
-        ) : null}
-        {plan ? (
-          <div className="nb-stack">
-            <Note tone={plan.blocked.length ? 'warn' : 'info'}>
-              <p>
-                {t('common.connections.reviewSnapshotCount', {
-                  total: formatCount(String(plan.rows.length)).display,
-                  eligible: formatCount(String(eligible)).display,
-                  blocked: formatCount(String(plan.blocked.length)).display,
-                })}
-              </p>
-              <p>{t('common.connections.reviewSnapshotFixed')}</p>
-              {decision === 'reject' ? <p>{t('common.connections.rejectKeepsApproved')}</p> : null}
-            </Note>
-            {plan.blocked.length ? (
-              <Fold title={t('common.connections.blockedUses')}>
-                <ul className="nb-list">
-                  {plan.blocked.map((row) => (
-                    <li key={row.id}>
-                      {t('common.connections.reviewUseLabel', {
-                        key: row.donation_key_id,
-                        service: t(NATIVE_SERVICE_LABEL_KEYS[row.native_service]),
-                      })}
-                      {' · '}
-                      {t(
-                        row.pending?.review.material_available
-                          ? 'common.connections.useReviewUnavailable'
-                          : 'common.connections.reviewMaterialUnavailable',
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </Fold>
-            ) : null}
-            {!started ? (
-              <Field
-                label={t('common.connections.reviewReason')}
-                help={t('common.connections.reviewReasonVisible')}
-              >
-                {(props) => (
-                  <textarea
-                    {...props}
-                    value={note}
-                    onChange={(event) => setNote(event.target.value)}
-                  />
-                )}
-              </Field>
-            ) : null}
-            {started ? (
-              <p role="status">
-                {t('common.connections.reviewProgress', {
-                  completed: formatCount(String(results.length)).display,
-                  total: formatCount(String(eligible)).display,
-                  succeeded: formatCount(String(results.filter((entry) => entry.ok).length))
-                    .display,
-                  failed: formatCount(String(results.filter((entry) => !entry.ok).length)).display,
-                })}
-              </p>
-            ) : null}
-            {review.isPending ? (
-              <button
-                type="button"
-                className="nb-btn nb-btn--secondary"
-                disabled={stopping}
-                onClick={() => {
-                  stop.current = true;
-                  setStopping(true);
-                }}
-              >
+        ) : (
+          <ErrorState error={review.refreshError} />
+        )
+      ) : review.isSuccess ? (
+        <Note tone="ok">{t('common.connections.reviewSaved')}</Note>
+      ) : null}
+    </div>
+  );
+}
+export function DonationUseReviewResults({
+  results,
+  labels = [],
+  onConfigure,
+  configurationStatus,
+}: {
+  results: UseReviewResult[];
+  labels?: ReviewedUseLabel[];
+  onConfigure?: (label: ReviewedUseLabel) => void;
+  configurationStatus?: (label: ReviewedUseLabel) => 'available' | 'denied' | undefined;
+}) {
+  const { t } = useTranslation();
+  const groups = new Map<string, { label?: ReviewedUseLabel; results: UseReviewResult[] }>();
+  for (const result of results) {
+    const label = labels.find((row) => row.use_id === result.use_id);
+    const key = label?.donation_key_id ?? result.use_id;
+    const group = groups.get(key) ?? { label, results: [] };
+    group.results.push(result);
+    groups.set(key, group);
+  }
+  return results.length ? (
+    <>
+      <ul className="nb-list" role="status">
+        {[...groups].map(([key, group]) => {
+          const { label } = group;
+          const expected = label
+            ? labels.filter((row) => row.donation_key_id === label.donation_key_id).length
+            : group.results.length;
+          const saved =
+            group.results.length === expected && group.results.every((result) => result.ok);
+          return (
+            <li key={key}>
+              <span>
                 {t(
-                  stopping
-                    ? 'common.connections.stoppingUseReview'
-                    : 'common.connections.stopUseReview',
+                  saved ? 'common.connections.reviewSaved' : 'common.connections.reviewIncomplete',
                 )}
-              </button>
-            ) : null}
-            {review.error ? <ErrorState error={review.error} /> : null}
-            {review.outcome === 'unknown' ? (
-              <Note tone="warn">
-                <p>{t('common.connections.unknownResult')}</p>
+              </span>
+              {label ? (
+                <span>
+                  {' '}
+                  · {label.display_head}…{label.display_tail}
+                </span>
+              ) : null}
+              {group.results
+                .filter((result) => result.error)
+                .map((result) => (
+                  <p key={result.use_id}>{result.error!.message}</p>
+                ))}
+              {group.results.some((result) => result.ok) &&
+              label?.decision === 'approve' &&
+              onConfigure &&
+              configurationStatus?.(label) === 'available' ? (
                 <button
                   type="button"
                   className="nb-btn nb-btn--secondary"
-                  disabled={review.isPending || checking}
-                  onClick={() => {
-                    stop.current = false;
-                    setChecking(true);
-                    void review
-                      .check()
-                      .catch(() => undefined)
-                      .finally(() => setChecking(false));
-                  }}
+                  onClick={() => onConfigure(label)}
                 >
-                  {t('common.connections.checkResult')}
+                  {t('common.connections.configureReviewedUse')}
                 </button>
-              </Note>
-            ) : null}
-            {review.refreshError ? (
-              review.isSuccess ? (
-                <OutcomeNote
-                  busy={review.isPending || checking}
-                  outcome={{ kind: 'savedRefreshFailed', recheck: () => void review.refresh() }}
-                />
-              ) : (
-                <ErrorState error={review.refreshError} />
-              )
-            ) : null}
-            {incomplete && !review.isPending && !checking && review.outcome !== 'unknown' ? (
-              <button
-                type="button"
-                className="nb-btn nb-btn--secondary"
-                onClick={() => {
-                  stop.current = true;
-                  onReviewed(results);
-                  setPlan(null);
-                  setStarted(false);
-                  setOpen(false);
-                  receipts.current.clear();
-                  review.reset();
-                  void refresh().catch(setExitRefreshError);
-                }}
-              >
-                {t('common.connections.finishUseReview')}
-              </button>
-            ) : null}
-            {results.length ? (
-              <Fold title={t('common.connections.reviewResults')}>
-                <DonationUseReviewResults results={results} />
-              </Fold>
-            ) : null}
-          </div>
-        ) : null}
-      </ConfirmDialog>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+      {results.some((result) => {
+        const label = labels.find((row) => row.use_id === result.use_id);
+        return (
+          result.ok && label?.decision === 'approve' && configurationStatus?.(label) === 'denied'
+        );
+      }) ? (
+        <Note>{t('common.connections.reviewConfigurationDenied')}</Note>
+      ) : null}
     </>
-  );
-}
-export function DonationUseReviewResults({ results }: { results: UseReviewResult[] }) {
-  const { t } = useTranslation();
-  return results.length ? (
-    <ul className="nb-list" role="status">
-      {results.map((result) => (
-        <li key={result.use_id}>
-          {t(
-            result.ok ? 'common.connections.useReviewSaved' : 'common.connections.useReviewFailed',
-            { id: result.use_id },
-          )}
-          {result.error ? ' · ' + result.error.message : ''}
-        </li>
-      ))}
-    </ul>
   ) : null;
 }

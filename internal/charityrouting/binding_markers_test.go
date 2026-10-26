@@ -15,10 +15,10 @@ func TestBindingMarkersIncludeCurrentAndFilterOtherTargets(t *testing.T) {
 	e, _, did, keys, models := presetFixture(t)
 	input := KeyBindingBatch{ExpectedDonationRevision: "1", Targets: []KeyBindingTarget{}}
 	for i := range 6 {
-		input.Targets = append(input.Targets, KeyBindingTarget{models[0], "0", fmt.Sprint("up-", i)})
+		input.Targets = append(input.Targets, KeyBindingTarget{models[0], "0", fmt.Sprint("up-", i), nil})
 	}
 	for _, model := range models[1:] {
-		input.Targets = append(input.Targets, KeyBindingTarget{model, "0", "up-0"})
+		input.Targets = append(input.Targets, KeyBindingTarget{model, "0", "up-0", nil})
 	}
 	if _, err := e.service.bindKeyTargets(t.Context(), roleAdmin, 0, did, keys[0], routingMutation(t, 'j', http.MethodPost, routeAdminKeyBindingBatch, []int64{did, keys[0]}, input), input); err != nil {
 		t.Fatal(err)

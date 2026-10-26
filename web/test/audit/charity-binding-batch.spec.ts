@@ -22,6 +22,10 @@ interface Fixture {
     binding_key_ids: string[];
     binding_model_ids: string[];
     binding_channel_id: string;
+    custom_binding_donation_id: string;
+    custom_binding_key_ids: string[];
+    custom_binding_model_ids: string[];
+    custom_binding_channel_id: string;
   };
 }
 const batch = common.common.bindingBatch;
@@ -107,6 +111,19 @@ async function visuals(page: Page, info: TestInfo, name: string, focus: () => Pr
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
+      if (name === 'review-return-6' && width === 390) {
+        const widerFont = await page.addStyleTag({
+          content:
+            '.charity-management, .charity-management :is(input, select, textarea, button) { font-family: Verdana, sans-serif; }',
+        });
+        try {
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          ).toBe(true);
+        } finally {
+          await widerFont.evaluate((node) => node.parentNode?.removeChild(node));
+        }
+      }
       await page.screenshot({
         path: process.env.NONBIRI_VISUAL_DIR
           ? resolve(process.env.NONBIRI_VISUAL_DIR, `${name}-${theme}-${width}.png`)
@@ -157,7 +174,12 @@ test('model-centric binding picker reaches bound keys through the general source
       .getByRole('button', { name: /Binding browser key 1/ })
       .click();
     await expect(picker.getByRole('checkbox', { name: /binding-up-0/ })).toBeDisabled();
-    await expect(picker.getByText(batch.boundHere, { exact: true })).toBeVisible();
+    await expect(
+      picker
+        .getByRole('checkbox', { name: /binding-up-0/ })
+        .locator('..')
+        .getByText(batch.boundHere, { exact: true }),
+    ).toBeVisible();
     expect(sourceReads.length).toBeGreaterThan(1);
     expect(sourceReads.every((url) => !url.searchParams.has('include_bound'))).toBe(true);
   } finally {
@@ -539,6 +561,105 @@ test('administrator and level 6 configure channel presets and apply missing or r
   }
 });
 
+test('custom donations select matching or other channel templates without changing their source', async ({
+  browser,
+}, info) => {
+  const state = fixture();
+  const data = state.management;
+  const admin = await session(browser, 'admin');
+  try {
+    for (const [channelId, modelIds] of [
+      [data.custom_binding_channel_id, data.custom_binding_model_ids],
+      [data.binding_channel_id, data.binding_model_ids],
+    ] as const) {
+      const path = `/admin/api/charity-binding-presets/${channelId}`;
+      const saved = await read(admin, state.admin_url, path);
+      const response = await admin.request.put(state.admin_url + path, {
+        headers: { Origin: state.admin_url, 'Idempotency-Key': randomUUID() },
+        data: {
+          expected_channel_revision: saved.channel_revision,
+          expected_preset_revision: saved.preset_revision,
+          mappings: [0, 3].map((index) => ({
+            upstream_model_id: `binding-up-${index}`,
+            charity_model_id: modelIds[index],
+          })),
+        },
+      });
+      expect(response.status()).toBe(200);
+    }
+    const before = await read(
+      admin,
+      state.admin_url,
+      `/admin/api/donations/${data.custom_binding_donation_id}`,
+    );
+    for (const role of ['admin', 6] as const) {
+      const context = role === 'admin' ? admin : await session(browser, role);
+      try {
+        const origin = role === 'admin' ? state.admin_url : state.user_url;
+        const page = await context.newPage();
+        const route =
+          role === 'admin'
+            ? '/charity?charity_section=donations'
+            : '/steward?tab=charity&charity_section=donations';
+        await page.goto(`${origin}${route}&donation_id=${data.custom_binding_donation_id}`);
+        await page.getByText(presets.applyTitle, { exact: true }).click();
+        const picker = page.getByRole('region', { name: presets.choosePreset });
+        await expect(picker.getByText(presets.recommended, { exact: true })).toBeVisible();
+        await expect(picker.getByRole('row').nth(1)).toContainText('Custom preset browser service');
+        if (role === 'admin') {
+          await visuals(page, info, 'custom-preset-candidates', () =>
+            picker.getByRole('heading').scrollIntoViewIfNeeded(),
+          );
+          await picker
+            .getByRole('searchbox', { name: presets.searchChannels })
+            .fill('No such template');
+          await picker.getByRole('button', { name: common.common.search, exact: true }).click();
+          await expect(picker.getByRole('heading', { name: presets.noCandidates })).toBeVisible();
+          await picker.getByRole('searchbox', { name: presets.searchChannels }).fill('');
+          await picker.getByRole('button', { name: common.common.search, exact: true }).click();
+        }
+        const other = picker.getByRole('row').filter({
+          has: page.getByText('Binding browser service', { exact: true }),
+        });
+        await expect(other.getByText(presets.recommended, { exact: true })).toHaveCount(0);
+        await other.getByRole('button', { name: presets.selectPreset }).click();
+        const apply = page.getByRole('region', { name: presets.applyTitle });
+        await expect(apply).toContainText('Binding browser service');
+        await apply.getByRole('button', { name: presets.changePreset }).click();
+        await other.getByRole('button', { name: presets.selectPreset }).click();
+        await apply.getByRole('button', { name: presets.apply, exact: true }).click();
+        const results = page.getByRole('region', { name: batch.results });
+        await expect(results).toContainText(batch.status.missing_model);
+        await expect(results).toContainText(
+          role === 'admin' ? batch.status.added : batch.status.already_bound,
+        );
+        if (role === 'admin')
+          await visuals(page, info, 'custom-preset-results', () =>
+            results.scrollIntoViewIfNeeded(),
+          );
+        await page.close();
+      } finally {
+        if (role !== 'admin') await context.close();
+      }
+    }
+    const after = await read(
+      admin,
+      state.admin_url,
+      `/admin/api/donations/${data.custom_binding_donation_id}`,
+    );
+    const sources = (donation: { keys: { safe_source: unknown }[] }) =>
+      donation.keys.map((key) => key.safe_source);
+    expect(sources(after)).toEqual(sources(before));
+    expect(
+      after.keys.every(
+        (key: { safe_source: { kind: string } }) => key.safe_source.kind === 'custom',
+      ),
+    ).toBe(true);
+  } finally {
+    await admin.close();
+  }
+});
+
 test('level 5 keeps its allowed manual targets and cannot open channel presets', async ({
   browser,
 }) => {
@@ -549,7 +670,11 @@ test('level 5 keeps its allowed manual targets and cannot open channel presets',
     const options = await read(
       context,
       state.user_url,
-      `/api/steward/donations/${data.binding_donation_id}/keys/${data.binding_key_ids[0]}/binding-options?q=binding-browser&page=1&page_size=20`,
+      '/api/steward/donations/' +
+        data.binding_donation_id +
+        '/keys/' +
+        data.binding_key_ids[0] +
+        '/binding-options?q=binding-browser&page=1&page_size=20',
     );
     expect(options.data.map((row: { charity_model_id: string }) => row.charity_model_id)).toContain(
       data.binding_model_ids[0],
@@ -561,11 +686,40 @@ test('level 5 keeps its allowed manual targets and cannot open channel presets',
       state.user_url + '/api/steward/charity-binding-presets?page=1&page_size=20',
     );
     expect(denied.status()).toBe(403);
+    expect((await denied.json()).error.code).toBe('steward_permission_denied');
     const page = await context.newPage();
+    await page.goto(
+      state.user_url +
+        '/steward?tab=charity&charity_section=models&charity_model=' +
+        data.binding_model_ids[0],
+    );
+    const picker = page.locator('.ops-binding-picker');
+    const sourceSearch = picker.getByRole('searchbox', {
+      name: common.common.operations.charity.searchSources,
+    });
+    await sourceSearch.fill('Binding browser service');
+    await sourceSearch
+      .locator('xpath=ancestor::form')
+      .getByRole('button', { name: common.common.search, exact: true })
+      .click();
+    await picker.getByRole('button').filter({ hasText: 'Binding browser service' }).click();
+    await picker
+      .getByRole('region', { name: common.common.operations.charity.chooseKey })
+      .getByRole('button', { name: /Binding browser key 1/ })
+      .click();
+    await expect(picker.getByRole('checkbox', { name: /binding-up-0/ })).toBeDisabled();
+    await expect(
+      picker
+        .getByRole('checkbox', { name: /binding-up-0/ })
+        .locator('..')
+        .getByText(batch.boundHere, { exact: true }),
+    ).toBeVisible();
     await page.goto(state.user_url + '/steward?tab=charity');
-    await expect(page.getByRole('link', { name: presets.title })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: presets.title })).toBeVisible();
     await page.goto(state.user_url + '/charity/channel-presets');
-    await expect(page.getByRole('alert')).toContainText(presets.accessDenied);
+    await expect(
+      page.getByText(common.management.permissions.denied, { exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole('searchbox', { name: presets.searchChannels })).toHaveCount(0);
   } finally {
     await context.close();

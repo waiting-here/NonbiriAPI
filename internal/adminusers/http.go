@@ -52,6 +52,8 @@ type managementRoute struct {
 func (api *httpAPI) userRoutes() []managementRoute {
 	return []managementRoute{
 		{http.MethodGet, api.role.route(routeUsers), api.listUsers},
+		{http.MethodGet, api.role.route(routeStewardPermissions), api.getStewardPermissions},
+		{http.MethodPut, api.role.route(routeStewardPermissions), api.putStewardPermissions},
 		{http.MethodGet, api.role.route(routeDeletedUser), api.getDeletedUser},
 		{http.MethodGet, api.role.route(routeUser), api.getUser},
 		{http.MethodGet, api.role.route(routeCallerKey), api.getCallerKey},
@@ -72,6 +74,9 @@ func RegisterStewardRoutes(registrar StewardRouteRegistrar, service *Service) er
 	}
 	api := &httpAPI{service: service, role: roleSteward}
 	routes := append(api.userRoutes(), []managementRoute{
+		{http.MethodGet, api.role.route(routeEndpointOverview), api.getEndpointOverview},
+		{http.MethodGet, api.role.route(routeEndpointOverviewUsers), api.getEndpointOverviewUsers},
+		{http.MethodPatch, api.role.route(routeEndpointTags), api.patchEndpointTags},
 		{http.MethodGet, api.role.route(routeBlacklist), api.listBlacklist},
 		{http.MethodPost, api.role.route(routeBlacklist), api.addBlacklist},
 		{http.MethodGet, api.role.route(routeBlacklistEvents), api.listBlacklistEvents},
@@ -472,7 +477,7 @@ func (api *httpAPI) getEndpointOverview(writer http.ResponseWriter, request *htt
 	if !parsePageQuery(writer, values, &query.Cursor, &query.Limit, &query.Page) {
 		return
 	}
-	page, err := api.service.EndpointOverview(request.Context(), principal.UserID, query)
+	page, err := api.service.endpointOverview(request.Context(), principal.UserID, api.role, query)
 	if err != nil {
 		writeError(writer, err)
 		return
@@ -956,6 +961,9 @@ func writeMutation(writer http.ResponseWriter, status int, body []byte) {
 }
 
 func writeError(writer http.ResponseWriter, err error) {
+	if authz.WritePermissionDenied(writer, err) {
+		return
+	}
 	if errors.Is(err, authz.ErrMFARequired) {
 		httperr.WriteError(writer, httperr.New(httperr.CodeMFARequired, "MFA verification is required."))
 		return

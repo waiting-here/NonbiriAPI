@@ -6,7 +6,8 @@ This standard applies to every existing and future Gacha Simulator card. Rarity 
 
 `internal/artwork/catalog.json` is the shared Go and browser classification
 registry. Every card, illustration, cover and appearance has an explicit
-`general` or `r18` rating; all current entries are `general`. Asset ownership
+`general` or `r18` rating. Sweet Hide-and-Seek's two cards, theme illustration
+and pool cover are `r18`, including all their derivatives. Asset ownership
 rules cover the corresponding previews, full-size images, layers and variants.
 Shared textures have one owner, and artwork that reuses them declares `uses`
 dependencies so its effective rating includes those sources. Card `scene`
@@ -17,6 +18,15 @@ coverage validation. Keep default appearance and fallback cover general. The
 administrator's R-18 switch controls both rendering and direct asset delivery;
 candidate labels are separate from the artwork, so allowed detail views and
 applied appearances remain unobstructed.
+
+Sweet Hide-and-Seek retains two animated SSR character portraits over static
+backgrounds. Its group illustration and independent pool cover stay static;
+the theme grants no SP site appearance. The character-free backgrounds and
+retained foregrounds share the theme's R-18 classification, including standard,
+thumbnail and high-resolution WebP exports. Its adult artwork is included in
+the public source distribution and remains disabled by default in the product.
+Heartfelt moments retain each card's aligned static scenery behind the animated
+character so the hand-to-door and foreground contact points remain supported.
 
 ## Artwork and identity
 
@@ -38,6 +48,14 @@ Inspect transparent corrections on light and dark neutral backgrounds and on the
 Existing N/R/SR cards use separate theme backgrounds and character layers. Existing group illustrations and covers retain their original cast compositions as registered foreground layers. Existing SSR/SP character, eyelid and scene layers remain reusable. The asset composition manifest records the inputs and placement. Keep the former flattened masters in the local archive.
 
 SSR card backgrounds stay static while their characters animate. SP also requires coordinated background animation and the complete dedicated site appearance. Heartfelt moments uses a static theme background for every selected card, including SP, and only animates SSR/SP characters.
+
+New SSR and SP motion should remain visible at the actual desktop and phone
+display sizes. Combine anatomically constrained breathing with pose-appropriate
+hair, cloth and environmental follow-through, with clear driving motion, delay
+and settling. Preserve roots, support, hand-to-prop contact and occlusion.
+Prepare missing layers, backing plates or bindings before accepting a finished
+animation. Blinking plus barely visible tip movement is insufficient; whole-body
+waves, unsupported bouncing and extra particles cannot replace character motion.
 
 ## High-resolution delivery
 
@@ -111,7 +129,7 @@ Check the production components at desktop and phone sizes, in light and dark mo
 
 Every card has its own bilingual character voice. Use an established personality and at most one gentle joke. Express affection plainly and make room for relaxed, intimate everyday moments. Keep warmth specific to the scene: sharing food, holding hands, a date or an invitation. Familiar character motifs may appear sparingly; do not turn every voice into a joke about AI or computing. Never belittle users or other models.
 
-N/R lines are light and everyday; SR grows more personal; SSR and SP can express love directly. SP connects its imagery to a concrete wish to be close to the player, with an intimate second paragraph. Avoid repeated ellipses, em dashes, coy denials, slogan-like contrasts and generic promises. Vary sentence lengths, openings and punctuation across the entire catalogue. Keep every line suitable for all ages. Each paragraph is at most 40 Chinese characters or 110 English characters and occupies no more than three lines in the phone close-up. Review both languages and the actual narrow-screen wrapping before adoption.
+N/R lines are light and everyday; SR grows more personal; SSR and SP can express love directly. SP connects its imagery to a concrete wish to be close to the player, with an intimate second paragraph. Avoid repeated ellipses, em dashes, coy denials, slogan-like contrasts and generic promises. Vary sentence lengths, openings and punctuation across the entire catalogue. Match the scene's content rating and direct intimate lines toward the player. Each paragraph is at most 40 Chinese characters or 110 English characters and occupies no more than three lines in the phone close-up. Review both languages and the actual narrow-screen wrapping before adoption.
 
 Keep voices in the presentation catalogue, separate from theme taglines. Show individual lines in SR focus, SSR/SP close-ups and owned-card appreciation; use theme taglines for theme memories. New SP encounters include a short prelude and a delayed second paragraph. Reunions use a distinct line without replaying the prelude. New voices require editorial approval before final adoption.
 

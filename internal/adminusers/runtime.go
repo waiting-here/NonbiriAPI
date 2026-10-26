@@ -15,13 +15,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/waiting-here/NonbiriAPI/internal/antiabuse"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
-	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 const (
@@ -190,24 +188,11 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 	if err != nil {
 		return AdminUser{}, classifyLedgerError("read game wallet", err)
 	}
-	automatic := row.autoLevel
-	if automatic < 1 || automatic > 4 {
-		return AdminUser{}, fmt.Errorf("%w: invalid automatic level", ErrInvariant)
+	level, err := projectUserLevel(row, config)
+	if err != nil {
+		return AdminUser{}, err
 	}
-	if !row.manualLevel.Valid {
-		automatic = authz.AutomaticLevel(automatic, donation, config.thresholds)
-	}
-	effective := automatic
-	var manual *int
-	if row.manualLevel.Valid {
-		if row.manualLevel.Int64 < 1 || row.manualLevel.Int64 > 6 {
-			return AdminUser{}, fmt.Errorf("%w: invalid manual level", ErrInvariant)
-		}
-		value := int(row.manualLevel.Int64)
-		manual = &value
-		effective = value
-	}
-	activeBan := row.isBanned == 1 && (!row.bannedUntil.Valid || row.bannedUntil.Int64 > now)
+	activeBan, bannedUntil := projectUserBan(row, now)
 	var automaticReason *observability.AutomaticReason
 	if activeBan {
 		var err error
@@ -217,13 +202,8 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 		}
 	}
 	bannedReason := ""
-	var bannedUntil *int64
 	if activeBan {
 		bannedReason = row.bannedReason
-		if row.bannedUntil.Valid {
-			value := row.bannedUntil.Int64
-			bannedUntil = &value
-		}
 	}
 	return AdminUser{
 		ID: strconv.FormatInt(row.id, 10), DiscordID: nullStringPointer(row.discordID),
@@ -239,10 +219,43 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 		LightConcurrencyLimit: nullableIntString(row.lightConcurrencyLimit), EffectiveLightConcurrencyLimit: effectiveLimit(row.lightConcurrencyLimit, db.DefaultUserLightConcurrencyLimit),
 		GlobalRPMLimit: nullableIntString(row.globalRPMLimit), EffectiveGlobalRPMLimit: effectiveLimit(row.globalRPMLimit, config.globalRPMDefault),
 		Lang: row.lang, Balance: formatMilliPoints(wallet.Balance.Big()), GameBalance: formatMilliPoints(gameWallet.Balance.Big()), DonationCredit: formatMilliPoints(donation.Big()),
-		Level:             AdminUserLevel{Manual: manual, Automatic: automatic, Effective: effective, DisplayName: config.display[effective]},
+		Level:             level,
 		GameProfilePublic: row.gamePublic == 1, Revision: revision.Decimal(), Usage: usage,
 		CreatedAt: row.createdAt, UpdatedAt: row.updatedAt,
 	}, nil
+}
+
+func projectUserLevel(row userRow, config projectionConfig) (AdminUserLevel, error) {
+	donation, err := db.DecodeU128(row.donation)
+	if err != nil {
+		return AdminUserLevel{}, fmt.Errorf("%w: decode donation credit", ErrInvariant)
+	}
+	automatic := row.autoLevel
+	if automatic < 1 || automatic > 4 {
+		return AdminUserLevel{}, fmt.Errorf("%w: invalid automatic level", ErrInvariant)
+	}
+	if !row.manualLevel.Valid {
+		automatic = authz.AutomaticLevel(automatic, donation, config.thresholds)
+	}
+	effective := automatic
+	var manual *int
+	if row.manualLevel.Valid {
+		if row.manualLevel.Int64 < 1 || row.manualLevel.Int64 > 6 {
+			return AdminUserLevel{}, fmt.Errorf("%w: invalid manual level", ErrInvariant)
+		}
+		value := int(row.manualLevel.Int64)
+		manual, effective = &value, value
+	}
+	return AdminUserLevel{Manual: manual, Automatic: automatic, Effective: effective, DisplayName: config.display[effective]}, nil
+}
+
+func projectUserBan(row userRow, now int64) (bool, *int64) {
+	active := row.isBanned == 1 && (!row.bannedUntil.Valid || row.bannedUntil.Int64 > now)
+	if active && row.bannedUntil.Valid {
+		value := row.bannedUntil.Int64
+		return true, &value
+	}
+	return active, nil
 }
 
 func (service *Service) ListUsers(ctx context.Context, adminID int64, query UserListQuery) (Page[AdminUser], error) {
@@ -627,6 +640,9 @@ FROM site_activity_daily WHERE day<?`, ` ORDER BY day DESC`, []any{upper}, query
 }
 
 func (service *Service) EndpointOverview(ctx context.Context, adminID int64, query EndpointOverviewQuery) (Page[EndpointOverview], error) {
+	return service.endpointOverview(ctx, adminID, roleAdmin, query)
+}
+func (service *Service) endpointOverview(ctx context.Context, adminID int64, role managementRole, query EndpointOverviewQuery) (Page[EndpointOverview], error) {
 	limit := normalizePageLimit(query.Page, query.Cursor, query.Limit)
 	if limit == 0 || query.UserID < 0 || !validEndpointTagFilter(query.Tag) {
 		return Page[EndpointOverview]{}, ErrInvalidRequest
@@ -648,7 +664,7 @@ func (service *Service) EndpointOverview(ctx context.Context, adminID int64, que
 	if err != nil {
 		return Page[EndpointOverview]{}, err
 	}
-	tx, err := service.beginListRead(ctx, adminID, query.Page != nil)
+	tx, err := service.beginEndpointManagement(ctx, adminID, role, true, "endpoints.read")
 	if err != nil {
 		return Page[EndpointOverview]{}, err
 	}
@@ -729,6 +745,7 @@ func (service *Service) Profile(ctx context.Context, adminID, userID int64, cont
 }
 
 func (service *Service) profile(ctx context.Context, adminID, userID int64, role managementRole, control ControlMutation, input ProfileMutation) (MutationResult[AdminUser], error) {
+	ctx = authz.WithStewardPermission(ctx, "user_fields")
 	if userID <= 0 {
 		return MutationResult[AdminUser]{}, ErrNotFound
 	}
@@ -763,6 +780,11 @@ func (service *Service) profile(ctx context.Context, adminID, userID int64, role
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
+	if role == roleSteward {
+		if err := authorizeProfilePermissions(ctx, tx, adminID, input); err != nil {
+			return MutationResult[AdminUser]{}, err
+		}
+	}
 	if input.LevelSet && decision.Kind != idempotency.Replay && (!row.discordID.Valid || row.discordID.String != lockedDiscord) {
 		return MutationResult[AdminUser]{}, ErrConflict
 	}
@@ -780,56 +802,7 @@ func (service *Service) profile(ctx context.Context, adminID, userID int64, role
 		done = true
 		return result, nil
 	}
-	if !equalU128Bytes(row.revision, input.ExpectedRevision) {
-		return MutationResult[AdminUser]{}, ErrConflict
-	}
-	next, err := incrementU128(input.ExpectedRevision)
-	if err != nil {
-		return MutationResult[AdminUser]{}, ErrResourceLimit
-	}
-	result, err := tx.ExecContext(ctx, `
-UPDATE users SET
- endpoint_limit=CASE WHEN ? THEN ? ELSE endpoint_limit END,
- rpm_limit=CASE WHEN ? THEN ? ELSE rpm_limit END,
- concurrency_limit=CASE WHEN ? THEN ? ELSE concurrency_limit END,
- light_rpm_limit=CASE WHEN ? THEN ? ELSE light_rpm_limit END,
- light_concurrency_limit=CASE WHEN ? THEN ? ELSE light_concurrency_limit END,
- global_rpm_limit=CASE WHEN ? THEN ? ELSE global_rpm_limit END,
- lang=CASE WHEN ? THEN ? ELSE lang END,
- level=CASE WHEN ? THEN ? ELSE level END,
- discord_gate_policy=CASE WHEN ? THEN ? ELSE discord_gate_policy END,
- revision=?,updated_at=?
-WHERE id=? AND is_admin=0 AND revision=?`,
-		input.EndpointLimitSet, nullableIntValue(input.EndpointLimit),
-		input.RPMLimitSet, nullableIntValue(input.RPMLimit),
-		input.ConcurrencySet, nullableIntValue(input.Concurrency),
-		input.LightRPMLimitSet, nullableIntValue(input.LightRPMLimit),
-		input.LightConcurrencySet, nullableIntValue(input.LightConcurrency),
-		input.GlobalRPMLimitSet, nullableIntValue(input.GlobalRPMLimit),
-		input.LangSet, input.Lang, input.LevelSet, nullableIntValueFromInt(input.Level),
-		input.DiscordGatePolicySet, input.DiscordGatePolicy,
-		db.EncodeU128(next), now, userID, row.revision)
-	if err != nil {
-		return MutationResult[AdminUser]{}, classifyDatabaseError("update user profile", err)
-	}
-	updated, err := result.RowsAffected()
-	if err != nil || updated != 1 {
-		return MutationResult[AdminUser]{}, ErrConflict
-	}
-	if input.LevelSet {
-		if err := useractivity.RescheduleTx(ctx, tx, userID); err != nil {
-			return MutationResult[AdminUser]{}, err
-		}
-	}
-	row, err = readUserRow(ctx, tx, userID)
-	if err != nil {
-		return MutationResult[AdminUser]{}, err
-	}
-	config, err := readProjectionConfig(ctx, tx)
-	if err != nil {
-		return MutationResult[AdminUser]{}, err
-	}
-	user, err := projectUser(ctx, tx, row, config, now)
+	user, err := service.applyProfileTx(ctx, tx, row, userID, input, now)
 	if err != nil {
 		return MutationResult[AdminUser]{}, err
 	}
@@ -856,6 +829,7 @@ func (service *Service) Economy(ctx context.Context, adminID, userID int64, cont
 }
 
 func (service *Service) economy(ctx context.Context, adminID, userID int64, role managementRole, control ControlMutation, input EconomyMutation) (MutationResult[AdminUser], error) {
+	ctx = authz.WithStewardPermission(ctx, "user_fields")
 	if userID <= 0 {
 		return MutationResult[AdminUser]{}, ErrNotFound
 	}
@@ -869,6 +843,11 @@ func (service *Service) economy(ctx context.Context, adminID, userID int64, role
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
+	if role == roleSteward && input.Target != "donation_credit" {
+		if err := authorizeEconomyPermissions(ctx, tx, adminID, input); err != nil {
+			return MutationResult[AdminUser]{}, err
+		}
+	}
 	if role == roleSteward && input.Target == "donation_credit" {
 		return MutationResult[AdminUser]{}, ErrForbidden
 	}
@@ -883,101 +862,7 @@ func (service *Service) economy(ctx context.Context, adminID, userID int64, role
 		done = true
 		return result, nil
 	}
-	if !equalU128Bytes(row.revision, input.ExpectedRevision) {
-		return MutationResult[AdminUser]{}, ErrConflict
-	}
-	asset := ledger.General
-	if input.Target == "game_balance" {
-		asset = ledger.Game
-	}
-	wallet, err := ledger.UserAssetAccount(ctx, tx, userID, asset)
-	if err != nil {
-		return MutationResult[AdminUser]{}, classifyLedgerError("read adjustment wallet", err)
-	}
-	external, err := ledger.CodedAssetAccount(ctx, tx, "external", asset)
-	if err != nil {
-		return MutationResult[AdminUser]{}, classifyLedgerError("read external account", err)
-	}
-	delta := input.AmountMilli
-	if input.Direction == "decrease" {
-		delta = -delta
-	}
-	creditDelta, donationDelta := ledger.AmountFromMilli(0), ledger.AmountFromMilli(0)
-	donationUserID := int64(0)
-	if input.Target == "balance" || input.Target == "game_balance" {
-		creditDelta = ledger.AmountFromMilli(delta)
-	} else {
-		donationDelta = ledger.AmountFromMilli(delta)
-		donationUserID = userID
-	}
-	operationID, err := service.newID("op_")
-	if err != nil || !db.ValidateOpaqueID(operationID, "op_") {
-		return MutationResult[AdminUser]{}, ErrUnavailable
-	}
-	meta := ledger.Meta{OperationID: operationID, ActorUserID: adminID, CreatedAt: now}
-	var plan ledger.Plan
-	if asset == ledger.Game {
-		plan, err = ledger.NewAdminGameAdjustment(meta, wallet.ID, external.ID, creditDelta, input.Reason)
-	} else {
-		plan, err = ledger.NewAdminUserAdjustment(meta, wallet.ID, external.ID, creditDelta, donationUserID, donationDelta, input.Reason)
-	}
-	if err != nil {
-		return MutationResult[AdminUser]{}, classifyLedgerError("build user adjustment", err)
-	}
-	if _, err := ledger.Apply(ctx, tx, plan); err != nil {
-		return MutationResult[AdminUser]{}, classifyLedgerError("apply user adjustment", err)
-	}
-	next, err := incrementU128(input.ExpectedRevision)
-	if err != nil {
-		return MutationResult[AdminUser]{}, ErrResourceLimit
-	}
-	newAuto := row.autoLevel
-	if input.Target == "donation_credit" {
-		var donationRaw []byte
-		if err := tx.QueryRowContext(ctx, `SELECT donation_credit_mag FROM users WHERE id=?`, userID).Scan(&donationRaw); err != nil {
-			return MutationResult[AdminUser]{}, classifyDatabaseError("read adjusted donation credit", err)
-		}
-		donation, err := db.DecodeU128(donationRaw)
-		if err != nil {
-			return MutationResult[AdminUser]{}, fmt.Errorf("%w: decode adjusted donation credit", ErrInvariant)
-		}
-		config, err := readProjectionConfig(ctx, tx)
-		if err != nil {
-			return MutationResult[AdminUser]{}, err
-		}
-		newAuto = authz.AutomaticLevel(newAuto, donation, config.thresholds)
-	}
-	authorityChanged := newAuto != row.autoLevel
-	var update sql.Result
-	if input.Target == "donation_credit" {
-		// The closed ledger primitive advances the user revision together with
-		// donation_credit_mag. Reuse that CAS winner instead of advancing the
-		// same mutation a second time.
-		update, err = tx.ExecContext(ctx, `UPDATE users SET auto_level=?,updated_at=? WHERE id=? AND is_admin=0 AND revision=?`, newAuto, now, userID, db.EncodeU128(next))
-	} else {
-		update, err = tx.ExecContext(ctx, `UPDATE users SET auto_level=?,revision=?,updated_at=? WHERE id=? AND is_admin=0 AND revision=?`, newAuto, db.EncodeU128(next), now, userID, row.revision)
-	}
-	if err != nil {
-		return MutationResult[AdminUser]{}, classifyDatabaseError("update adjusted user revision", err)
-	}
-	updated, err := update.RowsAffected()
-	if err != nil || updated != 1 {
-		return MutationResult[AdminUser]{}, ErrConflict
-	}
-	if authorityChanged {
-		if err := useractivity.RescheduleTx(ctx, tx, userID); err != nil {
-			return MutationResult[AdminUser]{}, err
-		}
-	}
-	row, err = readUserRow(ctx, tx, userID)
-	if err != nil {
-		return MutationResult[AdminUser]{}, err
-	}
-	config, err := readProjectionConfig(ctx, tx)
-	if err != nil {
-		return MutationResult[AdminUser]{}, err
-	}
-	user, err := projectUser(ctx, tx, row, config, now)
+	user, authorityChanged, err := service.applyEconomyTx(ctx, tx, row, adminID, userID, input, now)
 	if err != nil {
 		return MutationResult[AdminUser]{}, err
 	}
@@ -1004,6 +889,11 @@ func (service *Service) Unban(ctx context.Context, adminID, userID int64, contro
 }
 
 func (service *Service) setBan(ctx context.Context, adminID, userID int64, role managementRole, control ControlMutation, expected db.U128, banned bool, reason string, duration *int64) (MutationResult[struct{}], error) {
+	permission := "users.unban"
+	if banned {
+		permission = "users.ban"
+	}
+	ctx = authz.WithStewardPermission(ctx, permission)
 	if userID <= 0 {
 		return MutationResult[struct{}]{}, ErrNotFound
 	}
@@ -1022,6 +912,11 @@ func (service *Service) setBan(ctx context.Context, adminID, userID int64, role 
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
+	if role == roleSteward && banned {
+		if err := authorizeBanPermissions(ctx, tx, adminID, duration); err != nil {
+			return MutationResult[struct{}]{}, err
+		}
+	}
 	if decision.Kind != idempotency.Replay && (!row.discordID.Valid || row.discordID.String != lockedDiscord) {
 		return MutationResult[struct{}]{}, ErrConflict
 	}
@@ -1033,86 +928,14 @@ func (service *Service) setBan(ctx context.Context, adminID, userID int64, role 
 		done = true
 		return result, nil
 	}
-	if !equalU128Bytes(row.revision, expected) {
-		return MutationResult[struct{}]{}, ErrConflict
-	}
-	if !banned || duration != nil {
-		var blocked bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM discord_blacklist WHERE discord_id=?)`, row.discordID.String).Scan(&blocked); err != nil {
-			return MutationResult[struct{}]{}, err
+	var finalizers []func(bool)
+	defer func() {
+		for i := len(finalizers) - 1; i >= 0; i-- {
+			finalizers[i](done)
 		}
-		if blocked {
-			return MutationResult[struct{}]{}, ErrBlacklisted
-		}
-	}
-	next, err := incrementU128(expected)
-	if err != nil {
-		return MutationResult[struct{}]{}, ErrResourceLimit
-	}
-	var result sql.Result
-	if banned {
-		var until any
-		if duration != nil {
-			if *duration <= 0 || *duration > db.MaxBanDurationSeconds || now > maxUnixSecond-*duration {
-				return MutationResult[struct{}]{}, ErrInvalidRequest
-			}
-			until = now + *duration
-		}
-		if service.cancelUserDuelsTx != nil {
-			finalize, err := service.cancelUserDuelsTx(ctx, tx, userID, "account_unavailable", now)
-			if err != nil {
-				return MutationResult[struct{}]{}, classifyDatabaseError("cancel user games", err)
-			}
-			if finalize == nil {
-				return MutationResult[struct{}]{}, ErrInvariant
-			}
-			defer func() { finalize(done) }()
-		}
-		result, err = tx.ExecContext(ctx, `
-UPDATE users SET is_banned=1,banned_reason=?,banned_until=?,auto_banned=0,ban_kind='',revision=?,updated_at=?
-WHERE id=? AND is_admin=0 AND revision=?`, reason, until, db.EncodeU128(next), now, userID, row.revision)
-	} else {
-		if err := useractivity.ResetObservationTx(ctx, tx, userID, now); err != nil {
-			return MutationResult[struct{}]{}, err
-		}
-		result, err = tx.ExecContext(ctx, `
-UPDATE users SET is_banned=0,banned_reason='',banned_until=NULL,auto_banned=0,ban_kind='',revision=?,updated_at=?
-WHERE id=? AND is_admin=0 AND revision=?`, db.EncodeU128(next), now, userID, row.revision)
-	}
-	if err != nil {
-		return MutationResult[struct{}]{}, classifyDatabaseError("update ban state", err)
-	}
-	updated, err := result.RowsAffected()
-	if err != nil || updated != 1 {
-		return MutationResult[struct{}]{}, ErrConflict
-	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM automatic_reason_metadata WHERE owner_kind='user_ban' AND owner_id=?`, strconv.FormatInt(userID, 10)); err != nil {
+	}()
+	if err := service.applyBanTx(ctx, tx, row, adminID, userID, expected, banned, reason, duration, now, &finalizers); err != nil {
 		return MutationResult[struct{}]{}, err
-	}
-	if err := useractivity.RescheduleTx(ctx, tx, userID); err != nil {
-		return MutationResult[struct{}]{}, err
-	}
-	if banned {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=?`, userID); err != nil {
-			return MutationResult[struct{}]{}, classifyDatabaseError("revoke user sessions", err)
-		}
-		keyUpdate, err := tx.ExecContext(ctx, `
-UPDATE caller_keys SET generation=CASE WHEN key_hash IS NULL THEN generation ELSE generation+1 END,key_hash=NULL,display_head='',display_tail='',key_created_at=NULL,updated_at=?
-WHERE user_id=? AND (key_hash IS NULL OR generation<?)`, now, userID, int64(math.MaxInt64))
-		if err != nil {
-			return MutationResult[struct{}]{}, classifyDatabaseError("revoke caller key", err)
-		}
-		keys, err := keyUpdate.RowsAffected()
-		if err != nil || keys != 1 {
-			return MutationResult[struct{}]{}, fmt.Errorf("%w: caller key generation", ErrInvariant)
-		}
-	}
-	var replacementEnd *int64
-	if banned && duration != nil {
-		replacementEnd = new(now + *duration)
-	}
-	if err := antiabuse.EndAutomaticTx(ctx, tx, userID, "ban", adminID, now, banned, replacementEnd); err != nil {
-		return MutationResult[struct{}]{}, classifyDatabaseError("record automatic ban disposition", err)
 	}
 	if err := idempotency.Complete(ctx, tx, decision, http.StatusNoContent, []byte{}); err != nil {
 		return MutationResult[struct{}]{}, classifyDatabaseError("complete ban mutation", err)

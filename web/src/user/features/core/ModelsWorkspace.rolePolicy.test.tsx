@@ -119,11 +119,13 @@ describe('personal model role editor', () => {
     const form = screen.getByRole('button', { name: 'Save' }).closest('form')!;
     await view.user.type(within(form).getByRole('textbox', { name: 'Prefix' }), 'personal');
     await view.user.type(screen.getByRole('textbox', { name: 'Model name' }), 'primary');
+    expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
     expect(screen.queryByRole('radiogroup', { name: 'Streaming' })).not.toBeInTheDocument();
     expect(screen.queryByText('Advanced behavior')).not.toBeInTheDocument();
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(f.writes).toHaveLength(1));
-    expect(f.writes[0].model_types).toEqual(['chat_completions']);
+    expect(f.writes[0].model_types).toEqual(['chat_completions', 'responses']);
     expect(f.writes[0].route_strategy).toBe('cache_balanced');
     expect(f.writes[0].role_policy).toEqual({ default_action: 'native', rules: {} });
     await waitFor(() =>
@@ -276,10 +278,11 @@ describe('personal model role editor', () => {
 });
 
 describe('personal model API selection', () => {
-  it('preserves migrated types, cancels changes, and saves image-only balanced routing', async () => {
+  it('preserves saved types, cancels changes, and saves image-only balanced routing', async () => {
     const f = fixture();
     const view = await renderEditor();
-    expect(screen.getByRole('checkbox', { name: 'Chat Completions / Responses' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Responses' })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Embeddings' })).toBeChecked();
     await view.user.click(screen.getByRole('checkbox', { name: 'Image generation' }));
     await view.user.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -287,7 +290,7 @@ describe('personal model API selection', () => {
     await view.user.click(screen.getByRole('button', { name: 'Edit model' }));
     expect(screen.getByRole('checkbox', { name: 'Image generation' })).not.toBeChecked();
     await view.user.click(screen.getByRole('checkbox', { name: 'Image generation' }));
-    await view.user.click(screen.getByRole('checkbox', { name: 'Chat Completions / Responses' }));
+    await view.user.click(screen.getByRole('checkbox', { name: 'Chat completions' }));
     await view.user.click(screen.getByRole('checkbox', { name: 'Embeddings' }));
     await view.user.click(screen.getByText('Advanced behavior', { selector: 'strong' }));
     await view.user.click(screen.getByRole('switch', { name: 'Try the next source on error' }));
@@ -307,7 +310,7 @@ describe('personal model API selection', () => {
   it('explains an empty model type selection without saving it', async () => {
     const f = fixture();
     const view = await renderEditor();
-    await view.user.click(screen.getByRole('checkbox', { name: 'Chat Completions / Responses' }));
+    await view.user.click(screen.getByRole('checkbox', { name: 'Chat completions' }));
     await view.user.click(screen.getByRole('checkbox', { name: 'Embeddings' }));
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
     expect(screen.getByText('Select at least one model type.')).toBeVisible();

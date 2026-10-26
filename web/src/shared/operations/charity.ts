@@ -4,6 +4,12 @@ import {
   type ServiceProjection,
 } from '@shared/connections';
 import { normalizeUseSummary, type UseSummary } from './donationUses';
+import {
+  normalizeServiceStatuses,
+  normalizeBindingAvailability,
+  type ServiceStatus,
+  type BindingAvailability,
+} from './resourceHealth';
 import { normalizeSessionHeaders, type SessionHeader } from '@shared/sessionHeaders';
 export type { SessionHeader } from '@shared/sessionHeaders';
 import { normalizeCloudflareProxyMode, type CloudflareProxyMode } from '@shared/cloudflareProxy';
@@ -113,6 +119,7 @@ export type ManagedSafeSource =
     };
 
 export interface ManagedDonationKey extends SmartBackoffFields {
+  service_statuses?: ServiceStatus[];
   can_manage?: boolean;
   review?: { required: boolean; revision: string | null; material_available: boolean };
   failure_disable_threshold: string;
@@ -319,6 +326,7 @@ export function normalizeManagedKey(
       'breakdown_started_at',
       'review',
       'can_manage',
+      'service_statuses',
     ],
     label,
     required,
@@ -430,6 +438,7 @@ export function normalizeManagedKey(
     safe_source: normalizeManagedSource(root.safe_source, `${label} source`, role),
     physical_enabled: boolean(root.physical_enabled, `${label} physical switch`),
     charity_state: state,
+    service_statuses: normalizeServiceStatuses(root.service_statuses),
     rate_limited_until: nullableUnixSecond(
       root.rate_limited_until ?? null,
       `${label} rate limit expiry`,
@@ -589,23 +598,8 @@ function normalizeDonationCommon(root: ReturnType<typeof record>, label: string)
       reviewed_at: unixSecond(value.reviewed_at, `${label} review time`),
     };
   }
-  if (reviewer !== null && review === null) {
-    invalidResponse(`${label} attributed review`);
-  }
-  if (status === 'pending' && review !== null) invalidResponse(`${label} pending review`);
-  if (status === 'approved' && review?.decision !== 'approve')
-    invalidResponse(`${label} approved review`);
-  if (
-    (status === 'expired' || status === 'deleted') &&
-    (review?.decision === 'reject' || review?.decision === 'force_reject')
-  )
-    invalidResponse(`${label} terminal review`);
-  if (status === 'rejected' && review?.decision !== 'reject' && review?.decision !== 'force_reject')
-    invalidResponse(`${label} rejected review`);
   return {
-    ...(root.use_summary === undefined
-      ? {}
-      : { use_summary: normalizeUseSummary(root.use_summary) }),
+    ...(root.use_summary == null ? {} : { use_summary: normalizeUseSummary(root.use_summary) }),
     first_approval_origin:
       root.first_approval_origin === undefined
         ? 'unknown'
@@ -1460,6 +1454,28 @@ export const reviewManagedDonation = (
     (value) => decodeDonation(role, value),
     idempotentOptions(key, { method: 'POST', json: body }),
   );
+export interface PendingDonationReviewInput {
+  expected_revision: string;
+  decision: 'approve' | 'reject';
+  reason: string;
+  uses: { use_id: string; expected_revision: string; expected_review_revision: string | null }[];
+}
+export const reviewPendingDonation = (
+  role: CharityRole,
+  id: string,
+  body: PendingDonationReviewInput,
+  key: string,
+  signal?: AbortSignal,
+): Promise<AdminDonation | StewardDonation> =>
+  decoded(
+    `${base(role)}/donations/${encodeURIComponent(decimalID(id, `${role} donation id`))}/pending-review`,
+    (value) => {
+      const item = decodeDonation(role, value);
+      if (item.id !== id) invalidResponse('donation identity');
+      return item;
+    },
+    idempotentOptions(key, { method: 'POST', json: body, signal }),
+  );
 export const patchManagedDonationKey = (
   role: CharityRole,
   id: string,
@@ -1687,7 +1703,6 @@ export const orderManagedBindings = async (
       json: { expected_binding_revision: revision, order, response: 'receipt' },
     }),
   );
-  return getManagedBindings(role, id);
 };
 export const deleteManagedBinding = async (
   role: CharityRole,
@@ -1704,10 +1719,10 @@ export const deleteManagedBinding = async (
       json: { expected_binding_revision: revision, response: 'receipt' },
     }),
   );
-  return getManagedBindings(role, modelID);
 };
 
 export interface CharityTarget extends ServiceProjection {
+  availability?: BindingAvailability;
   id: string;
   revision: string;
   donation_key_id: string;
@@ -1744,8 +1759,25 @@ function normalizeCharityTarget(value: unknown): CharityTarget {
       'connector_type',
       'configuration_type',
       'base_url',
+      'availability',
     ],
     'charity target',
+    [
+      'id',
+      'revision',
+      'donation_id',
+      'endpoint_id',
+      'donation_key_id',
+      'upstream_model_id',
+      'native_services',
+      'model_types',
+      'service_routes',
+      'capabilities',
+      'uses',
+      'connector_type',
+      'configuration_type',
+      'base_url',
+    ],
   );
   return {
     id: decimalID(row.id, 'target'),
@@ -1774,6 +1806,7 @@ function normalizeCharityTarget(value: unknown): CharityTarget {
     donation_key_id: decimalID(row.donation_key_id, 'donation key'),
     upstream_model_id: string(row.upstream_model_id, 'target model'),
     ...normalizeServiceProjection(value),
+    availability: normalizeBindingAvailability(row.availability),
     uses: array(row.uses, 'approved uses').map((value) => {
       const use = record(
         value,

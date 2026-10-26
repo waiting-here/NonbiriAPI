@@ -12,6 +12,7 @@ import { expect, test } from './test';
 import { createOptions, mockConnectionResources } from './connection-fixtures';
 import enCommon from '../../src/shared/i18n/common/en.json' with { type: 'json' };
 import zhCommon from '../../src/shared/i18n/common/zh.json' with { type: 'json' };
+import { serviceCopy, servicePanel } from '../service-onboarding';
 
 const endpoint = {
   id: '11',
@@ -221,7 +222,8 @@ for (const locale of ['en', 'zh'] as const) {
     const bound = new Set<string>();
     const manualEntries: (typeof entries)[number][] = [];
     const c = (locale === 'zh' ? zhCommon : enCommon).common.connections;
-    const chatLabel = (locale === 'zh' ? zhCommon : enCommon).common.modelTypes.chat_responses;
+    const workflow = serviceCopy(locale);
+    const chatLabel = (locale === 'zh' ? zhCommon : enCommon).common.modelTypes.chat_completions;
     const nativeResponse = (locale === 'zh' ? zhCommon : enCommon).common.modelTypes.responses;
     const source = () => ({
       id: '51',
@@ -330,7 +332,7 @@ for (const locale of ['en', 'zh'] as const) {
       if (path === '/api/endpoints/11/request-adaptation') return fulfill(projection);
       if (path === '/api/endpoints/11/keys')
         return request.method() === 'POST'
-          ? fulfill(key, 201)
+          ? fulfill({ ...key, ...input }, 201)
           : fulfill(
               numberedPage(
                 Array.from({ length: count }, (_, i) => ({
@@ -537,38 +539,32 @@ for (const locale of ['en', 'zh'] as const) {
       .click();
     await shot('adaptation');
     await page.goto(`${USER_ORIGIN}/endpoints?quickstart=1`);
-    const connectionPanel = page
-      .locator('.nb-expandable-panel')
-      .filter({ has: page.getByRole('heading', { name: c.addConnection, exact: true }) });
-    await connectionPanel.getByLabel(c.name, { exact: true }).fill('Browser connection');
+    const entryPanel = servicePanel(page, locale);
+    await entryPanel.getByLabel(workflow.serviceName, { exact: true }).fill('Browser connection');
     await shot('step-1');
-    await connectionPanel.getByRole('button', { name: c.create, exact: true }).click();
-    await page.getByRole('button', { name: c.addEntry, exact: true }).first().click();
-    const entryPanel = page
-      .locator('.nb-expandable-panel')
-      .filter({ has: page.getByRole('heading', { name: c.addEntry, exact: true }) });
     await entryPanel
       .getByRole('combobox', { name: c.protocol, exact: true })
       .selectOption({ label: locale === 'zh' ? 'OpenAI 兼容' : 'OpenAI-compatible' });
     await entryPanel.getByLabel(c.entryURL, { exact: true }).fill(endpoint.base_url);
-    await entryPanel.getByRole('button', { name: c.saveEntries, exact: true }).click();
-    await shot('manual-wizard');
+    await entryPanel.locator('summary').filter({ hasText: c.discoveryOptional }).click();
     await entryPanel
-      .getByRole('radio', { name: c.newCredential, exact: true })
-      .locator('..')
-      .click();
+      .getByRole('checkbox', { name: workflow.discoverModels, exact: true })
+      .uncheck();
+    await shot('manual-wizard');
     await expect(
       entryPanel.getByRole('radio', { name: c.newCredential, exact: true }),
     ).toBeChecked();
     const secret = entryPanel.getByLabel(c.secret, { exact: true });
     await secret.fill('synthetic-setup-secret');
+    const saveService = entryPanel.getByRole('button', { name: workflow.addService, exact: true });
+    await expect(saveService).toBeDisabled();
     await entryPanel.getByRole('checkbox', { name: c.ownership, exact: true }).check();
-    await entryPanel.getByRole('button', { name: c.saveCredential, exact: true }).click();
+    await expect(saveService).toBeEnabled();
+    await saveService.click();
+    await expect(entryPanel.getByText(workflow.serviceReady, { exact: true })).toBeVisible();
     await expect(secret).toHaveCount(0);
-    await entryPanel.getByRole('button', { name: c.authorizeEntry, exact: true }).click();
-    await expect(entryPanel.getByText(c.grantSaved, { exact: true })).toBeVisible();
     await shot('step-2');
-    await entryPanel.getByRole('button', { name: c.close, exact: true }).first().click();
+    await entryPanel.getByRole('link', { name: c.manage, exact: true }).click();
     await page.getByRole('tab', { name: c.discoverySources, exact: true }).click();
     await page.getByRole('button', { name: c.addSource, exact: true }).click();
     const sourcePanel = page
@@ -620,8 +616,20 @@ for (const locale of ['en', 'zh'] as const) {
           .filter({ hasText: new RegExp('^' + name + '$') }),
       });
       await row.getByRole('checkbox', { name: new RegExp(name) }).check();
-      await row.getByRole('checkbox', { name: nativeResponse, exact: true }).check();
-      await row.getByRole('checkbox', { name: chatLabel, exact: true }).check();
+      await row
+        .getByRole('group', {
+          name: (locale === 'zh' ? zhCommon : enCommon).common.nativeServices.title,
+          exact: true,
+        })
+        .getByRole('checkbox', { name: nativeResponse, exact: true })
+        .check();
+      await row
+        .getByRole('group', {
+          name: (locale === 'zh' ? zhCommon : enCommon).common.modelTypes.title,
+          exact: true,
+        })
+        .getByRole('checkbox', { name: chatLabel, exact: true })
+        .check();
     }
     await shot('step-3');
     await page
@@ -652,17 +660,58 @@ for (const locale of ['en', 'zh'] as const) {
     await expect(page.getByText(c.mappingSaved, { exact: true })).toHaveCount(2);
     await shot('complete');
     expect(writes.filter((write) => write.path === '/api/endpoints')).toHaveLength(1);
+    expect(writes.filter((write) => write.path === '/api/connections')).toHaveLength(1);
+    expect(writes.find((write) => write.path === '/api/connections')?.body).toEqual({
+      name: 'Browser connection',
+      note: '',
+    });
+    const nativeServices = createOptions.native_service_options.find(
+      (row) => row.connector_type === 'openai-compatible',
+    )!.native_services;
+    expect(writes.find((write) => write.path === '/api/endpoints')?.body).toEqual({
+      source: 'custom',
+      connection_id: '1',
+      connector_type: 'openai-compatible',
+      base_url: endpoint.base_url,
+      note: 'Browser connection',
+      enabled: true,
+      native_services: nativeServices,
+      rerank_format: '',
+    });
     expect(writes.filter((write) => write.path === '/api/connections/1/credentials')).toHaveLength(
       1,
     );
     expect(writes.filter((write) => write.path === '/api/endpoints/11/keys')).toHaveLength(1);
+    expect(writes.find((write) => write.path === '/api/endpoints/11/keys')?.body).toEqual({
+      credential_id: '31',
+      native_services: nativeServices,
+      discovery_source_id: null,
+      note: '',
+      enabled: true,
+      ownership_confirmed: true,
+      force_store_false: false,
+      max_concurrency: 0,
+      max_rpm: 0,
+    });
     expect(
       writes.filter((write) => write.path === '/api/models/51/bindings/batch-receipt'),
     ).toHaveLength(1);
-    expect(
-      writes.find((write) => write.path === '/api/connections/1/credentials')?.body
-        .ownership_confirmed,
-    ).toBe(true);
+    expect(writes.find((write) => write.path === '/api/connections/1/credentials')?.body).toEqual({
+      note: '',
+      ownership_confirmed: true,
+      secret: 'synthetic-setup-secret',
+    });
+    const sourceWrites = writes.filter(
+      (write) => write.path === '/api/connections/1/discovery-sources',
+    );
+    expect(sourceWrites).toHaveLength(1);
+    expect(sourceWrites[0].body).toEqual({
+      name: 'Shared catalog',
+      base_url: endpoint.base_url,
+      list_format: 'openai',
+      credential_id: '31',
+      enabled: true,
+    });
     expect(writes.every((write) => Boolean(write.identity))).toBe(true);
     await assertNoSensitiveBrowserPersistence(page, ['synthetic-setup-secret']);
     expect(errors).toEqual([]);

@@ -53,7 +53,7 @@ if [ "$component" = all ] || [ "$component" = go ]; then
     export CGO_ENABLED=0
     "$GO" build "${go_packages[@]}"
     "$GO" vet "${go_packages[@]}"
-    "$GO" test -timeout="${GO_TEST_TIMEOUT:-30m}" "${go_packages[@]}"
+    "$GO" test -vet=off -timeout="${GO_TEST_TIMEOUT:-30m}" "${go_packages[@]}"
   else
     printf 'Go: not applicable to this scope\n'
   fi

@@ -1,6 +1,5 @@
 import {
   DONATION_DISPLAY_STATUSES,
-  donationDisplayStatus,
   normalizeUseSummary,
   type DonationDisplayStatus,
   type UseSummary,
@@ -158,21 +157,6 @@ function wellFormedText(value: string): boolean {
   return true;
 }
 
-function rejectLoneSurrogates(value: unknown, label: string, seen = new WeakSet<object>()): void {
-  if (typeof value === 'string') {
-    if (!wellFormedText(value)) invalidResponse(label);
-    return;
-  }
-  if (value === null || typeof value !== 'object') return;
-  if (seen.has(value)) return;
-  seen.add(value);
-  if (Array.isArray(value)) {
-    for (const entry of value) rejectLoneSurrogates(entry, label, seen);
-    return;
-  }
-  for (const entry of Object.values(value)) rejectLoneSurrogates(entry, label, seen);
-}
-
 function requestSearch(value: unknown): string {
   if (typeof value !== 'string' || !wellFormedText(value)) invalidInput('donation search');
   if (
@@ -241,7 +225,6 @@ function pageResponse<T>(
 
 function normalizeReviewResult(value: unknown, label: string): DonationReviewResult | null {
   if (value === null) return null;
-  rejectLoneSurrogates(value, label);
   const root = record(value, ['decision', 'reason', 'reviewed_at'], label);
   return {
     decision: oneOf(
@@ -249,103 +232,22 @@ function normalizeReviewResult(value: unknown, label: string): DonationReviewRes
       ['approve', 'reject'] as const,
       `${label} decision`,
     ),
-    reason: string(root.reason, `${label} reason`),
+    reason: string(root.reason, `${label} reason`, { multiline: true }),
     reviewedAt: unixSecond(root.reviewed_at, `${label} time`),
   };
 }
 
-function normalizeStateCounts(
-  value: unknown,
-  keyCount: string,
-  label: string,
-): OwnerDonationStateCounts {
+// Summaries are server projections. Parse what the page displays without
+// reimplementing approval, lifecycle or preview-count relationships here.
+function normalizeStateCounts(value: unknown, label: string): OwnerDonationStateCounts {
   const root = record(value, OWNER_DONATION_STATES, label);
-  const counts = {} as OwnerDonationStateCounts;
-  let total = 0n;
-  for (const state of OWNER_DONATION_STATES) {
-    const count = decimal(root[state], `${label} ${state}`);
-    counts[state] = count;
-    total += BigInt(count);
-  }
-  if (total !== BigInt(keyCount)) invalidResponse(`${label} total`);
-  return counts;
+  return Object.fromEntries(
+    OWNER_DONATION_STATES.map((state) => [state, decimal(root[state], `${label} ${state}`)]),
+  ) as OwnerDonationStateCounts;
 }
 
-function sourceIdentity(value: DonationKeySource): string {
-  return value.kind === 'custom'
-    ? `custom\u0000${value.connectorType}\u0000${value.baseUrl}`
-    : `mainstream\u0000${value.channelId}`;
-}
-
-function normalizeSources(value: unknown, sourceCount: string, label: string): DonationKeySource[] {
-  const entries = array(value, label, 3);
-  const sources = entries.map((entry, index) => {
-    rejectLoneSurrogates(entry, `${label} ${index + 1}`);
-    return normalizeDonationSafeSource(entry);
-  });
-  const expected = BigInt(sourceCount) < 3n ? Number(sourceCount) : 3;
-  if (sources.length !== expected) invalidResponse(`${label} count`);
-  if (new Set(sources.map(sourceIdentity)).size !== sources.length) {
-    invalidResponse(`${label} identities`);
-  }
-  return sources;
-}
-
-function validateSummaryState(
-  status: DonationStatus,
-  reviewResult: DonationReviewResult | null,
-  keyCount: string,
-  stateCounts: OwnerDonationStateCounts,
-  label: string,
-): void {
-  const total = BigInt(keyCount);
-  const pending = BigInt(stateCounts.pending);
-  const expired = BigInt(stateCounts.expired);
-  const ended = BigInt(stateCounts.ended);
-  const terminal = expired + ended;
-  if (status !== 'pending' && pending !== 0n) {
-    invalidResponse(`${label} terminal state`);
-  }
-  if (status === 'pending') {
-    // The backend keeps the header pending while any key is logically live,
-    // but its per-key projection may already contain expired or ended keys.
-    if (reviewResult !== null || pending === 0n || pending + terminal !== total) {
-      invalidResponse(`${label} pending state`);
-    }
-    return;
-  }
-  if (status === 'approved') {
-    if (reviewResult?.decision !== 'approve' || terminal === total) {
-      invalidResponse(`${label} approved state`);
-    }
-    return;
-  }
-  if (status === 'rejected') {
-    if (reviewResult?.decision !== 'reject' || ended !== total) {
-      invalidResponse(`${label} rejected state`);
-    }
-    return;
-  }
-  if (status === 'deleted') {
-    if (reviewResult?.decision === 'reject' || terminal !== total) {
-      invalidResponse(`${label} deleted state`);
-    }
-    return;
-  }
-  // logicalHeaderTx can expose an unreviewed pending donation as expired once
-  // all keys are terminal; that projection deliberately keeps review_result null.
-  if (reviewResult?.decision === 'reject' || expired === 0n || terminal !== total) {
-    invalidResponse(`${label} expired state`);
-  }
-}
-
-function normalizeOwnerDonation(
-  value: unknown,
-  index: number,
-  filters: Required<OwnerDonationPageFilters>,
-): OwnerDonationSummary {
+function normalizeOwnerDonation(value: unknown, index: number): OwnerDonationSummary {
   const label = `owner donation ${index + 1}`;
-  rejectLoneSurrogates(value, label);
   const root = record(
     value,
     [...OWNER_DONATION_FIELDS, 'discord_public_thanks', 'owner_hidden_at', 'use_summary'],
@@ -353,34 +255,16 @@ function normalizeOwnerDonation(
     OWNER_DONATION_FIELDS,
   );
   const status = oneOf(root.status, OWNER_DONATION_STATUSES, `${label} status`);
-  if (filters.status !== '' && filters.status !== status) invalidResponse(`${label} status filter`);
-  const summary =
-    root.use_summary === undefined ? undefined : normalizeUseSummary(root.use_summary);
-  if (filters.review_status && donationDisplayStatus(status, summary) !== filters.review_status)
-    invalidResponse(label + ' review status filter');
+  const summary = root.use_summary == null ? undefined : normalizeUseSummary(root.use_summary);
   const reviewResult = normalizeReviewResult(root.review_result, `${label} review`);
   const createdAt = unixSecond(root.created_at, `${label} creation time`);
   const updatedAt = unixSecond(root.updated_at, `${label} update time`);
-  if (updatedAt < createdAt) invalidResponse(`${label} timestamps`);
-  if (
-    reviewResult !== null &&
-    (reviewResult.reviewedAt < createdAt || reviewResult.reviewedAt > updatedAt)
-  ) {
-    invalidResponse(`${label} review timestamp`);
-  }
   const keyCount = decimal(root.key_count, `${label} key count`);
-  if (keyCount === '0') invalidResponse(`${label} key count`);
-  const stateCounts = normalizeStateCounts(root.state_counts, keyCount, `${label} state counts`);
+  const stateCounts = normalizeStateCounts(root.state_counts, `${label} state counts`);
   const sourceCount = decimal(root.source_count, `${label} source count`);
-  if (sourceCount === '0' || BigInt(sourceCount) > BigInt(keyCount)) {
-    invalidResponse(`${label} source count`);
-  }
-  const sources = normalizeSources(root.sources, sourceCount, `${label} sources`);
-  validateSummaryState(status, reviewResult, keyCount, stateCounts, label);
+  const sources = array(root.sources, `${label} sources`).map(normalizeDonationSafeSource);
   return {
-    ...(root.use_summary === undefined
-      ? {}
-      : { useSummary: normalizeUseSummary(root.use_summary) }),
+    ...(summary === undefined ? {} : { useSummary: summary }),
     id: decimalID(root.id, `${label} id`),
     ownerHiddenAt:
       root.owner_hidden_at == null ? null : unixSecond(root.owner_hidden_at, 'hidden time'),
@@ -390,7 +274,7 @@ function normalizeOwnerDonation(
         : boolean(root.discord_public_thanks, `${label} public thanks`),
     status,
     revision: decimal(root.revision, `${label} revision`, { positive: true }),
-    description: string(root.description, `${label} description`),
+    description: string(root.description, `${label} description`, { multiline: true }),
     reviewResult,
     createdAt,
     updatedAt,
@@ -407,7 +291,6 @@ function normalizeOwnerKey(
   expectedDonationID: string,
 ): OwnerDonationKeySummary {
   const label = `owner donation key ${index + 1}`;
-  rejectLoneSurrogates(value, label);
   const root = record(
     value,
     [
@@ -415,6 +298,7 @@ function normalizeOwnerKey(
       'endpoint_id',
       'review',
       'rate_limited_until',
+      'service_statuses',
       'input_token_reserve',
       'output_token_reserve',
       'breakdown_started_at',
@@ -446,6 +330,7 @@ function normalizeOwnerKey(
       : {}),
     failure_disable_threshold: root.failure_disable_threshold,
     smart_backoff: root.smart_backoff,
+    service_statuses: root.service_statuses,
     expires_at: root.expires_at,
     streak: root.streak,
     ended_reason: root.ended_reason,
@@ -459,21 +344,13 @@ function normalizeOwnerKey(
     positive: true,
   });
   const ruleCount = decimal(root.rule_count, `${label} rule count`);
-  if (BigInt(ruleCount) > 16n) invalidResponse(`${label} rule count`);
-  const rawRules = array(root.rules, `${label} rules`, 3);
-  const expectedRules = BigInt(ruleCount) < 3n ? Number(ruleCount) : 3;
-  if (rawRules.length !== expectedRules) invalidResponse(`${label} rule count`);
+  const rawRules = array(root.rules, `${label} rules`);
   const rules = rawRules.map((entry, ruleIndex) =>
     normalizeRuleView(entry, `${label} rule ${ruleIndex + 1}`),
   );
   const ruleIDs = rules.map((rule) => rule.id);
   if (ruleIDs.some((id) => id === null) || new Set(ruleIDs).size !== ruleIDs.length) {
     invalidResponse(`${label} rule ids`);
-  }
-  let sawNonLimited = false;
-  for (const rule of rules) {
-    if (rule.state === 'limited' && sawNonLimited) invalidResponse(`${label} rule order`);
-    if (rule.state !== 'limited') sawNonLimited = true;
   }
   return {
     ...key,
@@ -492,13 +369,13 @@ export function normalizeOwnerDonationsPage(
   pageSize: PageSize,
 ): OwnerDonationPage<OwnerDonationSummary> {
   const window = requestPage(page, pageSize);
-  const normalizedFilters = normalizeOwnerFilters(filters);
+  normalizeOwnerFilters(filters);
   const result = pageResponse(
     value,
     'owner donation page',
     window.page,
     window.pageSize,
-    (entry, index) => normalizeOwnerDonation(entry, index, normalizedFilters),
+    normalizeOwnerDonation,
   );
   if (new Set(result.data.map((item) => item.id)).size !== result.data.length) {
     invalidResponse('owner donation ids');

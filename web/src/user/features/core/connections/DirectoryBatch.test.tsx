@@ -41,6 +41,57 @@ vi.mock('./useConnectionOperation', () => ({
   }),
 }));
 describe('directory model batch', () => {
+  it('defaults to all authorized services and preserves a user override', async () => {
+    const view = await renderWithProviders(
+      <DirectoryBatch
+        accountId="1"
+        rows={[
+          {
+            id: 'known',
+            upstream_model_id: 'known-model',
+            provider: 'demo',
+            native_services: ['chat_completions'],
+            service_evidence: 'provider',
+            needs_service_selection: false,
+          },
+        ]}
+      />,
+      { station: 'user', role: 'user' },
+    );
+    await view.user.click(
+      screen.getByText(common.common.connections.chooseEntry, { selector: 'strong' }),
+    );
+    await view.user.click(screen.getByRole('button', { name: 'Choose shared grant' }));
+    const row = screen.getByText('known-model', { selector: 'strong' }).closest('details')!;
+    const chat = within(
+      within(row).getByRole('group', { name: common.common.nativeServices.title }),
+    ).getByRole('checkbox', {
+      name: common.common.modelTypes.chat_completions,
+    });
+    expect(chat).toBeChecked();
+    await view.user.click(chat);
+    view.rerender(
+      <DirectoryBatch
+        accountId="1"
+        rows={[
+          {
+            id: 'known',
+            upstream_model_id: 'known-model',
+            provider: 'demo',
+            native_services: ['chat_completions', 'responses'],
+            service_evidence: 'provider',
+            needs_service_selection: false,
+          },
+        ]}
+      />,
+    );
+    expect(chat).not.toBeChecked();
+    expect(
+      within(
+        within(row).getByRole('group', { name: common.common.nativeServices.title }),
+      ).getByRole('checkbox', { name: common.common.modelTypes.responses }),
+    ).toBeChecked();
+  });
   it('uses the same readiness for individual and batch saves when the upstream name is empty', async () => {
     mocks.run.mockClear();
     const c = common.common.connections;
@@ -63,12 +114,12 @@ describe('directory model batch', () => {
     await view.user.click(screen.getByText(c.chooseEntry, { selector: 'strong' }));
     await view.user.click(screen.getByRole('button', { name: 'Choose shared grant' }));
     const row = screen.getByText('model-a', { selector: 'strong' }).closest('details')!;
-    await view.user.click(within(row).getByRole('checkbox', { name: 'Shared entry · model-a' }));
+    expect(within(row).getByRole('checkbox', { name: 'Shared entry · model-a' })).toBeChecked();
     await view.user.click(
-      within(row).getByRole('checkbox', { name: common.common.modelTypes.responses }),
-    );
-    await view.user.click(
-      within(row).getByRole('checkbox', { name: common.common.modelTypes.chat_responses }),
+      within(within(row).getByRole('group', { name: common.common.modelTypes.title })).getByRole(
+        'checkbox',
+        { name: common.common.modelTypes.chat_completions },
+      ),
     );
     const single = within(row).getByRole('button', { name: c.saveMapping });
     const batch = screen.getByRole('button', {
@@ -107,7 +158,7 @@ describe('directory model batch', () => {
     await view.user.click(single);
     expect(mocks.run).not.toHaveBeenCalled();
   });
-  it('requires explicit services and retries only unfinished stages after one model fails', async () => {
+  it('defaults new targets to full authorization and retries only unfinished stages after one model fails', async () => {
     const c = common.common.connections;
     let failed = false;
     mocks.run.mockImplementation(async (intent: ConnectionIntent) => {
@@ -149,14 +200,17 @@ describe('directory model batch', () => {
     for (const name of ['model-a', 'model-b']) {
       const title = screen.getByText(name, { selector: 'strong' });
       const row = title.closest('details')!;
-      await view.user.click(within(row).getByRole('checkbox', { name: 'Shared entry · ' + name }));
-      const services = within(row).getByRole('checkbox', {
-        name: common.common.modelTypes.responses,
-      });
-      expect(services).not.toBeChecked();
+      expect(within(row).getByRole('checkbox', { name: 'Shared entry · ' + name })).toBeChecked();
+      const services = within(
+        within(row).getByRole('group', { name: common.common.nativeServices.title }),
+      ).getByRole('checkbox', { name: common.common.modelTypes.chat_completions });
+      expect(services).toBeChecked();
       await view.user.click(services);
       await view.user.click(
-        within(row).getByRole('checkbox', { name: common.common.modelTypes.chat_responses }),
+        within(within(row).getByRole('group', { name: common.common.modelTypes.title })).getByRole(
+          'checkbox',
+          { name: common.common.modelTypes.chat_completions },
+        ),
       );
     }
     expect(batch).toBeEnabled();

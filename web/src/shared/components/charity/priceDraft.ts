@@ -93,9 +93,23 @@ function hasModalities(value: ModalityPricing) {
     ['text', 'image', 'audio', 'video'].some((key) => Object.hasOwn(value, key))
   );
 }
+
+function priceTimeValue(draft: TimeDraft): number | null | undefined {
+  // An unchanged timestamp needs no conversion, even before site time is configured.
+  if (
+    draft.mode === 'site' &&
+    draft.siteOffsetMinutes === null &&
+    !draft.siteOffsetChanged &&
+    !draft.invalidInput &&
+    draft.text === draft.originalText
+  )
+    return draft.originalEpoch;
+  return timeDraftValue(draft);
+}
+
 export function draftPriceConfig(draft: PriceDraft): CharityPriceConfig | null {
-  const start = timeDraftValue(draft.discountStart);
-  const end = timeDraftValue(draft.discountEnd);
+  const start = priceTimeValue(draft.discountStart);
+  const end = priceTimeValue(draft.discountEnd);
   if (start === undefined || end === undefined) return null;
   return {
     pricing: {
@@ -256,8 +270,8 @@ export function priceDraftError(
     draft.discountPercent > 100
   )
     return 'discountPercent';
-  const start = timeDraftValue(draft.discountStart);
-  const end = timeDraftValue(draft.discountEnd);
+  const start = priceTimeValue(draft.discountStart);
+  const end = priceTimeValue(draft.discountEnd);
   if (
     start === undefined ||
     end === undefined ||

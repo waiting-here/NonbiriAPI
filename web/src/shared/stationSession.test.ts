@@ -1,6 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
 import { ApiError } from './query/http';
+import { defaultStewardPermissions, type DonationScope } from './operations/stewardPermissions';
 import {
   beginManagementSessionRequest,
   captureStationSession,
@@ -74,6 +75,33 @@ describe('station session identity', () => {
         pending,
       ),
     ).toBe(false);
+    client.clear();
+  });
+
+  it('invalidates sensitive state when the same steward receives a new permission revision', () => {
+    const client = new QueryClient();
+    const update = (revision: string, scope: DonationScope) => {
+      const value = {
+        user: {
+          id: '7',
+          username: 'sample',
+          effective_level: 5,
+          steward_permissions: { ...defaultStewardPermissions(5), revision, donation_scope: scope },
+        },
+      };
+      const serial = beginManagementSessionRequest(client, 'steward');
+      expect(noteManagementSessionSuccess(client, 'steward', value, serial)).toBe(true);
+      client.setQueryData(['user', 'session'], value);
+    };
+    update('0', 'enhanced');
+    const snapshot = captureStationSession(client, 'steward');
+    client.setQueryData(['user', 'operations', 'user', '7', '8'], 'previous access');
+    client.setQueryData(['user', 'operations', 'endpoints', '7'], 'previous endpoint access');
+    update('1', 'none');
+    expect(stationSessionMatches(client, 'steward', snapshot)).toBe(false);
+    expect(client.getQueryData(['user', 'operations', 'user', '7', '8'])).toBeUndefined();
+    expect(client.getQueryData(['user', 'operations', 'endpoints', '7'])).toBeUndefined();
+    expect(client.getQueryData(['user', 'session'])).toBeTruthy();
     client.clear();
   });
 

@@ -163,9 +163,17 @@ export function isMfaRequired(error: unknown): boolean {
   return isApiError(error) && error.code === 'mfa_required';
 }
 
+export function isStewardPermissionDenied(error: unknown): boolean {
+  return isApiError(error) && error.code === 'steward_permission_denied';
+}
+
 export function isForbidden(error: unknown): boolean {
-  return isApiError(error) && !isMfaRequired(error)
-    && (error.status === 403 || error.code === 'forbidden');
+  return (
+    isApiError(error) &&
+    !isMfaRequired(error) &&
+    !isStewardPermissionDenied(error) &&
+    (error.status === 403 || error.code === 'forbidden')
+  );
 }
 
 export function isNotFoundError(error: unknown): boolean {

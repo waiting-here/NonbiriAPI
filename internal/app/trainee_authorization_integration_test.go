@@ -123,19 +123,16 @@ VALUES('synthetic','outside-scope','[公益]synthetic/outside-scope',1,'per_requ
 	}
 	appFixtureBinding(t, f.store, testseed.BindingInput{ModelID: other, KeyID: mustAppFixtureID(t, customKey.key), UpstreamModelID: "synthetic/maintained", At: f.now}, true)
 	exec("UPDATE users SET level=5 WHERE id=?", f.userID)
-	queue := call(http.MethodGet, "/api/steward/donation-handling?page=1&page_size=10", "", "", false)
+	queue := call(http.MethodGet, "/api/steward/donations?handling=pending&page=1&page_size=10", "", "", false)
 	requireStatus(queue, http.StatusOK)
-	var handlingQueue donation.Page[donation.HandlingSummary]
-	if err := json.Unmarshal(queue.Body.Bytes(), &handlingQueue); err != nil || handlingQueue.Pagination.TotalItems != "2" || len(handlingQueue.Data) != 2 {
-		t.Fatalf("approved handling queue: %s %v", queue.Body, err)
+	var handlingQueue donation.Page[donation.StewardDonationSummary]
+	if err := json.Unmarshal(queue.Body.Bytes(), &handlingQueue); err != nil || handlingQueue.Pagination.TotalItems != "1" || handlingQueue.Data[0].ID != mainKey.id {
+		t.Fatalf("unified donation scope: %s %v", queue.Body, err)
 	}
-	for _, private := range []string{"Scoped donor note", "Scoped approval note", "Private physical", "https://", "endpoint_key_id", "reviewer", "owner", "display_head"} {
-		if strings.Contains(queue.Body.String(), private) {
-			t.Fatal("minimal handling queue disclosed", private)
-		}
-	}
+	requireStatus(call(http.MethodGet, "/api/steward/donation-handling", "", "", false), http.StatusNotFound)
+	requireStatus(call(http.MethodPost, "/api/steward/donations/"+customKey.id+"/handling/processed", `{"expected_handling_revision":"1"}`, nextKey(), false), http.StatusNotFound)
 	processing := map[string]string{}
-	for _, item := range []donated{mainKey, customKey} {
+	for _, item := range []donated{mainKey} {
 		path := "/api/steward/donations/" + item.id + "/handling/processed"
 		key := nextKey()
 		processed := call(http.MethodPost, path, `{"expected_handling_revision":"1"}`, key, false)
@@ -153,9 +150,9 @@ VALUES('synthetic','outside-scope','[公益]synthetic/outside-scope',1,'per_requ
 		}
 	}
 	checkProcessingReplay(http.StatusOK)
-	processedQueue := call(http.MethodGet, "/api/steward/donation-handling?handling=processed&donation_id="+customKey.id, "", "", false)
+	processedQueue := call(http.MethodGet, "/api/steward/donations?handling=processed", "", "", false)
 	requireStatus(processedQueue, http.StatusOK)
-	if err := json.Unmarshal(processedQueue.Body.Bytes(), &handlingQueue); err != nil || handlingQueue.Pagination.TotalItems != "1" || handlingQueue.Data[0].DonationID != customKey.id {
+	if err := json.Unmarshal(processedQueue.Body.Bytes(), &handlingQueue); err != nil || handlingQueue.Pagination.TotalItems != "1" || handlingQueue.Data[0].ID != mainKey.id {
 		t.Fatalf("exact processed queue: %s %v", processedQueue.Body, err)
 	}
 	requireStatus(call(http.MethodPost, "/api/steward/donations/"+customKey.id+"/review", fmt.Sprintf(`{"decision":"force_reject","expected_revision":%q,"reason":"Must remain forbidden"}`, customKey.revision), nextKey(), false), http.StatusForbidden)
@@ -189,14 +186,18 @@ VALUES('synthetic','outside-scope','[公益]synthetic/outside-scope',1,'per_requ
 		t.Fatalf("physical revision missing from scoped view: %s", view.Body)
 	}
 	patchBody := fmt.Sprintf(`{"expected_revision":%q,"expected_key_limits_revision":%q,"max_concurrency":3,"max_rpm":120,"safe_note":"Scoped maintenance applied","calls_limit":"7"}`, keyView.DonationRevision, *keyView.KeyLimitsRevision)
-	for _, wrong := range []string{"", "?charity_model_id=" + strconv.FormatInt(other, 10), "?charity_model_id=9223372036854775807"} {
-		requireStatus(call(http.MethodGet, keyPath+wrong, "", "", false), http.StatusNotFound)
-		requireStatus(call(http.MethodPatch, keyPath+wrong, patchBody, nextKey(), false), http.StatusNotFound)
+	for _, wrong := range []string{"?charity_model_id=" + strconv.FormatInt(other, 10), "?charity_model_id=9223372036854775807"} {
+		status := http.StatusNotFound
+		if wrong == "" {
+			status = http.StatusForbidden
+		}
+		requireStatus(call(http.MethodGet, keyPath+wrong, "", "", false), status)
+		requireStatus(call(http.MethodPatch, keyPath+wrong, patchBody, nextKey(), false), status)
 	}
 	foreignPath := "/api/steward/donations/" + customKey.id + "/keys/" + customKey.key + scope
 	requireStatus(call(http.MethodGet, foreignPath, "", "", false), http.StatusNotFound)
 	requireStatus(call(http.MethodPatch, foreignPath, fmt.Sprintf(`{"expected_revision":%q,"safe_note":"Must not apply"}`, customKey.revision), nextKey(), false), http.StatusNotFound)
-	requireStatus(call(http.MethodGet, "/api/steward/donations/"+mainKey.id, "", "", false), http.StatusForbidden)
+	requireStatus(call(http.MethodGet, "/api/steward/donations/"+mainKey.id, "", "", false), http.StatusOK)
 
 	patchKey := nextKey()
 	patched := call(http.MethodPatch, keyPath+scope, patchBody, patchKey, false)
@@ -260,12 +261,12 @@ WHERE k.id=?`, model, mainKey.key).Scan(&revision, &note, &limit, &reviews, &bin
 	exec("UPDATE users SET level=4 WHERE id=?", f.userID)
 	denyReplays(http.StatusForbidden)
 	checkProcessingReplay(http.StatusForbidden)
-	requireStatus(call(http.MethodGet, "/api/steward/donation-handling", "", "", false), http.StatusForbidden)
+	requireStatus(call(http.MethodGet, "/api/steward/donations", "", "", false), http.StatusForbidden)
 	exec("UPDATE users SET level=5 WHERE id=?", f.userID)
 	requireStatus(call(http.MethodGet, keyPath+scope, "", "", false), http.StatusOK)
 
 	exec("DELETE FROM sessions WHERE user_id=?", f.userID)
 	denyReplays(http.StatusUnauthorized)
 	checkProcessingReplay(http.StatusUnauthorized)
-	requireStatus(call(http.MethodGet, "/api/steward/donation-handling", "", "", false), http.StatusUnauthorized)
+	requireStatus(call(http.MethodGet, "/api/steward/donations", "", "", false), http.StatusUnauthorized)
 }

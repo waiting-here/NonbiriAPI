@@ -431,6 +431,24 @@ func TestNewIdentityStillRequiresLiveRegistrationConfigAndMembership(t *testing.
 	}
 }
 
+func TestAdminPasswordVerifierKeepsSessionsAcrossRuntimeRestart(t *testing.T) {
+	f := newRuntimeFixture(t, nil)
+	login := request(t, f.runtime.AdminHandler(), host.StationAdmin, http.MethodPost, "https://admin.example/admin/api/login", `{"username":"operator","password":"correct horse battery staple"}`, nil, map[string]string{"Content-Type": "application/json"})
+	cookie := responseCookie(t, login, AdminSessionCookieName)
+	second, err := NewRuntime(RuntimeConfig{Store: f.store, Provider: f.provider, DiscordClientID: "client", UserSiteBaseURL: "https://user.example", AdminUsername: "operator", AdminPassword: "correct horse battery staple", CredentialKeyDeriver: f.vault, Authorizer: authz.New(authz.Options{Now: f.clock.Now}), Maintenance: f.gate, Now: f.clock.Now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = second.Close() })
+	if f.runtime.adminPassword.key == second.adminPassword.key {
+		t.Fatal("runtime restart reused the password comparison key")
+	}
+	session := request(t, second.AdminHandler(), host.StationAdmin, http.MethodGet, "https://admin.example/admin/api/session", "", []*http.Cookie{cookie}, nil)
+	if session.Code != http.StatusOK {
+		t.Fatalf("unchanged credentials lost the persisted session: %d %s", session.Code, session.Body)
+	}
+}
+
 func TestAdminPasswordRotationInvalidatesPersistedSessionGeneration(t *testing.T) {
 	f := newRuntimeFixture(t, nil)
 	login := request(t, f.runtime.AdminHandler(), host.StationAdmin, http.MethodPost, "https://admin.example/admin/api/login", `{"username":"operator","password":"correct horse battery staple"}`, nil, map[string]string{"Content-Type": "application/json"})

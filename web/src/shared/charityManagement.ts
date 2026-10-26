@@ -703,8 +703,14 @@ function managementSessionIdentity(
   }
   const identity = sessionUserIdentity(value);
   if (!identity) return undefined;
+  const permissions = asRecord(identity.user.steward_permissions);
   return {
-    subject: JSON.stringify(['user', identity.user.id, identity.effective_level]),
+    subject: JSON.stringify([
+      'user',
+      identity.user.id,
+      identity.effective_level,
+      ...(permissions ? [permissions.revision] : []),
+    ]),
     elevated: identity.effective_level === 5 || identity.effective_level === 6,
   };
 }

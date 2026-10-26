@@ -94,6 +94,10 @@
   object-fit: cover;
   object-position: center;
 }
+.nb-moment-backdrop[data-registered='true'] > .nb-moment-backdrop__scene {
+  filter: blur(1.25rem);
+  transform: scale(1.06);
+}
 .nb-moment-character {
   position: absolute;
   bottom: 0;
@@ -119,10 +123,13 @@
 .nb-moment-character > canvas {
   opacity: 0;
 }
+.nb-moment-character__plate {
+  mask-image: linear-gradient(to bottom, transparent, var(--nb-color-text) 4%);
+}
 .nb-moment-character > canvas[data-ready='true'] {
   opacity: 1;
 }
-.nb-moment-character:has(canvas[data-ready='true']) > img {
+.nb-moment-character:has(canvas[data-ready='true']) > img:not(.nb-moment-character__plate) {
   visibility: hidden;
 }
 @media (width < 40rem) {

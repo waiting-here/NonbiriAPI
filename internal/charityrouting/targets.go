@@ -46,16 +46,17 @@ type ServiceProjection struct {
 
 type BindingTarget struct {
 	ServiceProjection
-	ID                string             `json:"id"`
-	Revision          string             `json:"revision"`
-	DonationID        string             `json:"donation_id"`
-	DonationKeyID     string             `json:"donation_key_id"`
-	UpstreamModelID   string             `json:"upstream_model_id"`
-	EndpointID        string             `json:"endpoint_id"`
-	ConnectorType     contract.Type      `json:"connector_type"`
-	ConfigurationType contract.Type      `json:"configuration_type"`
-	BaseURL           string             `json:"base_url"`
-	Uses              []BindingTargetUse `json:"uses"`
+	Availability      *BindingAvailability `json:"availability,omitempty"`
+	ID                string               `json:"id"`
+	Revision          string               `json:"revision"`
+	DonationID        string               `json:"donation_id"`
+	DonationKeyID     string               `json:"donation_key_id"`
+	UpstreamModelID   string               `json:"upstream_model_id"`
+	EndpointID        string               `json:"endpoint_id"`
+	ConnectorType     contract.Type        `json:"connector_type"`
+	ConfigurationType contract.Type        `json:"configuration_type"`
+	BaseURL           string               `json:"base_url"`
+	Uses              []BindingTargetUse   `json:"uses"`
 }
 
 type BindingTargetsUpdate struct {
@@ -181,7 +182,7 @@ func validateTargetsTx(ctx context.Context, tx *sql.Tx, scope charityscope.Scope
 		}
 		if target.legacy {
 			var exists bool
-			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM charity_model_catalog WHERE donation_key_id=? AND normalized_model_id=? AND (automatic_supports>0 OR manual_supports>0))`, target.keyID, target.upstream).Scan(&exists); err != nil {
+			if err := tx.QueryRowContext(ctx, catalogSupportQuery(), target.keyID, target.upstream).Scan(&exists); err != nil {
 				return err
 			}
 			if !exists {

@@ -20,7 +20,6 @@ const (
 	routeStewardBadge     = "/api/steward/donations/badge"
 	routeAdminProcessed   = "/admin/api/donations/{id}/handling/processed"
 	routeStewardProcessed = "/api/steward/donations/{id}/handling/processed"
-	routeStewardHandling  = "/api/steward/donation-handling"
 )
 
 // A disabled or unbound key does not end a donation. Logical expiry is checked
@@ -32,12 +31,34 @@ SELECT 1 FROM donation_keys live WHERE live.donation_id=d.id AND live.ended_at I
 type ManagementFilter struct {
 	Status, Handling, Query, OwnerView string
 	ReviewStatus                       string `json:",omitempty"`
+	UserID                             string `json:",omitempty"`
+	DiscordID                          string `json:",omitempty"`
 }
 
 func validManagementFilter(filter ManagementFilter) bool {
 	return validStatusFilter(filter.Status) && validReviewStatusFilter(filter.ReviewStatus) && validHandlingFilter(filter.Handling) &&
 		utf8.ValidString(filter.Query) && utf8.RuneCountInString(filter.Query) <= 128 &&
-		len(filter.Query) <= 512 && !strings.ContainsRune(filter.Query, 0)
+		len(filter.Query) <= 512 && !strings.ContainsRune(filter.Query, 0) &&
+		validDonorID(filter.UserID, false) && validDonorID(filter.DiscordID, true)
+}
+
+func validDonorID(value string, discord bool) bool {
+	if value == "" {
+		return true
+	}
+	if !discord {
+		_, err := parseCanonicalID(value)
+		return err == nil
+	}
+	if len(value) > 20 || value[0] == '0' {
+		return false
+	}
+	for _, c := range value {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func validHandlingFilter(value string) bool {
@@ -49,6 +70,14 @@ func validHandlingFilter(value string) bool {
 }
 
 func appendManagementFilter(query string, args []any, filter ManagementFilter, now int64) (string, []any) {
+	if filter.UserID != "" {
+		query += ` AND d.user_id=?`
+		args = append(args, filter.UserID)
+	}
+	if filter.DiscordID != "" {
+		query += ` AND d.user_id=(SELECT donor.id FROM users donor WHERE donor.discord_id=?)`
+		args = append(args, filter.DiscordID)
+	}
 	if filter.Status != "" {
 		query += ` AND (CASE WHEN d.status IN ('pending','approved') AND NOT ` + logicallyActiveDonationSQL + ` THEN 'expired' ELSE d.status END)=?`
 		args = append(args, now, filter.Status)
@@ -126,7 +155,7 @@ func (s *Service) badge(ctx context.Context, role reviewerRole, userID int64) (D
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, _, err := s.beginRoleTx(ctx, role, userID)
+	tx, _, err := s.beginHandlingTx(ctx, role, userID, true)
 	if err != nil {
 		return DonationBadge{}, err
 	}
@@ -135,9 +164,19 @@ func (s *Service) badge(ctx context.Context, role reviewerRole, userID int64) (D
 	if err != nil {
 		return DonationBadge{}, err
 	}
+	query := `SELECT COUNT(*) FROM donation_handling h JOIN donations d ON d.id=h.donation_id WHERE h.state='pending' AND ` + logicallyActiveDonationSQL
+	args := []any{now}
+	if role != reviewerAdmin {
+		access, err := readDonationAccessScope(ctx, tx, role, userID)
+		if err != nil {
+			return DonationBadge{}, err
+		}
+		predicate, values := access.predicate(now)
+		query += " AND " + predicate
+		args = append(args, values...)
+	}
 	var count int64
-	err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM donation_handling h JOIN donations d ON d.id=h.donation_id
-WHERE h.state='pending' AND `+logicallyActiveDonationSQL, now).Scan(&count)
+	err = tx.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
 		return DonationBadge{}, fmt.Errorf("donation: count pending handling: %w", err)
 	}
@@ -176,10 +215,8 @@ func (s *Service) process(ctx context.Context, role reviewerRole, userID, donati
 	if err := requireManagedDonationTx(ctx, tx, role, donationID, now); err != nil {
 		return empty, err
 	}
-	if actor.trainee {
-		if err := requireApprovedHandlingTx(ctx, tx, donationID, now); err != nil {
-			return empty, err
-		}
+	if err := requireDonationRangeTx(ctx, tx, role, actor.id, donationID, now); err != nil {
+		return empty, err
 	}
 	decision, err := beginMutation(ctx, tx, actor.hashKind, actor.id, idempotency.ScopeControlMutation, mutation, now)
 	if err != nil {
@@ -188,7 +225,7 @@ func (s *Service) process(ctx context.Context, role reviewerRole, userID, donati
 	if decision.Kind == idempotency.Replay {
 		return replay[HandlingReceipt](decision)
 	}
-	if !actor.trainee {
+	{
 		expiry, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
 		if err != nil {
 			return empty, err
@@ -235,7 +272,7 @@ func requireManagedDonationTx(ctx context.Context, tx *sql.Tx, role reviewerRole
 	var exists int
 	query := `SELECT 1 FROM donations WHERE id=?`
 	args := []any{donationID}
-	if role == reviewerSteward || role == reviewerTrainee {
+	if role == reviewerSteward || role == reviewerTrainee || role == reviewerGranted {
 		query += ` AND (status IN ('pending','approved') OR terminal_at>?)`
 		args = append(args, now-terminalRetention)
 	}

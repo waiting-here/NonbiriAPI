@@ -10,12 +10,13 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
-func TestTraineeReviewsAllPendingSourcesWithPrivateReceipts(t *testing.T) {
+func TestTraineeReviewsQualifiedPendingSourcesWithPrivateReceipts(t *testing.T) {
 	e := newDonationTestEnv(t)
 	ctx := context.Background()
 	e.seedUser(t, "", nil, true)
@@ -26,6 +27,7 @@ func TestTraineeReviewsAllPendingSourcesWithPrivateReceipts(t *testing.T) {
 	for i := range 11 {
 		_, key := e.seedEndpointKey(t, owner, byte('a'+i))
 		pending = append(pending, e.createDonationWithSeed(t, owner, byte('a'+i), key))
+		qualifyStandardDonation(t, e, pending[len(pending)-1].ID)
 	}
 	_, physical := e.seedEndpointKey(t, owner, 'z')
 	approved := approvedResetDonation(t, e, owner, physical)
@@ -38,7 +40,7 @@ func TestTraineeReviewsAllPendingSourcesWithPrivateReceipts(t *testing.T) {
 		t.Fatalf("pending final page: %+v %v", last, err)
 	}
 	for _, status := range []string{"approved", "rejected", "expired", "deleted"} {
-		if _, err := e.service.DonationsStewardPage(ctx, actor, ManagementFilter{Status: status}, pagination.Default()); !errors.Is(err, ErrForbidden) {
+		if _, err := e.service.DonationsStewardPage(ctx, actor, ManagementFilter{Status: status}, pagination.Default()); err != nil {
 			t.Fatalf("non-pending status %s: %v", status, err)
 		}
 	}
@@ -57,7 +59,7 @@ func TestTraineeReviewsAllPendingSourcesWithPrivateReceipts(t *testing.T) {
 	if err != nil || len(legacy) != 11 || legacy[0].Owner != nil || legacy[0].Keys[0].EndpointKeyID != nil {
 		t.Fatalf("cursor queue: %+v %v", legacy, err)
 	}
-	if _, err := e.service.GetSteward(ctx, actor, parseTestID(t, approved.ID)); !errors.Is(err, ErrForbidden) {
+	if _, err := e.service.GetSteward(ctx, actor, parseTestID(t, approved.ID)); !errors.Is(err, ErrNotFound) {
 		t.Fatal("approved full detail was exposed", err)
 	}
 	input := ReviewInput{Decision: "approve", ExpectedRevision: 1, KeySettings: []KeySetting{{DonationKeyID: parseTestID(t, pending[0].Keys[0].ID), Enabled: true}}}
@@ -82,11 +84,11 @@ func TestTraineeReviewsAllPendingSourcesWithPrivateReceipts(t *testing.T) {
 		t.Fatal("completed approval could not replay", err)
 	}
 	input.ExpectedRevision = 2
-	if _, err := e.service.ReviewSteward(ctx, actor, id, donationMutation(t, 'B', http.MethodPost, routeStewardReview, []int64{id}, input), input); !errors.Is(err, ErrForbidden) {
-		t.Fatal("trainee updated approved limits", err)
+	if _, err := e.service.ReviewSteward(ctx, actor, id, donationMutation(t, 'B', http.MethodPost, routeStewardReview, []int64{id}, input), input); err != nil {
+		t.Fatal("qualified review update denied", err)
 	}
 	input = ReviewInput{Decision: "force_reject", ExpectedRevision: 2, Reason: "Not allowed"}
-	if _, err := e.service.ReviewSteward(ctx, actor, id, donationMutation(t, 'C', http.MethodPost, routeStewardReview, []int64{id}, input), input); !errors.Is(err, ErrForbidden) {
+	if _, err := e.service.ReviewSteward(ctx, actor, id, donationMutation(t, 'C', http.MethodPost, routeStewardReview, []int64{id}, input), input); !errors.Is(err, authz.ErrPermissionDenied) {
 		t.Fatal("trainee force rejected approval", err)
 	}
 	rejectID := parseTestID(t, pending[1].ID)
@@ -127,6 +129,7 @@ func TestForceRejectEveryApprovalOrigin(t *testing.T) {
 				} else {
 					_, physical := e.seedEndpointKey(t, owner, 'a')
 					d = e.createDonationWithSeed(t, owner, 'a', physical)
+					qualifyStandardDonation(t, e, d.ID)
 					id := parseTestID(t, d.ID)
 					input := ReviewInput{Decision: "approve", ExpectedRevision: 1, KeySettings: []KeySetting{{DonationKeyID: parseTestID(t, d.Keys[0].ID), Enabled: true}}}
 					var err error
@@ -148,6 +151,7 @@ func TestForceRejectEveryApprovalOrigin(t *testing.T) {
 						}
 					}
 				}
+
 				id := parseTestID(t, d.ID)
 				before, err := e.service.GetAdmin(ctx, id)
 				if err != nil || !before.CanForceReject {
@@ -192,6 +196,7 @@ func TestConcurrentPendingReviewHasOneWinner(t *testing.T) {
 	owner := e.seedUser(t, "concurrent-donor", nil, false)
 	_, key := e.seedEndpointKey(t, owner, 'a')
 	d := e.createDonationWithSeed(t, owner, 'a', key)
+	qualifyStandardDonation(t, e, d.ID)
 	id := parseTestID(t, d.ID)
 	inputs := []ReviewInput{{Decision: "approve", ExpectedRevision: 1, KeySettings: []KeySetting{{DonationKeyID: parseTestID(t, d.Keys[0].ID), Enabled: true}}}, {Decision: "reject", ExpectedRevision: 1, Reason: "Rejected"}}
 	mutations := make([]resources.ControlMutation, len(inputs))
@@ -217,7 +222,7 @@ func TestConcurrentPendingReviewHasOneWinner(t *testing.T) {
 	for err := range errorsOut {
 		if err == nil {
 			success++
-		} else if !errors.Is(err, ErrForbidden) && !errors.Is(err, ErrConflict) {
+		} else if !errors.Is(err, ErrNotFound) && !errors.Is(err, ErrConflict) {
 			t.Fatal(err)
 		}
 	}
@@ -245,6 +250,7 @@ func TestTraineeReviewPartialExpiryRequiresFreshRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	qualifyStandardDonation(t, e, d.Value.ID)
 	id := parseTestID(t, d.Value.ID)
 	input := ReviewInput{Decision: "reject", ExpectedRevision: 1, Reason: "Review remaining key"}
 	mutation := donationMutation(t, 'q', http.MethodPost, routeStewardReview, []int64{id}, input)
@@ -253,7 +259,7 @@ func TestTraineeReviewPartialExpiryRequiresFreshRevision(t *testing.T) {
 		t.Fatal("stale partial expiry", err)
 	}
 	view, err := e.service.GetSteward(ctx, actor, id)
-	if err != nil || view.Status != "pending" || view.Revision != "2" || len(view.Keys) != 1 || view.Keys[0].ID != d.Value.Keys[1].ID || view.Keys[0].CanManage {
+	if err != nil || view.Status != "pending" || view.Revision != "2" || len(view.Keys) != 2 || view.Keys[0].CharityState != "expired" || view.Keys[1].ID != d.Value.Keys[1].ID || view.Keys[1].CanManage {
 		t.Fatalf("expiry did not persist: %+v %v", view, err)
 	}
 	var ended string

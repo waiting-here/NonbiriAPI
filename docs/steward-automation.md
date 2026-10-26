@@ -1,13 +1,13 @@
 # Steward automation
 
-Administrators can give these instructions to selected level-6 stewards. These controls have no user-station menu or help entry. They run on the configured **user host**, using the steward's own site CallerKey:
+Administrators can give these instructions to selected stewards with automation permission. These controls have no user-station menu or help entry. They run on the configured **user host**, using the steward's own site CallerKey:
 
 ```http
 Authorization: Bearer nbk_REPLACE_WITH_YOUR_CALLER_KEY
 Content-Type: application/json
 ```
 
-The caller must remain an active level-6 steward. Level-5 trainees cannot use these automation routes. Session cookies cannot replace the CallerKey. Revocation, rotation, bans, deletion and loss of steward permission are checked again before writes. These controls grant no authority over another donor's private endpoint, key or model catalog. This document describes the current source contract; use a matching server release. Price templates, donation processing/history and compact management binding receipts are browser-session APIs, not additions to this CallerKey allowlist.
+The caller must remain an active steward with `automation` and the corresponding action grants. Level 6 has all steward actions; level 5 requires explicit automation permission and retains its configured source/model scope. Session cookies cannot replace the CallerKey. Revocation, rotation, bans, deletion and current grants are checked before replay and writes; protected background completion also rechecks authority. These controls grant no access to another donor's private endpoint, key or model catalog. See [steward permissions](steward-permissions.md) for the 51 actions, six limits, four donation scopes and combined actions. This document describes the current source contract; use a matching server release. Price templates, donation processing/history, compact management binding receipts and the management assistant use browser-session APIs.
 
 Account MFA applies to browser sessions. These CallerKey routes retain their
 existing credentials and do not require authenticator codes. Browser controls
@@ -18,6 +18,36 @@ does not rotate a CallerKey; revoke that credential separately if it is exposed.
 Creation and model binding accept only POST without query parameters. Failure-policy reads use GET with the two specified IDs; edits use PATCH without query parameters. Other methods, suffixes and path variants are rejected. JSON rejects unknown and duplicate fields. Each request is limited to 256 KiB, 100 keys, 16 recurring rules per key and 16,384 total object fields; responses are limited to 64 KiB. All controls share a maximum of four concurrent requests, with one per user and no queue, across personal reads/writes, charity reads and existing charity writes. A busy control returns HTTP 429. Maintenance admission and the existing resource, credential, discovery and outbound protections still apply. These management operations do not consume model-call credits or charity usage quotas.
 
 Endpoint protocols include `google-gemini`, `openai-responses` and `openai-decisions` alongside the existing types. Gemini and Responses bindings serve Chat only; Decisions bindings serve `/v1/decisions` with model type `decisions`. Same-URL endpoints can use distinct protocols. Discovery availability does not prove model-operation support. See [content protocols](content-protocols.md) for native base URLs, supported subsets, continuation fields and usage. Existing control authentication, revision, idempotency and request/response budgets remain unchanged.
+
+## Current grants and resource range
+
+Every charity route needs `automation` plus its operation grants:
+
+| Operation | Additional grants |
+| --- | --- |
+| Donation list/detail/key/catalog reads | At least one of `donations.review`, `donations.manage_keys`, `donations.handle`, `donations.discover` or `donations.recurring`, within the current donation range |
+| Charity model, binding and candidate reads | `charity.read` |
+| Create and approve a donation | `donations.manage_keys` and `donations.review` |
+| Manual model binding | `charity.manage` |
+| Discover and bind | `charity.manage` and `donations.discover` |
+| Read or edit failure policy | `donations.manage_keys` |
+
+Level-5 donation scope defaults to `standard`: at least one unended, unexpired
+key, with every such key having a mainstream-channel source or a current binding
+to a mainstream charity model. Pending, paused and failed keys participate in
+this whole-donation check. Review and maintenance use the same qualification;
+an optional target model cannot expand it. `none` denies donation operations even when
+their booleans are true. `enhanced` adds entire donations with any tagged canonical
+endpoint, and `full` has the level-6 resource range. Current tags and policy are
+checked before reads, replay, writes and protected discovery completion.
+`charity.non_mainstream` only changes eligible charity models;
+`donations.read_all` does not widen the range. Automation responses retain their
+documented safe projection even with full identity permission.
+
+These endpoints do not edit steward permissions, endpoint tags or backoff policies.
+Those use browser-session routes. The optional per-target `native_services`
+field on [key-to-model batch binding](charity-bindings.md) does not change the
+older `/automation/model-bindings` request below.
 
 ## Create and approve one donation
 
@@ -83,7 +113,7 @@ Descriptions and approval notes are limited to 1,024 Unicode code points. Keys a
 
 Recurring `metric` also supports `input_tokens` and `output_tokens`. Input includes uncached input, cache writes and cache reads once each. When a validated usage result exists, settlement replaces reservations with actual normalized usage; otherwise split reservations supply the conservative amounts. A legacy total-only key may retain `token_reserve` without inventing input/output usage. These cumulative/recurring budgets are not a TPM limiter. Physical `max_rpm` and `max_concurrency` continue to cover personal and charity use of the same key.
 
-The server creates one new endpoint and all its keys, submits **one donation**, approves it as the caller, and saves all settings in a single transaction. The donation owner and recorded level-6 reviewer are that steward. All resources, encrypted secrets, review records, recurring rules and the replay receipt either commit together or roll back together. Duplicate secrets in one request are rejected. Independent new requests create new resources, even for an existing URL, subject to current resource limits and credential-review protections.
+The server creates one new endpoint and all its keys, submits **one donation**, approves it as the caller, and saves all settings in a single transaction. The donation owner and recorded reviewer are that steward, using the actor's actual level. Creation/approval requires `automation`, `donations.manage_keys` and `donations.review`. All resources, encrypted secrets, review records, recurring rules and the replay receipt either commit together or roll back together. Duplicate secrets in one request are rejected. Independent new requests create new resources, even for an existing URL, subject to current resource limits and credential-review protections.
 
 Success is HTTP 201:
 
@@ -142,7 +172,13 @@ The result order always matches the input. At least one success gives HTTP 200. 
 
 ## Read or edit one donation key's failure policy
 
-`GET /api/steward/automation/donation-key-failure-policy?donation_id=34&donation_key_id=78` accepts exactly these two positive decimal-string IDs and no body. A current steward may manage any donation visible in the steward management pages; this does not grant access to its owner's private resources or model catalog.
+`GET /api/steward/automation/donation-key-failure-policy?donation_id=34&donation_key_id=78` accepts exactly these two positive decimal-string IDs and no body. A current steward needs `automation`, `donations.manage_keys` and current donation scope for a visible donation; this does not grant access to its owner's private resources or model catalog.
+
+This fixed route has no `charity_model_id` selector and uses the same
+whole-donation qualification as other maintenance routes. Standard scope can
+access a qualifying donation without a model selector. Enhanced scope also
+permits currently tagged donations, and full scope permits the full resource
+range. Granting `charity.non_mainstream` alone does not change source scope.
 
 GET and a successful PATCH return HTTP 200 with the same safe shape:
 
@@ -205,13 +241,13 @@ connection. Unknown HTTP 400 responses remain protocol failures. These fixed
 messages do not expose the upstream response body; `discovery_failed` and the
 existing retry and idempotency rules remain unchanged.
 
-## Additional level-6 reads
+## Additional authorized reads
 
 The following GET suffixes use `/api/steward/automation`: `/donations`, `/donations/{id}`, `/donations/{id}/keys`, `/donations/{id}/keys/{keyId}`, `/donations/{id}/keys/{keyId}/catalog`, `/charity-models`, `/charity-models/{id}`, `/charity-models/{id}/bindings`, and `/charity-models/{id}/binding-candidates`. GET donations shares the existing POST path by method. The original query-based failure-policy GET stays unchanged.
 
 GETs have no body or idempotency key. Single objects have no query; lists accept only `q,page,page_size`, with search at most 200 code points, defaults 1/20 and sizes 10/20/50/100. Lists return `{data,pagination}`; each read is limited to five seconds/256 KiB and fails instead of truncating. Responses are no-store. Use exact donation/member/model IDs from these authorized reads.
 
-Only current L6 CallerKeys can query their existing charity-management scope. Necessary sources, addresses, safe notes, limits/failure state, catalog source/verification, model `role_policy` and connections are included; private donor profiles/notes, non-donated resources, secrets, fingerprints/review hashes, fixed auth headers and raw diagnostics are excluded. L5 has no charity CallerKey read/write permission; downgrading stops even replay. Existing L5 browser scope stays intact.
+Current steward CallerKeys require `automation` and the relevant read action for every query, within their current source/model scope. Necessary sources, addresses, safe notes, limits/failure state, catalog source/verification, model `role_policy` and connections are included; private donor profiles/notes, non-donated resources, secrets, fingerprints/review hashes, fixed auth headers and raw diagnostics are excluded. Revoking any required grant or removing the last tag needed for enhanced scope stops the affected reads, writes and replay. Automated discovery also requires `donations.discover`; binding requires `charity.manage` and current model/key authority. Missing action grants return `403 steward_permission_denied`; resources outside scope retain the route's not-found behavior. IDs, revisions, limits and retry precision remain as specified above.
 
 Ordinary users, L5 and L6 can separately query/import/append **their own** resources through [personal automation](api-contract.md#34-personal-callerkey-automation). Its fixed 24-hour per-item recovery differs from the older charity model-bindings operation above. It neither creates nor approves a donation. All these controls use one shared four-global/one-per-user admission budget.
 
@@ -246,9 +282,9 @@ creation limits, response budgets or failure-policy fields.
 
 Existing authorized charity-model reads include `session_headers`, containing saved `name,idle_seconds,format` configuration, never generated values. The formats are `uuid_v4`, `hex_32`, `opencode_session`, `opencode_message` and `opencode_part`. Zero idle lifetime creates a new value for each logical request and reuses it for internal retries; no format promises absolute uniqueness. Omission defaults to 300 seconds and UUID v4. See [managed headers](charity-session-headers.md).
 
-This adds no CallerKey model-setting or request-adaptation write permission. Administrator/level-6 browser model forms save managed headers with the model; request adaptation saves separately and remains read-only for level-6 charity management. Personal model settings remain owner-scoped.
+This adds no CallerKey model-setting or request-adaptation write permission. Administrator or appropriately granted steward browser model forms save managed headers with the model; request adaptation saves separately and remains read-only for all stewards. Personal model settings remain owner-scoped.
 
-Global pressure is a separate browser-session read: `GET /api/steward/logs/pressure` for current L5/L6, or `GET /admin/api/logs/pressure` for administrators. It is outside this CallerKey allowlist. The response exposes anonymous current concurrency/RPM, approximate 24-hour peaks and persistent all-time observed maxima, without user/request identifiers. Sampling is five seconds and foreground refresh is 15 seconds. Failed refreshes keep prior values marked stale; HTTP 401/403 hides the panel and stops interval polling. See [pressure fields, persistence and limits](api-contract.md#global-pressure).
+Global pressure is a separate browser-session read: `GET /api/steward/logs/pressure` for current stewards with `pressure.read`, or `GET /admin/api/logs/pressure` for administrators. It is outside this CallerKey allowlist. The response exposes anonymous current concurrency/RPM, approximate 24-hour peaks and persistent all-time observed maxima, without user/request identifiers. Sampling is five seconds and foreground refresh is 15 seconds. Failed refreshes keep prior values marked stale; HTTP 401/403 hides the panel and stops interval polling. See [pressure fields, persistence and limits](api-contract.md#global-pressure).
 
 ## Verified caller-parameter errors
 

@@ -191,14 +191,24 @@ material.
 
 ## 6. Prepare a Generation 2 database path
 
-For a fresh start, the configured database and its exact `-wal` and `-shm` paths must all be absent. Fresh storage uses schema 35. Exact published schema 33/34 receives an atomic startup upgrade, adding history indexes where needed and updating the donation catalog authorization trigger and catalog view. Existing published schema 16–26 databases must first pass the [one-time conversion](database-upgrades.md#one-time-conversion); that historical conversion chain remains outside the normal service. Other prerelease schemas and empty placeholder files are rejected.
+For a fresh start, the configured database and its exact `-wal` and `-shm` paths
+must all be absent. Fresh storage uses schema 38. The service opens only the
+exact current schema and rejects older, newer, unknown or incomplete storage
+before migration, repair or recovery writes. Exact registered schema 16–26 and
+33–37 sources require the matching [standalone upgrader](database-upgrades.md#one-time-conversion).
+Preserve a complete matching recovery set, stop the old service and deliberately
+invoke the tool before starting the target. The service, startup scripts and
+deployment helpers must not apply upgrades implicitly. Empty placeholder files
+and unsupported earlier structures are rejected.
 
 On a true fresh start the process creates a Generation 2 SQLite database with `application_id=0x4E425249` and `user_version=2`, validates the complete schema, and seeds these safe states:
 
 - maintenance mode on;
 - new registration off;
 - activities, charity, and donation intake off;
-- the game master switch and every game-specific switch off.
+- the game master switch and every game-specific switch off;
+- management-assistant chat closed and automatic review off;
+- R-18 artwork disabled and no limited gacha pool published.
 
 If a main file or sidecar already exists, the process first validates file identity, the raw SQLite header, the registered structure and key-check singleton before its writable open. An alpha or Generation 1 database, an empty or corrupt file, an unknown generation, an unexpected schema object, or an anomalous sidecar is rejected without modifying the source files or creating new source-side sidecars. Do not create a placeholder with `touch`, run hand-written DDL, or point the application at an unverified or unsupported earlier database.
 

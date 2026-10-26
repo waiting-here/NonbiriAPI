@@ -6,6 +6,8 @@ type StorageSchemaDescriptor struct {
 	FormatVersion int    `json:"format_version"`
 	ApplicationID uint32 `json:"application_id"`
 	UserVersion   uint32 `json:"user_version"`
+	StartupPolicy string `json:"startup_policy"`
+	UpgradeTool   string `json:"upgrade_tool"`
 	GenerationTwoCompatibility
 	OfflineConversions []OfflineConversionDescriptor `json:"offline_conversions"`
 }
@@ -22,7 +24,7 @@ type OfflineConversionDescriptor struct {
 // is needed by deployment tooling.
 func SchemaDescriptor() StorageSchemaDescriptor {
 	return StorageSchemaDescriptor{FormatVersion: 1, ApplicationID: DatabaseApplicationID,
-		UserVersion: DatabaseUserVersion, GenerationTwoCompatibility: GenerationTwoCompatibilityDescriptor(),
+		UserVersion: DatabaseUserVersion, StartupPolicy: "exact", UpgradeTool: "nonbiri-upgrade-v1", GenerationTwoCompatibility: GenerationTwoCompatibilityDescriptor(),
 		OfflineConversions: []OfflineConversionDescriptor{}}
 }
 

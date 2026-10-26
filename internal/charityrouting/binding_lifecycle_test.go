@@ -78,7 +78,7 @@ func TestPresetBindingLifecycleSnapshotsAndMissingTargets(t *testing.T) {
 }
 func TestBindingBatchConcurrentUnknownResultRetries(t *testing.T) {
 	e, _, did, keys, models := presetFixture(t)
-	input := KeyBindingBatch{ExpectedDonationRevision: "1", Targets: []KeyBindingTarget{{models[0], "0", "up-0"}, {models[1], "0", "up-1"}}}
+	input := KeyBindingBatch{ExpectedDonationRevision: "1", Targets: []KeyBindingTarget{{models[0], "0", "up-0", nil}, {models[1], "0", "up-1", nil}}}
 	mutation := routingMutation(t, 'h', http.MethodPost, routeAdminKeyBindingBatch, []int64{did, keys[0]}, input)
 	start := make(chan struct{})
 	var wg sync.WaitGroup

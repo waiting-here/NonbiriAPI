@@ -17,9 +17,10 @@ The rules and configuration contracts below are authoritative for both API and U
 ## Artwork availability
 
 Administrators can use **Disable R-18 built-in artwork** in site settings. It is
-on by default. All currently bundled artwork is general; the shared artwork
-catalog supports separately classified cards, covers, illustrations and site
-appearances, including their thumbnails and animation layers.
+on by default. Sweet Hide-and-Seek is an adult-only R-18 theme: its two cards,
+theme illustration and pool cover are restricted, including their thumbnails,
+high-resolution images and animation layers. The shared artwork catalog also
+classifies site appearances and shared sources.
 
 R-18 candidate tiles carry a visible label. When disabled, their artwork uses a
 safe substitute and cannot be newly selected as a background or cover. Card
@@ -51,7 +52,7 @@ Purchases are one-way. The exchange dialog shows the price and accepts 1–100 t
 
 ## Cards and collection
 
-The first eleven themes each have five cards: ChatGPT, Claude, GLM, DeepSeek and Gemini. Each SP theme contains one character card.
+The first eleven themes each have five cards: ChatGPT, Claude, GLM, DeepSeek and Gemini. Each SP theme contains one character card. Sweet Hide-and-Seek contains two limited SSR cards, ChatGPT and Claude.
 
 | Theme | Rarity | Acquisition |
 | --- | --- | --- |
@@ -72,10 +73,12 @@ The first eleven themes each have five cards: ChatGPT, Claude, GLM, DeepSeek and
 | 琥珀誓章 · Claude | SP | Limited |
 | 天光与共 · Claude | SP | Limited |
 | 偷心预告 · GLM | SP | Limited |
+| 未命名的明天 · ChatGPT | SP | Limited |
+| 糖夜迷藏 · ChatGPT and Claude | SSR · R-18 | Limited |
 
-The catalogue shows all 61 cards and collection status. Owned cards open a full illustration and show the first acquisition time. SSR and SP illustrations have a looping animation, pause control and static fallback. SP also animates its background in coordination with the character. N and R draws reveal automatically in order. SR, SSR and SP encounters wait for a click or the Continue button while their artwork keeps moving; SSR and SP use full-screen scenes. First-acquisition SSR/SP encounters cannot be skipped or closed until all their lines have appeared. Skip reaches the complete results once those encounters finish, without another request. Reduced motion retains the full static first encounter and its lines. Ten-pulls share one card board: five by two on desktop and four, four, two on phones. SR focuses within that board; SSR/SP charge before a full-screen close-up. New SP cards have a short prelude and a delayed second voice line; reunions use their own line. Results keep all ten cards visible and animate duplicate shard conversion. When enough tickets remain and the original pool is open, Draw again repeats the same quantity through the normal draw flow. Sound effects, music, supported-device vibration, card-back rarity hints and reduced motion have separate controls. Turning hints off keeps unrevealed backs identical. Pausing or hiding the page preserves remaining scene time. Owned-card appreciation includes bilingual character lines. Owning an SSR/SP card also unlocks both first-encounter and reunion replay, including cards acquired from the shop or a reward. Replays may be closed immediately and do not spend tickets or change collection, pity or shards.
+The catalogue contains 64 cards across nineteen themes. Collection shows available themes and ownership status. Owned cards open a full illustration and show the first acquisition time. SSR and SP illustrations have a looping animation, pause control and static fallback. SP also animates its background in coordination with the character. N and R draws reveal automatically in order. SR, SSR and SP encounters wait for a click or the Continue button while their artwork keeps moving; SSR and SP use full-screen scenes. First-acquisition SSR/SP encounters cannot be skipped or closed until all their lines have appeared. Skip reaches the complete results once those encounters finish, without another request. Reduced motion retains the full static first encounter and its lines. Ten-pulls share one card board: five by two on desktop and four, four, two on phones. SR focuses within that board; SSR/SP charge before a full-screen close-up. New SP cards have a short prelude and a delayed second voice line; reunions use their own line. Results keep all ten cards visible and animate duplicate shard conversion. When enough tickets remain and the original pool is open, Draw again repeats the same quantity through the normal draw flow. Sound effects, music, supported-device vibration, card-back rarity hints and reduced motion have separate controls. Turning hints off keeps unrevealed backs identical. Pausing or hiding the page preserves remaining scene time. Owned-card appreciation includes bilingual character lines. Owning an SSR/SP card also unlocks both first-encounter and reunion replay, including cards acquired from the shop or a reward. Replays may be closed immediately and do not spend tickets or change collection, pity or shards.
 
-Completing a theme immediately unlocks its horizontal illustration: all five cards for an ordinary theme, or its single card for an SP theme. Claim its reward separately, once per account: one standard ticket and 10,000 game credits for a permanent theme, or one limited ticket and 10,000 general credits for any other theme, including shop-only and SP themes. Every theme also grants ten cumulative donation credit. All reward components are granted together; retries cannot grant them twice. Published themes keep their original membership. New cards use new themes; new permanent cards join all applicable pools without resetting progress.
+Completing a theme immediately unlocks its horizontal illustration: all five cards for the original ordinary themes, both cards for Sweet Hide-and-Seek, or the single card for an SP theme. Claim its reward separately, once per account: one standard ticket and 10,000 game credits for a permanent theme, or one limited ticket and 10,000 general credits for any other theme, including shop-only and SP themes. Every theme also grants ten cumulative donation credit. All reward components are granted together; retries cannot grant them twice. Published themes keep their original membership. New cards use new themes; new permanent cards join all applicable pools without resetting progress.
 
 ## Rates and guarantees
 
@@ -85,7 +88,9 @@ Default long-run consolidated rates including hard pity are approximately N 51.3
 
 In limited pools, the default featured share within each SR/SSR tier is 50%. A permanent hit makes the next hit of that same tier featured. SR and SSR guarantees are independent. A pool without featured cards of a particular tier preserves that tier's guarantee. Selection is uniform within the chosen rarity and permanent/featured group.
 
-The six SP templates keep the 1% SSR-tier base rate and sixty-pull hard pity. An SSR-tier result has a 15% chance to be the featured SP. After two consecutive permanent SSR results, the next SSR-tier result is guaranteed to be the featured SP; an earlier SP resets the miss count. SR and lower results do not reset it. These templates share a separate rule group from the ordinary 50% featured SSR pools. The four newer SP templates feature only their corresponding SP card; their SR results come from the permanent pool and preserve existing featured-SR progress. Templates do not create or publish live pools and catalog synchronization preserves saved administrator edits. From empty progress, the SP guarantee requires at most 180 pulls. SP is a display rarity, not a fifth initial probability tier.
+The Sweet Hide-and-Seek template features only its two SSR cards, with equal weight within the featured group. It uses the default limited SSR rules and shared pity group; SR and lower results come from the permanent pool. The template starts unpublished with no schedule and grants no site appearance.
+
+The seven SP templates keep the 1% SSR-tier base rate and sixty-pull hard pity. An SSR-tier result has a 15% chance to be the featured SP. After two consecutive permanent SSR results, the next SSR-tier result is guaranteed to be the featured SP; an earlier SP resets the miss count. SR and lower results do not reset it. These templates share a separate rule group from the ordinary 50% featured SSR pools. The five newer SP templates feature only their corresponding SP card; their SR results come from the permanent pool and preserve existing featured-SR progress. Templates do not create or publish live pools and catalog synchronization preserves saved administrator edits. From empty progress, the SP guarantee requires at most 180 pulls. SP is a display rarity, not a fifth initial probability tier.
 
 Limited pools with exactly the same rate and guarantee rules, including the miss threshold, share counters and featured guarantees across periods. Different rules have independent progress. Names, artwork and selected limited cards do not define the group. The permanent pool has independent counters.
 
@@ -135,7 +140,7 @@ Cards use their theme’s static background and an independent foreground. SSR a
 
 ## Records and HTTP access
 
-Draw history retains the most recent 180 days. Collection, first-acquisition times, pity and claimed/redeemed states remain while the account exists. Ticket/shard accounting remains independently of draw-detail expiry. Account export schema 22 includes these records and the appearance selection, saved artwork key, unlocked designs and selection timestamp. Deletion removes personal activity state and clears user and retry-key associations from retained accounting/configuration events.
+Draw history retains the most recent 180 days. Collection, first-acquisition times, pity and claimed/redeemed states remain while the account exists. Ticket/shard accounting remains independently of draw-detail expiry. Account export includes these records and the appearance selection, saved artwork key, unlocked designs and selection timestamp. Deletion removes personal activity state and clears user and retry-key associations from retained accounting/configuration events.
 
 These routes use station sessions and existing same-origin checks; they are not CallerKey automation endpoints:
 

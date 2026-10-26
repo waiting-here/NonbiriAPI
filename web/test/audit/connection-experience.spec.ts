@@ -130,6 +130,61 @@ const adminAPI = <T>(
   data?: unknown,
   status?: number,
 ) => api<T>(context, fixture().admin_url, path, method, data, status);
+async function protocolServices(owner: BrowserContext) {
+  const options = await userAPI<{
+    native_service_options: { connector_type: string; native_services: NativeService[] }[];
+  }>(owner, '/api/endpoint-create-options');
+  return options.native_service_options.find((row) => row.connector_type === 'openai-compatible')!
+    .native_services;
+}
+async function qualifyForSteward(
+  admin: BrowserContext,
+  donation: Donation,
+  member: string,
+  name: string,
+) {
+  const path = `/admin/api/donations/${donation.id}/keys/${member}/models`;
+  const catalog = await adminAPI<{ manual_catalog_revision: string }>(
+    admin,
+    path + '?page=1&page_size=20',
+  );
+  await adminAPI(
+    admin,
+    path + '/manual',
+    'POST',
+    {
+      expected_manual_catalog_revision: catalog.manual_catalog_revision,
+      entries: ['synthetic-scope-model'],
+    },
+    200,
+  );
+  const model = await adminAPI<Identity>(admin, '/admin/api/charity-models', 'POST', {
+    provider: 'synthetic',
+    model: 'scope-' + name,
+    enabled: true,
+    is_mainstream: true,
+    flatten_tool_calls: false,
+    model_types: ['chat_completions'],
+    pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
+    discount: { enabled: false, percent: 100, start_at: null, end_at: null },
+  });
+  const bindingPath = `/admin/api/charity-models/${model.id}/bindings`;
+  const before = await adminAPI<Bindings>(admin, bindingPath);
+  await adminAPI(admin, bindingPath + '/batch-receipt', 'POST', {
+    expected_binding_revision: before.binding_revision,
+    selections: [
+      {
+        targets: [
+          {
+            donation_key_id: member,
+            upstream_model_id: 'synthetic-scope-model',
+            native_services: ['chat_completions'],
+          },
+        ],
+      },
+    ],
+  });
+}
 function responseFor(page: Page, method: string, path: string) {
   return page.waitForResponse(
     (response) =>
@@ -261,7 +316,9 @@ test('connection search exposes entry context and separate System One setup', as
     await form
       .getByRole('combobox', { name: c.protocol, exact: true })
       .selectOption('typesafe-systemone');
-    await expect(form.getByRole('checkbox', { name: native.systemone, exact: true })).toBeChecked();
+    await expect(form.getByRole('checkbox', { name: native.systemone, exact: true })).toHaveCount(
+      0,
+    );
     await expect(form.getByRole('checkbox', { name: native.decisions, exact: true })).toHaveCount(
       0,
     );
@@ -354,26 +411,44 @@ async function uses(context: BrowserContext, id: string) {
     )
   ).data;
 }
+async function endDonation(context: BrowserContext, id: string): Promise<Donation> {
+  const live = await userAPI<Donation>(context, '/api/donations/' + id);
+  if (live.status === 'pending' || live.status === 'approved')
+    return userAPI<Donation>(
+      context,
+      '/api/donations/' + id + (live.status === 'pending' ? '/withdraw' : '/terminate'),
+      'POST',
+      {
+        expected_revision: live.revision,
+        ...(live.status === 'approved' ? { confirmation: 'End synthetic donation' } : {}),
+      },
+      200,
+    );
+  expect(['rejected', 'deleted', 'expired']).toContain(live.status);
+  return live;
+}
 async function approve(context: BrowserContext, owner: BrowserContext, donation: Donation) {
   const rows = await uses(owner, donation.id);
-  const result = await adminAPI<{ results: { ok: boolean }[] }>(
+  const current = await adminAPI<Donation>(context, '/admin/api/donations/' + donation.id);
+  const result = await adminAPI<Donation>(
     context,
-    '/admin/api/donations/' + donation.id + '/uses/review',
+    '/admin/api/donations/' + donation.id + '/pending-review',
     'POST',
     {
-      items: rows
+      expected_revision: current.revision,
+      decision: 'approve',
+      reason: 'Synthetic initial approval',
+      uses: rows
         .filter((row) => row.pending)
         .map((row) => ({
           use_id: row.id,
           expected_revision: row.revision,
           expected_review_revision: row.pending!.expected_review_revision,
-          decision: 'approve',
-          review_note: 'Synthetic initial approval',
         })),
     },
     200,
   );
-  expect(result.results.every((row) => row.ok)).toBe(true);
+  expect(result.status).toBe('approved');
 }
 
 for (const configuredCatalog of [false, true]) {
@@ -409,8 +484,16 @@ for (const configuredCatalog of [false, true]) {
       for (const status of ['pending', 'approved']) {
         if (status === 'approved') await approve(admin, owner, donation);
         await page.goto(origin + path + donation.id);
-        const use = await openFold(page, native.chat_completions);
-        const fetchButton = use.getByRole('button', { name: c.refreshSharedCatalog, exact: true });
+        const use = page.locator('.donation-discovery').filter({
+          has: page.getByRole('button', {
+            name: common.common.donationDiscovery.one,
+            exact: true,
+          }),
+        });
+        const fetchButton = use.getByRole('button', {
+          name: common.common.donationDiscovery.one,
+          exact: true,
+        });
         await expect(fetchButton).toBeEnabled();
         const result = responseFor(
           page,
@@ -424,8 +507,7 @@ for (const configuredCatalog of [false, true]) {
         );
         await fetchButton.click();
         expect((await result).status()).toBe(202);
-        await expect(use).toContainText('Catalog: Succeeded');
-        await expect(use.getByText(/^Catalog:/)).toHaveCount(1);
+        await expect(use).toContainText('Fetching complete');
         if (status === 'pending')
           for (const width of [1440, 390])
             for (const theme of ['light', 'dark'] as const) {
@@ -442,16 +524,7 @@ for (const configuredCatalog of [false, true]) {
       }
     } finally {
       try {
-        if (donationId) {
-          const live = await userAPI<Donation>(owner, '/api/donations/' + donationId);
-          await userAPI<Donation>(
-            owner,
-            '/api/donations/' + donationId + '/withdraw',
-            'POST',
-            { expected_revision: live.revision },
-            200,
-          );
-        }
+        if (donationId) await endDonation(owner, donationId);
       } finally {
         await Promise.all([...new Set([owner, admin, manager])].map((context) => context.close()));
       }
@@ -627,7 +700,7 @@ test('shared versions keep old charity approval and survive deletion of their or
   }
 });
 
-test('additional services stay pending with their old budget and use-only trainee authority', async ({
+test('additional services stay pending with their old budget and redacted steward management', async ({
   browser,
 }, info) => {
   const owner = await session(browser, 'owner');
@@ -658,6 +731,7 @@ test('additional services stay pending with their old budget and use-only traine
       manager.getByRole('button', { name: c.modelsAndBindings, exact: true }),
     ).toHaveCount(0);
     await approve(admin, owner, donation);
+    await qualifyForSteward(admin, donation, donation.keys[0]!.id, randomUUID().slice(0, 8));
     let current = await adminAPI<Donation>(admin, '/admin/api/donations/' + donation.id);
     await adminAPI(
       admin,
@@ -682,21 +756,18 @@ test('additional services stay pending with their old budget and use-only traine
     );
     const page = await owner.newPage();
     await page.goto(fixture().user_url + '/charity/donations/' + donation.id);
-    const chat = await openFold(page, native.chat_completions);
+    const chat = page.locator('.economy-donation-key').first();
     const paused = responseFor(
       page,
       'PATCH',
       '/api/donations/' + donation.id + '/uses/' + (await uses(owner, donation.id))[0]!.id,
     );
-    await chat.getByRole('button', { name: c.pauseUse, exact: true }).click();
+    await chat.getByRole('button', { name: c.pauseSharedKey, exact: true }).click();
     expect((await paused).ok()).toBe(true);
     await page.reload();
     const addition = await openFold(page, c.addServices);
-    const form = addition.locator('form');
-    for (const box of await form.getByRole('checkbox').all()) await expect(box).not.toBeChecked();
-    await expect(form.getByRole('button', { name: c.submitServices, exact: true })).toBeDisabled();
-    await form.getByLabel(native.embeddings, { exact: true }).check();
-    await form.getByLabel(native.responses, { exact: true }).check();
+    await expect(addition.getByRole('checkbox')).toHaveCount(0);
+    const form = addition;
     const submitted = responseFor(page, 'POST', '/api/donations/' + donation.id + '/uses');
     await form.getByRole('button', { name: c.submitServices, exact: true }).click();
     const response = await submitted;
@@ -707,11 +778,16 @@ test('additional services stay pending with their old budget and use-only traine
       discovery_source_revision: string;
       credential_version: string;
     };
-    expect(input.items.map((row) => row.native_service).sort()).toEqual([
-      'embeddings',
-      'responses',
-    ]);
-    expect(input.items.every((row) => row.expected_revision === null)).toBe(true);
+    const fullServices = await protocolServices(owner);
+    expect(input.items.map((row) => row.native_service)).toEqual(fullServices);
+    expect(
+      input.items.find((row) => row.native_service === 'chat_completions')!.expected_revision,
+    ).not.toBeNull();
+    expect(
+      input.items
+        .filter((row) => row.native_service !== 'chat_completions')
+        .every((row) => row.expected_revision === null),
+    ).toBe(true);
     expect(input.discovery_source_id).toBeNull();
     expect(input.discovery_source_revision).toBeNull();
     const addedUses = await uses(owner, donation.id);
@@ -734,37 +810,58 @@ test('additional services stay pending with their old budget and use-only traine
         donation.id,
     );
     await expect(
-      reviewer.getByRole('tab', { name: common.common.pendingReviews.title, exact: true }),
+      reviewer.getByRole('tab', { name: userEn.user.steward.donationsTitle, exact: true }),
     ).toHaveAttribute('aria-selected', 'true');
     const projected = await userAPI<Numbered<DonationUse>>(
       trainee,
       '/api/steward/donations/' + donation.id + '/uses?page=1&page_size=20',
     );
-    expect(projected.data).toHaveLength(2);
+    expect(projected.data).toHaveLength(fullServices.length);
     for (const row of projected.data) {
       expect(row.endpoint_key_id).toBeNull();
       expect(row.capabilities.can_review).toBe(true);
-      expect(row.capabilities.can_manage).toBe(false);
+      expect(row.capabilities.can_manage).toBe(true);
     }
-    await expect(reviewer.getByRole('button', { name: c.pauseUse, exact: true })).toHaveCount(0);
+    await expect(reviewer.getByRole('button', { name: c.pauseSharedKey, exact: true })).toHaveCount(
+      0,
+    );
     await expect(
       reviewer.getByRole('button', { name: c.modelsAndBindings, exact: true }),
-    ).toHaveCount(0);
-    const embeddings = await openFold(reviewer, native.embeddings);
-    await embeddings.getByLabel(c.selectUseReview, { exact: true }).check();
-    await reviewer.getByLabel(c.reviewReason, { exact: true }).fill('Synthetic embedding approval');
+    ).toBeEnabled();
+    await openFold(reviewer, c.donationMaterials);
+    await reviewer.getByLabel(c.reviewReason, { exact: true }).fill('Synthetic pending approval');
     const accepted = responseFor(
       reviewer,
       'POST',
-      '/api/steward/donations/' + donation.id + '/uses/review',
+      '/api/steward/donations/' + donation.id + '/pending-review',
     );
-    await reviewer.getByRole('button', { name: c.approveSelected, exact: true }).click();
-    expect((await accepted).status()).toBe(200);
-    const responses = await openFold(reviewer, native.responses);
-    await responses.getByLabel(c.selectUseReview, { exact: true }).check();
+    await reviewer.getByRole('button', { name: c.approveAllUses, exact: true }).click();
+    const acceptedResponse = await accepted;
+    expect(acceptedResponse.status()).toBe(200);
+    expect(acceptedResponse.request().postDataJSON()).toMatchObject({
+      decision: 'approve',
+      reason: 'Synthetic pending approval',
+      uses: projected.data
+        .filter((row) => row.pending)
+        .map((row) => ({
+          use_id: row.id,
+          expected_revision: row.revision,
+          expected_review_revision: row.pending!.expected_review_revision,
+        })),
+    });
+    const currentCredential = await userAPI<Credential>(owner, '/api/credentials/' + saved.id);
+    await userAPI(owner, '/api/credentials/' + saved.id + '/versions', 'POST', {
+      expected_revision: currentCredential.revision,
+      secret: 'synthetic-replacement-' + randomUUID(),
+      ownership_confirmed: true,
+    });
+    const replacements = (await uses(owner, donation.id)).filter((row) => row.pending);
+    expect(replacements).toHaveLength(fullServices.length);
+    await reviewer.reload();
+    await openFold(reviewer, c.donationMaterials);
     await reviewer
       .getByLabel(c.reviewReason, { exact: true })
-      .fill('Synthetic responses rejection');
+      .fill('Synthetic pending replacement return');
     await screenshot(
       reviewer,
       info,
@@ -783,16 +880,29 @@ test('additional services stay pending with their old budget and use-only traine
     const rejected = responseFor(
       reviewer,
       'POST',
-      '/api/steward/donations/' + donation.id + '/uses/review',
+      '/api/steward/donations/' + donation.id + '/pending-review',
     );
-    await reviewer.getByRole('button', { name: c.rejectSelected, exact: true }).click();
-    expect((await rejected).status()).toBe(200);
+    await reviewer.getByRole('button', { name: c.rejectAllUses, exact: true }).click();
+    const rejectedResponse = await rejected;
+    expect(rejectedResponse.status()).toBe(200);
+    expect(rejectedResponse.request().postDataJSON()).toMatchObject({
+      decision: 'reject',
+      reason: 'Synthetic pending replacement return',
+      uses: replacements.map((row) => ({
+        use_id: row.id,
+        expected_revision: row.revision,
+        expected_review_revision: row.pending!.expected_review_revision,
+      })),
+    });
     const decided = await uses(owner, donation.id);
     expect(decided.find((row) => row.native_service === 'embeddings')!.approved?.status).toBe(
       'approved',
     );
     expect(decided.find((row) => row.native_service === 'responses')!.latest?.status).toBe(
       'rejected',
+    );
+    expect(decided.every((row) => row.approved?.credential_version === '1' && !row.pending)).toBe(
+      true,
     );
     expect(
       decided.find((row) => row.native_service === 'chat_completions')!.approved
@@ -822,29 +932,29 @@ test('additional services stay pending with their old budget and use-only traine
       manager.getByRole('button', { name: c.modelsAndBindings, exact: true }),
     ).toBeVisible();
     const live = await userAPI<Donation>(owner, '/api/donations/' + donation.id);
-    expect(live.status).toBe('pending');
+    expect(live.status).toBe('approved');
     const ended = await userAPI<
       Donation & { use_summary: { total: string; pending: string; approved: string } }
     >(
       owner,
-      '/api/donations/' + donation.id + '/withdraw',
+      '/api/donations/' + donation.id + '/terminate',
       'POST',
-      { expected_revision: live.revision },
+      { expected_revision: live.revision, confirmation: 'End synthetic donation' },
       200,
     );
     expect(ended.id).toBe(donation.id);
     expect(ended.status).toBe('deleted');
     expect(ended.use_summary).toEqual({
-      total: '3',
+      total: String(fullServices.length),
       pending: '0',
       approved: '0',
-      rejected: '1',
+      rejected: String(fullServices.length),
       withdrawn: '0',
-      review_status: 'mixed',
+      review_status: 'rejected',
     });
     expect(ended.keys).toHaveLength(1);
     const endedMember = ended.keys.find((row) => row.id === member.id)!;
-    expect(endedMember.ended_reason).toBe('withdrawn');
+    expect(endedMember.ended_reason).toBe('terminated');
     expect(budget(endedMember)).toEqual({ ...before, state: 'ended' });
     await manager.reload();
     await expect(
@@ -855,7 +965,7 @@ test('additional services stay pending with their old budget and use-only traine
     expect(closed.keys[0]!.id).toBe(member.id);
     expect(closed.keys[0]!.can_manage).toBe(false);
     const terminal = await uses(owner, donation.id);
-    expect(terminal).toHaveLength(3);
+    expect(terminal).toHaveLength(fullServices.length);
     expect(terminal.map((row) => row.id).sort()).toEqual(decided.map((row) => row.id).sort());
     for (const row of terminal) {
       expect(row.donation_key_id).toBe(member.id);
@@ -917,8 +1027,26 @@ async function saveTargets(page: Page, editor: Locator, path: string, status = 2
     await expect(editor.getByRole('button', { name: c.saveTargets, exact: true })).toBeEnabled();
   }
 }
+async function openTargetEditor(page: Page, title: string, charity: boolean) {
+  if (!charity) return openFold(page, title);
+  await page
+    .getByRole('row')
+    .filter({ has: page.getByRole('button', { name: c.editBindingSources, exact: true }) })
+    .first()
+    .getByRole('button', { name: c.editBindingSources, exact: true })
+    .click();
+  return page.getByRole('region', { name: c.editBindingSources, exact: true });
+}
 async function addGroup(page: Page, name: string, charity: boolean, path: string) {
-  const editor = await openFold(page, c.addTargetGroup);
+  let editor: Locator;
+  if (charity) {
+    const mode = page.getByRole('combobox', { name: c.addBindingMode, exact: true });
+    await mode.selectOption('group');
+    editor = mode
+      .locator('xpath=ancestor::section[1]')
+      .locator(':scope > div')
+      .filter({ has: page.getByRole('table', { name: c.availableTargets, exact: true }) });
+  } else editor = await openFold(page, c.addTargetGroup);
   const candidates = charity ? editor : await openFold(editor, c.addTarget);
   if (charity) await candidates.getByLabel(c.modelSearch, { exact: true }).fill(name);
   else {
@@ -929,8 +1057,8 @@ async function addGroup(page: Page, name: string, charity: boolean, path: string
   await row.getByRole('button', { name: c.addTarget, exact: true }).click();
   const selected = targetRows(editor);
   await expect(selected).toHaveCount(1);
-  await expect(selected.getByLabel(native.chat_completions, { exact: true })).not.toBeChecked();
-  await selected.getByLabel(native.chat_completions, { exact: true }).check();
+  const chat = selected.getByLabel(native.chat_completions, { exact: true });
+  await expect(chat).toBeChecked();
   const response = responseFor(page, 'POST', path + '/batch-receipt');
   await editor.getByRole('button', { name: c.addTargetGroup, exact: true }).click();
   const saved = await response;
@@ -953,7 +1081,7 @@ async function exerciseTargets(
 ) {
   await page.goto(origin + destination);
   const title = c.targetGroup.replace('{{number}}', '1');
-  let editor = await openFold(page, title);
+  let editor = await openTargetEditor(page, title, charity);
   await expect(targetRows(editor)).toHaveCount(2);
   const before = await api<Bindings>(context, origin, path);
   const binding = before.bindings[0]!;
@@ -1025,17 +1153,19 @@ async function exerciseTargets(
       ),
     )
     .toEqual([names[1]]);
+  if (charity) await editor.getByRole('button', { name: c.returnToBindings, exact: true }).click();
   await addGroup(page, names[2]!, charity, path);
   await addGroup(page, names[3]!, charity, path);
   await expect
     .poll(async () => (await api<Bindings>(context, origin, path)).bindings.length)
     .toBe(3);
   await page.reload();
-  editor = await openFold(page, title);
+  editor = await openTargetEditor(page, title, charity);
   await expect(targetRows(editor)).toHaveCount(1);
   await expect(targetRows(editor).first()).toContainText(names[1]!);
-  await editor.locator(':scope > summary').click();
-  await openFold(page, title);
+  if (charity) await editor.getByRole('button', { name: c.returnToBindings, exact: true }).click();
+  else await editor.locator(':scope > summary').click();
+  editor = await openTargetEditor(page, title, charity);
   await expect(targetRows(editor).first()).toContainText(names[1]!);
   const final = await api<Bindings>(context, origin, path);
   expect(
@@ -1198,14 +1328,7 @@ test('self and charity target groups save repeatedly and preserve drafts across 
       true,
       info,
     );
-    const liveDonation = await userAPI<Donation>(owner, '/api/donations/' + donation.id);
-    const ended = await userAPI<Donation>(
-      owner,
-      '/api/donations/' + donation.id + '/withdraw',
-      'POST',
-      { expected_revision: liveDonation.revision },
-      200,
-    );
+    const ended = await endDonation(owner, donation.id);
     expect(ended.status).toBe('deleted');
   } finally {
     await owner.close();
@@ -1336,7 +1459,7 @@ test('connection lists return to the requested page and mainstream mappings use 
     await form.getByLabel(channels.form.name, { exact: true }).fill(name);
     await form.getByRole('button', { name: c.addEntry, exact: true }).click();
     await form.getByRole('button', { name: c.addEntry, exact: true }).click();
-    for (const [index, service] of ['chat_completions', 'responses'].entries()) {
+    for (const index of [0, 1]) {
       const group = form.getByRole('group', {
         name: c.presetEntry.replace('{{number}}', String(index + 1)),
         exact: true,
@@ -1348,14 +1471,9 @@ test('connection lists return to the requested page and mainstream mappings use 
         channels.connector.openaiCompatible,
       );
       await group.getByLabel(c.entryURL, { exact: true }).fill(base);
-      const options = group.getByRole('group', {
-        name: common.common.nativeServices.title,
-        exact: true,
-      });
-      for (const checkbox of await options.getByRole('checkbox').all()) await checkbox.uncheck();
-      await options
-        .getByLabel(native[service as 'chat_completions' | 'responses'], { exact: true })
-        .check();
+      await expect(
+        group.getByRole('group', { name: common.common.nativeServices.title, exact: true }),
+      ).toHaveCount(0);
     }
     const mappings = await openFold(form, c.modelMappings);
     await expect(mappings.getByRole('button', { name: c.addMapping, exact: true })).toBeDisabled();
@@ -1374,7 +1492,7 @@ test('connection lists return to the requested page and mainstream mappings use 
     expect(payload.entries).toHaveLength(2);
     expect(
       (payload.entries as { native_services: NativeService[] }[]).map((row) => row.native_services),
-    ).toEqual([['chat_completions'], ['responses']]);
+    ).toEqual([await protocolServices(owner), await protocolServices(owner)]);
     expect(payload.model_mappings).toEqual([]);
     const channel = (await createdResponse.json()) as Identity & {
       entries: { id: string; name: string; native_services: NativeService[] }[];
@@ -1393,13 +1511,21 @@ test('connection lists return to the requested page and mainstream mappings use 
       .fill('synthetic-' + randomUUID().slice(0, 8));
     await mappingEditor.getByLabel(channel.entries[0]!.name, { exact: true }).check();
     await mappingEditor.getByLabel(c.upstreamModel, { exact: true }).first().fill('mapped-chat');
-    await mappingEditor.getByLabel(native.chat_completions, { exact: true }).check();
+    const firstSelection = mappingEditor
+      .getByRole('group', { name: common.common.nativeServices.title, exact: true })
+      .first();
+    for (const option of await firstSelection.getByRole('checkbox').all()) await option.uncheck();
+    await firstSelection.getByLabel(native.chat_completions, { exact: true }).check();
     await mappingEditor.getByLabel(channel.entries[1]!.name, { exact: true }).check();
     await mappingEditor
       .getByLabel(c.upstreamModel, { exact: true })
       .nth(1)
       .fill('mapped-responses');
-    await mappingEditor.getByLabel(native.responses, { exact: true }).check();
+    const secondSelection = mappingEditor
+      .getByRole('group', { name: common.common.nativeServices.title, exact: true })
+      .nth(1);
+    for (const option of await secondSelection.getByRole('checkbox').all()) await option.uncheck();
+    await secondSelection.getByLabel(native.responses, { exact: true }).check();
     const edited = responseFor(manager, 'PATCH', '/admin/api/mainstream-channels/' + channel.id);
     await form.getByRole('button', { name: channels.actions.save, exact: true }).click();
     const savedResponse = await edited;
@@ -1441,8 +1567,26 @@ test('connection lists return to the requested page and mainstream mappings use 
       .filter({ has: manager.getByLabel(channels.form.name, { exact: true }) });
     await expect(form.getByLabel(channels.form.name, { exact: true })).toHaveValue(name);
     const reread = await openFold(form, c.modelMappings);
-    await expect(reread.getByLabel(native.chat_completions, { exact: true })).toBeChecked();
-    await expect(reread.getByLabel(native.responses, { exact: true })).toBeChecked();
+    const savedMapping = reread.getByRole('group', {
+      name: c.modelMapping.replace('{{number}}', '1'),
+      exact: true,
+    });
+    const mappedEntry = (name: string) =>
+      savedMapping
+        .locator(':scope > div.nb-stack')
+        .filter({ has: manager.getByLabel(name, { exact: true }) });
+    const savedChat = mappedEntry(channel.entries[0]!.name);
+    const savedResponses = mappedEntry(channel.entries[1]!.name);
+    await expect(savedChat.getByLabel(c.upstreamModel, { exact: true })).toHaveValue('mapped-chat');
+    await expect(savedChat.getByLabel(native.chat_completions, { exact: true })).toBeChecked();
+    await expect(savedChat.getByLabel(native.responses, { exact: true })).not.toBeChecked();
+    await expect(savedResponses.getByLabel(c.upstreamModel, { exact: true })).toHaveValue(
+      'mapped-responses',
+    );
+    await expect(
+      savedResponses.getByLabel(native.chat_completions, { exact: true }),
+    ).not.toBeChecked();
+    await expect(savedResponses.getByLabel(native.responses, { exact: true })).toBeChecked();
     await screenshot(
       manager,
       info,
@@ -1509,37 +1653,38 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
         donation.id +
         '&uses_page_size=10',
     );
-    await page.getByRole('button', { name: c.rejectAllUses, exact: true }).first().click();
-    const dialog = page.getByRole('alertdialog', { name: c.rejectAllUses, exact: true });
-    await expect(
-      dialog.getByText('24 pending uses: 24 will be processed; 0 cannot be processed.'),
-    ).toBeVisible();
-    await dialog.getByLabel(c.reviewReason, { exact: true }).fill('Synthetic complete rejection');
+    await page.getByLabel(c.reviewReason, { exact: true }).fill('Synthetic complete rejection');
     for (const [width, theme] of [
       [1440, 'light'],
       [1440, 'dark'],
       [390, 'light'],
       [390, 'dark'],
     ] as const) {
-      await screenshot(page, info, 'bulk-use-review', width, theme, dialog, {
-        pending: 24,
-        visiblePageSize: 10,
-        scope: 'entire donation',
-      });
+      await screenshot(
+        page,
+        info,
+        'bulk-use-review',
+        width,
+        theme,
+        page.getByLabel(c.reviewReason, { exact: true }),
+        {
+          pending: 24,
+          visiblePageSize: 10,
+          scope: 'entire donation',
+        },
+      );
     }
     const reviewed = responseFor(
       page,
       'POST',
-      '/admin/api/donations/' + donation.id + '/uses/review',
+      '/admin/api/donations/' + donation.id + '/pending-review',
     );
-    await dialog.getByRole('button', { name: c.rejectAllUses, exact: true }).click();
+    await page.getByRole('button', { name: c.rejectAllUses, exact: true }).click();
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
     const receipt = await reviewed;
     expect(receipt.status()).toBe(200);
-    expect((receipt.request().postDataJSON() as { items: unknown[] }).items).toHaveLength(24);
-    await expect(
-      dialog.getByText('Processed 24 of 24 uses: 24 succeeded, 0 failed.'),
-    ).toBeVisible();
-    await dialog.getByRole('button', { name: common.common.close, exact: true }).click();
+    expect((receipt.request().postDataJSON() as { uses: unknown[] }).uses).toHaveLength(24);
+    await expect(page.getByText(c.reviewSaved, { exact: true }).first()).toBeVisible();
     const rejected = await adminAPI<
       Numbered<{ id: string; use_summary: { review_status: string } }>
     >(admin, '/admin/api/donations?page=1&page_size=100&review_status=rejected');
@@ -1565,16 +1710,11 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
       fixture().admin_url + '/charity?charity_section=donations&donation_id=' + approved.id,
     );
     await page.getByRole('button', { name: c.approveAllUses, exact: true }).first().click();
-    const approval = page.getByRole('alertdialog', { name: c.approveAllUses, exact: true });
-    await expect(
-      approval.getByText('2 pending uses: 2 will be processed; 0 cannot be processed.'),
-    ).toBeVisible();
-    await approval.getByRole('button', { name: c.approveAllUses, exact: true }).click();
-    await expect(approval.getByText('Processed 2 of 2 uses: 2 succeeded, 0 failed.')).toBeVisible();
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
+    await expect(page.getByText(c.reviewSaved, { exact: true }).first()).toBeVisible();
     const rows = await uses(owner, approved.id);
     expect(rows).toHaveLength(2);
     expect(rows.every((row) => row.approved?.status === 'approved' && !row.pending)).toBe(true);
-    await approval.getByRole('button', { name: common.common.close, exact: true }).click();
     await page
       .getByLabel(common.common.operations.charity.reason, { exact: true })
       .fill('Synthetic review of the approved services');
@@ -1604,14 +1744,7 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
   } finally {
     try {
       for (const id of createdDonationIDs) {
-        const live = await userAPI<Donation>(owner, '/api/donations/' + id);
-        await userAPI<Donation>(
-          owner,
-          '/api/donations/' + id + '/withdraw',
-          'POST',
-          { expected_revision: live.revision },
-          200,
-        );
+        await endDonation(owner, id);
       }
     } finally {
       await Promise.all([owner.close(), admin.close()]);
@@ -1699,27 +1832,21 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
       .filter({ has: page.getByRole('heading', { name: c.entries, exact: true }) })
       .getByRole('button', { name: c.addEntry, exact: true })
       .click();
-    await page.getByText(c.mainstream, { exact: true }).click();
-    await expect(page.getByRole('radio', { name: c.mainstream, exact: true })).toBeChecked();
-    await page.getByRole('combobox', { name: c.mainstream, exact: true }).selectOption(channel.id);
-    for (const item of channel.entries)
-      await page.getByRole('checkbox', { name: item.name, exact: true }).check();
-    await page.getByRole('button', { name: c.saveEntries, exact: true }).click();
-    await expect(page.getByText(c.entrySaved, { exact: false })).toHaveCount(3);
-    const entries = (
-      await userAPI<Numbered<Entry & { note: string }>>(
-        owner,
-        '/api/connections/' + group.id + '/entries?page=1&page_size=20',
-      )
-    ).data;
-    const granted: Key[] = [];
+    const form = page.getByRole('region', { name: c.addEntry, exact: true });
+    const mainstreamMode = form.getByRole('radio', { name: c.mainstream, exact: true });
+    await form.locator('.nb-seg').getByText(c.mainstream, { exact: true }).click();
+    await expect(mainstreamMode).toBeChecked();
+    await form.getByRole('combobox', { name: c.mainstream, exact: true }).selectOption(channel.id);
+    const entryChoices = await openFold(form, c.entries);
     for (const [index, item] of channel.entries.entries()) {
-      const form = page
-        .locator('section')
-        .filter({ has: page.getByRole('heading', { name: item.name, exact: true }) })
-        .last();
-      await form.getByRole('button', { name: c.select, exact: true }).click();
-      const defaultCatalog = form.getByLabel(c.useSuggestedCatalog, { exact: true });
+      const selectedEntry = entryChoices.getByRole('checkbox', { name: item.name, exact: true });
+      await expect(selectedEntry).toBeChecked();
+      const option = selectedEntry.locator(
+        'xpath=ancestor::div[contains(@class, "nb-stack--sm")][1]',
+      );
+      await expect(option.getByLabel(native.chat_completions, { exact: true })).toHaveCount(0);
+      await expect(option.getByLabel(native.responses, { exact: true })).toHaveCount(0);
+      const defaultCatalog = option.getByLabel(c.useSuggestedCatalog, { exact: true });
       await expect(defaultCatalog).toBeChecked();
       if (index === 2) await defaultCatalog.uncheck();
       if (index === 0) {
@@ -1735,22 +1862,62 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
               { credential_version: saved.credential_version, default_selected: true },
             );
       }
+    }
+    await expect(
+      form.getByRole('radio', { name: c.existingCredential, exact: true }),
+    ).toBeChecked();
+    await form
+      .getByRole('table', { name: c.chooseCredential, exact: true })
+      .getByRole('row')
+      .filter({ hasText: tag })
+      .getByRole('button', { name: c.select, exact: true })
+      .click();
+    await form.getByLabel(c.ownership, { exact: true }).check();
+    const grantResponses: { path: string; status: number }[] = [];
+    page.on('response', (response) => {
+      const path = new URL(response.url()).pathname;
+      if (response.request().method() === 'POST' && /^\/api\/endpoints\/[^/]+\/keys$/.test(path))
+        grantResponses.push({ path, status: response.status() });
+    });
+    await form
+      .getByRole('button', { name: userEn.user.workflows.continueService, exact: true })
+      .click();
+    await expect(form.getByText(userEn.user.workflows.serviceReady, { exact: true })).toBeVisible();
+    await expect(
+      form.getByRole('button', { name: userEn.user.workflows.useModels, exact: true }),
+    ).toBeVisible();
+    await expect(
+      form.getByRole('link', { name: userEn.user.workflows.donateService, exact: true }),
+    ).toBeVisible();
+    const entries = (
+      await userAPI<Numbered<Entry & { note: string }>>(
+        owner,
+        '/api/connections/' + group.id + '/entries?page=1&page_size=20',
+      )
+    ).data;
+    expect(entries).toHaveLength(3);
+    expect(grantResponses.map((response) => response.status)).toEqual([201, 201, 201]);
+    expect(grantResponses.map((response) => response.path).sort()).toEqual(
+      entries.map((entry) => '/api/endpoints/' + entry.id + '/keys').sort(),
+    );
+    const granted: Key[] = [];
+    for (const [index, item] of channel.entries.entries()) {
       const target = entries.find((row) => row.note === item.name)!;
-      const written = responseFor(page, 'POST', '/api/endpoints/' + target.id + '/keys');
-      await form.getByRole('button', { name: c.authorizeEntry, exact: true }).click();
-      const response = await written;
-      expect(response.status()).toBe(201);
-      const grant = (await response.json()) as Key;
+      const keys = await userAPI<Numbered<Key>>(
+        owner,
+        '/api/endpoints/' + target.id + '/keys?page=1&page_size=20',
+      );
+      expect(keys.data).toHaveLength(1);
+      const grant = keys.data[0]!;
       expect(grant.credential_id).toBe(saved.id);
       expect(grant.credential_version).toBe(saved.credential_version);
-      expect(grant.native_services).toEqual(['chat_completions', 'responses']);
+      expect(grant.native_services).toEqual(await protocolServices(owner));
       if (index === 0) expect(grant.discovery_source_id).not.toBeNull();
       else
         expect(grant.discovery_source_id).toBe(
           index === 1 ? granted[0]!.discovery_source_id : null,
         );
       granted.push(grant);
-      await expect(form.getByText(c.grantSaved, { exact: true })).toBeVisible();
     }
     const sources = (
       await userAPI<
@@ -1784,8 +1951,8 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
       name: userEn.user.charity.resourcePicker.selectedTitle,
       exact: true,
     });
-    await expect(selected.getByLabel(native.chat_completions, { exact: true })).toBeChecked();
-    await expect(selected.getByLabel(native.responses, { exact: true })).toBeChecked();
+    await expect(selected.getByLabel(native.chat_completions, { exact: true })).toHaveCount(0);
+    await expect(selected.getByLabel(native.responses, { exact: true })).toHaveCount(0);
     for (const width of [1440, 390])
       for (const theme of ['light', 'dark'] as const)
         await screenshot(draft, info, 'suggested-catalog-donation-draft', width, theme, selected, {
@@ -2038,10 +2205,16 @@ test('model imports reuse manual support after reopening and resume after a mode
         .click();
       const row = await openFold(page.locator('.connection-model-batch'), upstreamName);
       await row.getByRole('checkbox', { name: tag + ' · ' + upstreamName, exact: true }).check();
-      await row.getByRole('checkbox', { name: native.chat_completions, exact: true }).check();
+      await row
+        .getByRole('group', { name: common.common.nativeServices.title, exact: true })
+        .getByRole('checkbox', { name: native.chat_completions, exact: true })
+        .check();
       await row.getByLabel(c.provider, { exact: true }).fill(provider);
       await row.getByLabel(c.model, { exact: true }).fill(modelName);
-      await row.getByRole('checkbox', { name: native.chat_responses, exact: true }).check();
+      await row
+        .getByRole('group', { name: common.common.modelTypes.title, exact: true })
+        .getByRole('checkbox', { name: native.chat_completions, exact: true })
+        .check();
       return row;
     };
     const save = async (row: Locator, upstreamName: string) => {

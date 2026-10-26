@@ -2,14 +2,17 @@
 
 Authorized managers can see existing connections while choosing donated keys.
 From a key's management page, collect several exact upstream-model and charity-model
-pairs and submit them together. Selections remain available while changing target
-models or pages. A connection already present on the selected charity model is
+pairs, choose the services for each target and submit them together. Selections
+remain available while changing target models or pages. A connection already present on the selected charity model is
 marked and cannot be selected again.
 
-Administrators and level-6 stewards also have a separate **Channel presets** view.
+Administrators and stewards with `charity.presets` also have a separate **Channel presets** view.
 Choose a mainstream channel and save up to 16 exact upstream-model-to-charity-model
 pairs. From an approved donation for that channel, apply the preset to all its keys
-in one operation. A missing upstream model skips only that pair for that key.
+in one operation. Custom-endpoint donations can choose another channel's preset
+as a model-mapping template. Matching addresses and protocols appear first;
+other templates remain available through search and pagination. A missing
+upstream model skips only that pair for that key.
 Existing bindings keep their order; applying or editing a preset never enables a
 key, approves a donation, refreshes discovery or changes saved model pricing.
 
@@ -18,20 +21,57 @@ key, approves a donation, refreshes discovery or changes saved model pricing.
 Use the administrator prefix `/admin/api` or steward prefix `/api/steward`.
 These are authenticated browser-session routes, with the existing CSRF,
 `Idempotency-Key`, current-role and revision requirements. They are not CallerKey
-automation routes. Level-5 stewards retain their existing per-model scope for
-manual bindings; preset reads and writes require an administrator or level 6.
+automation routes. Stewards require `charity.manage` for ordinary binding options
+and key-to-model batch binding. Preset reads/edits require `charity.presets`;
+listing presets for a donation or applying one requires both grants. Current model/source scope is checked for every
+target and key. See [steward permissions](steward-permissions.md).
 
 IDs, revisions and counts below are canonical decimal strings, except opaque
 channel IDs. Pagination uses the existing numbered-page envelope.
 
+Binding reads include a current `availability` snapshot on each target, with
+`state` and `service_statuses`. The latter contains only selected upstream
+services relevant to the platform model's interfaces. Availability uses the
+same resource checks as the public catalog, scoped to the exact target; a healthy
+sibling target cannot mask a paused target. `capabilities.can_bind` continues to
+describe configuration compatibility, so temporary health failures do not prevent
+editing a connection. Key-to-model binding pages expose the same information in
+`targets:[{target_id,upstream_model_id,availability}]`. Write receipts omit the
+live snapshot; refresh the read endpoint after a mutation.
+
 | Method and suffix | Request or response |
 | --- | --- |
 | `GET /donations/{id}/keys/{keyId}/binding-options` | `q,page,page_size`; `{data:[{charity_model_id,full_name,enabled,binding_revision}],pagination,next_cursor:null}` |
-| `POST /donations/{id}/keys/{keyId}/bindings/batch` | `{expected_donation_revision,targets:[{charity_model_id,expected_binding_revision,upstream_model_id}]}`; at most 256 distinct pairs within a 256 KiB request |
-| `GET /charity-binding-presets` | `q,page,page_size,state=active\|retired\|all`; channel page with `channel_id,name,connector_type,base_url,enabled,state,channel_revision,preset_revision,mapping_count` |
+| `POST /donations/{id}/keys/{keyId}/bindings/batch` | `{expected_donation_revision,targets:[{charity_model_id,expected_binding_revision,upstream_model_id,native_services?}]}`; at most 256 distinct pairs within a 256 KiB request |
+| `GET /charity-binding-presets` | `q,page,page_size,state=active\|retired\|all`, optional `donation_id`; channel page with `channel_id,name,connector_type,base_url,enabled,state,channel_revision,preset_revision,mapping_count`. Donation candidates also include `recommended`. |
 | `GET /charity-binding-presets/{channelId}` | `{channel_id,channel_revision,preset_revision,mappings:[{upstream_model_id,charity_model_id,full_name,binding_revision}]}` |
 | `PUT /charity-binding-presets/{channelId}` | `{expected_channel_revision,expected_preset_revision,mappings:[{upstream_model_id,charity_model_id}]}`; at most 16 distinct pairs |
 | `POST /donations/{id}/bindings/apply-preset` | `{channel_id,expected_channel_revision,expected_preset_revision,expected_donation_revision,models:[{charity_model_id,expected_binding_revision}]}` |
+
+Each key-to-model batch target may include `native_services`. Omission or
+`null` preserves the existing connector default; an explicit empty list or an
+unknown service rejects the request. Explicit services must be an approved-use
+subset compatible with the target model and are saved exactly. Changing that
+subset with the same idempotency key returns 409. This optional field belongs to
+the browser key-to-model batch, not the separate automation model-bindings API.
+
+For example, a target can retain only an approved text service:
+
+```json
+{
+  "expected_donation_revision": "3",
+  "targets": [{
+    "charity_model_id": "7",
+    "expected_binding_revision": "2",
+    "upstream_model_id": "upstream-model",
+    "native_services": ["chat_completions"]
+  }]
+}
+```
+
+After approving a donation, reviewers with current maintenance permission can
+continue to charity-model configuration with the donation selected. They can
+adjust bindings and their supported services before saving.
 
 An unconfigured preset has revision `"0"`; its first save produces `"1"`.
 Saving `mappings:[]` clears it and advances the revision. Preset detail includes
@@ -39,9 +79,20 @@ current target names and binding revisions; both are null when a target no longe
 exists. Deleted targets remain identifiable in the preset so they can be repaired.
 Preset changes affect future applications only.
 
+With `donation_id`, the list contains authorized, active, enabled channels with
+nonempty presets. Custom sources can select any of these templates. Candidates
+whose declared entries match a current donated key's canonical address and protocol
+have `recommended:true` and sort first, then by channel name and ID. The name
+filter `q` and page controls apply to this authorized selection. Without
+`donation_id`, the existing channel-management list remains unchanged.
+
 Apply requires a live approved donation, an active enabled channel and a nonempty
-preset. The server verifies the donation's channel identity and each key's source
-snapshot. The `models` revision set must exactly cover the preset's existing
+preset. Custom keys need not share the template's address or protocol; their
+actual model catalog, approved services and target compatibility are still checked.
+Mainstream keys retain their channel identity and source-snapshot checks, including
+in donations containing both source kinds. Using a template never changes the
+donation's source, donor authorization or steward eligibility. The `models`
+revision set must exactly cover the preset's existing
 distinct target models. It is not a way to select only some preset entries.
 A target deleted after preview may still carry its previous revision; that
 mapping is skipped as `invalid_resource`.
@@ -101,6 +152,6 @@ from personal account exports. They contain no donor or operator identity.
 Mutations use the existing role-scoped control receipts and their retention
 boundary. Schema 33 extends the presets with entries, independent discovery
 suggestions and model-to-entry mappings. Shared presets are excluded from account
-export 29. Use the matching [offline converter](database-upgrades.md) for an
+export 30. Use the matching [offline converter](database-upgrades.md) for an
 existing published database. See [service connections](service-connections.md)
 for per-service approvals and ordered alternative binding targets.

@@ -1,8 +1,9 @@
 # Service connections
 
 A connection groups upstream entries, saved credentials and model directories.
-Each entry names a complete base URL, protocol and explicitly selected native
-services. Grouping entries does not authorize a credential at another destination.
+Each entry names a complete base URL and protocol. New or edited submissions
+explicitly authorize that protocol's complete native-service set. Grouping entries
+does not authorize a credential at another destination.
 The same credential can be attached to several entries without re-entering its
 secret. Users must select each destination explicitly.
 
@@ -11,28 +12,52 @@ name and note of the connection and the addresses and notes of all its entries.
 Untouched names generated during an upgrade use the original entry's note or
 hostname for display. Custom names and stored metadata remain unchanged.
 
+## Set up and continue
+
+The new-service form collects custom or mainstream entries and their protocols,
+credential selection and ownership confirmation, and an applicable model directory.
+It submits the full service set for each protocol; finer service choices are made
+when configuring model bindings.
+Choose Save once to run the required steps. These remain separate authorized API
+operations: if a later step fails, already-created resources stay available.
+Resolve an unknown response with the retained request before resuming the next
+step; do not create a second service to retry.
+
+After saving, continue directly to personal model setup, donation or connection
+management. A preset can supply model mappings; otherwise refresh the configured
+directory or enter exact model IDs manually. Donation starts with the selected
+entry, and the donor chooses the keys and authorized lifetime to share. Existing
+entry IDs and credentials remain editable through the same connection workspace.
+
 ## Configure entries and models
 
-An OpenAI-compatible entry can select Chat Completions, Responses, embeddings,
-images, audio and other supported native services independently. Rerank also
-requires its actual format: generic, Cohere, Jina, Voyage or SiliconFlow. Sharing
-a `/rerank` path does not make these payload formats interchangeable. Gateway
+An OpenAI-compatible entry's protocol set includes Chat Completions, Responses,
+embeddings, images, audio and the other supported native services. Select the
+services used by each upstream model in its binding. Rerank keeps an advanced
+format setting: generic, Cohere, Jina, Voyage or SiliconFlow; choose the provider's
+actual format. The form starts with generic when no other format is selected.
+Sharing a `/rerank` path does not make these payload formats interchangeable. Gateway
 v3 and v4 each offer text, image generation, embeddings and rerank. Select the
 upstream's actual version; there is no automatic probing or version fallback.
 
 System One is a separate **Typesafe System One** protocol in **Add entry**.
-Its service is `/v1/systemone`; the **Decisions** choice under OpenAI-compatible
-entries represents `/v1/decisions`. These services are not converted into each other.
+Its service is `/v1/systemone`; the **Decisions** native service in the
+OpenAI-compatible protocol uses `/v1/decisions`. Choose the applicable service
+when configuring a model binding. These services are not converted into each other.
 
-For an upstream serving both Chat and Responses at one base URL, select both
-services on one entry. A model may use a smaller subset. For a provider whose
-models need different protocols, create the required entries in one connection,
+For an upstream serving both Chat and Responses at one base URL, one
+OpenAI-compatible entry can serve both. Bindings select Chat Completions and
+Responses independently, including models that support only one of them. For a
+provider whose models need different protocols, create the required entries in one connection,
 attach the same credential explicitly and select the applicable entries on each
 model. Model identifiers may differ between entries and must be supplied for
 each target.
 
-A logical binding contains ordered targets. For each request, the platform
-prefers a native service that can represent the request, then considers the
+A logical binding contains ordered targets. New bindings start with the currently
+authorized native services selected; editing a binding preserves its saved subset.
+Keep at least one service that can serve the target model through the existing
+routing matrix. Extra authorized services may remain selected. For each request,
+the platform prefers a native service that can represent the request, then considers the
 existing bounded conversions. It selects one target in that binding before
 applying the model's routing strategy. More targets do not add retry slots or
 increase a binding's weight. Existing protocol, body and transport checks still
@@ -44,7 +69,8 @@ base URL, list format and selected credential version. This allows several
 protocol entries to share one model-list endpoint. A directory refresh does not
 send a paid inference request. Recognized Gateway model types and Gemini methods
 provide service suggestions; an ordinary OpenAI model ID alone does not prove
-service support. Unknown entries require an explicit selection when binding.
+service support. Check the upstream model's actual support when choosing a binding
+subset; suggestions do not expand its authorization or conversion capabilities.
 Saved models and bindings survive a failed refresh or credential rotation.
 
 Mainstream presets may suggest entries, a directory and per-model mappings.
@@ -69,10 +95,9 @@ While creating a custom entry, entering an address can show every matching
 available mainstream entry, including its protocol, native services, discovery
 suggestion and model mappings. Matching uses the complete normalized URL,
 including scheme, effective port and path, without contacting the provider.
-Choose **Use this preset** to select that entry alone. Compatible service choices
-are retained; if none match, choose the services to use. Switching back to
-**Custom** preserves the address, protocol, note and service choices. Saving
-remains a separate action. Empty or unavailable suggestions do not block custom
+Choose **Use this preset** to select that entry alone. Saving submits the selected
+protocol's full service set. Switching back to **Custom** preserves the address,
+protocol and note. Saving remains a separate action. Empty or unavailable suggestions do not block custom
 creation, and adopting a preset does not attach credentials or approve donations.
 
 ## Credentials and donations
@@ -83,22 +108,29 @@ previous version while a replacement awaits review. The owner can pause an old
 use or version immediately. A replacement is never approved merely because the
 old secret or the provider was previously approved.
 
-A donation shares explicitly selected services and permits administrators and
-authorized stewards to fetch their model directories for review and maintenance.
-There is no separate directory-sharing consent. Reviewers approve or reject each
-use. A use may have both an approved version and a pending replacement;
-partial rejection does not withdraw the still-approved version. The parent
-status alone therefore does not describe every service's availability.
+A new donation or donor-edited submission authorizes the selected protocol's
+complete service set. Donors choose keys and lifetime, while administrators or
+authorized stewards choose the native services used by each charity binding.
+Existing donations retain their old authorization until the donor submits an
+edit; upgrades and page loads never widen old grants or approved snapshots.
 
-Donors submit the keys and services they want to share. Administrators or authorized
-stewards then name and bind the charity models. If model discovery is unavailable,
-the donor can include model IDs in the public donation description, without secrets.
-Personal model entries do not automatically become charity models.
+Managers may fetch donated model directories for review and maintenance, without
+a separate directory-sharing consent. The approval page submits one approve or
+return decision, with an optional note, for the entire current pending submission.
+The donation revision and complete pending set are checked in one transaction:
+all decisions, audit and receipt commit together or nothing changes. Recover an
+unknown result with the original request; after a definite version conflict,
+reread the complete set before deciding again.
 
-New mainstream donation drafts select all of the key's available services. The
-donor can deselect individual services before submitting. Removing and reselecting
-a key in the same draft preserves those choices. Existing donations do not gain
-additional inference services automatically.
+A service may still have an approved version and a pending replacement.
+Returning the replacement preserves the approved version. The parent status
+alone therefore does not describe every service's availability. Ordinary approval
+does not create charity bindings; model configuration selects their targets and
+service subsets afterward.
+
+If model discovery is unavailable, the donor can include model IDs in the public
+donation description, without secrets. Personal model entries do not
+automatically become charity models.
 
 Managed model refreshes work for pending and approved donations, including
 existing donations without a separately shared directory. They use the pending
@@ -110,18 +142,26 @@ approved credential with a pending one. Expiry, withdrawal, disabled credentials
 and other applicable availability checks still apply. A `423 resource_locked`
 response alone does not mean the upstream credential is invalid.
 
-Administrators and level-6 stewards can force-reject a donation that has approved
-uses, including when its parent retains the pending status. The action requires
+Administrators and stewards with `donations.force_reject` can force-reject a donation that has approved
+uses within their current donation scope, including when its parent retains the pending status. The action requires
 a reason and complete review material, stops new charity dispatches and preserves
 normal settlement for requests already sent. Legacy whole-donation approval or
-rejection cannot override per-service approvals; review pending uses individually
-or use the authorized force-rejection action for the whole donation.
+rejection cannot override existing per-service approvals. Review the full pending
+submission through `pending-review`, or use the authorized force-rejection action
+for the whole donation.
 
-Owners can add another service to the same donated key or explicitly resubmit
-a rejected or withdrawn use. These actions create pending review material and
-preserve the original key, budget, consumed amounts and reservations. They do
-not replace a currently pending or approved use. Expanding a personal entry's
-service selection does not automatically donate the new service.
+Review results retain the service type and masked key label for each decision.
+After a successful approval, reviewers with current maintenance access can
+continue to charity-model configuration with that donation, key and service
+selected. They can adjust the selection before saving; reviewers without that
+access receive an explanation. A list refresh failure retries the read, not
+the already-completed approval.
+
+A donor edit or resubmission creates the required full-protocol pending material
+while preserving the key's existing budget, consumed amounts and reservations.
+Previously approved versions remain effective until explicitly replaced or
+withdrawn. Updating a personal entry alone does not approve additional charity
+authorization.
 
 Failure streaks, backoff and Retry-After for new calls are independent for each
 use, entry, native service and exact credential version. All uses of a donated
@@ -159,6 +199,7 @@ matches connection names/notes and any owned entry's URL/note before pagination.
 | Directories | `/api/connections/{id}/discovery-sources`, `/api/discovery-sources/{id}`, `/refresh` and `/models`; independent source settings and discovery evidence. |
 | Personal bindings | Existing binding routes support `targets`. `PUT /api/models/{id}/bindings/{bId}/targets` replaces their ordered selection while retaining stable IDs for unchanged key/model pairs. |
 | Donation uses | `/api/donations/{id}/uses`; owner list and explicit submission. Each use supports owner enablement, pending cancellation and permitted failure reset. Administrator/steward routes provide scoped material and per-use review. |
+| Whole-submission review | Administrator/steward `POST {prefix}/donations/{id}/pending-review` checks the complete versioned pending set and commits one atomic decision. Legacy per-use routes retain their own contracts. |
 | Charity bindings | Existing administrator/steward model binding routes add ordered targets backed by the selected services' approved uses. |
 
 Batch binding and target changes offer compact receipts. Read the paginated

@@ -79,6 +79,7 @@ describe('central route and navigation wiring', () => {
       '/users:admin-users',
       '/logs:admin-logs',
       '/endpoints:admin-endpoints',
+      '/ai:admin-agent',
       '/alerts:admin-alerts',
       '/settings:admin-settings',
       '/mainstream-channels:admin-mainstream-channels',

@@ -160,6 +160,76 @@ export function translationCopyReferences(path, source) {
   return references;
 }
 
+// Resolve only the closed permission catalogs used by the permission editor.
+// Every resulting leaf is still checked against both language catalogs.
+export function stewardPermissionCopyReferences(policySource, editorSource) {
+  const tree = ts.createSourceFile(
+    'stewardPermissions.ts',
+    policySource,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const constants = new Map();
+  function collect(node) {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name))
+      constants.set(node.name.text, node.initializer);
+    ts.forEachChild(node, collect);
+  }
+  collect(tree);
+  function literal(name, array = false) {
+    let node = constants.get(name);
+    while (
+      node &&
+      (ts.isAsExpression(node) ||
+        ts.isSatisfiesExpression(node) ||
+        ts.isParenthesizedExpression(node))
+    )
+      node = node.expression;
+    if (array && node && ts.isArrayLiteralExpression(node)) {
+      if (!node.elements.every(ts.isStringLiteral))
+        throw new Error(name + ' must contain literal scope names.');
+      return node.elements.map((element) => element.text);
+    }
+    if (!array && node && ts.isObjectLiteralExpression(node)) {
+      return node.properties.map((property) => {
+        if (
+          !ts.isPropertyAssignment(property) ||
+          !(ts.isStringLiteral(property.name) || ts.isIdentifier(property.name))
+        )
+          throw new Error(name + ' must contain closed literal properties.');
+        return property.name.text;
+      });
+    }
+    throw new Error(name + ' must be a closed literal catalog.');
+  }
+  const editor = stripComments(editorSource);
+  const references = [];
+  if (editor.includes('management.permissions.labels.' + '${copyKey(key)}'))
+    references.push(
+      ...literal('STEWARD_PERMISSION_DEFAULTS').map(
+        (key) => 'management.permissions.labels.' + key.replaceAll('.', '_'),
+      ),
+    );
+  if (editor.includes('management.permissions.limits.' + '${copyKey(key)}'))
+    references.push(
+      ...literal('STEWARD_LIMIT_MAXIMUMS').map(
+        (key) => 'management.permissions.limits.' + key.replaceAll('.', '_'),
+      ),
+    );
+  for (const leaf of ['label', 'description']) {
+    if (
+      editor.includes('management.permissions.scope.' + '${scope}.' + leaf) ||
+      editor.includes('management.permissions.scope.' + '${donationScope}.' + leaf)
+    )
+      references.push(
+        ...literal('DONATION_SCOPES', true).map(
+          (scope) => 'management.permissions.scope.' + scope + '.' + leaf,
+        ),
+      );
+  }
+  return references;
+}
+
 function sameValues(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
@@ -511,6 +581,18 @@ for (const [relativePath, source] of sourceTextByRelativePath) {
     }
   }
 }
+try {
+  for (const key of stewardPermissionCopyReferences(
+    sourceTextByRelativePath.get('src/shared/operations/stewardPermissions.ts') ?? '',
+    sourceTextByRelativePath.get('src/shared/components/StewardPermissionEditor.tsx') ?? '',
+  )) {
+    if (availableKeys.has(key)) markCatalogKey(key);
+    else missingReferences.push('steward permission catalog:' + key);
+  }
+} catch (error) {
+  rememberFailure(failures, error);
+}
+
 if (missingReferences.length > 0) {
   rememberFailure(
     failures,

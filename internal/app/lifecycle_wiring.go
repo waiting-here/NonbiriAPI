@@ -146,7 +146,7 @@ func heldReadAdminID(ctx context.Context) (int64, error) {
 }
 
 func translateDonationHeldReadError(err error) error {
-	if errors.Is(err, authz.ErrMFARequired) {
+	if errors.Is(err, authz.ErrMFARequired) || errors.Is(err, authz.ErrPermissionDenied) {
 		return err
 	}
 	var target error
@@ -170,7 +170,7 @@ func translateDonationHeldReadError(err error) error {
 }
 
 func translateLogHeldReadError(err error) error {
-	if errors.Is(err, authz.ErrMFARequired) {
+	if errors.Is(err, authz.ErrMFARequired) || errors.Is(err, authz.ErrPermissionDenied) {
 		return err
 	}
 	var target error
@@ -481,7 +481,7 @@ func newLifecycleCoordinator(
 			Governance:         activityEngines,
 			Sessions:           lifecycleadapters.NewAuthSessionRetention(authRuntime),
 			RequestLogs:        lifecycleadapters.NewRequestLogRetention(logRepository),
-			Audits:             lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository, charityRoutingService),
+			Audits:             lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository, charityRoutingService, lifecycleadapters.NewStewardPermissionRetention(store.DB())),
 			Observability:      diagnosticRetention{audits.observations},
 			RiskAudit:          riskRetention{repository: audits.risk, clientGuard: forwardRuntime.clientGuard},
 			Issues:             lifecycleadapters.NewIssueRetention(issueService),
@@ -520,18 +520,25 @@ func startLifecycleWorker(parent context.Context, coordinator *lifecycle.Coordin
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(lifecycle.WorkerSweepInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if err := coordinator.RunDue(ctx); err != nil && ctx.Err() == nil && !errors.Is(err, lifecycle.ErrClosed) {
-					slog.Error("account lifecycle maintenance pass failed", "err", err)
-				}
-			}
-		}
+		runLifecycleWorker(ctx, coordinator.RunDue)
 	}()
 	return cancel, done, nil
+}
+
+func runLifecycleWorker(ctx context.Context, runDue func(context.Context) error) {
+	timer := time.NewTimer(lifecycle.WorkerSweepInterval)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+			if err := runDue(ctx); err != nil && ctx.Err() == nil && !errors.Is(err, lifecycle.ErrClosed) {
+				slog.Error("account lifecycle maintenance pass failed", "err", err)
+			}
+			// Checkpoints advance from the actual decision time. Reset after
+			// completion so a delayed pass cannot make the next wake too early.
+			timer.Reset(lifecycle.WorkerSweepInterval)
+		}
+	}
 }

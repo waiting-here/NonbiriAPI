@@ -15,6 +15,9 @@ import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { EmptyState, ErrorState, LoadingState } from './States';
 import { useCharityModelScope } from './charityModelScopeContext';
 import { DonationManualCandidates } from './DonationManualCandidates';
+import { BindingHealth } from './ResourceHealth';
+import { serviceHealthDeadlines } from '@shared/operations/resourceHealth';
+import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
 
 interface Props {
   role: CharityRole;
@@ -284,6 +287,15 @@ function BindingPages({
       ),
     retry: false,
   });
+  useRateLimitRefresh(
+    query.data?.data.flatMap(
+      (binding) =>
+        binding.targets?.flatMap((target) =>
+          serviceHealthDeadlines(target.availability?.service_statuses),
+        ) ?? [],
+    ) ?? [],
+    () => query.refetch({ throwOnError: true }),
+  );
   const lost = isForbidden(query.error) || isUnauthorized(query.error);
   useEffect(() => {
     if (lost) onCapabilityLoss?.();
@@ -296,7 +308,18 @@ function BindingPages({
       <ul>
         {query.data.data.map((binding) => (
           <li key={binding.binding_id} className="ops-break">
-            {binding.upstream_model_id} · {t(bindingStateCopy[binding.state])}
+            {binding.targets?.length ? (
+              binding.targets.map((target) => (
+                <div key={target.target_id}>
+                  <strong>{target.upstream_model_id}</strong>
+                  <BindingHealth value={target.availability} />
+                </div>
+              ))
+            ) : (
+              <>
+                {binding.upstream_model_id} · {t(bindingStateCopy[binding.state])}
+              </>
+            )}
           </li>
         ))}
       </ul>

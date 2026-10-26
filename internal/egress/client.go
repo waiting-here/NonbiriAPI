@@ -370,6 +370,12 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 		return closeBodyOnError(err)
 	}
 
+	if err := checkDispatch(ctx); err != nil {
+		permit.Release()
+		cancel()
+		return closeBodyOnError(err)
+	}
+
 	outbound := req.Clone(ctx)
 	removeWorkerHeaders(outbound.Header)
 	if outbound.Method != http.MethodGet && outbound.Method != http.MethodHead && outbound.Method != http.MethodOptions && outbound.Method != http.MethodTrace {

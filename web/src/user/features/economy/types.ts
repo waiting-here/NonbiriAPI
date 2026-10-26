@@ -143,6 +143,7 @@ export interface EndpointOriginMainstream {
 export type EndpointOrigin = EndpointOriginCustom | EndpointOriginMainstream;
 
 export interface DonationKey {
+  serviceStatuses?: import('@shared/operations/resourceHealth').ServiceStatus[];
   endpointId?: string | null;
   inputTokenReserve?: string | null;
   outputTokenReserve?: string | null;

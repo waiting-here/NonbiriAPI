@@ -59,8 +59,9 @@ type OwnerKeySummary struct {
 type ManagedKeySummary struct {
 	DonationKey
 	// Only owner pages set this shadow field; role projections omit it.
-	EndpointID *string `json:"endpoint_id,omitempty"`
-	CanManage  bool    `json:"can_manage"`
+	EndpointID               *string `json:"endpoint_id,omitempty"`
+	CanManage                bool    `json:"can_manage"`
+	MaintenanceScopeRequired bool    `json:"maintenance_scope_required,omitempty"`
 	RecurringReceipt
 	RecurringSummary
 	AuthorizedExpiresAt    *int64                      `json:"authorized_expires_at"`
@@ -89,5 +90,5 @@ type DonationSource struct {
 type SourceFilter struct {
 	Query, Scope, Handling, Idle string
 	KeyState                     string `json:",omitempty"`
-	traineeModelID               int64
+	maintenanceScope             charityscope.Scope
 }

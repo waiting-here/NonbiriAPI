@@ -1,8 +1,11 @@
 import { ApiError } from '@shared/query/http';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
-import { DonationUsesPanel } from './DonationUsesPanel';
+import { useQuery } from '@tanstack/react-query';
+import { charityKeys } from '@shared/operations/charity';
+import { DonationUseReviewResults, DonationUsesPanel } from './DonationUsesPanel';
+import { NATIVE_SERVICES } from '@shared/nativeServices';
 const mocks = vi.hoisted(() => ({ get: vi.fn(), review: vi.fn(), start: vi.fn(), read: vi.fn() }));
 vi.mock('@shared/operations/donationDiscovery', async (original) => ({
   ...(await original<typeof import('@shared/operations/donationDiscovery')>()),
@@ -12,7 +15,10 @@ vi.mock('@shared/operations/donationDiscovery', async (original) => ({
 vi.mock('@shared/operations/donationUses', async (original) => ({
   ...(await original<typeof import('@shared/operations/donationUses')>()),
   getDonationUses: mocks.get,
-  reviewDonationUses: mocks.review,
+}));
+vi.mock('@shared/operations/charity', async (original) => ({
+  ...(await original<typeof import('@shared/operations/charity')>()),
+  reviewPendingDonation: mocks.review,
 }));
 const version = (number: string, status: 'approved' | 'pending') => ({
   credential_id: '8',
@@ -52,349 +58,287 @@ const row = (id: string, revision: string) => ({
   },
 });
 afterEach(() => vi.clearAllMocks());
-describe('per-use review recovery', () => {
-  it('keeps the failed selection, shows both versions, and requires explicit adoption of a refreshed revision', async () => {
-    let revision = '9';
-    mocks.get.mockImplementation(async () => ({
-      data: [row('6', '9'), row('7', revision)],
-      next_cursor: null,
-      pagination: { page: '1', page_size: 20, total_items: '2', total_pages: '1' },
-    }));
-    mocks.review
-      .mockImplementationOnce(async () => {
-        revision = '10';
-        return [
-          { use_id: '6', ok: true },
-          { use_id: '7', ok: false, error: { code: 'conflict', message: 'Version changed' } },
-        ];
-      })
-      .mockResolvedValue([{ use_id: '7', ok: true }]);
-    const view = await renderWithProviders(
-      <DonationUsesPanel role="steward" accountId="5" donationId="3" />,
-      { station: 'user', role: 'level5', route: '/charity' },
-    );
-    view.queryClient.setQueryData(['user', 'session'], {
-      user: { id: '5', username: 'reviewer', effective_level: 5 },
-    });
-    for (const name of ['Chat completions', 'Responses'])
-      await view.user.click(await screen.findByText(name, { exact: true }));
-    for (const checkbox of screen.getAllByRole('checkbox', { name: 'Select use for review' }))
-      await view.user.click(checkbox);
-    expect(screen.getAllByText('head-1…tail · Version 1')).toHaveLength(2);
-    expect(screen.getAllByText('head-2…tail · Version 2')).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: 'Fetch model list' })).toHaveLength(2);
-    await view.user.click(screen.getByRole('button', { name: 'Approve selected uses' }));
-    await waitFor(() => expect(mocks.review).toHaveBeenCalledTimes(1));
-    await screen.findByText(/Version changed/);
-    const checked = screen.getAllByRole('checkbox', { name: 'Select use for review' });
-    expect(checked[0]).not.toBeChecked();
-    expect(checked[1]).toBeChecked();
-    await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(2));
-    const adopt = screen.getByRole('button', { name: 'Continue with current revision' });
-    await view.user.click(adopt);
-    await view.user.click(screen.getByRole('button', { name: 'Approve selected uses' }));
-    await waitFor(() => expect(mocks.review).toHaveBeenCalledTimes(2));
-    expect(mocks.review.mock.calls[1]?.[2]).toEqual([
-      {
-        use_id: '7',
-        expected_revision: '10',
-        expected_review_revision: 'body-2',
-        decision: 'approve',
-        review_note: '',
-      },
-    ]);
-    expect(mocks.review.mock.calls[1]?.[3]).not.toBe(mocks.review.mock.calls[0]?.[3]);
-  });
+const page = (data: unknown[], size = 100) => ({
+  data,
+  pagination: { page: '1', page_size: size, total_items: String(data.length), total_pages: '1' },
 });
-
-it('reopens a current use confirmation after conflict and keeps uncertain recovery inside the dialog', async () => {
-  let revision = '9';
-  let complete = false;
-  const writes: { body: unknown; key: string | null }[] = [];
-  mocks.get.mockImplementation(async () => ({
-    data: [
-      {
-        ...row('6', revision),
-        endpoint_key_id: null,
-        pending: complete ? null : version('2', 'pending'),
-        latest: complete
-          ? { ...version('2', 'pending'), status: 'withdrawn' }
-          : version('2', 'pending'),
-        capabilities: { ...row('6', revision).capabilities, can_manage: true },
-      },
-    ],
-    next_cursor: null,
-    pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
-  }));
-  vi.stubGlobal(
-    'fetch',
-    vi.fn<typeof fetch>(async (input, init) => {
-      expect(String(input)).toBe('/api/donations/3/uses/6/pending');
-      expect(init?.method).toBe('DELETE');
-      writes.push({
-        body: JSON.parse(String(init?.body)),
-        key: new Headers(init?.headers).get('Idempotency-Key'),
-      });
-      if (writes.length === 1) {
-        revision = '10';
-        return new Response(
-          JSON.stringify({ error: { code: 'conflict', message: 'Version changed' } }),
-          { status: 409, headers: { 'content-type': 'application/json' } },
-        );
-      }
-      if (writes.length < 4) throw new TypeError('Response lost');
-      complete = true;
-      return new Response(null, { status: 204 });
-    }),
-  );
+async function setup(extra?: React.ReactNode) {
   const view = await renderWithProviders(
-    <DonationUsesPanel role="owner" accountId="1" donationId="3" />,
-    { station: 'user', role: 'user' },
-  );
-  view.queryClient.setQueryData(['user', 'session'], {
-    user: { id: '1', username: 'owner', effective_level: 1 },
-  });
-  await view.user.click(await screen.findByText('Chat completions', { exact: true }));
-  await view.user.click(screen.getByRole('button', { name: 'Withdraw pending version' }));
-  let dialog = await screen.findByRole('alertdialog');
-  await view.user.click(within(dialog).getByRole('button', { name: 'Confirm' }));
-  await within(dialog).findByText(/Version changed/);
-  await view.user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-  await view.user.click(screen.getByRole('button', { name: 'Withdraw pending version' }));
-  dialog = await screen.findByRole('alertdialog');
-  expect(within(dialog).getByRole('button', { name: 'Confirm' })).toBeEnabled();
-  await view.user.click(within(dialog).getByRole('button', { name: 'Confirm' }));
-  await view.user.click(await within(dialog).findByRole('button', { name: 'Check saved result' }));
-  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
-  expect(writes).toHaveLength(4);
-  expect(writes[0]?.body).toEqual({ expected_revision: '9' });
-  expect(writes[1]?.body).toEqual({ expected_revision: '10' });
-  expect(writes.slice(1).every((item) => JSON.stringify(item) === JSON.stringify(writes[1]))).toBe(
-    true,
-  );
-  expect(screen.getByText('head-1…tail · Version 1')).toBeVisible();
-});
-
-it('keeps a successful review receipt and retries only reads after a failed refresh', async () => {
-  const page = (data: ReturnType<typeof row>[]) => ({
-    data,
-    next_cursor: null,
-    pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
-  });
-  mocks.get
-    .mockResolvedValueOnce(page([row('6', '9')]))
-    .mockRejectedValueOnce(new Error('Refresh temporarily unavailable'))
-    .mockResolvedValue(page([row('6', '10')]));
-  mocks.review.mockResolvedValue([{ use_id: '6', ok: true }]);
-  const view = await renderWithProviders(
-    <DonationUsesPanel role="steward" accountId="5" donationId="3" />,
-    { station: 'user', role: 'level5', route: '/charity' },
-  );
-  view.queryClient.setQueryData(['user', 'session'], {
-    user: { id: '5', username: 'reviewer', effective_level: 5 },
-  });
-  await view.user.click(await screen.findByText('Chat completions', { exact: true }));
-  await view.user.click(screen.getByRole('checkbox', { name: 'Select use for review' }));
-  await view.user.click(screen.getByRole('button', { name: 'Approve selected uses' }));
-  await screen.findByText('Use 6 saved');
-  const retry = await screen.findByRole('button', { name: 'Check again' });
-  expect(mocks.review).toHaveBeenCalledTimes(1);
-  await view.user.click(retry);
-  await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(3));
-  await waitFor(() =>
-    expect(screen.queryByRole('button', { name: 'Check again' })).not.toBeInTheDocument(),
-  );
-  expect(screen.getByText('Use 6 saved')).toBeVisible();
-  expect(mocks.review).toHaveBeenCalledTimes(1);
-});
-
-it('confirms the complete key scope across pages and reports blocked uses before rejecting the frozen versions', async () => {
-  const pending = Array.from({ length: 102 }, (_, index) => ({
-    ...row(String(index + 1), '9'),
-    capabilities: { ...row('6', '9').capabilities, can_review: index !== 101 },
-  }));
-  mocks.get.mockImplementation(async (_role, _donation, pageNumber, size, state, _signal, key) => {
-    expect(key).toBe('4');
-    return {
-      data:
-        state === 'pending'
-          ? pending.slice((Number(pageNumber) - 1) * 100, Number(pageNumber) * 100)
-          : pending.slice(0, 1),
-      pagination: {
-        page: String(pageNumber),
-        page_size: size,
-        total_items: state === 'pending' ? '102' : '1',
-        total_pages: state === 'pending' ? '2' : '1',
-      },
-    };
-  });
-  mocks.review.mockImplementation(async (_role, _donation, items) =>
-    items.map((item: { use_id: string }) => ({ use_id: item.use_id, ok: true })),
-  );
-  const view = await renderWithProviders(
-    <DonationUsesPanel role="steward" accountId="5" donationId="3" donationKeyId="4" />,
-    { station: 'user', role: 'level5', route: '/charity' },
-  );
-  view.queryClient.setQueryData(['user', 'session'], {
-    user: { id: '5', username: 'reviewer', effective_level: 5 },
-  });
-  await view.user.click(await screen.findByRole('button', { name: 'Reject all pending uses' }));
-  const dialog = screen.getByRole('alertdialog');
-  await within(dialog).findByText(
-    '102 pending uses: 101 will be processed; 1 cannot be processed.',
-  );
-  expect(
-    within(dialog).getByText('All pending uses for key #4 in donation #3, across all pages.'),
-  ).toBeInTheDocument();
-  expect(mocks.review).not.toHaveBeenCalled();
-  pending[0]!.revision = '10';
-  pending.push(row('103', '1'));
-  await view.user.click(within(dialog).getByRole('button', { name: 'Reject all pending uses' }));
-  await waitFor(() => expect(mocks.review).toHaveBeenCalledTimes(2));
-  expect(mocks.review.mock.calls.map((call) => call[2].length)).toEqual([100, 1]);
-  expect(mocks.review.mock.calls[0]![2][0]).toMatchObject({
-    use_id: '1',
-    expected_revision: '9',
-    decision: 'reject',
-    expected_review_revision: 'body-2',
-  });
-  expect(mocks.review.mock.calls[1]![2][0].use_id).toBe('101');
-  await within(dialog).findByText('Processed 101 of 101 uses: 101 succeeded, 0 failed.');
-  expect(
-    within(dialog).getByText('102 pending uses: 101 will be processed; 1 cannot be processed.'),
-  ).toBeInTheDocument();
-});
-
-it('does not dispatch a whole-scope review when its confirmation is canceled', async () => {
-  mocks.get.mockImplementation(async (_role, _donation, _page, size) => ({
-    data: [row('6', '9')],
-    pagination: { page: '1', page_size: size, total_items: '1', total_pages: '1' },
-  }));
-  const view = await renderWithProviders(
-    <DonationUsesPanel role="admin" accountId="1" donationId="3" />,
-    { station: 'admin' },
+    <>
+      {extra}
+      <DonationUsesPanel role="admin" accountId="1" donationId="3" donationRevision="1" />
+    </>,
+    { station: 'admin', role: 'admin' },
   );
   view.queryClient.setQueryData(['admin', 'session'], { admin: { id: '1', username: 'admin' } });
-  await view.user.click(await screen.findByRole('button', { name: 'Approve all pending uses' }));
-  const dialog = screen.getByRole('alertdialog');
-  await within(dialog).findByText('1 pending uses: 1 will be processed; 0 cannot be processed.');
-  await view.user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-  expect(mocks.review).not.toHaveBeenCalled();
-  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
-});
-
-it.each([403, 0])(
-  'only lets a known batch failure finish the operation (status %s)',
-  async (status) => {
-    const rows = Array.from({ length: 101 }, (_, index) => row(String(index + 1), '9'));
-    mocks.get.mockImplementation(async (_role, _donation, number, size, state) => ({
-      data:
-        state === 'pending'
-          ? rows.slice((Number(number) - 1) * 100, Number(number) * 100)
-          : rows.slice(0, 1),
+  return view;
+}
+describe('normal donation review details', () => {
+  it('does not read closed materials and loads every page when they are opened', async () => {
+    const rows = Array.from({ length: 180 }, (_, index) => ({
+      ...row(String(index + 100), '9'),
+      donation_key_id: String(4 + Math.floor(index / 15)),
+      native_service: NATIVE_SERVICES[index % 15],
+    }));
+    mocks.get.mockImplementation(async (_role, _donation, requested, size) => ({
+      data: rows.slice((Number(requested) - 1) * size, Number(requested) * size),
       pagination: {
-        page: String(number),
+        page: requested,
         page_size: size,
-        total_items: state === 'pending' ? '101' : '1',
-        total_pages: state === 'pending' ? '2' : '1',
+        total_items: String(rows.length),
+        total_pages: String(Math.ceil(rows.length / size)),
       },
     }));
-    mocks.review
-      .mockImplementationOnce(async (_role, _donation, items) =>
-        items.map((item: { use_id: string }) => ({ use_id: item.use_id, ok: true })),
-      )
-      .mockRejectedValue(
-        new ApiError(status === 403 ? 'forbidden' : 'result_unknown', 'Review interrupted', status),
-      );
-    const view = await renderWithProviders(
-      <DonationUsesPanel role="admin" accountId="1" donationId="3" />,
-      { station: 'admin' },
+    const view = await setup();
+    expect(mocks.get).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Approve pending content' })).toBeEnabled();
+    await view.user.click(screen.getByText('Review material'));
+    expect(await screen.findAllByText('Pending version')).toHaveLength(12);
+    expect(mocks.get.mock.calls.map((call) => call.slice(0, 5))).toEqual([
+      ['admin', '3', '1', 100, ''],
+      ['admin', '3', '2', 100, ''],
+    ]);
+    await view.user.click(screen.getByText('Review material'));
+    await act(async () =>
+      view.queryClient.invalidateQueries({ queryKey: ['admin', 'operations', 'donation-uses'] }),
     );
-    view.queryClient.setQueryData(['admin', 'session'], { admin: { id: '1', username: 'admin' } });
-    await view.user.click(await screen.findByRole('button', { name: 'Approve all pending uses' }));
-    const dialog = screen.getByRole('alertdialog');
-    await within(dialog).findByText(
-      '101 pending uses: 101 will be processed; 0 cannot be processed.',
+    expect(mocks.get).toHaveBeenCalledTimes(2);
+    expect(mocks.review).not.toHaveBeenCalled();
+  });
+  it('retries an opened material read without submitting a review', async () => {
+    mocks.get
+      .mockRejectedValueOnce(new Error('Material read unavailable'))
+      .mockResolvedValue(page([row('6', '9')]));
+    const view = await setup();
+    expect(mocks.get).not.toHaveBeenCalled();
+    await view.user.click(screen.getByText('Review material'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The service could not complete this request. Try again later.',
     );
-    await view.user.click(within(dialog).getByRole('button', { name: 'Approve all pending uses' }));
-    await within(dialog).findByText('Processed 100 of 101 uses: 100 succeeded, 0 failed.');
-    if (status === 403) {
-      await view.user.click(
-        await within(dialog).findByRole('button', {
-          name: 'Finish this operation and keep processed results',
-        }),
-      );
-      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Approve all pending uses' })).toBeEnabled();
-    } else {
-      await waitFor(() => expect(mocks.review).toHaveBeenCalledTimes(3));
-      expect(
-        within(dialog).queryByRole('button', {
-          name: 'Finish this operation and keep processed results',
-        }),
-      ).not.toBeInTheDocument();
-      expect(within(dialog).getByRole('button', { name: 'Check saved result' })).toBeEnabled();
-      expect(mocks.review.mock.calls[2]![3]).toBe(mocks.review.mock.calls[1]![3]);
-    }
-  },
-);
-
-it.each(['pending', 'approved'] as const)(
-  'fetches an unshared %s donation catalog directly',
-  async (status) => {
-    const use = row('6', '9');
-    const previous = {
-      state: 'unknown',
-      revision: '1',
-      result: null,
-      safe_class: 'none',
-      observed_at: null,
-      count: null,
+    await view.user.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByText('head-2…tail · Version 2');
+    expect(mocks.get).toHaveBeenCalledTimes(2);
+    expect(mocks.review).not.toHaveBeenCalled();
+  });
+  it('keeps the owner key controls loaded while materials are closed', async () => {
+    mocks.get.mockResolvedValue(page([row('6', '9')]));
+    await renderWithProviders(
+      <DonationUsesPanel role="owner" accountId="1" donationId="3" donationKeyId="4" />,
+      { station: 'user', role: 'user' },
+    );
+    await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(1));
+    expect(mocks.get.mock.calls[0]!.slice(0, 5)).toEqual(['owner', '3', '1', 100, '']);
+    expect(mocks.get.mock.calls[0]![6]).toBe('4');
+  });
+  it('groups review receipts by key without exposing individual service decisions', async () => {
+    const configure = vi.fn();
+    const label = {
+      use_id: '6',
+      donation_key_id: '4',
+      native_service: 'chat_completions' as const,
+      display_head: 'head-2',
+      display_tail: 'tail',
+      decision: 'approve' as const,
     };
-    mocks.get.mockResolvedValue({
-      data: [
-        {
-          ...use,
-          approved: status === 'approved' ? { ...use.approved, discovery: previous } : null,
-          pending: status === 'pending' ? { ...use.pending, discovery: previous } : null,
-          capabilities: { ...use.capabilities, can_discover: true },
-        },
-      ],
-      pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
-    });
-    const evidence = {
-      state: 'succeeded',
-      revision: '1',
-      result: 'populated',
-      safe_class: 'none',
-      observed_at: 1,
-      count: '3',
-    };
-    mocks.start.mockResolvedValue(evidence);
-    mocks.read.mockResolvedValue(evidence);
     const view = await renderWithProviders(
-      <DonationUsesPanel role="admin" accountId="1" donationId="3" />,
+      <DonationUseReviewResults
+        results={[
+          { use_id: '6', ok: true },
+          { use_id: '7', ok: true },
+        ]}
+        labels={[label, { ...label, use_id: '7', native_service: 'responses' }]}
+        onConfigure={configure}
+        configurationStatus={() => 'available'}
+      />,
       { station: 'admin', role: 'admin' },
     );
-    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'admin' } });
-    await view.user.click(await screen.findByText('Chat completions', { exact: true }));
-    const button = screen.getByRole('button', { name: 'Fetch model list' });
-    expect(button).toBeEnabled();
-    await view.user.click(button);
-    await waitFor(() =>
-      expect(mocks.start).toHaveBeenCalledWith(
-        'admin',
-        {
-          donation_id: '3',
-          key_id: '4',
-          use_id: '6',
-          expected_revision: '9',
-        },
-        expect.any(String),
+    const buttons = screen.getAllByRole('button', { name: 'Configure charity models' });
+    expect(buttons).toHaveLength(1);
+    expect(screen.queryByText('Chat completions')).not.toBeInTheDocument();
+    await view.user.click(buttons[0]!);
+    expect(configure).toHaveBeenCalledWith(label);
+  });
+  it('shows one copy of each credential material and approves all pending content with its material revision', async () => {
+    let saved = false;
+    mocks.get.mockImplementation(async (_role, _donation, _page, size, state) =>
+      page(
+        state === 'pending' && saved
+          ? []
+          : ['6', '7'].map((id) => ({
+              ...row(id, saved ? '10' : '9'),
+              pending: saved ? null : version('2', 'pending'),
+            })),
+        size,
       ),
     );
-    await waitFor(() => expect(mocks.read).toHaveBeenCalled());
-    await screen.findByText('Catalog: Succeeded · Models 3');
-    expect(screen.getAllByText(/^Catalog:/)).toHaveLength(1);
-  },
-);
+    mocks.review.mockImplementation(async () => {
+      saved = true;
+      return {};
+    });
+    const view = await setup();
+    await view.user.click(screen.getByText('Review material'));
+    await screen.findByText('head-2…tail · Version 2');
+    expect(screen.getAllByText('head-1…tail · Version 1')).toHaveLength(1);
+    expect(screen.getAllByText('head-2…tail · Version 2')).toHaveLength(1);
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByText('Donation uses by service')).not.toBeInTheDocument();
+    await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    await waitFor(() => expect(mocks.review).toHaveBeenCalledTimes(1));
+    expect(mocks.review.mock.calls[0]![2]).toEqual({
+      expected_revision: '1',
+      decision: 'approve',
+      reason: '',
+      uses: ['6', '7'].map((id) => ({
+        use_id: id,
+        expected_revision: '9',
+        expected_review_revision: 'body-2',
+      })),
+    });
+    await waitFor(() => expect(screen.queryByText('Pending version')).not.toBeInTheDocument());
+    expect(screen.queryByText(/Processed .* uses/)).not.toBeInTheDocument();
+  });
+  it('keeps a known atomic conflict unconfirmed and loads a fresh complete snapshot for the next action', async () => {
+    let changed = false;
+    mocks.get.mockImplementation(async (_role, _donation, _page, size) =>
+      page([row('6', changed ? '10' : '9'), row('7', changed ? '10' : '9')], size),
+    );
+    mocks.review
+      .mockImplementationOnce(async () => {
+        changed = true;
+        throw new ApiError('conflict', 'Version changed', 409);
+      })
+      .mockResolvedValue({});
+    const view = await setup();
+    await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    await screen.findByText('Version changed');
+    expect(screen.queryByText('head-2…tail', { selector: 'li span' })).not.toBeInTheDocument();
+    await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    await waitFor(() => expect(mocks.review).toHaveBeenCalledTimes(2));
+    expect(mocks.review.mock.calls[1]![2].uses).toEqual(
+      ['6', '7'].map((id) => ({
+        use_id: id,
+        expected_revision: '10',
+        expected_review_revision: 'body-2',
+      })),
+    );
+    expect(mocks.review.mock.calls[1]![3]).not.toBe(mocks.review.mock.calls[0]![3]);
+  });
+  it('recovers an uncertain whole-content write using the original body and key', async () => {
+    mocks.get.mockImplementation(async (_role, _donation, _page, size) =>
+      page([row('6', '9'), row('7', '9')], size),
+    );
+    let attempts = 0;
+    mocks.review.mockImplementation(async () => {
+      if (++attempts < 3) throw new ApiError('network_error', 'Response lost', 0);
+      return {};
+    });
+    const view = await setup();
+    await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    await view.user.click(await screen.findByRole('button', { name: 'Check saved result' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Approve pending content' })).toBeEnabled(),
+    );
+    expect(mocks.review).toHaveBeenCalledTimes(3);
+    expect(mocks.review.mock.calls[0]!.slice(2, 4)).toEqual(
+      mocks.review.mock.calls[2]!.slice(2, 4),
+    );
+  });
+  it('retains successful write receipts and retries only reads after a real refresh error', async () => {
+    let saved = false,
+      failed = false;
+    mocks.get.mockImplementation(async (_role, _donation, _page, size) => {
+      if (saved && !failed) {
+        failed = true;
+        throw new Error('Refresh unavailable');
+      }
+      return page([row('6', saved ? '10' : '9')], size);
+    });
+    mocks.review.mockImplementation(async () => {
+      saved = true;
+      return [{ use_id: '6', ok: true }];
+    });
+    const view = await setup();
+    await view.user.click(screen.getByText('Review material'));
+    await screen.findByText('Pending version');
+    await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    const retry = await screen.findByRole('button', { name: 'Check again' });
+    await view.user.click(retry);
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Check again' })).not.toBeInTheDocument(),
+    );
+    expect(mocks.review).toHaveBeenCalledTimes(1);
+  });
+  it('refreshes current donation data without invalidating active old-revision discovery', async () => {
+    let saved = false;
+    mocks.get.mockImplementation(async (_role, _donation, _page, size) =>
+      page(
+        [{ ...row('6', saved ? '10' : '9'), pending: saved ? null : version('2', 'pending') }],
+        size,
+      ),
+    );
+    mocks.review.mockImplementation(async () => {
+      saved = true;
+      return [{ use_id: '6', ok: true }];
+    });
+    const discovery = vi.fn(async () => {
+      if (saved) throw new ApiError('conflict', 'Old discovery version', 409);
+      return 'catalog';
+    });
+    const list = vi.fn(async () => (saved ? 'approved' : 'pending'));
+    function ActiveQueries() {
+      const old = useQuery({
+        queryKey: ['admin', 'operations', 'use-discovery', '1', '6', '9'],
+        queryFn: discovery,
+      });
+      const current = useQuery({
+        queryKey: [...charityKeys.root('admin'), 'donation-pages', '1'],
+        queryFn: list,
+      });
+      return (
+        <p>
+          {old.data} / Donation list: {current.data}
+        </p>
+      );
+    }
+    const view = await setup(<ActiveQueries />);
+    await screen.findByText('catalog / Donation list: pending');
+    await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    await screen.findByText('catalog / Donation list: approved');
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Approve pending content' })).toBeEnabled(),
+    );
+    expect(discovery).toHaveBeenCalledTimes(1);
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('button', { name: 'Check again' })).not.toBeInTheDocument();
+  });
+  it('returns replacement content while preserving the old approved material', async () => {
+    let saved = false;
+    mocks.get.mockImplementation(async (_role, _donation, _page, size) =>
+      page(
+        [{ ...row('6', saved ? '10' : '9'), pending: saved ? null : version('2', 'pending') }],
+        size,
+      ),
+    );
+    mocks.review.mockImplementation(async () => {
+      saved = true;
+      return [{ use_id: '6', ok: true }];
+    });
+    const view = await setup();
+    await view.user.click(screen.getByText('Review material'));
+    await screen.findByText('Pending version');
+    await view.user.click(screen.getByRole('button', { name: 'Return pending content' }));
+    await waitFor(() => expect(screen.queryByText('Pending version')).not.toBeInTheDocument());
+    expect(screen.getByText('head-1…tail · Version 1')).toBeVisible();
+    expect(mocks.review.mock.calls[0]![2]).toMatchObject({
+      decision: 'reject',
+      uses: [{ use_id: '6', expected_review_revision: 'body-2' }],
+    });
+  });
+  it('does not write when no content is pending', async () => {
+    mocks.get.mockImplementation(async (_role, _donation, _page, size) => page([], size));
+    const view = await setup();
+    await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    await screen.findByText('There is no pending content to review.');
+    expect(mocks.review).not.toHaveBeenCalled();
+  });
+});

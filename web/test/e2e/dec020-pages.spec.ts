@@ -17,8 +17,10 @@ import {
   mockConnectionResources,
   mixedMainstreamLayout,
   mainstreamProjection,
+  credential,
 } from './connection-fixtures';
 import commonCopy from '../../src/shared/i18n/common/en.json' with { type: 'json' };
+import userCopy from '../../src/user/i18n/en.json' with { type: 'json' };
 const connectionCopy = commonCopy.common.connections;
 
 type BrowserContext = Parameters<typeof installURLPersistenceObserver>[0];
@@ -80,6 +82,19 @@ async function prepare(
   );
   await mockPublicConfig(page, station);
   await mockRoleSession(page, station, role);
+  if (station === 'user')
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/endpoint-create-options',
+      body: createOptions,
+    });
+  await page.route(/\/donations\/[1-9][0-9]*\/uses\?/, async (route) => {
+    expect(route.request().method()).toBe('GET');
+    const params = new URL(route.request().url()).searchParams;
+    expect(params.get('page_size')).toBe('100');
+    await route.fulfill({ json: numberedResponse([], params.get('page') ?? '1', 100) });
+  });
   return consoleGuard;
 }
 
@@ -484,7 +499,6 @@ test('user endpoint source wizard submits an immutable mainstream channel select
   page,
 }) => {
   const guard = await prepare(context, page, 'user', 'user');
-  await mockConnectionResources(page);
   const endpointID = '21';
   const endpoint = {
     id: endpointID,
@@ -495,10 +509,14 @@ test('user endpoint source wizard submits an immutable mainstream channel select
     enabled: true,
     revision: '1',
     key_count: '0',
+    connection_id: '1',
+    native_services: ['chat_completions', 'responses', 'decisions', 'embeddings'],
     created_at: 1_800_000_000,
     updated_at: 1_800_000_000,
   };
   let postBody: Record<string, unknown> | null = null;
+  let grantBody: Record<string, unknown> | null = null;
+  await mockConnectionResources(page, () => (postBody ? [endpoint] : []));
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
@@ -549,6 +567,21 @@ test('user endpoint source wizard submits an immutable mainstream channel select
       body: JSON.stringify(endpoint),
     });
   });
+  await page.route(`${USER_ORIGIN}/api/endpoints/${endpointID}/keys`, async (route) => {
+    expect(route.request().method()).toBe('POST');
+    grantBody = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 201,
+      json: {
+        ...endpointKeySummary('41', endpointID),
+        credential_id: credential.id,
+        credential_version: credential.credential_version,
+        native_services: endpoint.native_services,
+        max_concurrency: 0,
+        max_rpm: 0,
+      },
+    });
+  });
 
   await page.goto(`${USER_ORIGIN}/endpoints?connection_id=1`);
   await page.getByRole('button', { name: connectionCopy.addEntry, exact: true }).first().click();
@@ -561,13 +594,23 @@ test('user endpoint source wizard submits an immutable mainstream channel select
   await wizard
     .getByRole('combobox', { name: connectionCopy.mainstream, exact: true })
     .selectOption(MAINSTREAM_CHANNEL_ID);
-  await wizard.getByRole('checkbox', { name: 'Hosted entry', exact: true }).check();
-  await expect(wizard.getByText('https://channel.example.test/v1', { exact: true })).toBeVisible();
+  await wizard.locator('.nb-fold > summary').filter({ hasText: connectionCopy.entries }).click();
+  await expect(wizard.getByRole('checkbox', { name: 'Hosted entry', exact: true })).toBeChecked();
   await expect(
     wizard.getByRole('textbox', { name: connectionCopy.entryURL, exact: true }),
   ).toHaveCount(0);
-  await wizard.getByRole('button', { name: connectionCopy.saveEntries, exact: true }).click();
-  await expect(wizard.getByText(connectionCopy.entrySaved)).toBeVisible();
+  await wizard
+    .getByRole('row')
+    .filter({ hasText: credential.note })
+    .getByRole('button', { name: connectionCopy.select, exact: true })
+    .click();
+  await wizard.getByRole('checkbox', { name: connectionCopy.ownership, exact: true }).check();
+  await wizard
+    .getByRole('button', { name: userCopy.user.workflows.continueService, exact: true })
+    .click();
+  await expect(
+    wizard.getByText(userCopy.user.workflows.serviceReady, { exact: true }),
+  ).toBeVisible();
   expect(postBody).toEqual({
     source: 'mainstream',
     channel_id: MAINSTREAM_CHANNEL_ID,
@@ -576,8 +619,19 @@ test('user endpoint source wizard submits an immutable mainstream channel select
     connection_id: '1',
     channel_entry_id: '101',
     channel_revision: '2',
-    native_services: ['chat_completions', 'responses'],
+    native_services: ['chat_completions', 'responses', 'decisions', 'embeddings'],
     rerank_format: '',
+  });
+  expect(grantBody).toEqual({
+    credential_id: credential.id,
+    native_services: ['chat_completions', 'responses', 'decisions', 'embeddings'],
+    discovery_source_id: null,
+    note: '',
+    enabled: true,
+    ownership_confirmed: true,
+    force_store_false: false,
+    max_concurrency: 0,
+    max_rpm: 0,
   });
   await assertClean(page, guard);
 });
@@ -817,7 +871,9 @@ test.describe('donation expiry in UTC', () => {
     await expect(first.getByText('2 keys · 1 available', { exact: true })).toBeVisible();
     await first.locator('.nb-fold > summary').filter({ hasText: 'Sources and key status' }).click();
     await expect(first.locator('.economy-status-stack')).toContainText('Available · 1');
-    await expect(first.locator('.economy-status-stack')).toContainText('Charity use disabled · 1');
+    await expect(first.locator('.economy-status-stack')).toContainText(
+      'Charity services paused or not enabled · 1',
+    );
     await first.getByRole('button', { name: 'Donation actions', exact: true }).click();
     await page.getByRole('menuitem', { name: 'View donated keys', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'key-available…tail' })).toBeVisible();
@@ -851,7 +907,13 @@ test.describe('donation expiry in UTC', () => {
     const keyChoices = resources.locator('.donation-resource-picker__section').nth(1);
     await expect(keyChoices.getByRole('checkbox', { name: /key-11…tail/ })).toBeDisabled();
     await keyChoices.getByRole('checkbox', { name: /key-free…tail/ }).check();
-    await picker.getByRole('checkbox', { name: 'Chat completions', exact: true }).check();
+    await expect(
+      picker.getByText(commonCopy.common.connections.shareExactVersion.replace('{{version}}', '1')),
+    ).toBeVisible();
+    await picker
+      .locator('.nb-fold > summary')
+      .filter({ hasText: userCopy.user.workflows.donationOptions })
+      .click();
     await picker.getByLabel('Expiry for key-free…tail').fill('2027-01-15T08:00');
     await picker.getByRole('button', { name: 'Done', exact: true }).click();
     await composer
@@ -877,7 +939,7 @@ test.describe('donation expiry in UTC', () => {
       keys: [
         {
           endpoint_key_id: '14',
-          native_services: ['chat_completions'],
+          native_services: ['chat_completions', 'responses', 'decisions', 'embeddings'],
           credential_id: '14',
           credential_version: '1',
           grant_revision: '1',
@@ -1252,13 +1314,13 @@ test('administrator charity provenance grouping and report lineage expose safe d
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/donation-sources?scope=active&key_state=available&page=1&page_size=20',
+    path: '/admin/api/donation-sources?scope=all&key_state=all&page=1&page_size=20',
     body: numberedResponse([sourceKeys], '1', 20),
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: `/admin/api/donation-sources/${sourceKey}/keys?scope=active&key_state=available&page=1&page_size=20`,
+    path: `/admin/api/donation-sources/${sourceKey}/keys?scope=all&key_state=all&page=1&page_size=20`,
     body: numberedResponse([managedKeyPage], '1', 20),
   });
   await mockJson(page, {

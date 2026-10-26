@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"math"
 	"strconv"
 
-	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
@@ -20,6 +20,19 @@ type OwnBindingDiscovery struct {
 // ErrDiscoveryModelMissing means an authorized, successful discovery run did
 // not contain the requested model. It does not describe missing authorization.
 var ErrDiscoveryModelMissing = errors.New("charity routing: discovered model missing")
+
+// AuthorizeOwnBindingInTransaction checks the management scope before an
+// automation operation creates discovery sources or starts an upstream request.
+func (s *Service) AuthorizeOwnBindingInTransaction(ctx context.Context, tx *sql.Tx, userID, modelID, donationID, keyID, now int64) error {
+	if err := authz.RequireStewardPermission(ctx, tx, userID, "charity.manage"); err != nil {
+		return err
+	}
+	scope, err := s.managementScope(ctx, tx, roleSteward, userID, modelID, false)
+	if err != nil {
+		return err
+	}
+	return managementScopeError(scope.RequireKey(ctx, tx, donationID, keyID, now, true))
+}
 
 // EnsureOwnBindingInTransaction appends one owned donation key, or preserves
 // an identical existing binding. A positive discovery revision requires that
@@ -34,6 +47,13 @@ func (s *Service) EnsureOwnBindingInTransaction(ctx context.Context, tx *sql.Tx,
 	if err := s.roleAuth.AuthorizeStewardMutation(ctx, tx, userID); err != nil {
 		return mapAuthorization(err)
 	}
+	if err := authz.RequireStewardPermission(ctx, tx, userID, "charity.manage"); err != nil {
+		return err
+	}
+	scope, err := s.managementScope(ctx, tx, roleSteward, userID, modelID, false)
+	if err != nil {
+		return err
+	}
 	now, err := s.nowUnix()
 	if err != nil {
 		return err
@@ -42,18 +62,21 @@ func (s *Service) EnsureOwnBindingInTransaction(ctx context.Context, tx *sql.Tx,
 	if err != nil {
 		return err
 	}
-	var keyID int64
-	err = tx.QueryRowContext(ctx, `SELECT dk.endpoint_key_id FROM donation_keys dk
+	var keyID, donationID int64
+	err = tx.QueryRowContext(ctx, `SELECT dk.endpoint_key_id,dk.donation_id FROM donation_keys dk
 JOIN donations d ON d.id=dk.donation_id
 JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
 JOIN endpoint_keys k ON k.id=m.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id
 WHERE dk.id=? AND d.user_id=? AND e.user_id=? AND d.status IN ('pending','approved') AND d.terminal_at IS NULL
-AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?)`, donationKeyID, userID, userID, now).Scan(&keyID)
+AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?)`, donationKeyID, userID, userID, now).Scan(&keyID, &donationID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {
 		return err
+	}
+	if err := scope.RequireKey(ctx, tx, donationID, donationKeyID, now, true); err != nil {
+		return managementScopeError(err)
 	}
 	if discoveryRevision > 0 {
 		if len(discovery) != 1 {
@@ -110,7 +133,7 @@ WHERE st.source_revision_id=? AND r.credential_version_id=? AND r.result_generat
 		return ErrResourceLimit
 	}
 	targets := []validatedTarget{{keyID: donationKeyID, upstream: upstreamModelID, legacy: true}}
-	if err := validateTargetsTx(ctx, tx, charityscope.Scope{}, modelID, targets, now); err != nil {
+	if err := validateTargetsTx(ctx, tx, scope, modelID, targets, now); err != nil {
 		return err
 	}
 	if _, err := insertBindingGroupTx(ctx, tx, modelID, count, targets, now); err != nil {

@@ -194,7 +194,7 @@ func (s *Service) resetFailureBatch(ctx context.Context, role reviewerRole, user
 	}
 	allowed := make([]bool, len(items))
 	for index, item := range items {
-		if !scope.Trainee {
+		if !scope.RestrictedKeys() {
 			allowed[index] = true
 			continue
 		}
@@ -209,7 +209,7 @@ func (s *Service) resetFailureBatch(ctx context.Context, role reviewerRole, user
 		return empty, err
 	}
 	if decision.Kind == idempotency.Replay {
-		if scope.Trainee {
+		if scope.RestrictedKeys() {
 			for _, value := range allowed {
 				if !value {
 					return empty, ErrNotFound
@@ -283,7 +283,7 @@ func (s *Service) resetFailureBatch(ctx context.Context, role reviewerRole, user
 		if groupStatus != "not_found" {
 			latest := strconv.FormatInt(revision, 10)
 			for _, index := range indices {
-				if !scope.Trainee || allowed[index] && value.Results[index].Status != "not_found" {
+				if !scope.RestrictedKeys() || allowed[index] && value.Results[index].Status != "not_found" {
 					value.Results[index].Revision = &latest
 				}
 			}

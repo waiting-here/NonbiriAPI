@@ -298,7 +298,7 @@ test('a lost policy response retries the original operation without a second rev
   }
 });
 
-test('level 5 and ordinary users cannot see the entry or read endpoint policies and routes', async ({
+test('default level 5 and ordinary users cannot read endpoint policies and routes', async ({
   browser,
 }) => {
   for (const role of [5, 1] as const) {
@@ -316,9 +316,13 @@ test('level 5 and ordinary users cannot see the entry or read endpoint policies 
       }
       const page = await context.newPage();
       await page.goto(origin + '/steward?tab=charity');
-      await expect(page.getByRole('link', { name: copy.title, exact: true })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: copy.title, exact: true })).toHaveCount(
+        role === 5 ? 1 : 0,
+      );
       await page.goto(origin + '/endpoint-policies');
-      await expect(page.getByRole('alert')).toContainText(copy.accessDenied);
+      await expect(
+        page.getByText(common.management.permissions.denied, { exact: true }),
+      ).toBeVisible();
       await expect(page.getByRole('tab', { name: copy.rulesTab, exact: true })).toHaveCount(0);
     } finally {
       await context.close();

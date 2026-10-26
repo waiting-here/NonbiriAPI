@@ -278,6 +278,7 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 				}
 			}
 			if len(beforeFacts) != len(afterFacts) {
+				logFactDifferences(t, store.DB(), beforeFacts, afterFacts)
 				t.Fatal("unrelated table set changed")
 			}
 			var headerBudget string
@@ -307,12 +308,26 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 
 func TestOfflineDescriptorContainsOnlyExactSupportedSources(t *testing.T) {
 	descriptor := SchemaDescriptor()
-	if descriptor.SchemaVersion != db.CurrentSchemaVersion || descriptor.MinimumSchemaVersion != 33 || len(descriptor.SourceSchemaVersions) != 2 || descriptor.SourceSchemaVersions[0] != 33 || descriptor.SourceSchemaVersions[1] != 34 || len(descriptor.OfflineConversions) != 11 {
+	expected := []int{16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 33, 34, 35, 36, 37}
+	if descriptor.SchemaVersion != db.CurrentSchemaVersion || descriptor.MinimumSchemaVersion != db.CurrentSchemaVersion || descriptor.StartupPolicy != "exact" || descriptor.UpgradeTool != "nonbiri-upgrade-v1" || len(descriptor.SourceSchemaVersions) != 0 || len(descriptor.SourceManifestHashes) != 0 || len(descriptor.OfflineConversions) != len(expected) {
 		t.Fatal(descriptor)
 	}
 	for index, source := range descriptor.OfflineConversions {
-		if source.SourceSchemaVersion != 16+index || source.TargetSchemaVersion != db.CurrentSchemaVersion || len(source.SourceCommit) != 40 || len(source.SourceManifestHash) != 64 || source.Tool != "nonbiri-upgrade-v1" {
+		if source.SourceSchemaVersion != expected[index] || source.TargetSchemaVersion != db.CurrentSchemaVersion || len(source.SourceCommit) != 40 || len(source.SourceManifestHash) != 64 || source.Tool != "nonbiri-upgrade-v1" {
 			t.Fatal(source)
+		}
+		if source.SourceSchemaVersion == 16 {
+			if source.SourceManifestHash != SourceManifestHash {
+				t.Fatal(source)
+			}
+			continue
+		}
+		found := false
+		for _, step := range storageSchema.versions {
+			found = found || step.version == source.SourceSchemaVersion && step.manifest == source.SourceManifestHash
+		}
+		if !found {
+			t.Fatal("metadata advertised an unsupported source", source)
 		}
 	}
 }

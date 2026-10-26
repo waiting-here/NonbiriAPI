@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"net/http"
 	"strconv"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
@@ -31,6 +33,7 @@ type BindingPresetChannel struct {
 	ChannelRevision string `json:"channel_revision"`
 	PresetRevision  string `json:"preset_revision"`
 	MappingCount    string `json:"mapping_count"`
+	Recommended     *bool  `json:"recommended,omitempty"`
 }
 type BindingPresetMapping struct {
 	UpstreamModelID string  `json:"upstream_model_id"`
@@ -54,7 +57,9 @@ type BindingPresetInput struct {
 	Mappings                []BindingPresetPair `json:"mappings"`
 }
 
-const presetChannelSelect = `SELECT c.id,c.name,e.connector_type,e.canonical_base_url,c.enabled,c.state,c.revision,COALESCE(p.revision,0),(SELECT COUNT(*) FROM channel_charity_binding_mappings WHERE channel_id=c.id) FROM mainstream_channels c JOIN mainstream_channel_primary_entries e ON e.channel_id=c.id LEFT JOIN channel_charity_binding_presets p ON p.channel_id=c.id`
+const presetChannelColumns = `c.id,c.name,e.connector_type,e.canonical_base_url,c.enabled,c.state,c.revision,COALESCE(p.revision,0),(SELECT COUNT(*) FROM channel_charity_binding_mappings WHERE channel_id=c.id)`
+const presetChannelFrom = ` FROM mainstream_channels c JOIN mainstream_channel_primary_entries e ON e.channel_id=c.id LEFT JOIN channel_charity_binding_presets p ON p.channel_id=c.id`
+const presetChannelSelect = `SELECT ` + presetChannelColumns + presetChannelFrom
 
 func scanPresetChannel(scan func(...any) error) (BindingPresetChannel, error) {
 	var out BindingPresetChannel
@@ -244,40 +249,28 @@ func (s *Service) applyBindingPreset(ctx context.Context, role roleKind, actorID
 	if role == roleSteward {
 		route = routeStewardApplyBindingPreset
 	}
-	expected, err := parsePositiveID(input.ExpectedDonationRevision)
-	if ctx == nil || err != nil || !db.ValidateOpaqueID(input.ChannelID, "mch_") || len(input.Models) > maxChannelBindingMappings || !validMutation(mutation, http.MethodPost, route, donationID) {
+	expected, revisions, err := parsePresetApplication(input)
+	if ctx == nil || err != nil || !validMutation(mutation, http.MethodPost, route, donationID) {
 		return empty, ErrInvalidRequest
-	}
-	if _, err := parsePositiveID(input.ExpectedChannelRevision); err != nil {
-		return empty, err
-	}
-	if _, err := parsePositiveID(input.ExpectedPresetRevision); err != nil {
-		return empty, err
-	}
-	revisions := map[string]int64{}
-	for _, model := range input.Models {
-		if _, err := parsePositiveID(model.CharityModelID); err != nil {
-			return empty, err
-		}
-		revision, err := parseNonnegativeRevision(model.ExpectedBindingRevision)
-		if err != nil {
-			return empty, err
-		}
-		if _, ok := revisions[model.CharityModelID]; ok {
-			return empty, ErrInvalidRequest
-		}
-		revisions[model.CharityModelID] = revision
 	}
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
 	}
-	tx, actor, err := s.beginRoleTx(ctx, role, actorID)
+	tx, scope, err := s.beginManagementTx(ctx, role, actorID, 0, true, false)
 	if err != nil {
 		return empty, err
 	}
 	defer tx.Rollback()
-	revision, err := donationBindingRevision(ctx, tx, donationID)
+	actor := scope.ActorID
+	if role != roleAdmin {
+		for _, permission := range []string{"charity.presets", "charity.manage"} {
+			if err := authz.RequireStewardPermission(ctx, tx, actor, permission); err != nil {
+				return empty, err
+			}
+		}
+	}
+	revision, err := requirePresetDonationTx(ctx, tx, scope, donationID, now)
 	if err != nil {
 		return empty, err
 	}
@@ -292,6 +285,15 @@ func (s *Service) applyBindingPreset(ctx context.Context, role roleKind, actorID
 	if err != nil {
 		return empty, err
 	}
+	preset, err := readBindingPreset(ctx, tx, channel)
+	if err != nil {
+		return empty, err
+	}
+	if err := authorizePresetSourcesTx(ctx, tx, scope, donationID, preset, keys, now, func(modelID int64) (charityscope.Scope, error) {
+		return s.managementScope(ctx, tx, role, actor, modelID, false)
+	}); err != nil {
+		return empty, err
+	}
 	decision, err := beginMutation(ctx, tx, role, actor, mutation, now)
 	if err != nil {
 		return empty, err
@@ -302,32 +304,12 @@ func (s *Service) applyBindingPreset(ctx context.Context, role roleKind, actorID
 	if revision != expected || channel.ChannelRevision != input.ExpectedChannelRevision || channel.PresetRevision != input.ExpectedPresetRevision {
 		return empty, ErrConflict
 	}
-	preset, err := readBindingPreset(ctx, tx, channel)
-	if err != nil {
-		return empty, err
-	}
 	if len(preset.Mappings) == 0 {
 		return empty, ErrConflict
 	}
-	targets := make([]bindingTarget, 0, len(preset.Mappings))
-	used := map[string]bool{}
-	for _, mapping := range preset.Mappings {
-		id, _ := parsePositiveID(mapping.CharityModelID)
-		expected := int64(0)
-		if mapping.BindingRevision != nil {
-			var ok bool
-			expected, ok = revisions[mapping.CharityModelID]
-			if !ok {
-				return empty, ErrConflict
-			}
-			used[mapping.CharityModelID] = true
-		} else if _, ok := revisions[mapping.CharityModelID]; ok {
-			used[mapping.CharityModelID] = true
-		}
-		targets = append(targets, bindingTarget{id, mapping.UpstreamModelID, expected})
-	}
-	if len(used) != len(revisions) {
-		return empty, ErrInvalidRequest
+	targets, err := presetTargets(preset, revisions)
+	if err != nil {
+		return empty, err
 	}
 	value, err := applyBindingMatrix(ctx, tx, targets, keys, now)
 	if err != nil {

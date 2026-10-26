@@ -427,6 +427,25 @@
 .nb-field--span {
   grid-column: 1/-1;
 }
+.nb-field:has(> input[type='checkbox']) {
+  grid-template-columns: var(--nb-space-5) minmax(0, 1fr);
+  column-gap: var(--nb-space-2);
+  align-items: start;
+}
+.nb-field:has(> input[type='checkbox']) > .nb-field__label {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  cursor: pointer;
+}
+.nb-field:has(> input[type='checkbox']) > input {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
+}
+.nb-field:has(> input[type='checkbox']) > :is(.nb-field__help, .nb-field__error) {
+  grid-column: 2;
+}
 .nb-input,
 .nb-select,
 .nb-textarea {

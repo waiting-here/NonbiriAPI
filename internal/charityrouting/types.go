@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/waiting-here/NonbiriAPI/internal/charitydiscount"
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"log/slog"
 	"net/http"
 
@@ -442,7 +443,7 @@ type CandidateQuery struct {
 	omitBindingMarkers bool
 	IncludeBound       bool
 	KeyState           string
-	traineeOnly        bool
+	maintenanceScope   charityscope.Scope
 	DonationID         int64
 	DonationKeyID      int64
 	Source             string

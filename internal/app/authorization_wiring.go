@@ -151,12 +151,21 @@ func (authorizer *roleFinalTxAuthorizer) AuthorizeStewardLogRead(ctx context.Con
 	if _, ok := authz.StewardCallerFromContext(ctx); ok {
 		return false, authz.ErrForbidden
 	}
-	return authorizer.authorizeStewardSession(ctx, tx, userID)
+	if authz.StewardPermissionFromContext(ctx) == "" {
+		ctx = authz.WithStewardPermission(ctx, "logs.read")
+	}
+	_, err := authorizer.authorizeStewardSession(ctx, tx, userID)
+	if err != nil {
+		return false, err
+	}
+	policy, err := authz.ReadStewardPermissions(ctx, tx, userID)
+	return !policy.Permissions["logs.unredacted"], err
 }
 
 func (authorizer *roleFinalTxAuthorizer) AuthorizeUserManagement(ctx context.Context, tx *sql.Tx, userID int64) (bool, error) {
 	if _, ok := authz.StewardCallerFromContext(ctx); ok {
-		return false, authorizer.AuthorizeStewardMutation(ctx, tx, userID)
+		principal, err := authorizer.authorizer.AuthorizeStewardCaller(ctx, tx, userID)
+		return principal.EffectiveLevel == 5, err
 	}
 	return authorizer.authorizeStewardSession(ctx, tx, userID)
 }
@@ -194,10 +203,13 @@ func (authorizer *roleFinalTxAuthorizer) authorize(
 		return errors.New("role final-transaction authorization unavailable")
 	}
 	if _, ok := authz.StewardCallerFromContext(ctx); ok {
-		if role != authz.RoleSteward || kind != authz.ActorUserSession {
+		if role != authz.RoleSteward && role != authz.RoleTrainee || kind != authz.ActorUserSession {
 			return authz.ErrForbidden
 		}
-		_, err := authorizer.authorizer.AuthorizeStewardCaller(ctx, tx, userID)
+		principal, err := authorizer.authorizer.AuthorizeStewardCaller(ctx, tx, userID)
+		if err == nil && role == authz.RoleTrainee && principal.EffectiveLevel != 5 {
+			return authz.ErrForbidden
+		}
 		return err
 	}
 	actor, ok := auth.ActorFromContext(ctx)

@@ -153,3 +153,71 @@ func TestBuiltInCatalogMatchesProduct(t *testing.T) {
 		}
 	}
 }
+
+func TestTomorrowArtworkRemainsAvailableWithR18Disabled(t *testing.T) {
+	for _, key := range []string{"card:r-chatgpt", "illustration:r", "cover:r", "appearance:tomorrow"} {
+		definition, ok := builtIn.definitions[key]
+		if !ok || definition.Rating != General || !Allowed(key, true) {
+			t.Fatal("theme inherited restricted artwork", key, definition)
+		}
+		for _, dependency := range definition.Uses {
+			if !Allowed(dependency, true) {
+				t.Fatal("theme uses restricted artwork", key, dependency)
+			}
+		}
+	}
+	for _, key := range []string{"card:r-chatgpt", "illustration:r", "cover:r"} {
+		if !MomentAllowed(key, true) {
+			t.Fatal("theme moment blocked by artwork policy", key)
+		}
+	}
+	for _, file := range []string{
+		"cards/r-chatgpt.webp", "hires/cards/r-chatgpt.webp", "thumbs/r-chatgpt.webp",
+		"backgrounds/r.webp", "hires/backgrounds/r.webp", "groups/r.webp", "hires/groups/r.webp",
+		"covers/r.webp", "hires/covers/r.webp",
+		"appearances/tomorrow-light.webp", "appearances/tomorrow-dark.webp",
+		"hires/appearances/tomorrow-light.webp", "hires/appearances/tomorrow-dark.webp",
+		"motion/r-chatgpt/hero.webp", "hires/motion/r-chatgpt/hero-dark.webp",
+		"motion/r-chatgpt/background-light.webp", "hires/motion/r-chatgpt/background-dark.webp",
+		"tomorrow/hero.webp", "hires/tomorrow/hero.webp",
+	} {
+		if rating, ok := AssetRating(file); !ok || rating != General {
+			t.Error("theme asset is not general", file, rating, ok)
+		}
+	}
+}
+
+func TestSweetHideAndSeekArtworkIsRestricted(t *testing.T) {
+	for _, key := range []string{"card:s-chatgpt", "card:s-claude", "illustration:s", "cover:s"} {
+		definition, ok := builtIn.definitions[key]
+		if !ok || definition.Rating != R18 || Allowed(key, true) || !Allowed(key, false) {
+			t.Error("restricted theme classification or allowance changed", key, definition)
+		}
+		if MomentAllowed(key, true) || !MomentAllowed(key, false) {
+			t.Error("restricted moment ignored artwork policy", key)
+		}
+	}
+	for _, file := range []string{
+		"cards/s-chatgpt.webp", "hires/cards/s-chatgpt.webp", "thumbs/s-chatgpt.webp",
+		"cards/s-claude.webp", "hires/cards/s-claude.webp", "thumbs/s-claude.webp",
+		"groups/s.webp", "hires/groups/s.webp", "backgrounds/s.webp", "hires/backgrounds/s.webp",
+		"layers/groups/s.webp", "hires/layers/groups/s.webp",
+		"covers/s.webp", "hires/covers/s.webp",
+		"backgrounds/covers/s.webp", "hires/backgrounds/covers/s.webp",
+		"layers/covers/s.webp", "hires/layers/covers/s.webp",
+	} {
+		if rating, ok := AssetRating(file); !ok || rating != R18 {
+			t.Error("restricted derivative is unclassified", file, rating, ok)
+		}
+	}
+	for _, id := range []string{"s-chatgpt", "s-claude"} {
+		for _, prefix := range []string{"motion/", "hires/motion/"} {
+			for _, layer := range []string{"background", "hero", "half", "closed"} {
+				file := prefix + id + "/" + layer + ".webp"
+				if rating, ok := AssetRating(file); !ok || rating != R18 {
+					t.Error("restricted motion layer is unclassified", file, rating, ok)
+				}
+			}
+		}
+	}
+}

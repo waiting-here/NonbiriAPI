@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Fold, Note } from '@shared/components/ui';
-import { NativeServicesField } from '@shared/components/NativeServicesField';
-import { NativeServicesSummary } from '@shared/components/ServiceRoutesSummary';
+import { Field, Fold, Note } from '@shared/components/ui';
+import { ProtocolRerankField } from '@shared/components/ProtocolRerankField';
 import { useEndpointCreateOptions } from '../queries';
 import { getEndpoint } from '../api';
 import { readEndpointKey } from '../resourceOperation';
 import type { Endpoint, EndpointKey } from '../types';
-import type { NativeService, RerankFormat } from '@shared/nativeServices';
+import type { RerankFormat } from '@shared/nativeServices';
 import { CredentialPicker, credentialLabel } from './CredentialPicker';
 import { connectionAPI, resourcePath } from './api';
 import { useMetadataOperation } from './useMetadataOperation';
@@ -29,7 +28,7 @@ export function EntryScope(props: {
   return (
     <Fold
       lazy
-      title={t('common.connections.entryScope')}
+      title={t('user.workflows.editService')}
       open={props.open}
       onOpenChange={props.onOpenChange}
     >
@@ -43,11 +42,14 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
   const allowed = options.data?.native_service_options?.find(
     (row) => row.connector_type === endpoint.connector_type,
   );
-  const [services, setServices] = useState<NativeService[]>(endpoint.native_services ?? []);
+  const services = allowed?.native_services ?? [];
+  const [note, setNote] = useState(endpoint.note);
   const [format, setFormat] = useState<RerankFormat | null>(endpoint.rerank_format || null);
+  const selectedFormat = format ?? (allowed?.rerank_formats.includes('generic') ? 'generic' : '');
   const [group, setGroup] = useState<string | null>(null);
   const [creatingConnection, setCreatingConnection] = useState(false);
   const [expectedRevision, setExpectedRevision] = useState(endpoint.revision);
+  const [baseline, setBaseline] = useState(endpoint);
   const operation = useMetadataOperation(
     accountId,
     '/api/endpoints/' + resourcePath(endpoint.id),
@@ -56,7 +58,8 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
     () => undefined,
     (saved) => {
       setExpectedRevision(saved.revision);
-      setServices(saved.native_services ?? []);
+      setBaseline(saved);
+      setNote(saved.note);
       setFormat(saved.rerank_format || null);
       setGroup(null);
     },
@@ -65,6 +68,11 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
     operation.isPending ||
     operation.outcome === 'unknown' ||
     operation.outcome === 'refresh-failed';
+  const dirty =
+    note !== baseline.note ||
+    Boolean(group) ||
+    JSON.stringify(services) !== JSON.stringify(baseline.native_services ?? []) ||
+    selectedFormat !== (baseline.rerank_format ?? '');
   return (
     <div className="nb-stack">
       <form
@@ -73,27 +81,37 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
           event.preventDefault();
           void operation
             .mutateAsync({
+              ...(note !== baseline.note ? { note } : {}),
               native_services: services,
-              rerank_format: format ?? '',
+              ...(selectedFormat !== (baseline.rerank_format ?? '')
+                ? { rerank_format: selectedFormat }
+                : {}),
               ...(group ? { connection_id: group } : {}),
               expected_revision: expectedRevision,
             })
             .catch(() => undefined);
         }}
       >
-        <NativeServicesSummary value={endpoint.native_services ?? []} />
+        <Field label={t('user.workflows.serviceName')}>
+          {(props) => (
+            <input
+              {...props}
+              value={note}
+              maxLength={2048}
+              disabled={locked}
+              onChange={(event) => setNote(event.target.value)}
+            />
+          )}
+        </Field>
         {endpoint.connection_id ? (
           <Link to={'/endpoints?connection_id=' + encodeURIComponent(endpoint.connection_id)}>
             {t('common.connections.backToConnection')}
           </Link>
         ) : null}
-        <NativeServicesField
-          options={allowed?.native_services ?? []}
-          value={services}
-          onChange={setServices}
-          rerankFormats={allowed?.rerank_formats}
-          rerankFormat={format}
-          onRerankFormatChange={setFormat}
+        <ProtocolRerankField
+          formats={allowed?.rerank_formats}
+          value={format}
+          onChange={setFormat}
           disabled={locked}
         />
         <Fold
@@ -152,6 +170,7 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
             className="nb-btn nb-btn--secondary"
             onClick={() => {
               setExpectedRevision(endpoint.revision);
+              setBaseline(endpoint);
               operation.reset();
             }}
           >
@@ -161,7 +180,7 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
         <button
           type="submit"
           className="nb-btn nb-btn--primary"
-          disabled={locked || !services.length || operation.outcome === 'conflict'}
+          disabled={locked || !dirty || !services.length || operation.outcome === 'conflict'}
         >
           {t('common.connections.save')}
         </button>
@@ -199,6 +218,11 @@ export function KeyCredentialScope({
   revealCatalog?: number;
 }) {
   const { t } = useTranslation();
+  const options = useEndpointCreateOptions(accountId);
+  const services =
+    options.data?.native_service_options?.find(
+      (row) => row.connector_type === endpoint.connector_type,
+    )?.native_services ?? [];
   const [expanded, setExpanded] = useState({
     request: revealCatalog,
     scope: defaultOpen,
@@ -208,7 +232,6 @@ export function KeyCredentialScope({
     setExpanded({ request: revealCatalog, scope: true, catalog: true });
   }
   const [credential, setCredential] = useState<Credential | null>(null);
-  const [services, setServices] = useState(entryKey.native_services ?? []);
   const [source, setSource] = useState<DiscoverySource | null>(null);
   const [sourceChanged, setSourceChanged] = useState(false);
   const [expectedRevision, setExpectedRevision] = useState(entryKey.revision);
@@ -220,7 +243,6 @@ export function KeyCredentialScope({
     () => undefined,
     (saved) => {
       setExpectedRevision(saved.revision);
-      setServices(saved.native_services ?? []);
       setCredential(null);
       setSource(null);
       setSourceChanged(false);
@@ -267,12 +289,6 @@ export function KeyCredentialScope({
             {t('common.connections.grantRevision', { revision: entryKey.grant_revision ?? '—' })}
           </p>
         </Note>
-        <NativeServicesField
-          options={endpoint.native_services ?? []}
-          value={services}
-          onChange={setServices}
-          disabled={locked}
-        />
         {endpoint.connection_id ? (
           <Fold lazy title={t('common.connections.changeCredential')}>
             <CredentialPicker

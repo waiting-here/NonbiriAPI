@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
@@ -56,9 +57,10 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 		query += ` AND (` + donationstate.SQL() + `)=?`
 		args = append(args, now, now, now, now, filter.KeyState)
 	}
-	if filter.traineeModelID > 0 {
-		query += ` AND ` + charityscope.KeyPredicate()
-		args = append(args, filter.traineeModelID, now)
+	if filter.maintenanceScope.RestrictedKeys() {
+		predicate, values := filter.maintenanceScope.KeyPredicate(now, false)
+		query += " AND " + predicate
+		args = append(args, values...)
 	}
 	if len(candidates) > 0 {
 		query += ` AND dk.id IN (` + strings.TrimSuffix(strings.Repeat("?,", len(candidates)), ",") + `)`
@@ -96,6 +98,44 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 		}
 	}
 	return query, args
+}
+
+// Materialize only IDs, so an enhanced source scan checks all keys of each
+// donation once instead of repeating that check for every selected key. The
+// shared mutation selector keeps its original final-transaction predicate.
+func sourceReadSelectionSQL(filter SourceFilter, source *sourceIdentity, now int64) (string, []any) {
+	selection, args := sourceSelectionSQL(filter, source, now)
+	if !filter.maintenanceScope.RestrictedKeys() || filter.maintenanceScope.DonationScope != authz.DonationScopeEnhanced {
+		return selection, args
+	}
+	candidates := filter
+	candidates.maintenanceScope = charityscope.Scope{}
+	candidateSQL, candidateArgs := sourceSelectionSQL(candidates, source, now)
+	query := `WITH source_donations AS MATERIALIZED (
+SELECT DISTINCT donation_id AS id FROM (` + candidateSQL + `)
+), tagged_source_donations AS MATERIALIZED (
+SELECT d.id FROM source_donations d WHERE ` + charityscope.TaggedDonationSQL + `
+)
+` + strings.Replace(selection, charityscope.TaggedDonationSQL, `d.id IN (SELECT id FROM tagged_source_donations)`, 1)
+	return query, append(candidateArgs, args...)
+}
+
+// Source collections have no held-read audit writes. Keep their authorization,
+// counts and projections in one reader snapshot without occupying the writer.
+func (s *Service) beginSourceReadTx(ctx context.Context, role reviewerRole, actorID int64) (*sql.Tx, charityscope.Scope, error) {
+	if s == nil || s.readDB == nil || ctx == nil || nilDependency(s.roleAuth) {
+		return nil, charityscope.Scope{}, ErrUnavailable
+	}
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, charityscope.Scope{}, err
+	}
+	scope, err := s.managementScope(ctx, tx, role, actorID)
+	if err != nil {
+		tx.Rollback()
+		return nil, scope, err
+	}
+	return tx, scope, nil
 }
 
 // All counters are wide binary magnitudes. The minimum undiscounted reserve
@@ -157,19 +197,17 @@ func (s *Service) sourcesPage(ctx context.Context, role reviewerRole, userID int
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, scope, err := s.beginScopedTx(ctx, role, userID, true)
+	tx, scope, err := s.beginSourceReadTx(ctx, role, userID)
 	if err != nil {
 		return empty, err
 	}
 	defer tx.Rollback()
-	if scope.Trainee {
-		filter.traineeModelID = scope.ModelID
-	}
+	filter.maintenanceScope = scope
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
 	}
-	selection, args := sourceSelectionSQL(filter, nil, now)
+	selection, args := sourceReadSelectionSQL(filter, nil, now)
 	grouped := `SELECT ` + sourceGroupColumns + `,COUNT(DISTINCT donation_id),COUNT(*),COUNT(DISTINCT CASE WHEN pending=1 THEN donation_id END),MAX(id),MAX(CASE WHEN donation_status IN ('pending','approved') AND EXISTS(SELECT 1 FROM charity_use_availability av WHERE av.donation_key_id=source_group.id) THEN 1 ELSE 0 END) FROM (` + selection + `) source_group GROUP BY ` + sourceGroupColumns
 	var total int64
 	groupCount := `SELECT COUNT(*) FROM (SELECT ` + sourceGroupColumns + ` FROM (` + selection + `) GROUP BY ` + sourceGroupColumns + `)`
@@ -223,7 +261,7 @@ func (s *Service) sourcesPage(ctx context.Context, role reviewerRole, userID int
 			item.UsableKeyCount = "0"
 			continue
 		}
-		filtered, values := sourceSelectionSQL(filter, &identities[i], now)
+		filtered, values := sourceReadSelectionSQL(filter, &identities[i], now)
 		// Replace the selected key placeholder with the correlated safe ID. No
 		// user input is interpolated; all filters stay bound parameters.
 		usable := strings.Replace(sourceUsableSQL(), "WHERE dk.id=?", "WHERE dk.id=selected.id", 1)
@@ -257,14 +295,12 @@ func (s *Service) sourceKeysPage(ctx context.Context, role reviewerRole, userID 
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, scope, err := s.beginScopedTx(ctx, role, userID, true)
+	tx, scope, err := s.beginSourceReadTx(ctx, role, userID)
 	if err != nil {
 		return empty, err
 	}
 	defer tx.Rollback()
-	if scope.Trainee {
-		filter.traineeModelID = scope.ModelID
-	}
+	filter.maintenanceScope = scope
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
@@ -280,13 +316,21 @@ func (s *Service) sourceKeysPage(ctx context.Context, role reviewerRole, userID 
 		}
 		return Page[ManagedKeySummary]{Data: []ManagedKeySummary{}, Pagination: &metadata}, nil
 	}
-	selection, args := sourceSelectionSQL(filter, identity, now)
+	selection, args := sourceReadSelectionSQL(filter, identity, now)
 	query := `SELECT id FROM (` + selection + `)`
 	ids, metadata, err := browseIDs(ctx, tx, query, args, page)
 	if err != nil {
 		return empty, err
 	}
+	canManage, err := keyManagementAllowedTx(ctx, tx, role, userID)
+	if err != nil {
+		return empty, err
+	}
 	result := Page[ManagedKeySummary]{Data: make([]ManagedKeySummary, 0, len(ids)), Pagination: &metadata}
+	statuses, err := donationstate.LoadServiceStatuses(ctx, tx, ids, now)
+	if err != nil {
+		return empty, err
+	}
 	for _, keyID := range ids {
 		var donationID int64
 		if err := tx.QueryRowContext(ctx, `SELECT donation_id FROM donation_keys WHERE id=?`, keyID).Scan(&donationID); err != nil {
@@ -296,7 +340,7 @@ func (s *Service) sourceKeysPage(ctx context.Context, role reviewerRole, userID 
 		if err != nil {
 			return empty, err
 		}
-		keys, err := readDonationKeySelectionTx(ctx, tx, donationID, header.Status, now, []int64{keyID})
+		keys, err := readDonationKeySelectionTx(ctx, tx, donationID, header.Status, now, []int64{keyID}, statuses)
 		if err != nil {
 			return empty, err
 		}
@@ -308,7 +352,8 @@ func (s *Service) sourceKeysPage(ctx context.Context, role reviewerRole, userID 
 			return empty, err
 		}
 		value := managedKeySummary(keys[0], header, rules)
-		if scope.Trainee {
+		value.CanManage = value.CanManage && canManage
+		if scope.Redact {
 			value.EndpointKeyID = nil
 		}
 		impact, err := scope.Impact(ctx, tx, keyID)

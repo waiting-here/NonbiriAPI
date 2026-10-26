@@ -89,7 +89,7 @@ existing ranges; keep their returned values when editing Gwent players. They do
 not enable Gwent memory. Its admin response has four faction templates and an
 empty `scenarios` list.
 
-Account export v13 includes `gwent.ai` first-clear records and retained match
+Account export includes `gwent.ai` first-clear records and retained match
 snapshots; preference and memory collections are empty. Account deletion removes
 private links and data while retaining anonymous public match facts and the
 minimal same-identity receipt that prevents a repeated first-clear reward.
@@ -170,7 +170,7 @@ anonymous archives. Current hidden opposing actions are not disclosed. Origins
 are `human,ai,rule,timeout,fallback`; missing historical provenance is `unknown`.
 The AI view contains accepted terms, the frozen memory setting/sample count,
 first-clear status and reward. Free matches have no fabricated ledger operation.
-Account export v13 includes preferences, eligible samples, used summaries and
+Account export includes preferences, eligible samples, used summaries and
 first-clear records; see the [lifecycle checklist](data-lifecycle-checklist.md#ai-challenge-data).
 
 ## Extending decision sources

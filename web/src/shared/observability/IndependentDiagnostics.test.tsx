@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '@shared/query/http';
 import { IndependentDiagnostics } from './IndependentDiagnostics';
 import {
   decodeIndependentDetail,
@@ -7,7 +8,10 @@ import {
   syntheticImageMIME,
 } from './independentApi';
 const request = vi.hoisted(() => ({ apiFetch: vi.fn() }));
-vi.mock('@shared/query/http', () => ({ apiFetch: request.apiFetch }));
+vi.mock('@shared/query/http', async (original) => ({
+  ...(await original<typeof import('@shared/query/http')>()),
+  apiFetch: request.apiFetch,
+}));
 vi.mock('react-i18next', async () => {
   const { default: copy } = await import('@shared/i18n/common/en.json');
   return {
@@ -141,7 +145,7 @@ describe('independent management diagnostics', () => {
         body: { ...metadata, encoding: 'utf-8', body: '<script>untrusted</script>' },
         source: null,
       })
-      .mockRejectedValueOnce(new Error('Access changed'));
+      .mockRejectedValueOnce(new ApiError('forbidden', 'Access changed', 403));
     render(<IndependentDiagnostics role="admin" accountId="a" scopeReady />);
     fireEvent.click(screen.getByRole('button', { name: 'Search diagnostics' }));
     fireEvent.click(await screen.findByText(/img_AAAAA.*Attempt 3/));
@@ -161,7 +165,7 @@ describe('independent management diagnostics', () => {
         body: { ...first, encoding: 'utf-8', body: '<script>untrusted</script>' },
         source: null,
       })
-      .mockRejectedValueOnce(new Error('Access changed'));
+      .mockRejectedValueOnce(new ApiError('forbidden', 'Access changed', 403));
     render(<IndependentDiagnostics role="admin" accountId="a" scopeReady />);
     fireEvent.click(screen.getByRole('button', { name: 'Search diagnostics' }));
     await waitFor(() => expect(screen.getAllByText(/img_AAAAA.*Attempt 3/)).toHaveLength(2));

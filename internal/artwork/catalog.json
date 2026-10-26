@@ -245,6 +245,18 @@
       "rating": "general",
       "scene": "illustration:q"
     },
+    "card:r-chatgpt": {
+      "rating": "general",
+      "scene": "illustration:r"
+    },
+    "card:s-chatgpt": {
+      "rating": "r18",
+      "scene": "illustration:s"
+    },
+    "card:s-claude": {
+      "rating": "r18",
+      "scene": "illustration:s"
+    },
     "illustration:a": {
       "rating": "general"
     },
@@ -295,6 +307,12 @@
     },
     "illustration:q": {
       "rating": "general"
+    },
+    "illustration:r": {
+      "rating": "general"
+    },
+    "illustration:s": {
+      "rating": "r18"
     },
     "cover:permanent": {
       "rating": "general",
@@ -351,6 +369,16 @@
       "name": "偷心预告",
       "name_en": "A Notice to Steal Your Heart"
     },
+    "cover:r": {
+      "rating": "general",
+      "name": "未命名的明天",
+      "name_en": "Tomorrow, Still Unwritten"
+    },
+    "cover:s": {
+      "rating": "r18",
+      "name": "糖夜迷藏",
+      "name_en": "Sweet Hide-and-Seek"
+    },
     "appearance:default": {
       "rating": "general"
     },
@@ -392,9 +420,61 @@
       "uses": [
         "card:q-glm"
       ]
+    },
+    "appearance:tomorrow": {
+      "rating": "general",
+      "uses": [
+        "card:r-chatgpt"
+      ]
     }
   },
   "assets": [
+    {
+      "owner": "card:s-chatgpt",
+      "files": [
+        "cards/s-chatgpt.webp",
+        "hires/cards/s-chatgpt.webp",
+        "thumbs/s-chatgpt.webp"
+      ],
+      "prefixes": [
+        "motion/s-chatgpt/",
+        "hires/motion/s-chatgpt/"
+      ]
+    },
+    {
+      "owner": "card:s-claude",
+      "files": [
+        "cards/s-claude.webp",
+        "hires/cards/s-claude.webp",
+        "thumbs/s-claude.webp"
+      ],
+      "prefixes": [
+        "motion/s-claude/",
+        "hires/motion/s-claude/"
+      ]
+    },
+    {
+      "owner": "illustration:s",
+      "files": [
+        "groups/s.webp",
+        "hires/groups/s.webp",
+        "backgrounds/s.webp",
+        "hires/backgrounds/s.webp",
+        "layers/groups/s.webp",
+        "hires/layers/groups/s.webp"
+      ]
+    },
+    {
+      "owner": "cover:s",
+      "files": [
+        "covers/s.webp",
+        "hires/covers/s.webp",
+        "backgrounds/covers/s.webp",
+        "hires/backgrounds/covers/s.webp",
+        "layers/covers/s.webp",
+        "hires/layers/covers/s.webp"
+      ]
+    },
     {
       "owner": "appearance:amber",
       "files": [
@@ -453,6 +533,15 @@
       ],
       "prefixes": [
         "motion/q-glm/appearance-"
+      ]
+    },
+    {
+      "owner": "appearance:tomorrow",
+      "files": [
+        "appearances/tomorrow-dark.webp",
+        "appearances/tomorrow-light.webp",
+        "hires/appearances/tomorrow-dark.webp",
+        "hires/appearances/tomorrow-light.webp"
       ]
     },
     {
@@ -758,6 +847,15 @@
         "groups/q.webp",
         "hires/backgrounds/q.webp",
         "hires/groups/q.webp"
+      ]
+    },
+    {
+      "owner": "illustration:r",
+      "files": [
+        "backgrounds/r.webp",
+        "groups/r.webp",
+        "hires/backgrounds/r.webp",
+        "hires/groups/r.webp"
       ]
     },
     {
@@ -1413,6 +1511,20 @@
       ]
     },
     {
+      "owner": "card:r-chatgpt",
+      "files": [
+        "cards/r-chatgpt.webp",
+        "hires/cards/r-chatgpt.webp",
+        "thumbs/r-chatgpt.webp"
+      ],
+      "prefixes": [
+        "hires/motion/r-chatgpt/",
+        "hires/tomorrow/",
+        "motion/r-chatgpt/",
+        "tomorrow/"
+      ]
+    },
+    {
       "owner": "cover:n",
       "files": [
         "covers/n.webp",
@@ -1438,6 +1550,13 @@
       "files": [
         "covers/q.webp",
         "hires/covers/q.webp"
+      ]
+    },
+    {
+      "owner": "cover:r",
+      "files": [
+        "covers/r.webp",
+        "hires/covers/r.webp"
       ]
     }
   ]

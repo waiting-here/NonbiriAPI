@@ -74,6 +74,20 @@ async function setup({
   const keyWrites: Record<string, unknown>[] = [];
   const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
     const url = new URL(String(input), 'https://app.example');
+    if (url.pathname === '/api/endpoint-create-options')
+      return json({
+        base_connector_types: ['openai-compatible'],
+        mainstream_channels: [],
+        native_service_options: [
+          {
+            connector_type: 'openai-compatible',
+            configuration_type: 'openai-compatible',
+            native_services: ['chat_completions', 'responses'],
+            default_native_services: ['chat_completions'],
+            rerank_formats: [],
+          },
+        ],
+      });
     if (url.pathname === '/api/credentials/8')
       return json({ ...credential, credential_version: currentVersion });
     if (url.pathname === '/api/resource-operation-status') {
@@ -172,7 +186,11 @@ describe('granting a new mainstream entry', () => {
     );
     await screen.findByText(common.common.connections.grantSaved);
     expect(view.sourceWrites).toHaveLength(1);
-    expect(view.keyWrites[0]).toMatchObject({ credential_id: '8', discovery_source_id: '17' });
+    expect(view.keyWrites[0]).toMatchObject({
+      credential_id: '8',
+      discovery_source_id: '17',
+      native_services: ['chat_completions', 'responses'],
+    });
   });
   it('reuses an existing exact catalog instead of creating another', async () => {
     const view = await setup({ existing: true });

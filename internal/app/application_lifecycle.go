@@ -185,6 +185,12 @@ func (a *application) CloseContext(ctx context.Context) error {
 					failures = append(failures, err)
 				}
 			}
+			if a.agent != nil {
+				closeResource(a.agent.Close)
+			}
+			if a.agentRequests != nil {
+				closeResource(a.agentRequests.Close)
+			}
 			if a.lifecycle != nil {
 				closeResource(a.lifecycle.Close)
 			}

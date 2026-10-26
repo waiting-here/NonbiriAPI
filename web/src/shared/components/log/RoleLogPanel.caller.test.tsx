@@ -451,3 +451,82 @@ it.each(['admin', 'steward'] as const)(
     expect(within(dialog).getByText(action)).toBeVisible();
   },
 );
+
+it.each(['en', 'zh'] as const)(
+  'shows the owner safe check and correction in %s',
+  async (locale) => {
+    const row = {
+      id: requestID,
+      route_kind: 'openai_chat_completions',
+      phase: 'pre_handler',
+      rejection_stage: 'preflight',
+      rejection_reason: 'invalid_request',
+      request_method: 'POST',
+      request_path: '/v1/chat/completions',
+      caller_result_class: 'failed',
+      caller_status: 400,
+      caller_error_code: 'invalid_request',
+      started_at: 1,
+      completed_at: 2,
+      model: 'model',
+      attempt_count: '0',
+      usage: { ...usage, output_tokens: '0', total_tokens: '0' },
+      rejection_detail: {
+        field: 'n',
+        reason: 'expected the integer 1',
+        suggestion: 'Correct the field type or value according to the stated requirement.',
+      },
+    };
+    installFixtures('user', row);
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="user" />, {
+      station: 'user',
+      role: 'user',
+      locale,
+    });
+    await view.user.click(
+      await screen.findByRole('button', { name: locale === 'en' ? 'Details' : '详情' }),
+    );
+    expect(
+      await screen.findByText(
+        locale === 'en' ? 'n: expected the integer 1' : 'n: 此字段须为整数 1',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        locale === 'en'
+          ? 'Correct the field type or value according to the stated requirement.'
+          : '请按上述要求修改字段类型或值。',
+      ),
+    ).toBeInTheDocument();
+    view.unmount();
+  },
+);
+
+it('shows an honest missing-detail fallback for an older owner row', async () => {
+  const row = {
+    id: requestID,
+    route_kind: 'openai_chat_completions',
+    phase: 'pre_handler',
+    rejection_stage: 'preflight',
+    rejection_reason: 'invalid_request',
+    request_method: 'POST',
+    request_path: '/v1/chat/completions',
+    caller_result_class: 'failed',
+    caller_status: 400,
+    caller_error_code: 'invalid_request',
+    started_at: 1,
+    completed_at: 2,
+    model: 'model',
+    attempt_count: '0',
+    usage: { ...usage, output_tokens: '0', total_tokens: '0' },
+  };
+  installFixtures('user', row);
+  const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="user" />, {
+    station: 'user',
+    role: 'user',
+  });
+  await view.user.click(await screen.findByRole('button', { name: 'Details' }));
+  expect(await screen.findByText('Detailed reason was not recorded')).toBeInTheDocument();
+  expect(screen.queryByText('How to correct it')).not.toBeInTheDocument();
+  view.unmount();
+});

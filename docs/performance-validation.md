@@ -4,6 +4,103 @@ Run synthetic experiments against temporary databases and a local mock upstream.
 Never point these tests at a deployed instance. Default admission limits remain
 enabled; a rejected request is not counted as accepted throughput.
 
+For a slow test package, record per-test progress before changing its timeout:
+
+```sh
+GOMAXPROCS=2 go test -p 1 -json -count=1 ./internal/auth > auth-tests.jsonl
+GOMAXPROCS=2 RACE_TIMEOUT=10m scripts/race-check.sh -p 1 ./internal/auth
+```
+
+Go's test timeout covers the whole package, including all fixture setup; the
+duration beside a running test in a timeout stack covers only that test. Choose
+the diagnostic budget from measured fixture counts and case times. Separate
+template construction, materialization, database opening and the tested work.
+Use CPU and block profiles on a representative subset to distinguish parser or
+initialization work from an application wait. Cumulative blocking samples sum
+across goroutines and are not elapsed time. If separate runs show machine-wide
+speed changes, compare warmed before/after fixtures in alternating order within
+one process.
+
+Explicit arguments to `race-check.sh` retain the complete requested test set and
+flags. When no template environment is inherited, its ordinary-process builder
+prepares one immutable empty database for that invocation; each test still gets
+an isolated copy and runs the normal database validation. Inherited template
+settings are preserved, including invalid settings that must fail validation.
+The runner removes its temporary template and wrapper after completion. Catalog
+and sharded runs report package discovery durations and current top-level tests
+as they run, while retaining their complete grouped logs for timing analysis.
+
+The ordinary and routine gates run an explicit `go vet` phase, so their following
+test phase disables only the duplicate automatic vet pass. Standalone test and
+race commands retain their own vet behavior. Timing hints balance the live test
+catalog; they do not select coverage. Keep complete checks and failure reporting
+when changing scheduling, and measure runner queue/setup costs before adding jobs.
+
+For focused read-path measurements, start with the bounded SQLite benchmarks:
+
+```sh
+CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 ./internal/game/blackjack \
+  -run '^$' -bench '^BenchmarkHistorySparseUser$' -benchtime=10x -count=1
+CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 ./internal/riskaudit \
+  -run '^$' -bench '^BenchmarkRiskUsersSQLite$' -benchtime=3x -count=1
+CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 ./internal/riskaudit \
+  -run '^$' -bench '^BenchmarkRiskSourceWatermarkSQLite$' -benchtime=10x -count=1
+NONBIRI_PERFORMANCE_SAMPLE=1 CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 \
+  ./internal/donation ./internal/resources \
+  -run '^Test(DonationPage|CallerKey)PerformanceSample$' -benchtime=3x -count=1 -v
+```
+
+The history benchmark keeps three owned entries while unrelated retained tables
+grow from 1,000 to 50,000. It measures the candidate query, excluding full history
+projection. The users benchmark measures the repository method with 10,000 or
+100,000 minute observations for 100 users. The watermark benchmark isolates the
+two maximum-ID queries with equivalent indexes; it excludes scan creation and
+its time-window count. Fixture creation is outside the timed work. Report these
+scopes explicitly and compare the same inputs before and after a change.
+
+The opt-in donation sample reads a full 100-row page with three sources per
+donation, then adds 2,000 unrelated historical donations. It records query count,
+elapsed time and allocations separately. The caller-key sample measures the two
+independent lookups performed during request authentication; it does not model
+writer contention.
+
+Read-pool regressions separately verify that a held, authorized read snapshot
+does not consume the writer, retains consistent counts and results through a
+concurrent commit, and rechecks current permissions on the next request. An
+uncontended lookup microbenchmark alone does not demonstrate reduced contention.
+
+For streaming accumulation, ordered failure folding and writer ownership:
+
+```sh
+CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 ./internal/connector/openai \
+  -run '^$' -bench '^BenchmarkStreamAccumulation$' -benchtime=3x -count=1
+NONBIRI_PERFORMANCE_SAMPLE=1 CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 \
+  ./internal/charity -run '^Test(Fold|ServiceFold)PerformanceSample$' \
+  -benchtime=3x -count=1 -v
+NONBIRI_PERFORMANCE_SAMPLE=1 CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 \
+  ./internal/clientguard ./internal/game/ranking \
+  -run '^Test(ClientGuard|Ranking)ReaderPerformanceSample$' \
+  -benchtime=3x -count=1 -v
+```
+
+The stream benchmark exercises the real Responses and flattened-chat consumers,
+including terminal output, with 64 KiB or 512 KiB of text in 32- or 512-byte
+deltas. It excludes networking, upstream generation and fixture construction;
+allocated bytes are cumulative allocations, not peak memory. The key-fold sample
+uses 1, 32 or 256 contiguous completed results. The service-fold sample uses 32
+real dispatch associations, completing the leading gap in the timed transaction.
+Both roll back each iteration to preserve identical inputs and exclude unrelated
+completion/ledger work.
+
+Client-rule and ranking samples compare the same work on the writer and reader
+pools, with 0/100 rules and 1,000/20,000 eligible users. They do not model
+production contention. Separate regressions hold or observe the writer, verify
+concurrent write progress and fresh permission checks, and ensure MFA response
+output begins only after its snapshot is released. Keep these ownership results
+separate from small uncontended timing differences.
+
+For a broader mixed workload:
+
 ```sh
 NONBIRI_LOAD_TEST=1 CGO_ENABLED=0 go test ./internal/app \
   -run '^TestApplicationLakeMixedLoad$' -count=1 -v -timeout=8m

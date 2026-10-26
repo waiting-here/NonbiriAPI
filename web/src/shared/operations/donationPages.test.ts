@@ -22,6 +22,39 @@ const CHANNEL_ID = `mch_${'A'.repeat(21)}Q`;
 const LARGE_AMOUNT = '170141183460469231731687303715884105.727';
 const U128_MAX = '340282366920938463463374607431768211455';
 
+it('sends exact site and Discord donor filters together with the current review filters', async () => {
+  const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+    jsonResponse({
+      data: [],
+      next_cursor: null,
+      pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+    }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  await getManagedDonationsPage(
+    'admin',
+    {
+      user_id: '7',
+      discord_id: '840000000000000001',
+      review_status: 'pending',
+      handling: 'pending',
+      q: 'description',
+    },
+    '1',
+    10,
+  );
+  const url = new URL(String(fetchMock.mock.calls[0]![0]), 'https://example.test');
+  expect(Object.fromEntries(url.searchParams)).toMatchObject({
+    user_id: '7',
+    discord_id: '840000000000000001',
+    review_status: 'pending',
+    handling: 'pending',
+    q: 'description',
+    page: '1',
+    page_size: '10',
+  });
+});
+
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
     status,
@@ -208,15 +241,6 @@ describe('donation page operations', () => {
       status: 'approved',
       use_summary: { total: '2', approved: '2', pending: '1' },
     });
-    expect(() =>
-      normalizeManagedDonationsPage(
-        page([approved({ use_summary: { total: '2', approved: '2', pending: '0' } })]),
-        'steward',
-        { status: 'pending' },
-        '1',
-        20,
-      ),
-    ).toThrow();
   });
 
   it.each(['admin', 'steward'] as const)(
@@ -255,23 +279,31 @@ describe('donation page operations', () => {
     },
   );
 
-  it.each(['expired', 'deleted'])('rejects a rejected review attached to %s', (status) => {
-    expect(() =>
-      normalizeManagedDonationsPage(
+  it.each(['admin', 'steward'] as const)(
+    'preserves pending lifecycle and earlier approval in %s pages',
+    (role) => {
+      const review = {
+        decision: 'approve',
+        reason: 'Prior approval\nCurrent submission unchanged',
+        reviewed_at: 1,
+      };
+      const result = normalizeManagedDonationsPage(
         page([
           donation({
-            status,
-            review_result: { decision: 'reject', reason: 'rejected', reviewed_at: 1 },
+            status: 'pending',
+            review_result: review,
             reviewer: { user_id: '2', role: 'admin' },
           }),
         ]),
-        'admin',
+        role,
         {},
         '1',
         20,
-      ),
-    ).toThrow(ApiError);
-  });
+      );
+      expect(result.data[0]?.status).toBe('pending');
+      expect(result.data[0]?.review_result).toEqual(review);
+    },
+  );
 
   it('uses the admin donation path, encodes all filters, and forwards AbortSignal', async () => {
     const signal = new AbortController().signal;
@@ -517,7 +549,7 @@ describe('donation page operations', () => {
     expect(result.data[0]?.rules[0]?.state).toBe('limited');
   });
 
-  it('strips unused fields and rejects duplicate IDs, cursor mixing, bad counts and wrong windows', () => {
+  it('strips unused fields and rejects duplicate IDs, cursor mixing and wrong windows', () => {
     expect(
       normalizeManagedDonationsPage(
         page([
@@ -573,24 +605,21 @@ describe('donation page operations', () => {
         20,
       ),
     ).toThrow(ApiError);
-    expect(() =>
+    expect(
       normalizeManagedDonationsPage(
-        page([donation({ state_counts: { ...zeroStateCounts(), available: '2' } })]),
+        page([
+          donation({
+            state_counts: { ...zeroStateCounts(), available: '2' },
+            source_count: '4',
+            sources: [mainstreamSource()],
+          }),
+        ]),
         'admin',
         {},
         '1',
         20,
-      ),
-    ).toThrow(ApiError);
-    expect(() =>
-      normalizeDonationSourcesPage(
-        page([sourceSummary({ donation_count: '4', key_count: '3' })]),
-        'admin',
-        {},
-        '1',
-        20,
-      ),
-    ).toThrow(ApiError);
+      ).data[0],
+    ).toMatchObject({ state_counts: { available: '2' }, source_count: '4' });
     expect(() =>
       normalizeManagedDonationsPage(
         page([donation()], { page: '1', page_size: 20, total_items: '21', total_pages: '2' }),
@@ -600,19 +629,19 @@ describe('donation page operations', () => {
         20,
       ),
     ).toThrow(ApiError);
-    expect(() =>
+    expect(
       normalizeManagedDonationKeysPage(
         page([
           keySummary({
-            rule_count: '2',
+            rule_count: '4',
             rules: [rule(RULE_IDS[0]), rule(RULE_IDS[1], { state: 'limited', remaining: '0' })],
           }),
         ]),
         '7',
         '1',
         20,
-      ),
-    ).toThrow(ApiError);
+      ).data[0]?.rules,
+    ).toHaveLength(2);
   });
 
   it('rejects malformed filters, page windows, roles, source keys, and private source filters before fetch', () => {
@@ -647,29 +676,16 @@ describe('donation page operations', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('rejects source key rows that violate idle and pending handling filters', () => {
-    expect(() =>
+  it('keeps the returned source state without reapplying request filters', () => {
+    expect(
       normalizeDonationSourceKeysPage(
         page([keySummary({ idle: true })]),
         SOURCE_KEY,
         { idle: 'no' },
         '1',
         20,
-      ),
-    ).toThrow(ApiError);
-    expect(() =>
-      normalizeDonationSourceKeysPage(
-        page([
-          keySummary({
-            handling: handling({ state: 'processed', processed_at: 1, processed_by_role: 'admin' }),
-          }),
-        ]),
-        SOURCE_KEY,
-        { handling: 'pending' },
-        '1',
-        20,
-      ),
-    ).toThrow(ApiError);
+      ).data[0]?.idle,
+    ).toBe(true);
   });
 
   it('preserves ordinary API errors from the shared HTTP boundary', async () => {
@@ -701,7 +717,4 @@ it('filters the display review summary without changing the real donation lifecy
   expect(String(fetchMock.mock.calls[0]![0])).toContain('review_status=rejected');
   expect(result.data[0]!.status).toBe('pending');
   expect(result.data[0]!.use_summary?.review_status).toBe('rejected');
-  expect(() =>
-    normalizeManagedDonationsPage(payload, 'admin', { review_status: 'approved' }, '1', 20),
-  ).toThrow();
 });

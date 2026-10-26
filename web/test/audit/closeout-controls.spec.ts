@@ -1,3 +1,4 @@
+import { fillService, submitService } from '../service-onboarding';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -228,12 +229,6 @@ async function baseURL(context: BrowserContext) {
     (channel) => channel.id === state.management.channel_id,
   )!;
   return seed.entries![0].base_url;
-}
-
-async function selectService(scope: Locator, name: 'chat_completions' | 'responses') {
-  const group = scope.getByRole('group', { name: common.common.nativeServices.title, exact: true });
-  for (const box of await group.getByRole('checkbox').all()) await box.uncheck();
-  await group.getByRole('checkbox', { name: native[name], exact: true }).check();
 }
 
 test('personal rewriting reads ordinary values and preserves protected keep and replace edits', async ({
@@ -522,7 +517,16 @@ test('matching presets remain suggestions until an entry is explicitly selected'
     const address = (await baseURL(owner)).replace(/\/$/, '') + '/matching-' + suffix;
     const presets: AdminMainstreamChannel[] = [];
     const adminPage = await manager.newPage();
-    for (const [index, kind] of (['chat_completions', 'responses'] as const).entries()) {
+    const options = await api<EndpointCreateOptions>(
+      owner,
+      state.user_url,
+      '/api/endpoint-create-options',
+    );
+    const services = options.native_service_options!.find(
+      (option) => option.connector_type === 'openai-compatible',
+    )!.native_services;
+    expect(services.length).toBeGreaterThan(0);
+    for (const index of [0, 1]) {
       await adminPage.goto(state.admin_url + '/mainstream-channels');
       await adminPage.getByRole('button', { name: channels.actions.new, exact: true }).click();
       const form = adminPage.locator('form').filter({
@@ -541,7 +545,6 @@ test('matching presets remain suggestions until an entry is explicitly selected'
         .getByLabel(c.protocol, { exact: true })
         .selectOption({ label: channels.connector.openaiCompatible });
       await group.getByLabel(c.entryURL, { exact: true }).fill(address);
-      await selectService(group, kind);
       const saved = responseFor(adminPage, 'POST', '/admin/api/mainstream-channels');
       await form.getByRole('button', { name: channels.actions.create, exact: true }).click();
       const response = await saved;
@@ -572,7 +575,7 @@ test('matching presets remain suggestions until an entry is explicitly selected'
     });
     const url =
       state.user_url + '/endpoints?connection_id=' + connection.id + '&connection_view=entries';
-    const beginCustom = async (kind: 'chat_completions' | 'responses') => {
+    const beginCustom = async () => {
       await page.goto(url);
       await page.getByRole('button', { name: c.addEntry, exact: true }).first().click();
       const panel = page.locator('.nb-expandable-panel:not([hidden])');
@@ -580,7 +583,6 @@ test('matching presets remain suggestions until an entry is explicitly selected'
         .getByLabel(c.protocol, { exact: true })
         .selectOption({ label: user.user.core['connector.openai'] });
       await panel.getByLabel(c.entryURL, { exact: true }).fill(address);
-      await selectService(panel, kind);
       const suggestions = panel.getByRole('region', { name: matching.title, exact: true });
       await expect(
         suggestions.getByRole('button', { name: matching.usePreset, exact: false }),
@@ -599,23 +601,29 @@ test('matching presets remain suggestions until an entry is explicitly selected'
       await expect(panel.getByRole('radio', { name: c.custom, exact: true })).toBeChecked();
       return { panel, suggestions };
     };
-    const first = await beginCustom('chat_completions');
+    const first = await beginCustom();
     expect(writes).toEqual([]);
     await capture(page, info, 'matching-preset-choices', first.suggestions);
     const customSaved = responseFor(page, 'POST', '/api/endpoints');
-    await first.panel.getByRole('button', { name: c.saveEntries, exact: true }).click();
+    await fillService(first.panel, {
+      name: 'Custom preset choice ' + suffix,
+      url: address,
+      secret: 'synthetic-matching-' + suffix,
+      discovery: false,
+    });
+    await submitService(first.panel);
     const customResponse = await customSaved;
     expect(customResponse.status()).toBe(201);
     expect(customResponse.request().postDataJSON()).toMatchObject({
       source: 'custom',
       base_url: address,
       connection_id: connection.id,
-      native_services: ['chat_completions'],
+      native_services: services,
     });
     const custom = (await customResponse.json()) as Endpoint;
     expect(custom.origin).toEqual({ kind: 'custom' });
 
-    const second = await beginCustom('responses');
+    const second = await beginCustom();
     const chosen = presets[1];
     const chosenEntry = chosen.entries![0];
     await second.suggestions
@@ -630,14 +638,20 @@ test('matching presets remain suggestions until an entry is explicitly selected'
     await expect(
       second.panel.getByRole('combobox', { name: c.mainstream, exact: true }),
     ).toHaveValue(chosen.id);
+    await second.panel
+      .locator('summary')
+      .filter({ has: page.getByText(c.entries, { exact: true }) })
+      .click();
     await expect(
       second.panel.getByRole('checkbox', { name: chosenEntry.name, exact: true }),
     ).toBeChecked();
-    await expect(
-      second.panel.getByRole('checkbox', { name: native.responses, exact: true }),
-    ).toBeChecked();
     const selectedSaved = responseFor(page, 'POST', '/api/endpoints');
-    await second.panel.getByRole('button', { name: c.saveEntries, exact: true }).click();
+    await second.panel
+      .getByRole('table', { name: c.chooseCredential, exact: true })
+      .getByRole('button', { name: c.select, exact: true })
+      .click();
+    await second.panel.getByLabel(c.ownership, { exact: true }).check();
+    await submitService(second.panel);
     const selectedResponse = await selectedSaved;
     expect(selectedResponse.status()).toBe(201);
     expect(selectedResponse.request().postDataJSON()).toMatchObject({
@@ -646,7 +660,7 @@ test('matching presets remain suggestions until an entry is explicitly selected'
       channel_entry_id: chosenEntry.id,
       channel_revision: chosen.revision,
       connection_id: connection.id,
-      native_services: ['responses'],
+      native_services: services,
     });
     const selected = (await selectedResponse.json()) as Endpoint;
     const entries = await api<{ data: Endpoint[] }>(
@@ -660,20 +674,27 @@ test('matching presets remain suggestions until an entry is explicitly selected'
     });
     expect(entries.data.find((entry) => entry.id === selected.id)).toMatchObject({
       origin: { kind: 'mainstream', channel_id: chosen.id, name: chosen.name },
-      native_services: ['responses'],
+      native_services: services,
       base_url: address,
       configuration_type: 'openai-compatible',
     });
     for (const entry of entries.data) {
-      const keys = await api<{ data: unknown[] }>(
+      const keys = await api<{ data: { native_services: string[] }[] }>(
         owner,
         state.user_url,
         '/api/endpoints/' + entry.id + '/keys',
       );
-      expect(keys.data).toEqual([]);
+      expect(keys.data).toHaveLength(1);
+      expect(keys.data[0]).toMatchObject({ native_services: services });
     }
     expect(await donations()).toEqual(beforeDonations);
-    expect(writes).toEqual(['POST /api/endpoints', 'POST /api/endpoints']);
+    expect(writes).toEqual([
+      'POST /api/endpoints',
+      'POST /api/connections/' + connection.id + '/credentials',
+      'POST /api/endpoints/' + custom.id + '/keys',
+      'POST /api/endpoints',
+      'POST /api/endpoints/' + selected.id + '/keys',
+    ]);
   } finally {
     await owner.close();
     await manager.close();

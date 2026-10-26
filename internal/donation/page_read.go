@@ -20,10 +20,17 @@ func (s *Service) beginBrowseTx(ctx context.Context, role reviewerRole, userID i
 }
 
 func (s *Service) beginBrowseActorTx(ctx context.Context, role reviewerRole, userID int64) (*sql.Tx, int64, error) {
-	if s == nil || s.db == nil || ctx == nil {
+	if s == nil {
 		return nil, 0, ErrUnavailable
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	return s.beginBrowseActorTxOn(ctx, s.db, role, userID)
+}
+
+func (s *Service) beginBrowseActorTxOn(ctx context.Context, database *sql.DB, role reviewerRole, userID int64) (*sql.Tx, int64, error) {
+	if s == nil || database == nil || ctx == nil {
+		return nil, 0, ErrUnavailable
+	}
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, 0, err
 	}
@@ -46,7 +53,7 @@ func (s *Service) beginBrowseActorTx(ctx context.Context, role reviewerRole, use
 				err = mapAuthorization(s.roleAuth.AuthorizeAdminMutation(ctx, tx, userID))
 			}
 		}
-	case reviewerSteward:
+	case reviewerSteward, reviewerGranted:
 		if nilDependency(s.roleAuth) || userID <= 0 {
 			err = ErrForbidden
 		} else {
@@ -163,6 +170,11 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 	if err != nil {
 		return empty, err
 	}
+	if role != recurringOwner {
+		if err := scope.RequireDonation(ctx, tx, donationID, now); err != nil {
+			return empty, scopeError(err)
+		}
+	}
 	if role == recurringOwner {
 		var owned bool
 		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donations WHERE id=? AND user_id=?)`, donationID, userID).Scan(&owned); err != nil {
@@ -176,7 +188,7 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 	if err != nil {
 		return empty, err
 	}
-	if !visible && !scope.Trainee && (role == reviewerAdmin || role == reviewerSteward) {
+	if !visible && (role == reviewerAdmin || role == reviewerSteward || role == reviewerGranted) {
 		visible, err = s.managementHeldRead(ctx, tx, role, userID, donationID, now)
 		if err != nil {
 			return empty, err
@@ -199,15 +211,20 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 		}
 		args = append(args, now)
 	}
-	if scope.Trainee {
-		query += ` AND ` + charityscope.KeyPredicate()
-		args = append(args, scope.ModelID, now)
+	if scope.RestrictedKeys() {
+		predicate, values := scope.KeyPredicate(now, false)
+		query += " AND " + predicate
+		args = append(args, values...)
 	}
 	ids, metadata, err := browseIDs(ctx, tx, query, args, page)
 	if err != nil {
 		return empty, err
 	}
-	keys, err := readDonationKeySelectionTx(ctx, tx, donationID, header.Status, now, ids)
+	keys, err := readDonationKeySelectionWithStatusesTx(ctx, tx, donationID, header.Status, now, ids)
+	if err != nil {
+		return empty, err
+	}
+	canManage, err := keyManagementAllowedTx(ctx, tx, role, userID)
 	if err != nil {
 		return empty, err
 	}
@@ -222,11 +239,12 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 			return empty, err
 		}
 		value := managedKeySummary(key, header, rules)
+		value.CanManage = value.CanManage && canManage
 		if role == recurringOwner {
 			value.EndpointID = key.OwnerEndpointID
 			value.CanManage = false
 		}
-		if scope.Trainee {
+		if scope.Redact {
 			value.EndpointKeyID = nil
 		}
 		if role != recurringOwner {

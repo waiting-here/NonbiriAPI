@@ -12,7 +12,7 @@ import (
 )
 
 func TestEndpointTagsBulkAtomicityFiltersAndAuthority(t *testing.T) {
-	for _, tag := range []string{"community_charity", "noncommercial_gateway"} {
+	for _, tag := range []string{"community_charity", "noncommercial_gateway", "user_gateway", "steward_gateway", "invalid_entry"} {
 		t.Run(tag, func(t *testing.T) { checkEndpointTag(t, tag) })
 	}
 }
@@ -71,4 +71,43 @@ func checkEndpointTag(t *testing.T, tag string) {
 	if code := write(urls, tag, true, "endpoint-tags-denied-0001"); code != 403 {
 		t.Fatal("final authority", code)
 	}
+}
+
+func TestStewardEndpointSectionsCheckLiveGrantsBeforeReplay(t *testing.T) {
+	f, six := newStewardUsersFixture(t)
+	actor := f.seedUser("endpoint-reviewer", false)
+	owner := f.seedUser("endpoint-owner", false)
+	if _, err := f.store.DB().Exec(`UPDATE users SET level=5 WHERE id=?`, actor); err != nil {
+		t.Fatal(err)
+	}
+	base := "https://endpoint-grants.example/v1"
+	f.seedEndpoint(owner, base, true, 0)
+	body, _ := json.Marshal(endpointTagsMutation{[]string{base}, "steward_gateway", true})
+	request := func(who int64, method, route, body, key string, want int) {
+		t.Helper()
+		got := stewardUserRequest(t, f, who, 0, method, route, "", body, key)
+		if got.Code != want {
+			t.Fatalf("%s %s=%d want%d: %s", method, route, got.Code, want, got.Body.String())
+		}
+	}
+	request(actor, http.MethodGet, routeEndpointOverview, "", "", 403)
+	request(actor, http.MethodPatch, routeEndpointTags, string(body), "endpoint-live-replay-key1", 403)
+	request(six, http.MethodGet, routeEndpointOverview, "", "", 200)
+	request(six, http.MethodPatch, routeEndpointTags, string(body), "endpoint-six-write-key01", 204)
+	policy := authz.DefaultStewardPermissions(5)
+	policy.Permissions["endpoints.read"] = true
+	policy.Permissions["endpoints.tags"] = true
+	grants, _ := json.Marshal(policy.Permissions)
+	limits, _ := json.Marshal(policy.Limits)
+	if _, err := f.store.DB().Exec(`INSERT INTO steward_permissions(user_id,revision,permissions,limits,donation_scope,created_at,updated_at) VALUES(?,1,?,?,'standard',1,1)`, actor, string(grants), string(limits)); err != nil {
+		t.Fatal(err)
+	}
+	request(actor, http.MethodGet, routeEndpointOverview, "", "", 200)
+	request(actor, http.MethodPatch, routeEndpointTags, string(body), "endpoint-live-replay-key1", 204)
+	request(actor, http.MethodPatch, routeEndpointTags, string(body), "endpoint-live-replay-key1", 204)
+	if _, err := f.store.DB().Exec(`UPDATE steward_permissions SET permissions=json_set(permissions,'$."endpoints.tags"',json('false')),revision=revision+1 WHERE user_id=?`, actor); err != nil {
+		t.Fatal(err)
+	}
+	request(actor, http.MethodPatch, routeEndpointTags, string(body), "endpoint-live-replay-key1", 403)
+	request(actor, http.MethodGet, routeEndpointOverview, "", "", 200)
 }

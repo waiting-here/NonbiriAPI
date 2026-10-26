@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -22,9 +24,10 @@ const (
 )
 
 type KeyBindingTarget struct {
-	CharityModelID          string `json:"charity_model_id"`
-	ExpectedBindingRevision string `json:"expected_binding_revision"`
-	UpstreamModelID         string `json:"upstream_model_id"`
+	CharityModelID          string                   `json:"charity_model_id"`
+	ExpectedBindingRevision string                   `json:"expected_binding_revision"`
+	UpstreamModelID         string                   `json:"upstream_model_id"`
+	NativeServices          []contract.NativeService `json:"native_services,omitempty"`
 }
 type BindingModelRevision struct {
 	CharityModelID  string `json:"charity_model_id"`
@@ -60,6 +63,8 @@ type bindingTarget struct {
 	modelID  int64
 	upstream string
 	expected int64
+	services contract.NativeServiceSet
+	legacy   bool
 }
 type bindingKey struct {
 	id, physicalID int64
@@ -97,7 +102,14 @@ func parseBindingTargets(input []KeyBindingTarget) ([]bindingTarget, error) {
 			return nil, ErrInvalidRequest
 		}
 		revisions[id] = expected
-		out = append(out, bindingTarget{id, item.UpstreamModelID, expected})
+		var services contract.NativeServiceSet
+		if item.NativeServices != nil {
+			services, err = contract.ParseNativeServices(item.NativeServices)
+			if err != nil || services.Empty() {
+				return nil, ErrInvalidRequest
+			}
+		}
+		out = append(out, bindingTarget{modelID: id, upstream: item.UpstreamModelID, expected: expected, services: services, legacy: item.NativeServices == nil})
 	}
 	return out, nil
 }
@@ -138,7 +150,7 @@ func readBindingKeys(ctx context.Context, tx *sql.Tx, donationID, keyID, now int
 		if err := rows.Scan(&key.id, &key.physicalID, &key.valid, &source, &connector, &base); err != nil {
 			return nil, err
 		}
-		if channel != nil && (source != channel.ChannelID || connector != channel.ConnectorType || base != channel.BaseURL) {
+		if channel != nil && source != "" && (source != channel.ChannelID || connector != channel.ConnectorType || base != channel.BaseURL) {
 			key.valid = false
 		}
 		out = append(out, key)
@@ -176,8 +188,13 @@ func (s *Service) bindKeyTargets(ctx context.Context, role roleKind, actorID, do
 	}
 	defer tx.Rollback()
 	// Check every requested permission before reading receipts or skipping missing targets.
+	if role != roleAdmin {
+		if err := authz.RequireStewardPermission(ctx, tx, actorID, "charity.manage"); err != nil {
+			return empty, err
+		}
+	}
 	for _, target := range targets {
-		if scope.Trainee {
+		if scope.Trainee || scope.RestrictedKeys() {
 			targetScope, err := s.managementScope(ctx, tx, role, actorID, target.modelID, false)
 			if err != nil {
 				return empty, err
@@ -261,7 +278,7 @@ func applyBindingMatrix(ctx context.Context, tx *sql.Tx, targets []bindingTarget
 					status = "already_bound"
 				default:
 					var supported bool
-					if err := tx.QueryRowContext(ctx, `SELECT `+charityscope.SupportSQL("?", "?", "?"), key.id, target.upstream).Scan(&supported); err != nil {
+					if err := tx.QueryRowContext(ctx, catalogSupportQuery(), key.id, target.upstream).Scan(&supported); err != nil {
 						return out, err
 					}
 					if !supported {
@@ -269,7 +286,7 @@ func applyBindingMatrix(ctx context.Context, tx *sql.Tx, targets []bindingTarget
 					} else if head.targetCount >= maxBindingBatch {
 						status = "capacity_exceeded"
 					} else {
-						values := []validatedTarget{{keyID: key.id, upstream: target.upstream, legacy: true}}
+						values := []validatedTarget{{keyID: key.id, upstream: target.upstream, services: target.services, legacy: target.legacy}}
 						if err := validateTargetsTx(ctx, tx, charityscope.Scope{}, target.modelID, values, now); err != nil {
 							if errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalidRequest) {
 								row.Results[index] = "invalid_resource"

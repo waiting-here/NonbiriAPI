@@ -51,6 +51,8 @@ type pageCursor struct {
 	Before  int64  `json:"before"`
 }
 
+const historyPageSQL = `SELECT g.id,g.started_at FROM game_blackjack_sessions g WHERE g.terminal_at>? AND g.terminal_at<=? AND g.started_at<=? AND g.id IN (SELECT session_id FROM game_blackjack_entries WHERE user_id=?) ORDER BY g.started_at DESC LIMIT ?`
+
 func (s *Service) sealCursor(c pageCursor) (string, error) {
 	body, err := marshal(c)
 	if err != nil {
@@ -156,7 +158,7 @@ func (s *Service) HistoryDetail(ctx context.Context, identity Identity, id strin
 	if !db.ValidateOpaqueID(id, "bjt_") {
 		return HistoryDetail{}, ErrInvalid
 	}
-	tx, now, err := s.begin(ctx)
+	tx, now, err := s.beginRead(ctx)
 	if err != nil {
 		return HistoryDetail{}, err
 	}
@@ -173,7 +175,7 @@ func (s *Service) History(ctx context.Context, identity Identity, in PageInput) 
 		return out, ErrInvalid
 	}
 	in.Dataset = "recent"
-	tx, now, err := s.begin(ctx)
+	tx, now, err := s.beginRead(ctx)
 	if err != nil {
 		return out, err
 	}
@@ -185,7 +187,7 @@ func (s *Service) History(ctx context.Context, identity Identity, in PageInput) 
 	if err != nil {
 		return out, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT g.id,g.started_at FROM game_blackjack_sessions g WHERE g.terminal_at>? AND g.terminal_at<=? AND g.started_at<=? AND EXISTS(SELECT 1 FROM game_blackjack_entries e WHERE e.session_id=g.id AND e.user_id=?) ORDER BY g.started_at DESC LIMIT ?`, now-retentionSeconds, c.AsOf, c.Before, identity.UserID, limit+1)
+	rows, err := tx.QueryContext(ctx, historyPageSQL, now-retentionSeconds, c.AsOf, c.Before, identity.UserID, limit+1)
 	if err != nil {
 		return out, err
 	}

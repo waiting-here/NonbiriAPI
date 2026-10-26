@@ -39,6 +39,9 @@ func convertOffline(ctx context.Context, path string, codec secret.GenerationTwo
 		if err != nil {
 			return false, err
 		}
+		if version > db.CurrentSchemaVersion {
+			return false, &db.StartupError{Kind: db.StartupSchemaMismatch, ExpectedSchemaVersion: db.CurrentSchemaVersion, ActualSchemaVersion: &version}
+		}
 		hash, err := db.SchemaManifestHash(ctx, q)
 		if err != nil {
 			return false, err
@@ -51,7 +54,7 @@ func convertOffline(ctx context.Context, path string, codec secret.GenerationTwo
 				return true, nil
 			}
 		}
-		return false, errors.New("unsupported schema version or manifest")
+		return false, &db.StartupError{Kind: db.StartupSchemaMismatch, ExpectedSchemaVersion: db.CurrentSchemaVersion, ActualSchemaVersion: &version}
 	}
 	finishIdentity := beginProgress(ctx, "identity", 0, "")
 	identityFinished := false

@@ -1,9 +1,11 @@
 package app
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
@@ -44,7 +46,19 @@ func TestBindingManagementRoutesRequireLiveSessionRoleAndOrigin(t *testing.T) {
 	call(http.MethodGet, presets+"/"+channel, "", origin, f.cookies, http.StatusForbidden)
 	call(http.MethodPut, presets+"/"+channel, `{"expected_channel_revision":"1","expected_preset_revision":"0","mappings":[]}`, origin, f.cookies, http.StatusForbidden)
 	call(http.MethodPost, "/api/steward/donations/999999/bindings/apply-preset", `{"channel_id":"`+channel+`","expected_channel_revision":"1","expected_preset_revision":"1","expected_donation_revision":"1","models":[]}`, origin, f.cookies, http.StatusForbidden)
+	call(http.MethodGet, options, "", origin, f.cookies, http.StatusNotFound)
 	call(http.MethodPost, batch, input, origin, f.cookies, http.StatusNotFound)
+	policy := authz.DefaultStewardPermissions(5)
+	policy.Permissions["charity.manage"] = false
+	policy.Permissions["charity.presets"] = true
+	grants, _ := json.Marshal(policy.Permissions)
+	limits, _ := json.Marshal(policy.Limits)
+	if _, err := f.store.DB().Exec(`INSERT INTO steward_permissions(user_id,revision,permissions,limits,created_at,updated_at) VALUES(?,1,?,?,?,?)`, f.userID, string(grants), string(limits), f.now, f.now); err != nil {
+		t.Fatal(err)
+	}
+	call(http.MethodGet, presets, "", origin, f.cookies, http.StatusOK)
+	call(http.MethodGet, options, "", origin, f.cookies, http.StatusForbidden)
+	call(http.MethodPost, batch, input, origin, f.cookies, http.StatusForbidden)
 	setLevel(4)
 	call(http.MethodGet, options, "", origin, f.cookies, http.StatusForbidden)
 	call(http.MethodPost, batch, input, origin, f.cookies, http.StatusForbidden)

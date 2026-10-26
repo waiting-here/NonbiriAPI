@@ -35,7 +35,7 @@ func (s *Service) listBlacklistFiltered(ctx context.Context, actorID int64, role
 	empty := Page[BlacklistEntry]{Data: []BlacklistEntry{}}
 	limit := normalizePageLimit(query.Page, query.Cursor, query.Limit)
 	if limit == 0 || query.ActorUserID < 0 ||
-		query.ActorKind != "" && query.ActorKind != "admin" && query.ActorKind != "steward6" && query.ActorKind != "automatic" && query.ActorKind != "unknown" ||
+		query.ActorKind != "" && query.ActorKind != "admin" && query.ActorKind != "steward5" && query.ActorKind != "steward6" && query.ActorKind != "automatic" && query.ActorKind != "unknown" ||
 		query.DiscordID != "" && !validDiscordID(query.DiscordID) || query.Q != "" && !validFilter(query.Q) {
 		return empty, ErrInvalidRequest
 	}

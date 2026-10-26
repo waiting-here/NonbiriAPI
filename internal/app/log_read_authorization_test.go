@@ -5,9 +5,11 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -25,10 +27,16 @@ func TestQueuedLogReadRechecksExactSessionAndMFAPolicy(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			call := func(cookies []*http.Cookie) *httptest.ResponseRecorder {
-				return testApplicationRequest(t, f.app.handler, "GET", host, path, "", cookies, nil)
+			call := func(cookies []*http.Cookie, body io.ReadCloser) *httptest.ResponseRecorder {
+				handler := http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+					if body != nil {
+						request.Body = body
+					}
+					f.app.handler.ServeHTTP(w, request)
+				})
+				return testApplicationRequest(t, handler, "GET", host, path, "", cookies, nil)
 			}
-			if response := call(cookies); response.Code != http.StatusOK {
+			if response := call(cookies, nil); response.Code != http.StatusOK {
 				t.Fatalf("initial read: %d %s", response.Code, response.Body)
 			}
 			digest := sha256.Sum256([]byte(cookies[0].Value))
@@ -42,6 +50,21 @@ SELECT ?,user_id,oauth_state,last_seen_at,expires_at,absolute_expires_at,created
 			reader := f.store.ReadDB()
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
+			// The route consumes the empty body after all middleware and the
+			// steward precheck. Pause there before exhausting the reader pool,
+			// so the queued operation is the log repository's final authority
+			// check, not the earlier lifecycle admission read.
+			body := &queuedLogReadBody{ctx: ctx, entered: make(chan struct{}), release: make(chan struct{})}
+			defer body.Close()
+			result := make(chan *httptest.ResponseRecorder, 1)
+			go func() { result <- call(cookies, body) }()
+			select {
+			case <-body.entered:
+			case response := <-result:
+				t.Fatalf("read never reached the route: %d %s", response.Code, response.Body)
+			case <-ctx.Done():
+				t.Fatal("read did not complete its initial authorization")
+			}
 			connections := make([]*sql.Conn, 0, reader.Stats().MaxOpenConnections)
 			for range reader.Stats().MaxOpenConnections {
 				connection, err := reader.Conn(ctx)
@@ -52,8 +75,7 @@ SELECT ?,user_id,oauth_state,last_seen_at,expires_at,absolute_expires_at,created
 				defer connection.Close()
 			}
 			waits := reader.Stats().WaitCount
-			result := make(chan *httptest.ResponseRecorder, 1)
-			go func() { result <- call(cookies) }()
+			_ = body.Close()
 			for reader.Stats().WaitCount == waits {
 				select {
 				case response := <-result:
@@ -87,10 +109,31 @@ SELECT ?,user_id,oauth_state,last_seen_at,expires_at,absolute_expires_at,created
 				t.Fatal("queued read did not finish after the connection was released")
 			}
 			if scenario != "steward_mfa" {
-				if response := call([]*http.Cookie{otherCookie}); response.Code != http.StatusOK {
+				if response := call([]*http.Cookie{otherCookie}, nil); response.Code != http.StatusOK {
 					t.Fatalf("unrelated session should still authorize: %d %s", response.Code, response.Body)
 				}
 			}
 		})
 	}
+}
+
+type queuedLogReadBody struct {
+	ctx              context.Context
+	entered, release chan struct{}
+	read, close      sync.Once
+}
+
+func (b *queuedLogReadBody) Read([]byte) (int, error) {
+	b.read.Do(func() { close(b.entered) })
+	select {
+	case <-b.release:
+		return 0, io.EOF
+	case <-b.ctx.Done():
+		return 0, b.ctx.Err()
+	}
+}
+
+func (b *queuedLogReadBody) Close() error {
+	b.close.Do(func() { close(b.release) })
+	return nil
 }

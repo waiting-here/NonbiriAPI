@@ -37,7 +37,7 @@ func TestSchemaInfoNeedsNoDatabaseOrSecretEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	var descriptor db.StorageSchemaDescriptor
-	if err := json.Unmarshal(output.Bytes(), &descriptor); err != nil || descriptor.SchemaVersion != db.CurrentSchemaVersion || len(descriptor.OfflineConversions) != 11 {
+	if err := json.Unmarshal(output.Bytes(), &descriptor); err != nil || descriptor.SchemaVersion != db.CurrentSchemaVersion || len(descriptor.OfflineConversions) != 16 || descriptor.StartupPolicy != "exact" || descriptor.MinimumSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal(descriptor, err)
 	}
 	if strings.Contains(output.String(), "private-") {
@@ -71,10 +71,8 @@ func TestCurrentDatabaseCommandNeedsOnlyEncryptionEnvironment(t *testing.T) {
 		if err := runWithProgress(t.Context(), []string{mode}, &output, &progress); err != nil {
 			t.Fatal(err)
 		}
-		var result struct {
-			Status string `json:"status"`
-		}
-		if err := json.Unmarshal(output.Bytes(), &result); err != nil || result.Status != "current" {
+		var result v1.Result
+		if err := json.Unmarshal(output.Bytes(), &result); err != nil || result.Status != "current" || result.Tool != "nonbiri-upgrade-v1" || result.TargetSchemaVersion != db.CurrentSchemaVersion || result.TargetManifestHash != db.PinnedGenerationTwoManifestHash || len(result.SupportedSourceSchemaVersions) != 16 {
 			t.Fatal(output.String(), err)
 		}
 		decoder := json.NewDecoder(&progress)

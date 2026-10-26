@@ -4,10 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"strconv"
+	"strings"
 )
 
-type responseChatCall struct{ id, name, arguments string }
+type responseChatCall struct {
+	id, name, arguments string
+	argumentsBuffer     *strings.Builder
+}
 type responseChatState struct {
+	textBuffer, refusalBuffer, reasoningBuffer  strings.Builder
 	id                                          string
 	created                                     int64
 	model                                       string
@@ -89,9 +94,9 @@ func (s *responseChatState) consume(raw []byte, stream bool) error {
 	if annotations := message["annotations"]; annotations != nil && !isJSONNull(annotations) && !bytes.Equal(annotations, []byte("[]")) {
 		return errInvalidUpstreamResponse
 	}
-	channels := map[string]*string{"content": &s.text, "refusal": &s.refusal}
+	channels := map[string]*strings.Builder{"content": &s.textBuffer, "refusal": &s.refusalBuffer}
 	if s.gatewayReasoning {
-		channels["reasoning_content"] = &s.reasoning
+		channels["reasoning_content"] = &s.reasoningBuffer
 	}
 	for name, dst := range channels {
 		if value := message[name]; value != nil && !isJSONNull(value) {
@@ -99,9 +104,10 @@ func (s *responseChatState) consume(raw []byte, stream bool) error {
 			if !ok {
 				return errInvalidUpstreamResponse
 			}
-			*dst += text
+			dst.WriteString(text)
 		}
 	}
+	s.text, s.refusal, s.reasoning = s.textBuffer.String(), s.refusalBuffer.String(), s.reasoningBuffer.String()
 	if raw := message["tool_calls"]; raw != nil && !isJSONNull(raw) {
 		var calls []json.RawMessage
 		if json.Unmarshal(raw, &calls) != nil || calls == nil || len(calls) > 128 {
@@ -156,7 +162,11 @@ func (s *responseChatState) consume(raw []byte, stream bool) error {
 				if !ok {
 					return errInvalidUpstreamResponse
 				}
-				current.arguments += text
+				if current.argumentsBuffer == nil {
+					current.argumentsBuffer = &strings.Builder{}
+				}
+				current.argumentsBuffer.WriteString(text)
+				current.arguments = current.argumentsBuffer.String()
 			}
 		}
 	}

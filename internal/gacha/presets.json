@@ -298,6 +298,75 @@
         "published": false,
         "revision": 0
       }
+    },
+    {
+      "id": "sweet-hide-and-seek",
+      "name": "糖夜迷藏",
+      "pool": {
+        "id": "",
+        "name": "糖夜迷藏",
+        "name_en": "Sweet Hide-and-Seek",
+        "cover": "s",
+        "kind": "limited",
+        "group": "",
+        "rules": {
+          "weights": [
+            5500,
+            3500,
+            900,
+            100
+          ],
+          "sr_pity": 10,
+          "ssr_pity": 60,
+          "sr_featured": 5000,
+          "ssr_featured": 5000,
+          "sr_guarantee": true,
+          "ssr_guarantee": true
+        },
+        "featured": [
+          "s-chatgpt",
+          "s-claude"
+        ],
+        "starts_at": null,
+        "ends_at": null,
+        "paused": false,
+        "published": false,
+        "revision": 0
+      }
+    },
+    {
+      "id": "tomorrow",
+      "name": "未命名的明天",
+      "pool": {
+        "id": "",
+        "name": "未命名的明天",
+        "cover": "r",
+        "kind": "limited",
+        "group": "",
+        "rules": {
+          "weights": [
+            5500,
+            3500,
+            900,
+            100
+          ],
+          "sr_pity": 10,
+          "ssr_pity": 60,
+          "sr_featured": 5000,
+          "ssr_featured": 1500,
+          "sr_guarantee": true,
+          "ssr_guarantee": true,
+          "ssr_guarantee_misses": 2
+        },
+        "featured": [
+          "r-chatgpt"
+        ],
+        "starts_at": null,
+        "ends_at": null,
+        "paused": false,
+        "published": false,
+        "revision": 0
+      }
     }
   ]
 }

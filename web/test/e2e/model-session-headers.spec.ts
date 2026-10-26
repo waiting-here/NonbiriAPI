@@ -108,7 +108,7 @@ async function fixture(page: Page, kind: Kind, configured = false) {
           ...current,
           ...body,
           revision: String(BigInt(String(current.revision)) + 1n),
-          full_name: `${kind === 'personal' ? '' : '[公益]'}${body.provider}/${body.model}`,
+          full_name: `${kind === 'personal' ? '' : '[公益]'}${body.provider ?? current.provider}/${body.model ?? current.model}`,
           session_headers: (body.session_headers as Row[])
             .map((row) => ({ ...row, name: row.name.trim().toLowerCase() }))
             .sort((a, b) => a.name.localeCompare(b.name)),

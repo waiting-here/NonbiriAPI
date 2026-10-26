@@ -32,6 +32,7 @@ export interface PresetChannel {
   channel_revision: string;
   preset_revision: string;
   mapping_count: string;
+  recommended?: boolean;
 }
 export interface PresetMapping {
   upstream_model_id: string;
@@ -49,6 +50,7 @@ export interface BindingTarget {
   charity_model_id: string;
   expected_binding_revision: string;
   upstream_model_id: string;
+  native_services?: import('@shared/nativeServices').NativeService[];
 }
 export interface ManualBindingInput {
   expected_donation_revision: string;
@@ -191,30 +193,34 @@ export function getPresetChannels(
   page: string,
   size: PageSize,
   signal?: AbortSignal,
+  donationId?: string,
 ) {
   validateWindow(page, size);
   return decoded(
-    queryPath(`${base(role)}/charity-binding-presets`, { q, state, page, page_size: size }),
+    queryPath(`${base(role)}/charity-binding-presets`, {
+      q,
+      state,
+      page,
+      page_size: size,
+      donation_id: donationId,
+    }),
     (value) =>
       normalizeNumberedPage(
         value,
         'preset channels',
         (value): PresetChannel => {
-          const row = record(
-            value,
-            [
-              'channel_id',
-              'name',
-              'connector_type',
-              'base_url',
-              'enabled',
-              'state',
-              'channel_revision',
-              'preset_revision',
-              'mapping_count',
-            ],
-            'preset channel',
-          );
+          const required = [
+            'channel_id',
+            'name',
+            'connector_type',
+            'base_url',
+            'enabled',
+            'state',
+            'channel_revision',
+            'preset_revision',
+            'mapping_count',
+          ];
+          const row = record(value, [...required, 'recommended'], 'preset channel', required);
           return {
             channel_id: opaqueID(row.channel_id, 'mch_', 'channel id'),
             name: string(row.name, 'channel name', { min: 1 }),
@@ -225,6 +231,10 @@ export function getPresetChannels(
             channel_revision: decimal(row.channel_revision, 'channel revision'),
             preset_revision: decimal(row.preset_revision, 'preset revision'),
             mapping_count: decimal(row.mapping_count, 'mapping count'),
+            recommended:
+              row.recommended === undefined
+                ? undefined
+                : boolean(row.recommended, 'recommended preset'),
           };
         },
         page,

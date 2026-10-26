@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   registeredCopyReferences,
+  stewardPermissionCopyReferences,
   translationCopyReferences,
   validateJSONSource,
   visibleValueChecks,
@@ -153,4 +154,23 @@ test('global copy references remain visible beside scoped local registries', () 
     'common.missing',
     'common.close',
   ]);
+});
+
+test('permission copy resolves closed action and scope leaves without accepting arbitrary prefixes', () => {
+  const policy =
+    "const STEWARD_PERMISSION_DEFAULTS = {'endpoints.read': false}; const STEWARD_LIMIT_MAXIMUMS = {'users.rpm_limit_max': '4096'}; const DONATION_SCOPES = ['none', 'enhanced'] as const;";
+  const editor =
+    't(`management.permissions.labels.${copyKey(key)}`); t(`management.permissions.limits.${copyKey(key)}`); t(`management.permissions.scope.${scope}.description`);';
+  assert.deepEqual(stewardPermissionCopyReferences(policy, editor), [
+    'management.permissions.labels.endpoints_read',
+    'management.permissions.limits.users_rpm_limit_max',
+    'management.permissions.scope.none.description',
+    'management.permissions.scope.enhanced.description',
+  ]);
+  assert.deepEqual(stewardPermissionCopyReferences(policy, '// ' + editor), []);
+  assert.throws(
+    () =>
+      stewardPermissionCopyReferences('const STEWARD_PERMISSION_DEFAULTS = {...remote};', editor),
+    /closed literal/,
+  );
 });

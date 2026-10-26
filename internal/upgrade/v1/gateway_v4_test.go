@@ -26,7 +26,7 @@ func TestConnectionsUpgradePreservesPublishedHistoryAndCredentials(t *testing.T)
 	defer database.Close()
 	mustExec(t, database, "PRAGMA foreign_keys=ON")
 	plan, err := storageSchema.plan(ctx, database)
-	if err != nil || len(plan.steps) != 3 || plan.steps[0].version != 33 || plan.steps[1].version != 34 || plan.steps[2].version != db.CurrentSchemaVersion || !plan.auditsCredentials() {
+	if err != nil || len(plan.steps) != 6 || plan.steps[0].version != 33 || plan.steps[1].version != 34 || plan.steps[2].version != 35 || plan.steps[3].version != 36 || plan.steps[4].version != 37 || plan.steps[5].version != db.CurrentSchemaVersion || !plan.auditsCredentials() {
 		t.Fatalf("connection migration plan: %+v, %v", plan, err)
 	}
 	owner := hostileInsertUser(t, database, "connection-owner", 0, 1)
@@ -34,6 +34,8 @@ func TestConnectionsUpgradePreservesPublishedHistoryAndCredentials(t *testing.T)
 		seedGatewayRows(t, database, vault, owner, int64(i+1), kind)
 		mustExec(t, database, "INSERT INTO model_discovery_evidence(endpoint_key_id,state,revision) VALUES(?,'unknown',1)", i+1)
 	}
+	mustExec(t, database, `INSERT INTO models(user_id,provider,model,full_name,model_types,revision,binding_revision,created_at,updated_at) VALUES(?,'provider','preserved','provider/preserved',1,5,7,1,2)`, owner)
+	mustExec(t, database, `INSERT INTO charity_models(provider,model,full_name,pricing_mode,model_types,revision,binding_revision,created_at,updated_at) VALUES('provider','preserved','[公益]provider/preserved','per_request',1,5,7,1,2)`)
 	mustExec(t, database, "UPDATE sqlite_sequence SET seq=9000 WHERE name='endpoints'")
 	beforeRows := gatewayRows(t, database)
 	columns := legacyConnectionColumns(t, database)
@@ -123,6 +125,7 @@ func legacyConnectionColumns(t *testing.T, database *sql.DB) map[string][]string
 
 func assertPublishedConnectionRows(t *testing.T, database *sql.DB, columns map[string][]string, want map[string][]string) {
 	t.Helper()
+	want = expectedModelInterfaceRows(t, columns, want)
 	for table, names := range columns {
 		from := quoteSQLiteIdentifier(table) + " b"
 		switch table {

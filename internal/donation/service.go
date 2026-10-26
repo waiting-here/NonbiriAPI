@@ -49,22 +49,25 @@ const (
 )
 
 type Config struct {
-	Review     *secret.DonationReview
-	Store      *db.Store
-	OwnerAuth  OwnerFinalTxAuthorizer
-	RoleAuth   RoleFinalTxAuthorizer
-	CursorKeys resources.CursorKeyDeriver
-	Now        func() time.Time
+	PendingSubmission func(context.Context, *sql.Tx, int64) error
+	Review            *secret.DonationReview
+	Store             *db.Store
+	OwnerAuth         OwnerFinalTxAuthorizer
+	RoleAuth          RoleFinalTxAuthorizer
+	CursorKeys        resources.CursorKeyDeriver
+	Now               func() time.Time
 }
 
 type Service struct {
-	reviewMaterial *secret.DonationReview
-	db             *sql.DB
-	ownerAuth      OwnerFinalTxAuthorizer
-	roleAuth       RoleFinalTxAuthorizer
-	heldRead       AdminHeldReadAuthorizer
-	cursorKeys     resources.CursorKeyDeriver
-	now            func() time.Time
+	pendingSubmission func(context.Context, *sql.Tx, int64) error
+	reviewMaterial    *secret.DonationReview
+	db                *sql.DB
+	readDB            *sql.DB
+	ownerAuth         OwnerFinalTxAuthorizer
+	roleAuth          RoleFinalTxAuthorizer
+	heldRead          AdminHeldReadAuthorizer
+	cursorKeys        resources.CursorKeyDeriver
+	now               func() time.Time
 }
 
 func New(config Config) (*Service, error) {
@@ -74,7 +77,7 @@ func New(config Config) (*Service, error) {
 	if config.Now == nil {
 		config.Now = time.Now
 	}
-	return &Service{db: config.Store.DB(), ownerAuth: config.OwnerAuth, roleAuth: config.RoleAuth,
+	return &Service{pendingSubmission: config.PendingSubmission, db: config.Store.DB(), readDB: config.Store.ReadDB(), ownerAuth: config.OwnerAuth, roleAuth: config.RoleAuth,
 		cursorKeys: config.CursorKeys, now: config.Now, reviewMaterial: config.Review}, nil
 }
 
@@ -154,7 +157,7 @@ func (s *Service) CreateInTransaction(ctx context.Context, tx *sql.Tx, userID in
 		return Donation{}, ErrFeatureDisabled
 	}
 
-	keys, err := validateSubmissionKeys(ctx, tx, userID, input.Keys)
+	keys, err := validateSubmissionKeys(ctx, tx, userID, input.Keys, now)
 	if err != nil {
 		return Donation{}, err
 	}
@@ -245,6 +248,11 @@ VALUES(?,1,NULL,'','approve','',?)`, donationID, now); err != nil {
 			return Donation{}, err
 		}
 	}
+	if !autoApprove && s.pendingSubmission != nil {
+		if err := s.pendingSubmission(ctx, tx, donationID); err != nil {
+			return Donation{}, err
+		}
+	}
 	value, err := getOwnerDonationTx(ctx, tx, userID, donationID, now)
 	if err != nil {
 		return Donation{}, err
@@ -281,7 +289,13 @@ WHERE id=? AND user_id=? AND status='pending' AND revision=?`,
 		if err := requireOne(result); err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO donation_reviews(donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at) VALUES(?,?,NULL,'','note_update','',?)`, donationID, input.ExpectedRevision+1, now)
+		if _, err = tx.ExecContext(ctx, `INSERT INTO donation_reviews(donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at) VALUES(?,?,NULL,'','note_update','',?)`, donationID, input.ExpectedRevision+1, now); err != nil {
+			return err
+		}
+		changed, err := resubmitDonationProtocolTx(ctx, tx, userID, donationID, now)
+		if err == nil && changed && s.pendingSubmission != nil {
+			err = s.pendingSubmission(ctx, tx, donationID)
+		}
 		return err
 	})
 }
@@ -478,8 +492,15 @@ func (s *Service) review(
 	role = reviewRole
 	committed := false
 	defer finishTx(tx, &committed)
-	if role == reviewerTrainee && input.Decision == "force_reject" {
-		return roleDonationMutation{}, ErrForbidden
+	if role != reviewerAdmin {
+		if err := authz.RequireStewardPermission(ctx, tx, actorID, "donations.review"); err != nil {
+			return roleDonationMutation{}, err
+		}
+		if input.Decision == "force_reject" {
+			if err := authz.RequireStewardPermission(ctx, tx, actorID, "donations.force_reject"); err != nil {
+				return roleDonationMutation{}, err
+			}
+		}
 	}
 	now, err := s.nowUnix()
 	if err != nil {
@@ -493,12 +514,13 @@ func (s *Service) review(
 		return roleDonationMutation{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replayRoleDonation(ctx, tx, decision, role, actorID, donationID)
-	}
-	if role == reviewerTrainee {
-		if err := requirePendingReviewTx(ctx, tx, donationID, now); err != nil {
+		if _, err := readDonationAccessScope(ctx, tx, role, actorID); err != nil {
 			return roleDonationMutation{}, err
 		}
+		return replayRoleDonation(ctx, tx, decision, role, actorID, donationID)
+	}
+	if err := requireDonationRangeTx(ctx, tx, role, actorID, donationID, now); err != nil {
+		return roleDonationMutation{}, err
 	}
 	expiry, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
 	if err != nil {
@@ -798,14 +820,19 @@ func (s *Service) manageKey(
 		return roleDonationMutation{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		if scope.Trainee {
-			out, err := replay[ManagedKeyReceipt](decision)
+		if scope.Redact {
+			var stored ManagedKeyReceipt
+			if err := json.Unmarshal(decision.ResponseBody, &stored); err != nil {
+				return roleDonationMutation{}, ErrInvariant
+			}
+			if stored.DonationID != "" {
+				return replayManagedKeyReceipt(ctx, tx, decision, scope, stored)
+			}
+			key, err := s.managedKeyTx(ctx, tx, scope, donationID, keyID, now)
 			if err != nil {
 				return roleDonationMutation{}, err
 			}
-			if out.Value.DonationID != strconv.FormatInt(donationID, 10) || out.Value.KeyID != strconv.FormatInt(keyID, 10) {
-				return roleDonationMutation{}, ErrInvariant
-			}
+			out := resources.MutationResult[ManagedKeyReceipt]{Value: ManagedKeyReceipt{DonationID: key.DonationID, KeyID: key.KeyID, DonationRevision: key.DonationRevision, Key: key}, Status: decision.HTTPStatus, Replayed: true}
 			impact, err := scope.Impact(ctx, tx, keyID)
 			if err != nil {
 				return roleDonationMutation{}, err
@@ -815,14 +842,36 @@ func (s *Service) manageKey(
 			body, err := json.Marshal(out.Value)
 			return roleDonationMutation{trainee: &out.Value, status: out.Status, body: body, replayed: true}, err
 		}
-		return replayRoleDonation(ctx, tx, decision, role, actorID, donationID)
+		var stored struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(decision.ResponseBody, &stored); err != nil {
+			return roleDonationMutation{}, ErrInvariant
+		}
+		if stored.ID != "" {
+			return replayRoleDonation(ctx, tx, decision, role, actorID, donationID)
+		}
+		// Older redacted receipts contain only one key and cannot supply a full donation.
+		value, err := getAdminDonationTx(ctx, tx, donationID, now)
+		if err != nil {
+			return roleDonationMutation{}, err
+		}
+		result := roleDonationMutation{status: decision.HTTPStatus, replayed: true}
+		if role == reviewerAdmin {
+			result.admin = value
+			result.body, err = json.Marshal(value)
+		} else {
+			result.steward = stewardFromAdmin(value, actorID)
+			result.body, err = json.Marshal(result.steward)
+		}
+		return result, err
 	}
 	expiry, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
 	if expiry.changed {
-		if scope.Trainee {
+		if scope.RestrictedKeys() {
 			return roleDonationMutation{}, ErrConflict
 		}
 		if err := tx.Rollback(); err != nil {
@@ -854,7 +903,7 @@ func (s *Service) manageKey(
 	if err := manageDonationKeyTx(ctx, tx, donationID, keyID, actorID, scope.AuditRole(role == reviewerAdmin), input, now); err != nil {
 		return roleDonationMutation{}, err
 	}
-	if scope.Trainee {
+	if scope.Redact {
 		key, err := s.managedKeyTx(ctx, tx, scope, donationID, keyID, now)
 		if err != nil {
 			return roleDonationMutation{}, err
@@ -884,13 +933,17 @@ func (s *Service) manageKey(
 }
 
 func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, role reviewerRole, actorID, donationID int64) (roleDonationMutation, error) {
-	body, err := smartbackoff.ProjectReceipt(decision.ResponseBody)
+	stored, _, err := unwrapReviewReceipt(decision.ResponseBody)
+	if err != nil {
+		return roleDonationMutation{}, err
+	}
+	body, err := smartbackoff.ProjectReceipt(stored)
 	if err != nil {
 		return roleDonationMutation{}, ErrInvariant
 	}
 	result := roleDonationMutation{status: decision.HTTPStatus, body: body, replayed: true}
-	if role == reviewerSteward || role == reviewerTrainee {
-		if err := json.Unmarshal(decision.ResponseBody, &result.steward); err != nil {
+	if role == reviewerSteward || role == reviewerGranted || role == reviewerTrainee {
+		if err := json.Unmarshal(stored, &result.steward); err != nil {
 			return roleDonationMutation{}, ErrInvariant
 		}
 		if result.steward.Handling.State == "" {
@@ -911,14 +964,34 @@ func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.De
 				key.BindingCount, key.Idle = strconv.FormatInt(count, 10), count == 0
 			}
 		}
-		var err error
+		access, err := readDonationAccessScope(ctx, tx, role, actorID)
+		if err != nil {
+			return roleDonationMutation{}, err
+		}
+		forceAllowed := access.review && access.force
+		result.steward.CanForceReject = result.steward.CanForceReject && forceAllowed
+		if !forceAllowed {
+			result.steward.ForceRejectUnavailableReason = nil
+		}
+		if access.redact {
+			result.steward.Owner = nil
+			result.steward.Reviewer = nil
+			result.steward.DiscordPublicThanks = nil
+		}
+		for i := range result.steward.Keys {
+			result.steward.Keys[i].CanManage = result.steward.Keys[i].CanManage && access.manage
+			if access.redact {
+				result.steward.Keys[i].EndpointKeyID = nil
+				result.steward.Keys[i].OwnerEndpointID = nil
+			}
+		}
 		result.body, err = json.Marshal(result.steward)
 		if err != nil {
 			return roleDonationMutation{}, ErrInvariant
 		}
 		return result, nil
 	}
-	if err := json.Unmarshal(decision.ResponseBody, &result.admin); err != nil {
+	if err := json.Unmarshal(stored, &result.admin); err != nil {
 		return roleDonationMutation{}, ErrInvariant
 	}
 	changed := false
@@ -978,9 +1051,14 @@ JOIN donation_keys dk ON dk.id=b.donation_key_id WHERE dk.donation_id=? AND dk.i
 }
 
 func finishRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, role reviewerRole, actorID int64, value AdminDonation) (roleDonationMutation, error) {
-	if role == reviewerSteward || role == reviewerTrainee {
-		if role == reviewerTrainee {
-			value = traineeReviewProjection(value)
+	if role == reviewerSteward || role == reviewerGranted || role == reviewerTrainee {
+		access, err := readDonationAccessScope(ctx, tx, role, actorID)
+		if err != nil {
+			return roleDonationMutation{}, err
+		}
+		value, err = access.projectReceiptTx(ctx, tx, value)
+		if err != nil {
+			return roleDonationMutation{}, err
 		}
 		steward := stewardFromAdmin(value, actorID)
 		out, err := finishJSON(ctx, tx, decision, http.StatusOK, steward)
@@ -1148,12 +1226,15 @@ func (s *Service) beginRoleTx(ctx context.Context, role reviewerRole, actorUserI
 		if err := s.roleAuth.AuthorizeAdminMutation(ctx, tx, actorUserID); err != nil {
 			return rollback(mapAuthorization(err))
 		}
-	case reviewerSteward:
+	case reviewerSteward, reviewerGranted:
 		if actorUserID <= 0 {
 			return rollback(ErrInvalidRequest)
 		}
 		if err := s.roleAuth.AuthorizeStewardMutation(ctx, tx, actorUserID); err != nil {
 			return rollback(mapAuthorization(err))
+		}
+		if _, err := readDonationAccessScope(ctx, tx, role, actorUserID); err != nil {
+			return rollback(err)
 		}
 	default:
 		return rollback(ErrInvalidRequest)
@@ -1179,7 +1260,7 @@ func (s *Service) materializeRoleExpiryStandalone(
 	committed := false
 	defer finishTx(tx, &committed)
 	if role == reviewerTrainee {
-		if err := requirePendingReviewTx(ctx, tx, donationID, now); err != nil {
+		if err := requireDonationRangeTx(ctx, tx, role, actorUserID, donationID, now); err != nil {
 			return err
 		}
 	}
@@ -1226,7 +1307,7 @@ func submissionAutoApproval(keys []submissionKey) (bool, error) {
 	return mainstream, nil
 }
 
-func validateSubmissionKeys(ctx context.Context, tx *sql.Tx, userID int64, inputs []CreateKeyInput) ([]submissionKey, error) {
+func validateSubmissionKeys(ctx context.Context, tx *sql.Tx, userID int64, inputs []CreateKeyInput, now int64) ([]submissionKey, error) {
 	ids := make([]int64, len(inputs))
 	expiries := make(map[int64]*int64, len(inputs))
 	thresholds := make(map[int64]db.U128, len(inputs))
@@ -1282,7 +1363,7 @@ ORDER BY k.id`, args...)
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
-	if err := attachSubmissionUsesTx(ctx, tx, userID, inputs, keys); err != nil {
+	if err := attachSubmissionUsesTx(ctx, tx, userID, inputs, keys, now); err != nil {
 		return nil, err
 	}
 	return keys, nil
@@ -1577,7 +1658,7 @@ func classifyWrite(operation string, err error) error {
 }
 
 func mapAuthorization(err error) error {
-	if errors.Is(err, authz.ErrMFARequired) {
+	if errors.Is(err, authz.ErrMFARequired) || errors.Is(err, authz.ErrPermissionDenied) {
 		return err
 	}
 	if err == nil {

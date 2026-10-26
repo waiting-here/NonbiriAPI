@@ -1,3 +1,10 @@
+import {
+  fillService,
+  protocolServices,
+  readService,
+  servicePanel,
+  submitService,
+} from '../service-onboarding';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
@@ -355,15 +362,26 @@ test('level 5 reads the saved setting and cannot change the global model policy'
     const page = await context.newPage();
     await page.goto(origin + managementPath(5, { charity_model: id }));
     await expect(page.getByText(copy.label, { exact: true })).toBeVisible();
-    await expect(page.getByRole('switch', { name: copy.label, exact: true })).toHaveCount(0);
-    const denied = await context.request.patch(origin + path, {
-      headers: { Origin: origin, 'Idempotency-Key': randomUUID() },
-      data: {
-        expected_revision: current.revision,
-        cloudflare_proxy_enabled: !current.cloudflare_proxy_enabled,
-      },
-    });
+    const forwarding = page.getByRole('switch', { name: copy.label, exact: true });
+    await expect(forwarding).toBeChecked({ checked: current.cloudflare_proxy_enabled });
+    await forwarding.setChecked(!current.cloudflare_proxy_enabled);
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PATCH' && new URL(response.url()).pathname === path,
+    );
+    await page
+      .getByRole('button', {
+        name: common.common.workflow.saveTarget.replace('{{id}}', id),
+        exact: true,
+      })
+      .click();
+    const denied = await submitted;
     expect(denied.status()).toBe(403);
+    expect((await denied.json()).error.code).toBe('steward_permission_denied');
+    await expect(
+      page.getByText(common.management.permissions.denied, { exact: true }),
+    ).toBeVisible();
+    await expect(forwarding).toBeChecked({ checked: !current.cloudflare_proxy_enabled });
     expect((await read(context, origin, path)).cloudflare_proxy_enabled).toBe(
       current.cloudflare_proxy_enabled,
     );
@@ -392,26 +410,10 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
   };
   try {
     const page = await context.newPage();
-    await page.goto(origin + '/endpoints');
-    await page
-      .locator('[data-component="page-header"]')
-      .getByRole('button', { name: c.addConnection, exact: true })
-      .click();
-    const connectionPanel = page
-      .locator('.nb-expandable-panel')
-      .filter({ has: page.getByRole('heading', { name: c.addConnection, exact: true }) });
-    await connectionPanel.getByLabel(c.name, { exact: true }).fill(name);
-    const savedConnection = page.waitForResponse(
-      (response) =>
-        response.url().endsWith('/api/connections') && response.request().method() === 'POST',
-    );
-    await connectionPanel.getByRole('button', { name: c.create, exact: true }).click();
-    const connection = (await (await savedConnection).json()) as { id: string };
-    await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
-    await page.getByRole('button', { name: c.addEntry, exact: true }).first().click();
-    const entryPanel = page
-      .locator('.nb-expandable-panel')
-      .filter({ has: page.getByRole('heading', { name: c.addEntry, exact: true }) });
+    let connectionId = '',
+      sharedCredential = '',
+      sharedVersion = '',
+      credentialLabel = '';
     const cases = [
       {
         type: 'openai-compatible',
@@ -441,70 +443,42 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
       },
     ];
     for (const [index, item] of cases.entries()) {
-      if (index)
-        await entryPanel.getByRole('button', { name: c.addAnotherEntry, exact: true }).click();
-      await entryPanel
-        .getByRole('combobox', { name: c.protocol, exact: true })
-        .selectOption({ label: item.label });
-      await entryPanel.getByLabel(c.entryURL, { exact: true }).fill(item.url);
-      const scope = entryPanel.locator('form').first();
-      for (const label of item.labels)
-        await scope.getByRole('checkbox', { name: label, exact: true }).check();
-      const endpointSaved = page.waitForResponse(
-        (response) =>
-          response.url().endsWith('/api/endpoints') && response.request().method() === 'POST',
-      );
-      await scope.getByRole('button', { name: c.saveEntries, exact: true }).click();
-      const endpoint = (await (await endpointSaved).json()) as {
-        id: string;
-        configuration_type: string;
-        native_services: string[];
-      };
+      if (index) {
+        await page.goto(origin + '/endpoints?connection_id=' + connectionId);
+        await page.getByRole('button', { name: c.addEntry, exact: true }).first().click();
+      } else await page.goto(origin + '/endpoints?quickstart=1');
+      const panel = servicePanel(page, 'en', index > 0);
+      const entryName = name + '-' + index;
+      await fillService(panel, {
+        name: entryName,
+        url: item.url,
+        protocol: item.type,
+        discovery: false,
+        ...(index === 0 ? { secret: 'synthetic-browser-shared-credential' } : {}),
+      });
+      await submitService(panel);
+      const { endpoint, key } = await readService(page, entryName);
       expect(endpoint.configuration_type).toBe(item.type);
-      expect(endpoint.native_services.slice().sort()).toEqual(item.services.slice().sort());
+      expect(endpoint.base_url).toBe(item.url);
+      const configured = await protocolServices(page, item.type);
+      expect(endpoint.native_services.slice().sort()).toEqual(configured.slice().sort());
+      expect(endpoint.native_services).toEqual(expect.arrayContaining(item.services));
+      expect(key.native_services.slice().sort()).toEqual(configured.slice().sort());
       if (index === 0) {
-        const newCredential = entryPanel.getByRole('radio', {
-          name: c.newCredential,
-          exact: true,
-        });
-        await newCredential.locator('..').click();
-        await expect(newCredential).toBeChecked();
-        await entryPanel
-          .getByLabel(c.credentialName + ' ' + c.optional, { exact: true })
-          .fill(name + ' shared');
-        const secret = entryPanel.getByLabel(c.secret, { exact: true });
-        await secret.fill('synthetic-browser-shared-credential');
-        await entryPanel.getByRole('checkbox', { name: c.ownership, exact: true }).check();
-        await entryPanel.getByRole('button', { name: c.saveCredential, exact: true }).click();
-        await expect(secret).toHaveCount(0);
-      } else {
-        const credentials = entryPanel.getByRole('table', {
-          name: c.chooseCredential,
-          exact: true,
-        });
-        await credentials
-          .getByRole('row')
-          .filter({ hasText: name + ' shared' })
-          .getByRole('button', { name: c.select, exact: true })
-          .click();
+        connectionId = endpoint.connection_id;
+        sharedCredential = key.credential_id;
+        sharedVersion = key.credential_version;
+        credentialLabel = key.display_head + '••••' + key.display_tail;
       }
-      const grantSaved = page.waitForResponse(
-        (response) =>
-          response.url().endsWith('/api/endpoints/' + endpoint.id + '/keys') &&
-          response.request().method() === 'POST',
-      );
-      await entryPanel.getByRole('button', { name: c.authorizeEntry, exact: true }).click();
-      const key = (await (await grantSaved).json()) as {
-        id: string;
-        credential_id: string;
-        credential_version: string;
-        discovery_source_id: string | null;
-      };
+      expect(endpoint.connection_id).toBe(connectionId);
+      expect(key.credential_id).toBe(sharedCredential);
+      expect(key.credential_version).toBe(sharedVersion);
       expect(key.discovery_source_id).toBeNull();
+      expect(await panel.getByLabel(c.secret, { exact: true }).count()).toBe(0);
       entries.push({ id: endpoint.id, keyId: key.id, services: item.services });
-      await expect(entryPanel.getByText(c.grantSaved, { exact: true })).toBeVisible();
     }
-    await entryPanel.getByRole('button', { name: c.close, exact: true }).first().click();
+    const connection = { id: connectionId };
+    await page.goto(origin + '/endpoints?connection_id=' + connectionId);
     await page.getByRole('tab', { name: c.discoverySources, exact: true }).click();
     await page.getByRole('button', { name: c.addSource, exact: true }).click();
     const sourcePanel = page
@@ -522,7 +496,7 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
     await sourcePanel
       .getByRole('table', { name: c.chooseCredential, exact: true })
       .getByRole('row')
-      .filter({ hasText: name + ' shared' })
+      .filter({ hasText: credentialLabel })
       .getByRole('button', { name: c.select, exact: true })
       .click();
     const sourceSaved = page.waitForResponse(
@@ -587,7 +561,7 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
         .getByRole('button', { name: c.addTarget, exact: true })
         .click();
       const target = group.getByRole('group', {
-        name: index + 1 + '. ' + cases[index]!.url,
+        name: index + 1 + '. ' + name + '-' + index,
         exact: true,
       });
       const labels =
@@ -596,6 +570,7 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
           : index === 1
             ? [native.anthropic_messages]
             : [native.gateway_text];
+      for (const checkbox of await target.getByRole('checkbox').all()) await checkbox.uncheck();
       for (const label of labels)
         await target.getByRole('checkbox', { name: label, exact: true }).check();
     }

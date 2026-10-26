@@ -54,10 +54,12 @@ func TestTraineePendingReviewWithRealSession(t *testing.T) {
 		if err := json.Unmarshal(created.Body.Bytes(), &d); err != nil || d.Status != "pending" {
 			t.Fatalf("pending donation: %+v %v", d, err)
 		}
+		model := exec(`INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,is_mainstream,created_at,updated_at) VALUES('synthetic',?, ?,1,'per_request',1,?,?)`, fmt.Sprintf("pending-%d", index), fmt.Sprintf("[公益]synthetic/pending-%d", index), f.now, f.now)
+		appFixtureBinding(t, f.store, testseed.BindingInput{ModelID: model, KeyID: mustAppFixtureID(t, d.Keys[0].ID), UpstreamModelID: "pending-model", At: f.now}, true)
 		path := "/api/steward/donations/" + d.ID
 		require(call(http.MethodGet, path, "", ""), http.StatusForbidden)
 		exec(`UPDATE users SET level=5 WHERE id=?`, f.userID)
-		queue := call(http.MethodGet, "/api/steward/donations?page=1&page_size=10", "", "")
+		queue := call(http.MethodGet, "/api/steward/donations?status=pending&page=1&page_size=10", "", "")
 		require(queue, http.StatusOK)
 		var page donation.Page[donation.DonationSummary]
 		if err := json.Unmarshal(queue.Body.Bytes(), &page); err != nil || len(page.Data) != 1 || page.Pagination.TotalItems != "1" {
@@ -81,8 +83,12 @@ func TestTraineePendingReviewWithRealSession(t *testing.T) {
 		if replayed.Body.String() != saved.Body.String() {
 			t.Fatal("review replay changed")
 		}
-		require(call(http.MethodGet, path, "", ""), http.StatusForbidden)
-		require(call(http.MethodGet, "/api/steward/donations?status=approved", "", ""), http.StatusForbidden)
+		if decision == "approve" {
+			require(call(http.MethodGet, path, "", ""), http.StatusOK)
+		} else {
+			require(call(http.MethodGet, path, "", ""), http.StatusNotFound)
+		}
+		require(call(http.MethodGet, "/api/steward/donations?status=approved", "", ""), http.StatusOK)
 		exec(`UPDATE users SET level=6 WHERE id=?`, f.userID)
 		full := call(http.MethodGet, path, "", "")
 		require(full, http.StatusOK)

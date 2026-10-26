@@ -2,7 +2,9 @@ package v1
 
 import (
 	"database/sql"
+	"encoding/json"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -89,8 +91,92 @@ func assertExactPublishedSource(t *testing.T, database *sql.DB, version int, man
 		t.Fatalf("restored source has no published conversion path: %+v, %v", plan, err)
 	}
 	for _, step := range plan.steps {
-		if step.from > 26 && step.from != 33 && step.from != 34 || step.version > 26 && step.version != 33 && step.version != 34 && step.version != 35 {
+		if step.from > 26 && step.from != 33 && step.from != 34 && step.from != 35 && step.from != 36 && step.from != 37 || step.version > 26 && step.version != 33 && step.version != 34 && step.version != 35 && step.version != 36 && step.version != 37 && step.version != 38 {
 			t.Fatalf("unreleased intermediate schema became a supported source: %+v", step)
 		}
 	}
+}
+
+func logFactDifferences[V any](t *testing.T, database *sql.DB, before, after map[string]V) {
+	t.Helper()
+	var changed []string
+	for table, original := range before {
+		current, exists := after[table]
+		if !exists || !reflect.DeepEqual(original, current) {
+			changed = append(changed, table)
+		}
+	}
+	sort.Strings(changed)
+	t.Logf("changed or missing original table facts: %v", changed)
+	var added []string
+	for table := range after {
+		if _, exists := before[table]; !exists {
+			added = append(added, table)
+		}
+	}
+	sort.Strings(added)
+	for _, table := range added {
+		var count int
+		if err := database.QueryRow("SELECT COUNT(*) FROM " + quoteSQLiteIdentifier(table)).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("destination-only table %s has %d rows", table, count)
+	}
+}
+
+// Successful-upgrade expectations preserve the old shared Chat/Responses
+// capability. Rollback snapshots remain raw and never use this projection.
+func legacyModelInterfaceFact(t *testing.T, table, column string, value any) any {
+	t.Helper()
+	if (table != "models" && table != "charity_models") || column != "model_types" {
+		return value
+	}
+	mask, ok := value.(int64)
+	if !ok {
+		t.Fatalf("invalid source model_types: %T", value)
+	}
+	if mask&17 != 0 {
+		mask |= 17
+	}
+	return mask
+}
+
+func expectedModelInterfaceRows(t *testing.T, columns map[string][]string, original map[string][]string) map[string][]string {
+	t.Helper()
+	expected := make(map[string][]string, len(original))
+	for table, records := range original {
+		expected[table] = records
+		if table != "models" && table != "charity_models" {
+			continue
+		}
+		for index, column := range columns[table] {
+			if column != "model_types" {
+				continue
+			}
+			revised := make([]string, len(records))
+			for i, record := range records {
+				var values []json.RawMessage
+				if err := json.Unmarshal([]byte(record), &values); err != nil {
+					t.Fatal(err)
+				}
+				var mask int64
+				if err := json.Unmarshal(values[index], &mask); err != nil {
+					t.Fatal(err)
+				}
+				var err error
+				values[index], err = json.Marshal(legacyModelInterfaceFact(t, table, column, mask))
+				if err != nil {
+					t.Fatal(err)
+				}
+				encoded, err := json.Marshal(values)
+				if err != nil {
+					t.Fatal(err)
+				}
+				revised[i] = string(encoded)
+			}
+			sort.Strings(revised)
+			expected[table] = revised
+		}
+	}
+	return expected
 }

@@ -60,8 +60,17 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 	{from: 26, version: 33, manifest: db.Schema33ManifestHash, apply: extendConnections, impact: connectionsMigrationImpact},
 	{from: 33, version: 34, manifest: db.Schema34ManifestHash, sql: db.EndpointKeyHistoryIndexesSQL, impact: &migrationImpact{
 		indexedTables: []string{"request_logs", "dispatch_claims", "report_targets", "donation_keys"}, credentials: credentialsUnchanged}},
-	{from: 34, version: 35, manifest: db.PinnedGenerationTwoManifestHash, sql: db.DonationDiscoveryAuthorizationSQL, impact: &migrationImpact{
+	{from: 34, version: 35, manifest: db.Schema35ManifestHash, sql: db.DonationDiscoveryAuthorizationSQL, impact: &migrationImpact{
 		constraintTables: []string{"discovery_runs", "charity_model_catalog"}, credentials: credentialsUnchanged}},
+	{from: 35, version: 36, manifest: db.Schema36ManifestHash, sql: db.StewardPermissionsSQL + db.StewardAuditRolesSQL + db.EndpointTagsSQL, impact: &migrationImpact{rebuiltTables: []string{"risk_client_rules", "client_rule_auto_bans", "discord_blacklist_origins", "discord_blacklist_events", "admin_endpoint_tags"}, addedTables: []string{"steward_permissions", "steward_permission_audits"}, credentials: credentialsUnchanged}},
+	{from: 36, version: 37, manifest: db.Schema37ManifestHash, sql: db.AgentRequestsSQL + db.AgentWorkflowSQL, apply: func(ctx context.Context, tx *sql.Tx) error {
+		if err := db.UpgradeModelTypes(ctx, tx); err != nil {
+			return err
+		}
+		return db.UpgradeStewardAIPermissions(ctx, tx)
+	}, impact: &migrationImpact{controlTables: []string{"steward_permissions", "models", "charity_models"}, addedTables: []string{"ai_agent_plans", "ai_agent_model_results", "ai_agent_review_events", "ai_agent_jobs", "ai_agent_messages", "ai_agent_conversations", "ai_agent_memory_history", "ai_agent_memories", "ai_agent_settings", "agent_request_response_chunks", "agent_request_settings", "agent_requests", "agent_request_usage", "agent_request_usage_totals", "agent_request_usage_hours"}, credentials: credentialsUnchanged}},
+	{from: 37, version: 38, manifest: db.PinnedGenerationTwoManifestHash, sql: db.CharityModelDeletionIndexesSQL, impact: &migrationImpact{
+		indexedTables: []string{"charity_reservations", "charity_dispatch_receipts", "charity_key_affinities", "charity_header_sessions", "charity_header_uses"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {
@@ -71,9 +80,12 @@ type Options struct {
 }
 
 type Result struct {
-	Status              string `json:"status"`
-	SourceSchemaVersion int    `json:"source_schema_version"`
-	TargetSchemaVersion int    `json:"target_schema_version"`
+	Tool                          string `json:"tool"`
+	TargetManifestHash            string `json:"target_manifest_hash"`
+	SupportedSourceSchemaVersions []int  `json:"supported_source_schema_versions"`
+	Status                        string `json:"status"`
+	SourceSchemaVersion           int    `json:"source_schema_version"`
+	TargetSchemaVersion           int    `json:"target_schema_version"`
 }
 
 func SchemaDescriptor() db.StorageSchemaDescriptor {
@@ -93,6 +105,11 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{24, stableSchema24Manifest, "6f4ee67206eb6fb3a3f345ba06b2d85aba5abc83"},
 		{25, stableSchema25Manifest, "2b4f4f62ed5b01c247fcc3f79005358ef0237933"},
 		{26, stableSchema26Manifest, "361cb204e888de51901eecc993d3d52b1d156d3a"},
+		{33, db.Schema33ManifestHash, "a7ea261babd424470ff67d1d1b9a119c29437d2e"},
+		{34, db.Schema34ManifestHash, "8576d726e49bd76db6d191914cb4f3637b25f493"},
+		{35, db.Schema35ManifestHash, "2df56fe8814e6a9968380fc8461942065eed3f12"},
+		{36, db.Schema36ManifestHash, "1fc9527f0c9023542dfc7decf59789733a6a834f"},
+		{37, db.Schema37ManifestHash, "4413e15527dff68e42386ca4841c38fc93911539"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,
@@ -165,5 +182,14 @@ func run(ctx context.Context, path string, vault *secret.Vault, options Options,
 			status = "converted"
 		}
 	}
-	return Result{Status: status, SourceSchemaVersion: sourceVersion, TargetSchemaVersion: db.CurrentSchemaVersion}, nil
+	supported := make([]int, 0, len(sources))
+	for _, source := range sources {
+		supported = append(supported, source.Version)
+	}
+	tool := "nonbiri-upgrade-v1"
+	if rc7Only {
+		tool = "nonbiri-upgrade-rc7"
+	}
+	return Result{Tool: tool, Status: status, SourceSchemaVersion: sourceVersion, TargetSchemaVersion: db.CurrentSchemaVersion,
+		TargetManifestHash: db.PinnedGenerationTwoManifestHash, SupportedSourceSchemaVersions: supported}, nil
 }

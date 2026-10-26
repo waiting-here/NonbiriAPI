@@ -518,7 +518,14 @@ export function GachaApp({
                 }}
                 tabs={state.pools.map((p) => ({
                   value: p.id,
-                  label: english && p.name_en ? p.name_en : p.name,
+                  label: (
+                    <>
+                      <span>{english && p.name_en ? p.name_en : p.name}</span>
+                      <ArtworkBadge
+                        artworkKey={['cover:' + p.cover, ...p.featured.map((id) => 'card:' + id)]}
+                      />
+                    </>
+                  ),
                 }))}
               />
               <div

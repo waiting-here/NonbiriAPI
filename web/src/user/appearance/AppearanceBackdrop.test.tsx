@@ -12,6 +12,13 @@ afterEach(() => {
 });
 
 function motionPreference(initial = false) {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
   const query = new EventTarget() as MediaQueryList;
   Object.defineProperty(query, 'matches', { configurable: true, value: initial });
   vi.stubGlobal('matchMedia', () => query);
@@ -89,7 +96,7 @@ it('replaces texture quality when crossing the display threshold without restart
   view.unmount();
 });
 
-it.each(['mirrorsea', 'amber', 'elopement', 'heart-thief'])(
+it.each(['mirrorsea', 'amber', 'elopement', 'heart-thief', 'tomorrow'])(
   'uses matching %s scenery and cancels late renders',
   async (selected) => {
     const preference = motionPreference();
@@ -107,7 +114,9 @@ it.each(['mirrorsea', 'amber', 'elopement', 'heart-thief'])(
     expect(call[2]).toMatchObject({ landscape: true, dark: false });
     expect(view.container.querySelector('img')).toHaveAttribute(
       'src',
-      '/assets/gacha/appearances/' + selected + '-light.webp',
+      selected === 'tomorrow'
+        ? '/assets/gacha/motion/r-chatgpt/background-light.webp'
+        : '/assets/gacha/appearances/' + selected + '-light.webp',
     );
     await act(async () => preference(true));
     expect(call[2]?.signal?.aborted).toBe(true);
@@ -173,6 +182,24 @@ it('keeps the mirror reflection, touch light and contact layer when animation lo
     'src',
     '/assets/gacha/motion/n-gemini/appearance-light.webp',
   );
+  expect(view.container.querySelector('canvas')).toHaveAttribute('data-ready', 'false');
+  view.unmount();
+});
+
+it('retains the responsive tomorrow layers when animation loading fails', async () => {
+  motionPreference();
+  vi.stubGlobal('innerWidth', 390);
+  vi.stubGlobal('innerHeight', 844);
+  document.documentElement.dataset.theme = 'dark';
+  vi.mocked(renderSpecial).mockRejectedValue(new Error('image-unavailable'));
+  const view = render(<AppearanceBackdrop selected="tomorrow" />);
+  await waitFor(() => expect(renderSpecial).toHaveBeenCalledOnce());
+  const images = [...view.container.querySelectorAll('.nb-tomorrow-still img')];
+  expect(images.map((image) => image.getAttribute('src'))).toEqual([
+    '/assets/gacha/motion/r-chatgpt/background-dark.webp',
+    '/assets/gacha/motion/r-chatgpt/cloud.webp',
+    '/assets/gacha/motion/r-chatgpt/hero-dark.webp',
+  ]);
   expect(view.container.querySelector('canvas')).toHaveAttribute('data-ready', 'false');
   view.unmount();
 });

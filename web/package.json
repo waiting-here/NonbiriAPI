@@ -35,7 +35,10 @@
     "hashes": "node scripts/gen-manifest.mjs",
     "dev:gacha": "vite --config vite.gacha.config.ts",
     "build:gacha": "vite build --config vite.gacha.config.ts",
-    "preview:gacha": "vite preview --config vite.gacha.config.ts"
+    "preview:gacha": "vite preview --config vite.gacha.config.ts",
+    "dev:sp-review": "vite --config vite.sp-review.config.ts",
+    "build:sp-review": "vite build --config vite.sp-review.config.ts",
+    "preview:sp-review": "vite preview --config vite.sp-review.config.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "5.101.4",

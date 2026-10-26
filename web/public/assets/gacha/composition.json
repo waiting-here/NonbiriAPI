@@ -17,7 +17,8 @@
     "n": "backgrounds/n.webp",
     "o": "backgrounds/o.webp",
     "p": "backgrounds/p.webp",
-    "q": "backgrounds/q.webp"
+    "q": "backgrounds/q.webp",
+    "s": "backgrounds/s.webp"
   },
   "characters": {
     "a-chatgpt": "layers/a-chatgpt.webp",
@@ -80,7 +81,10 @@
     "n-gemini": "motion/n-gemini/hero.webp",
     "o-claude": "motion/o-claude/hero.webp",
     "p-claude": "motion/p-claude/hero.webp",
-    "q-glm": "motion/q-glm/hero.webp"
+    "q-glm": "motion/q-glm/hero.webp",
+    "r-chatgpt": "motion/r-chatgpt/hero.webp",
+    "s-chatgpt": "motion/s-chatgpt/hero.webp",
+    "s-claude": "motion/s-claude/hero.webp"
   },
   "cards": {
     "a-chatgpt": {
@@ -776,6 +780,87 @@
         ],
         "character_high_method": "native plates shared by both display qualities"
       }
+    },
+    "r-chatgpt": {
+      "source": "registered-motion-layers",
+      "background": "backgrounds/r.webp",
+      "character": "motion/r-chatgpt/hero.webp",
+      "scene": "tomorrow",
+      "inputs": [
+        "motion/r-chatgpt/background-light.webp",
+        "motion/r-chatgpt/background-dark.webp",
+        "motion/r-chatgpt/hero.webp",
+        "motion/r-chatgpt/body.webp",
+        "motion/r-chatgpt/pendant.webp",
+        "motion/r-chatgpt/closed.webp",
+        "motion/r-chatgpt/cloud.webp",
+        "motion/r-chatgpt/hero-dark.webp"
+      ],
+      "moment_layers": {
+        "background": "daylight scenery",
+        "character": "complete transparent source plate; same placement as animated character",
+        "standard": [
+          1024,
+          1536
+        ],
+        "high_resolution": [
+          2560,
+          3840
+        ]
+      },
+      "appearance_layers": {
+        "background": "motion/r-chatgpt/background-{light,dark}.webp",
+        "layout": "responsive source plate placement shared by static and animated appearance",
+        "character_light": "motion/r-chatgpt/hero.webp",
+        "character_dark": "motion/r-chatgpt/hero-dark.webp"
+      },
+      "resolution": {
+        "background_native": [
+          1672,
+          941
+        ],
+        "character_native": [
+          1024,
+          1536
+        ],
+        "card_standard": [
+          1280,
+          1920
+        ],
+        "card_high": [
+          2560,
+          3840
+        ],
+        "landscape_standard": [
+          1920,
+          1080
+        ],
+        "landscape_high": [
+          3840,
+          2160
+        ],
+        "high_method": "resampling; no additional native detail"
+      }
+    },
+    "s-chatgpt": {
+      "background": "motion/s-chatgpt/background.webp",
+      "character": "motion/s-chatgpt/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas"
+    },
+    "s-claude": {
+      "background": "motion/s-claude/background.webp",
+      "character": "motion/s-claude/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas"
     }
   },
   "groups": {
@@ -895,6 +980,15 @@
         2160
       ],
       "fit": "full-canvas"
+    },
+    "s": {
+      "background": "backgrounds/s.webp",
+      "foreground": "layers/groups/s.webp",
+      "canvas": [
+        1672,
+        941
+      ],
+      "fit": "full-canvas"
     }
   },
   "covers": {
@@ -960,8 +1054,56 @@
         2160
       ],
       "fit": "full-canvas"
+    },
+    "s": {
+      "background": "backgrounds/covers/s.webp",
+      "foreground": "layers/covers/s.webp",
+      "canvas": [
+        1672,
+        941
+      ],
+      "fit": "full-canvas"
     }
   },
   "sampling": "Lanczos3; generated native 1024x1536 portraits and approximately 1672x941 landscapes; larger derivatives do not add native detail.",
-  "compositing": "Background first, then registered transparent foreground using source-over. Existing rare cards retain their registered motion composition."
+  "compositing": "Background first, then registered transparent foreground using source-over. Existing rare cards retain their registered motion composition.",
+  "seasonal": {
+    "theme": "s",
+    "nativeCards": [
+      1024,
+      1536
+    ],
+    "nativeGroup": [
+      1536,
+      864
+    ],
+    "nativeCover": [
+      1920,
+      1080
+    ],
+    "highCards": [
+      2560,
+      3840
+    ],
+    "highLandscapes": [
+      3840,
+      2160
+    ],
+    "groups": {
+      "background": "backgrounds/s.webp",
+      "foreground": "layers/groups/s.webp"
+    },
+    "cover": {
+      "background": "backgrounds/covers/s.webp",
+      "foreground": "layers/covers/s.webp"
+    },
+    "eyeStates": [
+      "hero.webp",
+      "half.webp",
+      "closed.webp"
+    ],
+    "eyeRegistration": "Same full-canvas coordinates; half and closed layers retain only the face region.",
+    "scaling": "Portraits and group: same-source Lanczos resampling. Cover: existing enhanced foreground with the cleaned current alpha and the same adopted background. Large dimensions do not imply native added detail.",
+    "contentRating": "r18"
+  }
 }

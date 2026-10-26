@@ -120,7 +120,7 @@ func TestManualCatalogTraineeRequiresSelectedManagedModel(t *testing.T) {
 	mid, _ := parsePositiveID(model.ID)
 	input := ManualCatalogInput{Entries: []string{"manual"}, ExpectedManualCatalogRevision: "1"}
 	mutation := routingMutation(t, 'o', http.MethodPost, routeStewardManual, []int64{did, kid}, input)
-	if _, err := e.service.MutateManualCatalog(context.Background(), false, trainee, did, kid, 0, mutation, input); !errors.Is(err, ErrNotFound) && !errors.Is(err, ErrForbidden) {
+	if _, err := e.service.MutateManualCatalog(context.Background(), false, trainee, did, kid, 0, mutation, input); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unselected trainee: %v", err)
 	}
 	ctx := charityscope.WithModel(context.Background(), mid)

@@ -90,7 +90,6 @@ async function editor(role: 'admin' | 'steward', create = false, trainee = false
   const view = await renderWithProviders(
     <ModelsPanel
       role={role}
-      trainee={trainee}
       accountId="1"
       renderKeyManager={() => null}
       renderScopedKeys={() => null}
@@ -141,11 +140,11 @@ describe('managed model Cloudflare setting', () => {
     await editor(role, true);
     expect(screen.getByRole('switch', { name: 'Cloudflare forwarding' })).not.toBeChecked();
   });
-  it('shows level 5 a read-only summary without the switch', async () => {
+  it('shows level 5 the shared model editor without starting a write', async () => {
     const f = fixture('steward');
     await editor('steward', false, true);
     expect(await screen.findByText('Off. Requests connect directly to upstreams.')).toBeVisible();
-    expect(screen.queryByRole('switch', { name: 'Cloudflare forwarding' })).not.toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Cloudflare forwarding' })).toBeVisible();
     expect(f.sent).toHaveLength(0);
   });
   it.each([normalizeAdminCharityModel, normalizeStewardCharityModel])(

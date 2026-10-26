@@ -968,7 +968,9 @@ describe('ModelsWorkspace numbered pagination', () => {
         screen.queryByText('Saved to the model list. You can now add it as a source.'),
       ]).toEqual([null, null]);
       await view.user.click((await screen.findByText('typed-model')).closest('button')!);
-      await view.user.click(screen.getByRole('checkbox', { name: 'Responses' }));
+      expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
+      expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
+      await view.user.click(screen.getByRole('checkbox', { name: 'Chat completions' }));
       await view.user.click(screen.getByRole('button', { name: 'Add 1 selected sources' }));
       await waitFor(() => expect(bindingWrites).toHaveLength(1));
       expect(bindingWrites[0]).toEqual({

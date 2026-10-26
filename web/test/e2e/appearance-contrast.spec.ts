@@ -59,7 +59,7 @@ for (const intensity of ['vivid', 'balanced', 'focus'])
               await expect(page.locator('html')).toHaveAttribute('data-appearance', design);
             await page
               .locator(
-                'img.nb-appearance-still, img.nb-amber-still-character, .nb-moment-backdrop img',
+                'img.nb-appearance-still, img.nb-amber-still-character, .nb-moment-backdrop img, .nb-tomorrow-still img',
               )
               .evaluateAll(async (images) => {
                 await Promise.all(images.map((image) => (image as HTMLImageElement).decode()));

@@ -35,6 +35,9 @@ func availableCandidateCountSQL(bindingID string, callerScoped bool, memberID ..
 	if len(memberID) > 0 && memberID[0] != "" {
 		scope += " AND dk.id=" + memberID[0]
 	}
+	if len(memberID) > 1 && memberID[1] != "" {
+		scope += " AND target.id=" + memberID[1]
+	}
 	if callerScoped {
 		scope += " AND (d.user_id<>cx.caller_id OR cx.caller_level=6)"
 	}

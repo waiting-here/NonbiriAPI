@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"net/http"
 	"strconv"
 	"strings"
@@ -82,7 +83,7 @@ func TestModelAdaptationAdminWriteStewardReadTraineeDenied(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if _, err := env.service.GetAdaptation(ctx, roleSteward, trainee, modelID, 0); !errors.Is(err, ErrForbidden) {
+	if _, err := env.service.GetAdaptation(ctx, roleSteward, trainee, modelID, 0); !errors.Is(err, authz.ErrPermissionDenied) {
 		t.Fatalf("level 5 adaptation read: %v", err)
 	}
 	patch, err := requestadaptation.ParsePatch([]byte(`{"expected_revision":"0","fixed_headers":{"mode":"replace","values":{"X-Research":{"action":"replace","value":"private-charity-header"}}}}`))
@@ -201,7 +202,7 @@ func TestBindingAdaptationConfigurationInheritanceAndSafeReceipts(t *testing.T) 
 		t.Fatal(err)
 	}
 	for _, binding := range []int64{0, bindingID} {
-		if _, err := env.service.GetAdaptation(t.Context(), roleSteward, trainee, modelID, binding); !errors.Is(err, ErrForbidden) {
+		if _, err := env.service.GetAdaptation(t.Context(), roleSteward, trainee, modelID, binding); !errors.Is(err, authz.ErrPermissionDenied) {
 			t.Fatalf("level 5 configuration read = %v", err)
 		}
 		if _, err := env.service.GetAdaptation(t.Context(), roleSteward, owner, modelID, binding); !errors.Is(err, ErrForbidden) {

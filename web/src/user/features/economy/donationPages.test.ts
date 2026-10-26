@@ -10,6 +10,25 @@ import {
 const U128_MAX_AMOUNT = '340282366920938463463374607431768211.455';
 const OWNER_ID = '41';
 const KEY_ID = '51';
+
+it('retains current service failures in the owner key page', () => {
+  const status = {
+    use_id: '1',
+    native_service: 'chat_completions',
+    state: 'failure_disabled',
+    failure_streak: '10',
+    failure_disabled: true,
+    retry_after_until: null,
+    smart_backoff: null,
+  };
+  const result = normalizeOwnerDonationKeysPage(
+    page([key({ service_statuses: [status] })]),
+    OWNER_ID,
+    '1',
+    20,
+  );
+  expect(result.data[0]?.serviceStatuses).toEqual([status]);
+});
 const RULE_IDS = [
   `qlr_${'A'.repeat(21)}Q`,
   `qlr_${'B'.repeat(21)}Q`,
@@ -131,6 +150,64 @@ function jsonResponse(value: unknown, status = 200): Response {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('owner donation numbered-page normalizers', () => {
+  it.each([
+    {
+      total: '2',
+      approved: '2',
+      pending: '0',
+      rejected: '0',
+      withdrawn: '0',
+      review_status: 'approved',
+    },
+    {
+      total: '1',
+      approved: '1',
+      pending: '1',
+      rejected: '0',
+      withdrawn: '0',
+      review_status: 'approved_pending',
+    },
+  ])('accepts the confirmed live pending lifecycle with $review_status uses', (useSummary) => {
+    const payload = page([
+      summary({
+        state_counts: { ...summary().state_counts, pending: '0', available: '1' },
+        use_summary: useSummary,
+      }),
+    ]);
+    const result = normalizeOwnerDonationsPage(payload, { view: 'current' }, '1', 20).data[0]!;
+    expect(result.status).toBe('pending');
+    expect(result.reviewResult).toBeNull();
+    expect(result.stateCounts.available).toBe('1');
+    expect(result.useSummary).toEqual(useSummary);
+  });
+  it.each(['available', 'rate_limited', 'disabled', 'suspended', 'exhausted'] as const)(
+    'accepts %s keys approved through individual uses while the lifecycle remains pending',
+    (state) => {
+      const reviewed = summary({
+        state_counts: { ...summary().state_counts, pending: '0', [state]: '1' },
+        use_summary: {
+          total: '2',
+          pending: '1',
+          approved: '1',
+          rejected: '0',
+          withdrawn: '0',
+          review_status: 'approved_pending',
+        },
+      });
+      expect(
+        normalizeOwnerDonationsPage(
+          page([reviewed]),
+          { review_status: 'approved_pending' },
+          '1',
+          20,
+        ).data[0]?.status,
+      ).toBe('pending');
+      expect(
+        normalizeOwnerDonationsPage(page([{ ...reviewed, use_summary: undefined }]), {}, '1', 20)
+          .data[0]?.stateCounts[state],
+      ).toBe('1');
+    },
+  );
   it('projects the exact owner summary fields into economy camelCase DTOs', () => {
     const result = normalizeOwnerDonationsPage(page([summary()]), {}, '1', 20);
 
@@ -218,7 +295,7 @@ describe('owner donation numbered-page normalizers', () => {
     ).toThrow(ApiError);
   });
 
-  it('keeps large canonical counts and enforces the seven-state sum', () => {
+  it('keeps large canonical counts without recomputing server summaries', () => {
     const largeCount = '9007199254740993';
     const result = normalizeOwnerDonationsPage(
       page([
@@ -241,14 +318,14 @@ describe('owner donation numbered-page normalizers', () => {
       20,
     );
     expect(result.data[0]?.keyCount).toBe(largeCount);
-    expect(() =>
+    expect(
       normalizeOwnerDonationsPage(
         page([summary({ state_counts: { ...summary().state_counts, ended: '1' } })]),
         {},
         '1',
         20,
-      ),
-    ).toThrow(ApiError);
+      ).data[0]?.stateCounts.ended,
+    ).toBe('1');
   });
 
   it('shows a forced rejection as rejected with its reason', () => {
@@ -271,62 +348,48 @@ describe('owner donation numbered-page normalizers', () => {
     expect(result.reviewResult).toMatchObject({ decision: 'reject', reason: 'Review required' });
   });
 
-  it('enforces status and review state projections, including logical expiry', () => {
-    expect(
-      normalizeOwnerDonationsPage(
+  it.each(['current', 'all'] as const)(
+    'renders multiline review history in the %s view',
+    (view) => {
+      const review = {
+        decision: 'approve',
+        reason: 'First review line\nSecond review line',
+        reviewed_at: 1_800_000_002,
+      };
+      const result = normalizeOwnerDonationsPage(
         page([
           summary({
             status: 'approved',
-            review_result: { decision: 'approve', reason: 'accepted', reviewed_at: 1_800_000_001 },
+            review_result: review,
             state_counts: { ...summary().state_counts, pending: '0', available: '1' },
           }),
         ]),
-        {},
+        { view },
         '1',
         20,
-      ).data[0]?.status,
-    ).toBe('approved');
-    expect(
-      normalizeOwnerDonationsPage(
-        page([
-          summary({
-            status: 'expired',
-            review_result: { decision: 'approve', reason: '', reviewed_at: 1_800_000_001 },
-            state_counts: { ...summary().state_counts, pending: '0', expired: '1' },
-          }),
-        ]),
-        {},
-        '1',
-        20,
-      ).data[0]?.status,
-    ).toBe('expired');
-    expect(() =>
-      normalizeOwnerDonationsPage(
-        page([
-          summary({
-            status: 'pending',
-            review_result: { decision: 'approve', reason: '', reviewed_at: 1_800_000_001 },
-          }),
-        ]),
-        {},
-        '1',
-        20,
-      ),
-    ).toThrow(ApiError);
-    expect(() =>
-      normalizeOwnerDonationsPage(
-        page([
-          summary({
-            status: 'expired',
-            review_result: { decision: 'approve', reason: '', reviewed_at: 1_799_999_999 },
-            state_counts: { ...summary().state_counts, pending: '0', expired: '1' },
-          }),
-        ]),
-        {},
-        '1',
-        20,
-      ),
-    ).toThrow(ApiError);
+      );
+      expect(result.data[0]?.reviewResult).toEqual({
+        decision: 'approve',
+        reason: review.reason,
+        reviewedAt: review.reviewed_at,
+      });
+      expect(result.data[0]?.status).toBe('approved');
+    },
+  );
+
+  it('keeps an approval history when the parent is pending and the summary is absent', () => {
+    const review = { decision: 'approve', reason: 'Earlier approval', reviewed_at: 1_799_999_999 };
+    const result = normalizeOwnerDonationsPage(
+      page([summary({ review_result: review, use_summary: null })]),
+      {},
+      '1',
+      20,
+    );
+    expect(result.data[0]).toMatchObject({
+      status: 'pending',
+      reviewResult: { decision: 'approve', reason: review.reason },
+    });
+    expect(result.data[0]?.useSummary).toBeUndefined();
   });
 
   it('accepts backend logical expiry and mixed pending terminal key projections', () => {
@@ -366,29 +429,24 @@ describe('owner donation numbered-page normalizers', () => {
     }
   });
 
-  it('enforces source preview cardinality and distinct identities', () => {
+  it('keeps server preview metadata and ignores unused extension content', () => {
+    const result = normalizeOwnerDonationsPage(
+      page([
+        summary({
+          source_count: '4',
+          sources: [customSource()],
+          extension: { unused_text: '\ud800' },
+        }),
+      ]),
+      {},
+      '1',
+      20,
+    );
+    expect(result.data[0]?.sourceCount).toBe('4');
+    expect(result.data[0]?.sources).toHaveLength(1);
     expect(() =>
-      normalizeOwnerDonationsPage(page([summary({ source_count: '2' })]), {}, '1', 20),
+      normalizeOwnerDonationsPage(page([summary({ description: 7 })]), {}, '1', 20),
     ).toThrow(ApiError);
-    expect(() =>
-      normalizeOwnerDonationsPage(page([summary({ source_count: '0', sources: [] })]), {}, '1', 20),
-    ).toThrow(ApiError);
-    expect(() =>
-      normalizeOwnerDonationsPage(
-        page([
-          summary({
-            source_count: '2',
-            sources: [customSource(), customSource()],
-          }),
-        ]),
-        {},
-        '1',
-        20,
-      ),
-    ).toThrow(ApiError);
-    expect(
-      normalizeOwnerDonationsPage(page([summary({ owner: { user_id: OWNER_ID } })]), {}, '1', 20),
-    ).toEqual(normalizeOwnerDonationsPage(page([summary()]), {}, '1', 20));
   });
 
   it('rejects duplicate summary identities and strips unused wire fields', () => {
@@ -463,34 +521,26 @@ describe('owner donation key numbered-page normalizers', () => {
     ).toEqual(normalizeOwnerDonationKeysPage(page([key()]), OWNER_ID, '1', 20));
   });
 
-  it('requires exactly the bounded rule preview and limited rules first', () => {
-    expect(() =>
-      normalizeOwnerDonationKeysPage(
-        page([key({ rule_count: '4', rules: [rule(RULE_IDS[0]!)] })]),
-        OWNER_ID,
-        '1',
-        20,
-      ),
-    ).toThrow(ApiError);
+  it('renders the supplied rule preview independently of its count and ordering', () => {
+    const result = normalizeOwnerDonationKeysPage(
+      page([
+        key({
+          rule_count: '4',
+          rules: [rule(RULE_IDS[0]!), rule(RULE_IDS[1]!, { state: 'limited' })],
+        }),
+      ]),
+      OWNER_ID,
+      '1',
+      20,
+    );
+    expect(result.data[0]?.ruleCount).toBe('4');
+    expect(result.data[0]?.rules.map((entry) => entry.state)).toEqual(['available', 'limited']);
     expect(() =>
       normalizeOwnerDonationKeysPage(
         page([
           key({
             rule_count: '2',
             rules: [rule(RULE_IDS[0]!), rule(RULE_IDS[0]!)],
-          }),
-        ]),
-        OWNER_ID,
-        '1',
-        20,
-      ),
-    ).toThrow(ApiError);
-    expect(() =>
-      normalizeOwnerDonationKeysPage(
-        page([
-          key({
-            rule_count: '2',
-            rules: [rule(RULE_IDS[0]!), rule(RULE_IDS[1]!, { state: 'limited' })],
           }),
         ]),
         OWNER_ID,

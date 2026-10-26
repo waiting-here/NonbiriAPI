@@ -16,6 +16,9 @@ import (
 )
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL != nil && !IsPersonalPath(r.URL.Path) {
+		r = r.WithContext(authz.WithStewardPermission(r.Context(), authz.StewardRoutePermission(r.Method, r.URL.Path)))
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	if r.URL != nil && r.URL.EscapedPath() == r.URL.Path {
 		route := matchAutomationRoute(r.URL.Path)

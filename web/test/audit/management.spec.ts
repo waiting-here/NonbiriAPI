@@ -1,3 +1,10 @@
+import {
+  fillService,
+  protocolServices,
+  readService,
+  servicePanel,
+  submitService,
+} from '../service-onboarding';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
@@ -23,6 +30,9 @@ interface Fixture {
     automatic_donation_id: string;
     pending_donation_id: string;
     binding_donation_id: string;
+    custom_binding_donation_id: string;
+    multiline_review_donation_id: string;
+    resource_health: { donation_id: string };
     automatic_backoff_donation_id: string;
     recurring_discount: { donation_id: string };
     denials: Record<'client_rules' | 'charity' | 'manual', { cookie: Cookie }>;
@@ -97,10 +107,10 @@ test('level 5 reads accounts and retains the lower-user ban boundary', async ({ 
     page.on('pageerror', (error) => errors.push(error.message));
     const before = await read(context, state.user_url, root);
     await page.goto(state.user_url + '/steward?tab=users&user=' + id);
-    await expect(page.getByRole('tab', { name: copy.tabEconomy, exact: true })).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: copy.tabEconomy, exact: true })).toBeVisible();
     await page.getByRole('tab', { name: copy.tabLimits, exact: true }).click();
     await expect(page.getByLabel(copy.lightRPMLimit, { exact: true })).toBeEnabled();
-    await expect(page.getByLabel(copy.endpointLimit, { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel(copy.endpointLimit, { exact: true })).toBeVisible();
     await page.getByRole('tab', { name: copy.tabPenalties, exact: true }).click();
     await page.getByLabel(copy.banReason, { exact: true }).fill('Synthetic account restriction');
     await page.getByLabel(copy.banDurationDays, { exact: true }).fill('1');
@@ -140,9 +150,9 @@ test('level 5 reads accounts and retains the lower-user ban boundary', async ({ 
     await page.reload();
     await page.getByRole('tab', { name: copy.tabLimits, exact: true }).click();
     await expect(page.getByLabel(copy.lightRPMLimit, { exact: true })).toBeEnabled();
-    await expect(page.getByLabel(copy.endpointLimit, { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel(copy.endpointLimit, { exact: true })).toBeVisible();
     await page.getByRole('tab', { name: copy.tabPenalties, exact: true }).click();
-    await expect(page.getByRole('button', { name: copy.unban, exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: copy.unban, exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: copy.ban, exact: true })).toHaveCount(0);
     const unban = await context.request.post(state.user_url + root + '/unban', {
       headers: { Origin: state.user_url, 'Idempotency-Key': randomUUID() },
@@ -173,6 +183,9 @@ test('owner reads donation keys and details from current API responses', async (
         state.management.automatic_donation_id,
         state.management.pending_donation_id,
         state.management.binding_donation_id,
+        state.management.custom_binding_donation_id,
+        state.management.multiline_review_donation_id,
+        state.management.resource_health.donation_id,
         state.management.automatic_backoff_donation_id,
         state.management.recurring_discount.donation_id,
       ].sort(),
@@ -253,7 +266,9 @@ test('level 5 saves only message-role fields, reads logs and cannot open abuse a
   try {
     const page = await context.newPage();
     await page.goto(
-      state.user_url + '/steward?tab=charity&charity_model=' + state.management.charity_model_id,
+      state.user_url +
+        '/steward?tab=charity&charity_section=models&charity_model=' +
+        state.management.charity_model_id,
     );
     const fallback = page.getByLabel('Default action for unlisted roles');
     await page.locator('details').filter({ has: fallback }).locator('summary').click();
@@ -272,15 +287,23 @@ test('level 5 saves only message-role fields, reads logs and cannot open abuse a
           '/charity-models/' + state.management.charity_model_id,
         ),
     );
-    await page.getByRole('button', { name: 'Save model', exact: true }).click();
+    await page
+      .getByRole('button', {
+        name: commonEn.common.workflow.saveTarget.replace(
+          '{{id}}',
+          state.management.charity_model_id,
+        ),
+        exact: true,
+      })
+      .click();
     const result = await saved;
     expect(result.ok()).toBe(true);
     const intent = result.request().postDataJSON();
     expect(Object.keys(intent).sort()).toEqual(['expected_revision', 'role_policy']);
     expect(intent.role_policy).toEqual({ default_action: 'reject', rules: { developer: 'user' } });
-    await expect(page.getByText('Message role settings saved.', { exact: true })).toBeVisible();
+    await expect(fallback).toHaveValue('reject');
     await fallback.selectOption('native');
-    await expect(page.getByText('Message role settings saved.', { exact: true })).toHaveCount(0);
+    await expect(fallback).toHaveValue('native');
     await page.screenshot({ path: info.outputPath('steward-role-narrow.png'), fullPage: true });
     const model = await read(
       context,
@@ -670,48 +693,38 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
           : 'https://cache.example.test/ai',
       upstream = 'anthropic/browser-cache';
     try {
-      let endpoint: { id: string };
+      let endpoint: { id: string }, key: { id: string };
       if (connectorType === 'ai-sdk-gateway-v4') {
         const ownerPage = await owner.newPage();
-        const c = commonEn.common.connections;
         await ownerPage.goto(state.user_url + '/endpoints?quickstart=1');
-        const connectionPanel = ownerPage
-          .locator('.nb-expandable-panel')
-          .filter({ has: ownerPage.getByRole('heading', { name: c.addConnection, exact: true }) });
-        await connectionPanel
-          .getByLabel(c.name, { exact: true })
-          .fill('Synthetic Gateway v4 connection');
-        const connectionSaved = ownerPage.waitForResponse(
-          (response) =>
-            new URL(response.url()).pathname === '/api/connections' &&
-            response.request().method() === 'POST',
-        );
-        await connectionPanel.getByRole('button', { name: c.create, exact: true }).click();
-        expect((await connectionSaved).status()).toBe(201);
-        await ownerPage.getByRole('button', { name: c.addEntry, exact: true }).first().click();
-        const entryPanel = ownerPage
-          .locator('.nb-expandable-panel')
-          .filter({ has: ownerPage.getByRole('heading', { name: c.addEntry, exact: true }) });
-        await entryPanel
-          .getByRole('combobox', { name: c.protocol, exact: true })
-          .selectOption(connectorType);
-        await entryPanel.getByLabel(c.entryURL, { exact: true }).fill(baseURL);
-        await entryPanel
-          .getByLabel(c.note + ' ' + c.optional, { exact: true })
-          .fill('Synthetic Gateway v4');
+        const panel = servicePanel(ownerPage);
+        await fillService(panel, {
+          name: 'Synthetic Gateway v4',
+          url: baseURL,
+          protocol: connectorType,
+          secret: 'synthetic-gateway-cache-key',
+        });
         const created = ownerPage.waitForResponse(
           (response) =>
             new URL(response.url()).pathname === '/api/endpoints' &&
             response.request().method() === 'POST',
         );
-        await entryPanel.getByRole('button', { name: c.saveEntries, exact: true }).click();
+        await submitService(panel);
         const response = await created;
         expect(response.status()).toBe(201);
         expect(response.request().postDataJSON()).toMatchObject({
           connector_type: connectorType,
           base_url: baseURL,
         });
-        endpoint = await response.json();
+        const saved = await readService(ownerPage, 'Synthetic Gateway v4');
+        endpoint = saved.endpoint;
+        key = saved.key;
+        expect(saved.endpoint.native_services.slice().sort()).toEqual(
+          (await protocolServices(ownerPage, connectorType)).slice().sort(),
+        );
+        expect(saved.key.native_services.slice().sort()).toEqual(
+          saved.endpoint.native_services.slice().sort(),
+        );
         expect(await read(owner, state.user_url, '/api/endpoints/' + endpoint.id)).toMatchObject({
           connector_type: connectorType,
           base_url: baseURL,
@@ -729,14 +742,14 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
           note: 'Synthetic Gateway',
           enabled: true,
         });
+        key = await write(owner, state.user_url, '/api/endpoints/' + endpoint.id + '/keys', {
+          secret: 'synthetic-gateway-cache-key',
+          note: 'Synthetic cache credential',
+          enabled: true,
+          force_store_false: false,
+          ownership_confirmed: true,
+        });
       }
-      const key = await write(owner, state.user_url, '/api/endpoints/' + endpoint.id + '/keys', {
-        secret: 'synthetic-gateway-cache-key',
-        note: 'Synthetic cache credential',
-        enabled: true,
-        force_store_false: false,
-        ownership_confirmed: true,
-      });
       const donation = await write(owner, state.user_url, '/api/donations', {
         description: 'Synthetic Gateway cache source',
         discord_public_thanks: false,
@@ -807,7 +820,8 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
       );
       if (connectorType === 'ai-sdk-gateway-v4') {
         for (const label of [
-          'Chat Completions / Responses',
+          commonEn.common.modelTypes.chat_completions,
+          commonEn.common.modelTypes.responses,
           'Image generation',
           'Embeddings',
           'Rerank',
@@ -823,6 +837,7 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
         expect((await read(admin, state.admin_url, modelPath)).model_types).toEqual(
           expect.arrayContaining([
             'chat_completions',
+            'responses',
             'images_generations',
             'embeddings',
             'rerank',
@@ -830,7 +845,8 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
         );
         await page.reload();
         for (const label of [
-          'Chat Completions / Responses',
+          commonEn.common.modelTypes.chat_completions,
+          commonEn.common.modelTypes.responses,
           'Image generation',
           'Embeddings',
           'Rerank',

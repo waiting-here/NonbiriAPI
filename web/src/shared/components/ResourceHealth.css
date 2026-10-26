@@ -1,0 +1,39 @@
+.resource-health {
+  min-width: 0;
+  margin-block: var(--nb-space-3);
+}
+
+.resource-health__summary,
+.resource-health__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nb-space-2) var(--nb-space-3);
+}
+
+.resource-health__list {
+  display: grid;
+  gap: var(--nb-space-2);
+  list-style: none;
+  margin: var(--nb-space-2) 0 0;
+  padding: 0;
+}
+
+.resource-health__item {
+  min-width: 0;
+  padding: var(--nb-space-3);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-alt);
+  overflow-wrap: anywhere;
+}
+
+.resource-health__item p {
+  margin: var(--nb-space-2) 0 0;
+  color: var(--nb-color-text-muted);
+}
+
+.resource-health__binding {
+  min-width: 0;
+  margin-block-start: var(--nb-space-2);
+}

@@ -74,7 +74,7 @@ func (r *Runtime) VerifyUserSessionMFA(ctx context.Context, userID int64, bindin
 	if r == nil || ctx == nil || userID <= 0 || binding == "" {
 		return 0, authz.ErrUnauthorized
 	}
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := r.readDatabase().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return 0, err
 	}
@@ -129,7 +129,11 @@ func (r *Runtime) InvalidateUnverifiedMFASessions(ctx context.Context) error {
 }
 
 func (r *Runtime) mfaBegin(ctx context.Context, actor authz.Actor, write bool) (*sql.Tx, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
+	database := r.db
+	if !write {
+		database = r.readDatabase()
+	}
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: !write})
 	if err != nil {
 		return nil, err
 	}
@@ -161,6 +165,11 @@ func (r *Runtime) mfaStatusHTTP(w http.ResponseWriter, req *http.Request) {
 	defer tx.Rollback()
 	state, err := authz.ReadMFAState(req.Context(), tx, actor, r.now().Unix())
 	if err != nil {
+		_ = tx.Rollback()
+		writeMFAError(w, err)
+		return
+	}
+	if err = tx.Commit(); err != nil {
 		writeMFAError(w, err)
 		return
 	}
@@ -386,27 +395,8 @@ func (r *Runtime) mfaAdminHTTP(w http.ResponseWriter, req *http.Request) {
 		writeMFAError(w, err)
 		return
 	}
-	var isAdmin bool
-	if err = tx.QueryRowContext(req.Context(), `SELECT is_admin FROM users WHERE id=?`, target).Scan(&isAdmin); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			err = authz.ErrNotFound
-		}
-		writeMFAError(w, err)
-		return
-	}
-	if isAdmin {
-		writeMFAError(w, authz.ErrForbidden)
-		return
-	}
-	enrolled := false
-	if reset {
-		for _, query := range []string{`DELETE FROM account_mfa_credentials WHERE user_id=?`, `DELETE FROM account_mfa_pending WHERE user_id=?`, `DELETE FROM sessions WHERE user_id=?`} {
-			if _, err = tx.ExecContext(req.Context(), query, target); err != nil {
-				writeMFAError(w, err)
-				return
-			}
-		}
-	} else if err = tx.QueryRowContext(req.Context(), `SELECT EXISTS(SELECT 1 FROM account_mfa_credentials WHERE user_id=?)`, target).Scan(&enrolled); err != nil {
+	enrolled, err := managedMFATx(req.Context(), tx, target, reset)
+	if err != nil {
 		writeMFAError(w, err)
 		return
 	}

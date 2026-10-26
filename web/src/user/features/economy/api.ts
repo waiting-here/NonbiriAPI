@@ -102,7 +102,11 @@ export interface CreateDonationInput {
   ownershipAuthorized: true;
 }
 
-export async function createDonation(input: CreateDonationInput): Promise<Donation> {
+export async function createDonation(
+  input: CreateDonationInput,
+  operationKey = createMutationIdentity(),
+  signal?: AbortSignal,
+): Promise<Donation> {
   requireDonationDescription(input.description);
   if (
     input.ownershipAuthorized !== true ||
@@ -127,7 +131,8 @@ export async function createDonation(input: CreateDonationInput): Promise<Donati
   return normalizeDonation(
     await apiFetch<unknown>('/api/donations', {
       method: 'POST',
-      headers: mutationHeaders(),
+      headers: { 'Idempotency-Key': operationKey },
+      signal,
       json: {
         description: input.description,
         keys: input.keys.map((key) => ({

@@ -93,7 +93,7 @@ func TestConnectionUsesPartialReviewPreservesHeaderAndBudgetMember(t *testing.T)
 	}
 }
 
-func TestConnectionUsesTraineeSeesOnlyPendingMemberOnApprovedHeader(t *testing.T) {
+func TestConnectionUsesTraineeSeesWholeQualifiedDonation(t *testing.T) {
 	e := newDonationTestEnv(t)
 	e.seedUser(t, "", nil, true)
 	five := int64(5)
@@ -102,20 +102,21 @@ func TestConnectionUsesTraineeSeesOnlyPendingMemberOnApprovedHeader(t *testing.T
 	_, first := e.seedEndpointKey(t, owner, 'x')
 	_, second := e.seedEndpointKey(t, owner, 'y')
 	donation := approvedResetDonation(t, e, owner, first, second)
+	qualifyStandardDonation(t, e, donation.ID)
 	id := parseTestID(t, donation.ID)
 	uses := ownerUsesForTest(t, e, owner, id)
 	selected := uses[0]
 	stageUseForTest(t, e, selected)
-	queue, err := e.service.DonationsStewardPage(context.Background(), actor, ManagementFilter{Status: "pending"}, pagination.Default())
-	if err != nil || len(queue.Data) != 1 || queue.Data[0].Status != "approved" || queue.Data[0].UseSummary.Pending != "1" || queue.Data[0].KeyCount != "1" || queue.Data[0].SourceCount != "1" {
+	queue, err := e.service.DonationsStewardPage(context.Background(), actor, ManagementFilter{ReviewStatus: "approved_pending"}, pagination.Default())
+	if err != nil || len(queue.Data) != 1 || queue.Data[0].Status != "approved" || queue.Data[0].UseSummary.Pending != "1" || queue.Data[0].KeyCount != "2" || queue.Data[0].SourceCount != "2" {
 		t.Fatalf("pending-use queue: %+v, %v", queue, err)
 	}
 	view, err := e.service.GetSteward(context.Background(), actor, id)
-	if err != nil || len(view.Keys) != 1 || view.Keys[0].ID != selected.DonationKeyID || view.Keys[0].EndpointKeyID != nil || view.Status != "approved" {
+	if err != nil || len(view.Keys) != 2 || view.Keys[0].ID != selected.DonationKeyID || view.Keys[0].EndpointKeyID != nil || view.Status != "approved" {
 		t.Fatalf("pending member detail: %+v, %v", view, err)
 	}
 	page, err := e.service.UsesPage(context.Background(), reviewerSteward, actor, id, UseFilter{}, pagination.Default())
-	if err != nil || len(page.Data) != 1 || page.Data[0].ID != selected.ID || page.Data[0].Approved == nil || page.Data[0].Pending == nil || page.Data[0].EndpointKeyID != nil {
+	if err != nil || len(page.Data) != len(uses) || page.Data[0].ID != selected.ID || page.Data[0].Approved == nil || page.Data[0].Pending == nil || page.Data[0].EndpointKeyID != nil {
 		t.Fatalf("same-use accurate material: %+v, %v", page, err)
 	}
 }

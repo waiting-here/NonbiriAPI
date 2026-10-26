@@ -1,7 +1,11 @@
 import { CharityTargets } from './CharityTargets';
+import { BindingHealth } from '../ResourceHealth';
+import { serviceHealthDeadlines } from '@shared/operations/resourceHealth';
+import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
+import { StewardPermissionNotice } from '../StewardPermissionNotice';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { isAISDKGateway } from '@shared/operations/connectorPolicy';
-import { CloudflareProxyField, CloudflareProxySummary } from '../CloudflareProxyField';
+import { CloudflareProxyField } from '../CloudflareProxyField';
 import { SessionHeaderFields } from './SessionHeaderFields';
 import { PriceTools } from './PriceTools';
 import {
@@ -31,6 +35,7 @@ import {
   Field,
   FilterBar,
   Fold,
+  Note,
   Panel,
   PanelBody,
   PanelFoot,
@@ -78,7 +83,6 @@ import type { CharityPickerKeyManagerProps } from '../CharityBindingPicker';
 import { BindingAddForm } from './BindingAddForm';
 import { charityControlCopy } from '../charityControlCopy';
 import { CharityModelScope } from '../CharityModelScope';
-import { CharityRolePolicyForm } from '../CharityRolePolicyForm';
 import { KeyLimitSummary } from '../KeyRoutingLimits';
 import { useRequestAdaptationCopy } from '../requestAdaptationCopy';
 import { RequestAdaptationEditor } from '../RequestAdaptationEditor';
@@ -118,7 +122,7 @@ function modelDraft(model?: CharityModel): ModelDraft {
     ...priceDraft(model),
     cloudflareProxy: model?.cloudflare_proxy_enabled ?? false,
     sessionHeaders: sessionHeaderDraft(model?.session_headers),
-    modelTypes: model ? [...model.model_types] : ['chat_completions'],
+    modelTypes: model ? [...model.model_types] : ['chat_completions', 'responses'],
     transportRule: model?.transport_rule ?? 'passthrough',
     rolePolicy: draftFromRolePolicy(model?.role_policy),
     isMainstream: model?.is_mainstream ?? false,
@@ -267,7 +271,7 @@ function ModelForm({
     target?.scrollIntoView?.({ block: 'nearest', behavior: 'instant' });
   }, [referenceOpen]);
   const save = useRetainedOperation<
-    { body: ReturnType<typeof modelBody>; revision?: string },
+    { body: Record<string, unknown>; revision?: string },
     CharityModel
   >(
     async (input, key, context) => {
@@ -699,14 +703,28 @@ function ModelForm({
             save.outcome === 'refresh-failed'
           }
           onClick={() => {
-            if (!modelDraftError(draft))
+            if (!modelDraftError(draft)) {
+              const candidate = modelBody(
+                draft,
+                !model || draft.tokenReserveCredits !== (model.token_reserve_credits ?? null),
+                role === 'admin',
+              );
+              const baseline = model
+                ? modelBody(modelDraft(model), true, role === 'admin')
+                : undefined;
+              const body = baseline
+                ? Object.fromEntries(
+                    Object.entries(candidate).filter(
+                      ([key, value]) =>
+                        JSON.stringify(value) !==
+                        JSON.stringify(baseline[key as keyof typeof baseline]),
+                    ),
+                  )
+                : candidate;
+              if (Object.keys(body).length === 0) return;
               save.mutate(
                 {
-                  body: modelBody(
-                    draft,
-                    !model || draft.tokenReserveCredits !== (model.token_reserve_credits ?? null),
-                    role === 'admin',
-                  ),
+                  body,
                   revision: baseRevision,
                 },
                 {
@@ -716,6 +734,7 @@ function ModelForm({
                   },
                 },
               );
+            }
           }}
         >
           {model
@@ -835,6 +854,10 @@ function BindingsPanel({
   const { t } = useTranslation();
   const adaptationCopy = useRequestAdaptationCopy();
   const [adaptationBinding, setAdaptationBinding] = useState('');
+  const [editingBinding, setEditingBinding] = useState('');
+  const [visitedBindings, setVisitedBindings] = useState<string[]>([]);
+  const [addMode, setAddMode] = useState<'single' | 'group'>('single');
+  const [groupVisited, setGroupVisited] = useState(false);
   const [, setParams] = useSearchState();
   const pager = usePagePager({
     station: role === 'admin' ? 'admin' : 'user',
@@ -847,6 +870,15 @@ function BindingsPanel({
     queryFn: ({ signal }) => getManagedBindings(role, model.id, signal),
     retry: false,
   });
+  useRateLimitRefresh(
+    bindings.data?.bindings.flatMap(
+      (binding) =>
+        binding.targets?.flatMap((target) =>
+          serviceHealthDeadlines(target.availability?.service_statuses),
+        ) ?? [],
+    ) ?? [],
+    () => bindings.refetch({ throwOnError: true }),
+  );
 
   const capabilityLost = isUnauthorized(bindings.error) || isForbidden(bindings.error);
   useEffect(() => {
@@ -931,7 +963,6 @@ function BindingsPanel({
         </Fold>
       ) : null}
       <Card>
-        <CharityTargets role={role} accountId={accountId} model={model} />
         <h3>{t('common.operations.charity.orderedBindings')}</h3>
         {bindings.isPending ? (
           <LoadingState />
@@ -956,6 +987,13 @@ function BindingsPanel({
               <tbody>
                 {bindingPage.data.map((entry, pageIndex) => {
                   const index = bindingPage.offset + pageIndex;
+                  const sourceKeys = entry.targets?.length
+                    ? [
+                        ...new Map(
+                          entry.targets.map((target) => [target.donation_key_id, target]),
+                        ).values(),
+                      ]
+                    : [entry];
                   return (
                     <tr key={entry.id}>
                       <td data-label={t(charityCopyKey(role, 'order'))}>{index + 1}</td>
@@ -985,7 +1023,14 @@ function BindingsPanel({
                         className="ops-cell-wide"
                         data-label={t(charityCopyKey(role, 'upstreamModel'))}
                       >
-                        {entry.upstream_model_id}
+                        {entry.targets?.length
+                          ? entry.targets.map((target) => (
+                              <div key={target.id} className="nb-stack nb-stack--sm">
+                                <strong>{target.upstream_model_id}</strong>
+                                <BindingHealth value={target.availability} />
+                              </div>
+                            ))
+                          : entry.upstream_model_id}
                         {(entry.targets?.every((target) => isAISDKGateway(target.connector_type)) ??
                         isAISDKGateway(entry.source.connector_type)) ? (
                           <GatewayCapabilitySummary entry={entry.gateway_capabilities} />
@@ -995,24 +1040,40 @@ function BindingsPanel({
                         <button
                           className="nb-btn nb-btn--secondary"
                           type="button"
-                          disabled={busy || orderChanged}
-                          onClick={() =>
-                            setParams((current) => {
-                              const next = new URLSearchParams(current);
-                              next.set('charity_section', 'donations');
-                              next.set('donation_id', entry.donation_id);
-                              next.set('donation_key', entry.donation_key_id);
-                              next.set('donation_from', 'models');
-                              next.delete('donation_keys_page');
-                              next.delete('donation_keys_page_size');
-                              return next;
-                            })
-                          }
+                          disabled={busy}
+                          onClick={() => {
+                            setEditingBinding(entry.id);
+                            setVisitedBindings((previous) =>
+                              previous.includes(entry.id) ? previous : [...previous, entry.id],
+                            );
+                          }}
                         >
-                          {t('common.operations.charity.sourceBrowser.manageKey', {
-                            id: entry.donation_key_id,
-                          })}
+                          {t('common.connections.editBindingSources')}
                         </button>
+                        {sourceKeys.map((sourceKey) => (
+                          <button
+                            key={sourceKey.donation_key_id}
+                            className="nb-btn nb-btn--secondary"
+                            type="button"
+                            disabled={busy || orderChanged}
+                            onClick={() =>
+                              setParams((current) => {
+                                const next = new URLSearchParams(current);
+                                next.set('charity_section', 'donations');
+                                next.set('donation_id', sourceKey.donation_id);
+                                next.set('donation_key', sourceKey.donation_key_id);
+                                next.set('donation_from', 'models');
+                                next.delete('donation_keys_page');
+                                next.delete('donation_keys_page_size');
+                                return next;
+                              })
+                            }
+                          >
+                            {t('common.operations.charity.sourceBrowser.manageKey', {
+                              id: sourceKey.donation_key_id,
+                            })}
+                          </button>
+                        ))}
                         {showAdaptation ? (
                           <button
                             className="nb-btn nb-btn--secondary"
@@ -1121,14 +1182,68 @@ function BindingsPanel({
             <span>{t('common.operations.charity.saveOrderHelp')}</span>
           </div>
         ) : null}
-        <BindingAddForm
-          role={role}
-          accountId={accountId}
-          model={model}
-          refresh={refresh}
-          onCapabilityLoss={onCapabilityLoss}
-          renderKeyManager={renderKeyManager}
-        />
+        {visitedBindings
+          .filter((id) => bindings.data?.bindings.some((row) => row.id === id))
+          .map((id) => (
+            <section
+              key={id}
+              hidden={editingBinding !== id}
+              className="nb-stack"
+              aria-label={t('common.connections.editBindingSources')}
+            >
+              <h3>{t('common.connections.editBindingSources')}</h3>
+              <button
+                className="nb-btn nb-btn--ghost"
+                type="button"
+                onClick={() => setEditingBinding('')}
+              >
+                {t('common.connections.returnToBindings')}
+              </button>
+              <CharityTargets
+                role={role}
+                accountId={accountId}
+                model={model}
+                bindingId={id}
+                inline
+              />
+            </section>
+          ))}
+        <section hidden={Boolean(editingBinding)} className="nb-stack">
+          <Field
+            label={t('common.connections.addBindingMode')}
+            help={t('common.connections.addBindingModeHelp')}
+          >
+            {(props) => (
+              <select
+                {...props}
+                value={addMode}
+                onChange={(event) => {
+                  const mode = event.target.value as 'single' | 'group';
+                  setAddMode(mode);
+                  if (mode === 'group') setGroupVisited(true);
+                }}
+              >
+                <option value="single">{t('common.connections.addSeparateSources')}</option>
+                <option value="group">{t('common.connections.combineSources')}</option>
+              </select>
+            )}
+          </Field>
+          <div hidden={addMode !== 'single'}>
+            <BindingAddForm
+              role={role}
+              accountId={accountId}
+              model={model}
+              refresh={refresh}
+              onCapabilityLoss={onCapabilityLoss}
+              renderKeyManager={renderKeyManager}
+            />
+          </div>
+          {groupVisited ? (
+            <div hidden={addMode !== 'group'}>
+              <CharityTargets role={role} accountId={accountId} model={model} inline />
+            </div>
+          ) : null}
+        </section>
         {order.error ? (
           <ErrorState error={order.error} />
         ) : remove.error ? (
@@ -1144,8 +1259,8 @@ export function ModelsPanel({
   renderKeyManager,
   role,
   accountId,
+  canRead = true,
   onCapabilityLoss,
-  trainee = false,
 }: {
   renderScopedKeys: (props: {
     modelID: string;
@@ -1155,8 +1270,8 @@ export function ModelsPanel({
   renderKeyManager: (props: CharityPickerKeyManagerProps) => ReactNode;
   role: CharityRole;
   accountId: string;
+  canRead?: boolean;
   onCapabilityLoss?: () => void;
-  trainee?: boolean;
 }) {
   const { t } = useTranslation();
   const location = useLocation();
@@ -1173,7 +1288,8 @@ export function ModelsPanel({
   const managedDonation = selectedID(params, 'managed_donation');
   const managedKey = selectedID(params, 'managed_key');
   const managingKey = Boolean(selectedId && managedDonation && managedKey);
-  const creating = !trainee && oneParam(params, 'model_workspace') === 'new' && !selectedId;
+  const creating = oneParam(params, 'model_workspace') === 'new' && !selectedId;
+  const [createdNotice, setCreatedNotice] = useState('');
   const [draft, setDraft] = useState({ query, text: query });
   const queryDraft = draft.query === query ? draft.text : query;
   const setQueryDraft = (text: string) => setDraft({ query, text });
@@ -1256,7 +1372,6 @@ export function ModelsPanel({
     ...charityKeys.root(role),
     'model-pages',
     accountId,
-    trainee ? 'trainee' : 'full',
     query,
     enabled,
     pager.page,
@@ -1267,21 +1382,15 @@ export function ModelsPanel({
     queryFn: ({ signal }) =>
       getManagedCharityModelsPage(role, query, enabled, pager.page, pager.pageSize, signal),
     retry: false,
-    enabled: !selectedId && !creating,
+    enabled: canRead && !selectedId && !creating,
     placeholderData: (previous, previousQuery) =>
       samePageFamily(previousQuery?.queryKey, listKey) ? previous : undefined,
   });
   const detail = useQuery({
-    queryKey: [
-      ...charityKeys.root(role),
-      'model-detail',
-      accountId,
-      trainee ? 'trainee' : 'full',
-      selectedId,
-    ],
+    queryKey: [...charityKeys.root(role), 'model-detail', accountId, selectedId],
     queryFn: ({ signal }) => getManagedCharityModel(role, selectedId, signal),
     retry: false,
-    enabled: Boolean(selectedId),
+    enabled: canRead && Boolean(selectedId),
   });
   const selected = detail.data;
   const navigationReady = selectedId
@@ -1340,7 +1449,7 @@ export function ModelsPanel({
           ) : undefined
         }
         actions={
-          !trainee && !creating && !selectedId ? (
+          !creating && !selectedId ? (
             <button
               type="button"
               className="nb-btn nb-btn--primary"
@@ -1358,15 +1467,24 @@ export function ModelsPanel({
           ) : undefined
         }
       />
+      {createdNotice ? (
+        <Note tone="ok">
+          {t('common.outcome.saved')} · {createdNotice}
+        </Note>
+      ) : null}
       {creating ? (
         <ModelForm
           role={role}
           refresh={refresh}
           onCapabilityLoss={onCapabilityLoss}
-          onCreated={(model) => setSelected(model.id)}
+          onCreated={(model) => {
+            if (!canRead) setCreatedNotice(model.full_name);
+            setSelected(canRead ? model.id : '');
+          }}
         />
       ) : null}
-      {!selectedId && !creating ? (
+      {!canRead && !creating ? <StewardPermissionNotice /> : null}
+      {canRead && !selectedId && !creating ? (
         <Card>
           <FilterBar
             activeCount={[query, enabled].filter(Boolean).length}
@@ -1513,7 +1631,7 @@ export function ModelsPanel({
           ) : null}
         </Card>
       ) : null}
-      {selectedId ? (
+      {canRead && selectedId ? (
         <div className="ops-stack ops-detail-target" ref={detailRef} tabIndex={-1}>
           {detail.isPending ? (
             <LoadingState />
@@ -1540,31 +1658,14 @@ export function ModelsPanel({
             </CharityModelScope>
           ) : selected ? (
             <fieldset className="ops-stack ops-unframed" disabled={detail.isFetching}>
-              {trainee ? (
-                <dl className="nb-kv">
-                  <CloudflareProxySummary
-                    enabled={selected.cloudflare_proxy_enabled}
-                    mode={selected.cloudflare_proxy_mode}
-                  />
-                </dl>
-              ) : null}
-              {trainee ? (
-                <CharityRolePolicyForm
-                  key={`roles:${selected.id}`}
-                  model={selected}
-                  refresh={refresh}
-                  onCapabilityLoss={onCapabilityLoss}
-                />
-              ) : (
-                <ModelForm
-                  key={`model:${selected.id}`}
-                  role={role}
-                  model={selected}
-                  refresh={refresh}
-                  onDeleted={() => setSelected('')}
-                  onCapabilityLoss={onCapabilityLoss}
-                />
-              )}
+              <ModelForm
+                key={`model:${selected.id}`}
+                role={role}
+                model={selected}
+                refresh={refresh}
+                onDeleted={() => setSelected('')}
+                onCapabilityLoss={onCapabilityLoss}
+              />
               <BindingsPanel
                 key={`bindings:${selected.id}`}
                 role={role}
@@ -1572,10 +1673,10 @@ export function ModelsPanel({
                 model={selected}
                 refresh={refresh}
                 onCapabilityLoss={onCapabilityLoss}
-                showAdaptation={!trainee}
+                showAdaptation
                 renderKeyManager={renderKeyManager}
               />
-              {trainee ? (
+              {role === 'steward' ? (
                 <CharityModelScope modelID={selected.id}>
                   {renderScopedKeys({ modelID: selected.id, accountId, onCapabilityLoss })}
                 </CharityModelScope>

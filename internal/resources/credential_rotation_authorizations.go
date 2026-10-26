@@ -76,6 +76,7 @@ func (r *Repository) rotateCredentialAuthorizationsTx(ctx context.Context, tx *s
 		return nil, err
 	}
 	keyIDs := make([]int64, 0, len(keys))
+	grantIDs := make([]int64, 0, len(keys))
 	for _, item := range keys {
 		if item.businessRevision == math.MaxInt64 || item.grantRevision == math.MaxInt64 {
 			return nil, ErrConflict
@@ -106,6 +107,7 @@ func (r *Repository) rotateCredentialAuthorizationsTx(ctx context.Context, tx *s
 		}
 		retired[item.version] = true
 		keyIDs = append(keyIDs, item.id)
+		grantIDs = append(grantIDs, grantID)
 	}
 	for _, item := range sources {
 		if err := r.reconcileSourceKeysTx(ctx, tx, userID, item.id, now); err != nil {
@@ -117,6 +119,9 @@ func (r *Repository) rotateCredentialAuthorizationsTx(ctx context.Context, tx *s
 		return nil, err
 	}
 	if err := r.reconcileRoutingTargetsTx(ctx, tx, userID, models); err != nil {
+		return nil, err
+	}
+	if err := r.notifyPendingSubmissionsTx(ctx, tx, userID, grantIDs); err != nil {
 		return nil, err
 	}
 	return retired, nil

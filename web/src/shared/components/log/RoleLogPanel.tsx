@@ -936,13 +936,17 @@ function ScopedRoleLogPanel({
                         ),
                 },
                 { label: t('logs.rejectionReason'), value: detailRequest.rejection_reason },
-                ...(detailRequest.role !== 'user'
+                {
+                  label: t('logs.rejectionDetail'),
+                  value: detailRequest.rejection_detail
+                    ? `${detailRequest.rejection_detail.field}: ${rejectionDescription(detailRequest.rejection_detail.reason)}`
+                    : t('logs.rejectionDetailMissing'),
+                },
+                ...(detailRequest.rejection_detail?.suggestion
                   ? [
                       {
-                        label: t('logs.rejectionDetail'),
-                        value: detailRequest.rejection_detail
-                          ? `${detailRequest.rejection_detail.field}: ${rejectionDescription(detailRequest.rejection_detail.reason)}`
-                          : t('logs.rejectionDetailMissing'),
+                        label: t('logs.rejectionSuggestion'),
+                        value: rejectionDescription(detailRequest.rejection_detail.suggestion),
                       },
                     ]
                   : []),

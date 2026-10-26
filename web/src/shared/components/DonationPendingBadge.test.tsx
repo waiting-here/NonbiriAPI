@@ -34,7 +34,7 @@ describe('DonationPendingBadge', () => {
       role: 'steward' as const,
       station: 'user' as const,
       endpoint: '/api/steward/donations/badge',
-      href: '/steward?tab=charity&handling=pending',
+      href: '/steward?tab=charity&charity_section=donations&handling=pending',
     },
   ])(
     'shows the exact count and role-specific pending link for $role',
@@ -45,10 +45,15 @@ describe('DonationPendingBadge', () => {
       });
       vi.stubGlobal('fetch', fetchMock);
 
-      const view = await renderWithProviders(
-        <DonationPendingBadge role={role} accountID="account-a" />,
-        { station, role: role === 'admin' ? 'admin' : 'level5' },
-      );
+      const view = await renderWithProviders(<></>, {
+        station,
+        role: role === 'admin' ? 'admin' : 'level5',
+      });
+      if (role === 'steward')
+        view.queryClient.setQueryData(['user', 'session'], {
+          user: { id: 'account-a', effective_level: 5 },
+        });
+      view.rerender(<DonationPendingBadge role={role} accountID="account-a" />);
 
       const link = await screen.findByRole('link', {
         name: `${exactBadgeCount} donations awaiting shared follow-up`,
@@ -214,13 +219,18 @@ describe('DonationPendingBadge', () => {
       });
       vi.stubGlobal('fetch', fetchMock);
 
-      const view = await renderWithProviders(
-        <DonationPendingBadge role={role} accountID="account-a" />,
-        { station, role: role === 'admin' ? 'admin' : 'level5' },
-      );
+      const view = await renderWithProviders(<></>, {
+        station,
+        role: role === 'admin' ? 'admin' : 'level5',
+      });
+      if (role === 'steward')
+        view.queryClient.setQueryData(['user', 'session'], {
+          user: { id: 'account-a', effective_level: 5 },
+        });
       view.queryClient.setQueryData(sentinel, { private: 'marker' });
       const ordinary = [station, 'ordinary-page'];
       view.queryClient.setQueryData(ordinary, { available: true });
+      view.rerender(<DonationPendingBadge role={role} accountID="account-a" />);
 
       await waitFor(() => expect(screen.queryByRole('link')).not.toBeInTheDocument());
       expect(screen.queryByText('Pending')).not.toBeInTheDocument();

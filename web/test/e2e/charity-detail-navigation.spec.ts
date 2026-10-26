@@ -361,6 +361,10 @@ async function installManagementRoutes(
       return;
     }
     const path = url.pathname;
+    if (path.match(new RegExp('^' + config.root + '/donations/[1-9][0-9]*/uses$'))) {
+      await fulfillJSON(route, numberedPage([], url.searchParams));
+      return;
+    }
     if (path === config.root + '/donations') {
       state.listReads.push(url.search);
       await state.listGate?.promise;
@@ -845,9 +849,7 @@ async function exerciseSourceNavigation(
     page: '2',
     pageSize: String(PAGE_SIZE),
   });
-  expect(state.sourceReads).toContain(
-    '?q=detail&scope=active&key_state=available&page=2&page_size=10',
-  );
+  expect(state.sourceReads).toContain('?q=detail&scope=active&key_state=all&page=2&page_size=10');
   expect(state.sourceKeyReads.length).toBeGreaterThanOrEqual(1);
   await saveScreenshot(page, setup.station + '-source-detail-1280-light-en');
 
@@ -904,7 +906,12 @@ async function exerciseModelNavigation(
   await expect
     .poll(() => new URL(page.url()).searchParams.get('charity_model'))
     .toBe(DETAIL_MODEL_ID);
-  const detailTarget = page.locator('.ops-detail-target');
+  const detailTarget = page.locator('.ops-detail-target').filter({
+    has: page.getByRole('heading', {
+      name: '[公益]DetailProvider/detail-model-20',
+      exact: true,
+    }),
+  });
   await expect(detailTarget).toHaveCount(1);
   await expect(
     detailTarget.getByRole('heading', {
@@ -1445,7 +1452,7 @@ test('detail errors remain reachable and retry can recover the selected resource
   await assertStationClean(page, setup);
 });
 
-test('steward detail permission loss clears the visible private projection', async ({
+test('steward resource denial clears the private donation detail and preserves navigation', async ({
   context,
   page,
 }) => {
@@ -1471,7 +1478,10 @@ test('steward detail permission loss clears the visible private projection', asy
   );
   await donationListRow(page).getByRole('button', { name: 'Review', exact: true }).click();
   await expect.poll(() => state.detailReads.length).toBeGreaterThan(0);
-  await expect(page).toHaveURL(/tab=logs/);
+  await expect(page).toHaveURL(/tab=charity.*donation_id=20/);
+  await expect(page.getByRole('alert')).toContainText(
+    'This action is not allowed for the current account.',
+  );
   await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toHaveCount(0);
   await expect(page.getByText('Synthetic detail note', { exact: true })).toHaveCount(0);
   await assertNoSensitiveBrowserPersistence(page, [setup.marker]);
@@ -1479,6 +1489,47 @@ test('steward detail permission loss clears the visible private projection', asy
   expect(consoleMessages).toHaveLength(1);
   expect(consoleMessages[0]).toMatchObject({ type: 'error' });
   expect(consoleMessages[0].text).toMatch(/Failed to load resource:.*403/);
+});
+
+test('steward list permission loss clears an already visible private donation detail', async ({
+  context,
+  page,
+}) => {
+  const setup = await prepareStation(context, page, 'user');
+  await installManagementRoutes(page, 'user', initialState());
+  await page.goto(USER_ORIGIN + '/steward?tab=charity&charity_section=donations&donation_id=20');
+  const privateNote = page.locator('.donation-key-editor input[value="Synthetic detail note"]');
+  await expect(privateNote).toBeVisible();
+  setup.consoleGuard.assertNone();
+  const errors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning')
+      errors.push(`${message.type()}: ${message.text()}`);
+  });
+  page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
+  const forbiddenResponses: string[] = [];
+  page.on('response', (response) => {
+    const url = new URL(response.url());
+    if (response.status() === 403 && url.origin === USER_ORIGIN)
+      forbiddenResponses.push(url.pathname);
+  });
+  await page.route(`${USER_ORIGIN}/api/steward/donations?*`, async (route) => {
+    await fulfillJSON(
+      route,
+      { error: { code: 'forbidden', message: 'Synthetic management access loss.' } },
+      403,
+    );
+  });
+  await page.locator('.charity-donation-search input').fill('permission recheck');
+  await page.locator('.charity-donation-search input').press('Enter');
+  await expect(page).toHaveURL(/tab=logs/);
+  await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toHaveCount(0);
+  await expect(privateNote).toHaveCount(0);
+  await assertNoSensitiveBrowserPersistence(page, [setup.marker]);
+  expect(forbiddenResponses).toEqual(['/api/steward/donations']);
+  expect(errors).toEqual([
+    'error: Failed to load resource: the server responded with a status of 403 (Forbidden)',
+  ]);
 });
 
 for (const scenario of [

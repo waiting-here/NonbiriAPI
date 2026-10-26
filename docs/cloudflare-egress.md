@@ -42,7 +42,7 @@ and [request API](https://developers.cloudflare.com/workers/runtime-apis/request
 Personal models enable Cloudflare forwarding by default. Charity models disable
 it by default. These defaults also apply to models created before this setting
 was introduced. Owners can change their personal models; administrators and
-level-6 stewards can change charity models in the existing model editor.
+stewards with the applicable `charity.create` or `charity.model_settings` grant can change charity models in the existing model editor.
 
 The saved `cloudflare_proxy_enabled` setting is captured when a request is
 admitted. Changing the model does not reroute an already admitted request. When
@@ -183,7 +183,7 @@ and [locations](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn
 
 ## View loaded configuration
 
-Administrators and current level-6 stewards can inspect the loaded configuration
+Administrators and stewards with `egress.read` can inspect the loaded configuration
 on the endpoint policies page. Refresh reads the running process without probing
 any upstream. Changes still require deployment configuration and a restart.
 
@@ -196,5 +196,5 @@ empty string. `enabled` means either forwarding configuration is loaded.
 Each legacy route includes `source_base_url`, `gateway_origin`,
 `credential_header`, `credential_query_parameter` and `retain_credential_header`.
 These mappings are inactive when a Worker is configured. Tokens, secret variable
-names and full private forwarding paths are omitted. CallerKey, level-5 and
-ordinary user access are rejected. Responses use `Cache-Control: no-store`.
+names and full private forwarding paths are omitted. CallerKey and ordinary
+user access are rejected. Level-5 sessions require an explicit `egress.read` grant. Responses use `Cache-Control: no-store`.

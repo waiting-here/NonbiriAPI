@@ -21,6 +21,8 @@ func TestThemeRewardsCreditTheMatchingWalletExactlyOnce(t *testing.T) {
 		{"i", "0", "10000", "limited"},
 		{"k", "0", "10000", "limited"},
 		{"l", "0", "10000", "limited"},
+		{"r", "0", "10000", "limited"},
+		{"s", "0", "10000", "limited"},
 	} {
 		t.Run(tc.theme, func(t *testing.T) {
 			f := newFixture(t)
@@ -28,7 +30,15 @@ func TestThemeRewardsCreditTheMatchingWalletExactlyOnce(t *testing.T) {
 			if _, err := f.act(f.user, "incomplete", Action{Action: "claim", Theme: tc.theme}); !errors.Is(err, ErrTheme) {
 				t.Fatal(err)
 			}
-			ownTheme(t, f, tc.theme)
+			if tc.theme == "s" {
+				f.exec(t, "INSERT INTO gacha_owned(user_id,card_id,obtained_at,source) VALUES(?,?,?,'draw')", f.user, "s-chatgpt", f.at.Load())
+				if _, err := f.act(f.user, "partial", Action{Action: "claim", Theme: tc.theme}); !errors.Is(err, ErrTheme) {
+					t.Fatal("one card completed a two-card theme", err)
+				}
+				f.exec(t, "INSERT INTO gacha_owned(user_id,card_id,obtained_at,source) VALUES(?,?,?,'draw')", f.user, "s-claude", f.at.Load())
+			} else {
+				ownTheme(t, f, tc.theme)
+			}
 			input := Action{Action: "claim", Theme: tc.theme}
 			first, err := f.act(f.user, "reward", input)
 			if err != nil {

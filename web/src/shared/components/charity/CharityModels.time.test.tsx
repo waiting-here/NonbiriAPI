@@ -11,6 +11,40 @@ import { ModelsPanel } from './CharityModels';
 const json = (body: unknown) =>
   new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
 
+it('allows a new model with no scheduled dates before the site time zone is configured', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((path: string) => {
+      if (path.endsWith('/time-context'))
+        return Promise.resolve(json({ mode: 'site', offset_minutes: null }));
+      throw new Error('Unexpected request: ' + path);
+    }),
+  );
+  const view = await renderWithProviders(
+    <ModelsPanel
+      role="admin"
+      accountId="1"
+      renderKeyManager={() => null}
+      renderScopedKeys={() => null}
+    />,
+    {
+      station: 'admin',
+      role: 'admin',
+      route: '/charity?charity_section=models&model_workspace=new',
+    },
+  );
+  fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'preview' } });
+  fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'charity-chat' } });
+  await waitFor(() => {
+    expect(view.queryClient.getQueryData(timeContextQueryKey('admin'))).toMatchObject({
+      mode: 'site',
+      offset_minutes: null,
+    });
+    expect(screen.getByRole('button', { name: 'Add charity model' })).toBeEnabled();
+  });
+  expect(view.container.querySelector('.field-error')).not.toBeInTheDocument();
+});
+
 function EditDuringTimeHydration({
   role,
   field,

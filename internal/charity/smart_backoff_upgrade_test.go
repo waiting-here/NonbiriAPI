@@ -210,6 +210,10 @@ func backoffUpgradeFacts(t *testing.T, d *sql.DB, tables map[string][]string, cu
 			projection[i] = "src." + quoteFixtureName(column)
 			if current {
 				projection[i] = releasedBackoffColumn(table, column, "")
+			} else if (table == "models" || table == "charity_models") && column == "model_types" {
+				// Only the expected source facts receive the old shared-interface meaning.
+				value := projection[i]
+				projection[i] = "CASE WHEN (" + value + "&17) IN (1,16) THEN " + value + "|17 ELSE " + value + " END"
 			}
 		}
 		queries[table] = "SELECT " + strings.Join(projection, ",") + " FROM " + quoteFixtureName(table) + " src"

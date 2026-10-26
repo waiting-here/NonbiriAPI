@@ -8,6 +8,7 @@ import (
 
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
@@ -110,8 +111,9 @@ type ReviewState struct {
 
 type DonationKey struct {
 	smartbackoff.Projection
-	EndpointID *string     `json:"endpoint_id"`
-	Review     ReviewState `json:"review"`
+	ServiceStatuses []donationstate.ServiceStatus `json:"service_statuses,omitempty"`
+	EndpointID      *string                       `json:"endpoint_id"`
+	Review          ReviewState                   `json:"review"`
 	TokenBreakdown
 	FailureDisableThreshold string         `json:"failure_disable_threshold"`
 	ID                      string         `json:"id"`
@@ -135,9 +137,10 @@ type DonationKey struct {
 
 type AdminDonationKey struct {
 	smartbackoff.Projection
-	OwnerEndpointID *string     `json:"-"`
-	CanManage       bool        `json:"can_manage"`
-	Review          ReviewState `json:"review"`
+	ServiceStatuses []donationstate.ServiceStatus `json:"service_statuses,omitempty"`
+	OwnerEndpointID *string                       `json:"-"`
+	CanManage       bool                          `json:"can_manage"`
+	Review          ReviewState                   `json:"review"`
 	TokenBreakdown
 	FailureDisableThreshold string          `json:"failure_disable_threshold"`
 	ID                      string          `json:"id"`

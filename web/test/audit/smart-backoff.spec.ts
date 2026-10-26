@@ -1,3 +1,4 @@
+import { protocolServices } from '../service-onboarding';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
@@ -152,6 +153,7 @@ test('owner submits with automatic recovery and edits its threshold through the 
       errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto(state.user_url + '/charity?tab=donate');
+    const services = await protocolServices(page, 'openai-compatible');
     await page.getByRole('button', { name: charity.presentation.openPicker, exact: true }).click();
     const picker = page.locator('.donation-resource-picker');
     const search = picker.getByLabel(charity.resourcePicker.endpointSearch, { exact: true });
@@ -167,9 +169,7 @@ test('owner submits with automatic recovery and edits its threshold through the 
       .nth(1)
       .getByRole('checkbox', { name: new RegExp(source.label) })
       .check();
-    await picker
-      .getByRole('checkbox', { name: common.common.modelTypes.chat_completions, exact: true })
-      .check();
+    await picker.getByText(user.user.workflows.donationOptions, { exact: true }).click();
     await picker.getByLabel(policy.label, { exact: true }).fill('13');
     await expect(
       picker.locator('..').getByText(backoff.automaticHelp, { exact: true }),
@@ -204,7 +204,7 @@ test('owner submits with automatic recovery and edits its threshold through the 
           credential_id: source.key.credential_id,
           credential_version: source.key.credential_version,
           grant_revision: source.key.grant_revision,
-          native_services: ['chat_completions'],
+          native_services: services,
           expires_at: null,
           failure_disable_threshold: '13',
         },
@@ -289,12 +289,12 @@ async function boundDonation(owner: BrowserContext, admin: BrowserContext) {
     entries: ['browser/smart-backoff'],
   });
   const models: string[] = [];
-  for (const model of ['smart-backoff-bound', 'smart-backoff-unbound']) {
+  for (const [index, model] of ['smart-backoff-bound', 'smart-backoff-private'].entries()) {
     const added = await write<{ id: string }>(admin, state.admin_url, '/admin/api/charity-models', {
       provider: 'browser',
       model,
       enabled: true,
-      is_mainstream: true,
+      is_mainstream: index === 0,
       transport_rule: 'passthrough',
       flatten_tool_calls: false,
       pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
@@ -312,7 +312,7 @@ async function boundDonation(owner: BrowserContext, admin: BrowserContext) {
     donationID: current.id,
     keyID,
     modelID: models[0],
-    unboundModelID: models[1],
+    nonMainstreamModelID: models[1],
     safeSource: current.keys[0].safe_source,
   };
 }
@@ -359,7 +359,7 @@ async function openManagement(
   return page.locator('.failure-policy-control').first();
 }
 
-test('administrator and collaborators edit thresholds while level five stays within its bound model', async ({
+test('administrator and collaborators edit thresholds while level five stays within qualified sources', async ({
   browser,
 }, info) => {
   const state = fixture(),
@@ -367,6 +367,20 @@ test('administrator and collaborators edit thresholds while level five stays wit
     admin = await session(browser, 'admin');
   try {
     const data = await boundDonation(owner, admin);
+    const outside = await endpoint(owner, 'backoff-unqualified-browser');
+    const unqualified = await write<Donation>(owner, state.user_url, '/api/donations', {
+      description: 'Synthetic unqualified backoff source',
+      ownership_authorized: true,
+      discord_public_thanks: false,
+      keys: [{ endpoint_key_id: outside.keyID, expires_at: null }],
+    });
+    const unqualifiedPath =
+      '/api/steward/donations/' + unqualified.id + '/keys/' + unqualified.keys[0].id;
+    const outsideBefore = await read<Donation>(
+      admin,
+      state.admin_url,
+      '/admin/api/donations/' + unqualified.id,
+    );
     const initial = await read<Donation>(
       admin,
       state.admin_url,
@@ -412,17 +426,22 @@ test('administrator and collaborators edit thresholds while level five stays wit
           expect(
             await read<Key>(context, state.user_url, keyPath + '?charity_model_id=' + data.modelID),
           ).toMatchObject({ smart_backoff: null });
-          for (const suffix of ['', '?charity_model_id=' + data.unboundModelID]) {
-            const rejected = await context.request.patch(
-              state.user_url + keyPath + '/failure-policy' + suffix,
-              {
-                headers: { Origin: state.user_url, 'Idempotency-Key': randomUUID() },
-                data: {
-                  expected_revision: saved.revision,
-                  failure_disable_threshold: '99',
-                },
+          expect(await read<Key>(context, state.user_url, keyPath)).toMatchObject({
+            failure_disable_threshold: entry.threshold,
+          });
+          for (const [target, revision] of [
+            [keyPath + '?charity_model_id=' + data.nonMainstreamModelID, saved.revision],
+            [unqualifiedPath, unqualified.revision],
+          ]) {
+            const targetURL = new URL(target, state.user_url);
+            targetURL.pathname += '/failure-policy';
+            const rejected = await context.request.patch(targetURL.href, {
+              headers: { Origin: state.user_url, 'Idempotency-Key': randomUUID() },
+              data: {
+                expected_revision: revision,
+                failure_disable_threshold: '99',
               },
-            );
+            });
             expect(rejected.status()).toBe(404);
           }
           const unchanged = await read<Donation>(
@@ -431,6 +450,9 @@ test('administrator and collaborators edit thresholds while level five stays wit
             '/admin/api/donations/' + data.donationID,
           );
           expect(unchanged).toEqual(saved);
+          expect(
+            await read<Donation>(admin, state.admin_url, '/admin/api/donations/' + unqualified.id),
+          ).toEqual(outsideBefore);
         }
         const reloaded = await openManagement(page, entry.role, data);
         await expect(reloaded.getByLabel(policy.label, { exact: true })).toHaveValue(
@@ -534,7 +556,7 @@ test('existing recovery states and independent upstream waits remain visible acr
                 donationID: donation.id,
                 keyID: key.id,
                 modelID: data.automatic_backoff_model_id,
-                unboundModelID: '0',
+                nonMainstreamModelID: '0',
                 safeSource: key.safe_source,
               },
               true,

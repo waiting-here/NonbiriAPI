@@ -79,9 +79,13 @@ func (s *Service) RecordRejectionTx(ctx context.Context, tx *sql.Tx, user int64,
 VALUES(?,?,?,?,'terminal',1,'failed',?,?,'none',0,'user',?,?,?,?,?,?,?)`, fact.ID, user, route, model, fact.Status, fact.Code, u128Small(0), at, at, fact.Stage, fact.Reason, fact.Method, fact.Path); err != nil {
 		return err
 	}
+	detail := requestattempt.EncodeDetail(fact.Detail)
+	if detail == "" && fact.Code == httperr.CodeInvalidRequest {
+		detail = requestattempt.EncodeDetail(requestattempt.NewDetail("request", "request validation failed without a recorded field"))
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO request_logs
 (logical_request_id,user_id,model,route_kind,caller_result_class,caller_status,caller_error_code,status_code,error_code,started_at,completed_at,rejection_stage,rejection_reason,request_method,request_path,error_diag,requested_streaming,automatic_actions)
-VALUES(?,?,?,?,'failed',?,?,?,?,?,?,?,?,?,?,?,?,0)`, fact.ID, user, model, route, fact.Status, fact.Code, fact.Status, fact.Code, at, at, fact.Stage, fact.Reason, fact.Method, fact.Path, requestattempt.EncodeDetail(fact.Detail), fact.RequestedStreaming); err != nil {
+VALUES(?,?,?,?,'failed',?,?,?,?,?,?,?,?,?,?,?,?,0)`, fact.ID, user, model, route, fact.Status, fact.Code, fact.Status, fact.Code, at, at, fact.Stage, fact.Reason, fact.Method, fact.Path, detail, fact.RequestedStreaming); err != nil {
 		return err
 	}
 	if s.observations != nil {

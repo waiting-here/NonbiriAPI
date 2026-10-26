@@ -1,5 +1,7 @@
 vi.mock('@shared/components/AsyncLeaveDialog', () => ({ AsyncLeaveDialog: () => null }));
 import { CharityManagement } from '@shared/components/CharityManagement';
+import { charityKeys } from '@shared/operations/charity';
+import type { DonationUse } from '@shared/operations/donationUses';
 import type {
   AdminDonation,
   CharityModel,
@@ -121,6 +123,7 @@ function pendingAdminDonation(expiresAt: number | null = null): AdminDonation {
       closed_at: null,
       closed_reason: null,
     },
+    use_summary: { total: '2', pending: '2', approved: '0', review_status: 'pending' },
     description: 'Generation 2 donor submission',
     review_result: null,
     keys: [managedKey({ authorized_expires_at: expiresAt, expires_at: expiresAt })],
@@ -190,6 +193,7 @@ function donationPageSummary(donation: AdminDonation | StewardDonation) {
     handling: donation.handling,
     description: donation.description,
     review_result: donation.review_result,
+    ...(donation.use_summary ? { use_summary: donation.use_summary } : {}),
     created_at: donation.created_at,
     updated_at: donation.updated_at,
     key_count: String(donation.keys.length),
@@ -236,14 +240,12 @@ function SessionBackedManagement({
 }
 
 const siteOffsetMinutes = 330;
-const siteDateTime = (epoch: number) =>
-  `${new Date((epoch + siteOffsetMinutes * 60) * 1_000).toISOString().slice(0, 19)}.000`;
 
 function approve(current: AdminDonation, body: Record<string, unknown>): AdminDonation {
-  const settings = body.key_settings as { donation_key_id: string; expires_at: number | null }[];
   return {
     ...current,
     status: 'approved',
+    use_summary: { total: '2', pending: '0', approved: '2', review_status: 'approved' },
     revision: String(Number(current.revision) + 1),
     review_result: {
       decision: 'approve',
@@ -254,22 +256,81 @@ function approve(current: AdminDonation, body: Record<string, unknown>): AdminDo
       ...key,
       charity_state: 'available',
       rate_limited_until: null,
-      key_limits_revision: '1',
-      expires_at:
-        settings.find((setting) => setting.donation_key_id === key.id)?.expires_at ?? null,
     })),
     reviewer: { user_id: '9', role: 'admin' },
     updated_at: 1_735_689_700,
   };
 }
 
+function donationUsesPage(donation: AdminDonation | StewardDonation, url: URL) {
+  const pending = donation.use_summary?.pending !== '0';
+  const version = {
+    credential_id: '8',
+    credential_version: '2',
+    grant_revision: '1',
+    status: pending ? ('pending' as const) : ('approved' as const),
+    review_note: '',
+    reviewed_at: pending ? null : 1_735_689_700,
+    expected_review_revision: 'review-11',
+    discovery_source_id: null,
+    discovery_source_revision: null,
+    display_head: 'head',
+    display_tail: 'tail',
+    review: { required: true, revision: 'review-11', material_available: true },
+    discovery: null,
+  };
+  const rows: DonationUse[] =
+    donation.use_summary?.total === '0'
+      ? []
+      : (['chat_completions', 'responses'] as const).map((native_service, index) => ({
+          id: String(31 + index),
+          donation_id: donation.id,
+          donation_key_id: donation.keys[0].id,
+          endpoint_key_id: donation.keys[0].endpoint_key_id,
+          native_service,
+          enabled: true,
+          discovery_enabled: false,
+          revision: '1',
+          pending: pending ? version : null,
+          approved: pending ? null : version,
+          latest: version,
+          health: null,
+          capabilities: {
+            can_review: pending,
+            can_manage: true,
+            can_reset_failures: true,
+            can_discover: false,
+            can_bind: true,
+            unavailable_reason: null,
+          },
+        }));
+  const data = url.searchParams.get('state') === 'pending' && !pending ? [] : rows;
+  return {
+    data,
+    next_cursor: null,
+    pagination: {
+      page: '1',
+      page_size: Number(url.searchParams.get('page_size')),
+      total_items: String(data.length),
+      total_pages: '1',
+    },
+  };
+}
+
 const operationKeyPattern = /^[A-Za-z0-9_-]{22,128}$/;
 
 describe('Generation 2 charity management policy', () => {
-  it('preserves the authoritative pending expiry and reconciles an unknown result without replaying', async () => {
+  it('preserves the authoritative pending expiry and recovers an unknown result with the same atomic request', async () => {
     const expiresAt = 1_735_776_005;
     let current = pendingAdminDonation(expiresAt);
+    current.keys[0] = {
+      ...current.keys[0],
+      limits: { price: '12.345', calls: '50', tokens: '900' },
+      token_reserve: 64,
+    };
+    const originalKey = structuredClone(current.keys[0]);
     const reviewRequests: RequestInit[] = [];
+    let committedReviews = 0;
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
       const url = new URL(String(input), 'https://example.test');
       const path = url.pathname;
@@ -287,17 +348,29 @@ describe('Generation 2 charity management policy', () => {
         return jsonResponse(managementNumberedPage([donationPageSummary(current)]));
       }
       if (method === 'GET' && path === '/admin/api/donations/1') return jsonResponse(current);
+      if (method === 'GET' && path === '/admin/api/donations/1/uses') {
+        expect(url.searchParams.get('page')).toBe('1');
+        return jsonResponse(donationUsesPage(current, url));
+      }
       if (method === 'GET' && path === '/admin/api/donations/1/keys') {
         expectNumberedPageQuery(url);
         return jsonResponse(
           managementNumberedPage(current.keys.map((key) => keyPageSummary(current, key))),
         );
       }
-      if (method === 'POST' && path === '/admin/api/donations/1/review') {
+      if (method === 'POST' && path === '/admin/api/donations/1/pending-review') {
         reviewRequests.push(init ?? {});
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-        current = approve(current, body);
-        return errorResponse(500, 'internal');
+        if (reviewRequests.length === 1) {
+          current = approve(current, body);
+          committedReviews++;
+          return errorResponse(500, 'internal');
+        }
+        expect(init?.body).toBe(reviewRequests[0].body);
+        expect(new Headers(init?.headers).get('Idempotency-Key')).toBe(
+          new Headers(reviewRequests[0].headers).get('Idempotency-Key'),
+        );
+        return jsonResponse(current);
       }
       throw new Error(`Unexpected request: ${method} ${path}`);
     });
@@ -308,29 +381,42 @@ describe('Generation 2 charity management policy', () => {
     });
 
     await view.user.click(await screen.findByRole('button', { name: 'Review' }));
-    await waitFor(() =>
-      expect(screen.getByLabelText('Effective expiry')).toHaveValue(siteDateTime(expiresAt)),
+    await view.user.type(
+      await screen.findByLabelText('Review reason'),
+      'approved with retained expiry',
     );
-    await view.user.type(screen.getByLabelText('Reason'), 'approved with retained expiry');
-    await view.user.click(
-      screen.getByRole('checkbox', {
-        name: 'I confirm this review result and its per-key consequences.',
-      }),
-    );
-    await view.user.click(screen.getByRole('button', { name: 'Approve donation' }));
+    const approveButton = screen.getByRole('button', { name: 'Approve pending content' });
+    expect(approveButton).toBeEnabled();
+    await view.user.click(approveButton);
 
-    await waitFor(() => expect(screen.getAllByText('All approved').length).toBeGreaterThan(0));
-    expect(reviewRequests).toHaveLength(1);
-    const body = JSON.parse(String(reviewRequests[0].body)) as Record<string, unknown>;
-    expect(body).not.toHaveProperty('expires_at');
-    expect((body.key_settings as { expires_at: number | null }[])[0]?.expires_at).toBe(expiresAt);
+    await waitFor(() => expect(reviewRequests).toHaveLength(2));
+    expect(await screen.findByRole('cell', { name: 'All approved' })).toBeVisible();
+    expect((await screen.findAllByText('Review saved.')).length).toBeGreaterThan(0);
+    expect(committedReviews).toBe(1);
+    expect(JSON.parse(String(reviewRequests[0].body))).toEqual({
+      expected_revision: '7',
+      decision: 'approve',
+      reason: 'approved with retained expiry',
+      uses: [
+        { use_id: '31', expected_revision: '1', expected_review_revision: 'review-11' },
+        { use_id: '32', expected_revision: '1', expected_review_revision: 'review-11' },
+      ],
+    });
+    expect(current.keys[0]).toEqual({ ...originalKey, charity_state: 'available' });
     expect(new Headers(reviewRequests[0].headers).get('Idempotency-Key')).toMatch(
       operationKeyPattern,
     );
   });
 
-  it('blocks non-canonical or out-of-range review values and submits exact maxima', async () => {
-    let current = pendingAdminDonation();
+  it('preserves existing exact quota maxima and expiry without review overrides', async () => {
+    let current = pendingAdminDonation(1_735_776_005);
+    current.keys[0] = {
+      ...current.keys[0],
+      limits: { price: '9000000000000', calls: '9000000000000000', tokens: '9000000000000000' },
+      token_reserve: 2_147_483_647,
+      safe_note: '🫶'.repeat(256),
+    };
+    const originalKey = structuredClone(current.keys[0]);
     const reviewRequests: RequestInit[] = [];
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
       const url = new URL(String(input), 'https://example.test');
@@ -349,13 +435,17 @@ describe('Generation 2 charity management policy', () => {
         return jsonResponse(managementNumberedPage([donationPageSummary(current)]));
       }
       if (method === 'GET' && path === '/admin/api/donations/1') return jsonResponse(current);
+      if (method === 'GET' && path === '/admin/api/donations/1/uses') {
+        expect(url.searchParams.get('page')).toBe('1');
+        return jsonResponse(donationUsesPage(current, url));
+      }
       if (method === 'GET' && path === '/admin/api/donations/1/keys') {
         expectNumberedPageQuery(url);
         return jsonResponse(
           managementNumberedPage(current.keys.map((key) => keyPageSummary(current, key))),
         );
       }
-      if (method === 'POST' && path === '/admin/api/donations/1/review') {
+      if (method === 'POST' && path === '/admin/api/donations/1/pending-review') {
         reviewRequests.push(init ?? {});
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
         current = approve(current, body);
@@ -370,67 +460,41 @@ describe('Generation 2 charity management policy', () => {
     });
 
     await view.user.click(await screen.findByRole('button', { name: 'Review' }));
-    await screen.findByRole('heading', { name: 'Review pending submission' });
-    fireEvent.change(screen.getByLabelText('Price limit (credits)'), {
-      target: { value: '0.0000' },
-    });
-    fireEvent.change(screen.getByLabelText('Call limit'), { target: { value: '01' } });
-    fireEvent.change(screen.getByLabelText('Token reserve'), {
-      target: { value: '2147483648' },
-    });
-    fireEvent.change(screen.getByLabelText('Review note'), {
-      target: { value: '🫶'.repeat(257) },
-    });
-    await view.user.type(screen.getByLabelText('Reason'), 'exact boundary review');
-    await view.user.click(
-      screen.getByRole('checkbox', {
+    await view.user.type(
+      await screen.findByLabelText('Review reason'),
+      'retain exact authorized limits',
+    );
+    for (const label of [
+      'Price limit (credits)',
+      'Call limit',
+      'Token limit',
+      'Token reserve',
+      'Effective expiry',
+    ]) {
+      expect(screen.queryByLabelText(label)).not.toBeInTheDocument();
+    }
+    expect(
+      screen.queryByRole('checkbox', {
         name: 'I confirm this review result and its per-key consequences.',
       }),
-    );
-    expect(screen.getByRole('button', { name: 'Approve donation' })).toBeDisabled();
+    ).not.toBeInTheDocument();
     expect(reviewRequests).toHaveLength(0);
-
-    fireEvent.change(screen.getByLabelText('Price limit (credits)'), {
-      target: { value: '9000000000000' },
-    });
-    fireEvent.change(screen.getByLabelText('Call limit'), {
-      target: { value: '9000000000000000' },
-    });
-    fireEvent.change(screen.getByLabelText('Token limit'), {
-      target: { value: '9000000000000000' },
-    });
-    fireEvent.change(screen.getByLabelText('Token reserve'), {
-      target: { value: '2147483647' },
-    });
-    fireEvent.change(screen.getByLabelText('Review note'), {
-      target: { value: '🫶'.repeat(256) },
-    });
-    const approveButton = screen.getByRole('button', { name: 'Approve donation' });
+    const approveButton = screen.getByRole('button', { name: 'Approve pending content' });
     expect(approveButton).toBeEnabled();
     await view.user.click(approveButton);
 
     await waitFor(() => expect(reviewRequests).toHaveLength(1));
-    const body = JSON.parse(String(reviewRequests[0].body)) as {
-      expected_revision: string;
-      key_settings: Record<string, unknown>[];
-    };
-    expect(body.expected_revision).toBe('7');
-    expect(body.key_settings).toEqual([
-      {
-        donation_key_id: '11',
-        price_limit: '9000000000000',
-        calls_limit: '9000000000000000',
-        tokens_limit: '9000000000000000',
-        input_tokens_limit: null,
-        output_tokens_limit: null,
-        token_reserve: 2_147_483_647,
-        input_token_reserve: null,
-        output_token_reserve: null,
-        enabled: true,
-        safe_note: '🫶'.repeat(256),
-        expires_at: null,
-      },
-    ]);
+    expect((await screen.findAllByText('Review saved.')).length).toBeGreaterThan(0);
+    expect(JSON.parse(String(reviewRequests[0].body))).toEqual({
+      expected_revision: '7',
+      decision: 'approve',
+      reason: 'retain exact authorized limits',
+      uses: [
+        { use_id: '31', expected_revision: '1', expected_review_revision: 'review-11' },
+        { use_id: '32', expected_revision: '1', expected_review_revision: 'review-11' },
+      ],
+    });
+    expect(current.keys[0]).toEqual({ ...originalKey, charity_state: 'available' });
     expect(new Headers(reviewRequests[0].headers).get('Idempotency-Key')).toMatch(
       operationKeyPattern,
     );
@@ -571,43 +635,77 @@ describe('Generation 2 charity management policy', () => {
     expect(screen.queryByText('No donations')).not.toBeInTheDocument();
   });
 
-  it('clears the rendered steward projection after a detail read loses authority', async () => {
-    const item = stewardDonation();
-    const onCapabilityLoss = vi.fn();
-    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
-      const url = new URL(String(input), 'https://example.test');
-      const path = url.pathname;
-      const method = init?.method ?? 'GET';
-      if (method === 'GET' && path === '/api/session') return jsonResponse(stewardSession);
-      if (method === 'GET' && path === '/api/time-zones')
-        return jsonResponse({
-          version: 'go1.26.6-zoneinfo',
-          zones: ['America/Indianapolis', 'UTC'],
-        });
-      if (method === 'GET' && path === '/api/steward/donations') {
-        expectNumberedPageQuery(url);
-        return jsonResponse(managementNumberedPage([donationPageSummary(item)]));
-      }
-      if (method === 'GET' && path === '/api/steward/donations/2') {
-        return errorResponse(403, 'forbidden');
-      }
-      throw new Error(`Unexpected request: ${method} ${path}`);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    const view = await renderWithProviders(
-      <SessionBackedManagement frame="steward" onCapabilityLoss={onCapabilityLoss} />,
-      { station: 'user', role: 'user' },
-    );
+  it.each([401, 403])(
+    'clears the lost detail projection after HTTP %s while retaining only authorized views',
+    async (status) => {
+      const item = stewardDonation();
+      const detailItem = {
+        ...item,
+        description: 'Detail-only sensitive projection',
+        use_summary: { total: '0', pending: '0', approved: '0' },
+      };
+      let detailAllowed = true;
+      let detailReads = 0;
+      const onCapabilityLoss = vi.fn();
+      const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+        const url = new URL(String(input), 'https://example.test');
+        const path = url.pathname;
+        const method = init?.method ?? 'GET';
+        if (method === 'GET' && path === '/api/session') return jsonResponse(stewardSession);
+        if (method === 'GET' && path === '/api/time-zones')
+          return jsonResponse({
+            version: 'go1.26.6-zoneinfo',
+            zones: ['America/Indianapolis', 'UTC'],
+          });
+        if (method === 'GET' && path === '/api/steward/donations') {
+          expectNumberedPageQuery(url);
+          return jsonResponse(managementNumberedPage([donationPageSummary(item)]));
+        }
+        if (method === 'GET' && path === '/api/steward/donations/2') {
+          detailReads++;
+          return detailAllowed
+            ? jsonResponse(detailItem)
+            : errorResponse(status, status === 401 ? 'unauthorized' : 'forbidden');
+        }
+        if (method === 'GET' && path === '/api/steward/donations/2/keys') {
+          expectNumberedPageQuery(url);
+          return jsonResponse(
+            managementNumberedPage(item.keys.map((key) => keyPageSummary(item, key))),
+          );
+        }
+        if (method === 'GET' && path === '/api/steward/donations/2/uses')
+          return jsonResponse(donationUsesPage(detailItem, url));
+        throw new Error('Unexpected request: ' + method + ' ' + path);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const view = await renderWithProviders(
+        <SessionBackedManagement frame="steward" onCapabilityLoss={onCapabilityLoss} />,
+        { station: 'user', role: 'user' },
+      );
 
-    expect(await screen.findByRole('cell', { name: /^My donation/ })).toBeInTheDocument();
-    await view.user.click(screen.getByRole('button', { name: 'Review' }));
-    await waitFor(() => expect(onCapabilityLoss).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(screen.queryByRole('cell', { name: /^My donation/ })).not.toBeInTheDocument(),
-    );
-    expect(
-      screen.queryByRole('checkbox', { name: 'My donation', hidden: true }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent(/access.*no longer/i);
-  });
+      expect(await screen.findByRole('cell', { name: /^My donation/ })).toBeInTheDocument();
+      await view.user.click(screen.getByRole('button', { name: 'Review' }));
+      expect(await screen.findByText('Detail-only sensitive projection')).toBeVisible();
+      detailAllowed = false;
+      await view.queryClient.invalidateQueries({ queryKey: charityKeys.donation('steward', '2') });
+      await waitFor(() => expect(detailReads).toBe(2));
+      await waitFor(() =>
+        expect(screen.queryByText('Detail-only sensitive projection')).not.toBeInTheDocument(),
+      );
+      if (status === 401) {
+        await waitFor(() => expect(onCapabilityLoss).toHaveBeenCalledTimes(1));
+        expect(screen.queryByRole('cell', { name: /^My donation/ })).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole('checkbox', { name: 'My donation', hidden: true }),
+        ).not.toBeInTheDocument();
+        expect(screen.getByRole('alert')).toHaveTextContent(/access.*no longer/i);
+      } else {
+        expect(onCapabilityLoss).not.toHaveBeenCalled();
+        expect(screen.getByRole('cell', { name: /^My donation/ })).toBeInTheDocument();
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          'This action is not allowed for the current account.',
+        );
+      }
+    },
+  );
 });

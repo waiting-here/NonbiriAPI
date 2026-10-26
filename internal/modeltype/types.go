@@ -35,15 +35,12 @@ func (s Set) Mask() (int64, error) {
 		mask |= bit
 		seen[operation] = true
 	}
-	if mask&17 != 0 {
-		mask |= 17
-	}
 	return mask, nil
 }
 func (s Set) Valid() bool { _, err := s.Mask(); return err == nil }
 func (s Set) Supports(operation contract.Operation) bool {
 	for _, current := range s {
-		if current == operation || chatCategory(current) && chatCategory(operation) {
+		if current == operation {
 			return true
 		}
 	}
@@ -56,17 +53,10 @@ func (s *Set) Scan(value any) error {
 		return errors.New("invalid stored model types")
 	}
 	*s = Set{}
-	if mask&17 != 0 {
-		mask |= 17
-	}
 	for i, operation := range contract.AllOperations() {
 		if mask&(1<<i) != 0 {
 			*s = append(*s, operation)
 		}
 	}
 	return nil
-}
-
-func chatCategory(operation contract.Operation) bool {
-	return operation == contract.OperationChatCompletions || operation == contract.OperationResponses
 }

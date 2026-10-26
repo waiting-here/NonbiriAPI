@@ -31,7 +31,13 @@ it('ships each new SP surface and registered moment layer in both resolutions', 
       ),
     ];
     const appearanceLayers = composition.cards[id].appearance_layers;
-    if (appearanceLayers) {
+    if (appearanceLayers && !appearanceLayers.character) {
+      for (const filename of [appearanceLayers.character_light, appearanceLayers.character_dark])
+        expect(statSync(resolve('public/assets/gacha', filename)).size, filename).toBeGreaterThan(
+          1000,
+        );
+    }
+    if (appearanceLayers?.character) {
       for (const mode of ['light', 'dark']) {
         const filename = appearanceLayers.character.replace('{light,dark}', mode);
         const file = resolve('public/assets/gacha', filename);

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"net/http"
 	"strconv"
 	"testing"
@@ -116,7 +117,7 @@ func TestContextPricingUsesExistingStewardModelScope(t *testing.T) {
 	if _, err := e.store.DB().Exec("UPDATE charity_models SET is_mainstream=1 WHERE id=?", id); err != nil {
 		t.Fatal(err)
 	}
-	if err := mutate('e', trainee); !errors.Is(err, ErrForbidden) {
+	if err := mutate('e', trainee); !errors.Is(err, authz.ErrPermissionDenied) {
 		t.Fatal("trainee cannot change prices", err)
 	}
 	patch.ExpectedRevision = "1"

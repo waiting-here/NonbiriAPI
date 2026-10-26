@@ -94,7 +94,7 @@ func (api *httpAPI) keyBindingBatch(w http.ResponseWriter, r *http.Request, role
 func decodeKeyBindingBatch(w http.ResponseWriter, r *http.Request, input *KeyBindingBatch) bool {
 	body, err := httpapi.ReadJSON(w, r, input, httpapi.BodyOptions{MaxBytes: idempotency.MaxControlBodyBytes,
 		Validate: func(body []byte) error {
-			return strictjson.ValidateObjectWithFieldLimit(body, 2+3*maxKeyBindingTargets)
+			return strictjson.ValidateObjectWithFieldLimit(body, 2+4*maxKeyBindingTargets)
 		}})
 	if err != nil {
 		if errors.Is(err, httpapi.ErrTooLarge) {

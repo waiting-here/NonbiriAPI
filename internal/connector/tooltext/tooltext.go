@@ -389,14 +389,16 @@ func ReverseMessages(messages []json.RawMessage, allowed map[string]struct{}) ([
 type ReverseCall struct{ ID, Name, Arguments string }
 
 type StreamToolDelta struct {
-	ID        string
-	IDSeen    bool
-	Name      string
-	NameSeen  bool
-	Arguments string
+	argumentsBuffer *strings.Builder
+	ID              string
+	IDSeen          bool
+	Name            string
+	NameSeen        bool
+	Arguments       string
 }
 
 type StreamChoiceState struct {
+	contentBuffer       *strings.Builder
 	Index               int
 	Role                string
 	RoleSeen            bool
@@ -447,11 +449,13 @@ func ClearStreamStates(states map[int]*StreamChoiceState) {
 	for _, state := range states {
 		clear([]byte(state.Content))
 		state.Content = ""
+		state.contentBuffer = nil
 		for _, tool := range state.Tools {
 			clear([]byte(tool.ID))
 			clear([]byte(tool.Name))
 			clear([]byte(tool.Arguments))
 			tool.ID, tool.Name, tool.Arguments = "", "", ""
+			tool.argumentsBuffer = nil
 		}
 		state.Tools = nil
 	}
@@ -520,7 +524,12 @@ func AccumulateStreamChunk(data []byte, states map[int]*StreamChoiceState) (map[
 				if !JsonString(content, &text) {
 					return nil, false, ErrToolFlatten
 				}
-				state.Content += text
+				if state.contentBuffer == nil {
+					state.contentBuffer = &strings.Builder{}
+					state.contentBuffer.WriteString(state.Content)
+				}
+				state.contentBuffer.WriteString(text)
+				state.Content = state.contentBuffer.String()
 			}
 		}
 		callsRaw, ok := delta["tool_calls"]
@@ -592,7 +601,12 @@ func AccumulateStreamChunk(data []byte, states map[int]*StreamChoiceState) (map[
 					len(value) > MaxFlattenAggregate-current {
 					return nil, false, ErrToolFlatten
 				}
-				tool.Arguments += value
+				if tool.argumentsBuffer == nil {
+					tool.argumentsBuffer = &strings.Builder{}
+					tool.argumentsBuffer.WriteString(tool.Arguments)
+				}
+				tool.argumentsBuffer.WriteString(value)
+				tool.Arguments = tool.argumentsBuffer.String()
 			}
 			if len([]byte(tool.Arguments)) > MaxFlattenArguments {
 				return nil, false, ErrToolFlatten

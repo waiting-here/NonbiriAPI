@@ -4,57 +4,66 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## Unreleased
+## 1.2.0 — 2026-10-26
 
-### Fixed
+### Added
 
-- Keep browser and steward time contexts in separate caches and preserve date
-  initialization when other fields change, so valid charity model forms remain
-  submittable.
-- Identify upgraded connections by their original endpoint note or hostname,
-  show endpoint context in lists and search all owned entry URLs and notes.
-  Clarify donation model setup and the separate System One protocol selection.
-- Load key credential and catalog editors only when opened, avoiding unnecessary
-  list requests while preserving unfinished edits when the panel is closed.
-- Restore model-list fetching for pending and approved donations without a
-  separate catalog-sharing permission, including existing unshared donations.
-  Reuse the configured catalog for the exact donated credential version or the
-  entry's standard model-list endpoint. Pending catalog reads do not grant
-  inference access. Preserve missing-resource errors without silently skipping them.
-- Restore whole-donation force rejection after per-service approval, including
-  partially approved submissions. Prevent legacy review actions from bypassing
-  the existing rejection safeguards or changing already approved uses.
-- Keep donation checkboxes, expiry fields and actions aligned on narrow and wide
-  screens. New mainstream donation drafts select available services by default,
-  while retaining the donor's manual exclusions. Remove the extra catalog-sharing
-  checkbox and pause-sharing action.
-- Apply mainstream catalog suggestions during normal credential authorization,
-  reusing an available catalog for the same credential version when possible.
-- Preserve each saved entry and its credential-authorization form when several
-  mainstream entries are created together.
-- Guide keys without a catalog to its configuration before attempting discovery.
-  Keep specific operation errors and recovery actions readable across the full
-  key table instead of squeezing them into the actions column.
-- Reuse existing manual model entries when importing or connecting models, so
-  reopening the workflow or retrying after a partial failure can complete the
-  model binding without a duplicate-entry conflict.
-- Index endpoint-key references in request logs, dispatch claims, report targets
-  and donation keys so deleting a key avoids scanning unrelated history and
-  holding up session loading and other writes. Existing deletion and retention
-  behavior is preserved.
+- Configure level-5 stewards per account with 51 action permissions, six limits
+  and four donation scopes. Review, handling and maintenance share a
+  whole-donation scope; identity visibility stays separate. Level 6 and explicitly
+  authorized level-5 accounts can manage shared endpoints and their policies.
+- Add an experimental management assistant with editable presets and shared
+  memories, one conversation per operator, context compaction and human-approved
+  atomic operation plans. Independent off/preview/automatic review handles new
+  or modified pending donations and binds existing charity models. Chat and
+  automatic review default to disabled; calls require a configured driver.
+- Add administrator-only complete assistant request/response logs with manual
+  cleanup and independent cumulative/24-hour token usage. Clearing chat changes
+  active context; conversation originals, memories and usage remain retained.
+- Add the ChatGPT SP theme “Tomorrow, Still Unwritten” and the adult-only R-18
+  “Sweet Hide-and-Seek” theme with two limited SSR cards. Their pool templates
+  remain unpublished; R-18 artwork is disabled by default. Sweet Hide-and-Seek's
+  public artwork includes adult nudity and transparent clothing, with all
+  derivatives rated R-18.
 
-### Storage
+### Improved and fixed
 
-- Fresh storage uses schema 35. Exact published schema 33/34 databases receive
-  atomic startup upgrades: the four history indexes where needed, followed by
-  the donation catalog authorization trigger and catalog view. No table rebuild or data rewrite
-  is required. The separate schema 16–26 converter targets the same schema;
-  account export remains 29.
+- Simplify service creation, personal-model setup, donation and whole-submission
+  review. Keep recoverable saves, optional multiline review notes and previous
+  approvals when replacements are rejected. Select Chat Completions, Responses
+  and other authorized native services independently when binding models.
+- Restore optional mainstream-channel suggestions when entering a custom service
+  address. Wrap long donation-action labels to keep narrow screens usable.
+- Add exact donor account/Discord filters and safe complete donation history in
+  user management. Show current approved service health, timed backoff and partial
+  availability without rejecting valid mixed donation states in the browser.
+- Apply saved channel binding presets from the management page or an approved
+  assistant plan, including templates chosen for custom-endpoint donations.
+  Preserve source authorization; missing models and existing bindings are skips.
+- Count tool descriptions, parameter schemas and prior function-call arguments
+  toward charity input length. Dry debug warns and captures short requests
+  without penalties; live debug and ordinary calls retain enforcement. Future
+  validation failures include safe field/reason guidance in authorized logs.
+- Reduce donation-page and catalog queries, indexed game/risk history work,
+  writer contention, streaming accumulation and repeated frontend processing.
+  Index charity-model references to avoid unrelated history scans on deletion.
+  Schedule background maintenance from completed passes so delayed wakeups do
+  not skip the following recovery interval.
+  Assistant tools return complete filtered summaries within explicit size/context
+  budgets and guide narrower retries when those budgets are exceeded.
+- Include the post-1.1.1 key-deletion indexes, donation catalog authorization,
+  connection/discovery recovery and binding fixes. Update DOMPurify, Vitest,
+  undici and zod for the adopted security patches.
 
-### Security
+### Upgrade
 
-- Update DOMPurify to 3.4.17 and Vitest to 4.1.12, including its matching mocker
-  packages, to address the upstream sanitization and development-server advisories.
+- Current storage is schema 38; account export remains format 30. The service
+  opens only the exact current schema or initializes an absent database. Older,
+  newer, unknown and incomplete storage is rejected before migration, repair or
+  recovery writes. Preserve a complete matching recovery set, then deliberately
+  run the matching [standalone upgrader](cmd/nonbiri-upgrade-v1/README.md) for exact
+  registered schema 16–26 or 33–37 sources. Startup and deployment helpers must
+  not apply upgrades implicitly. Upgrades are one-way, with no schema downgrade.
 
 ## 1.1.1 — 2026-10-23
 

@@ -24,7 +24,7 @@ export interface BlacklistEntry {
   reason: string;
   created_at: number;
   user_id: string | null;
-  first_actor_kind: 'admin' | 'steward6' | 'automatic' | 'unknown';
+  first_actor_kind: 'admin' | 'steward5' | 'steward6' | 'automatic' | 'unknown';
   first_actor_user_id: string | null;
 }
 function entry(value: unknown): BlacklistEntry {
@@ -46,7 +46,7 @@ function entry(value: unknown): BlacklistEntry {
         ? 'unknown'
         : oneOf(
             root.first_actor_kind,
-            ['admin', 'steward6', 'automatic', 'unknown'],
+            ['admin', 'steward5', 'steward6', 'automatic', 'unknown'],
             'first actor',
           ),
     first_actor_user_id:
@@ -141,7 +141,7 @@ export function getBlacklistEvents(
           id: decimalID(row.id, 'blacklist event id'),
           actor_kind: oneOf(
             row.actor_kind,
-            ['admin', 'steward6', 'automatic', 'unknown'],
+            ['admin', 'steward5', 'steward6', 'automatic', 'unknown'],
             'blacklist event actor',
           ),
           actor_user_id:

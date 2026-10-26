@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
@@ -167,6 +168,70 @@ func TestModalityHTTPSettlementAndFallback(t *testing.T) {
 			pricing, err := usageinfo.PricingFromUsage(metadata)
 			if err != nil || original != wantOriginal || charge != wantCharge || reward != wantReward || pricing.InputMode != wantMode || pricing.OutputMode != wantMode {
 				t.Fatalf("original=%d charge=%d reward=%d metadata=%s err=%v", original, charge, reward, metadata, err)
+			}
+		})
+	}
+}
+
+func TestSelectedChatAndResponsesInterfacesGateBeforeConversion(t *testing.T) {
+	for _, tc := range []struct {
+		name, connector                                   string
+		mask                                              int64
+		enabledPath, enabledFields, outputObject          string
+		deniedPath, deniedFields, upstreamField, response string
+	}{
+		{
+			name: "chat_over_responses", connector: "openai-responses", mask: 1,
+			enabledPath: "/v1/chat/completions", enabledFields: `"messages":[{"role":"user","content":"hi"}]`, outputObject: "chat.completion",
+			deniedPath: "/v1/responses", deniedFields: `"input":"hi"`, upstreamField: "input",
+			response: `{"id":"r1","object":"response","status":"completed","model":"private-model","output":[{"type":"message","id":"m1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"fixture reply","annotations":[]}]}],"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}`,
+		},
+		{
+			name: "responses_over_chat", connector: "openai-chat-completions", mask: 16,
+			enabledPath: "/v1/responses", enabledFields: `"input":"hi"`, outputObject: "response",
+			deniedPath: "/v1/chat/completions", deniedFields: `"messages":[{"role":"user","content":"hi"}]`, upstreamField: "messages",
+			response: `{"id":"c1","object":"chat.completion","created":1,"model":"private-model","choices":[{"index":0,"message":{"role":"assistant","content":"fixture reply"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var upstreamCalls atomic.Int64
+			f := newModelHTTPFixture(t, nil, tc.connector, func(w http.ResponseWriter, r *http.Request) {
+				upstreamCalls.Add(1)
+				var body map[string]json.RawMessage
+				if r.Method != http.MethodPost || r.URL.Path != tc.deniedPath || r.Header.Get("Authorization") != "Bearer embedding-fixture-secret" ||
+					json.NewDecoder(r.Body).Decode(&body) != nil || string(body["model"]) != `"private-model"` || body[tc.upstreamField] == nil {
+					t.Errorf("incorrect converted request: %s %s body=%v", r.Method, r.URL.Path, body)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, tc.response)
+			})
+			f.exec(t, "UPDATE site_config SET value='0' WHERE key='charity_min_chars'")
+			f.exec(t, "UPDATE models SET model_types=?,cloudflare_proxy_enabled=0", tc.mask)
+			f.exec(t, "UPDATE charity_models SET model_types=?,cloudflare_proxy_enabled=0", tc.mask)
+			for _, model := range []string{"provider/self", "[公益]provider/per_request"} {
+				t.Run(model, func(t *testing.T) {
+					var beforeClaims, afterClaims int
+					if err := f.store.DB().QueryRow("SELECT COUNT(*) FROM dispatch_claims").Scan(&beforeClaims); err != nil {
+						t.Fatal(err)
+					}
+					beforeCalls := upstreamCalls.Load()
+					status, body := f.post(t, tc.deniedPath, `{"model":"`+model+`",`+tc.deniedFields+`}`)
+					if status != http.StatusBadRequest || !strings.Contains(string(body), "model does not support this request type") {
+						t.Fatalf("disabled interface: status=%d body=%s", status, body)
+					}
+					if err := f.store.DB().QueryRow("SELECT COUNT(*) FROM dispatch_claims").Scan(&afterClaims); err != nil || afterClaims != beforeClaims || upstreamCalls.Load() != beforeCalls {
+						t.Fatalf("disabled interface dispatched: claims=%d->%d calls=%d->%d err=%v", beforeClaims, afterClaims, beforeCalls, upstreamCalls.Load(), err)
+					}
+					status, body = f.post(t, tc.enabledPath, `{"model":"`+model+`",`+tc.enabledFields+`}`)
+					var output struct {
+						Object string `json:"object"`
+					}
+					if status != http.StatusOK || json.Unmarshal(body, &output) != nil || output.Object != tc.outputObject || !strings.Contains(string(body), "fixture reply") || upstreamCalls.Load() != beforeCalls+1 {
+						t.Fatalf("enabled conversion: status=%d body=%s calls=%d->%d", status, body, beforeCalls, upstreamCalls.Load())
+					}
+				})
 			}
 		})
 	}

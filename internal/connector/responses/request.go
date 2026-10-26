@@ -35,24 +35,24 @@ func Compile(r *openai.ChatRequest, model string, policy contract.AttemptPolicy)
 	defer clear(body)
 	root, err := chatwire.Object(body)
 	if err != nil || !chatwire.Keys(root, "model", "messages", "stream", "stream_options", "max_tokens", "max_completion_tokens", "temperature", "top_p", "n", "tools", "tool_choice", "parallel_tool_calls", "response_format", "reasoning_effort", "store", "safety_identifier", "prompt_cache_key", "prompt_cache_retention") {
-		return nil, chatwire.Rejection("request")
+		return nil, chatwire.RejectionReason("request", "unsupported top-level field")
 	}
 	if !chatwire.Null(root["n"]) {
 		n, ok := chatwire.Integer(root["n"])
 		if !ok || n != 1 {
-			return nil, chatwire.Rejection("n")
+			return nil, chatwire.RejectionReason("n", "expected the integer 1")
 		}
 	}
 	if !chatwire.Null(root["store"]) && string(root["store"]) != "false" {
-		return nil, chatwire.Rejection("store")
+		return nil, chatwire.RejectionReason("store", "expected false for this connector")
 	}
 	if !chatwire.Null(root["stream_options"]) {
 		options, err := chatwire.Object(root["stream_options"])
 		if err != nil || !chatwire.Keys(options, "include_usage") {
-			return nil, chatwire.Rejection("stream_options")
+			return nil, chatwire.RejectionReason("stream_options", "expected only include_usage with a boolean value")
 		}
 		if v, ok := options["include_usage"]; ok && string(v) != "true" && string(v) != "false" {
-			return nil, chatwire.Rejection("stream_options")
+			return nil, chatwire.RejectionReason("stream_options", "expected only include_usage with a boolean value")
 		}
 	}
 	input, err := messages(root["messages"])
@@ -64,8 +64,11 @@ func Compile(r *openai.ChatRequest, model string, policy contract.AttemptPolicy)
 	for _, name := range []string{"max_tokens", "max_completion_tokens"} {
 		if !chatwire.Null(root[name]) {
 			value, ok := chatwire.Integer(root[name])
-			if !ok || value < 1 || value > 2147483647 || maximum != 0 && maximum != value {
-				return nil, chatwire.Rejection(name)
+			if !ok || value < 1 || value > 2147483647 {
+				return nil, chatwire.RejectionReason(name, "expected an integer from 1 to 2147483647")
+			}
+			if maximum != 0 && maximum != value {
+				return nil, chatwire.RejectionReason("max_completion_tokens/max_tokens", "conflicting output budgets")
 			}
 			maximum = value
 		}
@@ -81,7 +84,7 @@ func Compile(r *openai.ChatRequest, model string, policy contract.AttemptPolicy)
 				max = 1
 			}
 			if !ok || value < 0 || value > max {
-				return nil, chatwire.Rejection(name)
+				return nil, chatwire.RejectionReason(name, "expected a number within the supported sampling range")
 			}
 			out[name] = value
 		}

@@ -1,3 +1,10 @@
+import {
+  fillService,
+  protocolServices,
+  readService,
+  servicePanel,
+  submitService,
+} from '../service-onboarding';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -321,7 +328,7 @@ test('administrator saves inherited five-limit profiles and batches only the sel
   }
 });
 
-test('level five edits lower-user inference limits without exposing profile or protected-user writes', async ({
+test('level five preserves denied profile drafts and edits lower-user limits within its hierarchy', async ({
   browser,
 }, info) => {
   const { context, origin } = await session(browser, 5);
@@ -332,8 +339,25 @@ test('level five edits lower-user inference limits without exposing profile or p
     const page = await context.newPage();
     await page.goto(origin + '/steward?tab=users&user=' + id);
     await page.getByRole('tab', { name: limits.tabLimits, exact: true }).click();
-    await expect(page.getByLabel(limits.endpointLimit, { exact: true })).toHaveCount(0);
-    await expect(page.getByLabel(limits.language, { exact: true })).toHaveCount(0);
+    const endpointLimit = page.getByLabel(limits.endpointLimit, { exact: true });
+    await expect(endpointLimit).toBeVisible();
+    await expect(page.getByLabel(limits.language, { exact: true })).toBeVisible();
+    const deniedDraft = before.endpoint_limit === '123' ? '124' : '123';
+    await endpointLimit.fill(deniedDraft);
+    const deniedSave = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PATCH' && new URL(response.url()).pathname === path,
+    );
+    await page.getByRole('button', { name: limits.saveProfile, exact: true }).click();
+    const denied = await deniedSave;
+    expect(denied.status()).toBe(403);
+    expect((await denied.json()).error.code).toBe('steward_permission_denied');
+    await expect(
+      page.getByText(common.management.permissions.denied, { exact: true }),
+    ).toBeVisible();
+    await expect(endpointLimit).toHaveValue(deniedDraft);
+    expect(await read<AdminUser>(context, origin, path)).toEqual(before);
+    await endpointLimit.fill(before.endpoint_limit ?? '');
     for (const [, label, value] of fields)
       await page.getByLabel(label, { exact: true }).fill(value);
     const response = await save(
@@ -570,91 +594,54 @@ test('modality prices, long-context rewards, template application and search-uni
   }
 });
 
-test('native Chat services retain storage policy and one Chat Responses group alongside other services', async ({
+test('native Chat services retain storage policy and combined platform support alongside other services', async ({
   browser,
 }, info) => {
   const { context, origin } = await session(browser, 1);
   const core = userEn.user.core;
   try {
     const page = await context.newPage();
-    const c = common.common.connections;
     await page.goto(origin + '/endpoints?quickstart=1');
-    const connectionPanel = page
-      .locator('.nb-expandable-panel')
-      .filter({ has: page.getByRole('heading', { name: c.addConnection, exact: true }) });
-    await connectionPanel.getByLabel(c.name, { exact: true }).fill('Native Chat connection');
-    await save(
-      page,
-      connectionPanel.getByRole('button', { name: c.create, exact: true }),
-      '/api/connections',
-      'POST',
-    );
-    await page.getByRole('button', { name: c.addEntry, exact: true }).first().click();
-    const entryPanel = page
-      .locator('.nb-expandable-panel')
-      .filter({ has: page.getByRole('heading', { name: c.addEntry, exact: true }) });
-    await entryPanel
-      .getByRole('combobox', { name: c.protocol, exact: true })
-      .selectOption({ label: core['connector.openai'] });
-    await entryPanel
-      .getByLabel(c.entryURL, { exact: true })
-      .fill('https://native-chat.example.test/v1');
-    await entryPanel
-      .getByRole('checkbox', { name: common.common.modelTypes.chat_completions, exact: true })
-      .check();
-    await entryPanel
-      .getByRole('checkbox', { name: common.common.modelTypes.responses, exact: true })
-      .uncheck();
-    const created = await save(
-      page,
-      entryPanel.getByRole('button', { name: c.saveEntries, exact: true }),
-      '/api/endpoints',
-      'POST',
-    );
-    const endpoint = (await created.json()) as {
-      id: string;
-      configuration_type: string;
-      native_services: string[];
-    };
+    const panel = servicePanel(page);
+    await fillService(panel, {
+      name: 'Native Chat connection',
+      url: 'https://native-chat.example.test/v1',
+      secret: 'synthetic-native-chat-secret',
+    });
+    await submitService(panel);
+    const { endpoint, key } = await readService(page, 'Native Chat connection');
     expect(endpoint.configuration_type).toBe('openai-compatible');
-    expect(endpoint.native_services).toEqual(['chat_completions']);
-    await entryPanel
-      .getByRole('radio', { name: c.newCredential, exact: true })
-      .locator('..')
+    expect(endpoint.native_services.slice().sort()).toEqual(
+      (await protocolServices(page, 'openai-compatible')).slice().sort(),
+    );
+    expect(endpoint.native_services).toEqual(
+      expect.arrayContaining(['chat_completions', 'responses']),
+    );
+    expect(key.native_services.slice().sort()).toEqual(endpoint.native_services.slice().sort());
+    expect(key.force_store_false).toBe(false);
+    const keyLabel = key.note || key.display_head + '…' + key.display_tail;
+    await page.goto(origin + '/endpoints/' + endpoint.id);
+    await page
+      .getByRole('button', { name: userEn.user.services.more + ' · ' + keyLabel, exact: true })
       .click();
-    await expect(
-      entryPanel.getByRole('radio', { name: c.newCredential, exact: true }),
-    ).toBeChecked();
-    await entryPanel
-      .getByLabel(c.credentialName + ' ' + c.optional, { exact: true })
-      .fill('Native Chat credential');
-    await entryPanel.getByLabel(c.secret, { exact: true }).fill('synthetic-native-chat-secret');
-    await entryPanel.getByRole('checkbox', { name: c.ownership, exact: true }).check();
     await save(
       page,
-      entryPanel.getByRole('button', { name: c.saveCredential, exact: true }),
-      '/api/connections/' + new URL(page.url()).searchParams.get('connection_id') + '/credentials',
-      'POST',
+      page.getByRole('menuitem', { name: core['endpoints.storePolicyOn'], exact: true }),
+      '/api/endpoints/' + endpoint.id + '/keys/' + key.id,
     );
-    const grant = entryPanel
-      .locator('form')
-      .filter({ has: page.getByRole('button', { name: c.authorizeEntry, exact: true }) });
-    await grant
-      .getByLabel(c.note + ' ' + c.optional, { exact: true })
-      .fill('Native Chat browser key');
-    await entryPanel.getByLabel(core['endpoints.storePolicy'], { exact: true }).check();
-    const keyResponse = await save(
-      page,
-      entryPanel.getByRole('button', { name: c.authorizeEntry, exact: true }),
-      '/api/endpoints/' + endpoint.id + '/keys',
-      'POST',
-    );
-    const key = (await keyResponse.json()) as { id: string; force_store_false: boolean };
-    expect(key.force_store_false).toBe(true);
+    expect(
+      (
+        await read<{ data: { id: string; force_store_false: boolean }[] }>(
+          context,
+          origin,
+          '/api/endpoints/' + endpoint.id + '/keys?page=1&page_size=20',
+        )
+      ).data.find((row) => row.id === key.id)?.force_store_false,
+    ).toBe(true);
     await page.goto(origin + '/endpoints/' + endpoint.id);
     await page
       .getByRole('button', {
-        name: userEn.user.services.more + ' · Native Chat browser key',
+        name: userEn.user.services.more + ' · ' + keyLabel,
         exact: true,
       })
       .click();
@@ -685,13 +672,17 @@ test('native Chat services retain storage policy and one Chat Responses group al
       exact: true,
     });
     await expect(
-      choices.getByRole('checkbox', { name: common.common.modelTypes.chat_responses, exact: true }),
+      choices.getByRole('checkbox', {
+        name: common.common.modelTypes.chat_completions,
+        exact: true,
+      }),
     ).toHaveCount(1);
     await expect(
       choices.getByRole('checkbox', { name: common.common.modelTypes.responses, exact: true }),
-    ).toHaveCount(0);
+    ).toHaveCount(1);
     for (const label of [
-      common.common.modelTypes.chat_responses,
+      common.common.modelTypes.chat_completions,
+      common.common.modelTypes.responses,
       common.common.modelTypes.images_generations,
       common.common.modelTypes.images_edits,
       common.common.modelTypes.systemone,

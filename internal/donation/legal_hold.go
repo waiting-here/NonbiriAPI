@@ -22,7 +22,7 @@ func (s *Service) managementHeldRead(ctx context.Context, tx *sql.Tx, role revie
 	if role == reviewerAdmin && s.heldRead != nil {
 		return s.heldRead.AuthorizeHeldDonationRead(ctx, tx, donationID, now)
 	}
-	if hook, ok := s.heldRead.(StewardHeldReadAuthorizer); role == reviewerSteward && ok {
+	if hook, ok := s.heldRead.(StewardHeldReadAuthorizer); (role == reviewerSteward || role == reviewerTrainee || role == reviewerGranted) && ok {
 		return hook.AuthorizeStewardHeldDonationRead(ctx, tx, actorID, donationID, now)
 	}
 	return false, nil

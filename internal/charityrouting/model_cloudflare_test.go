@@ -3,6 +3,7 @@ package charityrouting
 import (
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"net/http"
 	"testing"
 
@@ -51,7 +52,7 @@ func TestModelCloudflareDefaultPermissionsAndReplay(t *testing.T) {
 	if _, err := e.store.DB().Exec(`UPDATE users SET level=5 WHERE id=?`, steward); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.service.PatchSteward(t.Context(), steward, id, mutation, input); !errors.Is(err, ErrForbidden) {
+	if _, err := e.service.PatchSteward(t.Context(), steward, id, mutation, input); !errors.Is(err, authz.ErrPermissionDenied) {
 		t.Fatal("revoked replay", err)
 	}
 	got, err := e.service.GetSteward(t.Context(), steward, id)

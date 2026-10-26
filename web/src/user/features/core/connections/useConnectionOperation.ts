@@ -26,7 +26,7 @@ export function useConnectionOperation(
       context.commit(() => {
         saved.current = null;
         setReceipt(null);
-        clearSecrets?.();
+        if (secret !== undefined) clearSecrets?.();
       });
       const result = await executeConnection(intent, secret, key, context.signal);
       context.commit(() => {

@@ -1,7 +1,12 @@
 # Prepare existing storage
 
-The server creates fresh schema 35 databases and opens current schema 35. Exact
-published schema 33/34 receives an atomic upgrade during normal startup.
+The server initializes an absent database as schema 38 and opens only the exact
+current schema. Older, newer, unknown and incomplete storage is rejected before
+migration, repair or recovery writes. The service, startup scripts and deployment
+helpers must not run this upgrader implicitly. A developer or deployer must
+preserve a matching recovery set and deliberately invoke it before the new
+server starts. An existing zero-byte or partial database is not a fresh instance.
+
 `nonbiri-upgrade-v1` is the separate, one-time offline converter for the following
 exact source structures:
 
@@ -18,16 +23,21 @@ exact source structures:
 | 24 | `6f4ee67206eb6fb3a3f345ba06b2d85aba5abc83` |
 | 25 | `2b4f4f62ed5b01c247fcc3f79005358ef0237933` |
 | 26 | `361cb204e888de51901eecc993d3d52b1d156d3a` |
+| 33 | `a7ea261babd424470ff67d1d1b9a119c29437d2e` |
+| 34 | `8576d726e49bd76db6d191914cb4f3637b25f493` |
+| 35 | `2df56fe8814e6a9968380fc8461942065eed3f12` |
+| 36 | `1fc9527f0c9023542dfc7decf59789733a6a834f` |
+| 37 | `4413e15527dff68e42386ca4841c38fc93911539` |
 
 The machine-readable descriptor is authoritative for these exact source commits
 and their pinned manifest hashes. All supported sources convert atomically to
-schema 35. Unreleased intermediate layouts are not supported sources.
+schema 38. Schemas 27–32 and unregistered layouts are not supported sources.
 
 The executable that last used a database may differ from the listed commit if
 its stored application identity, generation, schema version and complete
 structure match. Unknown or modified structures are rejected. The server does
-not import the converter or its historical DDL; it only retains the exact schema
-33/34 manifests and their small startup migrations.
+not import the converter or its historical conversion chain, and has no startup
+migration path.
 
 Build the converter from the same reviewed source as the target server:
 
@@ -38,8 +48,23 @@ CGO_ENABLED=0 go build -trimpath -o nonbiri-upgrade-v1 ./cmd/nonbiri-upgrade-v1
 ```
 
 Both metadata commands need no database or environment. The converter reports
-its exact sources in `offline_conversions`. The server reports current schema
-34, the exact schema 33 startup source and manifest, and no offline conversions.
+its exact sources in `offline_conversions` and target schema 38. The server
+reports current and minimum schema 38, `startup_policy="exact"` and
+`upgrade_tool="nonbiri-upgrade-v1"`, with empty `source_schema_versions`,
+`source_manifest_hashes` and `offline_conversions` arrays. The converter
+retains that target policy and adds its 16 offline-source entries. These describe
+different executables; the empty server list does not remove the converter or
+authorize a deployment helper to call it automatically.
+
+The schema-37 upgrade step preserves the effective Chat/Responses support
+of existing personal and charity models by normalizing their legacy interface
+bits once; selections saved at schema 37 or later remain independent on subsequent starts.
+
+Upgrades are one-way: a server expecting an older or different schema cannot
+open the upgraded database. No schema downgrade or reverse migration is provided,
+and newer database versions are rejected before writes. Recovering an older
+schema requires a complete matching stopped snapshot; switching binaries cannot
+reverse the conversion.
 
 1. Rehearse on a consistent copy of the intended source using its existing
    encryption root and the reviewed target binaries.
@@ -49,23 +74,35 @@ its exact sources in `offline_conversions`. The server reports current schema
 3. Supply exactly one existing key source, `NONBIRI_MASTER_KEY` or
    `NONBIRI_MASTER_KEY_FILE`, through the protected deployment environment.
    HTTP, OAuth and administrator settings are unnecessary for the converter.
-4. Run the conversion:
+4. After the recovery set is ready, deliberately choose the required action.
+   For a full offline source audit:
+
+   ```sh
+   ./nonbiri-upgrade-v1 --check --database /path/to/database.sqlite
+   ```
+
+   To perform the upgrade:
 
    ```sh
    ./nonbiri-upgrade-v1 --apply --database /path/to/database.sqlite
    ```
 
-5. Start the target server once, check readiness and exercise affected pages.
-   Recovery uses the retained deployment snapshot; an old snapshot must not
-   automatically replace new writes accepted by the target service.
+5. Complete the manual release switch and start the target server once, check
+   readiness and exercise affected pages. Do not retry a deployment path that
+   still identifies the source through the old server's descriptor. Recovery
+   uses the retained deployment snapshot; an old snapshot must not automatically
+   replace new writes accepted by the target service.
 
 Use `--check` instead of `--apply` for an explicit full offline audit. It is not
 a mandatory duplicate pass over a rehearsal copy immediately before conversion.
 
 `--database` defaults to `NONBIRI_DB_PATH`; `--timeout` defaults to `30m`.
 Exactly one of `--check` and `--apply` is required. Standard output is JSON
-containing `status`, `source_schema_version` and `target_schema_version`.
-Statuses are `ready`, `converted` and `current`. Errors return a nonzero exit
+containing `tool`, `status`, `source_schema_version`,
+`target_schema_version`, `target_manifest_hash` and
+`supported_source_schema_versions`. Status `ready` means an accepted source
+passed check without conversion, `converted` means apply committed, and
+`current` means the exact target was already present. Errors return a nonzero exit
 status without printing database content or environment values.
 
 Checking opens the source read-only and performs a credential scan, SQLite
@@ -94,7 +131,14 @@ Earlier sources receive default-off MFA policies without enrollments or proofs.
 Schema 20 adds four covering indexes for request-log filtering; it changes no
 business records. Schema 21 widens endpoint tags with `noncommercial_gateway`
 and model-discovery outcomes with `region` and `unavailable`, preserving
-existing rows. The current application produces account export format 29.
+existing rows. The current application produces account export format 30, including own
+stored/effective steward permissions and retained policy history. Schema 36
+rebuilds the risk-rule/automatic-ban and blacklist audit tables with existing
+rows, labels, indexes and constraints preserved; new actions can record actual
+level-5 actors. Schema 37 adds independent assistant request and workflow assets;
+request cleanup does not remove conversation originals, memories or token usage.
+Automatic-review evidence follows its associated donation lifecycle. See the
+[upgrade contract](../../docs/database-upgrades.md).
 
 Schema 17 additionally receives the protocol and fishing presentation changes
 already present in schema 18. Existing probabilities and outcomes remain:
@@ -114,8 +158,14 @@ conversion, remove the retired Gateway variable and `NONBIRI_SMTP_HOST`,
 `NONBIRI_SMTP_FROM` and `NONBIRI_SMTP_TLS` from the deployment environment.
 
 The [rc.7 command](../nonbiri-upgrade-rc7/README.md) remains a narrow wrapper
-accepting schema 16 and current schema 35. Both commands use one engine.
+accepting schema 16 and current schema 38. Both commands use one engine.
 `scripts/check-upgrade.sh` creates a populated synthetic source with the pinned
 rc.7 program, converts it, compares retained facts and resumes economy checks.
 The offline suite also covers the registered schema 17–26 fixtures. No
 production database or instance configuration belongs in the repository.
+
+The schema-38 step adds five foreign-key indexes for charity-model references
+in reservations, dispatch receipts, affinities and managed-header state. This
+avoids unrelated history scans during model deletion while preserving existing
+rows, foreign-key actions and accounting. See the
+[schema changes](../../docs/database-upgrades.md#schema-changes).

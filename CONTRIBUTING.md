@@ -4,7 +4,7 @@ NonbiriAPI is distributed under AGPL-3.0. Contributions use the same license.
 
 ## Before opening a change
 
-1. Check existing issues and discussions for related work.
+1. Check existing issues and pull requests for related work.
 2. For a security issue, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
 3. Keep one logical change per pull request where practical.
 4. Do not include credentials, databases, exported account data, browser profiles, or private deployment files.
@@ -13,7 +13,7 @@ NonbiriAPI is distributed under AGPL-3.0. Contributions use the same license.
 ## Development environment
 
 - Go 1.26.9.
-- Node.js 22.22.3 or newer and npm 12.0.1 for the frontend.
+- Node.js 22.23.4+ (22.x), 24.22.1+ (24.x), or 26.12.1+ (26.x), and npm 12.0.1 for the frontend.
 - Bash is required for the repository scripts (`set -euo pipefail` is used). On Windows, use Git Bash.
 
 The frontend dependencies are not part of the Go module. Run npm commands from the repository root with `--prefix web` or from `web/`.
@@ -65,6 +65,10 @@ headroom for image decoding and animation. Real-backend suites also use one
 worker in each of two isolated groups. Smoke starts after the station build
 without waiting for the backend fixture. Every selected child must succeed,
 including fixture preparation and both browser groups.
+CI collects all selected browser scenarios and suites before reporting failure;
+any failed child still makes the group fail. Local runs retain their early-stop
+behavior for focused diagnosis. Review unrun cases when collecting a failed
+candidate's results before submitting its replacement.
 
 Station artifacts carry generated files and the complete build manifests.
 Consumers restore unchanged public files from the same checkout and verify their
@@ -162,6 +166,12 @@ calculating spendable funds. Render server-calculated totals and settlements
 without deriving them again. Keep strict schemas for request inputs, executable
 adapter declarations, randomness proofs and deterministic game protocols, plus
 identity, visibility and state checks that affect available actions.
+
+Use backend business decisions without re-deriving lifecycle relationships,
+review history or count totals in the browser. Parse independent display data
+independently so a legal partial state or multiline note cannot invalidate the
+whole page. Keep unfinished inputs, filters, selections and return positions
+through ordinary navigation and recoverable failures.
 
 ## Commit and pull request guidance
 

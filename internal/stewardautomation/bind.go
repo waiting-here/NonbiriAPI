@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -98,12 +100,19 @@ func runBindings(ctx context.Context, input bindingInput, ids []int64, bindOne f
 }
 
 func (s *Service) bindOne(ctx context.Context, userID, modelID, donationKeyID int64, upstreamModelID string, manual bool) error {
+	ctx = charityscope.WithModel(ctx, modelID)
 	tx, err := s.begin(ctx, userID)
 	if err != nil {
 		return err
 	}
 	now := time.Now().Unix()
 	key, err := ownKeyTx(ctx, tx, userID, donationKeyID, now)
+	if err == nil {
+		err = s.charity.AuthorizeOwnBindingInTransaction(ctx, tx, userID, modelID, key.donationID, donationKeyID, now)
+	}
+	if err == nil && !manual {
+		err = authz.RequireStewardPermission(ctx, tx, userID, "donations.discover")
+	}
 	var discovery ownedDiscovery
 	if err == nil && !manual {
 		discovery, err = ownDiscoveryTx(ctx, tx, userID, donationKeyID, now)

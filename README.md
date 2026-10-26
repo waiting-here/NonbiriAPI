@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage service connections, shared encrypted credentials, model discovery and routing, then use revocable CallerKeys for personal or shared charity calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.0.0 is the first stable release.** GitHub Releases provide source code; build instructions are below. Version history is in [CHANGELOG](CHANGELOG.md).
+**v1.2.0** improves donation workflows and steward permissions, adds an optional management assistant, and requires explicit database upgrades. GitHub Releases provide source code; build instructions are below. Version history is in [CHANGELOG](CHANGELOG.md).
 
 ## Architecture
 
@@ -27,36 +27,55 @@ configuration reads use the read pool and reuse validation only when the full
 current contents match. Database values are still read on every call; accounting,
 authorization and availability remain authoritative.
 
+Charity binding and candidate checks query only the selected donation/key catalog.
+This avoids repeatedly aggregating unrelated catalog history while preserving
+current authorization, revisions and atomic binding changes.
+
 Attempt and request completion use small synchronous transaction batches when
 work overlaps. Success still requires a durable commit, and anonymous queue
 metrics distinguish application waiting from database pool waiting.
 
-Level-5 stewards can inspect user accounts, adjust the five inference RPM/concurrency
-overrides or revoke CallerKeys for strictly lower-level users, and ban level 1–4
-users. They cannot change other account settings or credits, lift a ban, or replace
-an active ban. They can approve or reject every pending donation. Administrators and level-6
-stewards can force-reject any approved donation, including manual approvals.
-Administrators can revoke any non-administrator user's CallerKey; level-6
-stewards use the same strictly lower-level rule. Revocation leaves browser
-sessions and upstream credentials usable, and the user may create a replacement.
+Level-5 stewards have 51 per-account action permissions, six numeric limits and
+a four-position donation scope, configured by administrators or actual level-6
+stewards. Standard scope, the default, requires at least one live donated key and every live
+key to have a mainstream source or a current binding to a mainstream charity
+model. Enhanced scope also includes entire donations with any tagged endpoint;
+none closes donation access, and full uses the level-6 resource range.
+Review, handling and maintenance share that scope and retain their individual
+action grants. Identity visibility is separate. Actual account hierarchy and
+administrator-only operations remain unchanged; revoked grants affect current
+sessions, CallerKeys and pending work. See the
+[action catalog, scopes and limits](docs/steward-permissions.md).
+
+Level 6 can use shared endpoint and endpoint-policy management. Level 5 needs
+explicit endpoint grants. Tags include User-built gateway, Steward-built gateway
+and Incorrect entry alongside existing classifications.
+
+Management donation lists support exact donor account and Discord ID filters.
+User details provide complete retained donation history, including hidden owner
+history, through a safe summary without credentials or key controls. Source
+browsers initially show all retained sources, with an active-only filter.
 
 Administrators manage complete price templates in a dedicated charity workspace,
 with search, pagination, creation, editing and deletion. Administrators and
-level-6 stewards can copy a template into a model form and adjust it before saving.
+stewards with price-template read permission can copy a template into a model
+form and adjust it before saving.
 Models and templates support [recurring weekly discounts](docs/charity-discounts.md)
 with configurable time zones and percentages. An enabled fixed-window discount
 pauses the recurring schedule. Accepted requests keep their captured price.
 
 Binding selectors show existing connections. Authorized managers can bind one
 donated key to several charity models in one operation. Administrators and
-level-6 stewards can maintain channel presets and apply them to every key in an
-approved donation; missing models and existing bindings are reported individually.
+stewards with the required preset and binding permissions can maintain channel
+presets and apply them to every key in an approved donation. Custom-endpoint
+donations can choose other channels' templates, with matching addresses and
+protocols suggested first. Missing models and existing bindings are reported individually.
 
 Models can use a [Cloudflare Worker](docs/cloudflare-egress.md) to forward
 requests across providers without adding a mapping for each upstream. Personal
 models enable forwarding by default; charity models disable it by default.
-Administrators and level-6 stewards can inspect the loaded configuration. Existing
-AI Gateway mappings remain compatible when no Worker is configured.
+Administrators and stewards with egress-read permission can inspect the loaded
+configuration. Existing AI Gateway mappings remain compatible when no Worker is configured.
 
 | Area | Source and contract |
 | --- | --- |
@@ -65,14 +84,23 @@ AI Gateway mappings remain compatible when no Worker is configured.
 | One-time database conversion | `cmd/nonbiri-upgrade-v1/` |
 | Accounting, export, deletion and retention | `internal/ledger/`, `internal/lifecycle/`, [lifecycle](docs/data-lifecycle-checklist.md) |
 | Connectors, forwarding and outbound policy | `internal/connector/`, `internal/forward/`, `internal/egress/` |
+| Experimental management assistant | `internal/aiagent/`, `internal/agentrequest/`, [API contract](docs/api-contract.md#78-experimental-ai-assistant) |
 | Shared components and separate stations | `web/src/shared/`, `web/src/user/`, `web/src/admin/` |
 | Verification and deployment examples | `scripts/`, `.github/workflows/`, `deploy/` |
 
-[Service connections](docs/service-connections.md) group explicitly authorized entries around shared credentials and an independent model directory. OpenAI-compatible and Gateway entries select their native services; each model selects its applicable targets. Credential rotation preserves approved charity versions until explicit review.
+[Service connections](docs/service-connections.md) group explicitly authorized entries around shared credentials and an independent model directory. New or edited service and donation submissions authorize the selected protocol's complete service set. Existing donations retain their original authorization until the donor submits an edit; approved snapshots are not expanded automatically. Native-service choices belong to model bindings, where at least one retained service must support the target model. New bindings start with the authorized set selected, while editing preserves saved choices. Credential rotation preserves approved charity versions until explicit review.
 
-Donation lists summarize decisions across their service uses. Reviewers can
-approve or reject all pending uses in one donation or key, confirm the exact
-selection and recover partial or uncertain results without expanding it.
+New service setup collects entries, credential authorization and applicable
+model-directory choices in one form. One save completes the necessary stages;
+a failure preserves completed resources for recovery. Continue directly to
+personal model setup or donation.
+
+Reviewers approve or reject the whole current pending donation submission with
+one decision and an optional note. The complete versioned pending set, audit and
+receipt commit together; a changed item applies nothing. Unknown results recover
+with the original request. Previous approved versions remain intact when a
+replacement is rejected. Successful reviews continue into authorized charity-model
+configuration, where bindings retain each selected service subset.
 
 Outbound requests include a short-lived, authenticated opaque origin header.
 A valid returned marker creates an unresolved administrator alert while the
@@ -84,7 +112,7 @@ When creating a custom entry, matching mainstream presets show their current
 details. Users may explicitly adopt one entry or continue with the custom draft;
 suggestions grant no credential or donation authorization.
 
-The registry has 13 connector types covering OpenAI-compatible, dedicated Chat and Responses, Anthropic, Gateway v3/v4, Gemini, Decisions, System One and four explicit rerank protocols. Both Gateway versions support native text, image generation, embeddings and rerank with complete base URLs and no version probing. Direct HTTP operations include text, images, audio, embeddings, moderation and rerank, with SSE where supported. Chat and Responses share one model service selection and have bounded conversion paths; other services remain independently selectable. See [direct inference](docs/direct-inference.md) for the operation matrix and excluded persistent/realtime resources, and the [API contract](docs/api-contract.md) for ownership, credentials, SSRF, accounting and cancellation rules.
+The registry has 13 connector types covering OpenAI-compatible, dedicated Chat and Responses, Anthropic, Gateway v3/v4, Gemini, Decisions, System One and four explicit rerank protocols. Both Gateway versions support native text, image generation, embeddings and rerank with complete base URLs and no version probing. Direct HTTP operations include text, images, audio, embeddings, moderation and rerank, with SSE where supported. Chat Completions and Responses are separate model interface and binding choices, with bounded conversion paths where supported; other services remain independently selectable. See [direct inference](docs/direct-inference.md) for the operation matrix and excluded persistent/realtime resources, and the [API contract](docs/api-contract.md) for ownership, credentials, SSRF, accounting and cancellation rules.
 
 [Decisions](docs/content-protocols.md#decisions) supports up to 400 questions,
 text/image/JSON question content and structured JSON evidence in user messages.
@@ -101,6 +129,10 @@ whole. Mutation receipts and account exports continue to omit those values.
 Administrator and level-5/6 log pages show [global concurrency and RPM](docs/api-contract.md#global-pressure), with approximate 24-hour peaks and persistent observed maxima. Narrowly verified original caller-parameter errors leave donated-key failure streaks unchanged; ambiguous errors keep their existing treatment.
 Short charity-request rejections explain the minimum-length requirement in
 English or Chinese, with the existing status, code, counts and penalty rules.
+Safe validation diagnostics also identify the rejected field, recorded reason
+and corrective guidance in the caller's own log and authorized management views,
+including JSON/CSV exports. They expose no submitted value or secret; older
+records without a saved cause remain explicitly unknown.
 
 Browser appearance controls offer light/dark/system themes and three glass intensities, with manual choices taking priority over system preferences. Focus mode supports viewing the background and returning to the previous reading surface.
 
@@ -109,12 +141,18 @@ game checkpoints, request accounting and background maintenance. In-flight
 elapsed time remains visible across reporting windows; see the runtime metrics
 guide before comparing completed latency with current occupancy.
 
-The optional Gacha Simulator includes layered SP artwork. Amber Vow keeps its
+The optional Gacha Simulator includes layered SP artwork. Tomorrow, Still
+Unwritten adds a single ChatGPT card with animated light/dark site appearances;
+its limited-pool template remains unpublished. Amber Vow keeps its
 character beside desktop content, with matching static fallback and enhanced
 artwork; composition and source details are in the [art guide](docs/gacha-art.md).
-Administrators can disable R-18 built-in artwork across the site; this is on by
-default. Candidate lists label rated artwork, while permitted individual viewing
-stays unobstructed. Current assets are general. Collections and saved choices
+R-18 built-in artwork is disabled across the site by default and can be enabled
+by an administrator. Candidate lists label rated artwork, while permitted individual viewing
+stays unobstructed. Sweet Hide-and-Seek includes two adult-only R-18 limited SSR
+cards, a theme illustration and an independent pool cover with adult nudity and
+transparent clothing. These assets and their derivatives are included in the
+public source distribution. Its unpublished pool
+template gives the two featured cards equal weight. Collections and saved choices
 remain intact when artwork is disabled; see [artwork availability](docs/gacha.md#artwork-availability).
 
 The mystery shop offers daily bundles of ten standard or limited tickets for
@@ -130,10 +168,31 @@ Charity calls automatically wait after recognized recoverable quota errors and
 recover through one real charity request. No per-key setup is required.
 Retry headers take precedence; other errors retain the consecutive-failure policy. See the
 [smart-backoff contract](docs/api-contract.md#413-smart-donated-key-backoff).
-Administrators and level-6 stewards can configure additional recognition rules
-per complete endpoint, shared by its donated keys, and inspect loaded egress
-routes. [Google routing](docs/cloudflare-egress.md#google-official-channels)
+Administrators and stewards with endpoint-backoff permission can configure
+additional recognition rules per complete endpoint, shared by its donated keys.
+Inspecting loaded egress routes requires the separate egress-read permission. [Google routing](docs/cloudflare-egress.md#google-official-channels)
 covers AI Studio and Vertex AI's OpenAI-compatible Chat endpoints.
+
+The experimental [management assistant](docs/api-contract.md#78-experimental-ai-assistant)
+uses a dedicated encrypted Chat Completions key. [Built-in presets](docs/ai-agent-presets.md)
+provide editable messages, initial shared memories and tool descriptions. Chat
+is closed by default and requires a configured endpoint, key and model. Each authorized operator has one
+conversation, with editable context, retained originals and context compaction.
+In conversation mode, business and memory changes require approval of an exact
+plan; all operations
+recheck current authority and commit together or all roll back.
+
+Automatic review is separate and off by default. Preview saves advice; automatic
+mode can approve and bind existing charity models atomically after deterministic
+rules have run. It handles only new or modified pending submissions, with no
+backlog scan or manual enqueue. Each actual model HTTP call joins the shared FIFO
+queue and counts against global limits, without personal RPM or credit charges.
+
+Administrators can inspect complete assistant request/response logs and manually
+clean a fixed selection. These logs have no automatic expiry. Conversations,
+memories and token statistics remain independent administrator assets; automatic
+review evidence follows the associated donation lifecycle. Ordinary request logs
+keep their existing content and retention boundary.
 
 ## Build and develop
 
@@ -151,7 +210,20 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed. Fresh storage uses schema 35. Exact published schema 33 and 34 databases receive atomic startup upgrades; schema 33 adds the history indexes, and schema 34 updates the donation catalog authorization rule. Current schema 35 opens directly. Account export remains 29. Existing published schema 16–26 databases use the separate offline converter; historical conversion code is excluded from the service. Later v1.x releases retain an upgrade path from every earlier stable v1.x schema. Older binaries need not read newer databases. Source documentation does not imply that an instance has released or deployed the update.
+Fresh databases start in maintenance with public features closed and use schema 38.
+The service opens only the exact current schema; older, newer, unknown or
+incomplete storage is rejected before migration, repair or recovery writes.
+For exact registered schema 16–26 and 33–37 sources, preserve a complete recovery
+set before deliberately running the matching standalone
+[upgrader](cmd/nonbiri-upgrade-v1/README.md) with `--check` or `--apply`.
+The service, startup scripts and deployment helpers must not apply upgrades
+implicitly. Account export remains format 30. Schema versions change when
+storage requires it, independently of software patch releases.
+Use the matching binaries' schema descriptors to check accepted sources.
+Upgrades are one-way: a server expecting an older or different schema cannot
+open the upgraded database, and there is no schema downgrade migration. Do not overwrite newly accepted data with an
+old snapshot.
+Source documentation does not imply an instance deployment.
 
 [Deployment](docs/deployment.md) covers systemd, proxies, immutable artifacts, upgrades and complete-snapshot recovery. Startup variables and online settings have one reference in [configuration](docs/configuration.md).
 
@@ -159,7 +231,7 @@ Fresh databases start in maintenance with public features closed. Fresh storage 
 
 | Topic | Documentation |
 | --- | --- |
-| HTTP and automation | [API contract](docs/api-contract.md), [steward integration](docs/steward-automation.md) |
+| HTTP and automation | [API contract](docs/api-contract.md), [steward permissions](docs/steward-permissions.md), [steward integration](docs/steward-automation.md) |
 | Gateway and charging | [Gateway controls](docs/gateway-model-controls.md), [context prices](docs/charity-context-pricing.md), [managed headers](docs/charity-session-headers.md) |
 | Game integration | [Game modules](docs/game-modules.md), [randomness](docs/game-randomness.md), [duels](docs/duel-games.md), [AI players](docs/ai-players.md) |
 | Game storage and rules | [Blackjack](docs/blackjack.md), [Steady Catch](docs/steady-catch.md), [AI Gwent](docs/ai-gwent.md), [Lake Notes](docs/lake-notes.md), [Fat Fish editor](docs/fatfish-editor.md) |

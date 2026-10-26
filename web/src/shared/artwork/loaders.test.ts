@@ -22,6 +22,8 @@ it('does not start image loads for a scene retired before a lazy renderer resolv
   await renderSSR(canvas, 'g-chatgpt', undefined, undefined, false, { signal: controller.signal });
   await renderSSR(canvas, 'q-glm', undefined, undefined, false, { signal: controller.signal });
   await renderSpecial(canvas, 'heart-thief', { signal: controller.signal });
+  await renderSpecial(canvas, 'tomorrow', { signal: controller.signal });
+  await renderSSR(canvas, 'r-chatgpt', undefined, undefined, false, { signal: controller.signal });
   await renderRomance(canvas, 'heart-thief', { signal: controller.signal });
   await renderWallpaper(canvas, 'celestial', 'light', controller.signal, 'standard');
   expect(requests).toEqual([]);

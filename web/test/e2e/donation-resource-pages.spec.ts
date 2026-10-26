@@ -7,6 +7,7 @@ import en from '../../src/user/i18n/en.json' with { type: 'json' };
 import zh from '../../src/user/i18n/zh.json' with { type: 'json' };
 import commonEn from '../../src/shared/i18n/common/en.json' with { type: 'json' };
 import commonZh from '../../src/shared/i18n/common/zh.json' with { type: 'json' };
+import { createOptions } from './connection-fixtures';
 
 const NOW = 1_800_000_000;
 const EXPIRY = Date.parse('2030-01-01T05:00:00Z') / 1000;
@@ -94,6 +95,7 @@ test.describe('donation resource submission', () => {
       page,
     }) => {
       const copy = (locale === 'en' ? en : zh).user.charity;
+      const workflows = (locale === 'en' ? en : zh).user.workflows;
       const common = (locale === 'en' ? commonEn : commonZh).common;
       const errors = collectConsoleViolations(page);
       await page.setViewportSize({ width, height: 900 });
@@ -114,6 +116,11 @@ test.describe('donation resource submission', () => {
         const request = route.request();
         const url = new URL(request.url());
         if (url.origin !== USER_ORIGIN) return route.fallback();
+        if (url.pathname === '/api/endpoint-create-options') {
+          expect(request.method()).toBe('GET');
+          expect(url.search).toBe('');
+          return route.fulfill({ json: createOptions });
+        }
         if (url.pathname === '/api/charity/leaderboard')
           return route.fulfill({
             json: {
@@ -234,6 +241,12 @@ test.describe('donation resource submission', () => {
       await sources.getByRole('button', { name: /^Source 1 / }).click();
       const keys = picker.locator('.donation-resource-picker__section').nth(1);
       await keys.getByRole('checkbox', { name: /^Key 101 / }).check();
+      await picker
+        .locator('.economy-key-expiry')
+        .first()
+        .locator('summary')
+        .filter({ hasText: workflows.donationOptions })
+        .click();
       const expiry = picker.locator('input[type="datetime-local"]');
       await expiry.fill('2030-01-01T00:00');
       await expect(
@@ -244,13 +257,11 @@ test.describe('donation resource submission', () => {
       await sources.getByRole('button', { name: common.next, exact: true }).click();
       await sources.getByRole('button', { name: /^Source 21 / }).click();
       await keys.getByRole('checkbox', { name: /^Key 201 / }).check();
-      for (const selected of await picker
-        .locator('.donation-resource-picker__selected-list > li')
-        .all()) {
-        await selected
-          .getByRole('checkbox', { name: common.modelTypes.chat_completions, exact: true })
-          .check();
-      }
+      await expect(
+        picker
+          .locator('.donation-resource-picker__selected-list')
+          .getByRole('checkbox', { name: common.modelTypes.chat_completions, exact: true }),
+      ).toHaveCount(0);
       await page
         .getByRole('button', { name: copy.presentation.selectionDone, exact: true })
         .click();
@@ -314,7 +325,7 @@ test.describe('donation resource submission', () => {
           keys: [
             {
               endpoint_key_id: '101',
-              native_services: ['chat_completions'],
+              native_services: ['chat_completions', 'responses', 'decisions', 'embeddings'],
               credential_id: '1101',
               credential_version: '1',
               grant_revision: '1',
@@ -323,7 +334,7 @@ test.describe('donation resource submission', () => {
             },
             {
               endpoint_key_id: '121',
-              native_services: ['chat_completions'],
+              native_services: ['chat_completions', 'responses', 'decisions', 'embeddings'],
               credential_id: '1121',
               credential_version: '1',
               grant_revision: '1',
@@ -332,7 +343,7 @@ test.describe('donation resource submission', () => {
             },
             {
               endpoint_key_id: '201',
-              native_services: ['chat_completions'],
+              native_services: ['chat_completions', 'responses', 'decisions', 'embeddings'],
               credential_id: '1201',
               credential_version: '1',
               grant_revision: '1',

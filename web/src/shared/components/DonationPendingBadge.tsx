@@ -1,4 +1,8 @@
 import { Button } from '@shared/components/ui/Button';
+import {
+  hasStewardPermission,
+  type StewardPermissions,
+} from '@shared/operations/stewardPermissions';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -19,8 +23,10 @@ export function DonationPendingBadge({
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const session = client.getQueryData<{ user?: { effective_level?: number } }>(['user', 'session']);
-  const eligible = role === 'admin' || session?.user?.effective_level !== 5;
+  const session = client.getQueryData<{
+    user?: { effective_level: number; steward_permissions?: StewardPermissions };
+  }>(['user', 'session']);
+  const eligible = role === 'admin' || hasStewardPermission(session?.user, 'donations.handle');
   const identity = `${role}:${accountID}`;
   const [revokedIdentity, setRevokedIdentity] = useState('');
   const revoked = revokedIdentity === identity;
@@ -63,7 +69,9 @@ export function DonationPendingBadge({
     <span className="donation-pending-badge">
       <Link
         to={
-          role === 'admin' ? '/charity?handling=pending' : '/steward?tab=charity&handling=pending'
+          role === 'admin'
+            ? '/charity?handling=pending'
+            : '/steward?tab=charity&charity_section=donations&handling=pending'
         }
         title={label}
         aria-label={label}

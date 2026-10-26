@@ -11,18 +11,28 @@ import (
 
 type Service struct {
 	database   *sql.DB
+	readDB     *sql.DB
 	authorizer resources.FinalTxAuthorizer
 	now        func() time.Time
 }
 
 func New(database *sql.DB, authorizer resources.FinalTxAuthorizer, now func() time.Time) (*Service, error) {
+	return NewWithReader(database, nil, authorizer, now)
+}
+
+// NewWithReader separates pure ranking snapshots from bounded catch-up writes.
+// A nil reader preserves the single-database constructor's behavior.
+func NewWithReader(database, reader *sql.DB, authorizer resources.FinalTxAuthorizer, now func() time.Time) (*Service, error) {
 	if database == nil || authorizer == nil {
 		return nil, ErrInvalid
 	}
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{database, authorizer, now}, nil
+	if reader == nil {
+		reader = database
+	}
+	return &Service{database: database, readDB: reader, authorizer: authorizer, now: now}, nil
 }
 
 // Advance commits bounded progress even when the full backlog needs another
@@ -91,7 +101,7 @@ func (s *Service) Read(ctx context.Context, user int64, board, window string, pa
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	// The first gate prevents an unauthorized caller from scheduling catch-up.
-	tx, err := s.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Board{}, err
 	}
@@ -115,7 +125,7 @@ func (s *Service) Read(ctx context.Context, user int64, board, window string, pa
 			}
 		}
 	}
-	tx, err = s.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err = s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Board{}, err
 	}

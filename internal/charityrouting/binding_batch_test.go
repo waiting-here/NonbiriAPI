@@ -26,6 +26,10 @@ func presetExec(t *testing.T, e *routingTestEnv, q string, args ...any) {
 }
 func presetFixture(t *testing.T) (*routingTestEnv, string, int64, []int64, []string) {
 	t.Helper()
+	return presetSourceFixture(t, true)
+}
+func presetSourceFixture(t *testing.T, mainstream bool) (*routingTestEnv, string, int64, []int64, []string) {
+	t.Helper()
 	e := newRoutingTestEnv(t)
 	e.seedUser(t, true, nil)
 	owner := e.seedUser(t, false, nil)
@@ -37,8 +41,12 @@ func presetFixture(t *testing.T) (*routingTestEnv, string, int64, []int64, []str
 	var donationID int64
 	keys := []int64{}
 	models := []string{}
+	channels := []string{}
+	if mainstream {
+		channels = append(channels, channel)
+	}
 	for i := range 3 {
-		did, key, physical := e.seedPresetCandidate(t, owner, donationID, fmt.Sprint(i), "up-0", connectorcontract.TypeOpenAICompatible, channel)
+		did, key, physical := e.seedPresetCandidate(t, owner, donationID, fmt.Sprint(i), "up-0", connectorcontract.TypeOpenAICompatible, channels...)
 		donationID = did
 		keys = append(keys, key)
 		catalog := []testseed.DiscoveryModel{{ID: "up-0"}}
@@ -159,7 +167,7 @@ func TestPresetBindingMatrixSkipsMissingAndReplaysWithoutReordering(t *testing.T
 func TestManualMultiTargetBindingRollbackAuthorizationAndRevision(t *testing.T) {
 	e, channel, did, keys, models := presetFixture(t)
 	ctx := context.Background()
-	input := KeyBindingBatch{ExpectedDonationRevision: "1", Targets: []KeyBindingTarget{{models[0], "0", "up-0"}, {models[1], "0", "up-1"}, {"999999", "0", "up-2"}, {models[2], "0", "missing"}}}
+	input := KeyBindingBatch{ExpectedDonationRevision: "1", Targets: []KeyBindingTarget{{models[0], "0", "up-0", nil}, {models[1], "0", "up-1", nil}, {"999999", "0", "up-2", nil}, {models[2], "0", "missing", nil}}}
 	mutation := routingMutation(t, 'V', http.MethodPost, routeAdminKeyBindingBatch, []int64{did, keys[0]}, input)
 	presetExec(t, e, `CREATE TRIGGER reject_second_binding BEFORE INSERT ON charity_model_bindings WHEN NEW.charity_model_id=`+models[1]+` BEGIN SELECT RAISE(ABORT,'synthetic failure');END`)
 	if _, err := e.service.bindKeyTargets(ctx, roleAdmin, 0, did, keys[0], mutation, input); err == nil {
@@ -180,7 +188,7 @@ func TestManualMultiTargetBindingRollbackAuthorizationAndRevision(t *testing.T) 
 	five := int64(5)
 	trainee := e.seedUser(t, false, &five)
 	presetExec(t, e, `UPDATE charity_models SET is_mainstream=1 WHERE id=?`, models[0])
-	scoped := KeyBindingBatch{ExpectedDonationRevision: "1", Targets: []KeyBindingTarget{{models[0], "1", "up-2"}, {models[1], "1", "up-3"}}}
+	scoped := KeyBindingBatch{ExpectedDonationRevision: "1", Targets: []KeyBindingTarget{{models[0], "1", "up-2", nil}, {models[1], "1", "up-3", nil}}}
 	if _, err := e.service.bindKeyTargets(ctx, roleSteward, trainee, did, keys[0], routingMutation(t, 'X', http.MethodPost, routeStewardKeyBindingBatch, []int64{did, keys[0]}, scoped), scoped); !errors.Is(err, ErrNotFound) {
 		t.Fatal("trainee crossed target scope", err)
 	}
@@ -229,5 +237,39 @@ func TestBindingMatrixReceiptFitsExistingLimit(t *testing.T) {
 				t.Fatal(len(body), err)
 			}
 		})
+	}
+}
+
+func TestMultiTargetBindingPreservesSelectedNativeServicesAndReplay(t *testing.T) {
+	e, _, did, keys, models := presetFixture(t)
+	selected := []connectorcontract.NativeService{connectorcontract.NativeServiceChatCompletions}
+	input := KeyBindingBatch{ExpectedDonationRevision: "1", Targets: []KeyBindingTarget{{CharityModelID: models[0], ExpectedBindingRevision: "0", UpstreamModelID: "up-0", NativeServices: selected}}}
+	mutation := routingMutation(t, 'N', http.MethodPost, routeAdminKeyBindingBatch, []int64{did, keys[0]}, input)
+	out, err := e.service.bindKeyTargets(t.Context(), roleAdmin, 0, did, keys[0], mutation, input)
+	if err != nil || out.Value.AddedCount != "1" {
+		t.Fatalf("subset binding %+v %v", out, err)
+	}
+	for range 2 {
+		replayed, err := e.service.bindKeyTargets(t.Context(), roleAdmin, 0, did, keys[0], mutation, input)
+		if err != nil || !replayed.Replayed || string(replayed.Body) != string(out.Body) {
+			t.Fatal("unknown-result retry", err)
+		}
+	}
+	set, _ := connectorcontract.ParseNativeServices(selected)
+	var mask int64
+	var origin string
+	if err := e.store.DB().QueryRow(`SELECT native_service_mask,selection_origin FROM charity_binding_targets WHERE donation_key_id=?`, keys[0]).Scan(&mask, &origin); err != nil || mask != set.Mask() || origin != "reviewer" {
+		t.Fatalf("subset not retained: mask=%d origin=%s err=%v", mask, origin, err)
+	}
+	for _, invalid := range [][]connectorcontract.NativeService{{}, {"unknown"}} {
+		input.Targets[0].NativeServices = invalid
+		if _, err := e.service.bindKeyTargets(t.Context(), roleAdmin, 0, did, keys[0], mutation, input); !errors.Is(err, ErrInvalidRequest) {
+			t.Fatal("invalid selection accepted before replay", err)
+		}
+	}
+	input.Targets[0].NativeServices = []connectorcontract.NativeService{connectorcontract.NativeServiceEmbeddings}
+	changed := routingMutation(t, 'N', http.MethodPost, routeAdminKeyBindingBatch, []int64{did, keys[0]}, input)
+	if _, err := e.service.bindKeyTargets(t.Context(), roleAdmin, 0, did, keys[0], changed, input); !errors.Is(err, ErrConflict) {
+		t.Fatal("changed subset reused receipt", err)
 	}
 }

@@ -155,7 +155,7 @@ func (s *Service) adminDetailTx(ctx context.Context, tx *sql.Tx, dataset, id str
 	return out, nil
 }
 func (s *Service) AdminDetail(ctx context.Context, dataset, id string) (AdminDetail, error) {
-	tx, now, err := s.begin(ctx)
+	tx, now, err := s.beginRead(ctx)
 	if err != nil {
 		return AdminDetail{}, err
 	}
@@ -220,7 +220,7 @@ func (s *Service) AdminHistory(ctx context.Context, in PageInput) (AdminPage, er
 	if err != nil || in.Dataset != "recent" && in.Dataset != "anonymous" {
 		return out, ErrInvalid
 	}
-	tx, now, err := s.begin(ctx)
+	tx, now, err := s.beginRead(ctx)
 	if err != nil {
 		return out, err
 	}
@@ -254,7 +254,7 @@ func (s *Service) AdminExport(ctx context.Context, in PageInput) (out AdminExpor
 	if in.Dataset != "recent" && in.Dataset != "anonymous" || in.Limit != 0 {
 		return out, ErrInvalid
 	}
-	tx, now, err := s.begin(ctx)
+	tx, now, err := s.beginRead(ctx)
 	if err != nil {
 		return out, err
 	}

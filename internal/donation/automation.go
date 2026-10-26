@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 )
 
 // ApproveOwnNewInTransaction approves the caller's newly created submission
@@ -14,6 +15,9 @@ func (s *Service) ApproveOwnNewInTransaction(ctx context.Context, tx *sql.Tx, us
 	}
 	if err := s.roleAuth.AuthorizeStewardMutation(ctx, tx, userID); err != nil {
 		return mapAuthorization(err)
+	}
+	if err := authz.RequireStewardPermission(ctx, tx, userID, "donations.review"); err != nil {
+		return err
 	}
 	var owned bool
 	if err := tx.QueryRowContext(ctx, `SELECT user_id=? AND status='pending' AND revision=1 FROM donations WHERE id=?`, userID, donationID).Scan(&owned); errors.Is(err, sql.ErrNoRows) {
@@ -31,5 +35,16 @@ func (s *Service) ApproveOwnNewInTransaction(ctx context.Context, tx *sql.Tx, us
 	if err := requireManagedDonationTx(ctx, tx, reviewerSteward, donationID, now); err != nil {
 		return err
 	}
-	return s.reviewDonationTx(ctx, tx, donationID, userID, string(reviewerSteward), input, now)
+	var level int
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(level,auto_level) FROM users WHERE id=?`, userID).Scan(&level); err != nil {
+		return err
+	}
+	role := reviewerSteward
+	if level == 5 {
+		role = reviewerGranted
+	}
+	if err := requireDonationRangeTx(ctx, tx, role, userID, donationID, now); err != nil {
+		return err
+	}
+	return s.reviewDonationTx(ctx, tx, donationID, userID, string(role), input, now)
 }

@@ -131,7 +131,7 @@ func (r *Runtime) VerifyUserSessionBinding(ctx context.Context, userID int64, ir
 		liveSessions int64
 		matches      int64
 	)
-	err := r.db.QueryRowContext(ctx, `
+	err := r.readDatabase().QueryRowContext(ctx, `
 SELECT u.is_admin,u.is_banned,u.banned_until,
        (SELECT COUNT(*) FROM sessions s
          WHERE s.user_id=u.id AND s.expires_at>? AND s.absolute_expires_at>?),

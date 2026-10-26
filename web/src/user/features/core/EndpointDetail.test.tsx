@@ -530,6 +530,22 @@ describe('missing catalog recovery', () => {
     const view = await renderKeyFeedback(async (input, init) => {
       const url = new URL(String(input), 'https://app.example');
       if (url.pathname === '/api/endpoints/11/keys') return jsonResponse(keyPage(current));
+      if (url.pathname === '/api/endpoint-create-options')
+        return jsonResponse({
+          base_connector_types: ['openai-compatible'],
+          mainstream_channels: [],
+          native_service_options: [
+            {
+              connector_type: 'openai-compatible',
+              configuration_type: 'openai-compatible',
+              native_services: ['chat_completions', 'responses'],
+              default_native_services: ['chat_completions'],
+              rerank_formats: [],
+            },
+          ],
+        });
+      if (url.pathname === '/api/endpoints/11/keys/21' && (init?.method ?? 'GET') === 'GET')
+        return jsonResponse(current);
       if (url.pathname === '/api/connections/9/discovery-sources') {
         catalogReads++;
         return jsonResponse({ ...keyPage(catalogSource) });
@@ -604,12 +620,13 @@ describe('missing catalog recovery', () => {
       'href',
       '/endpoints?connection_id=9&connection_view=discovery',
     );
-    await view.user.click(within(scope).getByRole('checkbox', { name: 'Responses' }));
+    await view.user.click(await within(scope).findByRole('button', { name: 'Use source' }));
+    expect(writes).toHaveLength(0);
     const keyEditor = screen.getByRole('region', { name: 'Edit note and limits' });
     await view.user.click(within(keyEditor).getByRole('button', { name: 'Close' }));
     await view.user.click(screen.getByRole('button', { name: 'Choose model catalog' }));
-    expect(within(scope).getByRole('checkbox', { name: 'Responses' })).not.toBeChecked();
     expect(catalogReads).toBe(1);
+    expect(within(catalog).getByText('Exact catalog', { selector: 'p' })).toBeVisible();
     const note = screen.getByRole('textbox', { name: 'Key note' });
     await view.user.clear(note);
     await view.user.type(note, 'Keep this note draft');
@@ -622,10 +639,9 @@ describe('missing catalog recovery', () => {
     await view.user.click(screen.getByRole('button', { name: 'Choose model catalog' }));
     expect(scope).toHaveAttribute('open');
     expect(catalog).toHaveAttribute('open');
-    expect(within(scope).getByRole('checkbox', { name: 'Responses' })).not.toBeChecked();
     expect(note).toHaveValue('Keep this note draft');
-    await view.user.click(within(scope).getByRole('checkbox', { name: 'Responses' }));
-    await view.user.click(await within(scope).findByRole('button', { name: 'Use source' }));
+    expect(within(catalog).getByText('Exact catalog', { selector: 'p' })).toBeVisible();
+    expect(writes).toHaveLength(0);
     await view.user.click(within(scope).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toEqual({
@@ -714,9 +730,7 @@ describe('missing catalog recovery', () => {
       throw Error('Unexpected ' + url.pathname);
     }, '/endpoints/11?focus_key_id=21');
     await view.user.click(screen.getByRole('button', { name: 'Move to another connection' }));
-    const scope = screen
-      .getByText('Entry services and connection', { selector: 'strong' })
-      .closest('details')!;
+    const scope = screen.getByText('Edit service', { selector: 'strong' }).closest('details')!;
     expect(scope).toHaveAttribute('open');
     expect(scope.querySelector('summary')).toHaveFocus();
     expect(writes).toHaveLength(0);
@@ -728,6 +742,10 @@ describe('missing catalog recovery', () => {
     );
     await view.user.click(within(create).getByRole('button', { name: 'Create' }));
     await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toEqual({
+      path: '/api/connections',
+      body: { name: 'Catalog connection', note: '' },
+    });
     expect(currentEndpoint.connection_id).toBeNull();
     await waitFor(() => expect(within(scope).getByRole('button', { name: 'Save' })).toBeEnabled());
     await view.user.click(within(scope).getByRole('button', { name: 'Save' }));
@@ -736,7 +754,6 @@ describe('missing catalog recovery', () => {
       path: '/api/endpoints/11',
       body: {
         native_services: ['chat_completions', 'responses'],
-        rerank_format: '',
         connection_id: '9',
         expected_revision: '3',
       },

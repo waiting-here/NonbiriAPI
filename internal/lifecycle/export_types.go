@@ -14,6 +14,7 @@ import (
 // field is explicit so a future database or domain DTO field cannot silently
 // enter a personal export.
 type ExportDocument struct {
+	StewardPermissions StewardPermissionsExport `json:"steward_permissions"`
 	ConnectionExportCollections
 	GovernanceExport
 	InteractionExport

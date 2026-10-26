@@ -52,14 +52,12 @@ func readManualCandidatesTx(ctx context.Context, tx *sql.Tx, keyID int64, q stri
 	if err := tx.QueryRowContext(ctx, `SELECT manual_catalog_revision FROM donation_keys WHERE id=?`, keyID).Scan(&revision); err != nil {
 		return nil, nil, "", err
 	}
-	catalog := `(SELECT pc.normalized_model_id,pc.automatic_supports,pc.manual_supports FROM charity_model_catalog pc WHERE pc.donation_key_id=? AND (pc.automatic_supports>0 OR pc.manual_supports>0))`
-	from := ` FROM ` + catalog + ` pc LEFT JOIN donation_key_manual_models dm ON dm.donation_key_id=? AND dm.normalized_model_id=pc.normalized_model_id`
-	args := []any{keyID, keyID}
+	selection := manualCatalogSelection()
+	args := []any{keyID, keyID, keyID}
 	if q != "" {
-		from += ` WHERE pc.normalized_model_id LIKE ? ESCAPE '\'`
+		selection += ` WHERE pc.normalized_model_id LIKE ? ESCAPE '\'`
 		args = append(args, "%"+escapeLike(q)+"%")
 	}
-	selection := `SELECT pc.normalized_model_id,COALESCE(dm.display_name,pc.normalized_model_id),pc.automatic_supports,pc.manual_supports,dm.id,dm.revision` + from
 	meta, offset, err := pageWindow(ctx, tx, selection, args, page)
 	if err != nil {
 		return nil, nil, "", err
@@ -189,7 +187,7 @@ func (s *Service) MutateManualCatalog(ctx context.Context, admin bool, actorID, 
 			return empty, err
 		}
 		var bound bool
-		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM charity_binding_targets b WHERE b.donation_key_id=? AND b.upstream_model_id=? AND NOT EXISTS(SELECT 1 FROM charity_model_catalog pc WHERE pc.donation_key_id=b.donation_key_id AND pc.normalized_model_id=b.upstream_model_id AND pc.automatic_supports>0))`, keyID, name).Scan(&bound); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM charity_binding_targets b JOIN donation_keys dk ON dk.id=b.donation_key_id WHERE b.donation_key_id=? AND b.upstream_model_id=? AND NOT `+automaticCatalogSupportSQL("b.upstream_model_id")+`)`, keyID, name).Scan(&bound); err != nil {
 			return empty, err
 		}
 		if bound {
@@ -221,7 +219,7 @@ func (s *Service) MutateManualCatalog(ctx context.Context, admin bool, actorID, 
 		}
 		seen[name] = true
 		var id, rev, automatic int64
-		if err = tx.QueryRowContext(ctx, `SELECT dm.id,dm.revision,COALESCE(pc.automatic_supports,0) FROM donation_key_manual_models dm LEFT JOIN charity_model_catalog pc ON pc.donation_key_id=dm.donation_key_id AND pc.normalized_model_id=dm.normalized_model_id WHERE dm.donation_key_id=? AND dm.normalized_model_id=?`, keyID, name).Scan(&id, &rev, &automatic); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT dm.id,dm.revision,`+automaticCatalogSupportSQL("dm.normalized_model_id")+` FROM donation_key_manual_models dm JOIN donation_keys dk ON dk.id=dm.donation_key_id WHERE dm.donation_key_id=? AND dm.normalized_model_id=?`, keyID, name).Scan(&id, &rev, &automatic); err != nil {
 			return empty, err
 		}
 		idText, revText := strconv.FormatInt(id, 10), strconv.FormatInt(rev, 10)

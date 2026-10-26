@@ -15,11 +15,11 @@ import {
 import { getManagedBindingCandidatesPage } from '@shared/operations/charityPages';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { PagePagination } from '@shared/operations/PagePagination';
-import { NATIVE_SERVICE_LABEL_KEYS, type NativeService } from '@shared/nativeServices';
+import type { NativeService } from '@shared/nativeServices';
 import { NativeServicesField } from '../NativeServicesField';
 import { ServiceRoutesSummary } from '../ServiceRoutesSummary';
 import { DataTable, Field, Fold, Note } from '../ui';
-import { ErrorState, LoadingState } from '../States';
+import { EmptyState, ErrorState, LoadingState } from '../States';
 
 interface Target {
   donation_key_id: string;
@@ -32,65 +32,42 @@ export function CharityTargets({
   role,
   accountId,
   model,
+  bindingId,
+  inline = false,
 }: {
   role: CharityRole;
   accountId: string;
   model: CharityModel;
+  bindingId?: string;
+  inline?: boolean;
 }) {
   const { t } = useTranslation();
   const query = useQuery({
     queryKey: [...charityKeys.bindings(role, model.id), accountId],
     queryFn: ({ signal }) => getManagedBindings(role, model.id, signal),
   });
-  return (
-    <div className="nb-stack">
-      <Fold title={t('common.connections.addTargetGroup')} lazy>
-        {query.data ? (
-          <TargetEditor
-            role={role}
-            accountId={accountId}
-            model={model}
-            revision={query.data.binding_revision}
-          />
-        ) : query.error ? (
-          <ErrorState error={query.error} onRetry={() => void query.refetch()} />
-        ) : (
-          <LoadingState />
-        )}
-      </Fold>
-      {query.data?.bindings.map((binding) => (
-        <Fold
-          key={binding.id}
-          title={t('common.connections.targetGroup', { number: binding.ord + 1 })}
-          lazy
-        >
-          <p>{t('common.connections.groupOrderKept')}</p>
-          {binding.targets?.map((target) => (
-            <div key={target.id} className="nb-stack nb-stack--sm">
-              <strong>
-                {target.base_url} · {target.upstream_model_id}
-              </strong>
-              <ServiceRoutesSummary value={target.service_routes} />
-              <ul className="nb-list">
-                {target.uses.map((use) => (
-                  <li key={use.use_id}>
-                    {t(NATIVE_SERVICE_LABEL_KEYS[use.native_service])} ·{' '}
-                    {t('common.connections.versionNumber', { version: use.credential_version })}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-          <TargetEditor
-            role={role}
-            accountId={accountId}
-            model={model}
-            binding={binding}
-            revision={query.data!.binding_revision}
-          />
-        </Fold>
-      ))}
-    </div>
+  const binding = bindingId ? query.data?.bindings.find((row) => row.id === bindingId) : undefined;
+  const editor = query.error ? (
+    <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+  ) : !query.data ? (
+    <LoadingState />
+  ) : bindingId && !binding ? (
+    <EmptyState title={t('common.noResults')} body={t('common.noResultsBody')} />
+  ) : (
+    <TargetEditor
+      role={role}
+      accountId={accountId}
+      model={model}
+      binding={binding}
+      revision={query.data.binding_revision}
+    />
+  );
+  return inline ? (
+    editor
+  ) : (
+    <Fold title={t('common.connections.addTargetGroup')} lazy>
+      {editor}
+    </Fold>
   );
 }
 function TargetEditor({
@@ -142,7 +119,7 @@ function TargetEditor({
       getManagedBindingCandidatesPage(
         role,
         model.id,
-        { q: query },
+        { q: query, include_bound: true, key_state: 'all' },
         pager.page,
         pager.pageSize,
         signal,
@@ -187,7 +164,19 @@ function TargetEditor({
       const saved = confirmed
         ? await getManagedBindings(role, model.id, context.signal)
         : undefined;
-      await client.invalidateQueries({ queryKey: charityKeys.root(role) }, { throwOnError: true });
+      const bindingsKey = [...charityKeys.bindings(role, model.id), accountId] as const;
+      // Reuse this authoritative read while refreshing dependent lists and counts.
+      if (saved) context.commit(() => client.setQueryData(bindingsKey, saved));
+      await client.invalidateQueries(
+        {
+          queryKey: charityKeys.root(role),
+          predicate: ({ queryKey }) =>
+            !saved ||
+            queryKey.length !== bindingsKey.length ||
+            bindingsKey.some((part, index) => queryKey[index] !== part),
+        },
+        { throwOnError: true },
+      );
       if (saved) {
         context.commit(() => {
           setExpected(saved.binding_revision);
@@ -210,7 +199,7 @@ function TargetEditor({
       {
         donation_key_id: row.donation_key_id,
         upstream_model_id: row.upstream_model_id,
-        native_services: [],
+        native_services: row.capabilities?.can_bind ? [...(row.native_services ?? [])] : [],
         options: row.native_services ?? [],
         label: row.source.canonical_base_url,
       },
@@ -224,7 +213,14 @@ function TargetEditor({
             {index + 1}. {row.label} · {row.upstream_model_id}
           </legend>
           <NativeServicesField
-            options={row.options}
+            options={Array.from(
+              new Set([
+                ...row.options,
+                ...row.native_services,
+                ...(candidates.data?.data.find((candidate) => identity(candidate) === identity(row))
+                  ?.native_services ?? []),
+              ]),
+            )}
             value={row.native_services}
             onChange={(native_services) =>
               setTargets((previous) =>

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -33,7 +34,11 @@ func (s *Service) beginManagementTx(ctx context.Context, role roleKind, actorID,
 	if s == nil || s.db == nil || nilDependency(s.roleAuth) {
 		return nil, charityscope.Scope{}, ErrUnavailable
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: readOnly})
+	database := s.db
+	if readOnly && s.readDB != nil {
+		database = s.readDB
+	}
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: readOnly})
 	if err != nil {
 		return nil, charityscope.Scope{}, err
 	}
@@ -47,7 +52,7 @@ func (s *Service) beginManagementTx(ctx context.Context, role roleKind, actorID,
 
 func replayScopedBindings(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, scope charityscope.Scope, now int64) (resources.MutationResult[AdminBindings], error) {
 	result, err := replay[AdminBindings](decision)
-	if err != nil || !scope.Trainee {
+	if err != nil || !scope.RestrictedKeys() {
 		return result, err
 	}
 	for _, binding := range result.Value.Bindings {
@@ -83,4 +88,63 @@ func (s *Service) managementCursorOwner(ctx context.Context, role roleKind, acto
 		return "", managementScopeError(err)
 	}
 	return owner, tx.Commit()
+}
+
+func requireBindingSourceScope(ctx context.Context, tx *sql.Tx, scope charityscope.Scope, modelID, bindingID, now int64) error {
+	if !scope.RestrictedKeys() {
+		return nil
+	}
+	if scope.DonationScope == "none" {
+		return authz.ErrPermissionDenied
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT d.id,dk.id FROM charity_model_bindings b JOIN charity_binding_targets t ON t.binding_id=b.id JOIN donation_keys dk ON dk.id=t.donation_key_id JOIN donations d ON d.id=dk.donation_id WHERE b.charity_model_id=? AND (?=0 OR b.id=?)`, modelID, bindingID, bindingID)
+	if err != nil {
+		return err
+	}
+	var keys [][2]int64
+	for rows.Next() {
+		var item [2]int64
+		if err := rows.Scan(&item[0], &item[1]); err != nil {
+			rows.Close()
+			return err
+		}
+		keys = append(keys, item)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, key := range keys {
+		if err := scope.RequireKey(ctx, tx, key[0], key[1], now, false); err != nil {
+			return managementScopeError(err)
+		}
+	}
+	return nil
+}
+
+func scopedBindingsTx(ctx context.Context, tx *sql.Tx, scope charityscope.Scope, value AdminBindings, now int64) (AdminBindings, error) {
+	if !scope.RestrictedKeys() {
+		return value, nil
+	}
+	if scope.DonationScope == "none" {
+		return AdminBindings{}, authz.ErrPermissionDenied
+	}
+	visible := value.Bindings[:0]
+	for _, binding := range value.Bindings {
+		id, err := strconv.ParseInt(binding.ID, 10, 64)
+		if err != nil {
+			return AdminBindings{}, ErrInvariant
+		}
+		err = scope.RequireBinding(ctx, tx, id, now)
+		if errors.Is(err, charityscope.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return AdminBindings{}, managementScopeError(err)
+		}
+		visible = append(visible, binding)
+	}
+	value.Bindings = visible
+	return value, nil
 }

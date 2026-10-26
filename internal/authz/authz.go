@@ -222,7 +222,7 @@ WHERE s.token_hash=? AND s.user_id=?
 			return Principal{}, ErrForbidden
 		}
 	case RoleSteward:
-		if actor.Kind != ActorUserSession || isAdmin != 0 || effectiveLevel != 6 {
+		if actor.Kind != ActorUserSession || isAdmin != 0 || effectiveLevel != 6 && !(effectiveLevel == 5 && StewardPermissionFromContext(ctx) != "") {
 			return Principal{}, ErrForbidden
 		}
 	case RoleTrainee:
@@ -232,6 +232,12 @@ WHERE s.token_hash=? AND s.user_id=?
 	case RoleAdministrator:
 		if actor.Kind != ActorAdminSession || isAdmin != 1 {
 			return Principal{}, ErrForbidden
+		}
+	}
+
+	if actor.Kind == ActorUserSession && StewardPermissionFromContext(ctx) != "" {
+		if err := RequireContextStewardPermission(ctx, tx, actor.UserID); err != nil {
+			return Principal{}, err
 		}
 	}
 
@@ -289,6 +295,8 @@ WHERE s.token_hash=? AND s.user_id=?
 // internal errors by the caller.
 func StableCode(err error) string {
 	switch {
+	case errors.Is(err, ErrPermissionDenied):
+		return httperr.CodeStewardPermissionDenied
 	case errors.Is(err, ErrUnauthorized):
 		return httperr.CodeUnauthorized
 	case errors.Is(err, ErrForbidden):

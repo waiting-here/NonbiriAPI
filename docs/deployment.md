@@ -133,7 +133,7 @@ The application accepts forwarding metadata only from configured trusted proxy a
 
 Review upstream operators as a trust boundary. Their reported usage determines actual charges and donation rewards and may exceed the admission reserve; the platform cannot independently verify a provider's token accounting. Public HTTP endpoints remain supported, but send credentials and content without transport encryption. Prefer HTTPS and review any HTTP exception before approving a donated source.
 
-Original-error diagnostics may retain a credential or other private content echoed by an upstream. Administrators and currently authorized level-6 stewards can read the complete saved content. Level-5 stewards can also read site-wide logs and diagnostics, with IPv4 addresses redacted from upstream error details. Source IPs and other authorized fields remain visible. Protect the database and its backups accordingly. Ordinary user displays still redact IPv4 addresses. Silent retries before an accepted response can also duplicate provider work when delivery is uncertain. Personal routes default to retries off; charity routes stop retrying as soon as HTTP 200 is received. See the [API contract](api-contract.md) for billing and error behavior.
+Original-error diagnostics may retain a credential or other private content echoed by an upstream. Administrators and stewards with `logs.unredacted` can read complete authorized saved content. Level-5 log and diagnostic reads require the corresponding grants; without `logs.unredacted`, upstream details redact IPv4 addresses and non-mainstream DNS identifiers. Source IPs and other authorized fields remain visible. Protect the database and its backups accordingly. Ordinary user displays still redact IPv4 addresses. Silent retries before an accepted response can also duplicate provider work when delivery is uncertain. Personal routes default to retries off; charity routes stop retrying as soon as HTTP 200 is received. See the [API contract](api-contract.md) for billing and error behavior.
 
 Source auditing distinguishes a direct peer, a validated forwarded client and a fallback peer. Before using shared-IP findings, verify the complete direct/CDN → Nginx → application chain for both IPv4 and IPv6, including an untrusted client-supplied forwarding header and malformed or duplicate values. A proxy address incorrectly treated as a client can associate many unrelated users. Fallback-quality addresses are excluded from shared-IP findings, but configuration still determines whether a forwarded address is trustworthy. Client headers are self-reported clues and cannot establish the identity of a relay or application.
 
@@ -307,28 +307,34 @@ This fallback also covers proxy timeouts or invalid upstream responses before re
 
 ## Database compatibility and version changes
 
-The application creates fresh schema **35** databases and opens current schema 35.
-Exact published schema **33/34** receives atomic upgrades during startup,
-before requests are served. Schema 33 builds four history indexes; schema 34
-updates the donation catalog authorization trigger and catalog view without rewriting data.
-Allow for index creation time on large schema 33 databases. Exact registered
-schema **16–26** structures use the standalone
-[v1 converter](../cmd/nonbiri-upgrade-v1/README.md). Other prereleases and unknown
-structures are rejected. SQLite identity remains Generation 2; exports use
-format **29**. See [database upgrades](database-upgrades.md) for manifests, stable
-migration guarantees and content versions.
+The service initializes absent storage as schema **38** and opens only the exact
+current schema. Older, newer, unknown and incomplete databases are rejected
+before migration, repair, WAL checkpoint or recovery writes. Exact registered
+schema **16–26** and **33–37** sources use the matching standalone
+[v1 upgrader](../cmd/nonbiri-upgrade-v1/README.md). Other intermediate structures,
+including schema 27–32, are unsupported. SQLite identity remains Generation 2;
+exports use format **30**. See [database upgrades](database-upgrades.md) for
+manifests, preserved data and content versions.
 
-Run `./nonbiriapi maintenance schema-info --json` without a production environment
-or database to inspect the target's compatibility descriptor. Deployment helpers
-must consume this output and the matching converter's `--schema-info --json`
-instead of parsing Go files. The service descriptor declares the exact schema 33/34
-startup sources and manifests; the converter declares its exact offline sources. Use
-`./nonbiriapi maintenance verify` on a stopped current database or consistent copy
-for a full offline audit; normal startup performs the current checks and recovers
-unfinished work. Historical cleanup commands are retired from the running binary.
+Run `./nonbiriapi maintenance schema-info --json` and the matching tool's
+`--schema-info --json` without application configuration or a database.
+The service declares `startup_policy="exact"`,
+`upgrade_tool="nonbiri-upgrade-v1"`, current/minimum schema 38 and empty source
+and conversion arrays. The tool declares its 16 exact offline sources.
+Deployment scripts must honor that policy and stop on mismatches, leaving the
+operator time to preserve the old database and deliberately invoke the tool.
+Do not run `--apply` from a service, startup hook or automatic deployment path.
+An advertised conversion is not permission to execute it.
+
+Current-schema validation and unfinished-work recovery remain part of startup.
+Use `./nonbiriapi maintenance verify` on a stopped current database or consistent
+copy when a full historical/credential audit is needed. Historical conversion
+commands remain outside the running service. A software patch need not change
+the schema; exact-current deployments do not need a converter.
 
 Preserve the database, master key, encrypted instance matching material,
-configuration and matching binary together. A binary-only downgrade is unsupported.
+configuration and matching binary together. Switching binaries cannot reverse a
+schema upgrade; a server expecting an older or different schema cannot open it.
 Fresh creation requires the database and sidecars to be absent and starts with
 maintenance on and public features closed. Opening features and publishing
 instance legal text remain separate operator actions.
@@ -348,7 +354,15 @@ instance legal text remain separate operator actions.
    protected recovery snapshot containing the database and existing sidecars,
    exact source release, environment, master key, unit, manifest and checksums.
    An unchanged stopped-state retry reuses that snapshot.
-4. For exact registered schemas 16–26, run the converter with `--apply` under exclusive database access.
+4. If the schema differs, verify that the matching upgrader declares the exact
+   source. After the recovery set is ready, deliberately invoke
+   `./nonbiri-upgrade-v1 --apply --database /path/to/database.sqlite` under
+   exclusive database access with the existing key. Use `--check` instead for a
+   full offline audit; reuse an already-valid audit rather than repeat it without
+   a new reason. Exact registered schemas 16–26 and 33–37 are supported.
+   No service or deployment hook performs this step for you. After a manual
+   upgrade, finish this manual release switch; do not retry an automatic path
+   that still identifies the source through its old server's schema descriptor.
    After any eligible legacy Gateway import, remove
    `NONBIRI_GATEWAY_MODEL_CAPABILITIES` and the six
    `NONBIRI_SMTP_HOST/PORT/USER/PASS/FROM/TLS` keys. Preserve other environment

@@ -61,6 +61,9 @@ func (a *application) serveCloudflareRoutes(store *db.Store, w http.ResponseWrit
 }
 
 func writeCloudflareStatusError(w http.ResponseWriter, err error) {
+	if authz.WritePermissionDenied(w, err) {
+		return
+	}
 	httperr.WriteMapped(w, err,
 		httperr.Mapping{Err: authz.ErrUnauthorized, Code: httperr.CodeUnauthorized, Message: "authentication required"},
 		httperr.Mapping{Err: authz.ErrForbidden, Code: httperr.CodeForbidden, Message: "forbidden"},

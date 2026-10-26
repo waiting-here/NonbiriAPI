@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"io"
 	"net/http"
 
@@ -136,8 +137,10 @@ func (s *Service) GetAdaptation(ctx context.Context, role roleKind, actorID, mod
 		return adaptationConfigurationView{}, err
 	}
 	defer tx.Rollback()
-	if scope.Trainee {
-		return adaptationConfigurationView{}, ErrForbidden
+	if role != roleAdmin {
+		if err := authz.RequireStewardPermission(ctx, tx, scope.ActorID, "charity.model_settings"); err != nil {
+			return adaptationConfigurationView{}, err
+		}
 	}
 	if _, err := readStoredModelTx(ctx, tx, modelID); err != nil {
 		return adaptationConfigurationView{}, err

@@ -89,7 +89,7 @@ func (repository *Repository) beginStewardReadOn(
 		if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, false, translateReadError(ctx, err)
 		}
-		if errors.Is(err, authz.ErrMFARequired) {
+		if errors.Is(err, authz.ErrMFARequired) || errors.Is(err, authz.ErrPermissionDenied) {
 			return nil, false, err
 		}
 		if errors.Is(err, ErrUnavailable) {
@@ -442,18 +442,20 @@ type rowScanner interface{ Scan(...any) error }
 
 func scanCommon(scanner rowScanner, extra ...any) (commonLogRecord, error) {
 	var record commonLogRecord
+	var detail sql.NullString
 	targets := []any{
 		&record.rowID, &record.id, &record.routeKind, &record.callerResultClass,
 		&record.callerStatus, &record.callerErrorCode, &record.startedAt, &record.completedAt,
 		&record.uncached, &record.cacheWrite, &record.cacheRead, &record.output,
 		&record.usageUnknown, &record.usageTotalMismatch, &record.attemptCount, &record.chargeMagnitude,
 		&record.rejectionStage, &record.rejectionReason, &record.requestMethod, &record.requestPath,
-		&record.requestedStreaming, &record.automaticActions, &record.usageDetails,
+		&record.requestedStreaming, &record.automaticActions, &record.usageDetails, &detail,
 	}
 	targets = append(targets, extra...)
 	if err := scanner.Scan(targets...); err != nil {
 		return commonLogRecord{}, err
 	}
+	record.rejectionDetail = requestattempt.DecodeDetail(detail.String)
 	if err := validateCommonRecord(record); err != nil {
 		return commonLogRecord{}, err
 	}

@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { selectSpecs, selectSuites } from './browser-plan.mjs';
 
@@ -41,4 +43,38 @@ test('CLI selects from the supplied plan across working directories and rejects 
   assert.equal(run({ suites: ['management'] }, 'suites', 'management').stdout, 'management\0');
   assert.notEqual(run({ specs: [] }, 'specs', 'invalid').status, 0);
   assert.notEqual(run(null, 'specs').status, 0);
+});
+
+test('CI collects every selected browser suite while preserving failures and local fail-fast', () => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'nonbiri-browser-gate-'));
+  const npm = resolve(directory, 'npm.sh');
+  const trace = resolve(directory, 'commands.txt');
+  const portable = (path) => path.replaceAll('\\', '/');
+  const bash = process.platform === 'win32'
+    ? resolve(process.env.ProgramFiles || 'C:/Program Files', 'Git/bin/bash.exe') : 'bash';
+  writeFileSync(npm, '#!/usr/bin/env bash\nset -eu\nprintf "%s\\n" "$*" >> "$RUNNER_TRACE"\ncase " $* " in *" playwright.audit.config.ts "*) exit "$FAIL_CODE" ;; esac\n');
+  chmodSync(npm, 0o700);
+  try {
+    for (const [ci, failure, expectedStatus, expectedCount] of [
+      ['true', '17', 1, 4], ['true', '0', 0, 4], ['', '17', 17, 1],
+    ]) {
+      writeFileSync(trace, '');
+      const result = spawnSync(bash, ['--noprofile', '--norc',
+        portable(resolve(import.meta.dirname, 'check-web.sh')), 'browser', 'management', 'all'], {
+        encoding: 'utf8', timeout: 30_000,
+        env: { ...process.env, CI: ci, FAIL_CODE: failure, NPM: portable(npm),
+          RUNNER_TRACE: portable(trace), NONBIRI_BROWSER_FIXTURE_BINARY: 'unused-existing-fixture',
+          BROWSER_PLAN: JSON.stringify({ suites: ['audit', 'management', 'workflow', 'proxy'] }) },
+      });
+      assert.equal(result.status, expectedStatus, result.stderr || String(result.error));
+      const commands = readFileSync(trace, 'utf8').trim().split('\n');
+      assert.equal(commands.length, expectedCount);
+      assert.ok(commands.every((line) => line.includes('--max-failures=0') === (ci === 'true')));
+      if (ci === 'true') assert.match(commands.at(-1), /playwright\.proxy\.config\.ts/);
+    }
+  } finally {
+    rmSync(trace, { force: true });
+    rmSync(npm, { force: true });
+    rmdirSync(directory);
+  }
 });

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
@@ -30,7 +31,7 @@ func (s *Service) reauthorizeUseReviewTx(ctx context.Context, tx *sql.Tx, access
 	switch access.role {
 	case reviewerAdmin:
 		return mapAuthorization(s.roleAuth.AuthorizeAdminMutation(ctx, tx, access.actorID))
-	case reviewerSteward:
+	case reviewerSteward, reviewerGranted:
 		return mapAuthorization(s.roleAuth.AuthorizeStewardMutation(ctx, tx, access.actorID))
 	case reviewerTrainee:
 		authority, ok := s.roleAuth.(interface {
@@ -52,6 +53,19 @@ func (s *Service) reauthorizeUseReviewTx(ctx context.Context, tx *sql.Tx, access
 func (s *Service) reviewUseTx(ctx context.Context, tx *sql.Tx, access useAccess, donationID int64, item UseReviewItem, now int64) error {
 	if err := s.reauthorizeUseReviewTx(ctx, tx, access); err != nil {
 		return err
+	}
+	if access.role != reviewerAdmin {
+		if err := authz.RequireStewardPermission(ctx, tx, access.actorID, "donations.review"); err != nil {
+			return err
+		}
+		rangeScope, err := readDonationAccessScope(ctx, tx, access.role, access.actorID)
+		if err != nil {
+			return err
+		}
+		_, err = rangeScope.requireTx(ctx, tx, donationID, now)
+		if err != nil {
+			return err
+		}
 	}
 	if err := requireUseAccessTx(ctx, tx, access, donationID, item.UseID, now, true); err != nil {
 		return err
@@ -166,7 +180,7 @@ func (s *Service) reviewUses(ctx context.Context, role reviewerRole, actorID, do
 	}
 	committed := false
 	defer finishTx(tx, &committed)
-	access := useAccess{role: actualRole, actorID: actorID, reviewOnly: actualRole == reviewerTrainee}
+	access := useAccess{role: actualRole, actorID: actorID}
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
@@ -179,7 +193,13 @@ func (s *Service) reviewUses(ctx context.Context, role reviewerRole, actorID, do
 		return empty, err
 	}
 	if decision.Kind == idempotency.Replay {
+		if _, err := readDonationAccessScope(ctx, tx, actualRole, actorID); err != nil {
+			return empty, err
+		}
 		return replay[UseReviewReceipt](decision)
+	}
+	if err := requireDonationRangeTx(ctx, tx, actualRole, actorID, donationID, now); err != nil {
+		return empty, err
 	}
 	receipt := UseReviewReceipt{Results: make([]UseReviewResult, 0, len(items))}
 	for _, item := range items {
@@ -256,7 +276,7 @@ FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donat
 			return err
 		}
 		for _, item := range items {
-			if err := s.reviewUseTx(ctx, tx, useAccess{role: reviewerRole(role), actorID: actorID, reviewOnly: reviewerRole(role) == reviewerTrainee}, donationID, item, now); err != nil {
+			if err := s.reviewUseTx(ctx, tx, useAccess{role: reviewerRole(role), actorID: actorID}, donationID, item, now); err != nil {
 				return err
 			}
 		}

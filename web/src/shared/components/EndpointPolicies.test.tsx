@@ -1,4 +1,6 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import permissionCopy from '../i18n/common/en.json';
+import { defaultStewardPermissions } from '@shared/operations/stewardPermissions';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { EndpointPolicies } from './EndpointPolicies';
@@ -116,6 +118,39 @@ async function open(
 }
 afterEach(() => vi.unstubAllGlobals());
 describe('endpoint policy management', () => {
+  it.each(['charity.backoff', 'egress.read'] as const)(
+    'loads only the separately granted %s section',
+    async (grant) => {
+      const data = fixture();
+      const view = await renderWithProviders(<EndpointPolicies role="steward" accountId="7" />, {
+        station: 'user',
+        route: '/endpoint-policies',
+      });
+      const policy = defaultStewardPermissions(0);
+      policy.permissions[grant] = true;
+      act(() =>
+        view.queryClient.setQueryData(['user', 'session'], {
+          user: { id: '7', effective_level: 5, steward_permissions: policy },
+        }),
+      );
+      if (grant === 'egress.read') {
+        await screen.findByText('https://gateway.example');
+        expect(data.requests.some((path) => path.includes('backoff'))).toBe(false);
+        await view.user.click(screen.getByRole('tab', { name: 'Extra backoff rules' }));
+      } else {
+        await screen.findByRole('button', { name: 'Edit rules' });
+        expect(data.requests.some((path) => path.includes('cloudflare-routes'))).toBe(false);
+        await view.user.click(screen.getByRole('tab', { name: 'Outbound routes' }));
+      }
+      expect(await screen.findByText(permissionCopy.management.permissions.denied)).toBeVisible();
+      expect(
+        data.requests.every((path) =>
+          grant === 'egress.read' ? !path.includes('backoff') : !path.includes('cloudflare-routes'),
+        ),
+      ).toBe(true);
+    },
+  );
+
   it('retains list filters, page and draft while switching tabs and returning', async () => {
     const data = fixture();
     const view = await open();
@@ -349,10 +384,10 @@ describe('endpoint policy management', () => {
     ).toBe(true);
     expect(data.writes).toHaveLength(0);
   });
-  it('refuses level 5 and ordinary users before loading privileged content', async () => {
+  it('refuses default level 5 and ordinary users before loading privileged content', async () => {
     const data = fixture();
     const view = await open('/endpoint-policies', 'steward');
-    expect(screen.getByRole('alert')).toHaveTextContent('Only administrators and level 6');
+    expect(screen.getByRole('alert')).toHaveTextContent(permissionCopy.management.permissions.denied);
     expect(data.requests).toHaveLength(0);
     view.queryClient.setQueryData(['user', 'session'], { user: { id: '7', effective_level: 5 } });
     await waitFor(() => expect(screen.getByRole('alert')).toBeVisible());

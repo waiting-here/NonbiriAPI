@@ -152,7 +152,7 @@ func New(options Options) (*Runtime, error) {
 				return nil, err
 			}
 			service, err := blackjack.New(blackjack.Options{
-				Database: shared.Database, Finance: financial.Blackjack, UserAuthorizer: shared.UserAuthorizer,
+				Database: shared.Database, ReadDatabase: options.Store.ReadDB(), Finance: financial.Blackjack, UserAuthorizer: shared.UserAuthorizer,
 				AdminAuthorizer: shared.AdminAuthorizer, Continuation: options.Continuation, Limiter: shared.Limiter,
 				Pools: options.Pools, Publisher: options.ActivityEvents, Keys: options.Vault, Now: shared.Now,
 				ReportError: func(err error) {

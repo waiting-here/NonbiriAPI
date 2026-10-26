@@ -48,8 +48,8 @@ export function normalizeModelTypes(value: unknown): ModelType[] {
 }
 
 export function sameModelTypes(left: readonly ModelType[], right: readonly ModelType[]): boolean {
-  const a = new Set(left.map(modelTypeGroup));
-  const b = new Set(right.map(modelTypeGroup));
+  const a = new Set(left);
+  const b = new Set(right);
   return a.size === b.size && [...a].every((type) => b.has(type));
 }
 
@@ -72,14 +72,11 @@ export const MODEL_TYPE_LABEL_KEYS: Record<ModelType, string> = {
   systemone: 'common.modelTypes.systemone',
 };
 
-export const MODEL_TYPE_CHOICES = MODEL_TYPES.filter((type) => type !== 'responses');
+export const MODEL_TYPE_CHOICES = MODEL_TYPES;
 export function modelTypeGroup(type: ModelType): ModelType {
-  return type === 'responses' ? 'chat_completions' : type;
+  return type;
 }
-export const MODEL_TYPE_GROUP_LABEL_KEYS = {
-  ...MODEL_TYPE_LABEL_KEYS,
-  chat_completions: 'common.modelTypes.chat_responses',
-} as const;
+export const MODEL_TYPE_GROUP_LABEL_KEYS = MODEL_TYPE_LABEL_KEYS;
 export function groupedModelTypes(value: readonly ModelType[]): ModelType[] {
   return MODEL_TYPE_CHOICES.filter((type) => value.some((item) => modelTypeGroup(item) === type));
 }
@@ -94,7 +91,5 @@ export function setModelTypeGroup(
   return MODEL_TYPES.filter((item) => groups.has(modelTypeGroup(item)));
 }
 export function modelTypeGroupPath(type: ModelType): string {
-  return modelTypeGroup(type) === 'chat_completions'
-    ? MODEL_TYPE_PATHS.chat_completions + ' · ' + MODEL_TYPE_PATHS.responses
-    : MODEL_TYPE_PATHS[type];
+  return MODEL_TYPE_PATHS[type];
 }

@@ -9,7 +9,11 @@ import {
   installURLPersistenceObserver,
   mockPublicConfig,
   mockRoleSession,
+  mockJson,
+  userSession,
 } from './support';
+import commonZh from '../../src/shared/i18n/common/zh.json' with { type: 'json' };
+import { defaultStewardPermissions } from '../../src/shared/operations/stewardPermissions';
 import { expect, test, type Page } from './test';
 
 const EVIDENCE_DIR = process.env.NONBIRI_VISUAL_DIR
@@ -203,7 +207,7 @@ async function installManagementRoutes(page: Page, scenario: Scenario, state: Fi
       return;
     }
     if (request.method() === 'GET' && path === `${scenario.root}/donation-sources`) {
-      expect(url.searchParams.get('scope')).toBe('active');
+      expect(url.searchParams.get('scope')).toBe('all');
       assertNumberedPage(url);
       await fulfillJSON(route, numberedResponse([], '1', PAGE_SIZE));
       return;
@@ -235,12 +239,10 @@ async function installManagementRoutes(page: Page, scenario: Scenario, state: Fi
         );
         return;
       }
-      const pricing = body.pricing;
-      expect(pricing).toBeTruthy();
       state.model = {
         ...state.model,
-        pricing,
-        model_types: body.model_types,
+        ...(Object.hasOwn(body, 'pricing') ? { pricing: body.pricing } : {}),
+        ...(Object.hasOwn(body, 'model_types') ? { model_types: body.model_types } : {}),
         ...(Object.hasOwn(body, 'transport_rule') ? { transport_rule: body.transport_rule } : {}),
         ...(Object.hasOwn(body, 'token_reserve_credits')
           ? { token_reserve_credits: body.token_reserve_credits }
@@ -354,11 +356,11 @@ async function exerciseScenario(
   await save.click();
   expect((await saved).status()).toBe(200);
   await expect.poll(() => state.patchBodies).toHaveLength(1);
-  expect(state.patchBodies[0]).toMatchObject({
+  expect(state.patchBodies[0]).toEqual({
     expected_revision: '1',
     token_reserve_credits: '1.111',
-    pricing: { mode: 'per_token' },
   });
+  expect(state.model.pricing).toEqual(tokenPricing());
   expect(state.model.token_reserve_credits).toBe('1.111');
 
   await page.reload();
@@ -692,11 +694,13 @@ for (const scenario of scenarios) {
         .locator('.card')
         .filter({ has: page.getByRole('heading', { name: MODEL_NAME, exact: true }) });
       const types = editor.getByRole('group', { name: /Model types|模型类型/ });
-      const chat = types.getByRole('checkbox', { name: 'Chat Completions / Responses' });
+      const chat = types.getByRole('checkbox', { name: /Chat completions|聊天补全/, exact: true });
+      const responses = types.getByRole('checkbox', { name: 'Responses', exact: true });
       const embeddings = types.getByRole('checkbox', { name: /Embeddings|向量化/ });
       const images = types.getByRole('checkbox', { name: /Image generation|图像生成/ });
       const save = editor.getByRole('button', { name: /Save model|保存模型/ });
       await expect(chat).toBeChecked();
+      await expect(responses).not.toBeChecked();
       await expect(embeddings).toBeChecked();
       await expect(images).not.toBeChecked();
       await images.check();
@@ -719,6 +723,7 @@ for (const scenario of scenarios) {
       });
       await page.reload();
       await expect(chat).not.toBeChecked();
+      await expect(responses).not.toBeChecked();
       await expect(embeddings).toBeChecked();
       await expect(images).toBeChecked();
       await assertPresentation(page, scenario, guard);
@@ -726,7 +731,7 @@ for (const scenario of scenarios) {
   );
 }
 
-test('level-five model view keeps capabilities read-only and hides chat policies for images', async ({
+test('level-five model editor retains its draft after denied permission and saves after a grant', async ({
   context,
   page,
 }) => {
@@ -738,6 +743,23 @@ test('level-five model view keeps capabilities read-only and hides chat policies
   };
   const guard = await prepare(context, page, scenario);
   await installManagementRoutes(page, scenario, state);
+  let authorized = false;
+  const deniedBodies: JSONRecord[] = [];
+  await page.route(
+    `${scenario.origin}${scenario.root}/charity-models/${MODEL_ID}`,
+    async (route) => {
+      if (route.request().method() !== 'PATCH' || authorized) {
+        await route.fallback();
+        return;
+      }
+      deniedBodies.push(route.request().postDataJSON() as JSONRecord);
+      await fulfillJSON(
+        route,
+        { error: { code: 'steward_permission_denied', message: 'Synthetic missing model grant.' } },
+        403,
+      );
+    },
+  );
   await page.goto(scenario.origin + scenario.pagePath);
   await page
     .getByRole('row')
@@ -747,11 +769,58 @@ test('level-five model view keeps capabilities read-only and hides chat policies
   const editor = page
     .locator('.card')
     .filter({ has: page.getByRole('heading', { name: MODEL_NAME, exact: true }) });
-  await expect(editor.locator('.model-types-summary')).toHaveText('图像生成');
-  await expect(editor.getByRole('checkbox')).toHaveCount(0);
-  await expect(editor.getByRole('button', { name: /Save model|保存模型/ })).toHaveCount(0);
+  const types = editor.getByRole('group', { name: '模型类型', exact: true });
+  const images = types.getByRole('checkbox', { name: '图像生成', exact: true });
+  const embeddings = types.getByRole('checkbox', { name: '向量化', exact: true });
+  const save = editor.getByRole('button', { name: /保存模型/ });
+  await expect(images).toBeChecked();
+  await expect(embeddings).not.toBeChecked();
+  await expect(editor.getByRole('radiogroup', { name: '流式输出', exact: true })).toHaveCount(0);
+  await embeddings.check();
+  guard.beforeConflict();
+  const errors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning')
+      errors.push(`${message.type()}: ${message.text()}`);
+  });
+  page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
+  await save.click();
+  await expect(editor.getByRole('alert')).toContainText(commonZh.management.permissions.denied);
+  expect(deniedBodies).toEqual([
+    { expected_revision: '1', model_types: ['embeddings', 'images_generations'] },
+  ]);
+  await expect(page).toHaveURL(/charity_model=7/);
+  await expect(images).toBeChecked();
+  await expect(embeddings).toBeChecked();
+  await expect(save).toBeEnabled();
   expect(state.patchBodies).toHaveLength(0);
+  const policy = defaultStewardPermissions(5);
+  policy.revision = '2';
+  policy.permissions['charity.model_settings'] = true;
+  policy.permissions['charity.pricing'] = true;
+  const baseSession = userSession('level5');
+  const granted = {
+    ...baseSession,
+    user: { ...baseSession.user, steward_permissions: policy },
+  };
+  for (const path of ['/api/session', '/api/me'])
+    await mockJson(page, { origin: USER_ORIGIN, method: 'GET', path, body: granted });
+  authorized = true;
+  await save.click();
+  await expect.poll(() => state.patchBodies.length).toBe(1);
+  expect(state.patchBodies[0]).toEqual(deniedBodies[0]);
+  await expect(editor.getByRole('alert')).toHaveCount(0);
+  await page.reload();
+  await expect(images).toBeChecked();
+  await expect(embeddings).toBeChecked();
   await editor.scrollIntoViewIfNeeded();
-  await saveScreenshot(page, 'steward-level5-image-readonly-390-dark', false);
-  await assertPresentation(page, scenario, guard);
+  await saveScreenshot(page, 'steward-level5-model-grant-390-dark', false);
+  await assertPresentation(page, scenario, {
+    ...guard,
+    afterConflict() {
+      expect(errors).toEqual([
+        'error: Failed to load resource: the server responded with a status of 403 (Forbidden)',
+      ]);
+    },
+  });
 });

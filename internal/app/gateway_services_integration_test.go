@@ -170,8 +170,8 @@ func TestGatewayV4HTTPResponsesPreserveTerminalUsage(t *testing.T) {
 		io.WriteString(w, "data: {\"type\":\"reasoning-start\",\"id\":\"r\"}\n\ndata: {\"type\":\"reasoning-delta\",\"id\":\"r\",\"delta\":\"brief thought\"}\n\ndata: {\"type\":\"reasoning-end\",\"id\":\"r\"}\n\ndata: {\"type\":\"text-start\",\"id\":\"t\"}\n\ndata: {\"type\":\"text-delta\",\"id\":\"t\",\"delta\":\"ok\"}\n\ndata: {\"type\":\"text-end\",\"id\":\"t\"}\n\ndata: {\"type\":\"finish\",\"finishReason\":{\"unified\":\"stop\"},\"usage\":{\"inputTokens\":{\"total\":3,\"noCache\":3,\"cacheRead\":0,\"cacheWrite\":0},\"outputTokens\":{\"total\":2,\"text\":1,\"reasoning\":1}}}\n\n")
 	})
 	f.exec(t, "UPDATE endpoint_keys SET force_store_false=0")
-	f.exec(t, "UPDATE models SET flatten_tool_calls=0,cloudflare_proxy_enabled=0")
-	f.exec(t, "UPDATE charity_models SET flatten_tool_calls=0,cloudflare_proxy_enabled=0")
+	f.exec(t, "UPDATE models SET model_types=16,flatten_tool_calls=0,cloudflare_proxy_enabled=0")
+	f.exec(t, "UPDATE charity_models SET model_types=16,flatten_tool_calls=0,cloudflare_proxy_enabled=0")
 	f.exec(t, "UPDATE site_config SET value='1' WHERE key='charity_min_chars'")
 	for _, model := range []string{"provider/self", "[公益]provider/per_token"} {
 		status, out := f.post(t, "/v1/responses", `{"model":"`+model+`","input":"PRIVATE_GATEWAY_PROMPT","stream":true,"store":false}`)

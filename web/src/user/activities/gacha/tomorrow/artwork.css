@@ -1,0 +1,42 @@
+.tomorrow-art {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  isolation: isolate;
+}
+.tomorrow-art--card {
+  aspect-ratio: 2 / 3;
+}
+.tomorrow-art--cover,
+.tomorrow-art--illustration {
+  aspect-ratio: 16 / 9;
+}
+.tomorrow-art--appearance {
+  height: 100%;
+}
+.tomorrow-art__still,
+.tomorrow-art canvas,
+.tomorrow-art__flat {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.tomorrow-art__still img {
+  position: absolute;
+  max-width: none;
+  object-fit: fill;
+}
+.tomorrow-art__flat {
+  object-fit: cover;
+}
+.tomorrow-art canvas {
+  opacity: 0;
+}
+.tomorrow-art canvas.is-ready {
+  opacity: 1;
+}
+.tomorrow-art__shadow {
+  position: absolute;
+  background: radial-gradient(ellipse, rgb(0 0 0 / 43%), transparent 70%);
+}

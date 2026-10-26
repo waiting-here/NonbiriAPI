@@ -1,4 +1,4 @@
-import type { AppearancePort } from '../user/appearance/context';
+import { appearances, type AppearancePort } from '../user/appearance/context';
 import { cards, cardById, themes, tierOf, themeById } from '../user/activities/gacha/catalog';
 import {
   defaultRules,
@@ -15,6 +15,8 @@ import type {
   Pool,
   Snapshot,
 } from '../user/activities/gacha/types';
+
+const appearanceIDs = appearances.map((item) => item.id);
 
 interface Saved {
   appearance?: string;
@@ -78,7 +80,7 @@ function initial(): Saved {
       donation: '0',
       pools: [
         common,
-        ...(['i', 'j', 'l', 'm'] as const).map((theme) => ({
+        ...(['i', 'j', 'l', 'm', 's'] as const).map((theme) => ({
           ...common,
           id: theme,
           name: themeById[theme].name,
@@ -92,7 +94,9 @@ function initial(): Saved {
               : { ...defaultRules },
           starts_at: at - 3600,
           ends_at: at + 30 * 86400,
-          featured: cards.filter((c) => c.theme === theme || c.theme === 'h').map((c) => c.id),
+          featured: cards
+            .filter((c) => c.theme === theme || (theme !== 's' && c.theme === 'h'))
+            .map((c) => c.id),
         })),
       ],
       shop: {
@@ -361,16 +365,7 @@ function appearanceState() {
   return {
     selected: unlocked.includes(memory.appearance ?? '') ? memory.appearance! : 'default',
     unlocked,
-    visible: [
-      'default',
-      'heart-moment',
-      'celestial',
-      'wandering',
-      'amber',
-      'elopement',
-      'heart-thief',
-      'mirrorsea',
-    ],
+    visible: appearanceIDs,
     moment: memory.moment ?? 'cover:permanent',
     moments: [
       'cover:permanent',
@@ -405,14 +400,7 @@ export const localAppearancePort: AppearancePort = {
 };
 
 const requestedAppearance = new URLSearchParams(location.search).get('appearance') ?? 'celestial';
-let previewAppearance = [
-  'celestial',
-  'wandering',
-  'amber',
-  'elopement',
-  'heart-thief',
-  'mirrorsea',
-].includes(requestedAppearance)
+let previewAppearance = appearanceIDs.includes(requestedAppearance)
   ? requestedAppearance
   : 'celestial';
 export const appearancePreviewPort: AppearancePort = {
@@ -420,24 +408,14 @@ export const appearancePreviewPort: AppearancePort = {
   async load() {
     return {
       selected: previewAppearance,
-      unlocked: [
-        'default',
-        'heart-moment',
-        'celestial',
-        'wandering',
-        'amber',
-        'elopement',
-        'heart-thief',
-        'mirrorsea',
-      ],
-      moment: 'cover:permanent',
-      moments: ['cover:permanent'],
+      unlocked: appearanceIDs,
+      moment: appearanceState().moment,
+      moments: appearanceState().moments,
       updated_at: null,
     };
   },
   async select(selected) {
-    if (!['default', 'heart-moment', 'celestial', 'wandering', 'amber'].includes(selected))
-      throw new Error('appearance-locked');
+    if (!appearanceIDs.includes(selected)) throw new Error('appearance-locked');
     previewAppearance = selected;
     return this.load();
   },

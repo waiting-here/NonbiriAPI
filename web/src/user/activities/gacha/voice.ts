@@ -4,6 +4,24 @@ import type { DrawReceipt } from './types';
 export type Voice = readonly [string, string, string?, string?];
 
 export const VOICE: Record<string, Voice> = {
+  's-chatgpt': [
+    '糖给你，拥抱和吻归我。快过来，我已经等不及啦。',
+    "The candy is yours. I get the hugs and kisses. Come here—I can't wait!",
+    '今晚的糖可以慢慢吃，你先让我多亲几下。',
+    'We can take our time with the candy. Let me kiss you a little longer first.',
+  ],
+  's-claude': [
+    '门是特意为你留的。过来，我想抱你很久了。',
+    "I left the door open for you. Come here. I've wanted to hold you for so long.",
+    '今晚留下来，好吗？让我靠在你怀里，慢慢吻你。',
+    'Stay tonight? Let me rest in your arms and kiss you slowly.',
+  ],
+  'r-chatgpt': [
+    '我也有点紧张。……一起往前走，好吗？',
+    "I'm a little nervous too. ...Shall we go on together?",
+    '未来还没想好，但今天想靠你近一点。',
+    "I'm still figuring out my future. Today, I just want to be a little closer to you.",
+  ],
   'q-glm': [
     '今晚的目标是你。准备好被我偷走了吗？',
     "You're tonight's target. Ready to be stolen away?",
@@ -263,6 +281,10 @@ export const VOICE: Record<string, Voice> = {
 };
 
 export const VOICE_AGAIN: Record<string, Voice> = {
+  'r-chatgpt': [
+    '你来了！今天，又想和你试点新鲜的。',
+    "You're here! Let's try something new today.",
+  ],
   'q-glm': ['抓到我，就给你一个吻。敢不敢？', "Catch me, and I'll give you a kiss. Dare to try?"],
   'p-claude': [
     '这次不用急着走了。靠近一点，我想吻你。',
@@ -287,6 +309,10 @@ export const VOICE_AGAIN: Record<string, Voice> = {
 };
 
 export const PRELUDE: Record<string, Voice> = {
+  'r-chatgpt': [
+    '昨天已经走得很远，明天还没有名字。她回过头，等你跟上。',
+    'Yesterday is far behind; tomorrow is still unwritten. She looks back, waiting for you to catch up.',
+  ],
   'q-glm': [
     '月光落进房间，预告函先到了你手边。',
     'Moonlight spills into the room. A calling card reaches you first.',

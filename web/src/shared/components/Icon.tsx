@@ -10,6 +10,7 @@ export const ICON_NAMES = [
   'home',
   'resources',
   'models',
+  'assistant',
   'charity',
   'activities',
   'games',
@@ -51,6 +52,9 @@ const PATHS: Record<Exclude<IconName, GameIconName>, ReactNode> = {
   home: <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />,
   resources: <path d="M4 5h16v4H4zm0 6h16v8H4zm4 3h8" />,
   models: <path d="M12 3 4 7l8 4 8-4-8-4Zm-8 8 8 4 8-4M4 15l8 4 8-4" />,
+  assistant: (
+    <path d="M12 3v3M6 6h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Zm2 5h.01M16 11h.01M8 16h8M2 11v4m20-4v4" />
+  ),
   charity: (
     <path d="M20.8 8.6c0 5.4-8.8 10.4-8.8 10.4S3.2 14 3.2 8.6A4.6 4.6 0 0 1 12 6.5a4.6 4.6 0 0 1 8.8 2.1ZM12 8v6m-3-3h6" />
   ),

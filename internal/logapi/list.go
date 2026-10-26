@@ -16,7 +16,7 @@ COALESCE((SELECT ce.delta_mag
  WHERE co.source_type='logical_request' AND co.source_id=l.logical_request_id
    AND co.kind IN ('forward_settle','charity_settle')
    AND ce.account_kind_snapshot='platform' AND ce.delta_sign=1
- ORDER BY co.ledger_seq DESC,ce.line_no ASC LIMIT 1),zeroblob(16)),l.rejection_stage,l.rejection_reason,l.request_method,l.request_path,l.requested_streaming,l.automatic_actions,l.usage_details`
+ ORDER BY co.ledger_seq DESC,ce.line_no ASC LIMIT 1),zeroblob(16)),l.rejection_stage,l.rejection_reason,l.request_method,l.request_path,l.requested_streaming,l.automatic_actions,l.usage_details,CASE WHEN l.rejection_stage IS NOT NULL THEN l.error_diag END`
 
 // Each condition can match a different attempt. Independent sets also prevent
 // repeated attempts from duplicating logical requests or their count.
@@ -269,7 +269,6 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 		}
 		if len(page.Data) < filter.Limit {
 			page.Data = append(page.Data, AdminLogRow{
-				RejectionDetail: record.rejectionDetail,
 				OriginIdentity:  record.origin,
 				RejectionFields: rejectionFields(record),
 				ID:              record.id, RouteKind: RouteKind(record.routeKind),
@@ -418,7 +417,6 @@ func (repository *Repository) ListSteward(
 			// Construct directly into the independent Steward type. No Admin DTO
 			// exists on this path, including transiently.
 			page.Data = append(page.Data, StewardLogRow{
-				RejectionDetail: record.rejectionDetail,
 				OriginIdentity:  record.origin,
 				RejectionFields: rejectionFields(record),
 				ID:              record.id, RouteKind: RouteKind(record.routeKind),

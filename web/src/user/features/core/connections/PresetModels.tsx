@@ -77,7 +77,7 @@ export function PresetModelRow({
   const [names, setNames] = useState<Record<string, string>>({});
   const [edited, setEdited] = useState(false);
   const [generation, setGeneration] = useState(bulk?.generation ?? 0);
-  const [services, setServices] = useState<Record<string, NativeService[]>>({});
+  const [services, setServices] = useState<Record<string, NativeService[] | null>>({});
   const [provider, setProvider] = useState(initialProvider);
   const [name, setName] = useState(mapping.model_id);
   const [types, setTypes] = useState<ModelType[]>([]);
@@ -102,10 +102,17 @@ export function PresetModelRow({
     operation.isPending ||
     operation.outcome === 'unknown' ||
     operation.outcome === 'refresh-failed';
+  const selectedServices = (entry: ModelMapping['entries'][number]) => {
+    if (entry.entry_id in services) return services[entry.entry_id] ?? undefined;
+    const endpoint = entries[entry.entry_id];
+    const key = endpoint ? grants[grantsByEntry ? entry.entry_id : endpoint.id] : undefined;
+    const known = key?.native_services ?? [];
+    return known.length ? known : undefined;
+  };
   const targets = mapping.entries.flatMap((entry) => {
     const endpoint = entries[entry.entry_id];
     const key = endpoint ? grants[grantsByEntry ? entry.entry_id : endpoint.id] : undefined;
-    const selected = services[entry.entry_id];
+    const selected = selectedServices(entry);
     return endpoint && key && selected?.length
       ? [{ entry, endpoint, key, services: selected }]
       : [];
@@ -194,6 +201,7 @@ export function PresetModelRow({
       {mapping.entries.map((entry) => {
         const endpoint = entries[entry.entry_id];
         const key = endpoint ? grants[grantsByEntry ? entry.entry_id : endpoint.id] : undefined;
+        const selected = selectedServices(entry);
         return (
           <div key={entry.entry_id}>
             <Field
@@ -207,23 +215,21 @@ export function PresetModelRow({
                 <input
                   {...props}
                   type="checkbox"
-                  checked={Boolean(services[entry.entry_id])}
+                  checked={Boolean(selected)}
                   disabled={locked || !key}
                   onChange={(event) =>
                     setServices((previous) => {
                       const next = { ...previous };
                       if (event.target.checked)
-                        next[entry.entry_id] = entry.native_services.filter((service) =>
-                          key?.native_services?.includes(service),
-                        );
-                      else delete next[entry.entry_id];
+                        next[entry.entry_id] = key?.native_services?.slice() ?? [];
+                      else next[entry.entry_id] = null;
                       return next;
                     })
                   }
                 />
               )}
             </Field>
-            {editableUpstream && services[entry.entry_id] ? (
+            {editableUpstream && selected ? (
               <Field
                 label={
                   t('common.connections.upstreamModel') +
@@ -247,10 +253,10 @@ export function PresetModelRow({
                 )}
               </Field>
             ) : null}
-            {key && services[entry.entry_id] ? (
+            {key && selected ? (
               <NativeServicesField
                 options={key.native_services ?? []}
-                value={services[entry.entry_id]}
+                value={selected}
                 onChange={(value) =>
                   setServices((previous) => ({ ...previous, [entry.entry_id]: value }))
                 }

@@ -21,6 +21,15 @@ export async function renderSpecial(
   } = {},
 ) {
   if (options.signal?.aborted) return () => {};
+  if (theme === 'tomorrow') {
+    const { renderTomorrow } = await import('./tomorrow/renderer');
+    if (options.signal?.aborted) return () => {};
+    return renderTomorrow(canvas, {
+      ...options,
+      walking: true,
+      characterPlate: options.characterOnly || options.characterPlate,
+    });
+  }
   const config = { ...options, polished: true };
   if (theme === 'mirrorsea') {
     const { renderMirrorSea } = await import('./mirror-sea-renderer');

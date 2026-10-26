@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CopyValue } from '@shared/components/CopyValue';
+import { ErrorState } from '@shared/components/States';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { RawErrorViewer } from './RequestDiagnostics';
 import type { DiagnosticRole } from './api';
@@ -45,7 +46,7 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
   const [page, setPage] = useState<IndependentPage>();
   const [applied, setApplied] = useState<IndependentFilter>();
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<unknown>();
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
   const labels = {
@@ -62,7 +63,7 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
     // Unmount all detail readers before a refresh can reuse the same row IDs.
     setPage(undefined);
     setBusy(true);
-    setFailed(false);
+    setFailure(undefined);
     const to = Math.floor(Date.now() / 1000);
     const filter: IndependentFilter =
       next && applied && page?.next_before
@@ -81,9 +82,9 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
         setPage(result);
         setApplied(filter);
       }
-    } catch {
+    } catch (error) {
       if (!request.signal.aborted) {
-        setFailed(true);
+        setFailure(error);
         setPage(undefined);
       }
     } finally {
@@ -106,8 +107,8 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
       </h2>
       <p>
         {words(
-          'Failure details from the last 30 days. Administrators and level-5/6 stewards can read these records. IPv4 addresses in upstream errors are hidden for level-5 stewards.',
-          '最近30天内的失败详情，管理员和5、6级协管可查看。5级协管看到的上游错误中，IPv4地址已删减。',
+          'Failure details from the last 30 days. Your permissions determine which records and upstream error details you can view.',
+          '最近30天内的失败详情。可查看的记录及上游错误详情取决于当前授权。',
         )}
       </p>
       <form
@@ -173,14 +174,7 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
           {words('Search diagnostics', '查询诊断')}
         </button>
       </form>
-      {failed && (
-        <p role="alert">
-          {words(
-            'Diagnostics could not be loaded. Check the filters and your current access.',
-            '无法加载诊断，请检查筛选条件和当前权限。',
-          )}
-        </p>
-      )}
+      {failure != null && <ErrorState error={failure} onRetry={() => void load()} />}
       {page?.data.length === 0 && (
         <p>{words('No matching diagnostics.', '没有符合条件的诊断。')}</p>
       )}
@@ -203,9 +197,9 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
               role={role}
               id={entry.id}
               synthetic={entry.synthetic}
-              onReadFailure={() => {
+              onReadFailure={(error) => {
                 setPage(undefined);
-                setFailed(true);
+                setFailure(error);
               }}
             />
           </details>
@@ -253,7 +247,7 @@ function Detail({
   role: DiagnosticRole;
   id: string;
   synthetic: boolean;
-  onReadFailure: () => void;
+  onReadFailure: (error: unknown) => void;
 }) {
   const words = useWords();
   const [detail, setDetail] = useState<IndependentDetail>();
@@ -269,8 +263,8 @@ function Detail({
     try {
       const result = await getIndependentDiagnostic(role, id, request.signal);
       if (!request.signal.aborted) setDetail(result);
-    } catch {
-      if (!request.signal.aborted) onReadFailure();
+    } catch (error) {
+      if (!request.signal.aborted) onReadFailure(error);
     } finally {
       if (!request.signal.aborted) setBusy(false);
     }

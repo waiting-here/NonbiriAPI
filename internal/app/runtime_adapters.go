@@ -352,6 +352,7 @@ type userSessionInvalidationFanout struct {
 	debug         *debug.Hub
 	connections   *accountEventConnections
 	limitsChanged func(int64)
+	agentChanged  func(int64)
 }
 
 func (fanout *userSessionInvalidationFanout) UserSessionInvalidated(userID int64) {
@@ -366,6 +367,9 @@ func (fanout *userSessionInvalidationFanout) UserSessionInvalidated(userID int64
 	}
 	if fanout.limitsChanged != nil {
 		fanout.limitsChanged(userID)
+	}
+	if fanout.agentChanged != nil {
+		fanout.agentChanged(userID)
 	}
 }
 

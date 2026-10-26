@@ -56,6 +56,8 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		handler         http.HandlerFunc
 	}{
 		{http.MethodGet, routeAdminDonations, api.listAdmin},
+		{http.MethodGet, routeAdminUserDonations, api.adminUseHandler(api.userHistoryHandler(reviewerAdmin, false))},
+		{http.MethodGet, routeAdminUserDonations + "/{id}", api.adminUseHandler(api.userHistoryHandler(reviewerAdmin, true))},
 		{http.MethodPost, routeAdminDiscoverySelection, api.discoverySelectionAdmin},
 		{http.MethodGet, routeAdminSources, api.sourcesAdmin},
 		{http.MethodGet, routeAdminSourceKeys, api.sourceKeysAdmin},
@@ -71,6 +73,7 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		{http.MethodGet, routeAdminRecurring, api.recurringAdmin},
 		{http.MethodPut, routeAdminRecurring, api.replaceRecurringAdmin},
 		{http.MethodPost, routeAdminReview, api.reviewAdmin},
+		{http.MethodPost, routeAdminPendingReview, api.adminUseHandler(api.pendingReviewHandler(reviewerAdmin))},
 		{http.MethodPatch, routeAdminKey, api.manageKeyAdmin},
 		{http.MethodPatch, routeAdminFailurePolicy, api.failurePolicyAdmin},
 	}
@@ -92,6 +95,8 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		handler         AuthorizedUserHandler
 	}{
 		{http.MethodGet, routeStewardDonations, api.listSteward},
+		{http.MethodGet, routeStewardUserDonations, api.userHistoryHandler(reviewerSteward, false)},
+		{http.MethodGet, routeStewardUserDonations + "/{id}", api.userHistoryHandler(reviewerSteward, true)},
 		{http.MethodPost, routeStewardDiscoverySelection, api.discoverySelectionSteward},
 		{http.MethodGet, routeStewardSources, api.sourcesSteward},
 		{http.MethodGet, routeStewardSourceKeys, api.sourceKeysSteward},
@@ -102,12 +107,12 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodPost, routeStewardFailureReset, api.failureResetSteward},
 		{http.MethodPost, routeStewardFailureReset + "/selection", api.failureSelectionSteward},
 		{http.MethodGet, routeStewardBadge, api.badgeSteward},
-		{http.MethodGet, routeStewardHandling, api.handlingQueueSteward},
 		{http.MethodPost, routeStewardProcessed, api.processSteward},
 		{http.MethodGet, routeStewardDonation, api.getSteward},
 		{http.MethodGet, routeStewardRecurring, api.recurringSteward},
 		{http.MethodPut, routeStewardRecurring, api.replaceRecurringSteward},
 		{http.MethodPost, routeStewardReview, api.reviewSteward},
+		{http.MethodPost, routeStewardPendingReview, api.pendingReviewHandler(reviewerSteward)},
 		{http.MethodPatch, routeStewardKey, api.manageKeySteward},
 		{http.MethodGet, routeStewardKey, api.keySteward},
 		{http.MethodPatch, routeStewardFailurePolicy, api.failurePolicySteward},
@@ -398,13 +403,14 @@ func (api *httpAPI) listRole(writer http.ResponseWriter, request *http.Request, 
 	if api.listNumbered(writer, request, principal, role, values) {
 		return
 	}
-	limit, cursor, ok := parsePage(values, "status", "handling", "q", "cursor", "limit")
+	limit, cursor, ok := parsePage(values, "status", "handling", "q", "user_id", "discord_id", "cursor", "limit")
 	if !ok {
 		writeDonationError(writer, ErrInvalidRequest)
 		return
 	}
 	filter := ManagementFilter{Status: values.Get("status"), Handling: values.Get("handling"), Query: values.Get("q")}
-	if !validManagementFilter(filter) {
+	filter.UserID, filter.DiscordID = values.Get("user_id"), values.Get("discord_id")
+	if !validManagementFilter(filter) || values.Has("user_id") && filter.UserID == "" || values.Has("discord_id") && filter.DiscordID == "" {
 		writeDonationError(writer, ErrInvalidRequest)
 		return
 	}
@@ -418,8 +424,12 @@ func (api *httpAPI) listRole(writer http.ResponseWriter, request *http.Request, 
 		scope = "steward-donations"
 		owner = pageOwner(principal.UserID, "steward:status="+filter.Status)
 	}
-	if filter.Handling != "" || filter.Query != "" {
-		owner += fmt.Sprintf(":filter=%x", sha256.Sum256([]byte(filter.Handling+"\x00"+filter.Query)))
+	if filter.Handling != "" || filter.Query != "" || filter.UserID != "" || filter.DiscordID != "" {
+		identity := filter.Handling + "\x00" + filter.Query
+		if filter.UserID != "" || filter.DiscordID != "" {
+			identity += "\x00" + filter.UserID + "\x00" + filter.DiscordID
+		}
+		owner += fmt.Sprintf(":filter=%x", sha256.Sum256([]byte(identity)))
 	}
 	after, err := api.service.decodeCursor(cursor, scope, owner, now)
 	if err != nil {

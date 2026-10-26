@@ -20,6 +20,7 @@ import './preview.css';
 import { AppearancePreview } from './AppearancePreview';
 import { AmberPreview } from './AmberPreview';
 import { AmberExport } from './AmberExport';
+import { SeasonalPreview } from './SeasonalPreview';
 import { sampleReceipt, previewPreferences, type Scenario } from './scenarios';
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -32,7 +33,7 @@ function Preview() {
   const [english, setEnglish] = useState(new URLSearchParams(location.search).get('lang') === 'en');
   const [demo, setDemo] = useState<DrawReceipt | null>(() => {
     const run = new URLSearchParams(location.search).get('run');
-    return run && ['ten', 'plain', 'ssr', 'sp2', 'n'].includes(run)
+    return run && ['ten', 'plain', 'ssr', 'sp2', 'n', 'seasonal'].includes(run)
       ? sampleReceipt(run as Scenario)
       : null;
   });
@@ -148,14 +149,29 @@ function Preview() {
 }
 const amberPreview = new URLSearchParams(location.search).get('view') === 'amber';
 const amberExport = new URLSearchParams(location.search).get('view') === 'amber-export';
+function PreviewRoot() {
+  const [adult, setAdult] = useState(() => new URLSearchParams(location.search).get('r18') === '1');
+  const seasonal = new URLSearchParams(location.search).get('view') === 'seasonal';
+  return (
+    <ArtworkPolicyProvider disabled={!adult}>
+      <ThemeProvider>
+        {seasonal ? (
+          <SeasonalPreview adult={adult} setAdult={setAdult} />
+        ) : amberExport ? (
+          <AmberExport />
+        ) : amberPreview ? (
+          <AmberPreview />
+        ) : (
+          <Preview />
+        )}
+      </ThemeProvider>
+    </ArtworkPolicyProvider>
+  );
+}
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={client}>
-      <ArtworkPolicyProvider disabled>
-        <ThemeProvider>
-          {amberExport ? <AmberExport /> : amberPreview ? <AmberPreview /> : <Preview />}
-        </ThemeProvider>
-      </ArtworkPolicyProvider>
+      <PreviewRoot />
     </QueryClientProvider>
   </StrictMode>,
 );

@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "characters": [
     "ChatGPT",
     "Claude",
@@ -183,6 +183,27 @@
       "tagline_en": "Come away with me tonight.",
       "art": "/assets/gacha/groups/q.webp",
       "appearance": "heart-thief"
+    },
+    {
+      "id": "r",
+      "name": "未命名的明天",
+      "name_en": "Tomorrow, Still Unwritten",
+      "rarity": "SP",
+      "source": "limited",
+      "tagline": "把昨天放进背包，向还没有答案的明天出发。",
+      "tagline_en": "Pack a little of yesterday, and step into a tomorrow still full of questions.",
+      "art": "/assets/gacha/groups/r.webp",
+      "appearance": "tomorrow"
+    },
+    {
+      "id": "s",
+      "name": "糖夜迷藏",
+      "name_en": "Sweet Hide-and-Seek",
+      "rarity": "SSR",
+      "source": "limited",
+      "tagline": "找到我，今晚的糖分你一半。",
+      "tagline_en": "Find me, and half of tonight's candy is yours.",
+      "art": "/assets/gacha/groups/s.webp"
     }
   ],
   "cards": [
@@ -862,6 +883,40 @@
       "art": "/assets/gacha/cards/q-glm.webp",
       "thumb": "/assets/gacha/thumbs/q-glm.webp",
       "appearance": "heart-thief"
+    },
+    {
+      "id": "r-chatgpt",
+      "theme": "r",
+      "character": "ChatGPT",
+      "name": "未命名的明天·ChatGPT",
+      "name_en": "Tomorrow, Still Unwritten · ChatGPT",
+      "rarity": "SP",
+      "source": "limited",
+      "art": "/assets/gacha/cards/r-chatgpt.webp",
+      "thumb": "/assets/gacha/thumbs/r-chatgpt.webp",
+      "appearance": "tomorrow"
+    },
+    {
+      "id": "s-chatgpt",
+      "theme": "s",
+      "character": "ChatGPT",
+      "name": "糖夜迷藏·ChatGPT",
+      "name_en": "Sweet Hide-and-Seek · ChatGPT",
+      "rarity": "SSR",
+      "source": "limited",
+      "art": "/assets/gacha/cards/s-chatgpt.webp",
+      "thumb": "/assets/gacha/thumbs/s-chatgpt.webp"
+    },
+    {
+      "id": "s-claude",
+      "theme": "s",
+      "character": "Claude",
+      "name": "糖夜迷藏·Claude",
+      "name_en": "Sweet Hide-and-Seek · Claude",
+      "rarity": "SSR",
+      "source": "limited",
+      "art": "/assets/gacha/cards/s-claude.webp",
+      "thumb": "/assets/gacha/thumbs/s-claude.webp"
     }
   ]
 }

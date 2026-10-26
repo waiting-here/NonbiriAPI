@@ -37,7 +37,7 @@ func (s *Service) mutateUse(ctx context.Context, role reviewerRole, actorID, don
 	var access useAccess
 	var err error
 	if role == recurringOwner {
-		tx, access, err = s.beginUseTx(ctx, role, actorID, false)
+		tx, access, err = s.beginUseTx(ctx, role, actorID, donationID, false)
 	} else {
 		access.role = role
 		tx, access.scope, err = s.beginScopedTx(ctx, role, actorID, false)
@@ -63,8 +63,8 @@ func (s *Service) mutateUse(ctx context.Context, role reviewerRole, actorID, don
 	actorKind := string(role)
 	if role == recurringOwner {
 		actorKind = "user"
-	} else if access.scope.Trainee {
-		actorKind = "trainee5"
+	} else {
+		actorKind = access.scope.AuditRole(role == reviewerAdmin)
 	}
 	decision, err := beginMutation(ctx, tx, actorKind, access.actorID, idempotency.ScopeDonation, mutation, now)
 	if err != nil {

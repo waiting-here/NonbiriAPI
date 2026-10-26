@@ -188,6 +188,56 @@ function install(pending = false, role: 'admin' | 'steward' = 'admin', keyCount 
     },
   };
 }
+
+it.each(['admin', 'steward'] as const)(
+  'applies exact donor IDs and clears both in the %s review queue',
+  async (role) => {
+    const fixture = install(true, role);
+    const view = await renderWithProviders(
+      <CharityManagement frame={role} accountId="donor-filter-account" />,
+      {
+        station: role === 'admin' ? 'admin' : 'user',
+        role: role === 'admin' ? 'admin' : 'level5',
+        locale: 'en',
+        route: '/charity?charity_section=donations',
+      },
+    );
+    await screen.findAllByText('Shared donation');
+    await view.user.click(screen.getByText('Filter', { exact: true }));
+    await view.user.type(screen.getByRole('textbox', { name: 'Site user ID' }), '7');
+    await view.user.type(screen.getByRole('textbox', { name: 'Discord ID' }), '840000000000000001');
+    await view.user.click(screen.getAllByRole('button', { name: 'Apply filters' }).at(-1)!);
+    await waitFor(() =>
+      expect(
+        fixture.requests
+          .filter((url) => url.pathname.endsWith('/donations'))
+          .at(-1)
+          ?.searchParams.get('discord_id'),
+      ).toBe('840000000000000001'),
+    );
+    expect(
+      fixture.requests
+        .filter((url) => url.pathname.endsWith('/donations'))
+        .at(-1)
+        ?.searchParams.get('user_id'),
+    ).toBe('7');
+    await view.user.click(screen.getAllByRole('button', { name: 'Reset' }).at(-1)!);
+    await waitFor(() =>
+      expect(
+        fixture.requests
+          .filter((url) => url.pathname.endsWith('/donations'))
+          .at(-1)
+          ?.searchParams.has('user_id'),
+      ).toBe(false),
+    );
+    expect(
+      fixture.requests
+        .filter((url) => url.pathname.endsWith('/donations'))
+        .at(-1)
+        ?.searchParams.has('discord_id'),
+    ).toBe(false);
+  },
+);
 function installBindingNavigation(
   role: 'admin' | 'steward',
   forbidden = false,
@@ -250,7 +300,7 @@ function installBindingNavigation(
             },
           ],
         });
-      if (forbidden && url.pathname === `${root}/donations/7`)
+      if (forbidden && url.pathname === `${root}/donations/7/keys`)
         return json({ error: { code: 'forbidden', message: 'Permission lost' } }, 403);
       return previousFetch(input, init);
     }),
@@ -338,7 +388,7 @@ describe('managed donation page integration', () => {
 
   it('clears only workflow parameters on account and role changes even when only new parameters remain', async () => {
     const newParameters =
-      'source_key_state=disabled&handling_donation=7&handling_view=all&handling_page=3&handling_page_size=50&model_workspace=new&binding_donation=7&binding_key=21&binding_target=1&keep=other';
+      'source_key_state=disabled&donation_id=7&donation_key=21&donation_from=sources&donation_keys_page=3&donation_keys_page_size=50&model_workspace=new&binding_donation=7&binding_key=21&binding_target=1&keep=other';
     function IdentityHarness() {
       const [step, setStep] = useState(0);
       const navigate = useNavigate();
@@ -690,16 +740,8 @@ describe('managed donation page integration', () => {
     const reviewFields = [...card.children].find((child) => child.matches('div.ops-field-grid'));
     if (!(reviewFields instanceof HTMLElement)) throw new Error('Review fields missing');
     const reason = within(reviewFields).getByLabelText('Reason');
-    const confirmationLabel = [...card.children].find((child) =>
-      child.matches('label.checkbox-label'),
-    );
-    if (!(confirmationLabel instanceof HTMLElement)) throw new Error('Review confirmation missing');
-    const confirmation = within(confirmationLabel).getByRole('checkbox', {
-      name: 'I confirm this review result and its per-key consequences.',
-    });
     act(() => {
       fireEvent.change(reason, { target: { value: 'Reviewed all pages' } });
-      fireEvent.click(confirmation);
     });
     fireEvent.click(
       within(card).getByText('Approve donation', { selector: 'button', exact: true }),

@@ -11,6 +11,8 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/adminalerts"
 	"github.com/waiting-here/NonbiriAPI/internal/adminapi"
 	"github.com/waiting-here/NonbiriAPI/internal/adminusers"
+	"github.com/waiting-here/NonbiriAPI/internal/agentrequest"
+	"github.com/waiting-here/NonbiriAPI/internal/aiagent"
 	"github.com/waiting-here/NonbiriAPI/internal/announcements"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
@@ -60,6 +62,8 @@ type application struct {
 	adminAlerts     *adminalerts.Repository
 	returnAlerts    *returnmarker.Recorder
 	adminUsers      *adminusers.Service
+	agent           *aiagent.Service
+	agentRequests   *agentrequest.Runtime
 	lifecycle       *lifecycle.Coordinator
 	lifecycleCancel context.CancelFunc
 	lifecycleDone   <-chan struct{}
