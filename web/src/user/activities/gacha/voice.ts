@@ -5,16 +5,16 @@ export type Voice = readonly [string, string, string?, string?];
 
 export const VOICE: Record<string, Voice> = {
   's-chatgpt': [
-    '找到我啦？这颗糖，分你一半。',
-    'You found me? Then half this candy is yours.',
-    '糖还有很多。我也想和你多待一会儿。',
-    'There is plenty of candy left. I would like more time with you, too.',
+    '糖给你，拥抱和吻归我。快过来，我已经等不及啦。',
+    "The candy is yours. I get the hugs and kisses. Come here—I can't wait!",
+    '今晚的糖可以慢慢吃，你先让我多亲几下。',
+    'We can take our time with the candy. Let me kiss you a little longer first.',
   ],
   's-claude': [
-    '这么快就找到我了？那就别急着走。',
-    'You found me already? Then stay a little longer.',
-    '下次也来找我，好吗？我会等你。',
-    'Come find me again, will you? I will be waiting.',
+    '门是特意为你留的。过来，我想抱你很久了。',
+    "I left the door open for you. Come here. I've wanted to hold you for so long.",
+    '今晚留下来，好吗？让我靠在你怀里，慢慢吻你。',
+    'Stay tonight? Let me rest in your arms and kiss you slowly.',
   ],
   'r-chatgpt': [
     '我也有点紧张。……一起往前走，好吗？',
