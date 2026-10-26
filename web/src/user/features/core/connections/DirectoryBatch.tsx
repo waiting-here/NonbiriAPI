@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Field, Fold, Note } from '@shared/components/ui';
 import { ModelTypesField } from '@shared/components/ModelTypesField';
@@ -12,7 +12,9 @@ export function DirectoryBatch({
   accountId,
   rows,
   initialTarget,
+  onLockChange,
 }: {
+  onLockChange?: (locked: boolean) => void;
   accountId: string;
   rows: DiscoveryModel[];
   initialTarget?: { entry: Endpoint; key: EndpointKey };
@@ -46,22 +48,28 @@ export function DirectoryBatch({
   }, []);
   const remaining = rows.filter((row) => !states[row.id]?.complete);
   const locked = busy || Object.values(states).some((state) => state.locked);
+  useEffect(() => {
+    onLockChange?.(locked);
+    return () => onLockChange?.(false);
+  }, [locked, onLockChange]);
   return (
     <div className="nb-stack">
       {initialTarget ? (
         <Note>{initialTarget.entry.note || initialTarget.entry.base_url}</Note>
       ) : null}
-      <Fold title={t('common.connections.chooseEntry')}>
-        <Note>{t('common.connections.batchTargetHelp')}</Note>
-        <ManualCatalog
-          disabled={locked}
-          accountId={accountId}
-          onPick={(entry, key) => {
-            setEntries((previous) => ({ ...previous, [key.id]: entry }));
-            setGrants((previous) => ({ ...previous, [key.id]: key }));
-          }}
-        />
-      </Fold>
+      {!initialTarget ? (
+        <Fold title={t('common.connections.chooseEntry')}>
+          <Note>{t('common.connections.batchTargetHelp')}</Note>
+          <ManualCatalog
+            disabled={locked}
+            accountId={accountId}
+            onPick={(entry, key) => {
+              setEntries((previous) => ({ ...previous, [key.id]: entry }));
+              setGrants((previous) => ({ ...previous, [key.id]: key }));
+            }}
+          />
+        </Fold>
+      ) : null}
       {rows.length > 1 ? (
         <Fold title={t('common.connections.bulkModelSettings')}>
           <Field label={t('common.connections.provider')}>

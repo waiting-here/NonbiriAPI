@@ -93,8 +93,8 @@ describe('persistent entry metadata drafts', () => {
     view.queryClient.setQueryData(['user', 'session'], {
       user: { id: '1', username: 'fixture-user', effective_level: 1 },
     });
-    await view.user.click(screen.getByText('Edit service', { exact: true }));
-    const name = screen.getByRole('textbox', { name: 'Service name' });
+    await view.user.click(screen.getByText('Endpoint settings', { exact: true }));
+    const name = screen.getByRole('textbox', { name: 'Endpoint name' });
     await view.user.clear(name);
     await view.user.type(name, 'Renamed service');
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
@@ -184,17 +184,16 @@ describe('persistent entry metadata drafts', () => {
         user: { id: '1', username: 'owner', effective_level: 1 },
       });
       await view.user.click(
-        screen.getByText(
-          kind === 'entry' ? 'Edit service' : 'Credential and service authorization',
-          { exact: true },
-        ),
+        screen.getByText(kind === 'entry' ? 'Endpoint settings' : 'Protocol access', {
+          exact: true,
+        }),
       );
       if (kind === 'entry')
-        await view.user.type(screen.getByRole('textbox', { name: 'Service name' }), ' first');
+        await view.user.type(screen.getByRole('textbox', { name: 'Endpoint name' }), ' first');
       await view.user.click(screen.getByRole('button', { name: 'Save' }));
       await screen.findByText('Saved');
       if (kind === 'entry')
-        await view.user.type(screen.getByRole('textbox', { name: 'Service name' }), ' second');
+        await view.user.type(screen.getByRole('textbox', { name: 'Endpoint name' }), ' second');
       await view.user.click(screen.getByRole('button', { name: 'Save' }));
       await waitFor(() => expect(writes).toHaveLength(2));
       expect(writes.map((row) => row.expected_revision)).toEqual(['1', '2']);
@@ -261,9 +260,7 @@ describe('persistent entry metadata drafts', () => {
     view.queryClient.setQueryData(['user', 'session'], {
       user: { id: '1', username: 'owner', effective_level: 1 },
     });
-    await view.user.click(
-      screen.getByText('Credential and service authorization', { exact: true }),
-    );
+    await view.user.click(screen.getByText('Protocol access', { exact: true }));
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
     const reread = await screen.findByRole('button', { name: 'Retry' });
     expect(writes).toHaveLength(1);
@@ -342,9 +339,7 @@ describe('persistent entry metadata drafts', () => {
     view.queryClient.setQueryData(['user', 'session'], {
       user: { id: '1', username: 'owner', effective_level: 1 },
     });
-    await view.user.click(
-      screen.getByText('Credential and service authorization', { exact: true }),
-    );
+    await view.user.click(screen.getByText('Protocol access', { exact: true }));
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findByText('The data changed. Review the latest values and try again.');
     expect(screen.queryByRole('checkbox', { name: 'Responses' })).not.toBeInTheDocument();

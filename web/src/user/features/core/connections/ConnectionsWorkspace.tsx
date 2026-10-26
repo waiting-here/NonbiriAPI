@@ -2,12 +2,17 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { PageHeader } from '@shared/components/States';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
-import { Tabs } from '@shared/components/ui';
+import { Field, Fold, Note } from '@shared/components/ui';
+import { PagePagination } from '@shared/operations/PagePagination';
+import { usePagePager } from '@shared/operations/usePagePager';
+import { EndpointDetail } from '../EndpointDetail';
+import { getEndpoint } from '../api';
+import { coreKeys } from '../queries';
 import { formatCount } from '@shared/utils/formatNumber';
-import { ConnectorLabel, CoreErrorPanel, CoreLoading } from '../components';
+import { CoreErrorPanel, CoreLoading } from '../components';
 import type { UserProfile } from '../types';
 import { ConnectionResourceList, connectionKeys } from './ResourceList';
 import { connectionAPI } from './api';
@@ -15,12 +20,26 @@ import { ServiceCreateForm } from './ServiceCreateForm';
 import { ConnectionEditor } from './ConnectionEditor';
 import { ConnectionSummary } from './ConnectionSummary';
 import { CredentialsPanel } from './CredentialsPanel';
-import { DiscoveryPanel } from './DiscoveryPanel';
 import { DiscoverySourceDetail } from './DiscoverySourceDetail';
 
-type View = 'entries' | 'credentials' | 'discovery';
+function clearDetailScope(params: URLSearchParams) {
+  for (const field of [
+    'connection_view',
+    'endpoint_id',
+    'entry_id',
+    'key_id',
+    'focus_key_id',
+    'credential_id',
+    'discovery_source_id',
+    'quickstart',
+  ])
+    params.delete(field);
+  for (const field of [...params.keys()])
+    if (/^(keys_|manual_|routes_|impact_|source_models_)/.test(field)) params.delete(field);
+}
 function connectionURL(search: string, id: string) {
   const next = new URLSearchParams(search);
+  clearDetailScope(next);
   next.set('connection_id', id);
   next.delete('quickstart');
   next.set('connection_view', 'entries');
@@ -138,13 +157,8 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
 }
 
 function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) {
-  const client = useQueryClient();
   const { t } = useTranslation();
-  const location = useLocation();
   const [params, setParams] = useSearchState();
-  const requestedView = params.get('connection_view');
-  const view: View =
-    requestedView === 'credentials' || requestedView === 'discovery' ? requestedView : 'entries';
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(false);
   const connection = useQuery({
@@ -153,7 +167,7 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
   });
   const backParams = new URLSearchParams(params);
   backParams.delete('connection_id');
-  backParams.delete('connection_view');
+  clearDetailScope(backParams);
   const back = '/endpoints' + (backParams.size ? '?' + backParams.toString() : '');
   if (connection.isPending)
     return (
@@ -206,137 +220,139 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
           />
         </ExpandablePanel>
       ) : null}
-      <Tabs
-        label={t('common.connections.sections')}
-        value={view}
-        tabs={[
-          { value: 'entries', label: t('common.connections.entries') },
-          { value: 'credentials', label: t('common.connections.credentials') },
-          { value: 'discovery', label: t('common.connections.discoverySources') },
-        ]}
-        onChange={(value) => {
-          setAdding(false);
-          setParams((previous) => {
-            const next = new URLSearchParams(previous);
-            next.set('connection_view', value);
-            return next;
-          });
-        }}
-      />
-      {view === 'entries' ? (
-        <>
-          {adding ? (
-            <ExpandablePanel
-              open
-              onClose={() => {
-                setAdding(false);
-                void client.invalidateQueries({ queryKey: connectionKeys.root(accountId) });
-              }}
-              title={t('common.connections.addEntry')}
-              closeLabel={t('common.connections.close')}
-            >
-              <ServiceCreateForm accountId={accountId} connection={connection.data} />
-            </ExpandablePanel>
-          ) : null}
-          <ConnectionResourceList
-            restoreScroll
-            accountId={accountId}
-            scope={id}
-            listType="connection-entries"
-            title={t('common.connections.entries')}
-            actions={
-              <button
-                type="button"
-                className="nb-btn nb-btn--primary"
-                onClick={() => setAdding(true)}
-              >
-                {t('common.connections.addEntry')}
-              </button>
-            }
-            emptyAction={
-              <button
-                type="button"
-                className="nb-btn nb-btn--secondary"
-                onClick={() => setAdding(true)}
-              >
-                {t('common.connections.addEntry')}
-              </button>
-            }
-            searchPlaceholder={t('common.connections.entrySearch')}
-            load={(window, q, signal) => connectionAPI.entries(id, window, q, signal)}
-            rowKey={(row) => row.id}
-            columns={[
-              {
-                key: 'name',
-                header: t('common.connections.entry'),
-                cell: 'title',
-                render: (row) => (
-                  <div className="nb-stack nb-stack--sm">
-                    <strong>
-                      {row.origin.kind === 'mainstream'
-                        ? row.origin.name
-                        : row.note || row.base_url}
-                    </strong>
-                    {row.origin.kind === 'mainstream' && row.note ? (
-                      <small>{row.note}</small>
-                    ) : null}
-                    <small className="nb-mono" title={row.base_url}>
-                      {row.base_url}
-                    </small>
-                    {row.browse?.mainstream_categories?.length ? (
-                      <div className="nb-inline">
-                        {row.browse.mainstream_categories.map((category) => (
-                          <span className="nb-badge nb-badge--info" key={category}>
-                            {t(`user.core.endpoints.category.${category}`)}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ),
-              },
-              {
-                key: 'protocol',
-                header: t('common.connections.protocol'),
-                cell: 'meta',
-                render: (row) => (
-                  <ConnectorLabel value={row.configuration_type ?? row.connector_type} />
-                ),
-              },
-              {
-                key: 'state',
-                header: t('common.connections.status'),
-                cell: 'status',
-                render: (row) => (
-                  <span className={'nb-badge nb-badge--' + (row.enabled ? 'ok' : 'warn')}>
-                    {row.enabled
-                      ? t('common.connections.enabled')
-                      : t('common.connections.disabled')}
-                  </span>
-                ),
-              },
-              {
-                key: 'manage',
-                header: t('common.connections.actions'),
-                cell: 'action',
-                render: (row) => (
-                  <Link
-                    className="nb-btn nb-btn--secondary"
-                    to={'/endpoints/' + encodeURIComponent(row.id)}
-                    state={{ returnTo: location.pathname + location.search }}
-                  >
-                    {t('common.connections.manageEntry')}
-                  </Link>
-                ),
-              },
-            ]}
-          />
-        </>
-      ) : view === 'credentials' ? (
+      <div className="nb-actions">
+        <button type="button" className="nb-btn nb-btn--secondary" onClick={() => setAdding(true)}>
+          {t('common.connections.addEntry')}
+        </button>
+      </div>
+      {adding ? (
+        <ExpandablePanel
+          open
+          onClose={() => setAdding(false)}
+          title={t('common.connections.addEntry')}
+          closeLabel={t('common.connections.close')}
+        >
+          <ServiceCreateForm accountId={accountId} connection={connection.data} />
+        </ExpandablePanel>
+      ) : null}
+      <ConnectionEndpoints accountId={accountId} connectionId={id} />
+      <Fold
+        lazy
+        title={t('user.services.manageServiceKeys')}
+        defaultOpen={
+          params.get('connection_view') === 'credentials' || Boolean(params.get('credential_id'))
+        }
+      >
+        <Note>{t('user.services.serviceKeysHelp')}</Note>
         <CredentialsPanel accountId={accountId} connectionId={id} />
-      ) : (
-        <DiscoveryPanel accountId={accountId} connectionId={id} />
-      )}
+      </Fold>
+    </div>
+  );
+}
+
+function ConnectionEndpoints({
+  accountId,
+  connectionId,
+}: {
+  accountId: string;
+  connectionId: string;
+}) {
+  const [modelsLocked, setModelsLocked] = useState(false);
+  const { t } = useTranslation();
+  const [params, setParams] = useSearchState();
+  const pager = usePagePager({
+    station: 'user',
+    listType: 'service-endpoint-switch',
+    scopeKey: accountId + ':' + connectionId,
+  });
+  const query = useQuery({
+    queryKey: [
+      ...connectionKeys.root(accountId),
+      connectionId,
+      'endpoint-switch',
+      pager.page,
+      pager.pageSize,
+    ],
+    queryFn: ({ signal }) => connectionAPI.entries(connectionId, pager, '', signal),
+  });
+  const requested = params.get('endpoint_id') || params.get('entry_id');
+  const requestedEntry = useQuery({
+    queryKey: coreKeys.endpoint(accountId, requested || ''),
+    queryFn: ({ signal }) => getEndpoint(requested!, signal),
+    enabled: Boolean(requested) && !query.data?.data.some((row) => row.id === requested),
+  });
+  const selected = requested
+    ? (query.data?.data.find((row) => row.id === requested) ?? requestedEntry.data)
+    : query.data?.data[0];
+  const endpointId = selected?.connection_id === connectionId ? selected.id : undefined;
+  return (
+    <div className="nb-stack">
+      {query.isPending ? (
+        <CoreLoading />
+      ) : query.error ? (
+        <CoreErrorPanel error={query.error} onRetry={() => void query.refetch()} />
+      ) : query.data ? (
+        <>
+          {query.data.pagination.total_items !== '1' ? (
+            <>
+              <Field label={t('common.connections.entry')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    disabled={modelsLocked}
+                    value={selected?.id ?? ''}
+                    onChange={(event) =>
+                      setParams((previous) => {
+                        const next = new URLSearchParams(previous);
+                        next.set('endpoint_id', event.target.value);
+                        next.delete('key_id');
+                        next.delete('focus_key_id');
+                        return next;
+                      })
+                    }
+                  >
+                    {selected && !query.data.data.some((row) => row.id === selected.id) ? (
+                      <option value={selected.id}>
+                        {selected.note || selected.base_url} · {selected.base_url}
+                      </option>
+                    ) : null}
+                    {query.data.data.map((row) => (
+                      <option key={row.id} value={row.id}>
+                        {row.note || row.base_url} · {row.base_url}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              <PagePagination
+                metadata={query.data.pagination}
+                requestedPage={pager.page}
+                busy={modelsLocked || query.isFetching}
+                onPageChange={pager.setPage}
+                onPageSizeChange={pager.setPageSize}
+              />
+            </>
+          ) : null}
+          {endpointId ? (
+            <EndpointDetail
+              key={endpointId}
+              accountId={accountId}
+              endpointId={endpointId}
+              embedded
+              onModelsLockChange={setModelsLocked}
+            />
+          ) : requestedEntry.isFetching ? (
+            <CoreLoading />
+          ) : requestedEntry.error ? (
+            <CoreErrorPanel
+              error={requestedEntry.error}
+              onRetry={() => void requestedEntry.refetch()}
+            />
+          ) : (
+            <Note>{t('user.services.noEndpoints')}</Note>
+          )}
+        </>
+      ) : null}
     </div>
   );
 }

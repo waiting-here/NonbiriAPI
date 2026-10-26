@@ -90,11 +90,21 @@ export function CredentialImpactPanel({
               rows={query.data.data}
               columns={[
                 {
-                  key: 'version',
-                  header: t('common.connections.version'),
+                  key: 'endpoint',
+                  header: t('user.services.usageEndpoint'),
                   cell: 'title',
-                  render: (row) =>
-                    t('common.connections.versionNumber', { version: row.credential_version }),
+                  render: (row) => (
+                    <div className="nb-stack nb-stack--sm">
+                      <strong>
+                        {row.endpoint_note ||
+                          row.endpoint_base_url ||
+                          t('common.connections.charityUses')}
+                      </strong>
+                      {row.endpoint_note && row.endpoint_base_url ? (
+                        <small className="nb-mono">{row.endpoint_base_url}</small>
+                      ) : null}
+                    </div>
+                  ),
                 },
                 {
                   key: 'services',

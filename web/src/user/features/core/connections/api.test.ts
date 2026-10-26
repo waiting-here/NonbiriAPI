@@ -134,6 +134,12 @@ describe('connection API boundaries', () => {
 
   it('keeps backend catalog URL and unknown service evidence without inferring capabilities', () => {
     expect(normalizeDiscoverySource(source).models_url).toBe(source.models_url);
+    expect(normalizeDiscoverySource({ ...source, endpoint_key_id: '21' }).endpoint_key_id).toBe(
+      '21',
+    );
+    expect(
+      normalizeDiscoverySource({ ...source, endpoint_key_id: null }).endpoint_key_id,
+    ).toBeNull();
     expect(
       normalizeDiscoveryModel({
         id: '1',

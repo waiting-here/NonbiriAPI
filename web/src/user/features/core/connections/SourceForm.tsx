@@ -15,7 +15,11 @@ export function SourceForm({
   source,
   preset,
   onSaved,
+  pairSettings = false,
+  fixedCredentialId,
 }: {
+  pairSettings?: boolean;
+  fixedCredentialId?: string;
   accountId: string;
   connectionId: string;
   source?: DiscoverySource;
@@ -53,7 +57,13 @@ export function SourceForm({
           name: name.trim(),
           base_url: baseURL.trim(),
           list_format: format,
-          ...(credential ? { credential_id: credential.id } : source ? {} : { credential_id: '' }),
+          ...(fixedCredentialId
+            ? { credential_id: fixedCredentialId }
+            : credential
+              ? { credential_id: credential.id }
+              : source
+                ? {}
+                : { credential_id: '' }),
           enabled: source?.enabled ?? true,
         };
         if (source)
@@ -65,22 +75,24 @@ export function SourceForm({
             .run({
               kind: 'discovery_source',
               connectionId,
-              input: { ...input, credential_id: credential!.id },
+              input: { ...input, credential_id: fixedCredentialId ?? credential!.id },
             })
             .catch(() => undefined);
       }}
     >
-      <Field label={t('common.connections.name')} optional={t('common.connections.optional')}>
-        {(props) => (
-          <input
-            {...props}
-            value={name}
-            maxLength={128}
-            disabled={locked}
-            onChange={(event) => setName(event.target.value)}
-          />
-        )}
-      </Field>
+      {!pairSettings ? (
+        <Field label={t('common.connections.name')} optional={t('common.connections.optional')}>
+          {(props) => (
+            <input
+              {...props}
+              value={name}
+              maxLength={128}
+              disabled={locked}
+              onChange={(event) => setName(event.target.value)}
+            />
+          )}
+        </Field>
+      ) : null}
       <Field
         label={t('common.connections.discoveryBaseURL')}
         help={t('common.connections.independentDiscovery')}
@@ -112,7 +124,7 @@ export function SourceForm({
           </select>
         )}
       </Field>
-      {credential ? (
+      {!pairSettings && credential ? (
         <Note>
           <p>
             {credentialLabel(credential)} ·{' '}
@@ -127,13 +139,13 @@ export function SourceForm({
             {t('common.connections.changeCredential')}
           </button>
         </Note>
-      ) : source ? (
+      ) : !pairSettings && source ? (
         <Note>
           <p>{t('common.connections.versionNumber', { version: source.credential_version })}</p>
           <p>{t('common.connections.keepCredential')}</p>
         </Note>
       ) : null}
-      {!credential ? (
+      {!pairSettings && !credential ? (
         <CredentialPicker
           accountId={accountId}
           connectionId={connectionId}
@@ -159,9 +171,9 @@ export function SourceForm({
       <button
         type="submit"
         className="nb-btn nb-btn--primary"
-        disabled={locked || !baseURL.trim() || (!credential && !source)}
+        disabled={locked || !baseURL.trim() || (!credential && !source && !fixedCredentialId)}
       >
-        {t('common.connections.saveSource')}
+        {t(pairSettings ? 'user.services.saveListSettings' : 'common.connections.saveSource')}
       </button>
     </form>
   );
