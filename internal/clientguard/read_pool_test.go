@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"testing"
-	"time"
 )
 
 func TestClientGuardPrecheckReleasesWriter(t *testing.T) {
@@ -16,12 +15,14 @@ func TestClientGuardPrecheckReleasesWriter(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer held.Close()
-	ctx, cancel := context.WithTimeout(f.context("self", "Allowed/1"), time.Second)
-	decision, err := f.service.CheckCall(ctx, f.user, "provider/model", testNow)
-	cancel()
+	waits := f.store.DB().Stats().WaitCount
+	// CheckCall already has a bounded deadline. Assert writer-pool isolation
+	// directly instead of imposing a one-second cold-reader timing requirement.
+	decision, err := f.service.CheckCall(f.context("self", "Allowed/1"), f.user, "provider/model", testNow)
+	waited := f.store.DB().Stats().WaitCount - waits
 	held.Close()
-	if err != nil || decision.Banned || f.gateCalls != 0 {
-		t.Fatalf("precheck blocked or changed decision: %+v %v", decision, err)
+	if err != nil || decision.Banned || f.gateCalls != 0 || waited != 0 {
+		t.Fatalf("precheck blocked or changed decision: %+v error=%v writer_waits=%d", decision, err, waited)
 	}
 
 	cfg := f.service.config

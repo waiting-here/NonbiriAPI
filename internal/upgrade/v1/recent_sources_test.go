@@ -19,13 +19,16 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"modernc.org/sqlite"
 )
 
 func bootstrapTestPath(t *testing.T, name string) string {
 	t.Helper()
-	return filepath.Join(t.TempDir(), name)
+	path := filepath.Join(t.TempDir(), name)
+	dbtest.EnsureOwnerOnlyParent(t, path)
+	return path
 }
 func bootstrapTestVault(t *testing.T) *secret.Vault { t.Helper(); return testVault(t, 0x29) }
 func foreignKeyCheck(ctx context.Context, q queryer) error {

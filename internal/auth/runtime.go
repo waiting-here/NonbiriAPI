@@ -36,7 +36,7 @@ type Runtime struct {
 	provider                          DiscordProvider
 	clientID, redirectURI, siteOrigin string
 	adminUsername                     string
-	adminPasswordDigest               [32]byte
+	adminPassword                     adminPasswordVerifier
 	adminCredentialGeneration         string
 	authorizer                        *authz.Authorizer
 	maintenance                       MaintenanceGate
@@ -157,7 +157,7 @@ func NewRuntime(c RuntimeConfig) (*Runtime, error) {
 	if now == nil {
 		now = time.Now
 	}
-	r := &Runtime{db: c.Store.DB(), readDB: c.Store.ReadDB(), provider: c.Provider, clientID: c.DiscordClientID, redirectURI: redirect, siteOrigin: origin, adminUsername: c.AdminUsername, adminPasswordDigest: sha256.Sum256([]byte(c.AdminPassword)), adminCredentialGeneration: generation, authorizer: c.Authorizer, maintenance: c.Maintenance, states: states, elevation: elev, oauthThrottle: oauthThrottle, adminThrottle: adminThrottle, now: now, idleTTL: idle, absoluteTTL: absolute, userMux: http.NewServeMux(), adminMux: http.NewServeMux(), routes: make(map[string]struct{})}
+	r := &Runtime{db: c.Store.DB(), readDB: c.Store.ReadDB(), provider: c.Provider, clientID: c.DiscordClientID, redirectURI: redirect, siteOrigin: origin, adminUsername: c.AdminUsername, adminPassword: newAdminPasswordVerifier(c.AdminPassword), adminCredentialGeneration: generation, authorizer: c.Authorizer, maintenance: c.Maintenance, states: states, elevation: elev, oauthThrottle: oauthThrottle, adminThrottle: adminThrottle, now: now, idleTTL: idle, absoluteTTL: absolute, userMux: http.NewServeMux(), adminMux: http.NewServeMux(), routes: make(map[string]struct{})}
 	var codecOK bool
 	r.mfaCodec, codecOK = c.CredentialKeyDeriver.(secret.AccountMFACodec)
 	if !codecOK {
@@ -641,11 +641,7 @@ func (r *Runtime) allowOAuthStart(w http.ResponseWriter, req *http.Request) bool
 }
 
 func (r *Runtime) passwordMatches(value string) bool {
-	if !validateBoundedText(value, maxPasswordBytes, false) {
-		return false
-	}
-	digest := sha256.Sum256([]byte(value))
-	return hmac.Equal(digest[:], r.adminPasswordDigest[:])
+	return r.adminPassword.matches(value)
 }
 
 func (r *Runtime) Close() error {
