@@ -259,6 +259,20 @@ function createManagedSourceFixture(setup: StationSetup): ManagedSourceFixture {
                 '/api/time-zones',
                 '/api/steward/donations/badge',
               ]);
+        if (url.pathname === `${donationDetailPath}/uses`) {
+          expect(request.method()).toBe('GET');
+          expect([...url.searchParams.entries()]).toEqual([
+            ['page', '1'],
+            ['page_size', '100'],
+            ['donation_key_id', TARGET_KEY_ID],
+          ]);
+          await fulfillJSON(route, {
+            data: [],
+            next_cursor: null,
+            pagination: { page: '1', page_size: 100, total_items: '0', total_pages: '1' },
+          });
+          return;
+        }
         const businessPath =
           url.pathname === sourceListPath ||
           url.pathname === sourceKeysPath ||
@@ -633,6 +647,8 @@ async function exerciseManagedSourceBrowser(
   ).toBeVisible();
   await expect.poll(() => fixture.donationListReads.length).toBeGreaterThan(0);
   await expect.poll(() => fixture.sourceReads.length).toBeGreaterThan(0);
+  await expect(page.getByRole('combobox', { name: setup.scope, exact: true })).toHaveValue('all');
+  expect(fixture.sourceReads.at(-1)).toContain('scope=all');
 
   const sourceSection = page.locator('.charity-source-browser__sources');
   const sourceSearch = page.getByRole('searchbox', { name: setup.searchSources, exact: true });
@@ -644,15 +660,17 @@ async function exerciseManagedSourceBrowser(
   await expect.poll(() => fixture.sourceReads.length).toBeGreaterThan(1);
   expect(fixture.sourceReads.at(-1)).toContain('q=source-needle');
   expect(fixture.sourceReads.at(-1)).toContain('page=1');
-  await page.getByRole('combobox', { name: setup.scope, exact: true }).selectOption('all');
+  await page.getByRole('combobox', { name: setup.scope, exact: true }).selectOption('active');
   await expect.poll(() => fixture.sourceReads.length).toBeGreaterThan(2);
   expect(fixture.sourceReads.at(-1)).toContain('q=source-needle');
-  expect(fixture.sourceReads.at(-1)).toContain('scope=all');
+  expect(fixture.sourceReads.at(-1)).toContain('scope=active');
+  await page.getByRole('combobox', { name: setup.scope, exact: true }).selectOption('all');
   await expect(page.getByRole('combobox', { name: setup.scope, exact: true })).toHaveValue('all');
+  await expect(sourceSearch).toHaveValue('source-needle');
 
   const sourcePager = sourceSection.locator('nav.page-pagination');
   await sourcePager.getByRole('button', { name: setup.next, exact: true }).click();
-  await expect.poll(() => fixture.sourceReads.length).toBeGreaterThan(3);
+  await expect.poll(() => fixture.sourceReads.at(-1)).toContain('page=2');
   expect(fixture.sourceReads.at(-1)).toContain('q=source-needle');
   expect(fixture.sourceReads.at(-1)).toContain('scope=all');
   expect(fixture.sourceReads.at(-1)).toContain('page=2');

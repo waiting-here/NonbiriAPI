@@ -338,7 +338,7 @@ for (const scenario of cases) {
         .click();
       await expect(page.getByTestId('model-source-search')).toBeFocused();
       expect(state.creates[0]).toMatchObject({
-        model_types: ['chat_completions'],
+        model_types: ['chat_completions', 'responses'],
         route_strategy: 'cache_balanced',
         silent_retry: false,
         flatten_tool_calls: false,
@@ -371,6 +371,18 @@ for (const scenario of cases) {
         name: core('models.addSelected').replace('{{count}}', '2'),
         exact: true,
       });
+      await expect(addSelected).toBeEnabled();
+      const firstSelection = selections.filter({
+        has: page.getByText('gpt-source-11', { exact: true }),
+      });
+      for (const service of ['chat_completions', 'responses'] as const) {
+        const choice = firstSelection.getByRole('checkbox', {
+          name: nativeServices[service],
+          exact: true,
+        });
+        await expect(choice).toBeChecked();
+        await choice.uncheck();
+      }
       await expect(addSelected).toBeDisabled();
       for (const name of ['gpt-source-11', 'typed-model']) {
         const selection = selections.filter({ has: page.getByText(name, { exact: true }) });
@@ -479,16 +491,22 @@ for (const scenario of cases) {
     await page.getByRole('button', { name: core('models.editModel'), exact: true }).click();
     const editor = page.locator('.model-editor');
     const types = editor.getByRole('group', { name: /Model types|模型类型/ });
-    const chat = types.getByRole('checkbox', { name: 'Chat Completions / Responses' });
+    const chat = types.getByRole('checkbox', {
+      name: nativeServices.chat_completions,
+      exact: true,
+    });
+    const responses = types.getByRole('checkbox', { name: nativeServices.responses, exact: true });
     const embeddings = types.getByRole('checkbox', { name: /Embeddings|向量化/ });
     const images = types.getByRole('checkbox', { name: /Image generation|图像生成/ });
     await expect(chat).toBeChecked();
+    await expect(responses).toBeChecked({ checked: Boolean(scenario.create) });
     await expect(embeddings).toBeChecked({ checked: !scenario.create });
     await images.check();
     await editor.getByRole('button', { name: core('common.cancel'), exact: true }).click();
     await page.getByRole('button', { name: core('models.editModel'), exact: true }).click();
     await expect(images).not.toBeChecked();
     await chat.uncheck();
+    await responses.uncheck();
     await embeddings.uncheck();
     await images.check();
     const advanced = editor
@@ -522,6 +540,7 @@ for (const scenario of cases) {
     await page.getByRole('button', { name: core('models.editModel'), exact: true }).click();
     await expect(images).toBeChecked();
     await expect(chat).not.toBeChecked();
+    await expect(responses).not.toBeChecked();
     await expect(embeddings).not.toBeChecked();
     await expect(
       page.getByRole('radio', { name: core('models.cacheBalanced'), exact: true }),

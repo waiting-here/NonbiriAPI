@@ -365,6 +365,15 @@ test('admin pending badge opens the shared queue and processing survives refresh
       await fulfillJSON(route, current);
       return;
     }
+    if (request.method() === 'GET' && url.pathname === '/admin/api/donations/7/uses') {
+      expect([...url.searchParams.entries()]).toEqual([
+        ['page', '1'],
+        ['page_size', '100'],
+        ['donation_key_id', '11'],
+      ]);
+      await fulfillJSON(route, numberedResponse([], '1', 100));
+      return;
+    }
     if (request.method() === 'GET' && url.pathname === '/admin/api/donations/7/keys') {
       if (url.searchParams.get('page') !== '1' || url.searchParams.get('page_size') !== '20') {
         throw new Error(`Unexpected donation-key page request: ${request.method()} ${url.href}`);
@@ -726,6 +735,15 @@ test('level-six stewardship shows the shared owner projection and caller identit
     if (request.method() === 'GET' && url.pathname === '/api/steward/donations/8') {
       donationDetailReads.push(url.search);
       await fulfillJSON(route, currentDonation);
+      return;
+    }
+    if (request.method() === 'GET' && url.pathname === '/api/steward/donations/8/uses') {
+      expect([...url.searchParams.entries()]).toEqual([
+        ['page', '1'],
+        ['page_size', '100'],
+        ['donation_key_id', '12'],
+      ]);
+      await fulfillJSON(route, numberedResponse([], '1', 100));
       return;
     }
     if (request.method() === 'GET' && url.pathname === '/api/steward/donations/8/keys') {

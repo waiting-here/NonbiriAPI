@@ -45,6 +45,8 @@ for (const scenario of [
       level: { manual: null, automatic: 1, effective: 1, display_name: 'Lv1' },
       revision: '1',
       game_balance: '-2.5',
+      rpm_limit: '120',
+      effective_rpm_limit: '120',
     };
     const id = 'ann_' + 'A'.repeat(22);
     const notice = {
@@ -94,15 +96,18 @@ for (const scenario of [
       if (path === api + '/users/7') {
         if (request.method() === 'PATCH') {
           const body = request.postDataJSON();
-          Object.assign(target, {
-            endpoint_limit: body.endpoint_limit,
-            rpm_limit: body.rpm_limit,
-            concurrency_limit: body.concurrency_limit,
-            light_rpm_limit: body.light_rpm_limit,
-            light_concurrency_limit: body.light_concurrency_limit,
-            global_rpm_limit: body.global_rpm_limit,
-            revision: '2',
-          });
+          for (const field of [
+            'endpoint_limit',
+            'rpm_limit',
+            'concurrency_limit',
+            'light_rpm_limit',
+            'light_concurrency_limit',
+            'global_rpm_limit',
+          ]) {
+            if (Object.hasOwn(body, field)) Reflect.set(target, field, body[field]);
+          }
+          target.revision = '2';
+          if (body.rpm_limit === null) target.effective_rpm_limit = '60';
         }
         await route.fulfill({ json: target });
         return;
@@ -124,13 +129,11 @@ for (const scenario of [
     await page.getByLabel(copy.users.concurrencyLimit, { exact: true }).fill('999');
     await page.getByRole('button', { name: copy.users.saveProfile, exact: true }).click();
     await expect.poll(() => writes.length).toBe(1);
-    expect(writes[0].body).toMatchObject({
+    expect(writes[0].body).toEqual({
+      mode: 'profile',
       endpoint_limit: '99',
       rpm_limit: null,
       concurrency_limit: '999',
-      global_rpm_limit: null,
-      light_rpm_limit: null,
-      light_concurrency_limit: null,
       expected_revision: '1',
     });
     if (station === 'user') {

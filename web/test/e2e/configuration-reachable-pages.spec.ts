@@ -755,6 +755,12 @@ test('reachable admin charity opens the corrected pending review query without i
     path: '/admin/api/donations/9/keys?page=1&page_size=20',
     body: numberedResponse([managedKeyPageItem(pendingAdminDonation, pendingKey)], '1', 20),
   });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: '/admin/api/donations/9/uses?page=1&page_size=100&donation_key_id=6',
+    body: numberedResponse([], '1', 100),
+  });
 
   await page.goto(`${ADMIN_ORIGIN}/charity`);
   await expect(page.getByRole('heading', { name: '公益', exact: true })).toBeVisible();
@@ -806,7 +812,7 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: `/admin/api/donation-sources?scope=active&key_state=available&page=1&page_size=20`,
+    path: `/admin/api/donation-sources?scope=all&key_state=all&page=1&page_size=20`,
     body: {
       data: [
         {
@@ -825,7 +831,7 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: `/admin/api/donation-sources/${SOURCE_KEY}/keys?scope=active&key_state=available&page=1&page_size=20`,
+    path: `/admin/api/donation-sources/${SOURCE_KEY}/keys?scope=all&key_state=all&page=1&page_size=20`,
     body: numberedResponse(
       [
         managedKeyPageItem(pendingAdminDonation, {
@@ -955,6 +961,12 @@ test('reachable level-6 steward page keeps its bounded log projection usable', a
     method: 'GET',
     path: '/api/steward/donations/9/keys?page=1&page_size=20',
     body: numberedResponse([managedKeyPageItem(pendingStewardDonation, pendingKey)], '1', 20),
+  });
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
+    path: '/api/steward/donations/9/uses?page=1&page_size=100&donation_key_id=6',
+    body: numberedResponse([], '1', 100),
   });
 
   await page.goto(`${USER_ORIGIN}/steward`);
