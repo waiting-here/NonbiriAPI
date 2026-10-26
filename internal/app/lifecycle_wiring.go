@@ -520,18 +520,25 @@ func startLifecycleWorker(parent context.Context, coordinator *lifecycle.Coordin
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(lifecycle.WorkerSweepInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if err := coordinator.RunDue(ctx); err != nil && ctx.Err() == nil && !errors.Is(err, lifecycle.ErrClosed) {
-					slog.Error("account lifecycle maintenance pass failed", "err", err)
-				}
-			}
-		}
+		runLifecycleWorker(ctx, coordinator.RunDue)
 	}()
 	return cancel, done, nil
+}
+
+func runLifecycleWorker(ctx context.Context, runDue func(context.Context) error) {
+	timer := time.NewTimer(lifecycle.WorkerSweepInterval)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+			if err := runDue(ctx); err != nil && ctx.Err() == nil && !errors.Is(err, lifecycle.ErrClosed) {
+				slog.Error("account lifecycle maintenance pass failed", "err", err)
+			}
+			// Checkpoints advance from the actual decision time. Reset after
+			// completion so a delayed pass cannot make the next wake too early.
+			timer.Reset(lifecycle.WorkerSweepInterval)
+		}
+	}
 }

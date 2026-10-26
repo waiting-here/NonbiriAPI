@@ -47,6 +47,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Reduce donation-page and catalog queries, indexed game/risk history work,
   writer contention, streaming accumulation and repeated frontend processing.
   Index charity-model references to avoid unrelated history scans on deletion.
+  Schedule background maintenance from completed passes so delayed wakeups do
+  not skip the following recovery interval.
   Assistant tools return complete filtered summaries within explicit size/context
   budgets and guide narrower retries when those budgets are exceeded.
 - Include the post-1.1.1 key-deletion indexes, donation catalog authorization,
