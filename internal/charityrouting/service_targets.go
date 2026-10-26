@@ -50,7 +50,7 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 	}
 	result := make([]RuntimeCandidate, 0, len(candidates))
 	groups := make(map[int64]bool)
-	sawAvailableService := false
+	sawAvailableOperation := false
 	for _, item := range candidates {
 		for _, use := range uses[item.candidate.DonationKeyID] {
 			candidate, grant := item.candidate, use.Grant
@@ -58,7 +58,6 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 				!candidate.NativeServices.Has(use.NativeService) || !grant.EffectiveServices.Has(use.NativeService) {
 				continue
 			}
-			sawAvailableService = true
 			services, err := connectorcontract.ParseNativeServices([]connectorcontract.NativeService{use.NativeService})
 			if err != nil {
 				return nil, ErrInvariant
@@ -71,6 +70,9 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 				}
 				if err != nil {
 					return nil, ErrInvariant
+				}
+				if len(routes) > 0 {
+					sawAvailableOperation = true
 				}
 				for _, route := range routes {
 					_, allowed := connectorSet[route.WireType]
@@ -102,9 +104,13 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 	if len(groups) > MaxRuntimeCandidates {
 		return nil, ErrResourceLimit
 	}
-	if len(result) == 0 && sawAvailableService {
-		return nil, ErrInvalidRequest
+	if len(result) == 0 && sawAvailableOperation {
+		return nil, errors.Join(ErrInvalidRequest, &connectorcontract.RequestRejection{
+			Field: "request", Reason: "no connector supports the required request features",
+		})
 	}
+	// Health in another service does not establish capacity for this request.
+	// The caller maps an empty selection to unavailable model resources.
 	return result, nil
 }
 

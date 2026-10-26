@@ -502,6 +502,54 @@ it.each(['en', 'zh'] as const)(
   },
 );
 
+it.each(['en', 'zh'] as const)(
+  'shows an undispatched handler resource failure in %s',
+  async (locale) => {
+    const reason = 'no usable model resource is available for this request';
+    const suggestion =
+      'No upstream request was sent. Retry later or choose another available model.';
+    const row = {
+      id: requestID,
+      route_kind: 'openai_chat_completions',
+      phase: 'handler',
+      rejection_stage: null,
+      rejection_reason: null,
+      request_method: null,
+      request_path: null,
+      model: 'model',
+      started_at: 1,
+      completed_at: 2,
+      caller_result_class: 'failed',
+      caller_status: 429,
+      caller_error_code: 'rate_limited',
+      attempt_count: '0',
+      usage: { ...usage, output_tokens: '0', total_tokens: '0' },
+      rejection_detail: { field: 'model', reason, suggestion },
+    };
+    installFixtures('user', row);
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="user" />, {
+      station: 'user',
+      role: 'user',
+      locale,
+    });
+    await view.user.click(
+      await screen.findByRole('button', { name: locale === 'en' ? 'Details' : '详情' }),
+    );
+    expect(
+      await screen.findByText(
+        locale === 'en' ? `model: ${reason}` : 'model: 当前没有可用于此请求的模型资源',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        locale === 'en' ? suggestion : '请求未发送到上游。请稍后重试，或选择其他可用模型。',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(view.i18n.t('logs.rejectionStage'))).not.toBeInTheDocument();
+    view.unmount();
+  },
+);
+
 it('shows an honest missing-detail fallback for an older owner row', async () => {
   const row = {
     id: requestID,

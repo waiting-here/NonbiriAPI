@@ -90,6 +90,14 @@ func TestHTTPRejectionDetailsPersistForAuthorizedReaders(t *testing.T) {
 			if detail == nil || detail.Field != tc.field || detail.Reason != tc.reason || detail.Suggestion == "" {
 				t.Fatal("wrong persisted check", detail)
 			}
+			var envelope struct {
+				Error struct {
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if json.Unmarshal(body, &envelope) != nil || !strings.Contains(envelope.Error.Message, detail.Field+": "+detail.Reason) || !strings.Contains(envelope.Error.Message, detail.Suggestion) {
+				t.Fatalf("caller did not receive the recorded safe explanation: %s", body)
+			}
 			steward, err := f.app.logs.GetSteward(context.Background(), f.userID, id, logapi.AttemptFilter{}, rejectionStewardReader{})
 			if err != nil || steward.Request.RejectionDetail == nil || *steward.Request.RejectionDetail != *detail {
 				t.Fatal(steward, err)
@@ -107,6 +115,27 @@ func TestHTTPRejectionDetailsPersistForAuthorizedReaders(t *testing.T) {
 	defer f.mu.Unlock()
 	if len(f.upstreamRequests) != 0 {
 		t.Fatal("rejection dispatched")
+	}
+}
+
+func TestHTTPValidationReasonRemainsSpecificInChinese(t *testing.T) {
+	f := newEmbeddingHTTPFixture(t)
+	r, err := http.NewRequest(http.MethodPost, f.server.URL+"/v1/chat/completions", strings.NewReader(`{"model":"provider/self","stream":"PRIVATE_INPUT"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Host = auditUserHost
+	r.Header.Set("Authorization", "Bearer "+f.caller)
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Accept-Language", "zh-CN")
+	response, err := f.server.Client().Do(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil || response.StatusCode != http.StatusBadRequest || !strings.Contains(string(body), "stream: 需要布尔值或 null") || !strings.Contains(string(body), "流式") || strings.Contains(string(body), "PRIVATE_INPUT") {
+		t.Fatalf("Chinese explanation lost its field, reason or action: %d %s %v", response.StatusCode, body, err)
 	}
 }
 

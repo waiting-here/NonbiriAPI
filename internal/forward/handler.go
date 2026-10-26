@@ -35,8 +35,9 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 	}
 	if request.URL.RawQuery != "" || request.URL.ForceQuery {
 		requestattempt.Stage(request.Context(), "preflight", "")
-		requestattempt.Detail(request.Context(), requestattempt.NewDetail("query", "query parameters are not supported"))
-		writeFailure(writer, platformFailure(httperr.CodeInvalidRequest, "invalid request"))
+		failure := rejectionFailure(httperr.CodeInvalidRequest, "invalid request", "query", "query parameters are not supported")
+		requestattempt.Detail(request.Context(), failure.detail)
+		writeFailure(writer, failure)
 		return
 	}
 	if handler == nil || handler.service == nil {
@@ -59,8 +60,9 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 func (handler *Handler) models(writer http.ResponseWriter, request *http.Request, userID int64) {
 	requestattempt.Stage(request.Context(), "preflight", "")
 	if hasRequestBody(request) {
-		requestattempt.Detail(request.Context(), requestattempt.NewDetail("body", "GET model discovery does not accept a request body"))
-		writeFailure(writer, platformFailure(httperr.CodeInvalidRequest, "invalid request"))
+		failure := rejectionFailure(httperr.CodeInvalidRequest, "invalid request", "body", "GET model discovery does not accept a request body")
+		requestattempt.Detail(request.Context(), failure.detail)
+		writeFailure(writer, failure)
 		return
 	}
 	models, err := handler.service.ListModels(request.Context(), userID)

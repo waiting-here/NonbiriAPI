@@ -11,6 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
+	"github.com/waiting-here/NonbiriAPI/internal/routing"
 )
 
 type executionPlan struct {
@@ -75,6 +76,9 @@ func (service *Service) snapshot(
 	if decision.Active && decision.ClaimPurpose != plan.purpose {
 		return executionPlan{}, ErrInternal
 	}
+	if len(plan.candidates) == 0 {
+		return executionPlan{}, routing.ErrUnbound
+	}
 	var expandErr error
 	plan.candidates, expandErr = expandServiceTargets(plan.candidates, request.operation)
 	if expandErr != nil {
@@ -132,7 +136,7 @@ func (service *Service) snapshot(
 		if rejection != nil {
 			return executionPlan{}, rejection
 		}
-		return executionPlan{}, openai.ErrInvalidRequest
+		return executionPlan{}, &openai.ValidationError{Detail: requestattempt.NewDetail("request", "no connector supports the required request features")}
 	}
 	var ordered []RouteCandidate
 	var err error

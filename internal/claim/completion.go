@@ -13,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 	"github.com/waiting-here/NonbiriAPI/internal/usageinfo"
 	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
@@ -141,6 +142,9 @@ func (s *Service) checkAttemptCompletionTx(ctx context.Context, tx *sql.Tx, hand
 func (s *Service) CompleteRequest(ctx context.Context, input CompleteRequestInput) (Request, error) {
 	if s == nil || s.db == nil || ctx == nil || !validCompleteRequestInput(input) {
 		return Request{}, ErrInvalidInput
+	}
+	if input.RejectionDetail != nil {
+		input.RejectionDetail = requestattempt.NewDetail(input.RejectionDetail.Field, input.RejectionDetail.Reason)
 	}
 	at, err := s.nowUnix()
 	if err != nil {
@@ -601,6 +605,11 @@ FROM dispatch_claims WHERE logical_request_id=?`, request.ID).Scan(&nonterminalC
 	if input.Caller.ErrorCode == httperr.CodeUpstream {
 		errorSource = "upstream"
 	}
+	rejectionDetail := ""
+	if dispatchedClaims == 0 && input.Caller.Class == ResultFailed &&
+		(input.Caller.ErrorCode == httperr.CodeUnboundModel || input.Caller.ErrorCode == httperr.CodeRateLimited) {
+		rejectionDetail = requestattempt.EncodeDetail(input.RejectionDetail)
+	}
 	terminal := func(callbackCtx context.Context, callbackTx *sql.Tx) error {
 		if callbackCtx == nil || callbackTx == nil {
 			return ErrInvariant
@@ -639,12 +648,13 @@ WHERE id=? AND state IN ('accepted','running') AND ledger_rows_remaining=?`,
 		}
 		logResult, err := callbackTx.ExecContext(callbackCtx, `UPDATE request_logs SET
 caller_result_class=?,caller_status=?,caller_error_code=?,status_code=?,error_code=?,
-completed_at=?,duration_ms=?,error_source=?
+completed_at=?,duration_ms=?,error_source=?,
+error_diag=CASE WHEN attempt_count=0 AND ?<>'' THEN ? ELSE error_diag END
 WHERE logical_request_id=?
   AND caller_result_class IS ? AND caller_status IS ? AND caller_error_code IS ?
   AND status_code=? AND error_code=? AND completed_at IS ?`,
 			input.Caller.Class, status, errorCode, input.Caller.Status, input.Caller.ErrorCode,
-			at, durationMillis, errorSource, request.ID,
+			at, durationMillis, errorSource, rejectionDetail, rejectionDetail, request.ID,
 			input.Caller.Class, status, errorCode, input.Caller.Status, input.Caller.ErrorCode, at)
 		if err != nil {
 			return fmt.Errorf("claim: finalize request log: %w", err)

@@ -936,6 +936,10 @@ function ScopedRoleLogPanel({
                         ),
                 },
                 { label: t('logs.rejectionReason'), value: detailRequest.rejection_reason },
+              ]
+            : []),
+          ...(detailRequest.phase === 'pre_handler' || detailRequest.rejection_detail
+            ? [
                 {
                   label: t('logs.rejectionDetail'),
                   value: detailRequest.rejection_detail
@@ -950,6 +954,10 @@ function ScopedRoleLogPanel({
                       },
                     ]
                   : []),
+              ]
+            : []),
+          ...(detailRequest.phase === 'pre_handler'
+            ? [
                 {
                   label: t('logs.requestRoute'),
                   value: `${detailRequest.request_method} ${detailRequest.request_path}`,
