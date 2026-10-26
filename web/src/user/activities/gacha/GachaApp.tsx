@@ -1,5 +1,6 @@
 import { artSourceSet } from './art-resolution';
 import { ArtworkImage, ArtworkBadge, ArtworkUnavailable } from '@shared/artwork/ArtworkImage';
+import { useArtworkPolicy } from '@shared/artwork/context';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@shared/components/ui/Button';
 import { Tabs } from '@shared/components/ui/Tabs';
@@ -18,6 +19,7 @@ import { cards, cardById, themes, themeById, rarities, isRare } from './catalog'
 import { Artwork } from './Artwork';
 import { CardTile } from './CardTile';
 import { Collection } from './Collection';
+import { collectionProgress } from './collection-progress';
 import { Shop, TicketIcon } from './Shop';
 import { DrawReveal } from './DrawReveal';
 import { voiceLines } from './voice';
@@ -91,6 +93,7 @@ export function GachaApp({
   initialPoolId?: string;
 }) {
   const appearance = useOptionalAppearance();
+  const artwork = useArtworkPolicy();
   const t = (zh: string, en: string) => (english ? en : zh);
   const [state, setState] = useState<Snapshot | null>(null),
     [page, setPage] = useState<Page>('pools');
@@ -346,6 +349,7 @@ export function GachaApp({
       </div>
     );
   const pool = state.pools.find((p) => p.id === poolId) ?? state.pools[0];
+  const collection = collectionProgress(state, artwork.allowed);
   const pity = state.pity[pool.group] ?? freshPity(pool.rules);
   const highlighted =
     pool.kind === 'limited'
@@ -765,13 +769,23 @@ export function GachaApp({
                   )}
                 </p>
               </div>
-              <Button onClick={() => setPage('collection')}>
-                <Icon name="book" />
-                {t('翻开收藏册', 'Open your collection')}
-                <span>
-                  {Object.keys(state.owned).length} / {cards.length}
-                </span>
-              </Button>
+              <div className="gacha-collection-summary">
+                <Button onClick={() => setPage('collection')}>
+                  <Icon name="book" />
+                  {t('翻开收藏册', 'Open your collection')}
+                  <span>
+                    {collection.collected} / {collection.total}
+                  </span>
+                </Button>
+                {collection.restricted && (
+                  <p className="gacha-collection-progress-note">
+                    {t(
+                      '未开放的分级卡牌不计入收藏进度。',
+                      'Restricted cards are not included in collection progress.',
+                    )}
+                  </p>
+                )}
+              </div>
             </div>
           </>
         )}
