@@ -36,7 +36,17 @@ func writeFailure(writer http.ResponseWriter, failure wireFailure) {
 	if writer == nil {
 		return
 	}
-	value := httperr.New(failure.code, failure.message)
+	message := failure.message
+	if failure.detail != nil {
+		// Revalidate at the response boundary: only fixed server-authored
+		// checks and suggestions can become caller-visible explanations.
+		if detail := requestattempt.NewDetail(failure.detail.Field, failure.detail.Reason); detail != nil {
+			language := httperr.Language(writer)
+			localize := func(text string) string { return httperr.Localize(httperr.New(failure.code, text), language).Message }
+			message = detail.Field + ": " + localize(detail.Reason) + ". " + localize(detail.Suggestion)
+		}
+	}
+	value := httperr.New(failure.code, message)
 	if failure.upstreamContext {
 		value = value.WithUpstreamCode(failure.upstreamCode)
 	}

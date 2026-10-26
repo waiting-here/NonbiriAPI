@@ -44,8 +44,13 @@ func TestServiceTargetsDistinguishUnsupportedFromUnavailable(t *testing.T) {
 	e.useEntropy(t, entropy)
 	connectors := []contract.Type{contract.TypeOpenAICompatible}
 	before := readRoutingWriteState(t, e)
-	if _, err := e.service.chatSnapshot(t.Context(), modelID, routingTestNow, connectors); !errors.Is(err, ErrInvalidRequest) {
-		t.Fatalf("healthy but unsupported target: %v", err)
+	_, mismatch := e.service.chatSnapshot(t.Context(), modelID, routingTestNow, connectors)
+	if !errors.Is(mismatch, ErrInvalidRequest) {
+		t.Fatalf("healthy but unsupported target: %v", mismatch)
+	}
+	var detail *contract.RequestRejection
+	if !errors.As(mismatch, &detail) || detail.Field != "request" || detail.Reason != "no connector supports the required request features" {
+		t.Fatalf("protocol mismatch lost its safe explanation: %v", mismatch)
 	}
 	if after := readRoutingWriteState(t, e); after != before || entropy.reads != 0 || e.state.dueCalls.Load() != 0 {
 		t.Fatal("unsupported service consumed entropy or materialized expiry")

@@ -45,6 +45,9 @@ func TestRecurringAdmissionAndDispatchSkipsNeverBecomeUpstreamFailures(t *testin
 				if response.Code != 429 || f.openAI.calls != 0 || len(f.claims.outcomes) != 0 || terminal.Disposition != claim.AccountingRelease || terminal.ActualChargeMilli != 0 {
 					t.Fatal(response.Code, terminal, f.claims.events)
 				}
+				if terminal.RejectionDetail == nil || !strings.Contains(response.Body.String(), terminal.RejectionDetail.Reason) || !strings.Contains(response.Body.String(), terminal.RejectionDetail.Suggestion) {
+					t.Fatal("undispatched quota explanation did not reach completion", terminal, response.Body.String())
+				}
 			} else if response.Code != 200 || f.openAI.calls != 1 || len(f.claims.outcomes) != 1 {
 				t.Fatal(response.Code, f.claims.events)
 			}
@@ -123,7 +126,7 @@ func TestLaterRecurringRejectionPreservesEarlierUpstreamFailure(t *testing.T) {
 			if response.Code != 503 || len(f.claims.claims) != 2 || len(f.claims.outcomes) != 1 || len(f.claims.requestResults) != 1 || f.claims.requestResults[0].Disposition != claim.AccountingCommit {
 				t.Fatal(response.Code, response.Body.String(), f.claims.events)
 			}
-			if !strings.Contains(response.Body.String(), "Capacity exhausted; retry later.") || !strings.Contains(response.Body.String(), `"upstream_code":"overloaded"`) || f.claims.outcomes[0].UpstreamCode != "overloaded" {
+			if !strings.Contains(response.Body.String(), "Capacity exhausted; retry later.") || !strings.Contains(response.Body.String(), `"upstream_code":"overloaded"`) || f.claims.outcomes[0].UpstreamCode != "overloaded" || f.claims.requestResults[0].RejectionDetail != nil {
 				t.Fatal("later unsent quota rejection replaced the reported error")
 			}
 		}

@@ -7,7 +7,9 @@ import "strings"
 func rejectionSuggestion(field, reason string) string {
 	switch reason {
 	case "request validation failed without a recorded field":
-		return "Check the request format and selected model capabilities. If it persists, share the request ID with support."
+		return "The specific cause was not recorded. Share the request ID with support if the problem persists."
+	case "no usable model resource is available for this request", "shared model resources are temporarily at capacity":
+		return "No upstream request was sent. Retry later or choose another available model."
 	case "query parameters are not supported":
 		return "Remove URL query parameters and send supported fields in the JSON body."
 	case "expected application/json with optional UTF-8 charset", "content encoding is not supported":

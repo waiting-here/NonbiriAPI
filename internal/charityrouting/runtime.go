@@ -40,6 +40,7 @@ func (s *Service) Preflight(ctx context.Context, userID int64, fullName string, 
 		var validation *openai.ValidationError
 		if errors.As(err, &validation) {
 			requestattempt.Detail(ctx, validation.Detail)
+			return RuntimePreflight{}, errors.Join(ErrInvalidRequest, err)
 		}
 		return RuntimePreflight{}, ErrInvalidRequest
 	}
