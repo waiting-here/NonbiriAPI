@@ -362,15 +362,26 @@ test('level 5 reads the saved setting and cannot change the global model policy'
     const page = await context.newPage();
     await page.goto(origin + managementPath(5, { charity_model: id }));
     await expect(page.getByText(copy.label, { exact: true })).toBeVisible();
-    await expect(page.getByRole('switch', { name: copy.label, exact: true })).toHaveCount(0);
-    const denied = await context.request.patch(origin + path, {
-      headers: { Origin: origin, 'Idempotency-Key': randomUUID() },
-      data: {
-        expected_revision: current.revision,
-        cloudflare_proxy_enabled: !current.cloudflare_proxy_enabled,
-      },
-    });
+    const forwarding = page.getByRole('switch', { name: copy.label, exact: true });
+    await expect(forwarding).toBeChecked({ checked: current.cloudflare_proxy_enabled });
+    await forwarding.setChecked(!current.cloudflare_proxy_enabled);
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PATCH' && new URL(response.url()).pathname === path,
+    );
+    await page
+      .getByRole('button', {
+        name: common.common.workflow.saveTarget.replace('{{id}}', id),
+        exact: true,
+      })
+      .click();
+    const denied = await submitted;
     expect(denied.status()).toBe(403);
+    expect((await denied.json()).error.code).toBe('steward_permission_denied');
+    await expect(
+      page.getByText(common.management.permissions.denied, { exact: true }),
+    ).toBeVisible();
+    await expect(forwarding).toBeChecked({ checked: !current.cloudflare_proxy_enabled });
     expect((await read(context, origin, path)).cloudflare_proxy_enabled).toBe(
       current.cloudflare_proxy_enabled,
     );

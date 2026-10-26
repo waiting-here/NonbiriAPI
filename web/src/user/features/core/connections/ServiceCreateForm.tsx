@@ -5,7 +5,8 @@ import { Field, Fold, Note, Segmented } from '@shared/components/ui';
 import { ProtocolRerankField } from '@shared/components/ProtocolRerankField';
 import type { NativeService, RerankFormat } from '@shared/nativeServices';
 import { DISCOVERY_FORMATS, type DiscoveryPreset } from '@shared/connections';
-import { useEndpointCreateOptions } from '../queries';
+import { useQueryClient } from '@tanstack/react-query';
+import { coreKeys, useEndpointCreateOptions } from '../queries';
 import { CoreErrorPanel, CoreLoading } from '../components';
 import type { ConnectorType, Endpoint, EndpointCreateInput, EndpointKey } from '../types';
 import type { Connection, Credential, DiscoverySource } from './types';
@@ -17,6 +18,8 @@ import { PresetModels } from './PresetModels';
 import { ServiceModelSetup } from './ServiceModelSetup';
 import { CONNECTOR_COPY_KEYS, useCoreCopy } from '../copy';
 import { defaultDiscovery } from './discoveryDefaults';
+import { MainstreamMatches } from './MainstreamMatches';
+import { useMainstreamMatches } from './useMainstreamMatches';
 
 function setupProgress(connection?: Connection) {
   return {
@@ -38,6 +41,7 @@ export function ServiceCreateForm({
   const { t } = useTranslation();
   const { t: coreText } = useCoreCopy();
   const formID = useId();
+  const client = useQueryClient();
   const options = useEndpointCreateOptions(accountId);
   const [mode, setMode] = useState<'custom' | 'mainstream'>('custom');
   const [channelId, setChannelId] = useState('');
@@ -153,6 +157,11 @@ export function ServiceCreateForm({
     operation.outcome === 'unknown' ||
     operation.outcome === 'refresh-failed';
   const started = Object.keys(saved.entries).length > 0;
+  const suggestions = useMainstreamMatches(
+    accountId,
+    address,
+    mode === 'custom' && !started && !locked,
+  );
   const ready = Boolean(
     serviceName.trim() &&
     inputs.length &&
@@ -443,6 +452,17 @@ export function ServiceCreateForm({
               value={format}
               onChange={setFormat}
               disabled={locked || started}
+            />
+            <MainstreamMatches
+              options={suggestions}
+              disabled={locked || started}
+              onAdopt={(snapshot, matchingChannel, entry) => {
+                client.setQueryData(coreKeys.endpointCreateOptions(accountId), snapshot);
+                setChannelId(matchingChannel.id);
+                setSelected({ [entry.id!]: protocolServices(entry.connector_type) });
+                setSkipCatalog({});
+                setMode('mainstream');
+              }}
             />
             <Fold title={t('common.connections.discoveryOptional')}>
               <Field label={t('user.workflows.discoverModels')}>

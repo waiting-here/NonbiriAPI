@@ -16,6 +16,7 @@ import { charityKeys } from '@shared/operations/charity';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ErrorState, LoadingState } from './States';
 import { Note } from './ui';
+import './DonationKeyUseControls.css';
 
 type Write = {
   id: string;
@@ -160,7 +161,7 @@ export function DonationKeyUseControls({
     </>
   );
   return (
-    <div className="nb-stack nb-stack--sm">
+    <div className="donation-key-use-controls nb-stack nb-stack--sm">
       {uses === undefined && query.isPending ? <LoadingState /> : null}
       {uses === undefined && query.error ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
