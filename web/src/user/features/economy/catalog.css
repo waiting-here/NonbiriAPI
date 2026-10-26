@@ -28,14 +28,6 @@
   gap: var(--nb-space-2);
   min-width: 0;
 }
-.economy-catalog-search {
-  display: flex;
-  align-items: end;
-  gap: var(--nb-space-2);
-}
-.economy-catalog-search label {
-  flex: 1;
-}
 .economy-catalog-filters input,
 .economy-catalog-filters select {
   min-width: 0;

@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { CharityPriceTable, type CharityPriceRow } from '@shared/components/CharityPriceTable';
-import { DataTable, FilterBar } from '@shared/components/ui';
+import { DataTable, Field, FilterBar } from '@shared/components/ui';
 import { CopyValue } from '@shared/components/CopyValue';
 import { RecentCharitySuccess } from '@shared/components/DonationControlFacts';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
@@ -147,21 +147,23 @@ function CatalogFilters({
       <FilterBar
         secondaryAlwaysVisible
         search={
-          <div className="economy-catalog-search">
-            <label>
-              <span>{t('user.charity.catalog.search')}</span>
-              <input
-                type="search"
-                placeholder={t('user.charity.catalog.searchPlaceholder')}
-                value={queryDraft}
-                maxLength={MAX_QUERY_BYTES}
-                onChange={(event) => setQueryDraft(boundQueryDraft(event.target.value))}
-              />
-            </label>
+          <>
+            <Field label={t('user.charity.catalog.search')}>
+              {(props) => (
+                <input
+                  {...props}
+                  type="search"
+                  placeholder={t('user.charity.catalog.searchPlaceholder')}
+                  value={queryDraft}
+                  maxLength={MAX_QUERY_BYTES}
+                  onChange={(event) => setQueryDraft(boundQueryDraft(event.target.value))}
+                />
+              )}
+            </Field>
             <button type="submit" className="nb-btn nb-btn--secondary">
               {t('common.search')}
             </button>
-          </div>
+          </>
         }
         secondaryLabel={t('user.charity.presentation.filters')}
         activeCount={chips.length}
