@@ -1045,6 +1045,7 @@ export function CharitySourceBrowser({
         </section>
         <section
           className="charity-source-browser__keys ops-detail-target"
+          hidden={!sourceKey}
           ref={detailRef}
           tabIndex={-1}
           aria-label={t('common.operations.charity.sourceBrowser.sourceKeys')}

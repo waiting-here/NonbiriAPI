@@ -118,7 +118,7 @@ export function UserDonationHistory({
             secondaryLabel={t('common.filter')}
             activeCount={[query, status].filter(Boolean).length}
             search={
-              <div className="nb-actions">
+              <>
                 <Field
                   label={t('common.donationHandling.search')}
                   error={
@@ -140,7 +140,7 @@ export function UserDonationHistory({
                 <Button type="submit" disabled={!validManagementSearch(draft)}>
                   {t('common.donationHandling.applySearch')}
                 </Button>
-              </div>
+              </>
             }
             secondary={
               <Field label={t('common.donationHistory.status')}>

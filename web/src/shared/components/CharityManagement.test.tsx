@@ -1106,6 +1106,30 @@ describe('CharityManagement corrective controls', () => {
     ).not.toHaveProperty('expected_review_revision');
   });
 
+  it.each(['admin', 'steward'] as const)(
+    'keeps the %s review receipt above the list and reopened detail',
+    async (frame) => {
+      installDonationFetch(pendingDonation());
+      const view = await renderWithProviders(<SessionBackedManagement frame={frame} />, {
+        station: frame === 'admin' ? 'admin' : 'user',
+        role: frame === 'admin' ? 'admin' : 'user',
+      });
+      await view.user.click(await screen.findByRole('button', { name: 'Review' }));
+      await view.user.type(await screen.findByLabelText('Reason'), 'Reviewed source');
+      await view.user.click(await screen.findByRole('button', { name: 'Approve donation' }));
+      const receipt = await screen.findByText(/Review saved:/);
+      expect(receipt.closest('.nb-md')).toBeNull();
+
+      await view.user.click(await screen.findByRole('button', { name: 'Review' }));
+      await screen.findByRole('heading', { name: 'Donation review' });
+      expect(receipt.closest('.nb-md')).toBeNull();
+      const panes = view.container.querySelector('.charity-donations__panes.nb-md');
+      expect(panes?.children).toHaveLength(2);
+      expect(panes?.children[0]).toHaveClass('charity-donations__list');
+      expect(panes?.children[1]).toHaveClass('ops-detail-target');
+    },
+  );
+
   it('submits an explicit per-key null expiry for a pending donation', async () => {
     const requests = installDonationFetch(pendingDonation());
     const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
@@ -2162,6 +2186,10 @@ it.each(['approve', 'reject'] as const)(
     expect(screen.getByRole('button', { name: 'Return to list' })).toBeDisabled();
     finishWrite();
     await screen.findByText('Review saved.');
+    expect(screen.getByText('Review saved.').closest('.nb-md')).toBeNull();
+    expect(view.container.querySelector('.charity-donations__panes.nb-md')?.children).toHaveLength(
+      2,
+    );
     await screen.findByText('Refresh temporarily unavailable');
     expect(screen.queryByRole('heading', { name: 'Donation uses' })).not.toBeInTheDocument();
     failQueue = false;
@@ -2173,6 +2201,8 @@ it.each(['approve', 'reject'] as const)(
     await view.user.click(screen.getByRole('button', { name: 'Return to list' }));
     await screen.findByRole('heading', { name: 'No donations' });
     expect(screen.getByText('Review saved.')).toBeVisible();
+    expect(screen.getByText('Review saved.').closest('.nb-md')).toBeNull();
+    expect(view.container.querySelector('.charity-donations__panes.nb-md')).toBeNull();
     expect(writes).toBe(1);
     expect(capabilityLost).not.toHaveBeenCalled();
   },
