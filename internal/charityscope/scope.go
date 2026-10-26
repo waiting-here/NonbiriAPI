@@ -263,7 +263,10 @@ GROUP BY cm.id,cm.full_name,cm.enabled ORDER BY cm.id LIMIT 21`, keyID, scope.Tr
 }
 
 // TaggedDonationSQL matches the entire donation when any canonical endpoint has a tag.
-const TaggedDonationSQL = `EXISTS(SELECT 1 FROM donation_keys tagged_key JOIN admin_endpoint_tags tagged_endpoint ON tagged_endpoint.base_url=tagged_key.canonical_base_url WHERE tagged_key.donation_id=d.id)`
+const TaggedDonationSQL = `EXISTS(SELECT 1 FROM donation_keys tagged_key WHERE tagged_key.donation_id=d.id AND EXISTS(SELECT 1 FROM effective_endpoint_tags tagged_endpoint WHERE tagged_endpoint.base_url=tagged_key.canonical_base_url))`
+
+const unqualifiedScopeKeySQL = `scope_key.mainstream_channel_id IS NULL AND NOT EXISTS(SELECT 1 FROM effective_endpoint_tags scope_tag WHERE scope_tag.base_url=scope_key.canonical_base_url AND scope_tag.tag='mainstream')
+ AND NOT EXISTS(SELECT 1 FROM charity_binding_targets scope_target JOIN charity_model_bindings scope_binding ON scope_binding.id=scope_target.binding_id JOIN charity_models scope_model ON scope_model.id=scope_binding.charity_model_id WHERE scope_target.donation_key_id=scope_key.id AND scope_model.is_mainstream=1)`
 
 func (scope Scope) RestrictedKeys() bool {
 	return scope.ActorLevel == 5 && scope.DonationScope != authz.DonationScopeFull
@@ -282,11 +285,27 @@ func DonationPredicate(mode authz.DonationScope, now int64) (string, []any) {
 	}
 	predicate := `(EXISTS(SELECT 1 FROM donation_keys scope_key WHERE scope_key.donation_id=d.id AND scope_key.ended_at IS NULL AND (scope_key.expires_at IS NULL OR scope_key.expires_at>?))
  AND NOT EXISTS(SELECT 1 FROM donation_keys scope_key WHERE scope_key.donation_id=d.id AND scope_key.ended_at IS NULL AND (scope_key.expires_at IS NULL OR scope_key.expires_at>?)
- AND scope_key.mainstream_channel_id IS NULL AND NOT EXISTS(SELECT 1 FROM charity_binding_targets scope_target JOIN charity_model_bindings scope_binding ON scope_binding.id=scope_target.binding_id JOIN charity_models scope_model ON scope_model.id=scope_binding.charity_model_id WHERE scope_target.donation_key_id=scope_key.id AND scope_model.is_mainstream=1)))`
+ AND ` + unqualifiedScopeKeySQL + `))`
 	if mode == authz.DonationScopeEnhanced {
 		predicate = "(" + predicate + " OR " + TaggedDonationSQL + ")"
 	}
 	return predicate, []any{now, now}
+}
+
+// TerminalReviewReceiptPredicate is only for an already-completed idempotent
+// review. It preserves a successful terminal receipt when every historical key
+// still qualifies, without granting ordinary access to ended donations. Tags and
+// model bindings are current authority; saved mainstream source identities persist.
+func TerminalReviewReceiptPredicate(mode authz.DonationScope) string {
+	if mode == authz.DonationScopeNone {
+		return "0"
+	}
+	predicate := `(EXISTS(SELECT 1 FROM donation_keys scope_key WHERE scope_key.donation_id=d.id)
+ AND NOT EXISTS(SELECT 1 FROM donation_keys scope_key WHERE scope_key.donation_id=d.id AND ` + unqualifiedScopeKeySQL + `))`
+	if mode == authz.DonationScopeEnhanced {
+		predicate = "(" + predicate + " OR " + TaggedDonationSQL + ")"
+	}
+	return "(d.terminal_at IS NOT NULL AND " + predicate + ")"
 }
 
 // KeyPredicate is shared by point authorization and pre-pagination filtering.

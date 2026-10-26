@@ -6491,7 +6491,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,38);
+INSERT INTO schema_state(id,version) VALUES(1,39);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -6615,7 +6615,7 @@ INSERT INTO game_ai_settings(game_key) VALUES('bidding'),('gwent');
 
 CREATE TABLE admin_endpoint_tags (
  base_url TEXT NOT NULL CHECK(length(base_url) BETWEEN 1 AND 4096),
- tag TEXT NOT NULL CHECK(tag IN ('abusive_third_party','community_charity','noncommercial_gateway','user_gateway','steward_gateway','invalid_entry')),
+ tag TEXT NOT NULL CHECK(tag IN ('abusive_third_party','community_charity','noncommercial_gateway','user_gateway','steward_gateway','invalid_entry','mainstream','mysterious','other_third_party')),
  PRIMARY KEY(base_url,tag)
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX idx_admin_endpoint_tags_tag ON admin_endpoint_tags(tag,base_url);

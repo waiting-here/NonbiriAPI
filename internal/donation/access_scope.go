@@ -54,6 +54,24 @@ func requireDonationRangeTx(ctx context.Context, tx *sql.Tx, role reviewerRole, 
 	return err
 }
 
+// Only call after confirming an existing review receipt. Ordinary reads and new
+// mutations must keep using the live range, including its active-key boundary.
+func requireReviewReceiptRangeTx(ctx context.Context, tx *sql.Tx, role reviewerRole, actorID, donationID, now int64) error {
+	a, err := readDonationAccessScope(ctx, tx, role, actorID)
+	if err != nil {
+		return err
+	}
+	allowed, err := a.wholeTx(ctx, tx, donationID, now)
+	if err != nil || allowed {
+		return err
+	}
+	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donations d WHERE d.id=? AND `+charityscope.TerminalReviewReceiptPredicate(a.mode)+`)`, donationID).Scan(&allowed)
+	if err == nil && !allowed {
+		err = ErrNotFound
+	}
+	return err
+}
+
 // projectReceiptTx changes identity and action affordances without hiding the
 // already-authorized decision snapshot from a successful review receipt.
 func (a donationAccessScope) projectReceiptTx(ctx context.Context, tx *sql.Tx, value AdminDonation) (AdminDonation, error) {

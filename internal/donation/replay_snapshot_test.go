@@ -77,6 +77,11 @@ func TestRejectedReviewReceiptPreservesDecisionKeysAndNarrowsScope(t *testing.T)
 			_, second := e.seedEndpointKey(t, owner, 'B')
 			d := e.createDonation(t, owner, first, second)
 			qualifyStandardDonation(t, e, d.ID)
+			// Rejection removes model bindings. Keep current endpoint qualification
+			// so this test continues to exercise receipt identity projection.
+			if _, err := e.store.DB().Exec(`INSERT INTO admin_endpoint_tags(base_url,tag) SELECT canonical_base_url,'mainstream' FROM donation_keys WHERE donation_id=?`, d.ID); err != nil {
+				t.Fatal(err)
+			}
 			id := parseTestID(t, d.ID)
 			// Resolve every service of the first member; only the second is pending
 			// when this review begins. Whole-donation readers still see both members.

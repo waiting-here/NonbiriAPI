@@ -292,7 +292,7 @@ WHERE id=? AND user_id=? AND status='pending' AND revision=?`,
 		if _, err = tx.ExecContext(ctx, `INSERT INTO donation_reviews(donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at) VALUES(?,?,NULL,'','note_update','',?)`, donationID, input.ExpectedRevision+1, now); err != nil {
 			return err
 		}
-		changed, err := resubmitDonationProtocolTx(ctx, tx, userID, donationID, now)
+		changed, err := s.resubmitDonationProtocolTx(ctx, tx, userID, donationID, now)
 		if err == nil && changed && s.pendingSubmission != nil {
 			err = s.pendingSubmission(ctx, tx, donationID)
 		}
@@ -514,7 +514,7 @@ func (s *Service) review(
 		return roleDonationMutation{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		if _, err := readDonationAccessScope(ctx, tx, role, actorID); err != nil {
+		if err := requireReviewReceiptRangeTx(ctx, tx, role, actorID, donationID, now); err != nil {
 			return roleDonationMutation{}, err
 		}
 		return replayRoleDonation(ctx, tx, decision, role, actorID, donationID)
@@ -1274,6 +1274,7 @@ func (s *Service) materializeRoleExpiryStandalone(
 }
 
 type submissionKey struct {
+	mainstreamTag                  bool
 	use                            useSubmission
 	failureDisableThreshold        db.U128
 	id                             int64
@@ -1290,8 +1291,10 @@ func submissionAutoApproval(keys []submissionKey) (bool, error) {
 		return false, ErrInvalidRequest
 	}
 	mainstream := keys[0].channelID.Valid
+	qualified := true
 	channelID := keys[0].channelID.String
 	for _, key := range keys {
+		qualified = qualified && (key.channelID.Valid || key.mainstreamTag)
 		completeSnapshot := key.channelID.Valid && key.channelRevision.Valid && key.channelName.Valid && key.channelCategory.Valid
 		customSnapshot := !key.channelID.Valid && !key.channelRevision.Valid && !key.channelName.Valid && !key.channelCategory.Valid
 		if !completeSnapshot && !customSnapshot {
@@ -1304,7 +1307,7 @@ func submissionAutoApproval(keys []submissionKey) (bool, error) {
 			return false, ErrInvalidRequest
 		}
 	}
-	return mainstream, nil
+	return qualified, nil
 }
 
 func validateSubmissionKeys(ctx context.Context, tx *sql.Tx, userID int64, inputs []CreateKeyInput, now int64) ([]submissionKey, error) {
@@ -1332,7 +1335,8 @@ func validateSubmissionKeys(ctx context.Context, tx *sql.Tx, userID int64, input
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT k.id,k.display_head,k.display_tail,e.base_url,e.connector_type,
 k.secret_fingerprint,e.mainstream_channel_id,e.mainstream_channel_revision,
-e.mainstream_channel_name,e.mainstream_channel_category
+e.mainstream_channel_name,e.mainstream_channel_category,
+EXISTS(SELECT 1 FROM effective_endpoint_tags t WHERE t.base_url=e.base_url AND t.tag='mainstream')
 FROM endpoint_key_current_credentials k JOIN endpoints e ON e.id=k.endpoint_id
 WHERE e.user_id=? AND k.id IN (`+placeholders+`)
 AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)
@@ -1346,7 +1350,7 @@ ORDER BY k.id`, args...)
 	for rows.Next() {
 		var key submissionKey
 		if err := rows.Scan(&key.id, &key.head, &key.tail, &key.baseURL, &key.connector,
-			&key.reportFingerprint, &key.channelID, &key.channelRevision, &key.channelName, &key.channelCategory); err != nil {
+			&key.reportFingerprint, &key.channelID, &key.channelRevision, &key.channelName, &key.channelCategory, &key.mainstreamTag); err != nil {
 			return nil, fmt.Errorf("donation: scan submission key: %w", err)
 		}
 		key.expiresAt = expiries[key.id]

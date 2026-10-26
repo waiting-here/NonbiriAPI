@@ -77,6 +77,9 @@ func RegisterStewardRoutes(registrar StewardRouteRegistrar, service *Service) er
 		{http.MethodGet, api.role.route(routeEndpointOverview), api.getEndpointOverview},
 		{http.MethodGet, api.role.route(routeEndpointOverviewUsers), api.getEndpointOverviewUsers},
 		{http.MethodPatch, api.role.route(routeEndpointTags), api.patchEndpointTags},
+		{http.MethodGet, api.role.route(routeEndpointTagRules), api.getEndpointTagRules},
+		{http.MethodPut, api.role.route(routeEndpointTagRules), api.writeEndpointTagRule},
+		{http.MethodDelete, api.role.route(routeEndpointTagRules), api.writeEndpointTagRule},
 		{http.MethodGet, api.role.route(routeBlacklist), api.listBlacklist},
 		{http.MethodPost, api.role.route(routeBlacklist), api.addBlacklist},
 		{http.MethodGet, api.role.route(routeBlacklistEvents), api.listBlacklistEvents},
@@ -104,6 +107,9 @@ func RegisterRoutes(registrar AdminRouteRegistrar, service *Service) error {
 		{http.MethodGet, routeActivity, api.getActivity},
 		{http.MethodGet, routeEndpointOverview, api.getEndpointOverview},
 		{http.MethodPatch, routeEndpointTags, api.patchEndpointTags},
+		{http.MethodGet, routeEndpointTagRules, api.getEndpointTagRules},
+		{http.MethodPut, routeEndpointTagRules, api.writeEndpointTagRule},
+		{http.MethodDelete, routeEndpointTagRules, api.writeEndpointTagRule},
 		{http.MethodGet, routeEndpointOverviewUsers, api.getEndpointOverviewUsers},
 	}...)
 	for _, route := range routes {
@@ -969,6 +975,8 @@ func writeError(writer http.ResponseWriter, err error) {
 		return
 	}
 	switch {
+	case errors.Is(err, ErrEndpointTagsManaged):
+		httperr.WriteError(writer, httperr.New(httperr.CodeConflict, "These tags are controlled by a domain rule. Update or delete the matching rule before changing them manually."))
 	case errors.Is(err, ErrBlacklisted):
 		httperr.WriteError(writer, httperr.New(httperr.CodeConflict, "remove the Discord ID from the blacklist before changing its permanent ban"))
 	case errors.Is(err, ErrInvalidRequest):
