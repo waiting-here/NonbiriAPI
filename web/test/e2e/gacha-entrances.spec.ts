@@ -1,8 +1,11 @@
 import { resolve } from 'node:path';
-import { expect, test } from './test';
+import { expect, test, type Page } from './test';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
 import { USER_ORIGIN } from './ports';
 import { loanActivity } from '../fixtures/loans';
+import { gachaSnapshot } from '../fixtures/gacha';
+
+type Locator = ReturnType<Page['locator']>;
 const defaultRules = {
   weights: [5500, 3500, 900, 100],
   sr_pity: 10,
@@ -45,6 +48,68 @@ const entrances = [
     ends_at: now + 86400,
   },
 ];
+
+const ratedEntrance = {
+  id: 'gp_sweet',
+  name: '糖夜迷藏',
+  name_en: 'Sweet Hide-and-Seek',
+  cover: 's',
+  featured: ['s-chatgpt', 's-claude'],
+  starts_at: now - 86400,
+  ends_at: now + 86400,
+};
+
+async function ratedFixture(page: Page, theme: 'light' | 'dark', disabled = false) {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.clock.setFixedTime(new Date(now * 1000));
+  await page.addInitScript((theme) => {
+    localStorage.setItem('nb.lang', 'en');
+    localStorage.setItem('nb.theme', theme);
+    localStorage.setItem(
+      'nb.gacha.preferences',
+      JSON.stringify({ music: false, sound: false, reduced: true }),
+    );
+  }, theme);
+  await mockRoleSession(page, 'user', 'user');
+  await mockPublicConfig(page, 'user', { artwork_r18_disabled: disabled });
+  await page.route('**/api/events', (route) =>
+    route.fulfill({ contentType: 'text/event-stream', body: ': connected\n\n' }),
+  );
+  await page.route('**/api/activities', (route) => route.fulfill({ json: loanActivity() }));
+  await page.route('**/api/limited-activities', (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/gacha/entry', (route) =>
+    route.fulfill({ json: { enabled: true, entered: false, pools: [ratedEntrance] } }),
+  );
+  const snapshot = gachaSnapshot();
+  snapshot.visible_themes.push('s');
+  snapshot.pools.push({
+    ...snapshot.pools[0],
+    ...ratedEntrance,
+    kind: 'limited',
+    group: ratedEntrance.id,
+  });
+  await page.route('**/api/gacha/state', (route) => route.fulfill({ json: snapshot }));
+  let enters = 0;
+  await page.route('**/api/gacha/actions', (route) => {
+    expect(route.request().postDataJSON().action).toBe('enter');
+    enters++;
+    return route.fulfill({ json: { snapshot } });
+  });
+  return () => enters;
+}
+
+async function expectBlurred(cover: Locator) {
+  const image = cover.locator('img');
+  await expect(image).toBeVisible();
+  await expect
+    .poll(() =>
+      image.evaluate((node) => {
+        const blur = getComputedStyle(node).filter.match(/blur\(([\d.]+)px\)/);
+        return Number(blur?.[1] ?? 0);
+      }),
+    )
+    .toBeGreaterThan(0);
+}
 
 for (const theme of ['light', 'dark'] as const)
   for (const width of [1440, 390]) {
@@ -223,3 +288,92 @@ for (const theme of ['light', 'dark'] as const)
       guard.assertNone();
     });
   }
+
+for (const theme of ['light', 'dark'] as const)
+  for (const width of [1440, 390]) {
+    test(`rated gacha cover toggles without navigation ${theme} ${width}`, async ({ page }) => {
+      const guard = collectConsoleViolations(page);
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      const enters = await ratedFixture(page, theme);
+      await page.goto(USER_ORIGIN + '/activities');
+      const entry = page.locator('.gacha-pool-entry').filter({
+        has: page.getByRole('heading', { name: ratedEntrance.name_en, exact: true }),
+      });
+      const cover = entry.getByRole('button');
+      const text = entry.getByRole('link');
+      await expect(cover).toHaveAccessibleName('Reveal R-18 cover: ' + ratedEntrance.name_en);
+      await expect(cover).toHaveAttribute('aria-pressed', 'false');
+      await expect(cover.locator('img')).toHaveAttribute('src', '/assets/gacha/covers/s.webp');
+      await expectBlurred(cover);
+      await expect(entry.locator('.gacha-pool-entry__hint')).toBeVisible();
+      await expect(text).toHaveAttribute('href', '/activities/gacha?pool=' + ratedEntrance.id);
+      await cover.click();
+      await expect(cover).toHaveAttribute('aria-pressed', 'true');
+      await expect(cover).toHaveAccessibleName('Blur R-18 cover: ' + ratedEntrance.name_en);
+      await expect(cover.locator('img')).toHaveCSS('filter', 'none');
+      await expect(page).toHaveURL(USER_ORIGIN + '/activities');
+      expect(enters()).toBe(0);
+      await cover.press('Enter');
+      await expect(cover).toHaveAttribute('aria-pressed', 'false');
+      await expectBlurred(cover);
+      await expect(page).toHaveURL(USER_ORIGIN + '/activities');
+      expect(enters()).toBe(0);
+      await cover.click();
+      await expect(cover).toHaveAttribute('aria-pressed', 'true');
+      await page.reload();
+      await expect(cover).toHaveAttribute('aria-pressed', 'false');
+      await expectBlurred(cover);
+      expect(enters()).toBe(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await cover.click();
+      await expect(cover).toHaveAttribute('aria-pressed', 'true');
+      await text.focus();
+      await expect(text).toBeFocused();
+      await text.press('Enter');
+      await expect(page).toHaveURL(USER_ORIGIN + '/activities/gacha?pool=' + ratedEntrance.id);
+      await expect(page.locator('#gacha-pool-title')).toHaveText(ratedEntrance.name_en);
+      expect(enters()).toBe(1);
+      await page.getByRole('link', { name: 'Back to activities', exact: true }).click();
+      await expect(page).toHaveURL(USER_ORIGIN + '/activities');
+      await expect(cover).toHaveAttribute('aria-pressed', 'false');
+      await expectBlurred(cover);
+      expect(enters()).toBe(1);
+      guard.assertNone();
+    });
+  }
+
+test('disabled R-18 policy keeps the banner placeholder while its text link still opens the pool', async ({
+  page,
+}) => {
+  const guard = collectConsoleViolations(page);
+  const enters = await ratedFixture(page, 'dark', true);
+  await page.goto(USER_ORIGIN + '/activities');
+  const entry = page.locator('.gacha-pool-entry').filter({
+    has: page.getByRole('heading', { name: ratedEntrance.name_en, exact: true }),
+  });
+  const cover = entry.getByRole('button');
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await expect(cover).toBeDisabled();
+    await expect(cover).toHaveAccessibleName('R-18 cover unavailable: ' + ratedEntrance.name_en);
+    await expect(cover).toHaveAttribute('aria-pressed', 'false');
+    await expect(cover.locator('.nb-artwork-placeholder')).toBeVisible();
+    await expect(entry.locator('img')).toHaveCount(0);
+    await cover.evaluate((button: HTMLButtonElement) => button.click());
+    await expect(cover).toHaveAttribute('aria-pressed', 'false');
+    await expect(entry.locator('img')).toHaveCount(0);
+    await expect(page).toHaveURL(USER_ORIGIN + '/activities');
+    expect(enters()).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+  }
+  await entry.getByRole('link').click();
+  await expect(page).toHaveURL(USER_ORIGIN + '/activities/gacha?pool=' + ratedEntrance.id);
+  await expect(page.locator('#gacha-pool-title')).toHaveText(ratedEntrance.name_en);
+  await expect(page.locator('.gacha-banner__art img')).toHaveCount(0);
+  expect(enters()).toBe(1);
+  guard.assertNone();
+});
