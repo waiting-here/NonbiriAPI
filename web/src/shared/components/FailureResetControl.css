@@ -1,12 +1,5 @@
 .failure-reset-control {
-  margin-block: 1rem;
-  padding: 0.75rem;
-  border: 1px solid var(--nb-color-border);
-  border-radius: 0.5rem;
-}
-.failure-reset-control summary {
-  cursor: pointer;
-  font-weight: 600;
+  margin-block: var(--nb-space-4);
 }
 .failure-reset-choices {
   display: grid;

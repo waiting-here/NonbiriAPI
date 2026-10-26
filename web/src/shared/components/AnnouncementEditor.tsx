@@ -1,4 +1,5 @@
 import { Button } from '@shared/components/ui/Button';
+import { Fold } from '@shared/components/ui/Fold';
 import { managementRoot, type ManagementRole } from '@shared/operations/managedUsers';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -299,8 +300,7 @@ export function AnnouncementEditor({
       <Card>
         <div className="ops-toolbar">
           <StatusBadge active={item.state === 'published'} label={stateLabels[item.state]} />
-          <details>
-            <summary>{t('common.operations.management.details')}</summary>
+          <Fold plain title={t('common.operations.management.details')}>
             <span>
               {t('management.announcements.detail.authorityRevision', { revision: item.revision })}
             </span>
@@ -311,7 +311,7 @@ export function AnnouncementEditor({
                 })}
               </span>
             ) : null}
-          </details>
+          </Fold>
         </div>
         {authority.error ? (
           <ErrorState error={authority.error} onRetry={() => void authority.refetch()} />

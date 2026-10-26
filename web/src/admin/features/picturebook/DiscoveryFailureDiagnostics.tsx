@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { RawErrorViewer } from '@shared/observability/RequestDiagnostics';
+import { Fold } from '@shared/components/ui/Fold';
 import {
   getIndependentDiagnostic,
   getIndependentDiagnostics,
@@ -119,12 +120,16 @@ function OperationDiagnostics({ operationID }: { readonly operationID: string })
       {items.map((item) => {
         const detail = details[item.id];
         return (
-          <details key={item.id}>
-            <summary>
-              {t('尝试', 'Attempt')} {item.attempt_seq} / {t('事件', 'event')} {item.event_seq} ·
-              HTTP {item.http_status ?? '—'} · {item.content_type || '—'} · {item.bytes_saved} B
-              {item.truncated ? ` · ${t('已截断', 'truncated')}` : ''} · {item.save_state}
-            </summary>
+          <Fold
+            key={item.id}
+            title={
+              <>
+                {t('尝试', 'Attempt')} {item.attempt_seq} / {t('事件', 'event')} {item.event_seq} ·
+                HTTP {item.http_status ?? '—'} · {item.content_type || '—'} · {item.bytes_saved} B
+                {item.truncated ? ` · ${t('已截断', 'truncated')}` : ''} · {item.save_state}
+              </>
+            }
+          >
             <DispatchDetails dispatch={item.dispatch} />
             {item.save_state !== 'saved' ? <OmittedBody state={item.save_state} /> : null}
             {detail ? (
@@ -145,7 +150,7 @@ function OperationDiagnostics({ operationID }: { readonly operationID: string })
                   : t('加载保留响应正文', 'Load retained response body')}
               </button>
             ) : null}
-          </details>
+          </Fold>
         );
       })}
     </section>
