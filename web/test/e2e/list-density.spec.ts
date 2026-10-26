@@ -1,6 +1,8 @@
 import { resolve } from 'node:path';
 import { numberedPage, numberedResponse } from './numbered-fixtures';
-import { mockConnectionResources } from './connection-fixtures';
+import { createOptions, mockConnectionResources } from './connection-fixtures';
+import commonCopy from '../../src/shared/i18n/common/en.json' with { type: 'json' };
+import userCopy from '../../src/user/i18n/en.json' with { type: 'json' };
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
   assertResponsiveOperationTables,
@@ -43,6 +45,18 @@ async function prepare(
   );
   await mockPublicConfig(page, station);
   await mockRoleSession(page, station, fullSteward ? 'level6' : station);
+  if (station === 'user')
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/endpoint-create-options',
+      body: createOptions,
+    });
+  await page.route(/\/donations\/[1-9][0-9]*\/uses\?/, async (route) => {
+    expect(route.request().method()).toBe('GET');
+    const url = new URL(route.request().url());
+    await route.fulfill({ json: numberedPage([], url.searchParams) });
+  });
   if (station === 'user') {
     const session = userSession(fullSteward ? 'level6' : 'user');
     session.user.lang = locale;
@@ -470,7 +484,7 @@ test('administrator source grouping accepts current key limits on narrow and wid
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/donation-sources?scope=active&key_state=available&page=1&page_size=20',
+    path: '/admin/api/donation-sources?scope=all&key_state=all&page=1&page_size=20',
     body: numberedResponse(
       [
         {
@@ -489,7 +503,7 @@ test('administrator source grouping accepts current key limits on narrow and wid
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: `/admin/api/donation-sources/${SOURCE_KEY}/keys?scope=active&key_state=available&page=1&page_size=20`,
+    path: `/admin/api/donation-sources/${SOURCE_KEY}/keys?scope=all&key_state=all&page=1&page_size=20`,
     body: numberedResponse([donationKeyPageItem(donation, donationKey)], '1', 20),
   });
   await page.goto(`${ADMIN_ORIGIN}/charity`);
@@ -1400,14 +1414,23 @@ test.describe('donation selection expiry in UTC', () => {
     const keys = picker.locator('.donation-resource-picker__section').nth(1);
     const choice = keys.getByRole('checkbox').first();
     await choice.check();
-    await picker
-      .locator('.donation-resource-picker__selected-list > li')
-      .first()
-      .getByRole('checkbox', { name: 'Chat completions', exact: true })
-      .check();
+    await expect(
+      picker
+        .locator('.donation-resource-picker__selected-list > li')
+        .first()
+        .getByText(commonCopy.common.connections.shareExactVersion.replace('{{version}}', '1'), {
+          exact: true,
+        }),
+    ).toBeVisible();
     const expiry = picker
       .locator('.donation-resource-picker__selected-list input[type=datetime-local]')
       .first();
+    await picker
+      .locator('.donation-resource-picker__selected-list > li')
+      .first()
+      .locator('.nb-fold > summary')
+      .filter({ hasText: userCopy.user.workflows.donationOptions })
+      .click();
     await expiry.fill('2027-02-01T12:00');
     await expect(choice).toBeChecked();
     await filter.fill('Endpoint 1 —');
@@ -1415,11 +1438,14 @@ test.describe('donation selection expiry in UTC', () => {
     await expect(groups).toHaveCount(1);
     await sources.getByRole('button', { name: /^Endpoint 1 —/ }).click();
     await keys.getByRole('checkbox').nth(1).check();
-    await picker
-      .locator('.donation-resource-picker__selected-list > li')
-      .last()
-      .getByRole('checkbox', { name: 'Chat completions', exact: true })
-      .check();
+    await expect(
+      picker
+        .locator('.donation-resource-picker__selected-list > li')
+        .last()
+        .getByText(commonCopy.common.connections.shareExactVersion.replace('{{version}}', '1'), {
+          exact: true,
+        }),
+    ).toBeVisible();
     await filter.fill('Endpoint 20 —');
     await filter.press('Enter');
     await expect(groups).toHaveCount(1);
@@ -1457,7 +1483,7 @@ test.describe('donation selection expiry in UTC', () => {
         keys: [
           {
             endpoint_key_id: '20001',
-            native_services: ['chat_completions'],
+            native_services: ['chat_completions', 'responses', 'decisions', 'embeddings'],
             credential_id: '20001',
             credential_version: '1',
             grant_revision: '1',
@@ -1466,7 +1492,7 @@ test.describe('donation selection expiry in UTC', () => {
           },
           {
             endpoint_key_id: '1002',
-            native_services: ['chat_completions'],
+            native_services: ['chat_completions', 'responses', 'decisions', 'embeddings'],
             credential_id: '1002',
             credential_version: '1',
             grant_revision: '1',
@@ -1533,8 +1559,10 @@ for (const locale of ['en', 'zh'] as const)
       ),
     });
     await page.goto(`${ADMIN_ORIGIN}/endpoints`);
-    await page.locator('.ops-table tbody button').first().click();
-    await expect(page.locator('.ops-table .ops-table')).toHaveCount(1);
+    await page
+      .getByRole('button', { name: locale === 'en' ? 'Show users' : '展开用户', exact: true })
+      .click();
+    await expect(page.locator('.nb-table .nb-table')).toHaveCount(1);
     await assertResponsiveOperationTables(page);
     await mockJson(page, {
       origin: ADMIN_ORIGIN,
