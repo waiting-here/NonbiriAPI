@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
-import { Field, Note, Panel, PanelBody, PanelHead } from '@shared/components/ui';
+import { Field, Fold, Note, Panel, PanelBody, PanelHead } from '@shared/components/ui';
 import { CoreErrorPanel, CoreLoading } from '../components';
 import { connectionAPI, resourcePath } from './api';
 import { ConnectionResourceList, connectionKeys } from './ResourceList';
@@ -92,13 +92,6 @@ export function CredentialsPanel({
                 </small>
               </div>
             ),
-          },
-          {
-            key: 'version',
-            header: t('common.connections.version'),
-            cell: 'meta',
-            render: (row) =>
-              t('common.connections.versionNumber', { version: row.credential_version }),
           },
           {
             key: 'enabled',
@@ -217,7 +210,6 @@ function CredentialDetails({
             {credential.display_head}••••{credential.display_tail}
           </p>
           <p>
-            {t('common.connections.versionNumber', { version: credential.credential_version })} ·{' '}
             {credential.enabled
               ? t('common.connections.enabled')
               : t('common.connections.disabled')}
@@ -271,6 +263,12 @@ function CredentialDetails({
           />
         </ExpandablePanel>
       ) : null}
+      <CredentialImpactPanel
+        accountId={accountId}
+        credentialId={credential.id}
+        revision={credential.revision}
+        onReady={setReadyRevision}
+      />
       {rotating ? (
         <ExpandablePanel
           open
@@ -278,12 +276,6 @@ function CredentialDetails({
           title={t('common.connections.rotate')}
           closeLabel={t('common.connections.close')}
         >
-          <CredentialImpactPanel
-            accountId={accountId}
-            credentialId={credential.id}
-            revision={credential.revision}
-            onReady={setReadyRevision}
-          />
           {readyRevision === credential.revision ? (
             <CredentialCreateForm
               accountId={accountId}
@@ -294,7 +286,9 @@ function CredentialDetails({
           ) : null}
         </ExpandablePanel>
       ) : null}
-      <CredentialVersions accountId={accountId} credentialId={credential.id} />
+      <Fold lazy title={t('common.connections.versionHistory')}>
+        <CredentialVersions accountId={accountId} credentialId={credential.id} />
+      </Fold>
       <ConfirmDialog
         open={danger !== null}
         title={

@@ -38,6 +38,8 @@ export interface CredentialVersion {
 }
 export type ImpactKind = 'personal' | 'charity' | 'discovery';
 export interface ImpactEntry {
+  endpoint_note?: string;
+  endpoint_base_url?: string;
   endpoint_id: string | null;
   endpoint_key_id: string | null;
   donation_id: string | null;
@@ -53,6 +55,7 @@ export interface CredentialImpact extends NumberedPage<ImpactEntry> {
   summary: { endpoint_keys: string; donation_keys: string; discovery_sources: string };
 }
 export interface DiscoverySource {
+  endpoint_key_id?: string | null;
   credential_available?: boolean;
   id: string;
   name: string;

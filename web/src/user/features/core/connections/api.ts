@@ -155,6 +155,7 @@ export function normalizeDiscoverySource(value: unknown): DiscoverySource {
       'created_at',
       'updated_at',
       'credential_available',
+      'endpoint_key_id',
     ],
     'discovery source',
     [
@@ -178,6 +179,9 @@ export function normalizeDiscoverySource(value: unknown): DiscoverySource {
     ],
   );
   return {
+    endpoint_key_id: optionalField(source, 'endpoint_key_id', (value) =>
+      nullableDecimalID(value, 'endpoint key id'),
+    ),
     ...(source.credential_available === undefined
       ? {}
       : { credential_available: boolean(source.credential_available, 'credential available') }),
@@ -250,6 +254,8 @@ function normalizeImpactEntry(value: unknown): ImpactEntry {
   const source = record(
     value,
     [
+      'endpoint_note',
+      'endpoint_base_url',
       'endpoint_id',
       'endpoint_key_id',
       'donation_id',
@@ -261,9 +267,26 @@ function normalizeImpactEntry(value: unknown): ImpactEntry {
       'state',
     ],
     'credential impact',
+    [
+      'endpoint_id',
+      'endpoint_key_id',
+      'donation_id',
+      'donation_key_id',
+      'use_id',
+      'discovery_source_id',
+      'credential_version',
+      'native_services',
+      'state',
+    ],
   );
   const optionalID = (name: string) => nullableDecimalID(source[name], name);
   return {
+    endpoint_note: optionalField(source, 'endpoint_note', (value) =>
+      string(value, 'endpoint note'),
+    ),
+    endpoint_base_url: optionalField(source, 'endpoint_base_url', (value) =>
+      string(value, 'endpoint URL'),
+    ),
     endpoint_id: optionalID('endpoint_id'),
     endpoint_key_id: optionalID('endpoint_key_id'),
     donation_id: optionalID('donation_id'),
