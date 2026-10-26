@@ -31,15 +31,15 @@ const serviceProjection = (): ServiceProjection => ({
 });
 const candidate = (index: number): BindingCandidate => ({
   ...serviceProjection(),
-  endpoint_key_id: index === 10 ? '112' : '111',
-  endpoint_base_url: `https://service-${index === 10 ? 12 : 11}.example.test/v1`,
+  endpoint_key_id: index === 21 ? '112' : index === 22 ? '113' : '111',
+  endpoint_base_url: `https://service-${index === 21 ? 12 : 11}.example.test/v1`,
   connector_type: 'openai-compatible',
-  endpoint_note: index === 10 ? 'Service B' : 'Service A',
+  endpoint_note: index === 21 ? 'Service B' : 'Service A',
   endpoint_key_display_head: 'sk-test',
   endpoint_key_display_tail: 'tail',
-  endpoint_key_note: 'Primary key',
-  upstream_model_id: `gpt-source-${index + 1}`,
-  source_types: [index === 10 ? 'manual' : 'automatic'],
+  endpoint_key_note: index === 22 ? 'Secondary key' : 'Primary key',
+  upstream_model_id: `gpt-source-${index === 22 ? 11 : index + 1}`,
+  source_types: [index === 21 ? 'manual' : 'automatic'],
 });
 const binding = (source: BindingCandidate, id: string, ord: number): Binding => {
   return {
@@ -64,7 +64,12 @@ const binding = (source: BindingCandidate, id: string, ord: number): Binding => 
         connector_type: source.connector_type,
         configuration_type: source.connector_type,
         base_url: source.endpoint_base_url,
-        credential_id: source.endpoint_key_id === '112' ? '212' : '211',
+        credential_id:
+          source.endpoint_key_id === '112'
+            ? '212'
+            : source.endpoint_key_id === '113'
+              ? '213'
+              : '211',
         credential_version: '1',
         grant_revision: '1',
       },
@@ -123,13 +128,14 @@ async function fixture(page: Page, empty: boolean) {
   let bindings: Binding[] = empty
     ? []
     : Array.from({ length: 25 }, (_, i) => binding(candidate(i), String(201 + i), i));
-  const candidates = Array.from({ length: 11 }, (_, i) => candidate(i));
+  const candidates = Array.from({ length: 23 }, (_, i) => candidate(i));
   const creates: Record<string, unknown>[] = [],
     patches: Record<string, unknown>[] = [];
   const orders: Record<string, unknown>[] = [],
     manual: Record<string, unknown>[] = [];
   const adds: Record<string, unknown>[] = [],
     reads: URL[] = [];
+  const keyReads: string[] = [];
   const bindingReads: { revision: string; order: string[] }[] = [];
   const endpoints = ['11', '12'].map((id) => ({
     id,
@@ -143,7 +149,7 @@ async function fixture(page: Page, empty: boolean) {
     note: id === '11' ? 'Service A' : 'Service B',
     enabled: true,
     revision: '1',
-    key_count: '1',
+    key_count: id === '11' ? '2' : '1',
     created_at: 1700000000,
     updated_at: 1700000001,
   }));
@@ -215,45 +221,68 @@ async function fixture(page: Page, empty: boolean) {
       body = { bindings, binding_revision: revision };
     } else if (path.endsWith('/binding-candidates')) {
       reads.push(url);
-      expect(url.searchParams.has('endpoint_key_id')).toBe(false);
-      expect(url.searchParams.has('source_type')).toBe(false);
+      const endpointId = url.searchParams.get('endpoint_id');
+      const keyId = url.searchParams.get('key_id');
+      expect(endpointId).toMatch(/^(11|12)$/);
+      expect(endpointId === '12' ? ['112'] : ['111', '113']).toContain(keyId);
+      expect(keyReads).toContain(endpointId!);
       let rows = candidates.filter((row) =>
         row.upstream_model_id.includes(url.searchParams.get('q') ?? ''),
       );
-      if (url.searchParams.get('endpoint_id'))
-        rows = rows.filter(
-          (row) =>
-            row.endpoint_note ===
-            (url.searchParams.get('endpoint_id') === '11' ? 'Service A' : 'Service B'),
-        );
+      rows = rows.filter((row) => row.endpoint_key_id === keyId);
+      const source = url.searchParams.get('source');
+      if (source)
+        rows = rows.filter((row) => row.source_types.includes(source as 'manual' | 'automatic'));
       body = numberedPage(rows, url.searchParams);
-    } else if (path === '/api/endpoints') body = numberedPage(endpoints, url.searchParams);
-    else if (path.endsWith('/keys')) {
-      const endpointId = path.split('/')[3]!;
+    } else if (path === '/api/connections') {
       body = numberedPage(
-        [
-          {
-            id: endpointId === '12' ? '112' : '111',
-            endpoint_id: endpointId,
-            credential_id: endpointId === '12' ? '212' : '211',
-            credential_version: '1',
-            grant_revision: '1',
-            credential_available: true,
-            discovery_source_id: null,
-            native_services: serviceProjection().native_services,
-            display_head: 'sk-test',
-            display_tail: 'tail',
-            note: 'Primary key',
-            enabled: true,
-            force_store_false: false,
-            max_concurrency: 0,
-            max_rpm: 0,
-            suspension_state: 'none',
-            revision: '1',
-            created_at: 1700000000,
-            updated_at: 1700000001,
-          },
-        ],
+        endpoints.map((row) => ({
+          id: row.connection_id,
+          name: row.note,
+          display_name: row.note,
+          primary_entry: { id: row.id, base_url: row.base_url, note: row.note },
+          note: '',
+          revision: '1',
+          entry_count: '1',
+          credential_count: '1',
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+        })),
+        url.searchParams,
+      );
+    } else if (path === '/api/endpoints' || /^\/api\/connections\/[^/]+\/entries$/.test(path)) {
+      const connectionId = path.split('/')[3];
+      body = numberedPage(
+        path === '/api/endpoints'
+          ? endpoints
+          : endpoints.filter((row) => row.connection_id === connectionId),
+        url.searchParams,
+      );
+    } else if (path.endsWith('/keys')) {
+      const endpointId = path.split('/')[3]!;
+      keyReads.push(endpointId);
+      body = numberedPage(
+        (endpointId === '12' ? ['112'] : ['111', '113']).map((id) => ({
+          id,
+          endpoint_id: endpointId,
+          credential_id: id === '112' ? '212' : id === '113' ? '213' : '211',
+          credential_version: '1',
+          grant_revision: '1',
+          credential_available: true,
+          discovery_source_id: null,
+          native_services: serviceProjection().native_services,
+          display_head: 'sk-test',
+          display_tail: 'tail',
+          note: id === '113' ? 'Secondary key' : 'Primary key',
+          enabled: true,
+          force_store_false: false,
+          max_concurrency: 0,
+          max_rpm: 0,
+          suspension_state: 'none',
+          revision: '1',
+          created_at: 1700000000,
+          updated_at: 1700000001,
+        })),
         url.searchParams,
       );
     } else if (path.endsWith('/models/manual')) {
@@ -287,7 +316,7 @@ async function fixture(page: Page, empty: boolean) {
     }
     await route.fulfill({ status: req.method() === 'POST' ? 201 : 200, json: body });
   });
-  return { creates, patches, orders, manual, adds, reads, bindingReads };
+  return { creates, patches, orders, manual, adds, reads, keyReads, bindingReads };
 }
 for (const scenario of cases) {
   test(`model layout and source actions ${scenario.width} ${scenario.locale} ${scenario.theme}`, async ({
@@ -298,6 +327,15 @@ for (const scenario of cases) {
     ).user;
     const core = (key: string) => copy.core[key] as string;
     const text = copy.models;
+    const bindingCopy = JSON.parse(
+      await readFile(
+        resolve(
+          process.cwd(),
+          `src/user/features/core/models/binding-copy/${scenario.locale}.json`,
+        ),
+        'utf8',
+      ),
+    );
     const nativeServices = JSON.parse(
       await readFile(
         resolve(process.cwd(), `src/shared/i18n/common/${scenario.locale}.json`),
@@ -336,7 +374,11 @@ for (const scenario of cases) {
         .locator('.model-editor')
         .getByRole('button', { name: core('common.save'), exact: true })
         .click();
-      await expect(page.getByTestId('model-source-search')).toBeFocused();
+      await expect(
+        page.getByRole('searchbox', { name: bindingCopy.searchServices, exact: true }),
+      ).toBeFocused();
+      expect(state.reads).toHaveLength(0);
+      expect(state.keyReads).toHaveLength(0);
       expect(state.creates[0]).toMatchObject({
         model_types: ['chat_completions', 'responses'],
         route_strategy: 'cache_balanced',
@@ -345,34 +387,91 @@ for (const scenario of cases) {
         transport_rule: 'passthrough',
         role_policy: { default_action: 'native', rules: {} },
       });
-      const results = page.locator('.model-source-results');
-      await expect(results.locator('.model-source-result')).toHaveCount(10);
+      const picker = page.locator('.personal-binding-picker');
+      const serviceFilter = picker.getByRole('combobox', {
+        name: bindingCopy.filterService,
+        exact: true,
+      });
+      await expect(serviceFilter).toBeVisible();
+      await picker
+        .locator('.personal-binding-picker__browse')
+        .getByRole('button', { name: /Service A/ })
+        .click();
+      await picker
+        .locator('.personal-binding-picker__browse')
+        .getByRole('button', { name: /Primary key/ })
+        .click();
+      const results = picker.getByRole('region', { name: bindingCopy.models, exact: true });
+      await expect(results.locator('.personal-binding-picker__model')).toHaveCount(20);
+      await results.getByRole('combobox').selectOption('10');
+      await expect(results.locator('.personal-binding-picker__model')).toHaveCount(10);
       await results.getByRole('button', { name: /Next|下一页/ }).click();
-      await expect(results.getByText('gpt-source-11', { exact: true })).toBeVisible();
-      await results.locator('.model-source-result').click();
-      await page.locator('.model-service-filter summary').click();
-      await page.getByRole('combobox', { name: text.service, exact: true }).selectOption('11');
-      await expect(results.locator('.model-source-result')).toHaveCount(10);
+      await results.getByRole('checkbox', { name: /gpt-source-11\b/ }).check();
+      await results
+        .getByRole('searchbox', { name: bindingCopy.searchModels, exact: true })
+        .fill('gpt-source-1');
       await expect.poll(() => state.reads.at(-1)?.searchParams.get('page')).toBe('1');
-      await page.getByRole('button', { name: text.manual, exact: true }).click();
-      await page.getByRole('combobox', { name: text.key, exact: true }).selectOption('111');
-      await page.getByRole('textbox', { name: text.modelName, exact: true }).fill('typed-model');
-      await page.getByRole('button', { name: core('endpoints.manualAdd'), exact: true }).click();
-      await expect(page.getByText(text.manualSaved, { exact: true })).toBeVisible();
+      await expect(results.getByRole('checkbox', { name: /gpt-source-11\b/ })).toBeChecked();
+      await serviceFilter.selectOption('52');
+      await expect(results.locator('.personal-binding-picker__model')).toHaveCount(1);
+      await results
+        .getByRole('radio', { name: bindingCopy.manual, exact: true })
+        .locator('..')
+        .click();
+      await expect.poll(() => state.reads.at(-1)?.searchParams.get('source')).toBe('manual');
+      await expect(
+        results.getByRole('link', { name: bindingCopy.managePair, exact: true }),
+      ).toHaveAttribute('href', '/endpoints?connection_id=52&endpoint_id=12&key_id=112');
+      expect(state.adds).toHaveLength(0);
+      await results.getByRole('checkbox', { name: /gpt-source-22\b/ }).check();
+      await serviceFilter.selectOption('51');
+      await picker
+        .locator('.personal-binding-picker__browse')
+        .getByRole('button', { name: /Secondary key/ })
+        .click();
+      await results
+        .getByRole('radio', { name: bindingCopy.allModels, exact: true })
+        .locator('..')
+        .click();
+      await results.getByRole('checkbox', { name: /gpt-source-11\b/ }).check();
+      await picker
+        .locator('.personal-binding-picker__path')
+        .getByRole('button', { name: new RegExp('^' + bindingCopy.keys) })
+        .click();
+      await picker
+        .locator('.personal-binding-picker__browse')
+        .getByRole('button', { name: /Primary key/ })
+        .click();
+      await results
+        .getByRole('searchbox', { name: bindingCopy.searchModels, exact: true })
+        .fill('gpt-source-11');
+      await expect(results.getByRole('checkbox', { name: /gpt-source-11\b/ })).toBeChecked();
+      const manualEntry = results.locator('details').filter({
+        has: page.locator('summary').getByText(bindingCopy.addManual, { exact: true }),
+      });
+      await manualEntry.locator(':scope > summary').click();
+      await manualEntry
+        .getByRole('textbox', { name: text.modelName, exact: true })
+        .fill('typed-model');
+      await manualEntry
+        .getByRole('button', { name: core('endpoints.manualAdd'), exact: true })
+        .click();
+      await expect(manualEntry.getByText(text.manualSaved, { exact: true })).toBeVisible();
       expect(state.manual).toEqual([
         { entries: [{ upstream_model_id: 'typed-model', provider: '' }] },
       ]);
-      expect(state.adds).toHaveLength(0);
-      await expect(results.locator('.model-source-result')).toHaveCount(1);
-      await results.locator('.model-source-result').filter({ hasText: 'typed-model' }).click();
+      await results.getByRole('checkbox', { name: /typed-model/ }).check();
       const selections = page.locator('.core-selection-list > li');
-      await expect(selections).toHaveCount(2);
+      await expect(selections).toHaveCount(4);
+      for (const selection of await selections.all()) {
+        await selection.locator('summary').filter({ hasText: bindingCopy.calls }).click();
+      }
       const addSelected = page.getByRole('button', {
-        name: core('models.addSelected').replace('{{count}}', '2'),
+        name: core('models.addSelected').replace('{{count}}', '4'),
         exact: true,
       });
       await expect(addSelected).toBeEnabled();
-      const firstSelection = selections.filter({
+      const firstSelection = selections.filter({ hasText: 'Primary key' }).filter({
         has: page.getByText('gpt-source-11', { exact: true }),
       });
       for (const service of ['chat_completions', 'responses'] as const) {
@@ -384,8 +483,7 @@ for (const scenario of cases) {
         await choice.uncheck();
       }
       await expect(addSelected).toBeDisabled();
-      for (const name of ['gpt-source-11', 'typed-model']) {
-        const selection = selections.filter({ has: page.getByText(name, { exact: true }) });
+      for (const selection of await selections.all()) {
         for (const service of ['chat_completions', 'responses'] as const) {
           await selection
             .getByRole('checkbox', { name: nativeServices[service], exact: true })
@@ -400,7 +498,25 @@ for (const scenario of cases) {
           {
             targets: [
               {
+                endpoint_key_id: '111',
+                upstream_model_id: 'gpt-source-11',
+                native_services: ['chat_completions', 'responses'],
+              },
+            ],
+          },
+          {
+            targets: [
+              {
                 endpoint_key_id: '112',
+                upstream_model_id: 'gpt-source-22',
+                native_services: ['chat_completions', 'responses'],
+              },
+            ],
+          },
+          {
+            targets: [
+              {
+                endpoint_key_id: '113',
                 upstream_model_id: 'gpt-source-11',
                 native_services: ['chat_completions', 'responses'],
               },
@@ -419,8 +535,9 @@ for (const scenario of cases) {
       });
       await expect
         .poll(() => state.bindingReads.at(-1))
-        .toEqual({ revision: '2', order: ['201', '202'] });
+        .toEqual({ revision: '2', order: ['201', '202', '203', '204'] });
       expect(state.manual).toHaveLength(1);
+      await expect(results.getByRole('checkbox', { name: /typed-model/ })).toBeDisabled();
       await picture(page, '1440-en-light-sources');
     } else {
       await expect(page.locator('.nb-table tbody tr')).toHaveCount(3);
