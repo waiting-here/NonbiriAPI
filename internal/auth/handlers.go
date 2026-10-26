@@ -123,6 +123,7 @@ func parseCallbackQuery(req *http.Request) (string, string, bool) {
 }
 
 func (r *Runtime) oauthStart(w http.ResponseWriter, req *http.Request) {
+	httperr.SetBrowserReason(w, httperr.BrowserReasonOAuthStart)
 	if !requireEmptyBody(w, req) {
 		return
 	}
@@ -149,6 +150,7 @@ func (r *Runtime) oauthStart(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *Runtime) oauthCallback(w http.ResponseWriter, req *http.Request) {
+	httperr.SetBrowserReason(w, httperr.BrowserReasonOAuthCallback)
 	clearOAuthStateCookie(w, secureCookieForRequest(req, r.siteOrigin))
 	if !requireEmptyBody(w, req) {
 		return

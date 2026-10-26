@@ -136,6 +136,7 @@ func stationBoundary(cfg *config.Config, next http.Handler) (http.Handler, error
 		AdminHost:         cfg.AdminHost,
 		SiteBaseURL:       cfg.SiteBaseURL,
 		TrustedProxyCIDRs: cfg.TrustedProxyCIDRs,
+		ErrorPageStyles:   web.ErrorPageStyles(),
 	}, next)
 }
 

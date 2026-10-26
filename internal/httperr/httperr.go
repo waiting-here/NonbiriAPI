@@ -265,6 +265,9 @@ func writeError(w http.ResponseWriter, e Error, statusOverride *int, allowUpstre
 		e = sanitizeError(Localize(e, language), allowUpstreamContext)
 		w.Header().Set("Content-Language", language)
 	}
+	if writeBrowserError(w, e, status) {
+		return
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
