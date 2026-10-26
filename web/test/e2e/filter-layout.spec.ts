@@ -36,6 +36,10 @@ for (const theme of ['light', 'dark'] as const) {
       }),
     );
     await page.route('**/api/gacha/state', (route) => route.fulfill({ json: snapshot }));
+    await page.route('**/api/gacha/actions', (route) => {
+      expect(route.request().postDataJSON().action).toBe('enter');
+      return route.fulfill({ json: { snapshot } });
+    });
     await page.route('**/api/gacha/entry', (route) =>
       route.fulfill({ json: { enabled: true, entered: true, pools: [] } }),
     );

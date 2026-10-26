@@ -137,7 +137,7 @@ it('shows shard costs and shared monthly ticket room with matching units', () =>
   expect(shop.getAllByText('本月剩余：1/20 张')).toHaveLength(2);
   expect(shop.getAllByText('本月剩余：1/10 张')).toHaveLength(2);
   expect(shop.getByRole('button', { name: '本月额度不足' })).toBeDisabled();
-  fireEvent.click(shop.getAllByRole('button', { name: '兑换', exact: true })[0]);
+  fireEvent.click(shop.getAllByRole('button', { name: '兑换' })[0]);
   expect(act).toHaveBeenCalledWith(
     { action: 'redeem', product: 'ticket-n', revision: 1 },
     '兑换成功，抽奖券已到账',
