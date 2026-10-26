@@ -261,6 +261,14 @@ async function prepare(
     const request = route.request();
     const url = new URL(request.url());
     if (url.origin !== origin) return route.fallback();
+    if (request.method() === 'GET' && url.pathname === `${base}/donations/7/uses`) {
+      expect([...url.searchParams.entries()]).toEqual([
+        ['page', '1'],
+        ['page_size', '100'],
+        ['donation_key_id', '11'],
+      ]);
+      return json(route, numberedResponse([], '1', 100));
+    }
     if (request.method() === 'GET' && url.pathname === `${base}/donations`) {
       return json(
         route,
