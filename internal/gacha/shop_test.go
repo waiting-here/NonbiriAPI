@@ -3,14 +3,111 @@ package gacha
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 )
+
+func TestPermanentSSRExchangeWithoutLimitedPoolsPreservesShopRules(t *testing.T) {
+	f := newFixture(t)
+	f.enter(t)
+	f.exec(t, "UPDATE gacha_settings SET shop=json_set(shop,'$.entry_enabled',0,'$.ssr_card',4)")
+	f.exec(t, "UPDATE gacha_profiles SET ssr_shards=3 WHERE user_id=?", f.user)
+	input := Action{Action: "redeem", Product: "g-chatgpt", Revision: 1}
+	if _, err := f.act(f.user, "insufficient-ssr", input); !errors.Is(err, ErrFragments) {
+		t.Fatal(err)
+	}
+	if f.scalar(t, "SELECT count(*) FROM gacha_owned WHERE user_id=?", f.user) != 0 {
+		t.Fatal("insufficient shards granted ownership")
+	}
+	f.exec(t, "UPDATE gacha_profiles SET ssr_shards=8 WHERE user_id=?", f.user)
+	f.recorder.fail.Store(true)
+	if _, err := f.act(f.user, "permanent-ssr", input); err == nil {
+		t.Fatal("expected late failure")
+	}
+	if f.scalar(t, "SELECT ssr_shards FROM gacha_profiles WHERE user_id=?", f.user) != 8 ||
+		f.scalar(t, "SELECT count(*) FROM gacha_owned WHERE user_id=?", f.user) != 0 ||
+		f.scalar(t, "SELECT count(*) FROM gacha_claims WHERE user_id=?", f.user) != 0 {
+		t.Fatal("failed exchange committed shards or ownership")
+	}
+	f.recorder.fail.Store(false)
+	before := bulkState(t, f)
+	out, err := f.act(f.user, "permanent-ssr", input)
+	if err != nil || out.Snapshot.Fragments[SSR] != 4 || out.Snapshot.Owned[input.Product].Source != "shop" ||
+		!slices.Contains(out.Snapshot.Redeemed, input.Product) || !reflect.DeepEqual(before.Pity, out.Snapshot.Pity) ||
+		!reflect.DeepEqual(before.MonthUsed, out.Snapshot.MonthUsed) || before.Credits != out.Snapshot.Credits ||
+		!reflect.DeepEqual(before.Tickets, out.Snapshot.Tickets) {
+		t.Fatal(out, err)
+	}
+	replay, err := f.act(f.user, "permanent-ssr", input)
+	if err != nil || replay.Snapshot.Fragments[SSR] != 4 || f.scalar(t, "SELECT count(*) FROM gacha_claims WHERE user_id=?", f.user) != 1 {
+		t.Fatal("replay exchanged twice", replay, err)
+	}
+	if _, err = f.act(f.user, "owned-ssr", input); !errors.Is(err, ErrOwned) {
+		t.Fatal(err)
+	}
+	input.Product = "g-claude"
+	input.Revision = 2
+	if _, err = f.act(f.user, "stale-ssr", input); !errors.Is(err, ErrPrice) {
+		t.Fatal(err)
+	}
+	input.Revision = 1
+	f.gate.blocked.Store(true)
+	if _, err = f.act(f.user, "maintenance-ssr", input); !errors.Is(err, maintenance.ErrMaintenanceOn) {
+		t.Fatal(err)
+	}
+	f.gate.blocked.Store(false)
+	if _, err = f.act(f.admin, "admin-ssr", input); !errors.Is(err, authz.ErrForbidden) {
+		t.Fatal(err)
+	}
+	for _, product := range []string{"a-chatgpt", "c-chatgpt", "e-chatgpt"} {
+		input.Product = product
+		if _, err = f.act(f.user, product, input); !errors.Is(err, ErrInvalid) {
+			t.Fatal("non-SSR permanent card became available", product, err)
+		}
+	}
+}
+
+func TestPermanentSSRDoesNotBypassLimitedCardWindowsOrArtworkPolicy(t *testing.T) {
+	f := newFixture(t)
+	f.enter(t)
+	f.exec(t, "UPDATE gacha_profiles SET sr_shards=100,ssr_shards=100 WHERE user_id=?", f.user)
+	pool := f.pool(t, "Limited", DefaultRules(), "s-chatgpt")
+	setArtworkPolicy(t, f, true)
+	for _, state := range []string{"future", "paused", "ended"} {
+		config := pool
+		switch state {
+		case "future":
+			start, end := f.at.Load()+10, f.at.Load()+20
+			config.StartsAt, config.EndsAt = &start, &end
+		case "paused":
+			config.Paused = true
+		case "ended":
+			start, end := f.at.Load()-20, f.at.Load()
+			config.StartsAt, config.EndsAt = &start, &end
+		}
+		f.exec(t, "UPDATE gacha_pools SET config=? WHERE id=?", jsonText(config), pool.ID)
+		if _, err := f.act(f.user, state, Action{Action: "redeem", Product: "s-chatgpt", Revision: 1}); !errors.Is(err, ErrClosed) {
+			t.Fatal(state, err)
+		}
+		out, err := f.act(f.user, "permanent-"+state, Action{Action: "redeem", Product: "g-" + map[string]string{"future": "chatgpt", "paused": "claude", "ended": "glm"}[state], Revision: 1})
+		if err != nil || out.Snapshot.Fragments[SSR] != 100-3*int64(len(out.Snapshot.Owned)) {
+			t.Fatal(state, out, err)
+		}
+	}
+	f.exec(t, "UPDATE gacha_pools SET config=? WHERE id=?", jsonText(pool), pool.ID)
+	out, err := f.act(f.user, "rated-limited", Action{Action: "redeem", Product: "s-chatgpt", Revision: 1})
+	if err != nil || out.Snapshot.Owned["s-chatgpt"].Source != "shop" || out.Snapshot.Fragments[SSR] != 88 {
+		t.Fatal("artwork policy changed collection eligibility", out, err)
+	}
+}
 
 func bulkState(t *testing.T, f *fixture) Snapshot {
 	t.Helper()

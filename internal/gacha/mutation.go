@@ -383,7 +383,7 @@ func redeem(ctx context.Context, tx *sql.Tx, user, at int64, product string, sho
 		cap = shop.LimitedCap
 	default:
 		card, ok := cardsByID[product]
-		if !ok || card.Source == "permanent" {
+		if !ok || card.Source == "permanent" && card.Rarity != SSR {
 			return ErrInvalid
 		}
 		owns, err := readOwned(ctx, tx, user)
@@ -403,6 +403,8 @@ func redeem(ctx context.Context, tx *sql.Tx, user, at int64, product string, sho
 		if card.Source == "shop" {
 			spend[0] = shop.ChibiN
 			spend[1] = shop.ChibiR
+		} else if card.Source == "permanent" {
+			spend[3] = shop.SSRCard
 		} else {
 			open := false
 			err := tx.QueryRowContext(ctx, `SELECT EXISTS(

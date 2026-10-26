@@ -924,8 +924,8 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
   gap: var(--nb-space-5);
 }
-.gacha-bulk-offers h3,
-.gacha-bulk-offer__number {
+.gacha-shop .gacha-offer h3,
+.gacha-offer__number {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }

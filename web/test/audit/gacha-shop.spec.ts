@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { expect, test, type Browser, type BrowserContext } from '@playwright/test';
 import type { Action, Outcome, Snapshot } from '../../src/user/activities/gacha/types';
+import type { Campaign, Redemption } from '../../src/shared/rewards/api';
 
 type Cookie = { Name: string; Value: string };
 interface Fixture {
@@ -108,7 +109,7 @@ test('daily bundles persist real ticket grants, game-first payments and independ
     expect(before.credits.game).toBe('15000.001');
     expect(before.redeemed).not.toContain('bulk-permanent');
     expect(before.redeemed).not.toContain('bulk-limited');
-    await expect(shop.getByText('Remaining today: 1/1', { exact: true })).toHaveCount(2);
+    await expect(shop.getByText('Remaining today: 1/1 bundles', { exact: true })).toHaveCount(2);
 
     async function buy(product: string, label: string) {
       const offer = shop
@@ -134,7 +135,7 @@ test('daily bundles persist real ticket grants, game-first payments and independ
       return result.snapshot;
     }
 
-    const standard = await buy('bulk-permanent', '10 standard tickets');
+    const standard = await buy('bulk-permanent', 'Standard ticket ×10');
     expect(standard.tickets).toEqual({
       permanent: before.tickets.permanent + 10,
       limited: before.tickets.limited,
@@ -155,7 +156,7 @@ test('daily bundles persist real ticket grants, game-first payments and independ
     expect(unchanged.tickets).toEqual(standard.tickets);
     expect(unchanged.credits).toEqual(standard.credits);
 
-    const limited = await buy('bulk-limited', '10 limited tickets');
+    const limited = await buy('bulk-limited', 'Limited ticket ×10');
     expect(limited.tickets).toEqual({
       permanent: before.tickets.permanent + 10,
       limited: before.tickets.limited + 10,
@@ -168,7 +169,7 @@ test('daily bundles persist real ticket grants, game-first payments and independ
     await expect(shop.getByRole('button', { name: 'Purchased today', exact: true })).toHaveCount(2);
     await page.reload();
     await page.getByRole('tab', { name: 'Mystery shop', exact: true }).click();
-    await expect(shop.getByText('Remaining today: 0/1', { exact: true })).toHaveCount(2);
+    await expect(shop.getByText('Remaining today: 0/1 bundles', { exact: true })).toHaveCount(2);
     const buttons = shop.getByRole('button', { name: 'Purchased today', exact: true });
     await expect(buttons).toHaveCount(2);
     await expect(buttons.nth(0)).toBeDisabled();
@@ -195,5 +196,78 @@ test('daily bundles persist real ticket grants, game-first payments and independ
       await user.close();
       await admin.close();
     }
+  }
+});
+
+test('code duplicates fund a permanent SSR exchange without an open limited pool', async ({
+  browser,
+}) => {
+  const f = fixture();
+  const player = f.users.find((user) => user.level === 2)!;
+  const user = await session(browser, f.user_url, player.cookie);
+  const admin = await session(browser, f.admin_url, f.admin_cookie, true);
+  try {
+    const created = await api(admin, f.admin_url, '/admin/api/rewards/create', 'POST', {
+      kind: 'code',
+      title: 'Synthetic card reunion',
+      enabled: true,
+      conditions: { op: 'all' },
+      rewards: [
+        { asset: 'gacha:card:g-chatgpt', quantity: '3' },
+        { asset: 'gacha:shard:SSR', quantity: '1' },
+      ],
+    });
+    expect(created.status()).toBe(200);
+    const campaign = (await created.json()) as Campaign;
+    for (const alreadyClaimed of [false, true]) {
+      const response = await api(user, f.user_url, '/api/rewards/redeem', 'POST', {
+        code: campaign.code,
+      });
+      expect(response.status()).toBe(200);
+      const receipt = (await response.json()) as Redemption;
+      expect(receipt.already_claimed).toBe(alreadyClaimed);
+      expect(receipt.results[0]).toEqual({
+        asset: 'gacha:card:g-chatgpt',
+        quantity: '3',
+        granted: '1',
+        converted: { asset: 'gacha:shard:SSR', quantity: '2' },
+      });
+    }
+    const page = await user.newPage();
+    await page.goto(f.user_url + '/activities/gacha');
+    await page.getByRole('tab', { name: 'Mystery shop', exact: true }).click();
+    const beforeResponse = await api(user, f.user_url, '/api/gacha/state');
+    expect(beforeResponse.status()).toBe(200);
+    const before = (await beforeResponse.json()) as Snapshot;
+    expect(before.pools.filter((pool) => pool.kind === 'limited')).toHaveLength(0);
+    expect(before.fragments.SSR).toBe(3);
+    await expect(page.getByRole('heading', { name: 'Permanent SSR', exact: true })).toBeVisible();
+    const offer = page.locator('.gacha-shop-card').filter({
+      has: page.getByRole('button', { name: 'Origin echo · Claude', exact: true }),
+    });
+    await expect(offer.getByText('Cost: 3 SSR shards', { exact: true })).toBeVisible();
+    const completed = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/api/gacha/actions' &&
+        response.request().postDataJSON()?.product === 'g-claude',
+    );
+    await offer.getByRole('button', { name: 'Add to collection', exact: true }).click();
+    const response = await completed;
+    expect(response.status()).toBe(200);
+    const outcome = (await response.json()) as Outcome;
+    expect(outcome.snapshot.fragments.SSR).toBe(0);
+    expect(outcome.snapshot.owned['g-claude'].source).toBe('shop');
+    await expect(offer.getByRole('button', { name: 'Collected', exact: true })).toBeDisabled();
+    await page.reload();
+    await page.getByRole('tab', { name: 'Mystery shop', exact: true }).click();
+    await expect(offer.getByRole('button', { name: 'Collected', exact: true })).toBeDisabled();
+    const persisted = await api(user, f.user_url, '/api/gacha/state');
+    expect(persisted.status()).toBe(200);
+    const state = (await persisted.json()) as Snapshot;
+    expect(state.fragments.SSR).toBe(0);
+    expect(state.owned['g-claude']).toEqual(outcome.snapshot.owned['g-claude']);
+  } finally {
+    await user.close();
+    await admin.close();
   }
 });
