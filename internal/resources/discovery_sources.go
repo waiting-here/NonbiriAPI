@@ -29,7 +29,8 @@ type PatchDiscoverySourceInput struct {
 
 const discoverySourceSelect = `SELECT ds.id,ds.connection_id,ds.name,sr.canonical_base_url,sr.list_format,sr.credential_id,v.version,ds.revision,sr.source_revision,ds.enabled,
  COALESCE(run.state,'unknown'),run.completed_at,COALESCE(run.safe_class,'none'),COALESCE(run.safe_diagnostic,''),ds.created_at,ds.updated_at,
- EXISTS(SELECT 1 FROM credentials cr JOIN endpoint_key_secrets sec ON sec.id=v.secret_ref_id WHERE cr.id=v.credential_id AND cr.deleted_at IS NULL AND cr.enabled=1 AND v.enabled=1 AND sec.orphaned_at IS NULL)
+ EXISTS(SELECT 1 FROM credentials cr JOIN endpoint_key_secrets sec ON sec.id=v.secret_ref_id WHERE cr.id=v.credential_id AND cr.deleted_at IS NULL AND cr.enabled=1 AND v.enabled=1 AND sec.orphaned_at IS NULL),
+ (SELECT endpoint_key_id FROM discovery_source_keys WHERE source_id=ds.id)
  FROM discovery_sources ds JOIN discovery_source_revisions sr ON sr.id=ds.current_revision_id AND sr.source_id=ds.id
  JOIN credential_versions v ON v.id=sr.credential_version_id AND v.credential_id=sr.credential_id
  LEFT JOIN discovery_source_states st ON st.source_revision_id=sr.id LEFT JOIN discovery_runs run ON run.id=st.current_run_id
@@ -38,9 +39,9 @@ const discoverySourceSelect = `SELECT ds.id,ds.connection_id,ds.name,sr.canonica
 func scanDiscoverySource(scanner pageScanner) (DiscoverySource, error) {
 	var item DiscoverySource
 	var id, credentialID, version, revision, sourceRevision int64
-	var connectionID, checkedAt sql.NullInt64
+	var connectionID, checkedAt, endpointKeyID sql.NullInt64
 	var enabled int
-	if err := scanner.Scan(&id, &connectionID, &item.Name, &item.BaseURL, &item.ListFormat, &credentialID, &version, &revision, &sourceRevision, &enabled, &item.State, &checkedAt, &item.SafeClass, &item.SafeDiagnostic, &item.CreatedAt, &item.UpdatedAt, &item.CredentialAvailable); err != nil {
+	if err := scanner.Scan(&id, &connectionID, &item.Name, &item.BaseURL, &item.ListFormat, &credentialID, &version, &revision, &sourceRevision, &enabled, &item.State, &checkedAt, &item.SafeClass, &item.SafeDiagnostic, &item.CreatedAt, &item.UpdatedAt, &item.CredentialAvailable, &endpointKeyID); err != nil {
 		return item, err
 	}
 	if id <= 0 || credentialID <= 0 || version <= 0 || revision <= 0 || sourceRevision <= 0 || enabled < 0 || enabled > 1 || !validDiscoveryListFormat(item.ListFormat) || !optionalChoice(item.State, "unknown", "checking", "succeeded", "failed") {
@@ -48,6 +49,10 @@ func scanDiscoverySource(scanner pageScanner) (DiscoverySource, error) {
 	}
 	var err error
 	item.ConnectionID, err = optionalDecimal(connectionID)
+	if err != nil {
+		return DiscoverySource{}, err
+	}
+	item.EndpointKeyID, err = optionalDecimal(endpointKeyID)
 	if err != nil {
 		return DiscoverySource{}, err
 	}
@@ -134,6 +139,9 @@ func (r *Repository) CreateDiscoverySource(ctx context.Context, userID, connecti
 		if err != nil {
 			return DiscoverySource{}, ResourceOperationResult{}, err
 		}
+		if err := requireCredentialConnectionTx(ctx, tx, userID, input.CredentialID, connectionID); err != nil {
+			return DiscoverySource{}, ResourceOperationResult{}, err
+		}
 		id, _, err := createDiscoverySourceTx(ctx, tx, userID, connectionID, ref.credentialID, ref.versionID, input.Name, baseURL, input.ListFormat, input.Enabled, now)
 		if err != nil {
 			return DiscoverySource{}, ResourceOperationResult{}, err
@@ -183,6 +191,13 @@ func (r *Repository) PatchDiscoverySource(ctx context.Context, userID, sourceID 
 			credentialID, _ := parseDecimalID(item.CredentialID)
 			versionID := oldVersionID
 			if input.CredentialID != nil {
+				if item.ConnectionID == nil {
+					return DiscoverySource{}, ResourceOperationResult{}, ErrNotFound
+				}
+				connectionID, _ := parseDecimalID(*item.ConnectionID)
+				if err := requireCredentialConnectionTx(ctx, tx, userID, *input.CredentialID, connectionID); err != nil {
+					return DiscoverySource{}, ResourceOperationResult{}, err
+				}
 				ref, err := currentCredentialReferenceTx(ctx, tx, userID, *input.CredentialID)
 				if err != nil {
 					return DiscoverySource{}, ResourceOperationResult{}, err

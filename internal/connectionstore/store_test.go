@@ -7,6 +7,7 @@ import (
 	"errors"
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	_ "modernc.org/sqlite"
 	"os"
 	"path/filepath"
@@ -25,7 +26,7 @@ func connectionFixture(t *testing.T) (*sql.DB, *sql.Tx) {
 	}
 	database.SetMaxOpenConns(1)
 	t.Cleanup(func() { database.Close() })
-	if _, err := database.Exec(string(body)); err != nil {
+	if _, err := database.Exec(string(body) + db.ServiceKeyScopeSQL); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := database.Exec("PRAGMA foreign_keys=ON"); err != nil {

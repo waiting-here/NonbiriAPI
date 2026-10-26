@@ -56,9 +56,9 @@ func StagePendingUseRevisionTx(ctx context.Context, tx *sql.Tx, in StagePendingU
 		}
 	}
 	if in.DiscoverySourceRevisionID != nil {
-		var sourceOwner, sourceCredential, sourceVersion int64
+		var sourceID, sourceOwner, sourceCredential, sourceVersion int64
 		var relationshipValid int
-		err := tx.QueryRowContext(ctx, "SELECT owner_user_id,credential_id,credential_version_id,relationship_valid FROM discovery_source_authorizations WHERE source_revision_id=?", *in.DiscoverySourceRevisionID).Scan(&sourceOwner, &sourceCredential, &sourceVersion, &relationshipValid)
+		err := tx.QueryRowContext(ctx, "SELECT source_id,owner_user_id,credential_id,credential_version_id,relationship_valid FROM discovery_source_authorizations WHERE source_revision_id=?", *in.DiscoverySourceRevisionID).Scan(&sourceID, &sourceOwner, &sourceCredential, &sourceVersion, &relationshipValid)
 		if errors.Is(err, sql.ErrNoRows) {
 			return UseRevisionIdentity{}, ErrNotFound
 		}
@@ -70,6 +70,9 @@ func StagePendingUseRevisionTx(ctx context.Context, tx *sql.Tx, in StagePendingU
 		}
 		if sourceOwner != ownerID || sourceCredential != grant.CredentialID || sourceVersion != grant.CredentialVersionID {
 			return UseRevisionIdentity{}, ErrUnavailable
+		}
+		if err := ClaimDiscoverySourceKeyTx(ctx, tx, ownerID, keyID, sourceID); err != nil {
+			return UseRevisionIdentity{}, err
 		}
 	}
 	var displayHead, displayTail string

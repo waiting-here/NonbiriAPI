@@ -129,7 +129,7 @@ func TestConnectionSharedCredentialRotationAndDeletedMaterial(t *testing.T) {
 	}
 }
 
-func TestConnectionDeletionKeepsCredentialUsedByAnotherGroup(t *testing.T) {
+func TestConnectionDeletionKeepsOtherServiceCredentialIndependent(t *testing.T) {
 	f := newConnectionTestFixture(t)
 	ctx := context.Background()
 	services := []contract.NativeService{contract.NativeServiceChatCompletions}
@@ -140,14 +140,24 @@ func TestConnectionDeletionKeepsCredentialUsedByAnotherGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	otherGroup := resourceTestID(t, created.Value.ID)
+	firstCredential := f.credential
+	credentialInput := CreateCredentialInput{Secret: []byte("shared-test-credential-body"), OwnershipConfirmed: true}
+	otherCredential, err := f.env.repository.CreateCredential(ctx, f.user, otherGroup, f.mutation(t, "POST", routeConnectionCredentials, []int64{otherGroup}, credentialInput), credentialInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.credential = resourceTestID(t, otherCredential.Value.ID)
 	endpoint, key := f.entry(t, otherGroup, "https://other.example/v1", services)
 	mutation := f.mutation(t, "DELETE", routeConnection, []int64{f.connection}, map[string]string{"expected_revision": "1"})
 	if _, err := f.env.repository.DeleteConnection(ctx, f.user, f.connection, mutation, 1); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := f.env.repository.GetCredential(ctx, f.user, firstCredential); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("deleted service credential remains visible: %v", err)
+	}
 	credential, err := f.env.repository.GetCredential(ctx, f.user, f.credential)
-	if err != nil || credential.ConnectionID != nil {
-		t.Fatalf("shared credential preserved: %+v %v", credential, err)
+	if err != nil || credential.ConnectionID == nil || *credential.ConnectionID != created.Value.ID {
+		t.Fatalf("other service credential preserved: %+v %v", credential, err)
 	}
 	available, err := f.env.repository.GetEndpointKey(ctx, f.user, resourceTestID(t, endpoint.ID), resourceTestID(t, key.ID))
 	if err != nil || !available.CredentialAvailable {

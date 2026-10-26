@@ -158,6 +158,9 @@ WHERE d.id=? AND d.user_id=? AND dk.id=?`, now, donationID, userID, input.Donati
 		if source.SourceRevision != *input.DiscoverySourceRevision || source.CredentialVersionID != grant.CredentialVersionID {
 			return empty, ErrConflict
 		}
+		if err := connectionstore.ClaimDiscoverySourceKeyTx(ctx, tx, userID, keyID.Int64, source.SourceID); err != nil {
+			return empty, connectionError(err)
+		}
 		sourceRevisionID = &source.SourceRevisionID
 	}
 	value := AppendUsesReceipt{DonationRevision: strconv.FormatInt(revision+1, 10), Uses: make([]AppendedUse, 0, len(input.Items))}

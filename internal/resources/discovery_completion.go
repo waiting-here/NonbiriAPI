@@ -117,6 +117,15 @@ func (r *Repository) finishDiscoveryRunTx(ctx context.Context, tx *sql.Tx, run d
 				return err
 			}
 		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO discovery_run_changes(run_id,added_count,removed_count)
+ SELECT ?,
+ (SELECT count(DISTINCT fresh.normalized_model_id) FROM model_catalog_entries fresh WHERE fresh.discovery_run_id=? AND NOT EXISTS(
+ SELECT 1 FROM model_catalog_entries old WHERE old.discovery_run_id=st.last_successful_run_id AND old.normalized_model_id=fresh.normalized_model_id)),
+ (SELECT count(DISTINCT old.normalized_model_id) FROM model_catalog_entries old WHERE old.discovery_run_id=st.last_successful_run_id AND NOT EXISTS(
+ SELECT 1 FROM model_catalog_entries fresh WHERE fresh.discovery_run_id=? AND fresh.normalized_model_id=old.normalized_model_id))
+ FROM discovery_source_states st WHERE st.source_revision_id=?`, run.id, run.id, run.id, run.sourceRevisionID.Int64); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `UPDATE discovery_source_states SET last_successful_run_id=?,updated_at=? WHERE source_revision_id=? AND current_run_id=? AND result_generation=?`, run.id, now, run.sourceRevisionID.Int64, run.id, run.generation); err != nil {
 			return err
 		}

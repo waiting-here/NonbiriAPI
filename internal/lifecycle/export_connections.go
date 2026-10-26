@@ -62,6 +62,10 @@ type GrantExport struct {
 	CreatedAt         int64    `json:"created_at"`
 }
 type DiscoverySourceExport struct {
+	EndpointKeyID           *string `json:"endpoint_key_id"`
+	LastSuccessAt           *int64  `json:"last_success_at"`
+	AddedCount              *string `json:"added_count"`
+	RemovedCount            *string `json:"removed_count"`
 	ID                      string  `json:"id"`
 	ConnectionID            *string `json:"connection_id"`
 	Name                    string  `json:"name"`
@@ -203,9 +207,12 @@ func exportConnections(ctx context.Context, tx *sql.Tx, request ExportRequest) (
 	if err != nil {
 		return out, err
 	}
-	out.DiscoverySources, err = readConnectionExportRows(ctx, tx, request, `SELECT CAST(s.id AS TEXT),CAST(s.connection_id AS TEXT),s.name,s.enabled,CAST(s.revision AS TEXT),CAST(sr.source_revision AS TEXT),CAST(sr.credential_id AS TEXT),CAST(v.version AS TEXT),sr.canonical_base_url,sr.list_format,CAST(st.result_generation AS TEXT),COALESCE(r.state,'unknown'),COALESCE(r.safe_class,'none'),CAST(COALESCE(r.model_count,0) AS TEXT),r.completed_at,s.created_at,s.updated_at FROM discovery_sources s JOIN discovery_source_revisions sr ON sr.id=s.current_revision_id JOIN credential_versions v ON v.id=sr.credential_version_id JOIN discovery_source_states st ON st.source_revision_id=sr.id LEFT JOIN discovery_runs r ON r.id=st.current_run_id WHERE s.user_id=? ORDER BY s.id LIMIT ?`, func(rows *sql.Rows) (DiscoverySourceExport, error) {
+	out.DiscoverySources, err = readConnectionExportRows(ctx, tx, request, `SELECT CAST(s.id AS TEXT),CAST(s.connection_id AS TEXT),s.name,s.enabled,CAST(s.revision AS TEXT),CAST(sr.source_revision AS TEXT),CAST(sr.credential_id AS TEXT),CAST(v.version AS TEXT),sr.canonical_base_url,sr.list_format,CAST(st.result_generation AS TEXT),COALESCE(r.state,'unknown'),COALESCE(r.safe_class,'none'),CAST(COALESCE(r.model_count,0) AS TEXT),r.completed_at,s.created_at,s.updated_at,CAST((SELECT endpoint_key_id FROM discovery_source_keys WHERE source_id=s.id) AS TEXT),success.completed_at,CAST(changes.added_count AS TEXT),CAST(changes.removed_count AS TEXT)
+ FROM discovery_sources s JOIN discovery_source_revisions sr ON sr.id=s.current_revision_id JOIN credential_versions v ON v.id=sr.credential_version_id JOIN discovery_source_states st ON st.source_revision_id=sr.id LEFT JOIN discovery_runs r ON r.id=st.current_run_id
+ LEFT JOIN discovery_runs success ON success.id=st.last_successful_run_id LEFT JOIN discovery_run_changes changes ON changes.run_id=st.current_run_id
+ WHERE s.user_id=? ORDER BY s.id LIMIT ?`, func(rows *sql.Rows) (DiscoverySourceExport, error) {
 		var item DiscoverySourceExport
-		if err := rows.Scan(&item.ID, &item.ConnectionID, &item.Name, &item.Enabled, &item.Revision, &item.DiscoverySourceRevision, &item.CredentialID, &item.CredentialVersion, &item.BaseURL, &item.ListFormat, &item.ResultGeneration, &item.State, &item.SafeClass, &item.ModelCount, &item.ObservedAt, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.ConnectionID, &item.Name, &item.Enabled, &item.Revision, &item.DiscoverySourceRevision, &item.CredentialID, &item.CredentialVersion, &item.BaseURL, &item.ListFormat, &item.ResultGeneration, &item.State, &item.SafeClass, &item.ModelCount, &item.ObservedAt, &item.CreatedAt, &item.UpdatedAt, &item.EndpointKeyID, &item.LastSuccessAt, &item.AddedCount, &item.RemovedCount); err != nil {
 			return item, err
 		}
 		return item, nil

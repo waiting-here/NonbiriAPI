@@ -47,7 +47,7 @@ func scanCredentialImpact(scanner pageScanner) (credentialImpactRow, error) {
 	var item credentialImpactRow
 	var id, version, mask int64
 	var endpointID, keyID, donationID, donationKeyID, useID, sourceID sql.NullInt64
-	err := scanner.Scan(&id, &endpointID, &keyID, &donationID, &donationKeyID, &useID, &sourceID, &version, &mask, &item.State)
+	err := scanner.Scan(&id, &endpointID, &keyID, &donationID, &donationKeyID, &useID, &sourceID, &version, &mask, &item.State, &item.EndpointNote, &item.EndpointBaseURL)
 	if err != nil {
 		return item, err
 	}
@@ -92,9 +92,9 @@ func (r *Repository) listCredentialImpact(ctx context.Context, userID, credentia
 		case "charity":
 			selectSQL = `SELECT cu.id,cu.endpoint_id,cu.endpoint_key_id,cu.donation_id,cu.donation_key_id,cu.use_id,sr.source_id,v.version,cu.native_service_bit,cu.review_state FROM current_uses cu JOIN credential_versions v ON v.id=cu.credential_version_id LEFT JOIN discovery_source_revisions sr ON sr.id=cu.discovery_source_revision_id`
 		case "discovery":
-			selectSQL = `SELECT sr.id,NULL,NULL,NULL,NULL,NULL,sr.source_id,v.version,0,CASE sr.priority WHEN 3 THEN 'current' WHEN 2 THEN 'approved' ELSE 'pending' END FROM affected_sources sr JOIN credential_versions v ON v.id=sr.credential_version_id`
+			selectSQL = `SELECT sr.id,NULL AS endpoint_id,NULL,NULL,NULL,NULL,sr.source_id,v.version,0,CASE sr.priority WHEN 3 THEN 'current' WHEN 2 THEN 'approved' ELSE 'pending' END FROM affected_sources sr JOIN credential_versions v ON v.id=sr.credential_version_id`
 		}
-		page, err := readConnectionList(ctx, tx, r, window, "credential-impact-"+kind, credentialImpactCTE+`SELECT * FROM (`+selectSQL+`) impact WHERE 1=1`, "impact.id", []any{credentialID, userID}, scanCredentialImpact, func(item credentialImpactRow) string { return item.sortID })
+		page, err := readConnectionList(ctx, tx, r, window, "credential-impact-"+kind, credentialImpactCTE+`SELECT impact.*,COALESCE(e.note,''),COALESCE(e.base_url,'') FROM (`+selectSQL+`) impact LEFT JOIN endpoints e ON e.id=impact.endpoint_id WHERE 1=1`, "impact.id", []any{credentialID, userID}, scanCredentialImpact, func(item credentialImpactRow) string { return item.sortID })
 		if err != nil {
 			return CredentialImpact{}, err
 		}
