@@ -4,6 +4,43 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.2.1 — 2026-10-26
+
+### Added
+
+- Add mainstream-channel-and-derivative, mysterious-channel and other-third-party
+  endpoint tags. Donations whose endpoints all qualify as mainstream use the
+  existing automatic-review and standard steward rules on new submissions and
+  explicit resubmissions; forced manual review remains respected. Existing
+  pending donations are not approved just because tags change.
+- Add persistent wildcard domain rules for adding or clearing tags on existing
+  and future endpoints. Patterns include the domain itself and all subdomains;
+  more specific rules run later. Matched endpoints display their rule sources
+  and cannot be tagged manually. Removing rules restores the remaining rules
+  and original manual labels. Existing endpoint-tag permissions govern both.
+- Blur R-18 limited-pool covers on the activities page by default. Clicking the
+  cover toggles its visibility; the separate text link opens the pool. The site
+  artwork policy continues to control whether restricted images are available.
+
+### Fixed and improved
+
+- Keep donation-review feedback outside the list/detail grid so approval receipts
+  cannot displace the review panel.
+- Share collection progress between the gacha home and collection. Count only
+  offered/owned-visible themes and currently permitted artwork, preserving
+  restricted placeholders and existing ownership and reward behavior.
+- Align filter labels, controls, help and actions across management pages;
+  improve source-panel layouts and use consistent disclosure panels and platform
+  leaderboard controls.
+
+### Upgrade
+
+- Storage advances to schema 39 with persistent endpoint rules and an indexed
+  domain lookup. Account export remains format 30. Back up the matching recovery
+  set and explicitly run the same-release standalone upgrader before startup.
+  Exact registered schema 16–26 and 33–38 sources are supported; startup never
+  upgrades an existing database implicitly.
+
 ## 1.2.0 — 2026-10-26
 
 ### Added

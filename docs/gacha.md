@@ -33,6 +33,12 @@ obey the switch; already downloaded content cannot be recalled.
 
 Activity entrances are hidden by default. Administrators can show them from the activity settings. This display switch does not stop scheduled pools or disable the activity URL. The permanent pool, catalogue and mystery shop stay open. Limited pools have individual schedules. When entrances are enabled, the main banner appears below Cyber Loan under permanent activities. Each open limited pool also appears under limited activities, with its cover, featured cards and opening dates, and links directly to that pool. Draft, paused, future and ended pools have no entrance. Open **Activities → The Gacha Simulator**; administrators configure it from **Activity management**. Site login, account restrictions and maintenance still apply.
 
+R-18 limited-pool banners label their rating and blur the cover by default.
+Clicking the cover reveals it or restores the blur; clicking the separate text
+area enters the pool. Revealing a cover lasts only for the current mounted banner.
+When the site disables R-18 artwork, the cover remains a neutral placeholder and
+cannot be revealed. General-audience banners retain their whole-card link.
+
 Cards are cosmetic collectibles. They cannot be transferred, traded, sold or converted into credits. One-time theme completion rewards grant tickets, credits and cumulative donation credit. Donation credit itself is not a spendable balance.
 
 ## Getting started
@@ -156,6 +162,13 @@ These routes use station sessions and existing same-origin checks; they are not 
 | POST | `/admin/api/gacha` | Save settings, a pool or a template |
 
 Themes consisting entirely of limited cards stay hidden until a pool containing their cards has opened. Past openings continue to count after a pool ends or is paused; already owned cards remain visible. Scheduled pools paused before opening do not reveal their themes.
+
+The home collection button and collection header use the same progress scope:
+cards in currently visible themes whose artwork is permitted by the instance's
+content setting. Both the owned count and total use that scope. Restricted
+artwork placeholders remain available in the collection, with a note explaining
+that these cards are excluded from progress. Content-setting changes do not
+delete ownership or alter completion rewards.
 
 Administrator settings accept an optional `entry_enabled` boolean, alongside rules, shop and the expected revision. Omitting it preserves the current switch; new installations default to false.
 

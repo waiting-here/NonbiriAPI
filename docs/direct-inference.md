@@ -1,6 +1,6 @@
 # Direct inference
 
-This contract describes the v1.2.0 source. Check the instance's deployed build
+This contract describes the v1.2.1 source. Check the instance's deployed build
 before using newly added configuration behavior. All routes use the existing
 CallerKey, ownership, model selection, outbound protection, cancellation,
 accounting and log rules in the [HTTP contract](api-contract.md).

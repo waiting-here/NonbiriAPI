@@ -2,7 +2,7 @@
 
 Service connection, shared credential, discovery-source and per-service donation semantics are described in [service connections](service-connections.md). Existing endpoint and single-target clients retain their original explicit scope.
 
-- Status: **v1.2.0 source contract**. Check an instance's deployed build before using routes or configuration added by an update.
+- Status: **v1.2.1 source contract**. Check an instance's deployed build before using routes or configuration added by an update.
 - Scope: model discovery and direct HTTP/SSE text, image, audio, embedding, moderation, rerank, Decisions and System One inference. See the [operation and connector matrix](direct-inference.md) for exact paths, conversion limits and the excluded persistent/realtime APIs. There is no Anthropic-native public ingress.
 - Authority: this document reflects the current source route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically. The session-authenticated picture-book activity has its own configuration and accounting, separate from the public image-generation model route.
 - Release boundary: new source behavior is listed in the [changelog](../CHANGELOG.md). This document does not assert that an instance has deployed it.
@@ -142,9 +142,9 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 38. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts exact registered schema 16–26 and 33–37 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 39. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts exact registered schema 16–26 and 33–38 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
 
-`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=38`, `minimum_schema_version=38`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
+`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=39`, `minimum_schema_version=39`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
 
 Current account export `schema_version=30` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v30.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
@@ -1244,7 +1244,7 @@ The browser routes below require a currently effective level-5 or level-6 user s
 | Users | `GET /api/steward/users`; `GET|PATCH /api/steward/users/{id}`; `POST /api/steward/users/{id}/ban`; `POST /api/steward/users/{id}/unban`; `GET|PUT /api/steward/users/{id}/steward-permissions` (actual L6 only) |
 | Announcements | The eight routes in §7.3 with `/api/steward/announcements` replacing `/admin/api/announcements` |
 | Failure reset | Shared batch and selection routes in §4.2 |
-| Endpoints | `GET /api/steward/overview/endpoints`, `GET /api/steward/overview/endpoints/users` (`endpoints.read`); `PATCH /api/steward/overview/endpoints/tags` (`endpoints.tags`) |
+| Endpoints | `GET /api/steward/overview/endpoints`, `GET /api/steward/overview/endpoints/users`, `GET /api/steward/overview/endpoints/tag-rules` (`endpoints.read`); `PATCH /api/steward/overview/endpoints/tags`, `PUT`/`DELETE /api/steward/overview/endpoints/tag-rules` (`endpoints.tags`) |
 | Endpoint policies | Backoff options, policy reads/updates (`charity.backoff`); loaded Cloudflare route reads (`egress.read`) |
 | AI assistant | Shared `/api/steward/ai` conversation, automatic-review and memory routes in §7.8, with their corresponding grants |
 
@@ -1323,7 +1323,7 @@ other workflows. Administrator-only actions remain exclusive. See the
 | Scope | Resource qualification |
 | --- | --- |
 | `none` | No steward donation browsing or operation. |
-| `standard` | At least one unended, unexpired key, and **every** such key has either a saved mainstream-channel source or a current binding to a mainstream charity model. |
+| `standard` | At least one unended, unexpired key, and **every** such key has a saved mainstream-channel source, an effective `mainstream` endpoint tag, or a current binding to a mainstream charity model. |
 | `enhanced` | Standard qualification, or any key's canonical endpoint URL has a current management tag. |
 | `full` | The level-6 donation resource range, subject to ordinary lifecycle/retention checks. |
 
@@ -1417,7 +1417,35 @@ Management charity log rows and JSON/CSV exports also expose optional `charity_m
 
 `PATCH /admin/api/site-config` accepts the closed body `{expected_revision:string,values:object}` with 1–64 known generic configuration keys and a 256 KiB request limit. Values use the catalog's scalar types. It validates the combined configuration and commits all changes with one site revision increment and one idempotency receipt. Stale revisions return `409`; invalid combinations return an actionable dependency error. Unchanged values do not advance the revision. The response is `{revision:string,changed_keys:string[]}`; clients may read the complete configuration after saving. The existing single-key route remains available.
 
-Endpoint-overview tags support `abusive_third_party`, `community_charity`, `noncommercial_gateway` (Non-commercial aggregation gateway), `user_gateway` (User-built gateway), `steward_gateway` (Steward-built gateway) and `invalid_entry` (Incorrect entry). `tag=untagged` selects base URLs with no tags. `PATCH {prefix}/overview/endpoints/tags` accepts `{base_urls:string[],tag:string,add:boolean}` for 1–100 distinct canonical base URLs and the existing idempotency key. Prefixes are `/admin/api` and `/api/steward`; stewards require `endpoints.tags`. Multiple tags coexist, batches are atomic, and adding an existing tag or removing an absent tag is harmless. Tags do not change routing, inference eligibility, bans or billing. Any tag does include the entire matching donation in an enhanced steward's resource scope; final operations recheck current tags and action grants.
+Endpoint-overview tags support `abusive_third_party`, `community_charity`, `noncommercial_gateway` (Non-commercial aggregation gateway), `user_gateway` (User-built gateway), `steward_gateway` (Steward-built gateway), `invalid_entry` (Incorrect entry), `mainstream` (Mainstream channels and derivatives), `mysterious` (Mysterious channel) and `other_third_party` (Other third party). `tag=untagged` selects base URLs with no effective tags. `PATCH {prefix}/overview/endpoints/tags` accepts `{base_urls:string[],tag:string,add:boolean}` for 1–100 distinct canonical base URLs and the existing idempotency key. Prefixes are `/admin/api` and `/api/steward`; stewards require `endpoints.tags`. Multiple tags coexist, batches are atomic, and adding an existing tag or removing an absent tag is harmless. A batch containing an endpoint managed by a wildcard rule fails atomically with HTTP 409 `conflict`. Tags do not directly change routing, inference eligibility, bans or billing. Any effective tag includes the entire matching donation in an enhanced steward's resource scope; `mainstream` also qualifies the endpoint for the standard all-key check and automatic approval on a subsequent submission. Final operations recheck current tags and action grants.
+
+Endpoint rows return `tags` (effective labels), `manual_tags` (retained original
+manual labels) and `tag_rules` (matching `{pattern,action,tags}` rules ordered from
+broad to specific). A nonempty `tag_rules` makes manual tag editing unavailable.
+
+Persistent wildcard rules use `{prefix}/overview/endpoints/tag-rules`:
+
+| Method | Input and result |
+| --- | --- |
+| `GET` | Optional `q`, `page`, `page_size`; numbered `{data,next_cursor:null,pagination}` with `{pattern,action,tags}` rows. Requires `endpoints.read` for stewards. |
+| `PUT` | `{pattern,action:"add"\|"remove",tags:string[]}`; upserts one pattern. Add requires at least one known tag; remove requires an empty array. |
+| `DELETE` | `{pattern}`; deletes the rule if present. |
+
+Writes require the existing idempotency key and `endpoints.tags` grant and return
+204. Use `*.example.com` to match `example.com` and any depth of subdomains;
+hostname boundaries prevent matching `notexample.com`. Patterns are normalized
+to lowercase without a trailing dot; protocols, ports, paths and IP literals are
+not patterns. Existing and future endpoints match by hostname regardless of
+protocol, port or path. Rules apply from broad to specific: add accumulates tags,
+remove clears earlier effective tags, and a more specific add can add again.
+Original manual tags remain stored. Deleting a rule recomputes effective tags
+from the remaining rules and manual originals. Changes affect current scope but
+do not rewrite approval history, bindings or donation source metadata.
+
+A custom donation whose entire submitted resource set has mainstream-qualified
+endpoints can use the existing automatic-approval path when newly submitted or
+explicitly resubmitted, unless forced manual review applies. Adding a tag or rule
+does not process an existing pending backlog.
 
 Matching `GET /api/steward/overview/endpoints` and `GET /api/steward/overview/endpoints/users` require `endpoints.read` and share the administrator filters, paging and projections above. Level 6 has both endpoint actions; level 5 defaults to neither. Endpoint-policy reads/updates independently require `charity.backoff`, while loaded Cloudflare route reads require `egress.read`. No configuration write route is added.
 
