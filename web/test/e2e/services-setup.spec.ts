@@ -520,9 +520,13 @@ for (const locale of ['en', 'zh'] as const) {
     await expect(page.locator('.nb-expandable-panel:not([hidden])')).toBeVisible();
     await shot('models-panel');
     await page.locator('summary').filter({ hasText: serviceUI.manualModels }).click();
-    const manual = page
-      .locator('.nb-expandable-panel:not([hidden])')
-      .getByLabel(copy('Provider model name', '服务商的模型名'), { exact: true });
+    const modelPanel = page.getByRole('region', {
+      name: copy('View models', '查看模型') + ' · Primary key',
+      exact: true,
+    });
+    const manual = modelPanel.getByLabel(copy('Provider model name', '服务商的模型名'), {
+      exact: true,
+    });
     await manual.fill('draft-model');
     await page
       .locator('.nb-expandable-panel:not([hidden])')
@@ -532,6 +536,7 @@ for (const locale of ['en', 'zh'] as const) {
       .getByRole('button', { name: copy('View models', '查看模型'), exact: true })
       .first()
       .click();
+    await expect(modelPanel).toBeVisible();
     await expect(manual).toHaveValue('draft-model');
     await page
       .locator('.nb-expandable-panel:not([hidden])')

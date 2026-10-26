@@ -62,10 +62,10 @@ for (const width of [1440, 390]) {
         const request = route.request();
         const url = new URL(request.url());
         const input = request.method() === 'POST' ? request.postDataJSON() : null;
-        if (input)
+        if (input || (request.method() === 'POST' && url.pathname.endsWith('/models/refresh')))
           writes.push({
             path: url.pathname,
-            body: input,
+            body: input ?? {},
             identity: request.headers()['idempotency-key'],
           });
         if (url.pathname === '/api/endpoint-create-options') {
@@ -127,13 +127,13 @@ for (const width of [1440, 390]) {
                 revision: '1',
                 result: null,
                 safe_class: 'none',
-                observed_at: null,
+                observed_at: 1800000000,
                 count: null,
               },
             },
           });
         } else if (/^\/api\/endpoints\/\d+\/keys\/\d+\/models$/.test(url.pathname)) {
-          const window = numberedPage([], url.searchParams);
+          const window = url.searchParams.has('limit') ? null : numberedPage([], url.searchParams);
           await route.fulfill({
             json: {
               evidence: {
@@ -147,7 +147,7 @@ for (const width of [1440, 390]) {
               automatic_entries: [],
               manual_entries: [],
               next_cursor: null,
-              pagination: window.pagination,
+              ...(window ? { pagination: window.pagination } : {}),
             },
           });
         } else if (/^\/api\/discovery-sources\/\d+\/models$/.test(url.pathname)) {
@@ -215,6 +215,8 @@ for (const width of [1440, 390]) {
         await expect(save).toBeEnabled();
         await save.click();
         await expect(wizard.getByText(workflow.serviceReady, { exact: true })).toBeVisible();
+        if (['google-gemini', 'openai-compatible'].includes(kind))
+          await expect(wizard.getByText(c.saved, { exact: true })).toBeVisible();
         const nativeServices = createOptions.native_service_options.find(
           (row) => row.connector_type === kind,
         )!.native_services;
@@ -253,7 +255,7 @@ for (const width of [1440, 390]) {
         writes.filter((write) => write.path === '/api/connections/1/discovery-sources'),
       ).toHaveLength(0);
       expect(writes.filter((write) => write.path.endsWith('/models/refresh'))).toHaveLength(2);
-      expect(writes.every((write) => Boolean(write.identity))).toBe(true);
+      expect(writes.filter((write) => !write.identity).map((write) => write.path)).toEqual([]);
 
       await mockPublicConfig(page, 'admin');
       await mockRoleSession(page, 'admin', 'admin');

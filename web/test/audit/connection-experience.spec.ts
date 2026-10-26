@@ -16,6 +16,7 @@ import userEn from '../../src/user/i18n/en.json' with { type: 'json' };
 import bindingCopy from '../../src/user/features/core/models/binding-copy/en.json' with { type: 'json' };
 import type { NativeService } from '../../src/shared/nativeServices';
 import type { DonationUse } from '../../src/shared/operations/donationUses';
+import { submitService } from '../service-onboarding';
 
 const c = common.common.connections;
 const native = common.common.modelTypes;
@@ -1996,9 +1997,7 @@ test('mainstream authorization isolates endpoint catalogs and lets users decline
       if (response.request().method() === 'POST' && /^\/api\/endpoints\/[^/]+\/keys$/.test(path))
         grantResponses.push({ path, status: response.status() });
     });
-    await form
-      .getByRole('button', { name: userEn.user.workflows.continueService, exact: true })
-      .click();
+    await submitService(form);
     await expect(form.getByText(userEn.user.workflows.serviceReady, { exact: true })).toBeVisible();
     await expect(form.locator('.service-key-models')).toHaveCount(3);
     await expect(
@@ -2305,6 +2304,7 @@ test('model imports reuse manual support after reopening and resume after a mode
     const prepare = async (upstreamName: string, modelName: string) => {
       await page.goto(destination);
       const pairModels = page.locator('.service-key-models');
+      await expect(pairModels).toHaveCount(1);
       await pairModels.getByRole('tab', { name: services.manualModels, exact: true }).click();
       await pairModels.getByRole('checkbox', { name: upstream, exact: true }).check();
       const row = await openFold(page.locator('.connection-model-batch'), upstream);

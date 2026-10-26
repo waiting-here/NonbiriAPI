@@ -158,7 +158,7 @@ describe('mainstream entry suggestions', () => {
       throw Error('Unexpected ' + url.pathname);
     });
     await view.user.type(
-      screen.getByRole('textbox', { name: 'Entry URL' }),
+      screen.getByRole('textbox', { name: 'Endpoint URL' }),
       'https://example.com/v1',
     );
     const suggestions = await screen.findByRole('region', {
@@ -222,7 +222,7 @@ describe('mainstream entry suggestions', () => {
       throw Error('Unexpected ' + url.pathname);
     });
     await view.user.type(
-      screen.getByRole('textbox', { name: 'Entry URL' }),
+      screen.getByRole('textbox', { name: 'Endpoint URL' }),
       'https://example.com/v1',
     );
     await view.user.type(screen.getByRole('textbox', { name: 'Note Optional' }), 'My custom draft');
@@ -232,7 +232,7 @@ describe('mainstream entry suggestions', () => {
       }),
     );
     await view.user.click(screen.getByRole('radio', { name: 'Custom' }));
-    expect(screen.getByRole('textbox', { name: 'Entry URL' })).toHaveValue(
+    expect(screen.getByRole('textbox', { name: 'Endpoint URL' })).toHaveValue(
       'https://example.com/v1',
     );
     expect(screen.getByRole('textbox', { name: 'Note Optional' })).toHaveValue('My custom draft');
@@ -259,7 +259,7 @@ describe('mainstream entry suggestions', () => {
       ),
     );
     await view.user.type(
-      screen.getByRole('textbox', { name: 'Entry URL' }),
+      screen.getByRole('textbox', { name: 'Endpoint URL' }),
       'https://example.com/v1',
     );
     await view.user.click(
@@ -289,7 +289,7 @@ describe('mainstream entry suggestions', () => {
         }
         throw Error('Unexpected ' + url.pathname);
       });
-      fireEvent.change(screen.getByRole('textbox', { name: 'Entry URL' }), {
+      fireEvent.change(screen.getByRole('textbox', { name: 'Endpoint URL' }), {
         target: { value: 'https://other.example/v1' },
       });
       await act(() => new Promise((resolve) => setTimeout(resolve, 450)));
@@ -319,7 +319,7 @@ describe('mainstream entry suggestions', () => {
       }
       return json({ ...options(), matching_mainstream_entries: [] });
     });
-    const input = screen.getByRole('textbox', { name: 'Entry URL' });
+    const input = screen.getByRole('textbox', { name: 'Endpoint URL' });
     fireEvent.change(input, { target: { value: 'https://first.example/v1' } });
     expect(matchingReads).toEqual([]);
     await waitFor(() => expect(matchingReads).toHaveLength(1));
@@ -343,7 +343,9 @@ describe('mainstream entry suggestions', () => {
       'https://example.com/v1#private',
       'ftp://example.com/v1',
     ]) {
-      fireEvent.change(screen.getByRole('textbox', { name: 'Entry URL' }), { target: { value } });
+      fireEvent.change(screen.getByRole('textbox', { name: 'Endpoint URL' }), {
+        target: { value },
+      });
       await act(() => new Promise((resolve) => setTimeout(resolve, 400)));
     }
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -367,7 +369,7 @@ describe('mainstream entry suggestions', () => {
         matchingReads === 1 ? options(true) : { ...options(), matching_mainstream_entries: [] },
       );
     });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Entry URL' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Endpoint URL' }), {
       target: { value: 'https://example.com/v1' },
     });
     await screen.findByRole('region', { name: 'This address is available as a preset' });
@@ -398,7 +400,7 @@ describe('mainstream entry suggestions', () => {
       }
       throw Error('Unexpected ' + url.pathname);
     });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Entry URL' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Endpoint URL' }), {
       target: { value: 'https://example.com/v1' },
     });
     await view.user.click(
@@ -505,7 +507,7 @@ it('uses the complete System One protocol without a sub-service choice', async (
     'typesafe-systemone',
   );
   await view.user.type(
-    screen.getByRole('textbox', { name: 'Entry URL' }),
+    screen.getByRole('textbox', { name: 'Endpoint URL' }),
     'https://system.example/v1',
   );
   expect(screen.queryByRole('checkbox', { name: 'System One' })).not.toBeInTheDocument();

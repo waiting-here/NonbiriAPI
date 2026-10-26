@@ -138,7 +138,7 @@ export function ServiceCreateForm({
           .filter((entry) => entry.id && selected[entry.id])
           .map((entry) => ({
             row: entry.id!,
-            discovery: skipCatalog[entry.id!] ? null : channel?.discovery_source,
+            discovery: skipCatalog[entry.id!] ? null : (channel?.discovery_source ?? undefined),
             input: {
               source: 'mainstream',
               channel_id: channel!.id,

@@ -219,13 +219,18 @@ test('personal models default on and retain a changed setting after a real revis
     await configureManagedHeaders(page);
     await toggle.uncheck();
     await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page).toHaveURL((url) =>
+      /^[1-9]\d*$/.test(url.searchParams.get('model_id') ?? ''),
+    );
     await expect(page.getByRole('button', { name: 'Edit model', exact: true })).toBeVisible();
     const id = new URL(page.url()).searchParams.get('model_id');
     expect(id).toMatch(/^[1-9]\d*$/);
     const path = '/api/models/' + id;
     let current = await read(context, origin, path);
     expect(current.cloudflare_proxy_enabled).toBe(false);
-    expect(current.cloudflare_proxy_mode).toBe('worker');
+    expect(current.cloudflare_proxy_mode).toBe(
+      process.env.NONBIRI_ENDPOINT_POLICIES_BROWSER === '1' ? 'worker' : 'direct',
+    );
     expect(current.session_headers).toEqual(managedHeaders);
     await saveSeparateAdaptation(page, context, origin, path);
     await page.getByRole('button', { name: 'Edit model', exact: true }).click();
@@ -293,7 +298,9 @@ for (const role of ['admin', 6] as const) {
       const path = prefix + '/charity-models/' + id;
       let current = await read(context, origin, path);
       expect(current.cloudflare_proxy_enabled).toBe(true);
-      expect(current.cloudflare_proxy_mode).toBe('worker');
+      expect(current.cloudflare_proxy_mode).toBe(
+        process.env.NONBIRI_ENDPOINT_POLICIES_BROWSER === '1' ? 'worker' : 'direct',
+      );
       expect(current.session_headers).toEqual(managedHeaders);
       await expectManagedHeaders(page);
       if (role === 'admin') await saveSeparateAdaptation(page, context, origin, path);
@@ -544,7 +551,7 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
       await picker
         .locator('.personal-binding-picker__browse')
         .getByRole('button')
-        .filter({ has: page.getByText(name + '-' + index, { exact: false }) })
+        .filter({ has: page.getByText(cases[index]!.url, { exact: true }) })
         .click();
       await picker
         .getByRole('searchbox', { name: bindingCopy.searchModels, exact: true })

@@ -854,26 +854,30 @@ export function PairManualCatalog({
       <p className="nb-small nb-muted">{text('user.services.manualBulkHelp')}</p>
       <form className="core-form" onSubmit={(event) => void create(event)}>
         <div className="core-field-grid">
-          <label>
-            <span>{t('endpoints.manualModel')}</span>
-            <textarea
-              className="core-mono"
-              value={upstreamModel}
-              rows={4}
-              maxLength={51200}
-              disabled={hasAttempt}
-              onChange={(event) => setUpstreamModel(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>{t('endpoints.manualProvider')}</span>
-            <input
-              value={provider}
-              maxLength={256}
-              disabled={hasAttempt}
-              onChange={(event) => setProvider(event.target.value)}
-            />
-          </label>
+          <Field label={t('endpoints.manualModel')}>
+            {(props) => (
+              <textarea
+                {...props}
+                className="core-mono"
+                value={upstreamModel}
+                rows={4}
+                maxLength={51200}
+                disabled={hasAttempt}
+                onChange={(event) => setUpstreamModel(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field label={t('endpoints.manualProvider')}>
+            {(props) => (
+              <input
+                {...props}
+                value={provider}
+                maxLength={256}
+                disabled={hasAttempt}
+                onChange={(event) => setProvider(event.target.value)}
+              />
+            )}
+          </Field>
         </div>
         <OutcomeNotice
           outcome={outcome}
@@ -1881,131 +1885,132 @@ export function EndpointDetail({
           onModelsLockChange={setModelsLocked}
         />
       ) : null}
-      <section className="core-card" aria-busy={keys.isFetching} hidden={Boolean(focusKeyId)}>
-        <div className="core-card__header">
-          <h2>{t('endpoints.key')}</h2>
-        </div>
-        {BigInt(endpoint.data.key_count) > 10n || filters.active ? (
-          <ResourceFilterBar control={filters} />
-        ) : null}
-        {addingKey ? (
-          endpoint.data.connection_id ? (
-            <ExpandablePanel
-              open
-              title={t('endpoints.addKey')}
-              closeLabel={t('common.close')}
-              onClose={() => setAddingKey(false)}
-            >
-              <CredentialGrantForm
-                accountId={accountId}
-                connectionId={endpoint.data.connection_id}
-                endpoint={endpoint.data}
-                onSaved={(key) => {
-                  setAddingKey(false);
-                  setSelectedKeyId(key.id);
-                  void keys.refetch();
-                }}
-              />
-            </ExpandablePanel>
-          ) : (
-            <AddEndpointKeyForm
-              accountId={accountId}
-              endpoint={endpoint.data}
-              onClose={() => setAddingKey(false)}
-            />
-          )
-        ) : null}
-        {keys.data && keys.data.data.length > 1 && !focusKeyId ? (
-          <Field label={text('user.services.currentKey')}>
-            {(props) => (
-              <select
-                {...props}
-                disabled={modelsLocked}
-                value={
-                  keys.data.data.some((row) => row.id === selectedKeyId)
-                    ? selectedKeyId
-                    : keys.data.data[0]!.id
-                }
-                onChange={(event) => setSelectedKeyId(event.target.value)}
-              >
-                {keys.data.data.map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {(row as EndpointKey & { credential_note?: string }).credential_note ||
-                      row.note ||
-                      row.display_head + '…' + row.display_tail}
-                  </option>
-                ))}
-              </select>
-            )}
-          </Field>
-        ) : null}
-        {keys.error && keys.data ? (
-          <CoreErrorPanel compact error={keys.error} onRetry={() => void keys.refetch()} />
-        ) : null}
-        {keys.isPending && !keys.data ? (
-          <CoreLoading />
-        ) : !keys.data ? (
-          <CoreErrorPanel
-            error={keys.error ?? new Error('The key details are unavailable.')}
-            onRetry={() => void keys.refetch()}
-          />
-        ) : keys.data.data.length === 0 && filters.active ? (
-          <FilteredResourceEmpty control={filters} />
-        ) : keys.data.data.length === 0 ? (
-          <CoreEmpty title={t('endpoints.noKeysTitle')} body={t('endpoints.noKeysBody')} />
-        ) : (
-          <div className="nb-table-wrap services-key-table">
-            <table className="nb-table">
-              <caption className="nb-sr">{t('endpoints.key')}</caption>
-              <thead>
-                <tr>
-                  <th>{t('endpoints.key')}</th>
-                  <th>{t('endpoints.keyState')}</th>
-                  <th>{t('endpoints.discovery')}</th>
-                  <th>{ui('user.services.keyLimits')}</th>
-                  <th>{ui('user.services.inUse')}</th>
-                  <th>
-                    <span className="nb-sr">{ui('user.services.more')}</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {keys.data.data
-                  .filter(
-                    (row) =>
-                      row.id ===
-                      (keys.data.data.some((item) => item.id === selectedKeyId)
-                        ? selectedKeyId
-                        : keys.data.data[0]?.id),
-                  )
-                  .map((keyData) => (
-                    <EndpointKeyCard
-                      initialModelsOpen
-                      onModelsLockChange={setModelsLocked}
-                      key={keyData.id}
-                      accountId={accountId}
-                      endpoint={endpoint.data}
-                      keyData={keyData}
-                      onRefresh={() => void keys.refetch()}
-                      suppressRoutePanel={usingModels}
-                      onChooseConnection={chooseConnection}
-                    />
-                  ))}
-              </tbody>
-            </table>
+      {!focusKeyId ? (
+        <section className="core-card" aria-busy={keys.isFetching}>
+          <div className="core-card__header">
+            <h2>{t('endpoints.key')}</h2>
           </div>
-        )}
-        {keys.data ? (
-          <PagePagination
-            metadata={keys.data.pagination}
-            requestedPage={keyPager.page}
-            busy={modelsLocked || keys.isFetching || addingKey || busy}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-          />
-        ) : null}
-      </section>
-
+          {BigInt(endpoint.data.key_count) > 10n || filters.active ? (
+            <ResourceFilterBar control={filters} />
+          ) : null}
+          {addingKey ? (
+            endpoint.data.connection_id ? (
+              <ExpandablePanel
+                open
+                title={t('endpoints.addKey')}
+                closeLabel={t('common.close')}
+                onClose={() => setAddingKey(false)}
+              >
+                <CredentialGrantForm
+                  accountId={accountId}
+                  connectionId={endpoint.data.connection_id}
+                  endpoint={endpoint.data}
+                  onSaved={(key) => {
+                    setAddingKey(false);
+                    setSelectedKeyId(key.id);
+                    void keys.refetch();
+                  }}
+                />
+              </ExpandablePanel>
+            ) : (
+              <AddEndpointKeyForm
+                accountId={accountId}
+                endpoint={endpoint.data}
+                onClose={() => setAddingKey(false)}
+              />
+            )
+          ) : null}
+          {keys.data && keys.data.data.length > 1 && !focusKeyId ? (
+            <Field label={text('user.services.currentKey')}>
+              {(props) => (
+                <select
+                  {...props}
+                  disabled={modelsLocked}
+                  value={
+                    keys.data.data.some((row) => row.id === selectedKeyId)
+                      ? selectedKeyId
+                      : keys.data.data[0]!.id
+                  }
+                  onChange={(event) => setSelectedKeyId(event.target.value)}
+                >
+                  {keys.data.data.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {(row as EndpointKey & { credential_note?: string }).credential_note ||
+                        row.note ||
+                        row.display_head + '…' + row.display_tail}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+          ) : null}
+          {keys.error && keys.data ? (
+            <CoreErrorPanel compact error={keys.error} onRetry={() => void keys.refetch()} />
+          ) : null}
+          {keys.isPending && !keys.data ? (
+            <CoreLoading />
+          ) : !keys.data ? (
+            <CoreErrorPanel
+              error={keys.error ?? new Error('The key details are unavailable.')}
+              onRetry={() => void keys.refetch()}
+            />
+          ) : keys.data.data.length === 0 && filters.active ? (
+            <FilteredResourceEmpty control={filters} />
+          ) : keys.data.data.length === 0 ? (
+            <CoreEmpty title={t('endpoints.noKeysTitle')} body={t('endpoints.noKeysBody')} />
+          ) : (
+            <div className="nb-table-wrap services-key-table">
+              <table className="nb-table">
+                <caption className="nb-sr">{t('endpoints.key')}</caption>
+                <thead>
+                  <tr>
+                    <th>{t('endpoints.key')}</th>
+                    <th>{t('endpoints.keyState')}</th>
+                    <th>{t('endpoints.discovery')}</th>
+                    <th>{ui('user.services.keyLimits')}</th>
+                    <th>{ui('user.services.inUse')}</th>
+                    <th>
+                      <span className="nb-sr">{ui('user.services.more')}</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {keys.data.data
+                    .filter(
+                      (row) =>
+                        row.id ===
+                        (keys.data.data.some((item) => item.id === selectedKeyId)
+                          ? selectedKeyId
+                          : keys.data.data[0]?.id),
+                    )
+                    .map((keyData) => (
+                      <EndpointKeyCard
+                        initialModelsOpen
+                        onModelsLockChange={setModelsLocked}
+                        key={keyData.id}
+                        accountId={accountId}
+                        endpoint={endpoint.data}
+                        keyData={keyData}
+                        onRefresh={() => void keys.refetch()}
+                        suppressRoutePanel={usingModels}
+                        onChooseConnection={chooseConnection}
+                      />
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {keys.data ? (
+            <PagePagination
+              metadata={keys.data.pagination}
+              requestedPage={keyPager.page}
+              busy={modelsLocked || keys.isFetching || addingKey || busy}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          ) : null}
+        </section>
+      ) : null}
       <Fold
         lazy
         title={ui('user.services.adaptation')}

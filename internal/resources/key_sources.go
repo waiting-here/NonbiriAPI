@@ -49,6 +49,15 @@ func setKeySourceTx(ctx context.Context, tx *sql.Tx, userID, keyID int64, source
 		_, err := tx.ExecContext(ctx, `DELETE FROM endpoint_key_discovery_sources WHERE endpoint_key_id=? AND EXISTS(SELECT 1 FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id WHERE k.id=? AND e.user_id=?)`, keyID, keyID, userID)
 		return err
 	}
+	var accessible bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM discovery_sources ds
+ JOIN endpoint_keys k ON k.id=? JOIN endpoints e ON e.id=k.endpoint_id
+ WHERE ds.id=? AND ds.user_id=? AND e.user_id=ds.user_id AND ds.connection_id IS e.connection_id)`, keyID, *sourceID, userID).Scan(&accessible); err != nil {
+		return err
+	}
+	if !accessible {
+		return ErrNotFound
+	}
 	var grantID, revisionID, versionID int64
 	err := tx.QueryRowContext(ctx, `SELECT k.current_grant_revision_id,ds.current_revision_id,g.credential_version_id
  FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id

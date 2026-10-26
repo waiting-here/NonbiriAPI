@@ -43,7 +43,21 @@ func TestServiceKeyScopeRejectsCrossServiceAndSharedCatalog(t *testing.T) {
 	}
 	sourceID := resourceTestID(t, *key.DiscoverySourceID)
 	selection := &sourceID
+	otherCredentialInput := CreateCredentialInput{Note: "Other key", Secret: []byte("synthetic-other-service-key"), OwnershipConfirmed: true}
+	otherCredential, err := f.env.repository.CreateCredential(ctx, f.user, otherID, f.mutation(t, "POST", routeConnectionCredentials, []int64{otherID}, otherCredentialInput), otherCredentialInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherKeyInput := CreateEndpointKeyInput{CredentialID: resourceTestID(t, otherCredential.Value.ID), Enabled: true, OwnershipConfirmed: true}
+	otherKey, err := f.env.repository.CreateEndpointKey(ctx, f.user, endpointID, f.mutation(t, "POST", routeEndpointKeys, []int64{endpointID}, otherKeyInput), otherKeyInput)
+	if err != nil {
+		t.Fatal(err)
+	}
 	patch := PatchEndpointKeyInput{DiscoverySourceID: &selection, ExpectedRevision: 1}
+	otherKeyID := resourceTestID(t, otherKey.Value.ID)
+	if _, err := f.env.repository.PatchEndpointKey(ctx, f.user, endpointID, otherKeyID, f.mutation(t, "PATCH", routeEndpointKey, []int64{endpointID, otherKeyID}, patch), patch); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-service catalog attachment accepted: %v", err)
+	}
 	secondID, key2ID := resourceTestID(t, second.ID), resourceTestID(t, key2.ID)
 	if _, err := f.env.repository.PatchEndpointKey(ctx, f.user, secondID, key2ID, f.mutation(t, "PATCH", routeEndpointKey, []int64{secondID, key2ID}, patch), patch); !errors.Is(err, ErrConflict) {
 		t.Fatalf("shared catalog attachment accepted: %v", err)

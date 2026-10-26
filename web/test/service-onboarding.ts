@@ -54,9 +54,10 @@ export async function fillService(
   const core = (locale === 'zh' ? zh : en).user.core;
   const services = (locale === 'zh' ? zh : en).user.services;
   const open = async (title: string) => {
-    const fold = panel.locator('details').filter({
-      has: panel.page().locator('summary').getByText(title, { exact: true }),
-    });
+    const fold = panel
+      .locator('summary')
+      .filter({ has: panel.page().getByText(title, { exact: true }) })
+      .locator('..');
     if ((await fold.getAttribute('open')) === null) await fold.locator(':scope > summary').click();
     return fold;
   };
@@ -77,10 +78,7 @@ export async function fillService(
       .selectOption({ label: label! });
   }
   if (input.discovery === false) {
-    const fold = panel
-      .locator('details')
-      .filter({ has: panel.page().getByText(copy.discoveryOptional, { exact: true }) });
-    if ((await fold.getAttribute('open')) === null) await fold.locator(':scope > summary').click();
+    await open(copy.discoveryOptional);
     await panel
       .getByRole('checkbox', { name: serviceCopy(locale).discoverModels, exact: true })
       .uncheck();

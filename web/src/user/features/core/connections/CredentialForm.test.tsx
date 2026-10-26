@@ -38,12 +38,12 @@ describe('credential entry privacy', () => {
       user: { id: '1', username: 'reader', effective_level: 4 },
     });
     const token = 'synthetic-private-credential-123';
-    const input = screen.getByLabelText('Secret', { exact: true });
+    const input = screen.getByLabelText('API key', { exact: true });
     await view.user.type(input, token);
     await view.user.click(
       screen.getByRole('checkbox', { name: 'I am authorized to use and grant this credential' }),
     );
-    await view.user.click(screen.getByRole('button', { name: 'Save credential' }));
+    await view.user.click(screen.getByRole('button', { name: 'Save key' }));
     await waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(1));
     expect(input).toHaveValue('');
     expect(mocks.execute.mock.calls[0]?.[1]).toBe(token);
