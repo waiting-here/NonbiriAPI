@@ -682,8 +682,8 @@ func (service *Service) endpointOverview(ctx context.Context, adminID int64, rol
 	for rows.Next() {
 		var item EndpointOverview
 		var users, endpoints, keys int64
-		var tags string
-		if err := rows.Scan(&item.BaseURL, &users, &endpoints, &keys, &tags); err != nil {
+		var tags, manualTags string
+		if err := rows.Scan(&item.BaseURL, &users, &endpoints, &keys, &tags, &manualTags); err != nil {
 			_ = rows.Close()
 			return Page[EndpointOverview]{}, classifyDatabaseError("scan endpoint overview", err)
 		}
@@ -691,6 +691,10 @@ func (service *Service) endpointOverview(ctx context.Context, adminID int64, rol
 		item.Tags = []string{}
 		if tags != "" {
 			item.Tags = strings.Split(tags, ",")
+		}
+		item.ManualTags = []string{}
+		if manualTags != "" {
+			item.ManualTags = strings.Split(manualTags, ",")
 		}
 		item.Users = []EndpointOverviewUser{}
 		page.Data = append(page.Data, item)
@@ -707,6 +711,10 @@ func (service *Service) endpointOverview(ctx context.Context, adminID int64, rol
 		page.Data = page.Data[:limit]
 	}
 	for index := range page.Data {
+		page.Data[index].TagRules, err = readEndpointTagRules(ctx, tx, `SELECT r.domain,r.action FROM endpoint_tag_rule_matches r WHERE r.base_url=? ORDER BY length(r.domain),r.domain`, page.Data[index].BaseURL)
+		if err != nil {
+			return Page[EndpointOverview]{}, err
+		}
 		userCount, err := strconv.Atoi(page.Data[index].UserCount)
 		if err != nil || userCount < 0 {
 			return Page[EndpointOverview]{}, fmt.Errorf("%w: endpoint overview user count", ErrInvariant)

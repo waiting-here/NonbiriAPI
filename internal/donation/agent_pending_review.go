@@ -166,7 +166,7 @@ func (s *Service) pendingReview(ctx context.Context, role reviewerRole, actorID,
 		return roleDonationMutation{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		if _, err = readDonationAccessScope(ctx, tx, actual, actorID); err != nil {
+		if err = requireReviewReceiptRangeTx(ctx, tx, actual, actorID, id, now); err != nil {
 			return roleDonationMutation{}, err
 		}
 		return replayRoleDonation(ctx, tx, decision, actual, actorID, id)

@@ -180,6 +180,11 @@ func (s *Service) reviewUses(ctx context.Context, role reviewerRole, actorID, do
 	}
 	committed := false
 	defer finishTx(tx, &committed)
+	if actualRole != reviewerAdmin {
+		if err := authz.RequireStewardPermission(ctx, tx, actorID, "donations.review"); err != nil {
+			return empty, err
+		}
+	}
 	access := useAccess{role: actualRole, actorID: actorID}
 	now, err := s.nowUnix()
 	if err != nil {
@@ -193,7 +198,7 @@ func (s *Service) reviewUses(ctx context.Context, role reviewerRole, actorID, do
 		return empty, err
 	}
 	if decision.Kind == idempotency.Replay {
-		if _, err := readDonationAccessScope(ctx, tx, actualRole, actorID); err != nil {
+		if err := requireReviewReceiptRangeTx(ctx, tx, actualRole, actorID, donationID, now); err != nil {
 			return empty, err
 		}
 		return replay[UseReviewReceipt](decision)

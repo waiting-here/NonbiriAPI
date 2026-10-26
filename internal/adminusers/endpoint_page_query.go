@@ -33,9 +33,9 @@ func endpointOverviewPageQuery(ctx context.Context, tx *sql.Tx, q, after string,
 		args = append(args, filter.UserID)
 	}
 	if filter.Tag != "" {
-		clause := ` AND EXISTS(SELECT 1 FROM admin_endpoint_tags t WHERE t.base_url=e.base_url AND t.tag=?)`
+		clause := ` AND EXISTS(SELECT 1 FROM effective_endpoint_tags t WHERE t.base_url=e.base_url AND t.tag=?)`
 		if filter.Tag == "untagged" {
-			clause = ` AND NOT EXISTS(SELECT 1 FROM admin_endpoint_tags t WHERE t.base_url=e.base_url)`
+			clause = ` AND NOT EXISTS(SELECT 1 FROM effective_endpoint_tags t WHERE t.base_url=e.base_url)`
 		} else {
 			args = append(args, filter.Tag)
 		}
@@ -48,6 +48,7 @@ func endpointOverviewPageQuery(ctx context.Context, tx *sql.Tx, q, after string,
 	return `WITH endpoint_page AS MATERIALIZED (` + window + `)
 SELECT p.base_url,COUNT(DISTINCT e.user_id),COUNT(*),
  COALESCE(SUM((SELECT COUNT(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id)),0),
+ (SELECT COALESCE(group_concat(tag,','),'') FROM (SELECT tag FROM effective_endpoint_tags WHERE base_url=p.base_url ORDER BY tag)),
  (SELECT COALESCE(group_concat(tag,','),'') FROM (SELECT tag FROM admin_endpoint_tags WHERE base_url=p.base_url ORDER BY tag))
 FROM endpoint_page p
 CROSS JOIN endpoints e ON e.base_url=p.base_url

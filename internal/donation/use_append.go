@@ -175,7 +175,21 @@ WHERE d.id=? AND d.user_id=? AND dk.id=?`, now, donationID, userID, input.Donati
 	if err := requireOne(result); err != nil {
 		return empty, err
 	}
-	if s.pendingSubmission != nil {
+	ids := make([]int64, len(value.Uses))
+	for i, use := range value.Uses {
+		ids[i], _ = strconv.ParseInt(use.ID, 10, 64)
+	}
+	approved, err := s.autoApproveSubmittedUsesTx(ctx, tx, donationID, ids, now)
+	if err != nil {
+		return empty, err
+	}
+	if approved {
+		for i := range value.Uses {
+			revision, _ := strconv.ParseInt(value.Uses[i].Revision, 10, 64)
+			value.Uses[i].Revision = strconv.FormatInt(revision+1, 10)
+		}
+	}
+	if !approved && s.pendingSubmission != nil {
 		if err := s.pendingSubmission(ctx, tx, donationID); err != nil {
 			return empty, err
 		}
