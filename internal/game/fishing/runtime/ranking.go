@@ -303,24 +303,29 @@ SELECT user_id,species_key,size_cm,blue_length,milk_length,rank,game_profile_pub
 
 func queryRecentSingleLeaderboard(ctx context.Context, tx *sql.Tx, userID, queryNow int64) (FishingLeaderboard, error) {
 	window := queryNow - int64(rankWindow/time.Second)
-	rows, err := tx.QueryContext(ctx, `WITH candidates AS (
-SELECT f.user_id,l.species_key,l.size_cm,l.blue_fat_fish_length_cm AS blue_length,l.milk_crab_length_cm AS milk_length,l.caught_at,b.public_tie_key,
-ROW_NUMBER() OVER(PARTITION BY f.user_id ORDER BY
-length(COALESCE(l.blue_fat_fish_length_cm,l.milk_crab_length_cm,CAST(l.size_cm AS TEXT))) DESC,
-COALESCE(l.blue_fat_fish_length_cm,l.milk_crab_length_cm,CAST(l.size_cm AS TEXT)) COLLATE BINARY DESC,
-l.caught_at ASC,l.batch_id_text ASC,l.ordinal ASC) AS pick
-FROM game_fishing_length_facts l JOIN game_fishing_rank_facts f ON f.batch_id_text=l.batch_id_text
-JOIN game_fishing_best b ON b.user_id=f.user_id
-WHERE f.aggregate_applied=1 AND f.settled_at>?), ranked AS (
+	rows, err := tx.QueryContext(ctx, recentSingleLeaderboardSQL, queryNow, queryNow, userID)
+	return scanLengthLeaderboard(rows, err, userID, "recent_single", &window)
+}
+
+// Select one catch per user with the existing user/expiry index before ranking.
+// The schema fixes expires_at=settled_at+30 days, so the window is unchanged.
+const recentSingleLeaderboardSQL = `WITH candidates AS (
+SELECT b.user_id,l.species_key,l.size_cm,l.blue_fat_fish_length_cm AS blue_length,l.milk_crab_length_cm AS milk_length,l.caught_at,b.public_tie_key
+FROM game_fishing_best b
+JOIN game_fishing_length_facts l ON l.batch_id_text=(
+ SELECT candidate.batch_id_text FROM game_fishing_rank_facts fact
+ CROSS JOIN game_fishing_length_facts candidate ON candidate.batch_id_text=fact.batch_id_text
+ WHERE fact.user_id=b.user_id AND fact.aggregate_applied=1 AND fact.expires_at>?
+ ORDER BY length(COALESCE(candidate.blue_fat_fish_length_cm,candidate.milk_crab_length_cm,CAST(candidate.size_cm AS TEXT))) DESC,
+ COALESCE(candidate.blue_fat_fish_length_cm,candidate.milk_crab_length_cm,CAST(candidate.size_cm AS TEXT)) COLLATE BINARY DESC,
+ candidate.caught_at ASC,candidate.batch_id_text ASC,candidate.ordinal ASC LIMIT 1)), ranked AS (
 SELECT c.user_id,c.species_key,c.size_cm,c.blue_length,c.milk_length,ROW_NUMBER() OVER(ORDER BY
 length(COALESCE(c.blue_length,c.milk_length,CAST(c.size_cm AS TEXT))) DESC,
 COALESCE(c.blue_length,c.milk_length,CAST(c.size_cm AS TEXT)) COLLATE BINARY DESC,c.caught_at ASC,c.public_tie_key ASC) AS rank,
 CASE WHEN u.is_banned=1 AND (u.banned_until IS NULL OR u.banned_until>?) THEN 0 ELSE COALESCE(p.game_profile_public,u.game_profile_public) END AS game_profile_public,u.username,u.guild_nick,COALESCE(u.discord_id,'') AS discord_id,u.avatar,u.guild_avatar_url
 FROM candidates c JOIN users u ON u.id=c.user_id LEFT JOIN game_user_preferences p ON p.user_id=u.id
-WHERE c.pick=1 AND u.is_admin=0)
-SELECT user_id,species_key,size_cm,blue_length,milk_length,rank,game_profile_public,username,guild_nick,discord_id,avatar,guild_avatar_url FROM ranked WHERE rank<=20 OR user_id=? ORDER BY rank`, window, queryNow, userID)
-	return scanLengthLeaderboard(rows, err, userID, "recent_single", &window)
-}
+WHERE u.is_admin=0)
+SELECT user_id,species_key,size_cm,blue_length,milk_length,rank,game_profile_public,username,guild_nick,discord_id,avatar,guild_avatar_url FROM ranked WHERE rank<=20 OR user_id=? ORDER BY rank`
 
 func scanLengthLeaderboard(rows *sql.Rows, err error, userID int64, board string, window *int64) (FishingLeaderboard, error) {
 	if err != nil {
