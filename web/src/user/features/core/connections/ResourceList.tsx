@@ -109,7 +109,7 @@ export function ConnectionResourceList<T>({
           activeCount={q ? 1 : 0}
           secondaryLabel={t('common.connections.filters')}
           search={
-            <div className="nb-inline">
+            <>
               <Field label={t('common.connections.search')}>
                 {(props) => (
                   <input
@@ -124,7 +124,7 @@ export function ConnectionResourceList<T>({
               <button type="button" className="nb-btn nb-btn--secondary" onClick={search}>
                 {t('common.connections.search')}
               </button>
-            </div>
+            </>
           }
           secondary={filters}
           onSubmit={search}

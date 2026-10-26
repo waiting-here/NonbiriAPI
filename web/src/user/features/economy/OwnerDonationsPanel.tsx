@@ -275,19 +275,17 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
                 />
               )}
             </Field>
-            <div className="form-actions">
-              <Button type="submit">{t('common.search')}</Button>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setDraft({ source: '', value: '', invalid: false });
-                  setFilter('donation_q', '');
-                }}
-              >
-                {t('user.charity.ownerPages.clear')}
-              </Button>
-            </div>
+            <Button type="submit">{t('common.search')}</Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setDraft({ source: '', value: '', invalid: false });
+                setFilter('donation_q', '');
+              }}
+            >
+              {t('user.charity.ownerPages.clear')}
+            </Button>
           </>
         }
         secondary={
