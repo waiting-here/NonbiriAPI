@@ -410,7 +410,7 @@ export async function mockRoleSession(
     path: '/api/limited-activities',
     body: [],
   });
-  if (role === 'level6') {
+  if (role === 'level5' || role === 'level6') {
     await mockEmptyDiagnosticHistory(page, station);
     await mockJson(page, {
       origin: USER_ORIGIN,
