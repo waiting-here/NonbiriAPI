@@ -143,6 +143,9 @@
   display: grid;
   gap: 0.75rem;
 }
+.linklink-leaderboard .game-state-actions {
+  align-items: flex-end;
+}
 .linklink-leaderboard h2,
 .linklink-leaderboard p {
   margin: 0;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ErrorState } from '@shared/components/States';
+import { Segmented } from '@shared/components/ui/Segmented';
 import { gameRequest } from '../common/request';
 import { PublicGameIdentity } from '../common/PublicGameIdentity';
 import { GamePrivacyControl } from '../common/GamePrivacyControl';
@@ -57,17 +58,15 @@ export function GwentLeaderboard() {
         <GamePrivacyControl />
       </header>
       <div className="duel-actions">
-        {['7d', '30d'].map((value) => (
-          <button
-            key={value}
-            type="button"
-            className={`btn ${window === value ? 'btn-primary' : 'btn-secondary'}`}
-            aria-pressed={window === value}
-            onClick={() => setWindow(value)}
-          >
-            {value === '7d' ? t('近 7 天', 'Last 7 days') : t('近 30 天', 'Last 30 days')}
-          </button>
-        ))}
+        <Segmented
+          label={t('榜单周期', 'Leaderboard period')}
+          value={window}
+          onChange={setWindow}
+          options={[
+            { value: '7d', label: t('近 7 天', 'Last 7 days') },
+            { value: '30d', label: t('近 30 天', 'Last 30 days') },
+          ]}
+        />
       </div>
       <p>
         {t('按胜场、胜率、更早达成排序。', 'Ordered by wins, win rate, then earlier achievement.')}
