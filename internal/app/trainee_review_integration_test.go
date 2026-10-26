@@ -79,13 +79,15 @@ func TestTraineePendingReviewWithRealSession(t *testing.T) {
 		saved := call(http.MethodPost, path+"/review", body, key)
 		require(saved, http.StatusOK)
 		replayed := call(http.MethodPost, path+"/review", body, key)
-		require(replayed, http.StatusOK)
-		if replayed.Body.String() != saved.Body.String() {
-			t.Fatal("review replay changed")
-		}
 		if decision == "approve" {
+			require(replayed, http.StatusOK)
+			if replayed.Body.String() != saved.Body.String() {
+				t.Fatal("review replay changed")
+			}
 			require(call(http.MethodGet, path, "", ""), http.StatusOK)
 		} else {
+			// Rejection removes the only binding that granted this trainee access.
+			require(replayed, http.StatusNotFound)
 			require(call(http.MethodGet, path, "", ""), http.StatusNotFound)
 		}
 		require(call(http.MethodGet, "/api/steward/donations?status=approved", "", ""), http.StatusOK)

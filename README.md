@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage service connections, shared encrypted credentials, model discovery and routing, then use revocable CallerKeys for personal or shared charity calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.2.0** improves donation workflows and steward permissions, adds an optional management assistant, and requires explicit database upgrades. GitHub Releases provide source code; build instructions are below. Version history is in [CHANGELOG](CHANGELOG.md).
+**v1.2.1** adds persistent domain-based endpoint tags, fixes donation-review layout and collection progress, and improves shared filters and controls. Existing databases require an explicit upgrade to schema 39. GitHub Releases provide source code; build instructions are below. Version history is in [CHANGELOG](CHANGELOG.md).
 
 ## Architecture
 
@@ -210,10 +210,10 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 38.
+Fresh databases start in maintenance with public features closed and use schema 39.
 The service opens only the exact current schema; older, newer, unknown or
 incomplete storage is rejected before migration, repair or recovery writes.
-For exact registered schema 16–26 and 33–37 sources, preserve a complete recovery
+For exact registered schema 16–26 and 33–38 sources, preserve a complete recovery
 set before deliberately running the matching standalone
 [upgrader](cmd/nonbiri-upgrade-v1/README.md) with `--check` or `--apply`.
 The service, startup scripts and deployment helpers must not apply upgrades

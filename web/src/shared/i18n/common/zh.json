@@ -3255,7 +3255,7 @@
         },
         "standard": {
           "label": "标准",
-          "description": "至少有一把未结束且未过期的密钥，且这些密钥全部来自主流渠道或已连接主流公益模型。暂停、待审和失败密钥仍计入。"
+          "description": "至少有一把未结束且未过期的密钥，且这些密钥全部来自主流渠道、端点具有主流渠道标签，或已连接主流公益模型。暂停、待审和失败密钥仍计入。"
         },
         "enhanced": {
           "label": "增强",
@@ -3295,13 +3295,41 @@
       "userPlaceholder": "站内用户 ID",
       "readOnly": "你可以查看端点。修改标签需单独授权。",
       "backManagement": "返回协管工作台",
+      "rules": {
+        "title": "通配标签规则",
+        "summary": "按域名自动管理端点标签",
+        "description": "规则长期作用于现有和以后新增的端点。命中规则的端点由规则管理，不能手动调整标签。",
+        "precedence": "从宽泛域名到更具体的域名依次应用。“移除标签”清空此前标签，更具体的添加规则仍可添加。删除规则后，按剩余规则和原手动标签恢复结果。",
+        "search": "查找域名规则",
+        "add": "新增规则",
+        "edit": "编辑规则",
+        "delete": "删除规则",
+        "save": "保存规则",
+        "saved": "规则已更新",
+        "pattern": "域名通配模式",
+        "patternHelp": "例如 *.example.com，包含 example.com 本身及任意层级子域；不填写协议、端口或路径。",
+        "action": "标签操作",
+        "addTags": "添加标签",
+        "clearTags": "移除标签",
+        "chooseTags": "要添加的标签",
+        "mainstreamHelp": "端点全部具备主流资格的捐赠，下次提交时可自动通过，并纳入协管标准操作范围；已有审批结果不变。",
+        "clearHelp": "清空匹配端点的有效标签。原手动标签会保留，删除规则后可恢复。",
+        "empty": "没有匹配的规则",
+        "emptyBody": "新增通配规则，可统一管理一个域名及其全部子域的标签。",
+        "managedBy": "不能手动调整 · 由 {{patterns}} 管理",
+        "sources": "标签来源",
+        "manualOriginal": "原手动标签"
+      },
       "tag": {
         "abusive_third_party": "违规第三方",
         "community_charity": "社区公益站",
         "noncommercial_gateway": "非经营性聚合网关",
         "user_gateway": "用户自建网关",
         "steward_gateway": "协管自建网关",
-        "invalid_entry": "错误填写"
+        "invalid_entry": "错误填写",
+        "mainstream": "主流渠道及其衍生",
+        "mysterious": "神秘渠道",
+        "other_third_party": "其他第三方"
       }
     }
   },

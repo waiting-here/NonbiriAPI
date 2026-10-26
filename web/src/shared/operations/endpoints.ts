@@ -17,6 +17,9 @@ export const ENDPOINT_TAGS = [
   'user_gateway',
   'steward_gateway',
   'invalid_entry',
+  'mainstream',
+  'mysterious',
+  'other_third_party',
 ] as const;
 export const endpointKeys = {
   list: (
@@ -62,6 +65,8 @@ export interface EndpointOverviewUser {
 
 export interface EndpointOverview {
   tags: string[];
+  manual_tags: string[];
+  tag_rules: EndpointTagRule[];
   base_url: string;
   user_count: string;
   endpoint_count: string;
@@ -69,10 +74,36 @@ export interface EndpointOverview {
   users: EndpointOverviewUser[];
 }
 
+export interface EndpointTagRule {
+  pattern: string;
+  action: 'add' | 'remove';
+  tags: string[];
+}
+
+function normalizeEndpointTagRule(value: unknown): EndpointTagRule {
+  const rule = record(value, ['pattern', 'action', 'tags'], 'endpoint tag rule');
+  const action = string(rule.action, 'endpoint tag rule action');
+  if (action !== 'add' && action !== 'remove') invalidResponse('endpoint tag rule action');
+  return {
+    pattern: string(rule.pattern, 'endpoint tag rule pattern'),
+    action,
+    tags: array(rule.tags, 'endpoint rule tags').map((tag) => string(tag, 'endpoint tag')),
+  };
+}
+
 export function normalizeEndpointOverview(value: unknown): EndpointOverview {
   const root = record(
     value,
-    ['base_url', 'user_count', 'endpoint_count', 'key_count', 'users', 'tags'],
+    [
+      'base_url',
+      'user_count',
+      'endpoint_count',
+      'key_count',
+      'users',
+      'tags',
+      'manual_tags',
+      'tag_rules',
+    ],
     'endpoint overview',
     ['base_url', 'user_count', 'endpoint_count', 'key_count', 'users'],
   );
@@ -92,6 +123,10 @@ export function normalizeEndpointOverview(value: unknown): EndpointOverview {
   return {
     base_url: string(root.base_url, 'canonical endpoint URL', { min: 1 }),
     tags: array(root.tags ?? [], 'endpoint tags').map((tag) => string(tag, 'endpoint tag')),
+    manual_tags: array(root.manual_tags ?? root.tags ?? [], 'manual endpoint tags').map((tag) =>
+      string(tag, 'endpoint tag'),
+    ),
+    tag_rules: array(root.tag_rules ?? [], 'endpoint tag rules').map(normalizeEndpointTagRule),
     user_count: decimal(root.user_count, 'endpoint user count'),
     endpoint_count: decimal(root.endpoint_count, 'endpoint count'),
     key_count: decimal(root.key_count, 'endpoint key count'),
@@ -218,5 +253,49 @@ export async function setEndpointTags(
       method: 'PATCH',
       json: { base_urls: baseURLs, tag, add },
     }),
+  );
+}
+
+export async function getEndpointTagRulesPage(
+  role: ManagementRole,
+  query: string,
+  page: string,
+  pageSize: PageSize,
+  signal?: AbortSignal,
+): Promise<NumberedPage<EndpointTagRule>> {
+  return decoded(
+    queryPath(endpointPath(role) + '/tag-rules', { q: query, page, page_size: pageSize }),
+    (value) =>
+      normalizePage(
+        value,
+        'endpoint tag rules',
+        normalizeEndpointTagRule,
+        page,
+        pageSize,
+        (rule) => rule.pattern,
+      ),
+    { signal },
+  );
+}
+
+export async function saveEndpointTagRule(
+  role: ManagementRole,
+  rule: EndpointTagRule,
+  key: string,
+): Promise<void> {
+  await apiFetch(
+    endpointPath(role) + '/tag-rules',
+    idempotentOptions(key, { method: 'PUT', json: rule }),
+  );
+}
+
+export async function deleteEndpointTagRule(
+  role: ManagementRole,
+  pattern: string,
+  key: string,
+): Promise<void> {
+  await apiFetch(
+    endpointPath(role) + '/tag-rules',
+    idempotentOptions(key, { method: 'DELETE', json: { pattern } }),
   );
 }

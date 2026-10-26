@@ -33,7 +33,8 @@ Every charity route needs `automation` plus its operation grants:
 | Read or edit failure policy | `donations.manage_keys` |
 
 Level-5 donation scope defaults to `standard`: at least one unended, unexpired
-key, with every such key having a mainstream-channel source or a current binding
+key, with every such key having a mainstream-channel source, an effective
+`mainstream` endpoint tag, or a current binding
 to a mainstream charity model. Pending, paused and failed keys participate in
 this whole-donation check. Review and maintenance use the same qualification;
 an optional target model cannot expand it. `none` denies donation operations even when

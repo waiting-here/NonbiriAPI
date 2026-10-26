@@ -386,4 +386,55 @@ describe('shared UI patterns', () => {
     expect(onClearAll).toHaveBeenCalledTimes(1);
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
+
+  it.each([false, true])(
+    'keeps search help, errors and submission with an action wrapper: %s',
+    async (wrapped) => {
+      const user = userEvent.setup();
+      const onSubmit = vi.fn();
+      const search = (
+        <>
+          <Field label="Search sources" help="Name or address" error="Shorten the search">
+            {(props) => <input {...props} />}
+          </Field>
+          <button type="submit">Apply</button>
+          <button type="button">Reset</button>
+        </>
+      );
+      render(
+        <FilterBar
+          search={wrapped ? <div className="nb-actions">{search}</div> : search}
+          secondaryAlwaysVisible
+          secondary={
+            <>
+              <Field label="User ID" help="Exact match">
+                {(props) => <input {...props} />}
+              </Field>
+              <Field label="Status">
+                {(props) => (
+                  <select {...props}>
+                    <option>All</option>
+                  </select>
+                )}
+              </Field>
+            </>
+          }
+          secondaryLabel="Filters"
+          activeCount={0}
+          onSubmit={onSubmit}
+        />,
+      );
+      const input = screen.getByRole('textbox', { name: 'Search sources' });
+      expect(input).toHaveAccessibleDescription('Shorten the search Name or address');
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(screen.getByRole('textbox', { name: 'User ID' })).toHaveAccessibleDescription(
+        'Exact match',
+      );
+      expect(screen.getByRole('combobox', { name: 'Status' })).toBeVisible();
+      await user.click(screen.getByRole('button', { name: 'Apply' }));
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      await user.click(screen.getByRole('button', { name: 'Reset' }));
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    },
+  );
 });

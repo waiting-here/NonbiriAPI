@@ -21,6 +21,7 @@ func TestAgentOfflineSchema36PreservesPolicyRepresentationAndFacts(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+	restoreSchema38LayoutForTest(t, database)
 	dropCharityModelIndexesForTest(t, database)
 	step := storageSchema.versions[migrationIndex(t, 36)]
 	if step.from != 36 || !reflect.DeepEqual(step.impact.controlTables, []string{"steward_permissions", "models", "charity_models"}) {

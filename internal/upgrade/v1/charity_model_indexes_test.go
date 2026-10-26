@@ -47,6 +47,7 @@ func schema37Fixture(t *testing.T) (string, *secret.Vault, *db.Store) {
 	hostileMustExec(t, database, `INSERT INTO charity_key_affinities(user_id,model_id,endpoint_key_id,physical_id,attempt_id,routing_revision,dispatched_at,expires_at) VALUES(?,?,?,zeroblob(32),?,1,0,300)`, user, model, key, attempt)
 	hostileMustExec(t, database, `INSERT INTO charity_header_sessions(user_id,model_id,name,value,format,idle_seconds,expires_at) VALUES(?,?,'header','12345678901234567890123456789012','hex_32',300,300)`, user, model)
 	hostileMustExec(t, database, `INSERT INTO charity_header_uses(logical_request_id,user_id,model_id,name,value,idle_seconds,sent) VALUES(?,?,?,'header','12345678901234567890123456789012',300,1)`, request, user, model)
+	restoreSchema38LayoutForTest(t, store.DB())
 	dropCharityModelIndexesForTest(t, store.DB())
 	hostileMustExec(t, store.DB(), "UPDATE schema_state SET version=37")
 	if hash, err := db.SchemaManifestHash(t.Context(), store.DB()); err != nil || hash != db.Schema37ManifestHash {

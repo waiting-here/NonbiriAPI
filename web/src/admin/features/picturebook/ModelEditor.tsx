@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Card, ErrorState } from '@shared/components/States';
+import { Fold } from '@shared/components/ui/Fold';
 import { usePictureBookText } from '@shared/picturebook/copy';
 import {
   initialValues,
@@ -190,97 +191,96 @@ export const ModelEditor = forwardRef<
             : t('保存模型配置', 'Save model settings')}
         </button>
       </form>
-      <details className="picturebook-form">
-        <summary>
-          {t('试选参数与查看价格（不扣币）', 'Try parameters and prices (no charge)')}
-        </summary>
-        <p>
-          {t(
-            '可选的本地预览，不会调用生成服务或扣费。',
-            'An optional local preview that makes no generation call or charge.',
-          )}
-        </p>
-        {previewModel ? (
-          <>
-            <fieldset disabled={checking || save.locked || disabled}>
-              <ModelParameterFields
-                model={previewModel}
-                values={sampleValues}
-                onChange={(patch) => setSampleValues((current) => ({ ...current, ...patch }))}
-              />
-            </fieldset>
-            <p role="status">
-              {t('本地预计整单', 'Local estimated total')}:{' '}
-              {previewQuote
-                ? previewQuote.total.paper + ' / ' + previewQuote.total.brush
-                : t('当前组合没有可用价格', 'No price for this selection')}
-            </p>
-            {previewPrepared && 'problem' in previewPrepared ? (
-              <p role="alert">{t('请检查预览参数。', 'Check the preview parameters.')}</p>
-            ) : null}
-          </>
-        ) : (
+      <Fold title={t('试选参数与查看价格（不扣币）', 'Try parameters and prices (no charge)')}>
+        <div className="picturebook-form">
           <p>
             {t(
-              '填写有效价格后，可试选此模型支持的参数。',
-              'Enter valid prices to try this model’s supported parameters.',
+              '可选的本地预览，不会调用生成服务或扣费。',
+              'An optional local preview that makes no generation call or charge.',
             )}
           </p>
-        )}
-        <button
-          className="nb-btn nb-btn--secondary"
-          type="button"
-          disabled={checking || save.locked || disabled || !previewModel}
-          onClick={() => {
-            setCheckedSignature(currentSignature);
-            if (!draft || !previewPrepared || 'problem' in previewPrepared) {
-              setCheckError(
-                new ApiError(
-                  'invalid_request',
-                  t('请先修正价格或预览参数。', 'Fix the prices or preview parameters first.'),
-                  400,
-                ),
-              );
-              return;
-            }
-            const parameters: Partial<SubmitInput> = { ...previewPrepared.input };
-            delete parameters.model_id;
-            delete parameters.expected_model_revision;
-            delete parameters.expected_pricing_revision;
-            setChecking(true);
-            setCheckError(null);
-            setCheckResult(null);
-            void checkModel({ model_id: value.id, draft, parameters })
-              .then(setCheckResult)
-              .catch(setCheckError)
-              .finally(() => setChecking(false));
-          }}
-        >
-          {checking ? t('正在检查', 'Checking') : t('检查草稿', 'Check draft')}
-        </button>
-        {checkError && checkedSignature === currentSignature ? (
-          <ErrorState error={checkError} />
-        ) : null}
-        {checkResult && checkedSignature === currentSignature ? (
-          checkResult.valid && checkResult.quote ? (
-            <p role="status">
-              {t(
-                '本地检查通过；未验证上游生成。',
-                'Local check passed; upstream generation is unverified.',
-              )}{' '}
-              {t('单张', 'Per image')}: {checkResult.quote.unit.paper} /{' '}
-              {checkResult.quote.unit.brush}; {t('整单', 'Total')}: {checkResult.quote.total.paper}{' '}
-              / {checkResult.quote.total.brush}
-            </p>
+          {previewModel ? (
+            <>
+              <fieldset disabled={checking || save.locked || disabled}>
+                <ModelParameterFields
+                  model={previewModel}
+                  values={sampleValues}
+                  onChange={(patch) => setSampleValues((current) => ({ ...current, ...patch }))}
+                />
+              </fieldset>
+              <p role="status">
+                {t('本地预计整单', 'Local estimated total')}:{' '}
+                {previewQuote
+                  ? previewQuote.total.paper + ' / ' + previewQuote.total.brush
+                  : t('当前组合没有可用价格', 'No price for this selection')}
+              </p>
+              {previewPrepared && 'problem' in previewPrepared ? (
+                <p role="alert">{t('请检查预览参数。', 'Check the preview parameters.')}</p>
+              ) : null}
+            </>
           ) : (
-            <ul role="alert">
-              {checkResult.issues.map((issue, index) => (
-                <li key={index}>{issue.safe_message}</li>
-              ))}
-            </ul>
-          )
-        ) : null}
-      </details>
+            <p>
+              {t(
+                '填写有效价格后，可试选此模型支持的参数。',
+                'Enter valid prices to try this model’s supported parameters.',
+              )}
+            </p>
+          )}
+          <button
+            className="nb-btn nb-btn--secondary"
+            type="button"
+            disabled={checking || save.locked || disabled || !previewModel}
+            onClick={() => {
+              setCheckedSignature(currentSignature);
+              if (!draft || !previewPrepared || 'problem' in previewPrepared) {
+                setCheckError(
+                  new ApiError(
+                    'invalid_request',
+                    t('请先修正价格或预览参数。', 'Fix the prices or preview parameters first.'),
+                    400,
+                  ),
+                );
+                return;
+              }
+              const parameters: Partial<SubmitInput> = { ...previewPrepared.input };
+              delete parameters.model_id;
+              delete parameters.expected_model_revision;
+              delete parameters.expected_pricing_revision;
+              setChecking(true);
+              setCheckError(null);
+              setCheckResult(null);
+              void checkModel({ model_id: value.id, draft, parameters })
+                .then(setCheckResult)
+                .catch(setCheckError)
+                .finally(() => setChecking(false));
+            }}
+          >
+            {checking ? t('正在检查', 'Checking') : t('检查草稿', 'Check draft')}
+          </button>
+          {checkError && checkedSignature === currentSignature ? (
+            <ErrorState error={checkError} />
+          ) : null}
+          {checkResult && checkedSignature === currentSignature ? (
+            checkResult.valid && checkResult.quote ? (
+              <p role="status">
+                {t(
+                  '本地检查通过；未验证上游生成。',
+                  'Local check passed; upstream generation is unverified.',
+                )}{' '}
+                {t('单张', 'Per image')}: {checkResult.quote.unit.paper} /{' '}
+                {checkResult.quote.unit.brush}; {t('整单', 'Total')}:{' '}
+                {checkResult.quote.total.paper} / {checkResult.quote.total.brush}
+              </p>
+            ) : (
+              <ul role="alert">
+                {checkResult.issues.map((issue, index) => (
+                  <li key={index}>{issue.safe_message}</li>
+                ))}
+              </ul>
+            )
+          ) : null}
+        </div>
+      </Fold>
     </Card>
   );
 });

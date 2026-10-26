@@ -1,4 +1,5 @@
 import { Button } from '@shared/components/ui/Button';
+import { Fold } from '@shared/components/ui/Fold';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -283,8 +284,7 @@ function Evidence({
             <p>{text('此处理没有新增违规计数。', 'This action added no violation count.')}</p>
           )}
           {data.rules.version !== undefined ? (
-            <details>
-              <summary>{text('查看当时完整规则', 'View all rules at the time')}</summary>
+            <Fold plain title={text('查看当时完整规则', 'View all rules at the time')}>
               <dl className="loan-facts">
                 {ruleFields
                   .filter((key) => data.rules[key] !== undefined)
@@ -295,7 +295,7 @@ function Evidence({
                     </div>
                   ))}
               </dl>
-            </details>
+            </Fold>
           ) : null}
           <h3>{text('参与计数的请求', 'Requests included in the count')}</h3>
           {data.members.data.map((member) => (

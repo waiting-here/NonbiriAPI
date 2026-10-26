@@ -18,3 +18,44 @@
 .endpoint-management-url {
   overflow-wrap: anywhere;
 }
+.endpoint-tag-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nb-space-2);
+}
+.endpoint-tag-cell {
+  min-width: 0;
+  gap: var(--nb-space-2);
+}
+.endpoint-tag-cell p {
+  margin: 0;
+}
+.endpoint-rule-editor {
+  padding: var(--nb-space-4);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-lg);
+  background: var(--nb-color-surface-alt);
+}
+.endpoint-rule-editor h3 {
+  margin: 0;
+}
+.endpoint-rule-editor__fields,
+.endpoint-rule-tags {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.endpoint-rule-tags legend {
+  margin-bottom: var(--nb-space-2);
+  font-weight: var(--nb-font-weight-semibold);
+}
+.endpoint-rule-tags__options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: var(--nb-space-2);
+}
+.endpoint-rule-sources {
+  padding-inline-start: var(--nb-space-4);
+  overflow-wrap: anywhere;
+}

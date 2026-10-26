@@ -89,6 +89,27 @@ describe('resource search navigation', () => {
     fireEvent.change(input, { target: { value: 'a'.repeat(513) } });
     await view.user.click(screen.getByRole('button', { name: 'Search' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Check the search text');
+    expect(input).toHaveAccessibleDescription(
+      'Check the search text and filter values. Control characters are not allowed.',
+    );
     expect(screen.getByTestId('filters')).toBeEmptyDOMElement();
+
+    const provider = screen.getByRole('textbox', {
+      name: view.i18n.t('user.core.models.provider'),
+    });
+    fireEvent.change(input, { target: { value: 'Needle' } });
+    fireEvent.change(provider, { target: { value: '[公益]invalid' } });
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(provider).toHaveAccessibleDescription(
+      'Check the search text and filter values. Control characters are not allowed.',
+    );
+    expect(screen.getByTestId('filters')).toBeEmptyDOMElement();
+    fireEvent.change(provider, { target: { value: 'Vendor' } });
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('filters')).toHaveTextContent('q=Needle&provider=Vendor'),
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

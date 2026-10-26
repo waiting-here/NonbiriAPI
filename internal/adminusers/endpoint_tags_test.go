@@ -12,7 +12,7 @@ import (
 )
 
 func TestEndpointTagsBulkAtomicityFiltersAndAuthority(t *testing.T) {
-	for _, tag := range []string{"community_charity", "noncommercial_gateway", "user_gateway", "steward_gateway", "invalid_entry"} {
+	for _, tag := range []string{"community_charity", "noncommercial_gateway", "user_gateway", "steward_gateway", "invalid_entry", "mainstream", "mysterious", "other_third_party"} {
 		t.Run(tag, func(t *testing.T) { checkEndpointTag(t, tag) })
 	}
 }

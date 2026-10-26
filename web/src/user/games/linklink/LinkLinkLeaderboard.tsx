@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Card, ErrorState, LoadingState } from '@shared/components/States';
+import { Field } from '@shared/components/ui/Field';
 import { useGameCopy } from '../copy';
 import { LINKLINK_SPECS, type LinkLinkSpec } from '../common/types';
 import { formatCredits } from '../common/strict';
@@ -22,26 +23,33 @@ export function LinkLinkLeaderboard({
       <h2>{text('linklink.leaderboard.title', { days })}</h2>
       <p>{text('linklink.leaderboard.help')}</p>
       <div className="game-state-actions">
-        <label>
-          {text('linklink.leaderboard.spec')}
-          <select
-            value={spec}
-            onChange={(event) => onSpecChange(event.target.value as LinkLinkSpec)}
-          >
-            {LINKLINK_SPECS.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {text('linklink.leaderboard.window')}
-          <select value={days} onChange={(event) => setDays(event.target.value === '7' ? 7 : 30)}>
-            <option value="7">{text('linklink.leaderboard.days', { days: 7 })}</option>
-            <option value="30">{text('linklink.leaderboard.days', { days: 30 })}</option>
-          </select>
-        </label>
+        <Field label={text('linklink.leaderboard.spec')}>
+          {(props) => (
+            <select
+              {...props}
+              value={spec}
+              onChange={(event) => onSpecChange(event.target.value as LinkLinkSpec)}
+            >
+              {LINKLINK_SPECS.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+        <Field label={text('linklink.leaderboard.window')}>
+          {(props) => (
+            <select
+              {...props}
+              value={days}
+              onChange={(event) => setDays(event.target.value === '7' ? 7 : 30)}
+            >
+              <option value="7">{text('linklink.leaderboard.days', { days: 7 })}</option>
+              <option value="30">{text('linklink.leaderboard.days', { days: 30 })}</option>
+            </select>
+          )}
+        </Field>
         <button
           type="button"
           className="nb-btn nb-btn--secondary"

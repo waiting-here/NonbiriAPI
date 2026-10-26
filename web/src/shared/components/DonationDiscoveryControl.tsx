@@ -1,4 +1,5 @@
 import { Button } from '@shared/components/ui/Button';
+import { Fold } from '@shared/components/ui/Fold';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -180,8 +181,7 @@ export function DonationDiscoveryControl({
           ) : null}
           {job.error ? <ErrorState error={job.error} /> : null}
           {job.results.length > 0 ? (
-            <details>
-              <summary>{t('common.donationDiscovery.results')}</summary>
+            <Fold plain title={t('common.donationDiscovery.results')}>
               <ol>
                 {job.results.map((item) => (
                   <li key={item.key_id}>
@@ -199,7 +199,7 @@ export function DonationDiscoveryControl({
                   </li>
                 ))}
               </ol>
-            </details>
+            </Fold>
           ) : null}
         </div>
       ) : null}

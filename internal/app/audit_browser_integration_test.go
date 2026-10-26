@@ -143,6 +143,9 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 	var mfaUser imageBrowserUser
 	if os.Getenv("NONBIRI_MANAGEMENT_BROWSER") == "1" {
 		management = seedManagementBrowser(t, f, now)
+		if os.Getenv("NONBIRI_ENDPOINT_TAG_RULES_BROWSER") == "1" {
+			management["endpoint_tag_rules"] = seedEndpointTagRulesBrowser(t, f, now)
+		}
 		if os.Getenv("NONBIRI_ENDPOINT_POLICIES_BROWSER") == "1" {
 			management["endpoint_policy"] = seedEndpointPoliciesBrowser(t, f)
 			management["worker_origin"] = f.worker.URL

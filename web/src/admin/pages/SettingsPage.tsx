@@ -15,6 +15,7 @@ import {
   Toggle,
 } from '@shared/components/ui';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { Icon } from '@shared/components/Icon';
 import './settings/settings.css';
 import { MaintenancePanel } from '@shared/operations/MaintenancePanel';
 import GatewayCapabilitiesSection from '../features/gateway/GatewayCapabilitiesSection';
@@ -381,7 +382,12 @@ function SettingField({
                     : scalar(entry.raw_default)}
           </p>
           <details className="setting-info">
-            <summary aria-label={t('admin.settings.fieldDetails')}>ⓘ</summary>
+            <summary
+              aria-label={t('admin.settings.fieldDetails')}
+              title={t('admin.settings.fieldDetails')}
+            >
+              <Icon name="info" />
+            </summary>
             <small>
               {entry.key} · {settingTypeLabel(t, entry.type)}
               {entry.unit ? ' · ' + entry.unit[locale] : ''}

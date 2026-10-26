@@ -76,7 +76,7 @@ async function visuals(page: Page, info: TestInfo, name: string, focus: () => Pr
       await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
       await focus();
       if (name.startsWith('binding-')) {
-        const layout = page.locator('.charity-donations');
+        const layout = page.locator('.charity-donations__panes');
         await expect(layout.locator(':scope > .charity-donations__list')).toBeHidden();
         const container = (await layout.boundingBox())!;
         const detail = (await layout.locator(':scope > .ops-detail-target').boundingBox())!;

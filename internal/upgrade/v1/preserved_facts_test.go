@@ -37,7 +37,7 @@ func connectionFactQuery(table string, sourceColumns map[string][]string) (strin
 			"endpoint_key_discovery_sources", "discovery_sources", "discovery_source_revisions",
 			"discovery_source_states", "discovery_runs", "donation_uses", "donation_use_revisions",
 			"model_binding_targets", "charity_binding_targets", "dispatch_claim_targets",
-			"mainstream_channel_entries":
+			"mainstream_channel_entries", "endpoint_tag_domains":
 			return "", false
 		}
 		return "SELECT * FROM " + quoteSQLiteIdentifier(table), true
@@ -91,7 +91,7 @@ func assertExactPublishedSource(t *testing.T, database *sql.DB, version int, man
 		t.Fatalf("restored source has no published conversion path: %+v, %v", plan, err)
 	}
 	for _, step := range plan.steps {
-		if step.from > 26 && step.from != 33 && step.from != 34 && step.from != 35 && step.from != 36 && step.from != 37 || step.version > 26 && step.version != 33 && step.version != 34 && step.version != 35 && step.version != 36 && step.version != 37 && step.version != 38 {
+		if step.from > 26 && step.from != 33 && step.from != 34 && step.from != 35 && step.from != 36 && step.from != 37 && step.from != 38 || step.version > 26 && step.version != 33 && step.version != 34 && step.version != 35 && step.version != 36 && step.version != 37 && step.version != 38 && step.version != 39 {
 			t.Fatalf("unreleased intermediate schema became a supported source: %+v", step)
 		}
 	}

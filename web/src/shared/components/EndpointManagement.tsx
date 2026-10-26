@@ -8,6 +8,7 @@ import {
   getEndpointsPage,
   getEndpointUsersPage,
   setEndpointTags,
+  type EndpointOverview,
 } from '@shared/operations/endpoints';
 import type { ManagementRole } from '@shared/operations/managedUsers';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -17,17 +18,11 @@ import { isStewardPermissionDenied, isUnauthorized } from '@shared/query/http';
 import { formatCount } from '@shared/utils/formatNumber';
 import { EmptyState, ErrorState, LoadingState, PageHeader, SectionHead } from './States';
 import { StewardPermissionNotice } from './StewardPermissionNotice';
-import { Button, DataTable, Field, FilterBar, Note, Panel, PanelBody } from './ui';
+import { Button, DataTable, Field, FilterBar, Fold, Note, Panel, PanelBody } from './ui';
+import { EndpointTagRules } from './EndpointTagRules';
+import { endpointTagKeys } from './endpointTagLabels';
 import './EndpointManagement.css';
 
-const endpointTagKeys = {
-  abusive_third_party: 'management.endpoints.tag.abusive_third_party',
-  community_charity: 'management.endpoints.tag.community_charity',
-  noncommercial_gateway: 'management.endpoints.tag.noncommercial_gateway',
-  user_gateway: 'management.endpoints.tag.user_gateway',
-  steward_gateway: 'management.endpoints.tag.steward_gateway',
-  invalid_entry: 'management.endpoints.tag.invalid_entry',
-} as const;
 type Props = {
   role: ManagementRole;
   account: string;
@@ -190,7 +185,11 @@ export function EndpointManagement({
     scope: '',
     urls: [],
   });
-  const selected = selection.scope === selectionScope ? selection.urls : [];
+  const selectable = result.data?.data.filter((group) => group.tag_rules.length === 0) ?? [];
+  const selected =
+    selection.scope === selectionScope
+      ? selection.urls.filter((url) => selectable.some((group) => group.base_url === url))
+      : [];
   const [editTag, setEditTag] = useState<string>(ENDPOINT_TAGS[0]);
   const tags = useMutation({
     mutationFn: (add: boolean) => setEndpointTags(role, selected, editTag, add),
@@ -251,6 +250,13 @@ export function EndpointManagement({
       className={embedded ? 'nb-stack endpoint-management' : 'page nb-stack endpoint-management'}
     >
       {header}
+      <Fold
+        title={t('management.endpoints.rules.title')}
+        summary={t('management.endpoints.rules.summary')}
+        lazy
+      >
+        <EndpointTagRules role={role} account={account} canTag={canTag} />
+      </Fold>
       <FilterBar
         secondaryLabel={t('common.filter')}
         activeCount={Number(Boolean(query)) + Number(Boolean(userId)) + Number(Boolean(tag))}
@@ -413,28 +419,41 @@ export function EndpointManagement({
                             type="checkbox"
                             aria-label={t('management.endpoints.selectAll')}
                             checked={
-                              result.data.data.length > 0 &&
-                              result.data.data.every((group) => selected.includes(group.base_url))
+                              selectable.length > 0 &&
+                              selectable.every((group) => selected.includes(group.base_url))
                             }
-                            disabled={tags.isPending || result.isFetching}
+                            disabled={
+                              tags.isPending || result.isFetching || selectable.length === 0
+                            }
                             onChange={(event) =>
                               select(
                                 event.target.checked
-                                  ? result.data.data.map((group) => group.base_url)
+                                  ? selectable.map((group) => group.base_url)
                                   : [],
                               )
                             }
                           />
                         ),
                         cell: 'meta' as const,
-                        render: (group: { base_url: string }) => (
+                        render: (group: EndpointOverview) => (
                           <input
                             type="checkbox"
                             aria-label={t('management.endpoints.selectEndpoint', {
                               url: group.base_url,
                             })}
                             checked={selected.includes(group.base_url)}
-                            disabled={tags.isPending || result.isFetching}
+                            disabled={
+                              tags.isPending || result.isFetching || group.tag_rules.length > 0
+                            }
+                            title={
+                              group.tag_rules.length
+                                ? t('management.endpoints.rules.managedBy', {
+                                    patterns: group.tag_rules
+                                      .map((rule) => rule.pattern)
+                                      .join(', '),
+                                  })
+                                : undefined
+                            }
                             onChange={(event) =>
                               select(
                                 event.target.checked
@@ -460,16 +479,70 @@ export function EndpointManagement({
                   header: t('management.endpoints.tags'),
                   cell: 'status',
                   mobileLabel: t('management.endpoints.tags'),
-                  render: (group) =>
-                    group.tags.length
-                      ? group.tags.map((value) => (
-                          <span className="nb-badge" key={value}>
-                            {endpointTagKeys[value as keyof typeof endpointTagKeys]
-                              ? t(endpointTagKeys[value as keyof typeof endpointTagKeys])
-                              : value}
-                          </span>
-                        ))
-                      : t('management.endpoints.untagged'),
+                  render: (group) => (
+                    <div className="nb-stack endpoint-tag-cell">
+                      <div className="endpoint-tag-badges">
+                        {group.tags.length
+                          ? group.tags.map((value) => (
+                              <span className="nb-badge" key={value}>
+                                {endpointTagKeys[value as keyof typeof endpointTagKeys]
+                                  ? t(endpointTagKeys[value as keyof typeof endpointTagKeys])
+                                  : value}
+                              </span>
+                            ))
+                          : t('management.endpoints.untagged')}
+                      </div>
+                      {group.tag_rules.length ? (
+                        <>
+                          <p className="nb-muted endpoint-management-url">
+                            {t('management.endpoints.rules.managedBy', {
+                              patterns: group.tag_rules.map((rule) => rule.pattern).join(', '),
+                            })}
+                          </p>
+                          <Fold plain title={t('management.endpoints.rules.sources')}>
+                            <p className="nb-muted">
+                              {t('management.endpoints.rules.manualOriginal')}:{' '}
+                              {group.manual_tags.length
+                                ? group.manual_tags
+                                    .map((value) =>
+                                      endpointTagKeys[value as keyof typeof endpointTagKeys]
+                                        ? t(endpointTagKeys[value as keyof typeof endpointTagKeys])
+                                        : value,
+                                    )
+                                    .join(', ')
+                                : t('management.endpoints.untagged')}
+                            </p>
+                            <ul className="endpoint-rule-sources">
+                              {group.tag_rules.map((rule) => (
+                                <li key={rule.pattern}>
+                                  <code>{rule.pattern}</code> ·{' '}
+                                  {t(
+                                    rule.action === 'remove'
+                                      ? 'management.endpoints.rules.clearTags'
+                                      : 'management.endpoints.rules.addTags',
+                                  )}
+                                  {rule.action === 'add'
+                                    ? ': ' +
+                                      rule.tags
+                                        .map((value) =>
+                                          endpointTagKeys[value as keyof typeof endpointTagKeys]
+                                            ? t(
+                                                endpointTagKeys[
+                                                  value as keyof typeof endpointTagKeys
+                                                ],
+                                              )
+                                            : value,
+                                        )
+                                        .join(', ')
+                                    : ''}
+                                </li>
+                              ))}
+                            </ul>
+                          </Fold>
+                        </>
+                      ) : null}
+                    </div>
+                  ),
                 },
                 ...(['user_count', 'endpoint_count', 'key_count'] as const).map((key, index) => ({
                   key,

@@ -64,7 +64,7 @@ describe('failure reset controls', () => {
       { station: 'admin', locale: 'en' },
     );
     view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture' } });
-    await view.user.click(screen.getByText('Reset failure count', { selector: 'summary' }));
+    await view.user.click(screen.getByText('Reset failure count'));
     await view.user.click(screen.getByRole('button', { name: 'Reset all matching keys' }));
     await screen.findByRole('button', { name: 'Continue' });
     expect(calls.map((call) => call.path.endsWith('/selection'))).toEqual([true, true, false]);
@@ -113,7 +113,7 @@ describe('failure reset controls', () => {
       locale: 'en',
     });
     view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture' } });
-    await view.user.click(screen.getByText('Reset failure count', { selector: 'summary' }));
+    await view.user.click(screen.getByText('Reset failure count'));
     await view.user.click(screen.getByLabelText('First key'));
     view.rerender(<FailureResetControl {...props} choices={[second]} />);
     await view.user.click(screen.getByLabelText('Second key'));
@@ -168,7 +168,7 @@ describe('failure reset controls', () => {
     view.queryClient.setQueryData(['user', 'session'], {
       user: { id: '3', username: 'fixture', effective_level: 6 },
     });
-    await view.user.click(screen.getByText('Reset failure count', { selector: 'summary' }));
+    await view.user.click(screen.getByText('Reset failure count'));
     await view.user.click(screen.getByRole('button', { name: 'Reset all matching keys' }));
     await waitFor(() => expect(revoked).toHaveBeenCalledOnce());
     expect(fetch).toHaveBeenCalledOnce();

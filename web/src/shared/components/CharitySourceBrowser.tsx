@@ -5,6 +5,7 @@ import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { Button } from '@shared/components/ui/Button';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
+import { Fold } from '@shared/components/ui/Fold';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
@@ -328,8 +329,7 @@ function RecurringSummary({ keyValue }: { keyValue: ManagedDonationKeySummary })
   const copy = copyForRecurringLimits(i18n.language);
   const total = Number(keyValue.rule_count);
   return (
-    <details className="charity-source-browser__recurring">
-      <summary>{copy.ruleCount(total)}</summary>
+    <Fold plain className="charity-source-browser__recurring" title={copy.ruleCount(total)}>
       {keyValue.rules.length === 0 ? (
         <p className="muted">{copy.noRules}</p>
       ) : (
@@ -358,7 +358,7 @@ function RecurringSummary({ keyValue }: { keyValue: ManagedDonationKeySummary })
           })}
         </p>
       ) : null}
-    </details>
+    </Fold>
   );
 }
 
@@ -1045,6 +1045,7 @@ export function CharitySourceBrowser({
         </section>
         <section
           className="charity-source-browser__keys ops-detail-target"
+          hidden={!sourceKey}
           ref={detailRef}
           tabIndex={-1}
           aria-label={t('common.operations.charity.sourceBrowser.sourceKeys')}

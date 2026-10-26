@@ -1633,7 +1633,7 @@ test('level 5 reviews independent pending sources, retains receipts after refres
       }
 
       await expect(page.getByText(savedText, { exact: true }).first()).toBeVisible();
-      const result = page.locator('ul[role="status"]').filter({ hasText: savedText });
+      const result = page.locator('.donation-review-results').filter({ hasText: savedText });
       await expect(result).not.toContainText(common.common.modelTypes.chat_completions);
       await expect(result).toContainText(
         pending.pending!.display_head + '…' + pending.pending!.display_tail,

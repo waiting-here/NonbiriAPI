@@ -1,5 +1,6 @@
 import { Button } from '@shared/components/ui/Button';
 import { useState, type ReactNode } from 'react';
+import { FilterFieldLayoutContext } from './FieldLayoutContext';
 
 export function FilterBar({
   search,
@@ -37,72 +38,74 @@ export function FilterBar({
     }
   });
   return (
-    <Tag
-      role={Tag === 'div' ? 'search' : undefined}
-      onKeyDown={(event) => {
-        if (
-          Tag === 'div' &&
-          event.key === 'Enter' &&
-          (event.target as HTMLElement).tagName === 'INPUT'
-        ) {
+    <FilterFieldLayoutContext value>
+      <Tag
+        role={Tag === 'div' ? 'search' : undefined}
+        onKeyDown={(event) => {
+          if (
+            Tag === 'div' &&
+            event.key === 'Enter' &&
+            (event.target as HTMLElement).tagName === 'INPUT'
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+            onSubmit();
+          }
+        }}
+        className="nb-filter"
+        aria-label={ariaLabel}
+        onSubmit={(event) => {
           event.preventDefault();
-          event.stopPropagation();
           onSubmit();
-        }
-      }}
-      className="nb-filter"
-      aria-label={ariaLabel}
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit();
-      }}
-    >
-      <div className="nb-filter__row">
-        <div className="nb-filter__search">{search}</div>
-        {secondary && !secondaryAlwaysVisible ? (
-          <details
-            className="nb-filter__more"
-            open={open}
-            onToggle={(event) => {
-              const next = event.currentTarget.open;
-              setOpen(next);
-              if (storageKey) {
-                try {
-                  sessionStorage.setItem(storageKey, next ? '1' : '0');
-                } catch {
-                  /* Disclosure remains usable without browser storage. */
+        }}
+      >
+        <div className="nb-filter__row">
+          <div className="nb-filter__search">{search}</div>
+          {secondary && !secondaryAlwaysVisible ? (
+            <details
+              className="nb-filter__more"
+              open={open}
+              onToggle={(event) => {
+                const next = event.currentTarget.open;
+                setOpen(next);
+                if (storageKey) {
+                  try {
+                    sessionStorage.setItem(storageKey, next ? '1' : '0');
+                  } catch {
+                    /* Disclosure remains usable without browser storage. */
+                  }
                 }
-              }
-            }}
-          >
-            <summary className="nb-btn nb-btn--secondary">
-              {secondaryLabel}
-              {activeCount ? ` · ${activeCount}` : ''}
-            </summary>
-            <div className="nb-filter__fields">{secondary}</div>
-          </details>
-        ) : null}
-      </div>
-      {secondary && secondaryAlwaysVisible ? (
-        <div className="nb-filter__fields">{secondary}</div>
-      ) : null}
-      {chips && chips.length ? (
-        <div className="nb-chips">
-          {chips.map((chip) => (
-            <span key={chip.key} className="nb-chip">
-              {chip.label}
-              <button type="button" aria-label={chip.removeLabel} onClick={chip.onRemove}>
-                ×
-              </button>
-            </span>
-          ))}
-          {onClearAll ? (
-            <Button type="button" variant="ghost" size="sm" onClick={onClearAll}>
-              {clearAllLabel}
-            </Button>
+              }}
+            >
+              <summary className="nb-btn nb-btn--secondary">
+                {secondaryLabel}
+                {activeCount ? ` · ${activeCount}` : ''}
+              </summary>
+              <div className="nb-filter__fields">{secondary}</div>
+            </details>
           ) : null}
         </div>
-      ) : null}
-    </Tag>
+        {secondary && secondaryAlwaysVisible ? (
+          <div className="nb-filter__fields">{secondary}</div>
+        ) : null}
+        {chips && chips.length ? (
+          <div className="nb-chips">
+            {chips.map((chip) => (
+              <span key={chip.key} className="nb-chip">
+                {chip.label}
+                <button type="button" aria-label={chip.removeLabel} onClick={chip.onRemove}>
+                  ×
+                </button>
+              </span>
+            ))}
+            {onClearAll ? (
+              <Button type="button" variant="ghost" size="sm" onClick={onClearAll}>
+                {clearAllLabel}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </Tag>
+    </FilterFieldLayoutContext>
   );
 }

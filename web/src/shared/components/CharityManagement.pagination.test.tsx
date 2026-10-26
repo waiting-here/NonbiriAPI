@@ -206,7 +206,8 @@ it.each(['admin', 'steward'] as const)(
     await view.user.click(screen.getByText('Filter', { exact: true }));
     await view.user.type(screen.getByRole('textbox', { name: 'Site user ID' }), '7');
     await view.user.type(screen.getByRole('textbox', { name: 'Discord ID' }), '840000000000000001');
-    await view.user.click(screen.getAllByRole('button', { name: 'Apply filters' }).at(-1)!);
+    expect(screen.getAllByRole('button', { name: 'Apply filters' })).toHaveLength(1);
+    await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
     await waitFor(() =>
       expect(
         fixture.requests

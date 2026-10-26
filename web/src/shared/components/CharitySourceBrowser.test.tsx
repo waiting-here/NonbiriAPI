@@ -271,8 +271,10 @@ describe('CharitySourceBrowser', () => {
     expect(sourceRequest?.searchParams.get('page')).toBe('1');
     expect(sourceRequest?.searchParams.get('page_size')).toBe('20');
     expect(sourceRequest?.searchParams.has('limit')).toBe(false);
+    expect(keyPane(view.container)).not.toBeVisible();
 
     await chooseSource(view, view.container);
+    expect(keyPane(view.container)).toBeVisible();
     const keyRequest = requests.find((request) => request.pathname.endsWith('/keys'));
     expect(keyRequest?.searchParams.get('scope')).toBe('all');
     expect(keyRequest?.searchParams.get('key_state')).toBe('all');
@@ -498,7 +500,8 @@ describe('CharitySourceBrowser', () => {
     expect(search.get('source_handling')).toBe('pending');
     expect(search.has('source_keys_page')).toBe(false);
     expect(search.has('source_keys_page_size')).toBe(false);
-    expect(within(keyPane(view.container)).getByText('Select a source')).toBeVisible();
+    expect(keyPane(view.container)).not.toBeVisible();
+    expect(sourcePane(view.container)).toBeVisible();
   });
 
   it('reads an empty source collection without a pager and sends independent filters', async () => {

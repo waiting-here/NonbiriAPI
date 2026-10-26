@@ -18,6 +18,7 @@ import {
 import { responseOutcomeUnknown } from '@shared/operations/api';
 import { ErrorState, LoadingState } from './States';
 import { Field, Note, OutcomeNote } from './ui';
+import './DonationUsesPanelReview.css';
 
 type ReviewPlan = { rows: DonationUse[]; body: PendingDonationReviewInput };
 export function DonationUsesReviewAll({
@@ -195,7 +196,7 @@ export function DonationUseReviewResults({
   }
   return results.length ? (
     <>
-      <ul className="nb-list" role="status">
+      <ul className="donation-review-results nb-stack">
         {[...groups].map(([key, group]) => {
           const { label } = group;
           const expected = label
@@ -205,34 +206,42 @@ export function DonationUseReviewResults({
             group.results.length === expected && group.results.every((result) => result.ok);
           return (
             <li key={key}>
-              <span>
-                {t(
-                  saved ? 'common.connections.reviewSaved' : 'common.connections.reviewIncomplete',
-                )}
-              </span>
-              {label ? (
+              <Note
+                tone={saved ? 'ok' : 'warn'}
+                action={
+                  group.results.some((result) => result.ok) &&
+                  label?.decision === 'approve' &&
+                  onConfigure &&
+                  configurationStatus?.(label) === 'available' ? (
+                    <button
+                      type="button"
+                      className="nb-btn nb-btn--secondary"
+                      onClick={() => onConfigure(label)}
+                    >
+                      {t('common.connections.configureReviewedUse')}
+                    </button>
+                  ) : undefined
+                }
+              >
                 <span>
-                  {' '}
-                  · {label.display_head}…{label.display_tail}
+                  {t(
+                    saved
+                      ? 'common.connections.reviewSaved'
+                      : 'common.connections.reviewIncomplete',
+                  )}
                 </span>
-              ) : null}
-              {group.results
-                .filter((result) => result.error)
-                .map((result) => (
-                  <p key={result.use_id}>{result.error!.message}</p>
-                ))}
-              {group.results.some((result) => result.ok) &&
-              label?.decision === 'approve' &&
-              onConfigure &&
-              configurationStatus?.(label) === 'available' ? (
-                <button
-                  type="button"
-                  className="nb-btn nb-btn--secondary"
-                  onClick={() => onConfigure(label)}
-                >
-                  {t('common.connections.configureReviewedUse')}
-                </button>
-              ) : null}
+                {label ? (
+                  <span>
+                    {' '}
+                    · {label.display_head}…{label.display_tail}
+                  </span>
+                ) : null}
+                {group.results
+                  .filter((result) => result.error)
+                  .map((result) => (
+                    <p key={result.use_id}>{result.error!.message}</p>
+                  ))}
+              </Note>
             </li>
           );
         })}

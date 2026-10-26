@@ -165,7 +165,7 @@ itself.
 | Value | Donation resources available with the relevant action |
 | --- | --- |
 | `none` | No steward donation browsing, handling or mutations. |
-| `standard` | At least one unended, unexpired key, and every such key has a saved mainstream-channel source or a current binding to a mainstream charity model. This is the level-5 default. |
+| `standard` | At least one unended, unexpired key, and every such key has a saved mainstream-channel source, an effective `mainstream` endpoint tag, or a current binding to a mainstream charity model. This is the level-5 default. |
 | `enhanced` | Standard scope plus the entire donation when any of its endpoints has any management tag. Tagged donations need no model selector for direct maintenance. |
 | `full` | The level-6 donation resource scope. This is the level-6 default. |
 
@@ -192,8 +192,13 @@ qualify a custom-source key. Removing its last qualifying binding can remove the
 whole donation from standard scope if that key is still live.
 
 Successful approve/reject receipts remain replayable for the same actor and input
-after the final pending use is resolved. Current grants and the applicable replay
-checks still apply, and identity fields use the current `read_all` grant.
+after the final pending use is resolved, while current grants and resource scope
+still permit access. For an already-completed review of a terminal donation,
+standard scope checks every retained key against its original mainstream source,
+current qualifying binding or current effective mainstream tag; enhanced scope
+also allows any current effective tag. A binding removed by termination no longer
+qualifies. This receipt-only exception does not authorize ordinary historical
+reads. Identity fields use the current `read_all` grant.
 Completed receipts report their original outcome; they do not execute again or
 grant broader resource access. Final writes and protected background completion
 recheck current scope, tags and resource revisions.
@@ -202,7 +207,9 @@ Level 6 can use the shared endpoint and endpoint-policy pages. Level 5 receives
 neither endpoint action by default. `endpoints.read` allows
 `GET /api/steward/overview/endpoints` and
 `GET /api/steward/overview/endpoints/users`;
-`endpoints.tags` allows `PATCH /api/steward/overview/endpoints/tags`.
+`endpoints.tags` allows `PATCH /api/steward/overview/endpoints/tags` and
+`PUT`/`DELETE /api/steward/overview/endpoints/tag-rules`.
+`GET /api/steward/overview/endpoints/tag-rules` requires `endpoints.read`.
 The payloads, filters and pagination match the administrator routes.
 `charity.backoff` controls endpoint-backoff options, policy reads and updates;
 `egress.read` independently allows reading loaded Cloudflare route configuration.
@@ -210,8 +217,23 @@ There is no route-configuration write API.
 
 Endpoint tags support any combination of `abusive_third_party`,
 `community_charity`, `noncommercial_gateway`, `user_gateway` (User-built gateway),
-`steward_gateway` (Steward-built gateway) and `invalid_entry` (Incorrect entry).
+`steward_gateway` (Steward-built gateway), `invalid_entry` (Incorrect entry),
+`mainstream` (Mainstream channels and derivatives), `mysterious` (Mysterious channel)
+and `other_third_party` (Other third party).
 Existing tags remain valid. Tags do not grant credential access or inference use.
+
+Persistent `*.example.com` rules include `example.com` and every subdomain.
+Rules run from broad to specific: add accumulates tags, while remove clears
+earlier tags. A more specific add can add tags after a clear. Matched endpoints
+cannot be tagged manually; the page identifies the matching rules. Original
+manual tags are retained and participate again after the applicable clear rule
+is removed. Tag and rule edits use the same existing permission, including when
+they add mainstream qualification. Revocation affects current resource scope;
+it does not rewrite previous approvals, bindings or donation provenance.
+
+New submissions and explicit resubmissions whose whole resource set qualifies
+as mainstream may be approved automatically, subject to existing forced-review
+rules. Editing a tag never approves an existing pending submission by itself.
 
 Without `logs.unredacted`, level-5 upstream diagnostic text retains IPv4 and
 non-mainstream DNS redaction; separately authorized source IP and resource

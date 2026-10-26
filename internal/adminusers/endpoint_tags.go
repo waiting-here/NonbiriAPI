@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/waiting-here/NonbiriAPI/internal/endpointtags"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 )
 
@@ -19,7 +20,7 @@ type endpointTagsMutation struct {
 }
 
 func validEndpointTag(tag string) bool {
-	return tag == "abusive_third_party" || tag == "community_charity" || tag == "noncommercial_gateway" || tag == "user_gateway" || tag == "steward_gateway" || tag == "invalid_entry"
+	return endpointtags.Valid(tag)
 }
 
 func validEndpointTagFilter(tag string) bool {
@@ -44,6 +45,17 @@ func (s *Service) setManagedEndpointTags(ctx context.Context, adminID int64, rol
 		return empty, err
 	}
 	defer tx.Rollback()
+	// Recheck ownership by rules before receipts: an old successful manual write
+	// cannot bypass a rule that now controls the address.
+	for _, baseURL := range input.BaseURLs {
+		var managed bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM endpoint_tag_rule_matches WHERE base_url=?)`, baseURL).Scan(&managed); err != nil {
+			return empty, err
+		}
+		if managed {
+			return empty, ErrEndpointTagsManaged
+		}
+	}
 	decision, err := beginControlMutation(ctx, tx, adminID, role, control, s.now().Unix())
 	if err != nil {
 		return empty, err
