@@ -13,12 +13,14 @@ import {
 import common from '../../src/shared/i18n/common/en.json' with { type: 'json' };
 import adminEn from '../../src/admin/i18n/en.json' with { type: 'json' };
 import userEn from '../../src/user/i18n/en.json' with { type: 'json' };
+import bindingCopy from '../../src/user/features/core/models/binding-copy/en.json' with { type: 'json' };
 import type { NativeService } from '../../src/shared/nativeServices';
 import type { DonationUse } from '../../src/shared/operations/donationUses';
 
 const c = common.common.connections;
 const native = common.common.modelTypes;
 const channels = adminEn.admin.mainstreamChannels;
+const services = userEn.user.services;
 type Cookie = { Name: string; Value: string };
 interface Fixture {
   user_url: string;
@@ -30,7 +32,7 @@ interface Fixture {
 }
 type Identity = { id: string; revision: string };
 type Credential = Identity & { credential_version: string; connection_id: string | null };
-type Entry = Identity & { base_url: string; native_services: NativeService[] };
+type Entry = Identity & { base_url: string; note: string; native_services: NativeService[] };
 type Key = Identity & {
   credential_id: string;
   credential_version: string;
@@ -307,12 +309,9 @@ test('connection search exposes entry context and separate System One setup', as
       .getByRole('region', { name: c.editConnection, exact: true })
       .getByRole('button', { name: c.close, exact: true })
       .click();
-    await page
-      .locator('.nb-panel__head')
-      .filter({ has: page.getByRole('heading', { name: c.entries, exact: true }) })
-      .getByRole('button', { name: c.addEntry, exact: true })
-      .click();
+    await page.getByRole('button', { name: c.addEntry, exact: true }).click();
     const form = page.getByRole('region', { name: c.addEntry, exact: true });
+    await openFold(form, services.advancedSetup);
     await form
       .getByRole('combobox', { name: c.protocol, exact: true })
       .selectOption('typesafe-systemone');
@@ -532,20 +531,50 @@ for (const configuredCatalog of [false, true]) {
   });
 }
 
-test('shared versions keep old charity approval and survive deletion of their original connection', async ({
+test('service keys reject cross-service reuse while shared versions preserve charity approval', async ({
   browser,
 }, info) => {
   const owner = await session(browser, 'owner');
   const admin = await session(browser, 'admin');
   const tag = 'Shared ' + randomUUID().slice(0, 8);
-  const secrets = ['synthetic-shared-' + randomUUID(), 'synthetic-rotation-' + randomUUID()];
+  const secrets = [
+    'synthetic-shared-' + randomUUID(),
+    'synthetic-rotation-' + randomUUID(),
+    'synthetic-isolated-' + randomUUID(),
+  ];
   try {
     const base = await baseURL(owner);
     const first = await connection(owner, tag + ' original');
     const second = await connection(owner, tag + ' retained');
     const saved = await credential(owner, first, tag, secrets[0]!);
     const a = await entry(owner, first, saved, base, tag + ' A', ['chat_completions']);
-    const b = await entry(owner, second, saved, base, tag + ' B', ['chat_completions']);
+    const b = await entry(owner, first, saved, base, tag + ' B', ['chat_completions']);
+    const isolated = await credential(owner, second, tag + ' isolated key', secrets[2]!);
+    const other = await entry(owner, second, isolated, base, tag + ' isolated endpoint', [
+      'chat_completions',
+    ]);
+    await userAPI(
+      owner,
+      '/api/endpoints/' + other.endpoint.id + '/keys',
+      'POST',
+      {
+        credential_id: saved.id,
+        note: 'Cross-service reference',
+        enabled: true,
+        ownership_confirmed: true,
+        force_store_false: false,
+        native_services: ['chat_completions'],
+      },
+      404,
+    );
+    const page = await owner.newPage();
+    await page.goto(fixture().user_url + '/endpoints?connection_id=' + second.id);
+    await page.getByRole('button', { name: c.addEntry, exact: true }).click();
+    const newEndpoint = page.getByRole('region', { name: c.addEntry, exact: true });
+    const availableKeys = newEndpoint.getByRole('table', { name: c.chooseCredential, exact: true });
+    await expect(availableKeys.getByText(tag + ' isolated key', { exact: true })).toBeVisible();
+    await expect(availableKeys.getByText(tag, { exact: true })).toHaveCount(0);
+    await newEndpoint.getByRole('button', { name: c.close, exact: true }).click();
     const source = await userAPI<Source>(
       owner,
       '/api/connections/' + first.id + '/discovery-sources',
@@ -558,25 +587,55 @@ test('shared versions keep old charity approval and survive deletion of their or
         enabled: true,
       },
     );
+    a.key = await userAPI<Key>(
+      owner,
+      '/api/endpoints/' + a.endpoint.id + '/keys/' + a.key.id,
+      'PATCH',
+      {
+        expected_revision: a.key.revision,
+        discovery_source_id: source.id,
+      },
+    );
+    await userAPI(
+      owner,
+      '/api/endpoints/' + b.endpoint.id + '/keys/' + b.key.id,
+      'PATCH',
+      {
+        expected_revision: b.key.revision,
+        discovery_source_id: source.id,
+      },
+      409,
+    );
+    await userAPI(
+      owner,
+      '/api/endpoints/' + other.endpoint.id + '/keys/' + other.key.id,
+      'PATCH',
+      {
+        expected_revision: other.key.revision,
+        discovery_source_id: source.id,
+      },
+      404,
+    );
     const donation = await donate(owner, a.key, ['chat_completions'], tag);
     await approve(admin, owner, donation);
-    const page = await owner.newPage();
     const groupURL = '/endpoints?connection_id=' + first.id;
     await page.goto(
-      fixture().user_url + groupURL + '&connection_view=discovery&discovery_source_id=' + source.id,
+      fixture().user_url + groupURL + '&endpoint_id=' + a.endpoint.id + '&key_id=' + a.key.id,
     );
-    const refreshed = responseFor(page, 'POST', '/api/discovery-sources/' + source.id + '/refresh');
-    await page.getByRole('button', { name: c.refreshSource, exact: true }).click();
+    const refreshed = responseFor(
+      page,
+      'POST',
+      '/api/endpoints/' + a.endpoint.id + '/keys/' + a.key.id + '/models/refresh',
+    );
+    await page.getByRole('button', { name: services.fetchModels, exact: true }).click();
     expect((await refreshed).status()).toBe(202);
     await expect
       .poll(async () => (await userAPI<Source>(owner, '/api/discovery-sources/' + source.id)).state)
       .toBe('failed');
     await page.reload();
-    await expect(page.getByText(c.sourceStates.failed, { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: c.backToSources, exact: true }).click();
-    await expect(page.getByPlaceholder(c.sourceSearch)).toBeVisible();
-    await page.getByRole('tab', { name: c.credentials, exact: true }).click();
-    await page
+    await expect(page.getByText(services.retainedCatalog, { exact: true })).toBeVisible();
+    const serviceKeys = await openFold(page, services.manageServiceKeys);
+    await serviceKeys
       .getByRole('row')
       .filter({ hasText: tag })
       .getByRole('button', { name: c.manage, exact: true })
@@ -611,6 +670,17 @@ test('shared versions keep old charity approval and survive deletion of their or
           ).data.find((row) => row.id === b.key.id)!.credential_version,
       )
       .toBe('2');
+    expect(
+      (await userAPI<Credential>(owner, '/api/credentials/' + isolated.id)).credential_version,
+    ).toBe('1');
+    expect(
+      (
+        await userAPI<Numbered<Key>>(
+          owner,
+          '/api/endpoints/' + other.endpoint.id + '/keys?page=1&page_size=20',
+        )
+      ).data[0]!.credential_version,
+    ).toBe('1');
     const versions = await uses(owner, donation.id);
     expect(versions[0]!.approved?.credential_version).toBe('1');
     expect(versions[0]!.pending?.credential_version).toBe('2');
@@ -625,7 +695,8 @@ test('shared versions keep old charity approval and survive deletion of their or
         )
       ).summary,
     ).toEqual(impact.summary);
-    const oldRow = page.getByRole('row').filter({
+    await openFold(serviceKeys, c.versionHistory);
+    const oldRow = serviceKeys.getByRole('row').filter({
       has: page.getByText(c.versionNumber.replace('{{version}}', '1'), { exact: true }),
     });
     await oldRow.getByRole('button', { name: c.disable, exact: true }).click();
@@ -673,23 +744,34 @@ test('shared versions keep old charity approval and survive deletion of their or
     expect(
       (await owner.request.get(fixture().user_url + '/api/endpoints/' + a.endpoint.id)).status(),
     ).toBe(404);
-    const retained = await userAPI<Credential>(owner, '/api/credentials/' + saved.id);
-    expect(retained.connection_id).toBeNull();
-    expect(retained.credential_version).toBe('2');
+    const retained = await userAPI<Credential>(owner, '/api/credentials/' + isolated.id);
+    expect(retained.connection_id).toBe(second.id);
+    expect(retained.credential_version).toBe('1');
     const membership = await userAPI<Numbered<Credential>>(
       owner,
       '/api/connections/' + second.id + '/credentials?page=1&page_size=20',
     );
-    expect(membership.data.map((row) => row.id)).toContain(saved.id);
+    expect(membership.data.map((row) => row.id)).toContain(isolated.id);
+    expect(membership.data.map((row) => row.id)).not.toContain(saved.id);
+    const preservedKey = (
+      await userAPI<Numbered<Key>>(
+        owner,
+        '/api/endpoints/' + other.endpoint.id + '/keys?page=1&page_size=20',
+      )
+    ).data[0]!;
+    expect(preservedKey.credential_id).toBe(isolated.id);
+    expect(preservedKey.credential_version).toBe('1');
     await page.goto(
       fixture().user_url + '/endpoints?connection_id=' + second.id + '&connection_view=credentials',
     );
     await page
       .getByRole('row')
-      .filter({ hasText: tag })
+      .filter({ hasText: tag + ' isolated key' })
       .getByRole('button', { name: c.manage, exact: true })
       .click();
-    await expect(page.getByRole('heading', { name: tag, exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: tag + ' isolated key', exact: true }),
+    ).toBeVisible();
     await page.getByRole('button', { name: c.backToCredentials, exact: true }).click();
     await page.getByRole('link', { name: c.backToConnections, exact: true }).click();
     await expect(page.getByPlaceholder(c.connectionSearch)).toBeVisible();
@@ -1011,8 +1093,9 @@ const targetRows = (editor: Locator) =>
     .locator('fieldset')
     .filter({ has: editor.page().getByRole('button', { name: c.removeTarget, exact: true }) });
 async function saveTargets(page: Page, editor: Locator, path: string, status = 200) {
+  const saveLabel = path.startsWith('/api/models/') ? bindingCopy.saveCombination : c.saveTargets;
   const response = responseFor(page, 'PUT', path);
-  await editor.getByRole('button', { name: c.saveTargets, exact: true }).click();
+  await editor.getByRole('button', { name: saveLabel, exact: true }).click();
   const saved = await response;
   expect(saved.status()).toBe(status);
   if (status === 200) {
@@ -1024,11 +1107,11 @@ async function saveTargets(page: Page, editor: Locator, path: string, status = 2
     expect(receipt.binding_id).toBe(path.split('/').at(-2));
     expect(receipt.binding_revision).toMatch(/^[1-9][0-9]*$/);
     expect(receipt.targets.length).toBeGreaterThan(0);
-    await expect(editor.getByRole('button', { name: c.saveTargets, exact: true })).toBeEnabled();
+    await expect(editor.getByRole('button', { name: saveLabel, exact: true })).toBeEnabled();
   }
 }
 async function openTargetEditor(page: Page, title: string, charity: boolean) {
-  if (!charity) return openFold(page, title);
+  if (!charity) return openFold(await openFold(page, bindingCopy.advanced), title);
   await page
     .getByRole('row')
     .filter({ has: page.getByRole('button', { name: c.editBindingSources, exact: true }) })
@@ -1037,7 +1120,13 @@ async function openTargetEditor(page: Page, title: string, charity: boolean) {
     .click();
   return page.getByRole('region', { name: c.editBindingSources, exact: true });
 }
-async function addGroup(page: Page, name: string, charity: boolean, path: string) {
+async function addGroup(
+  page: Page,
+  name: string,
+  charity: boolean,
+  path: string,
+  source?: { endpoint: Entry; key: Key },
+) {
   let editor: Locator;
   if (charity) {
     const mode = page.getByRole('combobox', { name: c.addBindingMode, exact: true });
@@ -1046,21 +1135,51 @@ async function addGroup(page: Page, name: string, charity: boolean, path: string
       .locator('xpath=ancestor::section[1]')
       .locator(':scope > div')
       .filter({ has: page.getByRole('table', { name: c.availableTargets, exact: true }) });
-  } else editor = await openFold(page, c.addTargetGroup);
-  const candidates = charity ? editor : await openFold(editor, c.addTarget);
-  if (charity) await candidates.getByLabel(c.modelSearch, { exact: true }).fill(name);
-  else {
-    await candidates.getByPlaceholder(c.modelSearch).fill(name);
-    await candidates.getByRole('button', { name: c.search, exact: true }).click();
+  } else
+    editor = await openFold(await openFold(page, bindingCopy.advanced), bindingCopy.addCombination);
+  if (charity) {
+    await editor.getByLabel(c.modelSearch, { exact: true }).fill(name);
+    const row = editor.getByRole('row').filter({ hasText: name });
+    await row.getByRole('button', { name: c.addTarget, exact: true }).click();
+  } else {
+    expect(source).toBeDefined();
+    const candidates = await openFold(editor, bindingCopy.addSources);
+    const picker = candidates.locator('.personal-binding-picker');
+    await expect(
+      picker.getByRole('combobox', { name: bindingCopy.filterService, exact: true }),
+    ).toBeVisible();
+    if (
+      !(await picker
+        .getByRole('searchbox', { name: bindingCopy.endpoints, exact: true })
+        .isVisible())
+    )
+      await picker.getByRole('button', { name: bindingCopy.changeEndpoint, exact: true }).click();
+    await picker
+      .getByRole('searchbox', { name: bindingCopy.endpoints, exact: true })
+      .fill(source!.endpoint.note);
+    await picker
+      .locator('.personal-binding-picker__browse')
+      .getByRole('button')
+      .filter({ hasText: source!.endpoint.note })
+      .click();
+    await picker.getByRole('searchbox', { name: bindingCopy.searchModels, exact: true }).fill(name);
+    await picker
+      .locator('.personal-binding-picker__model')
+      .filter({ has: page.getByText(name, { exact: true }) })
+      .getByRole('checkbox')
+      .check();
   }
-  const row = candidates.getByRole('row').filter({ hasText: name });
-  await row.getByRole('button', { name: c.addTarget, exact: true }).click();
   const selected = targetRows(editor);
   await expect(selected).toHaveCount(1);
   const chat = selected.getByLabel(native.chat_completions, { exact: true });
   await expect(chat).toBeChecked();
   const response = responseFor(page, 'POST', path + '/batch-receipt');
-  await editor.getByRole('button', { name: c.addTargetGroup, exact: true }).click();
+  await editor
+    .getByRole('button', {
+      name: charity ? c.addTargetGroup : bindingCopy.addCombination,
+      exact: true,
+    })
+    .click();
   const saved = await response;
   expect(saved.status()).toBe(201);
   expect(saved.request().postDataJSON().selections[0].targets[0].native_services).toEqual([
@@ -1078,9 +1197,10 @@ async function exerciseTargets(
   names: string[],
   charity: boolean,
   info: TestInfo,
+  personalSources?: { endpoint: Entry; key: Key }[],
 ) {
   await page.goto(origin + destination);
-  const title = c.targetGroup.replace('{{number}}', '1');
+  const title = charity ? c.targetGroup.replace('{{number}}', '1') : bindingCopy.combination + ' 1';
   let editor = await openTargetEditor(page, title, charity);
   await expect(targetRows(editor)).toHaveCount(2);
   const before = await api<Bindings>(context, origin, path);
@@ -1154,8 +1274,8 @@ async function exerciseTargets(
     )
     .toEqual([names[1]]);
   if (charity) await editor.getByRole('button', { name: c.returnToBindings, exact: true }).click();
-  await addGroup(page, names[2]!, charity, path);
-  await addGroup(page, names[3]!, charity, path);
+  await addGroup(page, names[2]!, charity, path, personalSources?.[0]);
+  await addGroup(page, names[3]!, charity, path, personalSources?.[1]);
   await expect
     .poll(async () => (await api<Bindings>(context, origin, path)).bindings.length)
     .toBe(3);
@@ -1253,6 +1373,7 @@ test('self and charity target groups save repeatedly and preserve drafts across 
       names,
       false,
       info,
+      [a, b],
     );
     const donation = await userAPI<Donation>(owner, '/api/donations', 'POST', {
       description: 'Targets ' + tag,
@@ -1793,7 +1914,7 @@ test('returned request alerts show source details and unresolved review state', 
   }
 });
 
-test('mainstream entry authorization applies, reuses and lets users decline the suggested catalog', async ({
+test('mainstream authorization isolates endpoint catalogs and lets users decline the suggestion', async ({
   browser,
 }, info) => {
   const owner = await session(browser, 'owner');
@@ -1827,12 +1948,9 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
     );
     const page = await owner.newPage();
     await page.goto(fixture().user_url + '/endpoints?connection_id=' + group.id);
-    await page
-      .locator('.nb-panel__head')
-      .filter({ has: page.getByRole('heading', { name: c.entries, exact: true }) })
-      .getByRole('button', { name: c.addEntry, exact: true })
-      .click();
+    await page.getByRole('button', { name: c.addEntry, exact: true }).click();
     const form = page.getByRole('region', { name: c.addEntry, exact: true });
+    await openFold(form, services.advancedSetup);
     const mainstreamMode = form.getByRole('radio', { name: c.mainstream, exact: true });
     await form.locator('.nb-seg').getByText(c.mainstream, { exact: true }).click();
     await expect(mainstreamMode).toBeChecked();
@@ -1872,7 +1990,6 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
       .filter({ hasText: tag })
       .getByRole('button', { name: c.select, exact: true })
       .click();
-    await form.getByLabel(c.ownership, { exact: true }).check();
     const grantResponses: { path: string; status: number }[] = [];
     page.on('response', (response) => {
       const path = new URL(response.url()).pathname;
@@ -1883,9 +2000,7 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
       .getByRole('button', { name: userEn.user.workflows.continueService, exact: true })
       .click();
     await expect(form.getByText(userEn.user.workflows.serviceReady, { exact: true })).toBeVisible();
-    await expect(
-      form.getByRole('button', { name: userEn.user.workflows.useModels, exact: true }),
-    ).toBeVisible();
+    await expect(form.locator('.service-key-models')).toHaveCount(3);
     await expect(
       form.getByRole('link', { name: userEn.user.workflows.donateService, exact: true }),
     ).toBeVisible();
@@ -1912,26 +2027,24 @@ test('mainstream entry authorization applies, reuses and lets users decline the 
       expect(grant.credential_id).toBe(saved.id);
       expect(grant.credential_version).toBe(saved.credential_version);
       expect(grant.native_services).toEqual(await protocolServices(owner));
-      if (index === 0) expect(grant.discovery_source_id).not.toBeNull();
-      else
-        expect(grant.discovery_source_id).toBe(
-          index === 1 ? granted[0]!.discovery_source_id : null,
-        );
+      if (index < 2) expect(grant.discovery_source_id).not.toBeNull();
+      else expect(grant.discovery_source_id).toBeNull();
       granted.push(grant);
     }
+    expect(granted[1]!.discovery_source_id).not.toBe(granted[0]!.discovery_source_id);
     const sources = (
       await userAPI<
         Numbered<Source & { credential_id: string; base_url: string; list_format: string }>
       >(owner, '/api/connections/' + group.id + '/discovery-sources?page=1&page_size=20')
     ).data;
-    expect(sources).toHaveLength(1);
-    expect(sources[0]).toMatchObject({
-      id: granted[0]!.discovery_source_id,
-      credential_id: saved.id,
-      credential_version: saved.credential_version,
-      base_url: base,
-      list_format: 'openai',
-    });
+    expect(sources).toHaveLength(2);
+    for (const key of granted.slice(0, 2))
+      expect(sources.find((source) => source.id === key.discovery_source_id)).toMatchObject({
+        credential_id: saved.id,
+        credential_version: saved.credential_version,
+        base_url: base,
+        list_format: 'openai',
+      });
 
     const draft = await owner.newPage();
     const first = entries.find((row) => row.note === channel!.entries[0]!.name)!;
@@ -2034,12 +2147,6 @@ test('a key without a catalog can recover, show a readable failure and load mode
     const saved = await credential(owner, group, tag, 'synthetic-image-credential');
     const base = await baseURL(owner);
     const value = await entry(owner, group, saved, base, tag, ['chat_completions']);
-    const source = await userAPI<Source>(
-      owner,
-      '/api/connections/' + group.id + '/discovery-sources',
-      'POST',
-      { name: tag, base_url: base, list_format: 'openai', credential_id: saved.id, enabled: true },
-    );
     const page = await owner.newPage();
     const keyPath = '/api/endpoints/' + value.endpoint.id + '/keys/' + value.key.id;
     const refreshPath = keyPath + '/models/refresh';
@@ -2049,6 +2156,10 @@ test('a key without a catalog can recover, show a readable failure and load mode
       page.getByRole('button', { name: core['endpoints.refreshDiscovery'], exact: true }),
     ).toHaveCount(0);
     await page.getByRole('button', { name: userEn.user.services.viewModels, exact: true }).click();
+    await expect(
+      page.getByRole('button', { name: services.fetchModels, exact: true }),
+    ).toBeDisabled();
+    await openFold(page, services.manualModels);
     await page
       .getByLabel(core['endpoints.manualModel'], { exact: true })
       .fill('vendor/manual-before-discovery');
@@ -2063,10 +2174,21 @@ test('a key without a catalog can recover, show a readable failure and load mode
     await page
       .getByRole('button', { name: userEn.user.services.chooseCatalog, exact: true })
       .click();
-    const grant = await openFold(page, c.credentialAndServices);
-    await grant.getByRole('button', { name: c.useSource, exact: true }).click();
+    const grant = await openFold(page, services.modelListSettings);
+    await expect(grant.getByLabel(c.discoveryBaseURL, { exact: true })).toHaveValue(base);
+    await expect(grant.getByRole('table', { name: c.chooseCredential, exact: true })).toHaveCount(
+      0,
+    );
+    const createdSource = responseFor(
+      page,
+      'POST',
+      '/api/connections/' + group.id + '/discovery-sources',
+    );
     const patched = responseFor(page, 'PATCH', keyPath);
-    await grant.getByRole('button', { name: c.save, exact: true }).click();
+    await grant.getByRole('button', { name: services.saveListSettings, exact: true }).click();
+    const sourceResponse = await createdSource;
+    expect(sourceResponse.status()).toBe(201);
+    const source = (await sourceResponse.json()) as Source;
     const patchResponse = await patched;
     expect(patchResponse.status()).toBe(200);
     expect(((await patchResponse.json()) as Key).discovery_source_id).toBe(source.id);
@@ -2074,6 +2196,7 @@ test('a key without a catalog can recover, show a readable failure and load mode
       .getByRole('region', { name: userEn.user.services.editKey, exact: true })
       .getByRole('button', { name: core['common.close'], exact: true })
       .click();
+    await page.getByRole('button', { name: services.viewModels, exact: true }).click();
 
     const failure = 'The selected model catalog changed. Choose the current catalog and try again.';
     await page.route('**' + refreshPath, (route) =>
@@ -2108,14 +2231,18 @@ test('a key without a catalog can recover, show a readable failure and load mode
             .state,
       )
       .toBe('succeeded');
-    const catalog = await userAPI<{ automatic_entries: { upstream_model_id: string }[] }>(
-      owner,
-      keyPath + '/models',
-    );
+    const catalog = await userAPI<{
+      automatic_entries: { upstream_model_id: string }[];
+      manual_entries: { upstream_model_id: string }[];
+    }>(owner, keyPath + '/models');
     expect(catalog.automatic_entries.length).toBeGreaterThan(0);
+    expect(catalog.manual_entries.map((row) => row.upstream_model_id)).toContain(
+      'vendor/manual-before-discovery',
+    );
     await expect(
       page.getByText(catalog.automatic_entries[0]!.upstream_model_id, { exact: true }),
     ).toBeVisible();
+    await openFold(page, services.manualModels);
     await page.getByLabel(core['endpoints.manualModel'], { exact: true }).fill('vendor/recovered');
     await page.getByRole('button', { name: core['endpoints.manualAdd'], exact: true }).click();
     await expect(page.getByText('vendor/recovered', { exact: true })).toBeVisible();
@@ -2150,18 +2277,6 @@ test('model imports reuse manual support after reopening and resume after a mode
     const saved = await credential(owner, group, tag, 'synthetic-import-' + randomUUID());
     const base = await baseURL(owner);
     const target = await entry(owner, group, saved, base, tag, ['chat_completions']);
-    const source = await userAPI<Source>(
-      owner,
-      '/api/connections/' + group.id + '/discovery-sources',
-      'POST',
-      {
-        name: tag,
-        base_url: base,
-        list_format: 'openai',
-        credential_id: saved.id,
-        enabled: true,
-      },
-    );
     const catalogPath =
       '/api/endpoints/' + target.endpoint.id + '/keys/' + target.key.id + '/models';
     const upstream = 'existing-' + randomUUID().slice(0, 8);
@@ -2183,28 +2298,19 @@ test('model imports reuse manual support after reopening and resume after a mode
       fixture().user_url +
       '/endpoints?connection_id=' +
       group.id +
-      '&connection_view=discovery&discovery_source_id=' +
-      source.id;
+      '&endpoint_id=' +
+      target.endpoint.id +
+      '&key_id=' +
+      target.key.id;
     const prepare = async (upstreamName: string, modelName: string) => {
       await page.goto(destination);
-      const manual = await openFold(page, c.manualModel);
-      await manual.getByLabel(c.upstreamModel, { exact: true }).fill(upstreamName);
-      await manual.getByRole('button', { name: c.configureModel, exact: true }).click();
-      const chooser = await openFold(page, c.chooseEntry);
-      await chooser.getByPlaceholder(c.entrySearch, { exact: true }).fill(tag);
-      await chooser.getByRole('button', { name: c.search, exact: true }).click();
-      await chooser
-        .getByRole('row')
-        .filter({ hasText: tag })
-        .getByRole('button', { name: c.select, exact: true })
-        .click();
-      await chooser
-        .getByRole('row')
-        .filter({ hasText: tag })
-        .getByRole('button', { name: c.select, exact: true })
-        .click();
-      const row = await openFold(page.locator('.connection-model-batch'), upstreamName);
-      await row.getByRole('checkbox', { name: tag + ' · ' + upstreamName, exact: true }).check();
+      const pairModels = page.locator('.service-key-models');
+      await pairModels.getByRole('tab', { name: services.manualModels, exact: true }).click();
+      await pairModels.getByRole('checkbox', { name: upstream, exact: true }).check();
+      const row = await openFold(page.locator('.connection-model-batch'), upstream);
+      await row.getByRole('checkbox', { name: tag + ' · ' + upstream, exact: true }).check();
+      if (upstreamName !== upstream)
+        await row.getByLabel(c.upstreamModel + ' · ' + tag, { exact: true }).fill(upstreamName);
       await row
         .getByRole('group', { name: common.common.nativeServices.title, exact: true })
         .getByRole('checkbox', { name: native.chat_completions, exact: true })
