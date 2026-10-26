@@ -42,15 +42,18 @@ type Config struct {
 	SiteBaseURL       string
 	TrustedProxyCIDRs []netip.Prefix
 	ForceHTTPS        bool
+	ErrorPageStyles   string
 }
 
 type policy struct {
-	next       http.Handler
-	matcher    host.Matcher
-	userOrigin string
-	adminHost  string
-	forceHTTPS bool
-	proxies    []netip.Prefix
+	next            http.Handler
+	matcher         host.Matcher
+	userOrigin      string
+	adminHost       string
+	forceHTTPS      bool
+	proxies         []netip.Prefix
+	errorPageStyles string
+	userBaseURL     string
 }
 
 // New validates the station authorities and returns a handler that wraps next.
@@ -81,12 +84,14 @@ func New(cfg Config, next http.Handler) (http.Handler, error) {
 	prefixes := make([]netip.Prefix, len(cfg.TrustedProxyCIDRs))
 	copy(prefixes, cfg.TrustedProxyCIDRs)
 	return &policy{
-		next:       next,
-		matcher:    matcher,
-		userOrigin: userOrigin,
-		adminHost:  admin.Authority,
-		forceHTTPS: cfg.ForceHTTPS,
-		proxies:    prefixes,
+		next:            next,
+		matcher:         matcher,
+		userOrigin:      userOrigin,
+		adminHost:       admin.Authority,
+		forceHTTPS:      cfg.ForceHTTPS,
+		proxies:         prefixes,
+		errorPageStyles: cfg.ErrorPageStyles,
+		userBaseURL:     strings.TrimRight(cfg.SiteBaseURL, "/"),
 	}, nil
 }
 
@@ -119,6 +124,11 @@ func (p *policy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := host.WithStation(r.Context(), station)
 	ctx = withRequestInfo(ctx, info)
 	request := r.Clone(ctx)
+	homeURL := "/"
+	if station == host.StationUnknown {
+		homeURL = p.userBaseURL + "/"
+	}
+	w = httperr.WithBrowserErrors(w, request, httperr.BrowserPageOptions{Styles: p.errorPageStyles, HomeURL: homeURL, Admin: station == host.StationAdmin})
 	// Downstream code uses the derived context values rather than reinterpreting
 	// forwarding headers. Removing them also prevents a future handler from
 	// accidentally treating an untrusted header as authoritative.
@@ -447,8 +457,9 @@ func (w *apiResponseWriter) WriteHeader(status int) {
 	w.wroteHeader = true
 	w.Header().Set("Cache-Control", "no-store")
 	contentType := strings.ToLower(w.Header().Get("Content-Type"))
+	browserHTML := strings.HasPrefix(contentType, "text/html") && httperr.BrowserErrorsEnabled(w.ResponseWriter)
 	if (status == http.StatusNotFound || status == http.StatusMethodNotAllowed) &&
-		!strings.HasPrefix(contentType, "application/json") {
+		!strings.HasPrefix(contentType, "application/json") && !browserHTML {
 		w.Header().Del("Content-Length")
 		code := httperr.CodeNotFound
 		if status == http.StatusMethodNotAllowed {

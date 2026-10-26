@@ -39,6 +39,20 @@ func writeStableError(w http.ResponseWriter, code, message string) {
 
 func writeAuthFailure(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, ErrStateInvalid), errors.Is(err, ErrStateExpired), errors.Is(err, ErrStateReplay):
+		httperr.SetBrowserReason(w, httperr.BrowserReasonOAuthState)
+	case errors.Is(err, ErrGuildRoleMismatch):
+		httperr.SetBrowserReason(w, httperr.BrowserReasonDiscordGate)
+	case errors.Is(err, ErrProviderUnauthorized):
+		httperr.SetBrowserReason(w, httperr.BrowserReasonDiscordRejected)
+	case errors.Is(err, ErrInvalidIdentity):
+		httperr.SetBrowserReason(w, httperr.BrowserReasonDiscordIdentity)
+	case errors.Is(err, ErrProviderUnavailable), errors.Is(err, ErrRegistrationPaused), errors.Is(err, ErrStateCapacity):
+		httperr.SetBrowserReason(w, httperr.BrowserReasonDiscordUnavailable)
+	case errors.Is(err, ErrStationMismatch):
+		httperr.SetBrowserReason(w, httperr.BrowserReasonWrongStation)
+	}
+	switch {
 	case errors.Is(err, ErrProviderUnavailable), errors.Is(err, ErrRegistrationPaused), errors.Is(err, ErrStateCapacity):
 		writeStableError(w, httperr.CodeServiceUnavailable, "authentication service unavailable")
 	case errors.Is(err, ErrProviderUnauthorized), errors.Is(err, ErrGuildRoleMismatch), errors.Is(err, ErrInvalidIdentity), errors.Is(err, ErrStateInvalid), errors.Is(err, ErrStateExpired), errors.Is(err, ErrStateReplay):

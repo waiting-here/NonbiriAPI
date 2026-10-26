@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="{{.Language}}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="referrer" content="no-referrer">
+    <title>{{if eq .Language "zh"}}{{.Title.Zh}}{{else}}{{.Title.En}}{{end}} · NonbiriAPI</title>
+    <script>{{.Script}}</script>
+    <style>{{.Styles}}</style>
+  </head>
+  <body>
+    <div class="browser-shell">
+      <header class="browser-topbar">
+        <a class="browser-brand" href="{{.HomeURL}}">NonbiriAPI</a>
+        <div class="browser-controls" hidden>
+          <button id="browser-language" class="nb-btn nb-btn--ghost" type="button"><span lang="zh">English</span><span lang="en">中文</span></button>
+          <button id="browser-theme" class="nb-btn nb-btn--ghost" type="button" aria-pressed="false"><span lang="zh">深色模式</span><span lang="en">Dark mode</span></button>
+        </div>
+      </header>
+      <main class="browser-main">
+        <section class="nb-panel browser-panel" aria-labelledby="browser-title">
+          <div class="nb-panel__body">
+            <p class="browser-status">HTTP {{.Status}}</p>
+            <header class="page-header nb-page-header">
+              <div class="nb-page-header__lead">
+                <div class="nb-page-header__copy">
+                  <h1 id="browser-title"><span lang="zh">{{.Title.Zh}}</span><span lang="en">{{.Title.En}}</span></h1>
+                  <p class="page-description nb-page-header__description"><span lang="zh">{{.Body.Zh}}</span><span lang="en">{{.Body.En}}</span></p>
+                </div>
+              </div>
+            </header>
+            <nav class="browser-actions" aria-label="{{if eq .Language "zh"}}下一步{{else}}Next steps{{end}}">
+              <a class="nb-btn nb-btn--primary" href="{{.ActionURL}}"><span lang="zh">{{.Action.Zh}}</span><span lang="en">{{.Action.En}}</span></a>
+              {{if ne .ActionURL .HomeURL}}<a class="nb-btn nb-btn--secondary" href="{{.HomeURL}}"><span lang="zh">{{.Home.Zh}}</span><span lang="en">{{.Home.En}}</span></a>{{end}}
+            </nav>
+          </div>
+        </section>
+      </main>
+      <footer class="browser-footer"><span lang="zh">悠哉一点，我们再试一次。</span><span lang="en">Take a breath. We can try again.</span></footer>
+    </div>
+  </body>
+</html>
