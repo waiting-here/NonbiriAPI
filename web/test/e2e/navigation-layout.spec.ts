@@ -87,6 +87,21 @@ test('user management separates identifiers and copies Discord IDs exactly at de
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(width);
   }
+  await page.setViewportSize({ width: 390, height: 900 });
+  const sidebar = page.locator('.nb-admin-sidebar');
+  const toggle = page.locator('.nb-menu-button');
+  await expect(sidebar).toBeHidden();
+  await toggle.focus();
+  for (let step = 0; step < 8; step++) {
+    await page.keyboard.press('Tab');
+    expect(await sidebar.evaluate((node) => node.contains(document.activeElement))).toBe(false);
+  }
+  await toggle.click();
+  await expect(sidebar).toBeVisible();
+  await expect(sidebar.locator('a').first()).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(sidebar).toBeHidden();
+  await expect(toggle).toBeFocused();
   errors.assertNone();
 });
 
