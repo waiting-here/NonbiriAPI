@@ -178,16 +178,11 @@
   padding-top: var(--nb-space-3);
 }
 
-.charity-source-browser__recurring summary {
-  cursor: pointer;
-  font-weight: 700;
-}
-
 .charity-source-browser__recurring ul {
   display: grid;
   gap: var(--nb-space-2);
-  margin: var(--nb-space-3) 0 0;
-  padding-left: 1.2rem;
+  margin: 0;
+  padding-left: var(--nb-space-5);
 }
 
 .charity-source-browser__recurring li {

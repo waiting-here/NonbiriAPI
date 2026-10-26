@@ -123,130 +123,139 @@ export function FailureResetControl({
   }
   if (lost) return <p role="alert">{t('common.operations.charity.accessLost')}</p>;
   return (
-    <details className="failure-reset-control">
-      <summary>{t('common.failureReset.title')}</summary>
-      <p>{t('common.failureReset.help')}</p>
-      {!job ? (
-        <>
-          <div className="form-actions">
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={disabled || !choices.length}
-              onClick={() =>
-                setChosen(
-                  (previous) =>
-                    new Map([...previous, ...choices.map((item) => [item.id, item] as const)]),
-                )
-              }
-            >
-              {t('common.failureReset.selectPage')}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={!chosen.size}
-              onClick={() => setChosen(new Map())}
-            >
-              {t('common.failureReset.clear')}
-            </Button>
-          </div>
-          <div className="failure-reset-choices">
-            {choices.map((choice) => (
-              <label key={choice.id}>
-                <input
-                  type="checkbox"
-                  disabled={disabled}
-                  checked={chosen.has(choice.id)}
-                  onChange={(event) =>
-                    setChosen((previous) => {
-                      const next = new Map(previous);
-                      if (event.target.checked) next.set(choice.id, choice);
-                      else next.delete(choice.id);
-                      return next;
-                    })
-                  }
-                />
-                <span>{choice.label}</span>
-              </label>
-            ))}
-          </div>
-          <div className="form-actions">
-            <Button
-              type="button"
-
-              disabled={disabled || !chosen.size}
-              onClick={() => begin(Array.from(chosen.values(), (choice) => choice.target))}
-            >
-              {t('common.failureReset.selected', { count: chosen.size })}
-            </Button>
-            <Button
-              type="button"
-
-              disabled={disabled}
-              onClick={() => begin([selection])}
-            >
-              {t('common.failureReset.all')}
-            </Button>
-          </div>
-        </>
-      ) : (
-        <>
-          <p role="status" aria-live="polite">
-            {t(
-              job.phase === 'selecting'
-                ? 'common.failureReset.selecting'
-                : job.phase === 'resetting'
-                  ? 'common.failureReset.resetting'
-                  : job.phase === 'paused'
-                    ? 'common.failureReset.paused'
-                    : 'common.failureReset.done',
-              counts!,
-            )}
-          </p>
-          {job.error ? <ErrorState error={job.error} /> : null}
-          {job.phase === 'paused' ? <p>{t('common.failureReset.resumeHelp')}</p> : null}
-          <div className="form-actions">
-            {working ? (
-              <Button type="button" variant="ghost" onClick={() => job.stop()}>
-                {t('common.cancel')}
-              </Button>
-            ) : null}
-            {job.phase === 'paused' ? (
-              <Button type="button" onClick={() => void job.resume()}>
-                {t('common.failureReset.resume')}
-              </Button>
-            ) : null}
-            {!working ? (
+    <details className="nb-fold failure-reset-control">
+      <summary>
+        <span className="nb-fold__title">
+          <strong>{t('common.failureReset.title')}</strong>
+        </span>
+      </summary>
+      <div className="nb-fold__body">
+        <p>{t('common.failureReset.help')}</p>
+        {!job ? (
+          <>
+            <div className="form-actions">
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => {
-                  active.current = null;
-                  setJob(null);
-                  setChosen(new Map());
-                  void refresh();
-                }}
+                disabled={disabled || !choices.length}
+                onClick={() =>
+                  setChosen(
+                    (previous) =>
+                      new Map([...previous, ...choices.map((item) => [item.id, item] as const)]),
+                  )
+                }
               >
-                {t('common.failureReset.newSelection')}
+                {t('common.failureReset.selectPage')}
               </Button>
-            ) : null}
-          </div>
-          {counts && counts.skipped > 0 ? (
-            <p>{t('common.failureReset.skippedHelp', { count: counts.skipped })}</p>
-          ) : null}
-          {failed.length ? (
-            <ul>
-              {failed.map((item) => (
-                <li key={item.key_id}>
-                  {t('common.failureReset.item', { donation: item.donation_id, key: item.key_id })}{' '}
-                  · {t(statusKey[item.status!])}
-                </li>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={!chosen.size}
+                onClick={() => setChosen(new Map())}
+              >
+                {t('common.failureReset.clear')}
+              </Button>
+            </div>
+            <div className="failure-reset-choices">
+              {choices.map((choice) => (
+                <label key={choice.id}>
+                  <input
+                    type="checkbox"
+                    disabled={disabled}
+                    checked={chosen.has(choice.id)}
+                    onChange={(event) =>
+                      setChosen((previous) => {
+                        const next = new Map(previous);
+                        if (event.target.checked) next.set(choice.id, choice);
+                        else next.delete(choice.id);
+                        return next;
+                      })
+                    }
+                  />
+                  <span>{choice.label}</span>
+                </label>
               ))}
-            </ul>
-          ) : null}
-        </>
-      )}
+            </div>
+            <div className="form-actions">
+              <Button
+                type="button"
+
+                disabled={disabled || !chosen.size}
+                onClick={() => begin(Array.from(chosen.values(), (choice) => choice.target))}
+              >
+                {t('common.failureReset.selected', { count: chosen.size })}
+              </Button>
+              <Button
+                type="button"
+
+                disabled={disabled}
+                onClick={() => begin([selection])}
+              >
+                {t('common.failureReset.all')}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p role="status" aria-live="polite">
+              {t(
+                job.phase === 'selecting'
+                  ? 'common.failureReset.selecting'
+                  : job.phase === 'resetting'
+                    ? 'common.failureReset.resetting'
+                    : job.phase === 'paused'
+                      ? 'common.failureReset.paused'
+                      : 'common.failureReset.done',
+                counts!,
+              )}
+            </p>
+            {job.error ? <ErrorState error={job.error} /> : null}
+            {job.phase === 'paused' ? <p>{t('common.failureReset.resumeHelp')}</p> : null}
+            <div className="form-actions">
+              {working ? (
+                <Button type="button" variant="ghost" onClick={() => job.stop()}>
+                  {t('common.cancel')}
+                </Button>
+              ) : null}
+              {job.phase === 'paused' ? (
+                <Button type="button" onClick={() => void job.resume()}>
+                  {t('common.failureReset.resume')}
+                </Button>
+              ) : null}
+              {!working ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    active.current = null;
+                    setJob(null);
+                    setChosen(new Map());
+                    void refresh();
+                  }}
+                >
+                  {t('common.failureReset.newSelection')}
+                </Button>
+              ) : null}
+            </div>
+            {counts && counts.skipped > 0 ? (
+              <p>{t('common.failureReset.skippedHelp', { count: counts.skipped })}</p>
+            ) : null}
+            {failed.length ? (
+              <ul>
+                {failed.map((item) => (
+                  <li key={item.key_id}>
+                    {t('common.failureReset.item', {
+                      donation: item.donation_id,
+                      key: item.key_id,
+                    })}{' '}
+                    · {t(statusKey[item.status!])}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </>
+        )}
+      </div>
     </details>
   );
 }

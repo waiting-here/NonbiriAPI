@@ -14,16 +14,20 @@ export function RecurringLimitsDisclosure({
   const copy = copyForRecurringLimits(i18n.language);
   return (
     <details
-      className="ops-subcard recurring-limits-disclosure"
+      className="nb-fold recurring-limits-disclosure"
       onToggle={(event) => {
         if (event.currentTarget.open) setLoaded(true);
       }}
     >
       <summary>
-        {copy.title}
-        {label ? ` · ${label}` : ''}
+        <span className="nb-fold__title">
+          <strong>
+            {copy.title}
+            {label ? ` · ${label}` : ''}
+          </strong>
+        </span>
       </summary>
-      {loaded ? <RecurringLimits {...props} /> : null}
+      <div className="nb-fold__body">{loaded ? <RecurringLimits {...props} /> : null}</div>
     </details>
   );
 }

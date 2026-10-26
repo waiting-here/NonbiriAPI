@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { stationSessionWrite } from '@shared/charityManagement';
 import { Card, ErrorState, LoadingState } from '@shared/components/States';
+import { Fold } from '@shared/components/ui/Fold';
 import { usePictureBookText } from '@shared/picturebook/copy';
 import { useImageOperation } from '@shared/picturebook/useImageOperation';
 import { useAdminSession } from '../../data';
@@ -249,8 +250,7 @@ const Catalog = forwardRef<
             <p>{discoveryError(operation.data.error_code, operation.data.http_status, t)}</p>
             {operation.data.http_status ? <p>HTTP {operation.data.http_status}</p> : null}
             <DiscoveryFailureDiagnostics operationID={operation.data.id} />
-            <details>
-              <summary>{t('诊断信息', 'Diagnostic information')}</summary>
+            <Fold plain title={t('诊断信息', 'Diagnostic information')}>
               <p>
                 {t('错误类别：', 'Error class: ')}
                 <code>{operation.data.error_code ?? 'unknown'}</code>
@@ -259,7 +259,7 @@ const Catalog = forwardRef<
                 {t('操作编号：', 'Operation ID: ')}
                 <code>{operation.data.id}</code>
               </p>
-            </details>
+            </Fold>
           </section>
         ) : operation.data ? (
           <p role="status">

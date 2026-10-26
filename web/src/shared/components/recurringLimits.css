@@ -1,18 +1,5 @@
 .recurring-limits-disclosure {
   min-width: 0;
-  border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-md);
-  padding: 0.85rem;
-}
-
-.recurring-limits-disclosure > summary {
-  overflow-wrap: anywhere;
-  cursor: pointer;
-  font-weight: 650;
-}
-
-.recurring-limits-disclosure[open] > summary {
-  margin-bottom: 1rem;
 }
 
 .recurring-limits {
@@ -360,10 +347,6 @@
 }
 
 @media (width <= 40rem) {
-  .recurring-limits-disclosure {
-    padding: 0.65rem;
-  }
-
   .recurring-limits__metrics,
   .recurring-limits__fields,
   .recurring-limits__comparison {

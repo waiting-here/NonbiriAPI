@@ -81,181 +81,192 @@ export function PriceFields({
           <option value="unavailable">{t('该尺寸不可提交', 'Make that size unavailable')}</option>
         </select>
       </label>
-      <details className="ops-advanced" ref={disclosure}>
+      <details className="nb-fold" ref={disclosure}>
         <summary>
-          <strong>{translate('common.operations.management.optionalPrices')}</strong>
-          {' · '}
-          {translate('common.operations.management.sizePricesSummary', {
-            tiers: value.tiers.length,
-            sizes: value.sizes.length,
-          })}
+          <span className="nb-fold__title">
+            <strong>{translate('common.operations.management.optionalPrices')}</strong>
+            <span>
+              {translate('common.operations.management.sizePricesSummary', {
+                tiers: value.tiers.length,
+                sizes: value.sizes.length,
+              })}
+            </span>
+          </span>
         </summary>
-        <section aria-label={t('尺寸档位价格', 'Size tier prices')} className="picturebook-stack">
-          <h4>{t('尺寸档位价格', 'Size tier prices')}</h4>
-          {value.tiers.map((row, index) => (
-            <fieldset className="picturebook-card" key={index}>
-              <legend>
-                {t('档位价格', 'Tier price')} {index + 1}
-              </legend>
-              <div className="picturebook-price-row">
-                <label>
-                  {t('价格档位', 'Price tier')} {index + 1}
-                  <select
-                    value={row.tier}
-                    onChange={(event) =>
-                      onChange({
-                        ...value,
-                        tiers: value.tiers.map((entry, i) =>
-                          i === index ? { ...entry, tier: event.target.value } : entry,
-                        ),
-                      })
-                    }
-                  >
-                    {tiers.map((tier) => (
-                      <option key={tier} value={tier}>
-                        {tier}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {currency(
-                  t('档位草稿纸', 'Tier sketch paper') + ' ' + (index + 1),
-                  row.paper,
-                  (paper) =>
-                    onChange({
-                      ...value,
-                      tiers: value.tiers.map((entry, i) =>
-                        i === index ? { ...entry, paper } : entry,
-                      ),
-                    }),
-                )}
-                {currency(t('档位画笔', 'Tier brushes') + ' ' + (index + 1), row.brush, (brush) =>
-                  onChange({
-                    ...value,
-                    tiers: value.tiers.map((entry, i) =>
-                      i === index ? { ...entry, brush } : entry,
-                    ),
-                  }),
-                )}
-              </div>
-              <button
-                className="nb-btn nb-btn--secondary"
-                type="button"
-                onClick={() =>
-                  onChange({
-                    ...value,
-                    tiers: value.tiers.filter((_, i) => i !== index),
-                  })
-                }
-              >
-                {t('移除档位价格', 'Remove tier price')} {index + 1}
-              </button>
-            </fieldset>
-          ))}
-          <button
-            className="nb-btn nb-btn--secondary"
-            type="button"
-            disabled={!nextTier || value.tiers.length >= 64}
-            onClick={() =>
-              nextTier &&
-              onChange({
-                ...value,
-                tiers: [...value.tiers, { tier: nextTier, paper: value.paper, brush: value.brush }],
-              })
-            }
-          >
-            {t('添加档位价格', 'Add tier price')}
-          </button>
-        </section>
-        <section aria-label={t('精确尺寸价格', 'Exact size prices')} className="picturebook-stack">
-          <h4>{t('精确尺寸价格', 'Exact size prices')}</h4>
-          {value.sizes.map((row, index) => (
-            <fieldset className="picturebook-card" key={index}>
-              <legend>
-                {t('尺寸价格', 'Size price')} {index + 1}
-              </legend>
-              <div className="picturebook-price-row">
-                {(['width', 'height'] as const).map((axis) => (
-                  <label key={axis}>
-                    {axis === 'width'
-                      ? t('价格宽度', 'Price width')
-                      : t('价格高度', 'Price height')}{' '}
-                    {index + 1}
-                    <input
-                      type="number"
-                      min={1}
-                      max={65536}
-                      step={1}
-                      inputMode="numeric"
-                      value={row[axis]}
-                      required
+        <div className="nb-fold__body">
+          <section aria-label={t('尺寸档位价格', 'Size tier prices')} className="picturebook-stack">
+            <h4>{t('尺寸档位价格', 'Size tier prices')}</h4>
+            {value.tiers.map((row, index) => (
+              <fieldset className="picturebook-card" key={index}>
+                <legend>
+                  {t('档位价格', 'Tier price')} {index + 1}
+                </legend>
+                <div className="picturebook-price-row">
+                  <label>
+                    {t('价格档位', 'Price tier')} {index + 1}
+                    <select
+                      value={row.tier}
                       onChange={(event) =>
                         onChange({
                           ...value,
-                          sizes: value.sizes.map((entry, i) =>
-                            i === index ? { ...entry, [axis]: event.target.value } : entry,
+                          tiers: value.tiers.map((entry, i) =>
+                            i === index ? { ...entry, tier: event.target.value } : entry,
                           ),
                         })
                       }
-                    />
+                    >
+                      {tiers.map((tier) => (
+                        <option key={tier} value={tier}>
+                          {tier}
+                        </option>
+                      ))}
+                    </select>
                   </label>
-                ))}
-                {currency(
-                  t('尺寸草稿纸', 'Size sketch paper') + ' ' + (index + 1),
-                  row.paper,
-                  (paper) =>
+                  {currency(
+                    t('档位草稿纸', 'Tier sketch paper') + ' ' + (index + 1),
+                    row.paper,
+                    (paper) =>
+                      onChange({
+                        ...value,
+                        tiers: value.tiers.map((entry, i) =>
+                          i === index ? { ...entry, paper } : entry,
+                        ),
+                      }),
+                  )}
+                  {currency(t('档位画笔', 'Tier brushes') + ' ' + (index + 1), row.brush, (brush) =>
+                    onChange({
+                      ...value,
+                      tiers: value.tiers.map((entry, i) =>
+                        i === index ? { ...entry, brush } : entry,
+                      ),
+                    }),
+                  )}
+                </div>
+                <button
+                  className="nb-btn nb-btn--secondary"
+                  type="button"
+                  onClick={() =>
+                    onChange({
+                      ...value,
+                      tiers: value.tiers.filter((_, i) => i !== index),
+                    })
+                  }
+                >
+                  {t('移除档位价格', 'Remove tier price')} {index + 1}
+                </button>
+              </fieldset>
+            ))}
+            <button
+              className="nb-btn nb-btn--secondary"
+              type="button"
+              disabled={!nextTier || value.tiers.length >= 64}
+              onClick={() =>
+                nextTier &&
+                onChange({
+                  ...value,
+                  tiers: [
+                    ...value.tiers,
+                    { tier: nextTier, paper: value.paper, brush: value.brush },
+                  ],
+                })
+              }
+            >
+              {t('添加档位价格', 'Add tier price')}
+            </button>
+          </section>
+          <section
+            aria-label={t('精确尺寸价格', 'Exact size prices')}
+            className="picturebook-stack"
+          >
+            <h4>{t('精确尺寸价格', 'Exact size prices')}</h4>
+            {value.sizes.map((row, index) => (
+              <fieldset className="picturebook-card" key={index}>
+                <legend>
+                  {t('尺寸价格', 'Size price')} {index + 1}
+                </legend>
+                <div className="picturebook-price-row">
+                  {(['width', 'height'] as const).map((axis) => (
+                    <label key={axis}>
+                      {axis === 'width'
+                        ? t('价格宽度', 'Price width')
+                        : t('价格高度', 'Price height')}{' '}
+                      {index + 1}
+                      <input
+                        type="number"
+                        min={1}
+                        max={65536}
+                        step={1}
+                        inputMode="numeric"
+                        value={row[axis]}
+                        required
+                        onChange={(event) =>
+                          onChange({
+                            ...value,
+                            sizes: value.sizes.map((entry, i) =>
+                              i === index ? { ...entry, [axis]: event.target.value } : entry,
+                            ),
+                          })
+                        }
+                      />
+                    </label>
+                  ))}
+                  {currency(
+                    t('尺寸草稿纸', 'Size sketch paper') + ' ' + (index + 1),
+                    row.paper,
+                    (paper) =>
+                      onChange({
+                        ...value,
+                        sizes: value.sizes.map((entry, i) =>
+                          i === index ? { ...entry, paper } : entry,
+                        ),
+                      }),
+                  )}
+                  {currency(t('尺寸画笔', 'Size brushes') + ' ' + (index + 1), row.brush, (brush) =>
                     onChange({
                       ...value,
                       sizes: value.sizes.map((entry, i) =>
-                        i === index ? { ...entry, paper } : entry,
+                        i === index ? { ...entry, brush } : entry,
                       ),
                     }),
-                )}
-                {currency(t('尺寸画笔', 'Size brushes') + ' ' + (index + 1), row.brush, (brush) =>
-                  onChange({
-                    ...value,
-                    sizes: value.sizes.map((entry, i) =>
-                      i === index ? { ...entry, brush } : entry,
-                    ),
-                  }),
-                )}
-              </div>
-              <button
-                className="nb-btn nb-btn--secondary"
-                type="button"
-                onClick={() =>
-                  onChange({
-                    ...value,
-                    sizes: value.sizes.filter((_, i) => i !== index),
-                  })
-                }
-              >
-                {t('移除尺寸价格', 'Remove size price')} {index + 1}
-              </button>
-            </fieldset>
-          ))}
-          <button
-            className="nb-btn nb-btn--secondary"
-            type="button"
-            disabled={value.sizes.length >= 2048}
-            onClick={() =>
-              onChange({
-                ...value,
-                sizes: [
-                  ...value.sizes,
-                  {
-                    width: nextSize?.width ? String(nextSize.width) : '',
-                    height: nextSize?.height ? String(nextSize.height) : '',
-                    paper: value.paper,
-                    brush: value.brush,
-                  },
-                ],
-              })
-            }
-          >
-            {t('添加尺寸价格', 'Add size price')}
-          </button>
-        </section>
+                  )}
+                </div>
+                <button
+                  className="nb-btn nb-btn--secondary"
+                  type="button"
+                  onClick={() =>
+                    onChange({
+                      ...value,
+                      sizes: value.sizes.filter((_, i) => i !== index),
+                    })
+                  }
+                >
+                  {t('移除尺寸价格', 'Remove size price')} {index + 1}
+                </button>
+              </fieldset>
+            ))}
+            <button
+              className="nb-btn nb-btn--secondary"
+              type="button"
+              disabled={value.sizes.length >= 2048}
+              onClick={() =>
+                onChange({
+                  ...value,
+                  sizes: [
+                    ...value.sizes,
+                    {
+                      width: nextSize?.width ? String(nextSize.width) : '',
+                      height: nextSize?.height ? String(nextSize.height) : '',
+                      paper: value.paper,
+                      brush: value.brush,
+                    },
+                  ],
+                })
+              }
+            >
+              {t('添加尺寸价格', 'Add size price')}
+            </button>
+          </section>
+        </div>
       </details>
     </>
   );
