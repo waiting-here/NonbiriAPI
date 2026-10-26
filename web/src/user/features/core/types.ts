@@ -163,6 +163,7 @@ export interface KeyBindingView {
 
 export interface Endpoint {
   connection_id?: string | null;
+  connection_name?: string;
   configuration_type?: ConnectorType;
   native_services?: NativeService[];
   rerank_format?: RerankFormat | '';
@@ -184,6 +185,7 @@ export interface EndpointKey {
   credential_available?: boolean;
   discovery_source_id?: string | null;
   credential_id?: string;
+  credential_note?: string;
   credential_version?: string;
   grant_revision?: string;
   native_services?: NativeService[];
@@ -234,6 +236,9 @@ export type DiscoverySafeClass =
   | 'unavailable';
 
 export interface DiscoveryEvidence {
+  last_success_at?: number | null;
+  added_count?: string | null;
+  removed_count?: string | null;
   state: DiscoveryState;
   revision: string;
   result: DiscoveryResult;

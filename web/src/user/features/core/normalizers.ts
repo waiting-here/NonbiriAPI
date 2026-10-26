@@ -1149,7 +1149,7 @@ function catalogSource(value: unknown): CatalogSourceType {
   return value;
 }
 
-export function normalizeDiscoveryEvidence(value: unknown): DiscoveryEvidence {
+function normalizeDiscoveryEvidenceState(value: unknown): DiscoveryEvidence {
   const record = responseRecord(
     value,
     ['state', 'revision', 'result', 'safe_class', 'observed_at', 'count'],
@@ -1240,6 +1240,23 @@ export function normalizeDiscoveryEvidence(value: unknown): DiscoveryEvidence {
     safe_class: record.safe_class as DiscoverySafeClass,
     observed_at: unixTime(record.observed_at, 'discovery failure time'),
     count: null,
+  };
+}
+
+export function normalizeDiscoveryEvidence(value: unknown): DiscoveryEvidence {
+  const evidence = normalizeDiscoveryEvidenceState(value);
+  const source = asRecord(value, 'discovery evidence');
+  return {
+    ...evidence,
+    ...(source.last_success_at === undefined
+      ? {}
+      : { last_success_at: nullableTime(source.last_success_at, 'last successful model fetch') }),
+    ...(source.added_count === undefined
+      ? {}
+      : { added_count: nullableDecimal(source.added_count, 'added model count') }),
+    ...(source.removed_count === undefined
+      ? {}
+      : { removed_count: nullableDecimal(source.removed_count, 'removed model count') }),
   };
 }
 
@@ -1794,6 +1811,13 @@ export function normalizeEndpoint(value: unknown): Endpoint {
   const source = asRecord(value, 'endpoint');
   return {
     ...result,
+    ...(source.connection_name === undefined
+      ? {}
+      : {
+          connection_name: scalarString(source.connection_name, 'service name', {
+            allowEmpty: true,
+          }),
+        }),
     ...(Object.hasOwn(source, 'connection_id')
       ? {
           connection_id:
@@ -1831,6 +1855,9 @@ export function normalizeEndpointKey(value: unknown): EndpointKey {
       : {}),
     ...(Object.hasOwn(source, 'credential_id')
       ? { credential_id: id(source.credential_id, 'key credential') }
+      : {}),
+    ...(Object.hasOwn(source, 'credential_note')
+      ? { credential_note: scalarString(source.credential_note, 'key name', { allowEmpty: true }) }
       : {}),
     ...(Object.hasOwn(source, 'credential_version')
       ? { credential_version: decimal(source.credential_version, 'key version', true) }

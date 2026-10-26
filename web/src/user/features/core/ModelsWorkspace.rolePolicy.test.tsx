@@ -129,7 +129,7 @@ describe('personal model role editor', () => {
     expect(f.writes[0].route_strategy).toBe('cache_balanced');
     expect(f.writes[0].role_policy).toEqual({ default_action: 'native', rules: {} });
     await waitFor(() =>
-      expect(screen.getByRole('searchbox', { name: 'Add sources' })).toHaveFocus(),
+      expect(screen.getByRole('searchbox', { name: 'Search service names' })).toHaveFocus(),
     );
   });
 

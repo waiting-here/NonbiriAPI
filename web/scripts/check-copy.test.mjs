@@ -59,7 +59,6 @@ test('closed aliases resolve to the root authority and reject hidden or dynamic 
 
 test('user terminology gate rejects ordinary technical labels in both languages', () => {
   for (const value of [
-    '端点',
     '平台模型',
     'store=false',
     'CallerKey',
@@ -75,14 +74,7 @@ test('user terminology gate rejects ordinary technical labels in both languages'
       /technical terminology/,
     );
   }
-  for (const value of [
-    'Endpoint',
-    'platform model',
-    'CallerKey',
-    'passthrough',
-    'flatten',
-    'JSON Pointer',
-  ]) {
+  for (const value of ['platform model', 'CallerKey', 'passthrough', 'flatten', 'JSON Pointer']) {
     assert.throws(
       () => visibleValueChecks('user', 'en', new Map([['user.core.field', value]])),
       /technical terminology/,
@@ -97,6 +89,7 @@ test('user terminology gate allows ordinary wording and scoped technical explana
       'zh',
       new Map([
         ['user.core.field', '服务商的模型名'],
+        ['user.core.endpoint', '端点'],
         ['user.core.storeHelp', 'store=false'],
         ['user.personalAutomation.identity', 'CallerKey'],
         ['user.debug.result', '端点'],
@@ -110,6 +103,7 @@ test('user terminology gate allows ordinary wording and scoped technical explana
       'en',
       new Map([
         ['user.core.field', 'Provider model name {{endpoint}}'],
+        ['user.core.endpoint', 'Endpoint'],
         ['user.personalAutomation.identity', 'CallerKey'],
         ['user.debug.result', 'Endpoint'],
         ['user.legal.body', 'Endpoint'],
@@ -124,7 +118,11 @@ test('user terminology gate allows ordinary wording and scoped technical explana
   );
   assert.throws(
     () =>
-      visibleValueChecks('user', 'zh', new Map([['user.personalAutomationExtra.field', '端点']])),
+      visibleValueChecks(
+        'user',
+        'zh',
+        new Map([['user.personalAutomationExtra.field', 'CallerKey']]),
+      ),
     /technical terminology/,
   );
   assert.throws(

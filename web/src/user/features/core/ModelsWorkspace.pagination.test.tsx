@@ -184,6 +184,13 @@ function requestMethod(input: RequestInfo | URL, init?: RequestInit): string {
 }
 
 async function renderWorkspace(route: string, user = account) {
+  const fetchFixture = globalThis.fetch;
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = requestURL(input);
+    if (requestMethod(input, init) === 'GET' && url.pathname === '/api/connections')
+      return Promise.resolve(jsonResponse(numbered([], '1', 20, 0)));
+    return fetchFixture(input, init);
+  });
   const rendered = await renderWithProviders(
     <>
       <ModelsWorkspace user={user} />
@@ -277,7 +284,7 @@ describe('ModelsWorkspace numbered pagination', () => {
     expect(rendered.queryClient.getQueryData(coreKeys.model(account.id, '21'))).toBeUndefined();
   });
 
-  it('searches all services, retains unique selections across pages and applies an optional paged service filter', async () => {
+  it('retains distinct model selections across endpoint pages and scoped keys', async () => {
     const selectedModel = modelRecord('31');
     const endpoints = Array.from({ length: 20 }, (_, index) => endpointRecord(String(index + 1)));
     const endpoint21 = endpointRecord('21');
@@ -306,15 +313,21 @@ describe('ModelsWorkspace numbered pagination', () => {
           const page = url.searchParams.get('page') ?? '1';
           return jsonResponse(numbered(page === '2' ? [endpoint21] : endpoints, page, 20, 21));
         }
+        if (method === 'GET' && url.pathname.endsWith('/keys')) {
+          const endpointId = url.pathname.split('/')[3]!;
+          return jsonResponse(
+            numbered([keyRecord(endpointId === '21' ? '221' : '211', endpointId)], '1', 20, 1),
+          );
+        }
         if (method === 'GET' && url.pathname.endsWith('/binding-candidates')) {
-          expect(url.searchParams.has('key_id')).toBe(false);
+          expect(url.searchParams.has('key_id')).toBe(true);
           expect(url.searchParams.has('source')).toBe(false);
           const page = url.searchParams.get('page') ?? '1',
             size = Number(url.searchParams.get('page_size'));
           const filtered = candidates.filter(
             (candidate) =>
               candidate.upstream_model_id.includes(url.searchParams.get('q') ?? '') &&
-              (!url.searchParams.has('endpoint_id') || candidate.endpoint_key_id === '211'),
+              candidate.endpoint_key_id === url.searchParams.get('key_id'),
           );
           const offset = (Number(page) - 1) * size;
           return jsonResponse(
@@ -339,36 +352,40 @@ describe('ModelsWorkspace numbered pagination', () => {
       }),
     );
     const rendered = await renderWorkspace('/models?model_id=31');
-    const results = await screen.findByRole('region', { name: 'Add sources' });
+    await rendered.user.click((await screen.findByText('endpoint-1')).closest('button')!);
+    const results = await screen.findByRole('region', { name: 'Models' });
     await within(results).findByText('gpt-1');
     expect(
       calls
         .filter((url) => url.pathname.endsWith('/binding-candidates'))
-        .every((url) => !url.searchParams.has('endpoint_id')),
+        .every(
+          (url) =>
+            url.searchParams.get('endpoint_id') === '1' && url.searchParams.get('key_id') === '211',
+        ),
     ).toBe(true);
-    await rendered.user.type(screen.getByRole('searchbox', { name: 'Add sources' }), 'gpt');
+    await rendered.user.type(
+      screen.getByRole('searchbox', { name: "Search this key's models" }),
+      'gpt',
+    );
     await waitFor(() =>
       expect(calls.some((url) => url.searchParams.get('q') === 'gpt')).toBe(true),
     );
     await within(results).findByText('gpt-1');
-    await rendered.user.click(within(results).getByText('gpt-1').closest('button')!);
-    await rendered.user.click(within(results).getByRole('button', { name: 'Next' }));
-    await rendered.user.click((await within(results).findByText('gpt-11')).closest('button')!);
-    await rendered.user.click(screen.getByText('Filter by service', { selector: 'summary' }));
-    const filter = screen
-      .getByText('Filter by service', { selector: 'summary' })
-      .closest('details')!;
-    await rendered.user.click(within(filter).getByRole('button', { name: 'Next' }));
-    await rendered.user.selectOptions(
-      within(filter).getByRole('combobox', { name: 'Service' }),
-      '21',
+    await rendered.user.click(within(results).getByRole('checkbox', { name: /^gpt-1 Fetched/ }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Change endpoint' }));
+    await rendered.user.click(
+      within(screen.getByRole('region', { name: 'Endpoints' })).getByRole('button', {
+        name: 'Next',
+      }),
     );
+    await rendered.user.click((await screen.findByText('endpoint-21')).closest('button')!);
+    await rendered.user.click(await within(results).findByRole('checkbox', { name: /^gpt-11 / }));
     await waitFor(() =>
       expect(
         calls.some(
           (url) =>
             url.searchParams.get('endpoint_id') === '21' &&
-            url.searchParams.get('q') === 'gpt' &&
+            url.searchParams.get('key_id') === '221' &&
             url.searchParams.get('page') === '1',
         ),
       ).toBe(true),
@@ -655,7 +672,7 @@ describe('ModelsWorkspace numbered pagination', () => {
     );
 
     const rendered = await renderWorkspace('/models?model_id=81');
-    await rendered.user.click((await screen.findByText('write-candidate')).closest('button')!);
+    await rendered.user.click(await screen.findByRole('checkbox', { name: /^write-candidate / }));
     await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected sources' }));
 
     expect(writes).toHaveLength(1);
@@ -747,7 +764,7 @@ describe('ModelsWorkspace numbered pagination', () => {
     );
 
     const rendered = await renderWorkspace('/models?model_id=71');
-    const automaticSection = await screen.findByRole('region', { name: 'Add sources' });
+    const automaticSection = await screen.findByRole('region', { name: 'Models' });
     await within(automaticSection!).findByText('searchable-1');
     await rendered.user.selectOptions(
       within(automaticSection!).getByRole('combobox', { name: 'Items per page' }),
@@ -756,7 +773,7 @@ describe('ModelsWorkspace numbered pagination', () => {
     await rendered.user.click(within(automaticSection!).getByRole('button', { name: 'Next' }));
     await within(automaticSection!).findByText('searchable-11');
 
-    const searchInput = screen.getByRole('searchbox', { name: 'Add sources' });
+    const searchInput = screen.getByRole('searchbox', { name: "Search this key's models" });
     await rendered.user.type(searchInput, 'needle');
     expect(requests.some((request) => request.includes('q=needle'))).toBe(false);
     await waitFor(() =>
@@ -797,7 +814,11 @@ describe('ModelsWorkspace numbered pagination', () => {
         if (method === 'GET' && url.pathname.endsWith('/bindings'))
           return jsonResponse({ bindings: [], binding_revision: '1' });
         if (method === 'GET' && url.pathname === '/api/endpoints')
-          return jsonResponse(numbered([], '1', 20, 0));
+          return jsonResponse(numbered([endpointRecord('91')], '1', 20, 1));
+        if (method === 'GET' && url.pathname === '/api/endpoints/91/keys')
+          return jsonResponse(
+            numbered([keyRecord(actor === 'first' ? '911' : '921', '91')], '1', 20, 1),
+          );
         if (method === 'GET' && url.pathname.endsWith('/binding-candidates')) {
           if (actor === 'first' && url.searchParams.get('q') === 'private-search') {
             oldSignal = init?.signal ?? undefined;
@@ -813,7 +834,7 @@ describe('ModelsWorkspace numbered pagination', () => {
                 ),
               ],
               '1',
-              10,
+              Number(url.searchParams.get('page_size')),
               1,
             ),
           );
@@ -822,8 +843,11 @@ describe('ModelsWorkspace numbered pagination', () => {
       }),
     );
     const view = await renderWorkspace('/models?model_id=91');
-    await view.user.click((await screen.findByText('private-first')).closest('button')!);
-    await view.user.type(screen.getByRole('searchbox', { name: 'Add sources' }), 'private-search');
+    await view.user.click(await screen.findByRole('checkbox', { name: /^private-first / }));
+    await view.user.type(
+      screen.getByRole('searchbox', { name: "Search this key's models" }),
+      'private-search',
+    );
     await waitFor(() => expect(oldSignal).toBeDefined());
     actor = 'second';
     view.queryClient.setQueryData(coreKeys.session, { user: otherAccount });
@@ -834,7 +858,7 @@ describe('ModelsWorkspace numbered pagination', () => {
       </>,
     );
     await screen.findByText('second-only');
-    expect(screen.getByRole('searchbox', { name: 'Add sources' })).toHaveValue('');
+    expect(screen.getByRole('searchbox', { name: "Search this key's models" })).toHaveValue('');
     expect(
       screen.queryByRole('button', { name: 'Add 1 selected sources' }),
     ).not.toBeInTheDocument();
@@ -906,7 +930,7 @@ describe('ModelsWorkspace numbered pagination', () => {
                     ]
                   : [],
                 '1',
-                10,
+                Number(url.searchParams.get('page_size')),
                 made ? 1 : 0,
               ),
             );
@@ -943,10 +967,7 @@ describe('ModelsWorkspace numbered pagination', () => {
         }),
       );
       const view = await renderWorkspace('/models?model_id=101');
-      await view.user.click(await screen.findByText('Filter by service', { selector: 'summary' }));
-      await view.user.selectOptions(screen.getByRole('combobox', { name: 'Service' }), '11');
-      await view.user.click(screen.getByRole('button', { name: 'Enter a model name manually' }));
-      await view.user.selectOptions(await screen.findByRole('combobox', { name: 'Key' }), '111');
+      await view.user.click(await screen.findByText('Add a model manually'));
       await view.user.type(
         screen.getByRole('textbox', { name: 'Service model name' }),
         'typed-model',
@@ -967,7 +988,8 @@ describe('ModelsWorkspace numbered pagination', () => {
         screen.queryByText(view.i18n.t('common.outcome.saved')),
         screen.queryByText('Saved to the model list. You can now add it as a source.'),
       ]).toEqual([null, null]);
-      await view.user.click((await screen.findByText('typed-model')).closest('button')!);
+      await view.user.click(await screen.findByRole('checkbox', { name: /^typed-model / }));
+      await view.user.click(screen.getByText('Call types', { selector: 'strong' }));
       expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
       expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
       await view.user.click(screen.getByRole('checkbox', { name: 'Chat completions' }));

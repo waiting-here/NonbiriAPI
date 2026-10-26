@@ -1,4 +1,4 @@
-import { OutcomeNote } from '@shared/components/ui';
+import { Field, OutcomeNote } from '@shared/components/ui';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
@@ -124,30 +124,34 @@ export function ManualSource({
   return (
     <div className="core-form model-manual-entry">
       <p className="core-muted">{text('manualHelp')}</p>
-      <label>
-        <span>{text('modelName')}</span>
-        <input
-          value={upstreamModel}
-          maxLength={512}
-          disabled={hasAttempt}
-          onChange={(event) => {
-            edit();
-            setUpstreamModel(event.target.value);
-          }}
-        />
-      </label>
-      <label>
-        <span>{t('endpoints.manualProvider')}</span>
-        <input
-          value={provider}
-          maxLength={128}
-          disabled={hasAttempt}
-          onChange={(event) => {
-            edit();
-            setProvider(event.target.value);
-          }}
-        />
-      </label>
+      <Field label={text('modelName')}>
+        {(props) => (
+          <input
+            {...props}
+            value={upstreamModel}
+            maxLength={512}
+            disabled={hasAttempt}
+            onChange={(event) => {
+              edit();
+              setUpstreamModel(event.target.value);
+            }}
+          />
+        )}
+      </Field>
+      <Field label={t('endpoints.manualProvider')}>
+        {(props) => (
+          <input
+            {...props}
+            value={provider}
+            maxLength={128}
+            disabled={hasAttempt}
+            onChange={(event) => {
+              edit();
+              setProvider(event.target.value);
+            }}
+          />
+        )}
+      </Field>
       <OutcomeNote
         busy={busy}
         outcome={
