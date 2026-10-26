@@ -26,6 +26,15 @@ func keyServiceSelection(endpoint Endpoint, selected *[]contract.NativeService) 
 
 type credentialVersionReference struct{ credentialID, versionID, secretRefID int64 }
 
+func requireCredentialConnectionTx(ctx context.Context, tx *sql.Tx, userID, credentialID, connectionID int64) error {
+	var exists bool
+	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM credentials WHERE id=? AND user_id=? AND connection_id=? AND deleted_at IS NULL)`, credentialID, userID, connectionID).Scan(&exists)
+	if err == nil && !exists {
+		return ErrNotFound
+	}
+	return err
+}
+
 func currentCredentialReferenceTx(ctx context.Context, tx *sql.Tx, userID, credentialID int64) (credentialVersionReference, error) {
 	var ref credentialVersionReference
 	err := tx.QueryRowContext(ctx, `SELECT c.id,v.id,v.secret_ref_id FROM credentials c
@@ -41,6 +50,16 @@ func currentCredentialReferenceTx(ctx context.Context, tx *sql.Tx, userID, crede
 func (r *Repository) resolveKeyCredentialTx(ctx context.Context, tx *sql.Tx, userID int64, endpoint Endpoint, input CreateEndpointKeyInput, now int64) (int64, int64, [32]byte, error) {
 	var fingerprint [32]byte
 	if input.CredentialID > 0 {
+		if endpoint.ConnectionID == nil {
+			return 0, 0, fingerprint, ErrNotFound
+		}
+		connectionID, err := parseDecimalID(*endpoint.ConnectionID)
+		if err != nil {
+			return 0, 0, fingerprint, ErrUnavailable
+		}
+		if err := requireCredentialConnectionTx(ctx, tx, userID, input.CredentialID, connectionID); err != nil {
+			return 0, 0, fingerprint, err
+		}
 		ref, err := currentCredentialReferenceTx(ctx, tx, userID, input.CredentialID)
 		if err != nil {
 			return 0, 0, fingerprint, err

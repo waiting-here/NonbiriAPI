@@ -71,8 +71,9 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 	}, impact: &migrationImpact{controlTables: []string{"steward_permissions", "models", "charity_models"}, addedTables: []string{"ai_agent_plans", "ai_agent_model_results", "ai_agent_review_events", "ai_agent_jobs", "ai_agent_messages", "ai_agent_conversations", "ai_agent_memory_history", "ai_agent_memories", "ai_agent_settings", "agent_request_response_chunks", "agent_request_settings", "agent_requests", "agent_request_usage", "agent_request_usage_totals", "agent_request_usage_hours"}, credentials: credentialsUnchanged}},
 	{from: 37, version: 38, manifest: db.Schema38ManifestHash, sql: db.CharityModelDeletionIndexesSQL, impact: &migrationImpact{
 		indexedTables: []string{"charity_reservations", "charity_dispatch_receipts", "charity_key_affinities", "charity_header_sessions", "charity_header_uses"}, credentials: credentialsUnchanged}},
-	{from: 38, version: 39, manifest: db.PinnedGenerationTwoManifestHash, sql: db.EndpointTagRulesSQL, impact: &migrationImpact{
+	{from: 38, version: 39, manifest: db.Schema39ManifestHash, sql: db.EndpointTagRulesSQL, impact: &migrationImpact{
 		rebuiltTables: []string{"admin_endpoint_tags"}, addedTables: []string{"endpoint_tag_rules", "endpoint_tag_rule_tags"}, controlTables: []string{"endpoint_tag_domains"}, indexedTables: []string{"donation_keys"}, constraintTables: []string{"endpoints", "donation_keys"}, credentials: credentialsUnchanged}},
+	{from: 39, version: 40, manifest: db.PinnedGenerationTwoManifestHash, apply: isolateServiceKeys, impact: serviceScopeImpact},
 }}
 
 type Options struct {
@@ -113,6 +114,7 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{36, db.Schema36ManifestHash, "1fc9527f0c9023542dfc7decf59789733a6a834f"},
 		{37, db.Schema37ManifestHash, "4413e15527dff68e42386ca4841c38fc93911539"},
 		{38, db.Schema38ManifestHash, "de51645924a488d742baad5ff1a35f6569f22746"},
+		{39, db.Schema39ManifestHash, "31f18116afe12c50a48bca87fe48c1a7c01ba796"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,

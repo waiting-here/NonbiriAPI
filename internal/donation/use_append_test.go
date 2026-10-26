@@ -328,6 +328,47 @@ func TestAppendUsesConflictsAndForeignOwnershipAreAtomic(t *testing.T) {
 	}
 }
 
+func TestDonationSourceCannotBorrowAnotherKeyCatalog(t *testing.T) {
+	f := newAppendUseFixture(t)
+	tx, err := f.e.store.DB().BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	grant, err := connectionstore.LoadSelfGrantTx(t.Context(), tx, f.owner, f.key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := testseed.InsertEndpointKeyTx(t.Context(), tx, testseed.KeyInput{EndpointID: grant.EndpointID, CredentialVersionID: grant.CredentialVersionID, Fingerprint: make([]byte, 32), At: donationTestNow})
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := testseed.SeedDiscoverySourceTx(t.Context(), tx, testseed.DiscoverySourceInput{EndpointKeyID: f.key, ListFormat: "openai", At: donationTestNow})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := connectionstore.ClaimDiscoverySourceKeyTx(t.Context(), tx, f.owner, f.key, source.SourceID); err != nil {
+		t.Fatal(err)
+	}
+	// Detaching a catalog must not release its original pair identity.
+	if _, err := tx.ExecContext(t.Context(), `DELETE FROM endpoint_key_discovery_sources WHERE endpoint_key_id=?`, f.key); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	publicRevision := int64(1)
+	in := CreateInput{Description: "independent catalog", OwnershipAuthorized: true, Keys: []CreateKeyInput{{EndpointKeyID: other.KeyID, NativeServices: []contract.NativeService{contract.NativeServiceChatCompletions}, DiscoverySourceID: &source.SourceID, DiscoverySourceRevision: &publicRevision}}}
+	if _, err := f.e.service.Create(t.Context(), f.owner, donationCreateMutation(t, 'x', in), in); !errors.Is(err, ErrConflict) {
+		t.Fatalf("initial donation borrowed another key catalog: %v", err)
+	}
+	otherSource := appendSource(t, f, other.KeyID)
+	f.input.DiscoverySourceID, f.input.DiscoverySourceRevision = &otherSource.SourceID, &publicRevision
+	if _, err := f.append(t, 'y', f.input); !errors.Is(err, ErrConflict) {
+		t.Fatalf("appended use borrowed another key catalog: %v", err)
+	}
+}
+
 func TestAppendUsesResubmitsCancelledAndRejectedWithoutUnpausing(t *testing.T) {
 	f := newAppendUseFixture(t)
 	out, err := f.append(t, 'B', f.input)

@@ -10,6 +10,7 @@ import (
 
 func restoreSchema38LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema39LayoutForTest(t, database)
 	for _, name := range []string{"effective_endpoint_tags", "endpoint_tag_rule_matches"} {
 		hostileMustExec(t, database, "DROP VIEW "+name)
 	}

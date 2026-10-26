@@ -93,6 +93,9 @@ func attachSubmissionUsesTx(ctx context.Context, tx *sql.Tx, ownerID int64, inpu
 			if source.SourceRevision != *input.DiscoverySourceRevision || source.CredentialVersionID != grant.CredentialVersionID {
 				return ErrConflict
 			}
+			if err := connectionstore.ClaimDiscoverySourceKeyTx(ctx, tx, ownerID, key.id, source.SourceID); err != nil {
+				return connectionError(err)
+			}
 			key.use.sourceRevisionID = &source.SourceRevisionID
 		}
 	}

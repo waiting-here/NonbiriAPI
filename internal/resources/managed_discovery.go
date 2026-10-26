@@ -148,8 +148,10 @@ func (api *httpAPI) managedDiscoveryHTTP(w http.ResponseWriter, req *http.Reques
 
 func discoveryEvidenceForRevisionTx(ctx context.Context, tx *sql.Tx, revisionID int64) (discoveryRow, error) {
 	var row discoveryRow
-	err := tx.QueryRowContext(ctx, `SELECT COALESCE(run.state,'unknown'),MAX(st.result_generation,1),CASE WHEN run.state='checking' THEN run.operation_hash END,COALESCE(run.safe_class,'none'),COALESCE(run.safe_diagnostic,''),run.started_at,run.completed_at,COALESCE(run.model_count,0)
- FROM discovery_source_states st LEFT JOIN discovery_runs run ON run.id=st.current_run_id WHERE st.source_revision_id=?`, revisionID).Scan(&row.state, &row.revision, &row.operationHash, &row.safeClass, &row.safeDiag, &row.startedAt, &row.completedAt, &row.fetchedCount)
+	err := tx.QueryRowContext(ctx, `SELECT COALESCE(run.state,'unknown'),MAX(st.result_generation,1),CASE WHEN run.state='checking' THEN run.operation_hash END,COALESCE(run.safe_class,'none'),COALESCE(run.safe_diagnostic,''),run.started_at,run.completed_at,COALESCE(run.model_count,0),success.completed_at,changes.added_count,changes.removed_count
+ FROM discovery_source_states st LEFT JOIN discovery_runs run ON run.id=st.current_run_id
+ LEFT JOIN discovery_runs success ON success.id=st.last_successful_run_id LEFT JOIN discovery_run_changes changes ON changes.run_id=st.current_run_id
+ WHERE st.source_revision_id=?`, revisionID).Scan(&row.state, &row.revision, &row.operationHash, &row.safeClass, &row.safeDiag, &row.startedAt, &row.completedAt, &row.fetchedCount, &row.lastSuccessAt, &row.addedCount, &row.removedCount)
 	return row, err
 }
 

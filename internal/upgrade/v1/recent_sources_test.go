@@ -312,6 +312,11 @@ func seedEndpointKeyHistory(t *testing.T, database *sql.DB, vault *secret.Vault,
 	t.Helper()
 	user := hostileInsertUser(t, database, string(marker), 0, 0)
 	endpoint := hostileInsertEndpoint(t, database, user, "https://upstream.example/v1")
+	// Keep this index/history fixture within one service so later ownership
+	// migrations have no data repair to perform. Legacy unscoped and shared
+	// relationships are covered by the dedicated service-scope conversion.
+	service := hostileMustLastID(t, hostileMustExec(t, database, `INSERT INTO service_connections(user_id,name,created_at,updated_at) VALUES(?,'History',0,0)`, user))
+	hostileMustExec(t, database, `UPDATE endpoints SET connection_id=? WHERE id=?`, service, endpoint)
 	contextID := hostileBlob16(marker)
 	credentialContext, err := secret.NewGenerationTwoEndpointKeyContext(contextID)
 	if err != nil {
@@ -323,6 +328,7 @@ func seedEndpointKeyHistory(t *testing.T, database *sql.DB, vault *secret.Vault,
 	}
 	secretID := hostileMustLastID(t, hostileMustExec(t, database, `INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at) VALUES(?,'https://upstream.example/v1','openai-compatible',?,0)`, contextID, envelope))
 	key := hostileInsertEndpointKey(t, database, endpoint, secretID)
+	hostileMustExec(t, database, `UPDATE credentials SET connection_id=? WHERE id=(SELECT credential_id FROM endpoint_key_grant_revisions WHERE endpoint_key_id=?)`, service, key)
 	request := hostileOIDVariant("req_", marker, 'Q')
 	hostileInsertLogicalRequest(t, database, request, user, "openai_chat_completions", 2)
 	log := hostileInsertRequestLog(t, database, request, user, "openai_chat_completions")

@@ -34,6 +34,9 @@ func TestConnectionExportOwnsExactPublicVersionsAndHealth(t *testing.T) {
 	if out.CredentialVersions[0].CredentialVersion != "1" || out.Grants[0].GrantRevision != "1" || out.SourceRevisions[0].DiscoverySourceRevision != "1" || out.DiscoverySources[0].ResultGeneration != "2" {
 		t.Fatal("public revisions changed")
 	}
+	if out.DiscoverySources[0].EndpointKeyID == nil || *out.DiscoverySources[0].EndpointKeyID != out.Grants[0].EndpointKeyID || out.DiscoverySources[0].LastSuccessAt == nil || *out.DiscoverySources[0].LastSuccessAt != 2 {
+		t.Fatalf("catalog ownership or successful refresh timestamp missing: %+v", out.DiscoverySources[0])
+	}
 	if len(out.DonationUses[0].Health) != 1 || out.DonationUses[0].Health[0].FailureStreak != "2" || out.DonationUses[0].Health[0].BackoffRetryAt == nil || *out.DonationUses[0].Health[0].BackoffRetryAt != 20 {
 		t.Fatalf("health: %+v", out.DonationUses[0])
 	}
@@ -76,6 +79,7 @@ func seedExportConnection(t *testing.T, tx *sql.Tx, owner int64) {
 	if _, err := testseed.SeedDiscoveryCatalogTx(t.Context(), tx, testseed.DiscoveryCatalogInput{EndpointKeyID: key.KeyID, ListFormat: "openai", Models: []testseed.DiscoveryModel{{ID: "model"}}, At: 2}); err != nil {
 		t.Fatal(err)
 	}
+	execute(`INSERT INTO discovery_source_keys(source_id,endpoint_key_id) SELECT source_id,endpoint_key_id FROM endpoint_key_discovery_sources WHERE endpoint_key_id=?`, key.KeyID)
 	model := execute("INSERT INTO models(user_id,provider,model,full_name,created_at,updated_at) VALUES(?,'provider','model','provider/model',1,1)", owner)
 	modelID, err := model.LastInsertId()
 	if err != nil {

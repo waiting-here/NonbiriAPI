@@ -150,7 +150,7 @@ SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
        (SELECT count(*) FROM endpoint_key_current_credentials k WHERE k.endpoint_id=e.id),
        e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
        e.mainstream_channel_name,e.mainstream_channel_category,
-       e.connection_id,e.native_service_mask,e.rerank_format
+       e.connection_id,e.native_service_mask,e.rerank_format,COALESCE((SELECT name FROM service_connections WHERE id=e.connection_id),'')
 FROM endpoints e
 WHERE e.user_id=?
 ORDER BY e.id

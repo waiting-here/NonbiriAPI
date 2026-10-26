@@ -25,14 +25,15 @@ const (
 )
 
 type discoveryRow struct {
-	endpointID, keyID      int64
-	connectorType, baseURL string
-	state                  string
-	revision               int64
-	operationHash          []byte
-	safeClass, safeDiag    string
-	startedAt, completedAt sql.NullInt64
-	fetchedCount           int64
+	endpointID, keyID                       int64
+	connectorType, baseURL                  string
+	state                                   string
+	revision                                int64
+	operationHash                           []byte
+	safeClass, safeDiag                     string
+	startedAt, completedAt                  sql.NullInt64
+	fetchedCount                            int64
+	lastSuccessAt, addedCount, removedCount sql.NullInt64
 }
 
 type discoveryJob struct {
@@ -47,6 +48,14 @@ func (row discoveryRow) evidence() (DiscoveryEvidence, error) {
 	evidence := DiscoveryEvidence{
 		State: row.state, Revision: strconv.FormatInt(row.revision, 10),
 		SafeClass: row.safeClass,
+	}
+	if row.lastSuccessAt.Valid {
+		value := row.lastSuccessAt.Int64
+		evidence.LastSuccessAt = &value
+	}
+	if row.state == "succeeded" && row.addedCount.Valid && row.removedCount.Valid {
+		added, removed := strconv.FormatInt(row.addedCount.Int64, 10), strconv.FormatInt(row.removedCount.Int64, 10)
+		evidence.AddedCount, evidence.RemovedCount = &added, &removed
 	}
 	switch row.state {
 	case "unknown":
@@ -86,17 +95,22 @@ func scanDiscovery(scanner interface{ Scan(...any) error }) (discoveryRow, error
 	var row discoveryRow
 	err := scanner.Scan(&row.endpointID, &row.keyID, &row.connectorType, &row.baseURL,
 		&row.state, &row.revision, &row.operationHash, &row.safeClass, &row.safeDiag,
-		&row.startedAt, &row.completedAt, &row.fetchedCount)
+		&row.startedAt, &row.completedAt, &row.fetchedCount, &row.lastSuccessAt, &row.addedCount, &row.removedCount)
 	return row, err
 }
 
 func discoveryOwnerTx(ctx context.Context, tx *sql.Tx, userID, endpointID, keyID int64) (discoveryRow, error) {
 	row, err := scanDiscovery(tx.QueryRowContext(ctx, `
 SELECT e.id,k.id,e.connector_type,e.base_url,
-       d.state,d.revision,d.operation_hash,d.safe_class,d.safe_diag,d.started_at,d.completed_at,d.fetched_count
+       d.state,d.revision,d.operation_hash,d.safe_class,d.safe_diag,d.started_at,d.completed_at,d.fetched_count,
+       success.completed_at,changes.added_count,changes.removed_count
 FROM endpoints e
 JOIN endpoint_keys k ON k.endpoint_id=e.id
 JOIN model_discovery_evidence d ON d.endpoint_key_id=k.id
+LEFT JOIN endpoint_key_discovery_sources ks ON ks.endpoint_key_id=k.id
+LEFT JOIN discovery_source_states st ON st.source_revision_id=ks.source_revision_id
+LEFT JOIN discovery_runs success ON success.id=st.last_successful_run_id
+LEFT JOIN discovery_run_changes changes ON changes.run_id=st.current_run_id
 WHERE e.user_id=? AND e.id=? AND k.id=?`, userID, endpointID, keyID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return discoveryRow{}, ErrNotFound
