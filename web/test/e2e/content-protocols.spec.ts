@@ -6,11 +6,13 @@ import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './s
 import { expect, test } from './test';
 import {
   createOptions,
+  credential,
   mockConnectionResources,
   mixedMainstreamLayout,
   mainstreamProjection,
 } from './connection-fixtures';
 import common from '../../src/shared/i18n/common/en.json' with { type: 'json' };
+import { serviceCopy } from '../service-onboarding';
 
 type Page = Parameters<typeof collectConsoleViolations>[0];
 
@@ -47,18 +49,29 @@ for (const width of [1440, 390]) {
       await mockPublicConfig(page, 'user');
       await mockRoleSession(page, 'user', 'user');
       const endpoints: Array<Record<string, unknown>> = [];
+      const grants: Array<Record<string, unknown>> = [];
+      const sources: Array<Record<string, unknown>> = [];
+      const writes: { path: string; body: Record<string, unknown>; identity?: string }[] = [];
       let submitted: Record<string, unknown> | null = null;
       const c = common.common.connections;
+      const workflow = serviceCopy();
       await mockConnectionResources(page, () => endpoints);
       await page.route(`${USER_ORIGIN}/api/**`, async (route) => {
         const request = route.request();
         const url = new URL(request.url());
+        const input = request.method() === 'POST' ? request.postDataJSON() : null;
+        if (input)
+          writes.push({
+            path: url.pathname,
+            body: input,
+            identity: request.headers()['idempotency-key'],
+          });
         if (url.pathname === '/api/endpoint-create-options') {
           await route.fulfill({
             json: createOptions,
           });
         } else if (url.pathname === '/api/endpoints' && request.method() === 'POST') {
-          submitted = request.postDataJSON();
+          submitted = input;
           const endpoint = {
             ...submitted,
             id: String(endpoints.length + 1),
@@ -70,6 +83,48 @@ for (const width of [1440, 390]) {
           };
           endpoints.push(endpoint);
           await route.fulfill({ status: 201, json: endpoint });
+        } else if (/^\/api\/endpoints\/\d+\/keys$/.test(url.pathname) && input) {
+          const endpointID = url.pathname.split('/')[3];
+          const grant = {
+            ...input,
+            id: String(21 + grants.length),
+            endpoint_id: endpointID,
+            credential_version: credential.credential_version,
+            grant_revision: '1',
+            display_head: credential.display_head,
+            display_tail: credential.display_tail,
+            suspension_state: 'none',
+            revision: '1',
+            created_at: 1_800_000_000,
+            updated_at: 1_800_000_000,
+          };
+          grants.push(grant);
+          await route.fulfill({ status: 201, json: grant });
+        } else if (url.pathname === '/api/credentials/31') {
+          await route.fulfill({ json: credential });
+        } else if (url.pathname === '/api/connections/1/discovery-sources') {
+          if (input) {
+            const source = {
+              ...input,
+              id: String(51 + sources.length),
+              name: '',
+              connection_id: '1',
+              credential_version: credential.credential_version,
+              models_url: baseURL + '/models',
+              revision: '1',
+              discovery_source_revision: '1',
+              state: 'unknown',
+              checked_at: null,
+              safe_class: 'none',
+              safe_diag: '',
+              created_at: 1_800_000_000,
+              updated_at: 1_800_000_000,
+            };
+            sources.push(source);
+            await route.fulfill({ status: 201, json: source });
+          } else {
+            await route.fulfill({ json: numberedPage(sources, url.searchParams) });
+          }
         } else if (url.pathname === '/api/endpoints') {
           await route.fulfill({ json: numberedPage(endpoints, url.searchParams) });
         } else {
@@ -88,26 +143,68 @@ for (const width of [1440, 390]) {
         await expect(choice.locator('option[value="openai-responses"]')).toHaveCount(0);
         await expect(choice.locator('option[value="openai-chat-completions"]')).toHaveCount(0);
         if (kind === 'google-gemini') await screenshot(page, `protocol-user-${width}-${theme}`);
-        if (kind === 'openai-compatible')
-          await wizard
-            .getByRole('checkbox', { name: common.common.modelTypes.decisions, exact: true })
-            .check();
         await wizard.getByLabel(c.entryURL, { exact: true }).fill(baseURL);
-        await wizard.getByLabel(c.note + ' ' + c.optional, { exact: true }).fill(label);
-        await wizard.getByRole('button', { name: c.saveEntries, exact: true }).click();
-        await expect(wizard.getByText(c.entrySaved)).toBeVisible();
-        expect(submitted).toMatchObject({
+        await wizard.getByLabel(workflow.serviceName, { exact: true }).fill(label);
+        await expect(
+          wizard.getByRole('radio', { name: c.existingCredential, exact: true }),
+        ).toBeChecked();
+        await expect(wizard.getByLabel(c.secret, { exact: true })).toHaveCount(0);
+        const save = wizard.getByRole('button', { name: workflow.continueService, exact: true });
+        await expect(save).toBeDisabled();
+        await wizard
+          .getByRole('table', { name: c.chooseCredential, exact: true })
+          .getByRole('button', { name: c.select, exact: true })
+          .click();
+        await expect(save).toBeDisabled();
+        await wizard.getByRole('checkbox', { name: c.ownership, exact: true }).check();
+        await expect(save).toBeEnabled();
+        await save.click();
+        await expect(wizard.getByText(workflow.serviceReady, { exact: true })).toBeVisible();
+        const nativeServices = createOptions.native_service_options.find(
+          (row) => row.connector_type === kind,
+        )!.native_services;
+        expect(submitted).toEqual({
           source: 'custom',
+          connection_id: '1',
           connector_type: kind,
           base_url: baseURL,
           note: label,
-          native_services:
-            kind === 'openai-compatible'
-              ? ['chat_completions', 'responses', 'decisions']
-              : createOptions.native_service_options.find((row) => row.connector_type === kind)!
-                  .default_native_services,
+          native_services: nativeServices,
+          rerank_format: '',
+          enabled: true,
+        });
+        const discovery = sources.find(
+          (source) => source.list_format === (kind === 'google-gemini' ? 'gemini' : 'openai'),
+        );
+        expect(writes.at(-1)?.path).toBe(`/api/endpoints/${endpoints.length}/keys`);
+        expect(writes.at(-1)?.body).toEqual({
+          credential_id: credential.id,
+          native_services: nativeServices,
+          discovery_source_id: ['google-gemini', 'openai-compatible'].includes(kind)
+            ? discovery!.id
+            : null,
+          note: '',
+          enabled: true,
+          ownership_confirmed: true,
+          force_store_false: false,
+          max_concurrency: 0,
+          max_rpm: 0,
         });
       }
+      expect(writes.filter((write) => write.path === '/api/endpoints')).toHaveLength(
+        protocols.length,
+      );
+      expect(writes.filter((write) => /\/keys$/.test(write.path))).toHaveLength(protocols.length);
+      expect(
+        writes
+          .filter((write) => write.path === '/api/connections/1/discovery-sources')
+          .map((write) => write.body),
+      ).toEqual([
+        { base_url: baseURL, list_format: 'gemini', credential_id: '31', enabled: true },
+        { base_url: baseURL, list_format: 'openai', credential_id: '31', enabled: true },
+      ]);
+      expect(writes).toHaveLength(protocols.length * 2 + 2);
+      expect(writes.every((write) => Boolean(write.identity))).toBe(true);
 
       await mockPublicConfig(page, 'admin');
       await mockRoleSession(page, 'admin', 'admin');
@@ -157,10 +254,6 @@ for (const width of [1440, 390]) {
         const options = page.getByRole('combobox', { name: c.protocol, exact: true });
         await options.selectOption(kind);
         await expect(options).toHaveValue(kind);
-        if (kind === 'openai-compatible')
-          await page
-            .getByRole('checkbox', { name: common.common.modelTypes.decisions, exact: true })
-            .check();
         await page.getByLabel(c.entryURL, { exact: true }).fill(baseURL);
         if (kind === 'google-gemini') await screenshot(page, `protocol-admin-${width}-${theme}`);
         await page.getByRole('button', { name: 'Create channel', exact: true }).click();
@@ -172,11 +265,9 @@ for (const width of [1440, 390]) {
           entries: [
             expect.objectContaining({
               connector_type: kind,
-              native_services:
-                kind === 'openai-compatible'
-                  ? ['chat_completions', 'responses', 'decisions']
-                  : createOptions.native_service_options.find((row) => row.connector_type === kind)!
-                      .default_native_services,
+              native_services: createOptions.native_service_options.find(
+                (row) => row.connector_type === kind,
+              )!.native_services,
             }),
           ],
         });
