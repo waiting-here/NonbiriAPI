@@ -4,180 +4,62 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## Unreleased
+## 1.2.0 — 2026-10-26
 
 ### Added
 
-- Add per-account level-5 steward permissions with 51 actions, six numeric limits,
-  four donation scopes, revisioned updates and live revocation. Use one whole-donation
-  scope for review, handling and maintenance: standard requires every live key
-  to qualify, enhanced also admits tagged donations, and identity visibility
-  stays separate. Preserve actual actor hierarchy and administrator-only actions;
-  include own policy and retained change history in account export.
-- Add shared endpoint and endpoint-policy management for level-6 stewards and
-  explicitly authorized level-5 accounts. Add User-built gateway, Steward-built
-  gateway and Incorrect entry tags; enhanced donation scope includes donations
-  with any tagged endpoint while identity visibility remains independent.
-- Add exact donor account/Discord ID filters and complete retained donation
-  history in user management, including owner-hidden records through a safe
-  projection. Default source browsers to all retained sources.
-- Add the single-card ChatGPT SP theme “Tomorrow, Still Unwritten”, with an
-  unpublished limited-pool template, animated card, cover, collection illustration
-  and unlockable light/dark site appearance. Its artwork is classified as general.
-- Add the adult-only R-18 theme “Sweet Hide-and-Seek”, with ChatGPT and Claude
-  limited SSR cards, a collection illustration and an independent pool cover.
-  Its unpublished pool template uses standard limited SSR rules and gives both
-  featured cards equal weight. R-18 artwork remains disabled by default.
-- Add an experimental management assistant with a dedicated encrypted Chat
-  Completions endpoint/key, configurable templates/tools and separate shared
-  memories. Chat defaults to closed until enabled with a ready driver; each
-  authorized operator has one conversation with editing, compaction and retained
-  originals. Exact human-approved plans apply all authorized business and memory
-  changes atomically, including existing user-management and deletion operations.
-- Add off/preview/automatic donation review after deterministic approval rules,
-  for new or modified pending submissions only. Automatic approval requires
-  valid bindings to existing charity models in the same transaction. Do not
-  enqueue old pending records or promote earlier preview results after a mode change.
-- Include editable automatic-review and conversation presets, initial shared
-  memories and tool descriptions. Preserve existing saved content, including
-  explicitly empty memories, without enabling model calls.
-- Add shared FIFO scheduling per assistant model HTTP call, global RPM/concurrency
-  accounting, cancellation and durable recovery. Add administrator-only complete
-  request/response history with manual selected or filtered cleanup, plus
-  independent historical and rolling 24-hour token usage for each operator.
-- Let the management assistant discover and apply saved channel binding presets
-  through a human-approved plan. Report missing upstream models and existing
-  bindings as normal skips; roll back the whole plan on actual errors.
-- Let authorized managers choose channel binding presets for custom-endpoint
-  donations, including other channels' templates. Rank address/protocol matches
-  first in the management page and assistant tools, while preserving original
-  donation sources and permissions.
+- Configure level-5 stewards per account with 51 action permissions, six limits
+  and four donation scopes. Review, handling and maintenance share a
+  whole-donation scope; identity visibility stays separate. Level 6 and explicitly
+  authorized level-5 accounts can manage shared endpoints and their policies.
+- Add an experimental management assistant with editable presets and shared
+  memories, one conversation per operator, context compaction and human-approved
+  atomic operation plans. Independent off/preview/automatic review handles new
+  or modified pending donations and binds existing charity models. Chat and
+  automatic review default to disabled; calls require a configured driver.
+- Add administrator-only complete assistant request/response logs with manual
+  cleanup and independent cumulative/24-hour token usage. Clearing chat changes
+  active context; conversation originals, memories and usage remain retained.
+- Add the ChatGPT SP theme “Tomorrow, Still Unwritten” and the adult-only R-18
+  “Sweet Hide-and-Seek” theme with two limited SSR cards. Their pool templates
+  remain unpublished; R-18 artwork is disabled by default. Sweet Hide-and-Seek's
+  public artwork includes adult nudity and transparent clothing, with all
+  derivatives rated R-18.
 
-### Fixed
+### Improved and fixed
 
+- Simplify service creation, personal-model setup, donation and whole-submission
+  review. Keep recoverable saves, optional multiline review notes and previous
+  approvals when replacements are rejected. Select Chat Completions, Responses
+  and other authorized native services independently when binding models.
+- Add exact donor account/Discord filters and safe complete donation history in
+  user management. Show current approved service health, timed backoff and partial
+  availability without rejecting valid mixed donation states in the browser.
+- Apply saved channel binding presets from the management page or an approved
+  assistant plan, including templates chosen for custom-endpoint donations.
+  Preserve source authorization; missing models and existing bindings are skips.
 - Count tool descriptions, parameter schemas and prior function-call arguments
-  toward charity input length, so tool-wrapped prompts are not mistaken for
-  short messages. Keep genuine short-input checks and request contents intact.
-- Capture and warn about short charity input in dry debug without deducting
-  points or advancing automatic restriction counters. Keep short-input
-  enforcement for live debug and ordinary requests.
-- Keep donation lists and details readable with multiline approval notes and
-  preserved review history. Parse lifecycle, counts and preview data independently
-  instead of rejecting complete pages based on frontend business-state guesses.
-- Show current approved service health on donation keys, source summaries and
-  model connections. Distinguish manual recovery after consecutive failures from
-  timed backoff, retain partial availability, and align key details with filters.
-- Accept legitimate mixed donation states in the frontend, including a pending
-  parent with approved services and a service awaiting a replacement. Keep valid
-  donation history readable instead of rejecting the complete response.
-- Combine service setup into one form with recoverable save stages and direct
-  continuation to personal models or donation. Retain key/service context after
-  approval and continue into authorized charity-model configuration. Preserve
-  explicitly selected native services in key-to-model batch bindings.
-- Review the whole current pending donation submission with one approval or
-  return action and an optional note. Validate its complete versioned set and
-  commit all decisions, audit and receipt together. Preserve previous approvals
-  and recover unknown results with the original request; choose service subsets
-  when configuring bindings after review.
-- Move donation-source browsing to read-only database snapshots and calculate
-  tagged donation scope once per candidate, reducing contention with writes.
-- Keep donation pages, blackjack history, risk statistics and caller-key lookups
-  off the writer connection. Batch donation summaries for the selected page,
-  locate blackjack history through the user's entries, and summarize risk
-  observations once per user while preserving live authorization and snapshots.
-- Load donation review material when expanded and reuse conversation history,
-  operation-plan indexes and parsed tool results while composing messages.
-- Return all authorized matching records from assistant site-data tools using
-  optional filters, without model-facing pagination. Include safe donation
-  details and charity bindings in list results, and remove the automatic-review
-  catalog cutoff. Preserve saved custom tool descriptions and management-page
-  pagination. Add the missing assistant navigation icon.
-- Accumulate streamed response text and function arguments without repeatedly
-  copying the full prefix. Fold ordered donation failure results with indexed
-  range reads, retaining immediate threshold updates in the completion transaction.
-- Move charge previews, client-rule prechecks, session/MFA validation and ranking
-  snapshots off the writer connection. Keep final authority, catch-up writes and
-  accounting checks, and release MFA snapshots before sending the response.
-- Reduce repeated authentication fixture initialization, prepare the empty
-  database outside race instrumentation for explicit local test runs, and expose
-  live race progress and catalog timings. Avoid repeating vet after the explicit
-  vet gate while preserving complete coverage and subprocess failures.
-- Read assistant user summaries in one query, with full profiles available by ID. Reject
-  oversized tool results as a whole with guidance for narrower filters, account
-  for the combined model context, and route oversized automatic-review
-  intelligence to manual review without blocking later submissions.
-- Limit charity binding, candidate and preset catalog checks to selected
-  donation keys, avoiding repeated aggregation of unrelated catalogs inside
-  write transactions while preserving scope, replay and atomicity.
-- Keep browser and steward time contexts in separate caches and preserve date
-  initialization when other fields change, so valid charity model forms remain
-  submittable. Unchanged or empty discount dates do not require a configured
-  site time zone.
-- Identify upgraded connections by their original endpoint note or hostname,
-  show endpoint context in lists and search all owned entry URLs and notes.
-  Clarify donation model setup and the separate System One protocol selection.
-- Load key credential and catalog editors only when opened, avoiding unnecessary
-  list requests while preserving unfinished edits when the panel is closed.
-- Restore model-list fetching for pending and approved donations without a
-  separate catalog-sharing permission, including existing unshared donations.
-  Reuse the configured catalog for the exact donated credential version or the
-  entry's standard model-list endpoint. Pending catalog reads do not grant
-  inference access. Preserve missing-resource errors without silently skipping them.
-- Restore whole-donation force rejection after per-service approval, including
-  partially approved submissions. Prevent legacy review actions from bypassing
-  the existing rejection safeguards or changing already approved uses.
-- Keep checkboxes, expiry fields and actions aligned on narrow and wide screens.
-  New or edited service and donation submissions authorize the protocol's full
-  service set; existing authorizations and approved snapshots stay unchanged until
-  an explicit donor edit. Select native services at model binding, with separate
-  Chat Completions and Responses choices and a required compatible target service.
-  Remove the extra catalog-sharing checkbox and pause-sharing action.
-- Apply mainstream catalog suggestions during normal credential authorization,
-  reusing an available catalog for the same credential version when possible.
-- Preserve each saved entry and its credential-authorization form when several
-  mainstream entries are created together.
-- Guide keys without a catalog to its configuration before attempting discovery.
-  Keep specific operation errors and recovery actions readable across the full
-  key table instead of squeezing them into the actions column.
-- Reuse existing manual model entries when importing or connecting models, so
-  reopening the workflow or retrying after a partial failure can complete the
-  model binding without a duplicate-entry conflict.
-- Index endpoint-key references in request logs, dispatch claims, report targets
-  and donation keys so deleting a key avoids scanning unrelated history and
-  holding up session loading and other writes. Existing deletion and retention
-  behavior is preserved.
-- Preserve safe field/reason diagnostics for future request-validation and typed
-  protocol-conversion failures. Show fixed corrective guidance in the caller's
-  own log, management views and JSON/CSV exports without recording submitted
-  values or secrets. Older records without a saved cause remain unknown.
+  toward charity input length. Dry debug warns and captures short requests
+  without penalties; live debug and ordinary calls retain enforcement. Future
+  validation failures include safe field/reason guidance in authorized logs.
+- Reduce donation-page and catalog queries, indexed game/risk history work,
+  writer contention, streaming accumulation and repeated frontend processing.
+  Index charity-model references to avoid unrelated history scans on deletion.
+  Assistant tools return complete filtered summaries within explicit size/context
+  budgets and guide narrower retries when those budgets are exceeded.
+- Include the post-1.1.1 key-deletion indexes, donation catalog authorization,
+  connection/discovery recovery and binding fixes. Update DOMPurify, Vitest,
+  undici and zod for the adopted security patches.
 
-### Storage
+### Upgrade
 
-- Fresh storage uses schema 37. The service opens only the exact current schema
-  and rejects mismatched storage before migration, repair or recovery writes.
-  Supported sources receive explicit offline upgrades through history indexes,
-  donation authorization, steward permission/scope storage, expanded tags/audit
-  roles and assistant tables.
-  Risk-rule, automatic-ban, blacklist and endpoint-tag rebuilds preserve existing
-  facts and constraints. Stored custom steward policies add the three assistant
-  permissions as false without changing existing grants, revisions or audit history.
-- Extend the standalone upgrader descriptor to include exact schema 33–36 sources
-  alongside 16–26, all targeting schema 37. Upgrades require a deliberate
-  `--apply` after preserving a matching recovery set; the service, startup scripts
-  and deployment helpers must not invoke it implicitly. `--check` remains a
-  separate offline audit. Upgrades are one-way: a server expecting an older or
-  different schema cannot open the upgraded database. No reverse migration is
-  provided. Account export remains format 30.
-- Keep assistant request logs until administrator cleanup. Conversations, memory
-  history and token statistics are separate administrator assets unaffected by
-  request cleanup or operator deletion; automatic-review evidence follows its
-  associated donation lifecycle.
-
-### Security
-
-- Update DOMPurify to 3.4.17 and Vitest to 4.1.12, including its matching mocker
-  packages, to address the upstream sanitization and development-server advisories.
-- Update indirect development dependencies undici to 8.12.3 and zod to 4.6.7.
+- Current storage is schema 38; account export remains format 30. The service
+  opens only the exact current schema or initializes an absent database. Older,
+  newer, unknown and incomplete storage is rejected before migration, repair or
+  recovery writes. Preserve a complete matching recovery set, then deliberately
+  run the matching [standalone upgrader](cmd/nonbiri-upgrade-v1/README.md) for exact
+  registered schema 16–26 or 33–37 sources. Startup and deployment helpers must
+  not apply upgrades implicitly. Upgrades are one-way, with no schema downgrade.
 
 ## 1.1.1 — 2026-10-23
 

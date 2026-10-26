@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Only the latest published release and the current development branch are expected to receive security fixes while the project is in prerelease. Older builds may contain known or breaking security changes; follow the documented generation boundary and take a verified complete snapshot before changing versions.
+Only the latest published release and the current development branch are expected to receive security fixes. Older builds may contain known security issues or require an explicit database upgrade; follow the documented compatibility boundary and preserve a complete matching recovery set before changing versions.
 
 ## Reporting a vulnerability
 
@@ -18,7 +18,7 @@ A useful report includes:
 - impact, prerequisites, and whether data or credentials may be exposed;
 - a proposed mitigation, if known.
 
-Maintainers should acknowledge a report, reproduce it in an isolated environment, assess severity, prepare a fix and regression test, and coordinate disclosure with the reporter. Timelines may vary during prerelease development.
+Maintainers should acknowledge a report, reproduce it in an isolated environment, assess severity, prepare a fix and regression test, and coordinate disclosure with the reporter. Response times depend on maintainer availability.
 
 ## Deployment security baseline
 
@@ -32,4 +32,4 @@ Operators should:
 - verify backups and test restoration before upgrades;
 - avoid putting secrets in URLs, notes, issue text, shell history, or diagnostic output.
 
-The project is prerelease software. A passing test suite is not a guarantee that every deployment, reverse proxy, upstream provider, or operational process is secure.
+A passing test suite does not establish the security of every deployment, reverse proxy, upstream provider or operational process.

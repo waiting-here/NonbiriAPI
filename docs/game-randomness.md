@@ -2,11 +2,11 @@
 
 ## 中文
 
-六款游戏的新局均使用服务器独立生成的 256 位秘密种子。进入一局后，在“随机性核验”中可以保存 SHA-256 开局承诺；整局结束后公开种子和抽样记录，并提供本机核验和 JSON 下载。源代码和浏览器中都没有进行中对局的种子。暗牌、未来牌、对手未揭示动作由服务端投影过滤，修改前端变量或请求中的阶段值不能提前取得它们。
+七款游戏的新局均使用服务器独立生成的 256 位秘密种子。进入一局后，在“随机性核验”中可以保存 SHA-256 开局承诺；整局结束后公开种子和抽样记录，并提供本机核验和 JSON 下载。源代码和浏览器中都没有进行中对局的种子。暗牌、未来牌、对手未揭示动作由服务端投影过滤，修改前端变量或请求中的阶段值不能提前取得它们。
 
-二十一点在全桌结束决策、结果已经提交后披露；竞标对决、回合制对战小游戏（测试）、石头剪刀布和连连看在整局终结后披露。回合制对战小游戏（测试）也有随机目标选择，因此纳入。钓鱼在整个批次结算后披露，与页面播放动画无关。即时钓鱼的承诺和种子可能一起出现在首次结果中，不能将其视为投入前已经独立保存的承诺。系统取消后不会继续使用这局种子，可随取消结果披露。旧局没有种子，显示不可追溯核验。
+二十一点在全桌结束决策、结果已经提交后披露；竞标对决、回合制对战小游戏（测试）、AI 昆特牌、石头剪刀布和连连看在整局终结后披露。回合制对战小游戏（测试）也有随机目标选择，因此纳入。钓鱼在整个批次结算后披露，与页面播放动画无关。即时钓鱼的承诺和种子可能一起出现在首次结果中，不能将其视为投入前已经独立保存的承诺。系统取消后不会继续使用这局种子，可随取消结果披露。旧局没有种子，显示不可追溯核验。
 
-普通用户可以读取本人当前和最近 30 天对局的凭证。二十一点旁观者仅能读取当前场次的公开承诺和终局凭证，之后的历史限实际参与者。维护期间沿用各游戏原有的继续读取权限，未满足条件时需等维护结束。所有响应禁止缓存。个人导出第九版包含 `randomness`：进行中仅含承诺，结束后含完整凭证。凭证随对应历史清理；去身份长期历史不含种子、承诺或凭证。
+普通用户可以读取本人当前和最近 30 天对局的凭证。二十一点旁观者仅能读取当前场次的公开承诺和终局凭证，之后的历史限实际参与者。维护期间沿用各游戏原有的继续读取权限，未满足条件时需等维护结束。所有响应禁止缓存。个人导出包含 `randomness`：进行中仅含承诺，结束后含完整凭证。凭证随对应历史清理；去身份长期历史不含种子、承诺或凭证。
 
 终局（含取消）公开种子后，可重建本局完整的竞标奖励牌堆或二十一点牌鞋，包括没有使用的牌。普通游戏历史和游戏导出字段不直接列出这些牌，但独立凭证及导出中的 `randomness` 足以进行重建。进行中的牌序仍保密，其他玩家的身份、支付来源和其他局的秘密不会随之开放。
 
@@ -16,9 +16,9 @@
 
 New games use independent 256-bit secret server seeds. The game page offers an opening SHA-256 commitment, local verification after disclosure, and a downloadable JSON proof. Active seeds never enter browser responses. Server projections also withhold dealer holes, undealt cards and opponents' unrevealed choices; client state and phase parameters cannot authorize disclosure.
 
-Blackjack reveals after the whole table's result commits. Bidding, Likes, RPS and LinkLink reveal only after the entire match ends, including cancellation. Likes includes random target selection. Fishing reveals after the whole batch settles, independently of frontend animations; an instant batch can return commitment and seed together, so it offers no independently observed pre-stake commitment. Legacy games are explicitly unverifiable.
+Blackjack reveals after the whole table's result commits. Bidding, Likes, Gwent, RPS and LinkLink reveal only after the entire match ends, including cancellation. Likes includes random target selection. Fishing reveals after the whole batch settles, independently of frontend animations; an instant batch can return commitment and seed together, so it offers no independently observed pre-stake commitment. Legacy games are explicitly unverifiable.
 
-Proofs are owner-scoped and retained for up to 30 days. Blackjack spectators can read only the current round's table; later history requires actual participation. Existing maintenance continuation restrictions apply. Responses are `no-store`. Account export v9 includes `randomness`, with only public commitments for active games. Proofs disappear with the corresponding retained parent; long-term anonymous archives omit seeds and commitments.
+Proofs are owner-scoped and retained for up to 30 days. Blackjack spectators can read only the current round's table; later history requires actual participation. Existing maintenance continuation restrictions apply. Responses are `no-store`. Account export includes `randomness`, with only public commitments for active games. Proofs disappear with the corresponding retained parent; long-term anonymous archives omit seeds and commitments.
 
 Once a terminal seed is disclosed, including after cancellation, the complete Bidding reward decks or Blackjack shoe can be reconstructed, including unused cards. Ordinary game history and game export fields do not list those cards, but the separate proof and exported `randomness` allow reconstruction. Active deck order remains secret; disclosure does not expose other players' identities, funding sources or other games' secrets.
 
@@ -26,7 +26,7 @@ Seeds never derive login tokens, encryption nonces, other games, cursors or anon
 
 ## Wire protocol
 
-`GET /api/games/{game}/randomness/{id}` accepts no query parameters or body, requires a live user session, and returns `{"proof": object-or-null}`. `null` means no historical proof exists. Unknown/unowned/expired resources are 404. Game names are `fishing`, `linklink`, `rps`, `bidding`, `likes`, `blackjack`. Responses are bounded by 2 MiB plus the envelope. There is no CallerKey or administrator automation scope for this endpoint.
+`GET /api/games/{game}/randomness/{id}` accepts no query parameters or body, requires a live user session, and returns `{"proof": object-or-null}`. `null` means no historical proof exists. Unknown/unowned/expired resources are 404. Game names are `fishing`, `linklink`, `rps`, `bidding`, `likes`, `gwent`, `blackjack`. Responses are bounded by 2 MiB plus the envelope. There is no CallerKey or administrator automation scope for this endpoint.
 
 The active object has exactly `algorithm`, `game`, `resource_id`, `rules`, and `commitment`. Terminal objects additionally contain the lowercase 64-character hex `seed`, and optionally `streams:[{label,samples}]`. Empty transcripts may omit `streams`. A stream contains canonical standard Base64 of consecutive 16-byte records: unsigned big-endian 64-bit bound, followed by unsigned big-endian 64-bit result. At most 65,664 samples and 1,024 stream labels are allowed. This covers the existing 65,536-draw Fishing decoration budget plus economic draws, and the maximum current LinkLink generation and hint budget.
 
@@ -61,6 +61,7 @@ The transcript verifier checks the supplied samples. To verify the complete game
 | Blackjack | Rules `six-decks-s17-v1`, stream `shoe`; six decks in the engine's canonical order, then descending Fisher–Yates bounds 312 through 2. Reuse the shuffled shoe with the recorded rotating seat order and accepted action batches. |
 | Bidding | Rules `mode/content_hash`; `seat-order` selects the initial color assignment, `initial` drives the engine's two reward-deck shuffles. Replay revealed bids/joker choices for the thirteen rounds. |
 | Likes | Rules `mode/content_hash`; `seat-order` and `round/<number>` for random target selection. Replay the frozen catalog, both loadouts and each revealed plan; server round records include target-selection facts. |
+| Gwent | Rules `mode/content_hash`; `seat-order`, `initial` for deck setup and `actions` for sequential random choices. Replay the frozen decks and ordered actions with the registered engine. |
 | RPS | Rules `rules_version/mode`; `seats-and-dealer` shuffles seats and chooses dealer. Timed-out gestures use an indexed draw described below, without growing a transcript. Player choices are separate authenticated game inputs; encryption nonces never use game seeds. |
 | LinkLink | Rules `rules_version/spec`; `initial` drives geometric board generation. `hint/<revision>` drives the current one-pass reshuffle; `automatic/<revision>` is reserved for older automatic reshuffles. The engine verifies the generated solution and all actual moves independently. |
 | Fishing | Rules `rules_version/bait/count`; `catch` first selects all economic outcomes using frozen batch prices/RTP, then decorative Easter-egg outcomes. Net returns additionally require the batch's frozen fee terms. |

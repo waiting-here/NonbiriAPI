@@ -20,14 +20,15 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh/exact-current schema 37 startup and explicit offline conversion
-  of registered schema 16–26 and 33–36 sources: target equality,
+- Validate fresh/exact-current schema 38 startup and explicit offline conversion
+  of registered schema 16–26 and 33–37 sources: target equality,
   rollback/cancellation, re-entry and upgrade-then-start. Verify older, newer,
   unknown and incomplete storage is rejected by the service before migration,
   repair, checkpoint or recovery writes. Check descriptor source coverage and
   that startup/deployment paths never invoke the upgrader implicitly.
   Preserve current-schema validation and business recovery. Check that
-  endpoint-key deletion uses indexes for its referencing history tables and preserves cascading behavior.
+  endpoint-key and charity-model deletion use indexes for their referencing
+  history tables and preserve cascading behavior.
   Preserve credentials, operator settings, legal overrides, balances, game saves,
   activities and receipts. Exercise successive stable migrations; see
   [database upgrades](database-upgrades.md).
@@ -39,8 +40,8 @@ has passed.
   temporary generated values, shared charity settings, pressure samples and
   caller-parameter receipts. Verify model/user deletion, late completions and
   the zero/default/positive idle-lifetime cases across all five formats.
-- Exercise shared-credential rotation with old approved uses, precise per-service
-  review, explicit service expansion without budget reset, model target ordering
+- Exercise shared-credential rotation with old approved uses, whole-submission
+  review with versioned per-service snapshots, explicit service expansion without budget reset, model target ordering
   and independent directory refresh. Verify ownership, revision conflicts,
   unknown-result retry, deletion and late completion across these relationships.
 - Verify both explicit Gateway versions and all four native service paths/headers,
@@ -57,6 +58,14 @@ has passed.
   Exercise an existing streak, repeated completion and transaction rollback.
 - Check account deletion with expired terminal logs and mixed settled/in-flight
   requests, preserving accounting, retained log snapshots and rollback.
+- Verify all 51 steward grants, whole-donation scopes and current target hierarchy
+  across sessions, CallerKeys, queued work and approved assistant plans. Check
+  whole-plan rollback, human decisions, mode changes, tool-result budgets and
+  restart recovery without duplicate operations.
+- Check assistant request cleanup retains conversation originals, memories,
+  review evidence and token statistics; chat clear only resets active context.
+  Keep chat/automatic review off, new pools unpublished and R-18 artwork disabled
+  by default. Check artwork classification, direct delivery and static fallback.
 - Cover ownership, secrets, SSRF, original-input abuse priority, ledger atomicity,
   cancellation, bans and deletion races in the affected paths. Redemption tests
   distinguish invalid/already-claimed codes, first business refusals, later

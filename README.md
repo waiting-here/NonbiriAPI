@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage service connections, shared encrypted credentials, model discovery and routing, then use revocable CallerKeys for personal or shared charity calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.0.0 is the first stable release.** GitHub Releases provide source code; build instructions are below. Version history is in [CHANGELOG](CHANGELOG.md).
+**v1.2.0** improves donation workflows and steward permissions, adds an optional management assistant, and requires explicit database upgrades. GitHub Releases provide source code; build instructions are below. Version history is in [CHANGELOG](CHANGELOG.md).
 
 ## Architecture
 
@@ -141,13 +141,17 @@ game checkpoints, request accounting and background maintenance. In-flight
 elapsed time remains visible across reporting windows; see the runtime metrics
 guide before comparing completed latency with current occupancy.
 
-The optional Gacha Simulator includes layered SP artwork. Amber Vow keeps its
+The optional Gacha Simulator includes layered SP artwork. Tomorrow, Still
+Unwritten adds a single ChatGPT card with animated light/dark site appearances;
+its limited-pool template remains unpublished. Amber Vow keeps its
 character beside desktop content, with matching static fallback and enhanced
 artwork; composition and source details are in the [art guide](docs/gacha-art.md).
-Administrators can disable R-18 built-in artwork across the site; this is on by
-default. Candidate lists label rated artwork, while permitted individual viewing
+R-18 built-in artwork is disabled across the site by default and can be enabled
+by an administrator. Candidate lists label rated artwork, while permitted individual viewing
 stays unobstructed. Sweet Hide-and-Seek includes two adult-only R-18 limited SSR
-cards, a theme illustration and an independent pool cover. Its unpublished pool
+cards, a theme illustration and an independent pool cover with adult nudity and
+transparent clothing. These assets and their derivatives are included in the
+public source distribution. Its unpublished pool
 template gives the two featured cards equal weight. Collections and saved choices
 remain intact when artwork is disabled; see [artwork availability](docs/gacha.md#artwork-availability).
 
@@ -206,10 +210,10 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 37.
+Fresh databases start in maintenance with public features closed and use schema 38.
 The service opens only the exact current schema; older, newer, unknown or
 incomplete storage is rejected before migration, repair or recovery writes.
-For exact registered schema 16–26 and 33–36 sources, preserve a complete recovery
+For exact registered schema 16–26 and 33–37 sources, preserve a complete recovery
 set before deliberately running the matching standalone
 [upgrader](cmd/nonbiri-upgrade-v1/README.md) with `--check` or `--apply`.
 The service, startup scripts and deployment helpers must not apply upgrades

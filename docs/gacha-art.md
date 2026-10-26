@@ -49,6 +49,14 @@ Existing N/R/SR cards use separate theme backgrounds and character layers. Exist
 
 SSR card backgrounds stay static while their characters animate. SP also requires coordinated background animation and the complete dedicated site appearance. Heartfelt moments uses a static theme background for every selected card, including SP, and only animates SSR/SP characters.
 
+New SSR and SP motion should remain visible at the actual desktop and phone
+display sizes. Combine anatomically constrained breathing with pose-appropriate
+hair, cloth and environmental follow-through, with clear driving motion, delay
+and settling. Preserve roots, support, hand-to-prop contact and occlusion.
+Prepare missing layers, backing plates or bindings before accepting a finished
+animation. Blinking plus barely visible tip movement is insufficient; whole-body
+waves, unsupported bouncing and extra particles cannot replace character motion.
+
 ## High-resolution delivery
 
 Target 2560 × 3840 portrait derivatives and 3840 × 2160 landscape derivatives for desktop appreciation, including animation layers. Keep native masters and enhancement settings separately. Enhanced derivatives improve display clarity but must not be described as new native detail. Inspect faces, fine jewelry, patterned cloth, transparent edges and painted textures before adoption; reject oversharpening and invented features.
@@ -121,7 +129,7 @@ Check the production components at desktop and phone sizes, in light and dark mo
 
 Every card has its own bilingual character voice. Use an established personality and at most one gentle joke. Express affection plainly and make room for relaxed, intimate everyday moments. Keep warmth specific to the scene: sharing food, holding hands, a date or an invitation. Familiar character motifs may appear sparingly; do not turn every voice into a joke about AI or computing. Never belittle users or other models.
 
-N/R lines are light and everyday; SR grows more personal; SSR and SP can express love directly. SP connects its imagery to a concrete wish to be close to the player, with an intimate second paragraph. Avoid repeated ellipses, em dashes, coy denials, slogan-like contrasts and generic promises. Vary sentence lengths, openings and punctuation across the entire catalogue. Keep every line suitable for all ages. Each paragraph is at most 40 Chinese characters or 110 English characters and occupies no more than three lines in the phone close-up. Review both languages and the actual narrow-screen wrapping before adoption.
+N/R lines are light and everyday; SR grows more personal; SSR and SP can express love directly. SP connects its imagery to a concrete wish to be close to the player, with an intimate second paragraph. Avoid repeated ellipses, em dashes, coy denials, slogan-like contrasts and generic promises. Vary sentence lengths, openings and punctuation across the entire catalogue. Match the scene's content rating and direct intimate lines toward the player. Each paragraph is at most 40 Chinese characters or 110 English characters and occupies no more than three lines in the phone close-up. Review both languages and the actual narrow-screen wrapping before adoption.
 
 Keep voices in the presentation catalogue, separate from theme taglines. Show individual lines in SR focus, SSR/SP close-ups and owned-card appreciation; use theme taglines for theme memories. New SP encounters include a short prelude and a delayed second paragraph. Reunions use a distinct line without replaying the prelude. New voices require editorial approval before final adoption.
 

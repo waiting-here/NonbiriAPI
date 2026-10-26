@@ -65,19 +65,21 @@ in independent Bidding, Likes and Gwent engines. Gwent can suspend an action for
 target or card choice; private legal actions and decision tokens belong to the acting
 seat. Likes commits a round atomically before its event-paced
 presentation; clients consume the server's structured events and replenish from
-the next round's facts. A process startup cancels unfinished two-player games;
-later periodic recovery only advances live deadlines. Neither presentation nor a
+the next round's facts. Startup cancels unfinished Bidding and Likes matches;
+Gwent resumes its saved cards with a new decision window. Later periodic
+recovery advances live deadlines. Neither presentation nor a
 client acknowledgement controls final accounting.
 
 Bidding and Likes have empty newcomer-task lists. Their personal export sections
-are included in the central version-8 envelope. Thirty-day complete histories
+are included in the current account export. Thirty-day complete histories
 become anonymous long-term traces through one transactional migration, and the
 administrator exporter uses bounded pages without copying opponent identities
 into ordinary user exports.
 
 Blackjack uses a separate multi-seat module, not the two-player service. A single
-table follows server minutes with 15 seconds for seating, 30 for decisions and 15
-for results. Up to nine players are admitted from a persistent FIFO queue, with
+table starts every server :00 and :30, with 5 seconds for seating, 20 for decisions
+and 5 for results. An early finish extends results to the next scheduled start.
+Up to nine players are admitted from a persistent FIFO queue, with
 at most 4,096 waiters. Queue entry and each split or double reserve actual payment
 sources atomically; normal per-hand returns become General Credits after the
 frozen fees, while cancellation refunds the original sources. The game starts
@@ -85,7 +87,7 @@ disabled and adds no newcomer rewards. Completed players explicitly rejoin at
 the tail. Restart cancels only an unsettled table and preserves unseated waiters;
 maintenance releases waiters and undealt seats while dealt tables finish. Bans
 auto-stand dealt hands; deletion removes identity and finishes those hands without
-cancelling other seats or recreating a wallet. Export v8 includes owner-safe queue,
+cancelling other seats or recreating a wallet. Account export includes owner-safe queue,
 current-table and recent-history records; 30-day records become administrator-only
 anonymous facts without payment sources or emotes.
 

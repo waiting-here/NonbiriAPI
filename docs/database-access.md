@@ -8,6 +8,11 @@ pools belong to the store and close with the application.
 
 ## Scoped charity catalog checks
 
+Charity-model foreign-key references in reservations, dispatch receipts,
+affinities and managed-header sessions/uses have covering indexes. Deletion
+locates the affected rows without scanning unrelated history; cascading and
+retained-reference behavior still follows the existing foreign keys.
+
 Binding, candidate, manual-entry and preset paths query the selected donation
 member or key when checking catalog existence. They combine its automatic and
 manual entries within the current scope instead of repeatedly aggregating the
