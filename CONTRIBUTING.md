@@ -65,6 +65,10 @@ headroom for image decoding and animation. Real-backend suites also use one
 worker in each of two isolated groups. Smoke starts after the station build
 without waiting for the backend fixture. Every selected child must succeed,
 including fixture preparation and both browser groups.
+CI collects all selected browser scenarios and suites before reporting failure;
+any failed child still makes the group fail. Local runs retain their early-stop
+behavior for focused diagnosis. Review unrun cases when collecting a failed
+candidate's results before submitting its replacement.
 
 Station artifacts carry generated files and the complete build manifests.
 Consumers restore unchanged public files from the same checkout and verify their

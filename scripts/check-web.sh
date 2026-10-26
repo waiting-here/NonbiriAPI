@@ -8,11 +8,20 @@ go_command=${GO:-go}
 component=${1:-all}
 group=${2:-all}
 shard=${3:-all}
-reporter_args=()
+playwright_args=()
+browser_status=0
 if [ "${CI:-}" = true ]; then
   mkdir -p "$root/.cache/ci"
-  reporter_args=(--reporter=line,json)
+  playwright_args=(--reporter=line,json --max-failures=0)
 fi
+run_browser() {
+  local status=0
+  "$@" || status=$?
+  if [ "$status" -ne 0 ]; then
+    if [ "${CI:-}" != true ]; then return "$status"; fi
+    browser_status=1
+  fi
+}
 selection=$(mktemp)
 fixture=
 cleanup() {
@@ -42,12 +51,12 @@ if [ "$component" = browser ] || [ "$component" = all ]; then
   if [ "$group" = all ] || [ "$group" = smoke ]; then
     select_values engine
     if [ "${selected[0]}" = true ] && [ "$shard" != 2/2 ]; then
-      node test/fatfish-engine/check.mjs chromium
+      run_browser node test/fatfish-engine/check.mjs chromium
     fi
     select_values specs "$shard"
     if [ "${#selected[@]}" -gt 0 ]; then
       export PLAYWRIGHT_JSON_OUTPUT_FILE="$root/.cache/ci/browser-smoke-${shard//\//-}.json"
-      "$npm_command" exec -- playwright test "${selected[@]}" "${reporter_args[@]}"
+      run_browser "$npm_command" exec -- playwright test "${selected[@]}" "${playwright_args[@]}"
     fi
   fi
   if [ "$group" != smoke ]; then
@@ -64,8 +73,9 @@ if [ "$component" = browser ] || [ "$component" = all ]; then
       fi
       for suite in "${selected[@]}"; do
         export PLAYWRIGHT_JSON_OUTPUT_FILE="$root/.cache/ci/browser-$suite.json"
-        CGO_ENABLED=0 "$npm_command" exec -- playwright test -c "playwright.$suite.config.ts" "${reporter_args[@]}"
+        CGO_ENABLED=0 run_browser "$npm_command" exec -- playwright test -c "playwright.$suite.config.ts" "${playwright_args[@]}"
       done
     fi
   fi
 fi
+exit "$browser_status"
