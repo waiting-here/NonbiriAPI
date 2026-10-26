@@ -56,7 +56,7 @@ their existing distinct errors.
 
 ## Actions and defaults
 
-There are 48 independent boolean permissions.
+There are 51 independent boolean permissions.
 
 | Permission | Allows | Level-5 default |
 |---|---|---|
@@ -108,6 +108,17 @@ There are 48 independent boolean permissions.
 | `maintenance.enable` | Enable maintenance | false |
 | `egress.read` | Cloudflare route configuration reads | false |
 | `automation` | Steward CallerKey automation ingress | false |
+| `ai.chat` | Use the operator's management-assistant conversation | true |
+| `ai.review.read` | Read automatic-review history and details | false |
+| `ai.memory.edit` | Read and edit the two shared assistant memories | false |
+
+These assistant defaults apply to accounts without a saved custom policy.
+Upgrading a custom policy adds all three assistant grants as false and preserves
+its existing choices. Chat also requires the administrator's chat switch and a
+configured driver. Assistant tools and approved plans retain every underlying
+action grant, target hierarchy, donation scope and numeric limit. Complete
+model-request logs, usage, archives and assistant configuration are
+administrator-only; see the [assistant contract](api-contract.md#78-experimental-ai-assistant).
 
 ## Limits
 
@@ -154,9 +165,15 @@ itself.
 | Value | Donation resources available with the relevant action |
 | --- | --- |
 | `none` | No steward donation browsing, handling or mutations. |
-| `standard` | Pending review, the existing safe handling queue, and maintenance within a mainstream charity model. This is the level-5 default. |
+| `standard` | At least one unended, unexpired key, and every such key has a saved mainstream-channel source or a current binding to a mainstream charity model. This is the level-5 default. |
 | `enhanced` | Standard scope plus the entire donation when any of its endpoints has any management tag. Tagged donations need no model selector for direct maintenance. |
 | `full` | The level-6 donation resource scope. This is the level-6 default. |
+
+A paused, failed or pending key still participates in the standard all-key check;
+ended and expired keys do not. Qualification applies to the whole donation for
+review, handling, discovery and maintenance. There is no separate pending-review
+exception or add-versus-maintain rule. An optional model selector checks the
+target model; it cannot qualify an otherwise ineligible donation.
 
 A tag matches the canonical endpoint URL saved on a donation key. One matching
 endpoint includes every key in that donation. Removing the last matching tag
@@ -170,17 +187,16 @@ already authorized resource. It does not widen donation scope. The independent
 `users.donations.read` grant permits safe retained target-user history even when
 scope is `none`, without key controls or credentials. `charity.non_mainstream`
 only expands eligible charity model targets; binding still needs both an eligible
-model and an eligible donated source. Standard maintenance retains existing
-non-mainstream keys already bound to an authorized mainstream model, but does not
-allow newly binding those sources after removal.
+model and an eligible donated source. A current mainstream-model binding can
+qualify a custom-source key. Removing its last qualifying binding can remove the
+whole donation from standard scope if that key is still live.
 
 Successful approve/reject receipts remain replayable for the same actor and input
-after the final pending use is resolved. The current action and non-none scope are
-still required, and identity fields use the current `read_all` grant. Force
-rejection and maintenance retries require current resource scope. Deleted-binding
-receipts retain only the original source references needed for that recheck; a
-still-mainstream original model may anchor its completed standard-scope retry.
-Historical deletion receipts without source references require full scope.
+after the final pending use is resolved. Current grants and the applicable replay
+checks still apply, and identity fields use the current `read_all` grant.
+Completed receipts report their original outcome; they do not execute again or
+grant broader resource access. Final writes and protected background completion
+recheck current scope, tags and resource revisions.
 
 Level 6 can use the shared endpoint and endpoint-policy pages. Level 5 receives
 neither endpoint action by default. `endpoints.read` allows
@@ -206,7 +222,7 @@ management or expand ordinary list/export retention.
 
 ## Storage, export and deletion
 
-Schema 36 stores one policy, including donation scope, per account and a separate
+The policy tables introduced in schema 36 store one policy, including donation scope, per account and a separate
 change audit. Scope shares the same revision, CAS and idempotency rules. Policies
 persist until account deletion. Audits contain previous/next policies, revisions,
 time and the editor reference; bounded retention cleanup removes entries at

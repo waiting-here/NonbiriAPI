@@ -142,9 +142,9 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 37. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts exact registered schema 16–26 and 33–36 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 38. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts exact registered schema 16–26 and 33–37 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
 
-`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=37`, `minimum_schema_version=37`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
+`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=38`, `minimum_schema_version=38`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
 
 Current account export `schema_version=30` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v30.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
@@ -2104,7 +2104,7 @@ RAM pickup window; successful generation is not refunded if a result is lost or
 not downloaded. Natural activity end lets accepted tasks finish; manual pause
 or maintenance cancels undispatched tasks with refunds. Ban, deletion, and
 model withdrawal follow the documented atomic cleanup rules. Safe task history
-lasts 30 days; accounting follows ledger retention and account export schema 22.
+lasts 30 days; accounting follows ledger retention and the current account export.
 
 ### Lake Notes API
 
@@ -2164,4 +2164,4 @@ lifetime claims. Reusing an earlier day's idempotency key returns current state
 without purchasing again or consuming the new day's limit. Monthly ticket
 exchange caps and single-ticket prices do not affect these bundles.
 
-Reward receipts are included in export schema 22 under `rewards`. They contain the account’s successful site-wide and code rewards, quantities, duplicate conversions and skipped items, without code text, eligibility configuration, other recipients or retry hashes. Receipts remain for the account lifetime and are removed on deletion; campaign totals and used quota remain. See [rewards](rewards.md).
+Reward receipts are included in the current account export under `rewards`. They contain the account’s successful site-wide and code rewards, quantities, duplicate conversions and skipped items, without code text, eligibility configuration, other recipients or retry hashes. Receipts remain for the account lifetime and are removed on deletion; campaign totals and used quota remain. See [rewards](rewards.md).

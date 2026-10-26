@@ -14,6 +14,30 @@ Lake Notes is a permanent free minigame with four independently configured excha
 
 Preserve the database's stable encrypted renewed-review matching material with the master key. Resetting it would bypass cross-account secret-text review requirements and is not a supported repair or configuration edit.
 
+## Experimental management assistant
+
+Assistant settings use their own revisioned configuration and encrypted driver
+storage, rather than startup environment variables or the general `site_config`
+catalog. An administrator configures the dedicated Chat Completions endpoint,
+key and model, model-context/output limits, shared request concurrency and
+timeout. Built-in [presets](ai-agent-presets.md) supply editable messages, initial
+shared memories and tool descriptions without overwriting saved customization.
+
+Chat defaults to closed; automatic review independently defaults to `off` and
+offers `preview` and `auto` modes. Model calls require a ready driver.
+Optional web search needs its own configured endpoint and encrypted key. Level-5
+access uses the separate assistant grants in the [permission catalog](steward-permissions.md#actions-and-defaults).
+Each actual model call joins shared FIFO scheduling and global RPM/concurrency
+limits without personal RPM or credit charges. Waiting for tools or human plan
+approval does not occupy a model-call slot.
+
+Complete assistant request/response logs have no automatic expiry; an
+administrator can clean an exact selection. Conversations, memories and token
+totals remain independently retained, and clearing a conversation only resets
+its active context. Disabling chat preserves those assets and leaves the
+automatic-review mode independent. See [configuration fields, defaults and retention](api-contract.md#78-experimental-ai-assistant)
+before enabling calls or publishing instance privacy text.
+
 ## Gateway cost attribution
 
 The runtime administrator setting `gateway_user_attribution_enabled` is a boolean, off by default (site-config JSON `false|true`). Enabling it includes a server-generated user-and-gateway-origin pseudonym in subsequent Gateway v3/v4 text, image generation, embedding and rerank requests for cost attribution. Disabling it omits the tag. It can correlate requests from the same user; it is not anonymous and does not claim upstream safety processing. The caller cannot override it. Existing OpenAI and Anthropic settings remain independent. It uses the ordinary configuration catalog, administrator authorization, revision and audit rules; no startup environment variable or rebuild is required.
@@ -247,7 +271,7 @@ Mainstream channels are managed through `/admin/api/mainstream-channels`, not `s
 
 RPM and concurrency settings update the shared in-process controllers immediately. The operation selects the light or heavy concurrency pool before reading the request body. Bounded model classification then selects personal or charity accounting. Charity calls check their class-specific charity cap first, then both the combined per-user global and site-wide caps; personal calls use the latter two. Changing limits preserves active permits and existing RPM events, including restored identity windows. A concurrency refusal creates no RPM hit or automatic penalty. Resource-count caps are read transactionally on each create. Display, legal, donation guidance, registration, OAuth admission, maintenance, Connector defaults, activities, reports, and game values are read from the database without rebuilding; responses are `no-store`. The site timezone offset carries no runtime singleton: consumers resolve it per transaction and fail closed when it is unset.
 
-`GET /api/config` exposes only the display/legal values, the two donation notices, `maintenance_mode`, `registration_open`, and `announcement_epoch`. The admin-host bootstrap endpoint exposes the same safe projection after administrator authentication. Neither exposes operational rate limits, Discord gate IDs, alert preferences, or secrets.
+`GET /api/config` exposes only the display/legal values, the two donation notices, `maintenance_mode`, `registration_open`, `artwork_r18_disabled`, and `announcement_epoch`. The admin-host bootstrap endpoint exposes the same safe projection after administrator authentication. Neither exposes operational rate limits, Discord gate IDs, alert preferences, or secrets.
 
 ## What requires a rebuild or code change
 

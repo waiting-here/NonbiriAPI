@@ -7,7 +7,7 @@ Authorization: Bearer nbk_REPLACE_WITH_YOUR_CALLER_KEY
 Content-Type: application/json
 ```
 
-The caller must remain an active steward with `automation` and the corresponding action grants. Level 6 has all steward actions; level 5 requires explicit automation permission and retains its configured source/model scope. Session cookies cannot replace the CallerKey. Revocation, rotation, bans, deletion and current grants are checked before replay and writes; protected background completion also rechecks authority. These controls grant no access to another donor's private endpoint, key or model catalog. See [steward permissions](steward-permissions.md) for the 48 actions, six limits, four donation scopes and combined actions. This document describes the current source contract; use a matching server release. Price templates, donation processing/history and compact management binding receipts remain browser-session APIs.
+The caller must remain an active steward with `automation` and the corresponding action grants. Level 6 has all steward actions; level 5 requires explicit automation permission and retains its configured source/model scope. Session cookies cannot replace the CallerKey. Revocation, rotation, bans, deletion and current grants are checked before replay and writes; protected background completion also rechecks authority. These controls grant no access to another donor's private endpoint, key or model catalog. See [steward permissions](steward-permissions.md) for the 51 actions, six limits, four donation scopes and combined actions. This document describes the current source contract; use a matching server release. Price templates, donation processing/history, compact management binding receipts and the management assistant use browser-session APIs.
 
 Account MFA applies to browser sessions. These CallerKey routes retain their
 existing credentials and do not require authenticator codes. Browser controls
@@ -32,8 +32,11 @@ Every charity route needs `automation` plus its operation grants:
 | Discover and bind | `charity.manage` and `donations.discover` |
 | Read or edit failure policy | `donations.manage_keys` |
 
-Level-5 donation scope defaults to `standard`: pending review and maintenance
-in an eligible mainstream model. `none` denies donation operations even when
+Level-5 donation scope defaults to `standard`: at least one unended, unexpired
+key, with every such key having a mainstream-channel source or a current binding
+to a mainstream charity model. Pending, paused and failed keys participate in
+this whole-donation check. Review and maintenance use the same qualification;
+an optional target model cannot expand it. `none` denies donation operations even when
 their booleans are true. `enhanced` adds entire donations with any tagged canonical
 endpoint, and `full` has the level-6 resource range. Current tags and policy are
 checked before reads, replay, writes and protected discovery completion.
@@ -171,12 +174,11 @@ The result order always matches the input. At least one success gives HTTP 200. 
 
 `GET /api/steward/automation/donation-key-failure-policy?donation_id=34&donation_key_id=78` accepts exactly these two positive decimal-string IDs and no body. A current steward needs `automation`, `donations.manage_keys` and current donation scope for a visible donation; this does not grant access to its owner's private resources or model catalog.
 
-This fixed route has no `charity_model_id` selector. A level-5 caller with
-standard scope therefore lacks the model context required for maintenance and
-receives `403 steward_permission_denied`. Enhanced scope permits it for a
-currently tagged donation, and full scope permits the full resource range.
-The model-bindings route carries a model ID and can use the standard mainstream
-model path. Granting `charity.non_mainstream` alone does not change source scope.
+This fixed route has no `charity_model_id` selector and uses the same
+whole-donation qualification as other maintenance routes. Standard scope can
+access a qualifying donation without a model selector. Enhanced scope also
+permits currently tagged donations, and full scope permits the full resource
+range. Granting `charity.non_mainstream` alone does not change source scope.
 
 GET and a successful PATCH return HTTP 200 with the same safe shape:
 
