@@ -400,7 +400,6 @@ test('administrator filters donations and manages manual candidates', async ({ b
     await page.goto(state.admin_url + '/charity');
     await page.getByLabel(copy.donationHandling.search).fill(donation.description);
     await page
-      .locator('.charity-donation-search')
       .getByRole('button', { name: copy.donationHandling.applySearch, exact: true })
       .click();
     const filterDisclosure = page.locator('.charity-donations .nb-filter__more summary');

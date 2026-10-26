@@ -37,7 +37,7 @@ func connectionFactQuery(table string, sourceColumns map[string][]string) (strin
 			"endpoint_key_discovery_sources", "discovery_sources", "discovery_source_revisions",
 			"discovery_source_states", "discovery_runs", "donation_uses", "donation_use_revisions",
 			"model_binding_targets", "charity_binding_targets", "dispatch_claim_targets",
-			"mainstream_channel_entries":
+			"mainstream_channel_entries", "endpoint_tag_domains":
 			return "", false
 		}
 		return "SELECT * FROM " + quoteSQLiteIdentifier(table), true
