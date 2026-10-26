@@ -203,7 +203,7 @@ test('code duplicates fund a permanent SSR exchange without an open limited pool
   browser,
 }) => {
   const f = fixture();
-  const player = f.users.find((user) => user.level === 2)!;
+  const player = f.users.find((user) => user.level === 1)!;
   const user = await session(browser, f.user_url, player.cookie);
   const admin = await session(browser, f.admin_url, f.admin_cookie, true);
   try {
