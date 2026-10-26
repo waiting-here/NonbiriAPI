@@ -370,6 +370,7 @@ function BindingSelector({
               type="search"
               value={endpointQuery}
               maxLength={128}
+              placeholder={text('searchHelp')}
               disabled={manualLocked || operation.isPending || Boolean(replayAttempt)}
               onChange={(event) => setEndpointQuery(event.target.value)}
             />

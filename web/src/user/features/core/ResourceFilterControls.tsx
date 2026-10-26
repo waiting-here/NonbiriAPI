@@ -1,6 +1,6 @@
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
-import { FilterBar } from '@shared/components/ui';
-import { useEffect, useState } from 'react';
+import { Button, Field, FilterBar } from '@shared/components/ui';
+import { useEffect, useId, useState } from 'react';
 import { useCoreCopy } from './copy';
 import { CoreEmpty, ConnectorLabel } from './components';
 import { useEndpointCreateOptions } from './queries';
@@ -25,22 +25,24 @@ function ConnectorFilter({ control }: { control: ResourceFilterControl }) {
     ]),
   ];
   return (
-    <label>
-      <span>{t('endpoints.connector')}</span>
-      <select
-        value={control.filters.connector_type ?? ''}
-        onChange={(event) =>
-          control.update((current) => ({ ...current, connector_type: event.target.value }))
-        }
-      >
-        <option value="">{t('filters.all')}</option>
-        {values.map((value) => (
-          <option key={value} value={value}>
-            <ConnectorLabel value={value} />
-          </option>
-        ))}
-      </select>
-    </label>
+    <Field label={t('endpoints.connector')}>
+      {(props) => (
+        <select
+          {...props}
+          value={control.filters.connector_type ?? ''}
+          onChange={(event) =>
+            control.update((current) => ({ ...current, connector_type: event.target.value }))
+          }
+        >
+          <option value="">{t('filters.all')}</option>
+          {values.map((value) => (
+            <option key={value} value={value}>
+              <ConnectorLabel value={value} />
+            </option>
+          ))}
+        </select>
+      )}
+    </Field>
   );
 }
 
@@ -59,6 +61,8 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
   const [query, setQuery] = useState(control.filters.q ?? '');
   const [provider, setProvider] = useState(control.filters.provider ?? '');
   const [invalid, setInvalid] = useState(false);
+  const errorId = useId();
+  const error = invalid ? <span id={errorId}>{t('filters.invalid')}</span> : undefined;
   useEffect(() => {
     if (control.kind !== 'models') setQuery(control.filters.q ?? '');
   }, [control.identity, control.kind, control.filters.q]);
@@ -67,22 +71,24 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
     label: string,
     values: readonly (readonly [string, string])[],
   ) => (
-    <label>
-      <span>{label}</span>
-      <select
-        value={control.filters[field] ?? ''}
-        onChange={(event) =>
-          control.update((current) => ({ ...current, [field]: event.target.value }))
-        }
-      >
-        <option value="">{t('filters.all')}</option>
-        {values.map(([value, text]) => (
-          <option key={value} value={value}>
-            {text}
-          </option>
-        ))}
-      </select>
-    </label>
+    <Field label={label}>
+      {(props) => (
+        <select
+          {...props}
+          value={control.filters[field] ?? ''}
+          onChange={(event) =>
+            control.update((current) => ({ ...current, [field]: event.target.value }))
+          }
+        >
+          <option value="">{t('filters.all')}</option>
+          {values.map(([value, text]) => (
+            <option key={value} value={value}>
+              {text}
+            </option>
+          ))}
+        </select>
+      )}
+    </Field>
   );
   if (control.kind !== 'models') {
     const labels: Partial<Record<keyof ResourceFilters, string>> = {
@@ -147,20 +153,19 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
           activeCount={chips.length}
           search={
             <>
-              <label>
-                <span className="nb-sr">{t('common.search')}</span>
-                <input
-                  className="nb-input"
-                  type="search"
-                  placeholder={ui('user.services.searchPlaceholder')}
-                  value={query}
-                  aria-invalid={invalid}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </label>
-              <button className="nb-btn nb-btn--secondary" type="submit">
-                {t('common.search')}
-              </button>
+              <Field label={t('common.search')} error={error}>
+                {(props) => (
+                  <input
+                    {...props}
+                    className="nb-input"
+                    type="search"
+                    placeholder={ui('user.services.searchPlaceholder')}
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                )}
+              </Field>
+              <Button type="submit">{t('common.search')}</Button>
             </>
           }
           secondary={
@@ -207,11 +212,6 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
             }
           }}
         />
-        {invalid ? (
-          <p role="alert" className="field-error">
-            {t('filters.invalid')}
-          </p>
-        ) : null}
       </>
     );
   }
@@ -251,32 +251,34 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
         clearAllLabel={t('filters.clear')}
         search={
           <>
-            <label>
-              <span className="nb-sr">{t('common.search')}</span>
-              <input
-                value={query}
-                type="search"
-                placeholder={ui('user.models.searchPlaceholder')}
-                aria-invalid={invalid}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </label>
-            <button type="submit" className="nb-btn nb-btn--secondary">
-              {t('common.search')}
-            </button>
+            <Field label={t('common.search')} error={error}>
+              {(props) => (
+                <input
+                  {...props}
+                  value={query}
+                  type="search"
+                  placeholder={ui('user.models.searchPlaceholder')}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              )}
+            </Field>
+            <Button type="submit">{t('common.search')}</Button>
           </>
         }
         secondary={
           <>
-            <label>
-              <span>{t('models.provider')}</span>
-              <input
-                value={provider}
-                placeholder={ui('user.models.providerPlaceholder')}
-                aria-invalid={invalid}
-                onChange={(event) => setProvider(event.target.value)}
-              />
-            </label>
+            <Field label={t('models.provider')}>
+              {(props) => (
+                <input
+                  {...props}
+                  value={provider}
+                  placeholder={ui('user.models.providerPlaceholder')}
+                  aria-invalid={invalid}
+                  aria-describedby={invalid ? errorId : undefined}
+                  onChange={(event) => setProvider(event.target.value)}
+                />
+              )}
+            </Field>
             {select('route_strategy', t('models.strategy'), [
               ['ordered', t('models.ordered')],
               ['random', t('models.random')],
@@ -298,11 +300,6 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
           }
         }}
       />
-      {invalid ? (
-        <p role="alert" className="field-error">
-          {t('filters.invalid')}
-        </p>
-      ) : null}
     </>
   );
 }
@@ -314,9 +311,9 @@ export function FilteredResourceEmpty({ control }: { control: ResourceFilterCont
       title={t('filters.empty')}
       body={t('filters.emptyBody')}
       action={
-        <button type="button" className="nb-btn nb-btn--secondary" onClick={control.clear}>
+        <Button type="button" onClick={control.clear}>
           {t('filters.clear')}
-        </button>
+        </Button>
       }
     />
   );

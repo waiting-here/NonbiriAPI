@@ -604,8 +604,20 @@
   margin: var(--nb-space-3) 0 0;
   font-size: var(--nb-font-size-sm);
 }
-.gacha-section-heading > p {
+.gacha-section-heading .gacha-collection-progress {
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.gacha-collection-summary {
+  display: grid;
+  min-width: 0;
+  max-width: 24rem;
+  gap: var(--nb-space-2);
+}
+.gacha-collection-summary .gacha-collection-progress-note {
+  margin: 0;
+  color: var(--g-muted);
+  font-size: var(--nb-font-size-sm);
 }
 .gacha-section-heading strong {
   color: var(--g-ink);
@@ -1599,6 +1611,10 @@
   .gacha-home-bottom .nb-btn {
     width: 100%;
   }
+  .gacha-home-bottom .gacha-collection-summary {
+    width: 100%;
+    max-width: none;
+  }
   .gacha-footer {
     margin-inline: var(--nb-space-4);
     line-height: 1.7;
@@ -1617,7 +1633,7 @@
   .gacha-section-heading h2 {
     font-size: var(--nb-font-size-lg);
   }
-  .gacha-section-heading > p {
+  .gacha-section-heading .gacha-collection-progress {
     margin-top: 0;
   }
   .gacha-catalog {

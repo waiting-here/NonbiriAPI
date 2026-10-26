@@ -3,12 +3,92 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { GachaApp } from './GachaApp';
 import { Shop } from './Shop';
 import { themes } from './catalog';
+import { ArtworkPolicyProvider } from '@shared/artwork/policy';
 import { gachaSnapshot } from '../../../../test/fixtures/gacha';
 import type { GachaPort, Outcome, Snapshot } from './types';
 
 function snapshot(): Snapshot {
   return { ...gachaSnapshot(), visible_themes: themes.map((theme) => theme.id) };
 }
+
+it.each([
+  ['never offered', ['g'], ['g-chatgpt'], false, 1, 5],
+  ['previously offered', ['g', 'i'], ['i-chatgpt'], false, 1, 10],
+  ['owned limited theme', ['g', 'l'], ['l-chatgpt'], false, 1, 6],
+  ['rated artwork hidden', ['g', 's'], ['g-chatgpt', 's-chatgpt'], true, 1, 5],
+  ['rated artwork allowed', ['g', 's'], ['g-chatgpt', 's-chatgpt'], false, 2, 7],
+] as const)(
+  'uses the same collection progress on the home and atlas pages: %s',
+  async (name, visibleThemes, owned, disabled, collected, total) => {
+    const state = gachaSnapshot();
+    state.visible_themes = [...visibleThemes];
+    for (const id of owned) state.owned[id] = { at: state.server_time, source: 'draw' };
+    const port: GachaPort = {
+      scope: 'collection-progress:' + name,
+      load: async () => state,
+      act: async () => ({ snapshot: state }),
+      history: async () => ({ items: [] }),
+    };
+    const view = render(
+      <ArtworkPolicyProvider disabled={disabled}>
+        <GachaApp port={port} english />
+      </ArtworkPolicyProvider>,
+    );
+    const open = await screen.findByRole('button', { name: /Open your collection/ });
+    expect(within(open).getByText(`${collected} / ${total}`, { exact: true })).toBeVisible();
+    fireEvent.click(open);
+    expect(view.container.querySelector('.gacha-section-heading')).toHaveTextContent(
+      `${collected} / ${total} collected`,
+    );
+  },
+);
+
+it.each([false, true])(
+  'updates collection progress when artwork policy changes and retains restricted placeholders, English=%s',
+  async (english) => {
+    const state = gachaSnapshot();
+    state.visible_themes = ['g', 's'];
+    for (const id of ['g-chatgpt', 's-chatgpt'])
+      state.owned[id] = { at: state.server_time, source: 'draw' };
+    const port: GachaPort = {
+      scope: 'collection-policy:' + english,
+      load: async () => state,
+      act: async () => ({ snapshot: state }),
+      history: async () => ({ items: [] }),
+    };
+    const tree = (disabled: boolean) => (
+      <ArtworkPolicyProvider disabled={disabled}>
+        <GachaApp port={port} english={english} />
+      </ArtworkPolicyProvider>
+    );
+    const view = render(tree(false));
+    const label = english ? /Open your collection/ : /翻开收藏册/;
+    const note = english
+      ? 'Restricted cards are not included in collection progress.'
+      : '未开放的分级卡牌不计入收藏进度。';
+    expect(
+      within(await screen.findByRole('button', { name: label })).getByText('2 / 7'),
+    ).toBeVisible();
+    expect(screen.queryByText(note)).not.toBeInTheDocument();
+    view.rerender(tree(true));
+    const open = screen.getByRole('button', { name: label });
+    expect(within(open).getByText('1 / 5')).toBeVisible();
+    expect(screen.getByText(note)).toBeVisible();
+    fireEvent.click(open);
+    expect(view.container.querySelector('.gacha-collection-progress')).toHaveTextContent('1 / 5');
+    expect(view.container.querySelectorAll('.gacha-catalog .gacha-card')).toHaveLength(7);
+    expect(view.container.querySelectorAll('.gacha-catalog .nb-artwork-placeholder')).toHaveLength(
+      2,
+    );
+    expect(screen.getByText(note)).toBeVisible();
+    view.rerender(tree(false));
+    expect(view.container.querySelector('.gacha-collection-progress')).toHaveTextContent('2 / 7');
+    expect(screen.queryByText(note)).not.toBeInTheDocument();
+    expect(view.container.querySelectorAll('.gacha-catalog .nb-artwork-placeholder')).toHaveLength(
+      0,
+    );
+  },
+);
 
 it.each([
   ['-1', '10000', '10000', '10,000 游戏积分 + 0 通用积分', true, false],

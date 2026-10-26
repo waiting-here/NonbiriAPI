@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Toggle, Fold } from '@shared/components/ui';
+import { Toggle, Fold, Field } from '@shared/components/ui';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState } from '@shared/components/States';
@@ -140,17 +140,19 @@ function RankingPanel({
       )}
       <div className="rank-actions">
         {board === 'bidding' || board === 'blackjack' ? (
-          <label>
-            {text('ranking.period')}
-            <select
-              value={window}
-              onChange={(event) => setWindow(event.target.value as RankWindow)}
-            >
-              <option value="7d">{text('ranking.rolling7Days')}</option>
-              <option value="30d">{text('ranking.rolling30Days')}</option>
-              <option value="history">{text('ranking.allTime')}</option>
-            </select>
-          </label>
+          <Field label={text('ranking.period')}>
+            {(props) => (
+              <select
+                {...props}
+                value={window}
+                onChange={(event) => setWindow(event.target.value as RankWindow)}
+              >
+                <option value="7d">{text('ranking.rolling7Days')}</option>
+                <option value="30d">{text('ranking.rolling30Days')}</option>
+                <option value="history">{text('ranking.allTime')}</option>
+              </select>
+            )}
+          </Field>
         ) : null}
         <button
           type="button"

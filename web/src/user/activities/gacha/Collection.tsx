@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArtworkImage, ArtworkBadge, ArtworkUnavailable } from '@shared/artwork/ArtworkImage';
+import { useArtworkPolicy } from '@shared/artwork/context';
 import { MomentPicker } from '../../appearance/MomentPicker';
 import { useOptionalAppearance } from '../../appearance/context';
 import { Button } from '@shared/components/ui/Button';
@@ -10,6 +11,7 @@ import { Icon } from '@shared/components/Icon';
 import { ExactCredits } from '../../features/core/components';
 import { CardTile } from './CardTile';
 import { cards, characters, displayRarities, themes } from './catalog';
+import { collectionProgress } from './collection-progress';
 import type { Action, Card, Snapshot, Theme } from './types';
 
 export function Collection({
@@ -29,6 +31,8 @@ export function Collection({
 }) {
   const t = (zh: string, en: string) => (english ? en : zh);
   const appearance = useOptionalAppearance();
+  const artwork = useArtworkPolicy();
+  const progress = collectionProgress(state, artwork.allowed);
   const [view, setView] = useState<'cards' | 'themes' | 'moments'>('cards');
   const [search, setSearch] = useState(''),
     [character, setCharacter] = useState(''),
@@ -50,10 +54,19 @@ export function Collection({
           <span className="gacha-eyebrow">THE MEMORY ATLAS</span>
           <h2>{t('每一次相遇，都值得珍藏', 'Every encounter is worth keeping')}</h2>
         </div>
-        <p>
-          <strong>{Object.keys(state.owned).length}</strong> / {visibleCards.length}{' '}
-          {t('已收集', 'collected')}
-        </p>
+        <div className="gacha-collection-summary">
+          <p className="gacha-collection-progress">
+            <strong>{progress.collected}</strong> / {progress.total} {t('已收集', 'collected')}
+          </p>
+          {progress.restricted && (
+            <p className="gacha-collection-progress-note">
+              {t(
+                '未开放的分级卡牌不计入收藏进度。',
+                'Restricted cards are not included in collection progress.',
+              )}
+            </p>
+          )}
+        </div>
       </div>
       <Tabs
         label={t('图鉴视图', 'Collection view')}
