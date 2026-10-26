@@ -1,0 +1,53 @@
+.gacha-pool-entry--rated > .gacha-pool-entry__toggle {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--nb-color-surface-muted);
+  color: var(--nb-color-text);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.gacha-pool-entry__toggle[aria-pressed='false']:not(:disabled) > img {
+  filter: blur(1.25rem);
+  transform: scale(1.1);
+}
+
+.gacha-pool-entry__toggle:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.gacha-pool-entry__hint {
+  position: absolute;
+  inset: auto var(--nb-space-3) var(--nb-space-3);
+  padding: var(--nb-space-2) var(--nb-space-3);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface);
+  color: var(--nb-color-text);
+  font-size: var(--nb-font-size-sm);
+  font-weight: var(--nb-font-weight-semibold);
+  line-height: var(--nb-line-normal);
+  text-align: center;
+  pointer-events: none;
+}
+
+.gacha-pool-entry__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.gacha-pool-entry__toggle:focus-visible,
+.gacha-pool-entry__link:focus-visible {
+  outline: 3px solid var(--nb-color-accent);
+  outline-offset: -3px;
+}
+
+.gacha-pool-entry__link:hover .limited-entry__action {
+  text-decoration: underline;
+}
