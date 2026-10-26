@@ -290,13 +290,10 @@ func (s *Service) draw(ctx context.Context, tx *sql.Tx, user, at int64, id strin
 	if err = savePity(ctx, tx, user, pool.Group, pity); err != nil {
 		return nil, Rules{}, nil, err
 	}
-	roster := []string{}
-	for _, card := range catalog.Cards {
-		if card.Source == "permanent" {
-			roster = append(roster, card.ID)
-		}
+	roster := poolRoster(pool)
+	if err := recordDrawStatisticsTx(ctx, tx, user, pool, result, roster); err != nil {
+		return nil, Rules{}, nil, err
 	}
-	roster = append(roster, pool.Featured...)
 	return result, pool.Rules, roster, nil
 }
 func purchase(ctx context.Context, tx *sql.Tx, user, at int64, id string, input Action, shop ShopSettings, p *profile) error {

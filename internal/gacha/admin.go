@@ -232,6 +232,14 @@ func (s *Service) AdminSave(ctx context.Context, actor int64, key string, input 
 			return out, e
 		} else if input.ExpectedRevision != 0 {
 			return out, ErrConflict
+		} else {
+			var recorded bool
+			if err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM gacha_pool_statistics WHERE pool_id=?)", pool.ID).Scan(&recorded); err != nil {
+				return out, err
+			}
+			if recorded {
+				return out, ErrConflict
+			}
 		}
 		if err = s.checkCoverSelection(ctx, tx, pool.Cover, previousCover); err != nil {
 			return out, err
@@ -239,6 +247,9 @@ func (s *Service) AdminSave(ctx context.Context, actor int64, key string, input 
 		pool.Revision = revision
 		_, err = tx.ExecContext(ctx, `INSERT INTO gacha_pools(id,config,revision,created_at) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET config=excluded.config,revision=excluded.revision`,
 			pool.ID, jsonText(pool), revision, at)
+		if err == nil {
+			err = saveStatisticsPoolTx(ctx, tx, pool, poolRoster(pool))
+		}
 		target = pool.ID
 		stored = pool
 	case "preset":
