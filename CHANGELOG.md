@@ -4,6 +4,30 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.2.2 — Unreleased
+
+### Fixed and improved
+
+- Keep search and filter controls aligned across both stations, including
+  donation review and the card collection. Closed mobile administrator menus
+  no longer leave invisible navigation links in the keyboard focus order.
+- Correct tea pouring, saucer support, writing and sealing tables, travel seats
+  and puddle contact in seven N/R/SR portraits and their image derivatives.
+- Make permanent SSR cards exchangeable without an open limited pool. Unify
+  ticket-offer quantities, prices, remaining limits and success messages.
+- Distinguish unavailable model resources from unsupported request features,
+  and return safe field, reason and next-step guidance in API errors and logs.
+  Historical missing reasons remain explicitly unknown.
+- Reduce work in the recent single-fish leaderboard by selecting each user's
+  best eligible catch through the existing expiry index before ranking users.
+  Ranking, time windows and privacy rules remain unchanged.
+
+### Compatibility
+
+- Storage remains schema 39 and account export remains format 30. Duplicate
+  cards from redemption codes and site-wide rewards continue to grant one
+  matching shard per duplicate; duplicate SP cards grant SSR shards.
+
 ## 1.2.1 — 2026-10-26
 
 ### Added

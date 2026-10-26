@@ -114,8 +114,8 @@ bounded request-time data, not persistent file or conversation resources.
 The public model API adds no WebSocket/Realtime store, background job or batch resource.
 
 Safe `rejection_detail:{field,reason,suggestion?}` contains server-authored
-validation facts and fixed corrective guidance, never submitted values, prompts
-or secrets. It is available in the caller's own request logs and authorized
+validation or resource-availability facts and fixed corrective guidance, never
+submitted values, prompts or secrets. It is available in the caller's own request logs and authorized
 management list/detail/JSON/CSV views. It follows the request root's existing
 retention, deletion and display-privacy rules, without creating another history
 table or exposing raw upstream diagnostics. Missing historical causes remain
