@@ -1,5 +1,6 @@
 .charity-source-browser {
   min-width: 0;
+  container: charity-source / inline-size;
 }
 
 .charity-source-browser__header,
@@ -35,10 +36,16 @@
 
 .charity-source-browser__columns {
   display: grid;
-  grid-template-columns: minmax(15rem, 0.8fr) minmax(0, 1.5fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--nb-space-5);
   min-width: 0;
   margin-top: var(--nb-space-5);
+}
+.charity-source-browser__columns.has-selection {
+  grid-template-columns: minmax(20rem, 0.8fr) minmax(0, 1.5fr);
+}
+.charity-source-browser__columns:not(.has-selection) .charity-source-browser__keys {
+  display: none;
 }
 
 .charity-source-browser__sources,
@@ -212,8 +219,18 @@
   margin: 0;
 }
 
+@container charity-source (width < 48rem) {
+  .charity-source-browser__columns.has-selection {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .charity-source-browser__columns.has-selection .charity-source-browser__sources {
+    display: none;
+  }
+}
+
 @media (width <= 48rem) {
-  .charity-source-browser__columns {
+  .charity-source-browser__columns.has-selection {
     grid-template-columns: minmax(0, 1fr);
   }
 

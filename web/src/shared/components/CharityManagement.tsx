@@ -1684,11 +1684,7 @@ function DonationsPanel({
     );
   }
   return (
-    <div
-      className={`charity-donations${selected && !binding ? ' nb-md' : ''}`}
-      ref={listRef}
-      tabIndex={-1}
-    >
+    <div className="charity-donations" ref={listRef} tabIndex={-1}>
       {receipt ? (
         <Note tone="ok">
           {t('common.pendingReviews.saved', { status: t(charityStatusKey(role, receipt.status)) })}
@@ -1720,446 +1716,433 @@ function DonationsPanel({
           }
         />
       ) : null}
-      <div className="charity-donations__list" hidden={binding}>
-        <Card>
-          <div className="charity-donation-toolbar">
-            <FilterBar
-              secondaryLabel={t('common.filter')}
-              activeCount={[handling, status, query, userID, discordID].filter(Boolean).length}
-              search={
-                <div className="charity-donation-search">
-                  {' '}
-                  <label>
-                    <span>{t('common.donationHandling.search')}</span>
-                    <input
-                      type="search"
-                      placeholder={t('common.donationHandling.searchPlaceholder')}
-                      value={queryDraft}
-                      aria-invalid={!validManagementSearch(queryDraft)}
-                      onChange={(event) => setQueryDraft(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' && queryValid) {
-                          event.preventDefault();
-                          updateFilters(handling, queryDraft, status, userDraft, discordDraft);
-                        }
-                      }}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="nb-btn nb-btn--secondary"
-                    disabled={!queryValid}
-                    onClick={() =>
-                      updateFilters(handling, queryDraft, status, userDraft, discordDraft)
-                    }
-                  >
-                    {t('common.donationHandling.applySearch')}
-                  </button>
-                  {!validManagementSearch(queryDraft) ? (
-                    <p className="field-error" role="alert">
-                      {t('common.donationHandling.searchInvalid')}
-                    </p>
-                  ) : null}
-                </div>
-              }
-              secondary={
-                <>
-                  <Field
-                    label={t('common.donationHistory.userId')}
-                    help={t('common.donationHistory.exactId')}
-                    error={
-                      validDonorFilters(userDraft, '')
-                        ? undefined
-                        : t('common.donationHistory.invalidId')
-                    }
-                  >
-                    {(field) => (
-                      <input
-                        {...field}
-                        inputMode="numeric"
-                        placeholder={t('common.donationHistory.userIdPlaceholder')}
-                        value={userDraft}
-                        onChange={(event) =>
-                          setDonorDraft({
-                            userID,
-                            discordID,
-                            user: event.target.value.trim(),
-                            discord: discordDraft,
-                          })
-                        }
-                      />
-                    )}
-                  </Field>
-                  <Field
-                    label="Discord ID"
-                    help={t('common.donationHistory.exactId')}
-                    error={
-                      validDonorFilters('', discordDraft)
-                        ? undefined
-                        : t('common.donationHistory.invalidId')
-                    }
-                  >
-                    {(field) => (
-                      <input
-                        {...field}
-                        inputMode="numeric"
-                        placeholder={t('common.donationHistory.discordIdPlaceholder')}
-                        value={discordDraft}
-                        onChange={(event) =>
-                          setDonorDraft({
-                            userID,
-                            discordID,
-                            user: userDraft,
-                            discord: event.target.value.trim(),
-                          })
-                        }
-                      />
-                    )}
-                  </Field>
-                  <Button
-                    disabled={!queryValid}
-                    onClick={() =>
-                      updateFilters(handling, queryDraft, status, userDraft, discordDraft)
-                    }
-                  >
-                    {t('common.donationHandling.applySearch')}
-                  </Button>{' '}
-                  <label>
-                    <span>{t('common.donationHandling.filter')}</span>
-                    <select
-                      value={handling}
-                      onChange={(event) => updateFilters(event.target.value, query)}
+      <div className={`charity-donations__panes${selected && !binding ? ' nb-md' : ''}`}>
+        <div className="charity-donations__list" hidden={binding}>
+          <Card>
+            <div className="charity-donation-toolbar">
+              <FilterBar
+                secondaryLabel={t('common.filter')}
+                activeCount={[handling, status, query, userID, discordID].filter(Boolean).length}
+                search={
+                  <>
+                    <Field
+                      label={t('common.donationHandling.search')}
+                      error={
+                        validManagementSearch(queryDraft)
+                          ? undefined
+                          : t('common.donationHandling.searchInvalid')
+                      }
                     >
-                      <option value="">{t('common.donationHandling.all')}</option>
-                      {(['pending', 'processed', 'closed', 'legacy'] as const).map((state) => (
-                        <option key={state} value={state}>
-                          {t(donationHandlingStateKey[state])}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>{t(charityCopyKey(role, 'statusFilter'))}</span>
-                    <select
-                      value={status}
-                      onChange={(event) => {
-                        updateFilters(handling, query, event.target.value);
-                      }}
+                      {(field) => (
+                        <input
+                          {...field}
+                          type="search"
+                          placeholder={t('common.donationHandling.searchPlaceholder')}
+                          value={queryDraft}
+                          onChange={(event) => setQueryDraft(event.target.value)}
+                        />
+                      )}
+                    </Field>
+                    <Button type="submit" disabled={!queryValid}>
+                      {t('common.donationHandling.applySearch')}
+                    </Button>
+                  </>
+                }
+                secondary={
+                  <>
+                    <Field
+                      label={t('common.donationHistory.userId')}
+                      help={t('common.donationHistory.exactId')}
+                      error={
+                        validDonorFilters(userDraft, '')
+                          ? undefined
+                          : t('common.donationHistory.invalidId')
+                      }
                     >
-                      <option value="">{t(charityCopyKey(role, 'allStatuses'))}</option>
-                      {DONATION_DISPLAY_STATUSES.map((value) => (
-                        <option key={value} value={value}>
-                          {t(`common.connections.donationStates.${value}`)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </>
-              }
-              chips={[
-                ...[
-                  { value: userID, name: 'user', label: t('common.donationHistory.userId') },
-                  { value: discordID, name: 'discord', label: 'Discord ID' },
-                ]
-                  .filter((item) => item.value)
-                  .map((item) => ({
-                    key: item.name,
-                    label: `${item.label}: ${item.value}`,
-                    removeLabel: t('common.resetFilter'),
-                    onRemove: () =>
-                      updateFilters(
-                        handling,
-                        query,
-                        status,
-                        item.name === 'user' ? '' : userID,
-                        item.name === 'discord' ? '' : discordID,
-                      ),
-                  })),
-                ...(handling
-                  ? [
-                      {
-                        key: 'handling',
-                        label: t(
-                          donationHandlingStateKey[
-                            handling as keyof typeof donationHandlingStateKey
-                          ],
+                      {(field) => (
+                        <input
+                          {...field}
+                          inputMode="numeric"
+                          placeholder={t('common.donationHistory.userIdPlaceholder')}
+                          value={userDraft}
+                          onChange={(event) =>
+                            setDonorDraft({
+                              userID,
+                              discordID,
+                              user: event.target.value.trim(),
+                              discord: discordDraft,
+                            })
+                          }
+                        />
+                      )}
+                    </Field>
+                    <Field
+                      label="Discord ID"
+                      help={t('common.donationHistory.exactId')}
+                      error={
+                        validDonorFilters('', discordDraft)
+                          ? undefined
+                          : t('common.donationHistory.invalidId')
+                      }
+                    >
+                      {(field) => (
+                        <input
+                          {...field}
+                          inputMode="numeric"
+                          placeholder={t('common.donationHistory.discordIdPlaceholder')}
+                          value={discordDraft}
+                          onChange={(event) =>
+                            setDonorDraft({
+                              userID,
+                              discordID,
+                              user: userDraft,
+                              discord: event.target.value.trim(),
+                            })
+                          }
+                        />
+                      )}
+                    </Field>
+                    <Field label={t('common.donationHandling.filter')}>
+                      {(field) => (
+                        <select
+                          {...field}
+                          value={handling}
+                          onChange={(event) => updateFilters(event.target.value, query)}
+                        >
+                          <option value="">{t('common.donationHandling.all')}</option>
+                          {(['pending', 'processed', 'closed', 'legacy'] as const).map((state) => (
+                            <option key={state} value={state}>
+                              {t(donationHandlingStateKey[state])}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </Field>
+                    <Field label={t(charityCopyKey(role, 'statusFilter'))}>
+                      {(field) => (
+                        <select
+                          {...field}
+                          value={status}
+                          onChange={(event) => {
+                            updateFilters(handling, query, event.target.value);
+                          }}
+                        >
+                          <option value="">{t(charityCopyKey(role, 'allStatuses'))}</option>
+                          {DONATION_DISPLAY_STATUSES.map((value) => (
+                            <option key={value} value={value}>
+                              {t(`common.connections.donationStates.${value}`)}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </Field>
+                  </>
+                }
+                chips={[
+                  ...[
+                    { value: userID, name: 'user', label: t('common.donationHistory.userId') },
+                    { value: discordID, name: 'discord', label: 'Discord ID' },
+                  ]
+                    .filter((item) => item.value)
+                    .map((item) => ({
+                      key: item.name,
+                      label: `${item.label}: ${item.value}`,
+                      removeLabel: t('common.resetFilter'),
+                      onRemove: () =>
+                        updateFilters(
+                          handling,
+                          query,
+                          status,
+                          item.name === 'user' ? '' : userID,
+                          item.name === 'discord' ? '' : discordID,
                         ),
-                        onRemove: () => updateFilters('', query, status),
-                        removeLabel: t('common.resetFilter'),
-                      },
-                    ]
-                  : []),
-                ...(status
-                  ? [
-                      {
-                        key: 'status',
-                        label: t(`common.connections.donationStates.${status}`),
-                        onRemove: () => updateFilters(handling, query, ''),
-                        removeLabel: t('common.resetFilter'),
-                      },
-                    ]
-                  : []),
-                ...(query
-                  ? [
-                      {
-                        key: 'query',
-                        label: query,
-                        onRemove: () => updateFilters(handling, '', status),
-                        removeLabel: t('common.resetFilter'),
-                      },
-                    ]
-                  : []),
-              ]}
-              onClearAll={() => {
-                setQueryDraft('');
-                setDonorDraft({ userID: '', discordID: '', user: '', discord: '' });
-                updateFilters('', '', '', '', '');
-              }}
-              clearAllLabel={t('common.resetFilter')}
-              onSubmit={() => {
-                if (queryValid)
-                  updateFilters(handling, queryDraft, status, userDraft, discordDraft);
-              }}
-            />
-            <div className="charity-batch-menu">
-              <span>
-                {t('common.operations.charity.batchActions', { defaultValue: 'Batch actions' })}
-              </span>
-              <MoreMenu
-                label={t('common.operations.charity.batchActions', {
-                  defaultValue: 'Batch actions',
-                })}
-                items={[
-                  {
-                    label: t('common.operations.charity.batchDiscovery', {
-                      defaultValue: 'Discover all donations',
-                    }),
-                    onSelect: () => setBatch('discovery'),
-                  },
-                  {
-                    label: t('common.operations.charity.batchFailureReset', {
-                      defaultValue: 'Reset failure streaks',
-                    }),
-                    disabled: !list.data || list.isFetching || Boolean(list.error),
-                    onSelect: () => {
-                      setBatch('reset');
-                      const details = resetBatchRef.current?.querySelector('details');
-                      if (details) details.open = true;
-                    },
-                  },
+                    })),
+                  ...(handling
+                    ? [
+                        {
+                          key: 'handling',
+                          label: t(
+                            donationHandlingStateKey[
+                              handling as keyof typeof donationHandlingStateKey
+                            ],
+                          ),
+                          onRemove: () => updateFilters('', query, status),
+                          removeLabel: t('common.resetFilter'),
+                        },
+                      ]
+                    : []),
+                  ...(status
+                    ? [
+                        {
+                          key: 'status',
+                          label: t(`common.connections.donationStates.${status}`),
+                          onRemove: () => updateFilters(handling, query, ''),
+                          removeLabel: t('common.resetFilter'),
+                        },
+                      ]
+                    : []),
+                  ...(query
+                    ? [
+                        {
+                          key: 'query',
+                          label: query,
+                          onRemove: () => updateFilters(handling, '', status),
+                          removeLabel: t('common.resetFilter'),
+                        },
+                      ]
+                    : []),
                 ]}
+                onClearAll={() => {
+                  setQueryDraft('');
+                  setDonorDraft({ userID: '', discordID: '', user: '', discord: '' });
+                  updateFilters('', '', '', '', '');
+                }}
+                clearAllLabel={t('common.resetFilter')}
+                onSubmit={() => {
+                  if (queryValid)
+                    updateFilters(handling, queryDraft, status, userDraft, discordDraft);
+                }}
+              />
+              <div className="charity-batch-menu">
+                <span>
+                  {t('common.operations.charity.batchActions', { defaultValue: 'Batch actions' })}
+                </span>
+                <MoreMenu
+                  label={t('common.operations.charity.batchActions', {
+                    defaultValue: 'Batch actions',
+                  })}
+                  items={[
+                    {
+                      label: t('common.operations.charity.batchDiscovery', {
+                        defaultValue: 'Discover all donations',
+                      }),
+                      onSelect: () => setBatch('discovery'),
+                    },
+                    {
+                      label: t('common.operations.charity.batchFailureReset', {
+                        defaultValue: 'Reset failure streaks',
+                      }),
+                      disabled: !list.data || list.isFetching || Boolean(list.error),
+                      onSelect: () => {
+                        setBatch('reset');
+                        const details = resetBatchRef.current?.querySelector('details');
+                        if (details) details.open = true;
+                      },
+                    },
+                  ]}
+                />
+              </div>
+            </div>
+            <div hidden={batch !== 'discovery'} className="charity-batch-section">
+              <DonationDiscoveryControl
+                key={`discovery-all:${role}:${accountId}`}
+                role={role}
+                target={{ donation_id: null }}
+                onCapabilityLoss={onCapabilityLoss}
               />
             </div>
-          </div>
-          <div hidden={batch !== 'discovery'} className="charity-batch-section">
-            <DonationDiscoveryControl
-              key={`discovery-all:${role}:${accountId}`}
-              role={role}
-              target={{ donation_id: null }}
-              onCapabilityLoss={onCapabilityLoss}
-            />
-          </div>
-          <div hidden={batch !== 'reset'} ref={resetBatchRef} className="charity-batch-section">
-            {list.data ? (
-              <FailureResetControl
-                key={`${role}:${accountId}:${status}:${handling}:${query}:${userID}:${discordID}`}
-                role={role}
-                selection={{
-                  view: 'donations',
-                  ...({
-                    review_status: status,
-                    handling,
-                    q: query,
-                    ...(userID ? { user_id: userID } : {}),
-                    ...(discordID ? { discord_id: discordID } : {}),
-                  } as ManagedDonationPageFilters),
-                }}
-                disabled={list.isFetching || Boolean(list.error)}
-                onCapabilityLoss={onCapabilityLoss}
-                choices={list.data.data.map((item) => ({
-                  id: item.id,
-                  label: item.description || t('common.operations.charity.noDescription'),
-                  target: { view: 'donation_keys', donation_id: item.id },
-                }))}
+            <div hidden={batch !== 'reset'} ref={resetBatchRef} className="charity-batch-section">
+              {list.data ? (
+                <FailureResetControl
+                  key={`${role}:${accountId}:${status}:${handling}:${query}:${userID}:${discordID}`}
+                  role={role}
+                  selection={{
+                    view: 'donations',
+                    ...({
+                      review_status: status,
+                      handling,
+                      q: query,
+                      ...(userID ? { user_id: userID } : {}),
+                      ...(discordID ? { discord_id: discordID } : {}),
+                    } as ManagedDonationPageFilters),
+                  }}
+                  disabled={list.isFetching || Boolean(list.error)}
+                  onCapabilityLoss={onCapabilityLoss}
+                  choices={list.data.data.map((item) => ({
+                    id: item.id,
+                    label: item.description || t('common.operations.charity.noDescription'),
+                    target: { view: 'donation_keys', donation_id: item.id },
+                  }))}
+                />
+              ) : null}
+            </div>
+            {batch ? (
+              <button type="button" className="nb-btn nb-btn--ghost" onClick={() => setBatch(null)}>
+                {t('common.close')}
+              </button>
+            ) : null}
+            {list.isPending ? (
+              <LoadingState />
+            ) : list.error ? (
+              <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+            ) : list.data.data.length === 0 ? (
+              <EmptyState
+                title={t(charityCopyKey(role, 'noDonations'))}
+                body={t(charityCopyKey(role, 'noDonationsBody'))}
+              />
+            ) : (
+              <>
+                <DataTable
+                  caption={t(charityCopyKey(role, 'donationsTitle'))}
+                  rows={list.data.data}
+                  rowKey={(item) => item.id}
+                  selectedKey={selected}
+                  columns={[
+                    {
+                      key: 'description',
+                      header: t('common.operations.charity.description'),
+                      cell: 'title',
+                      render: (item) => (
+                        <div className="charity-donation-summary">
+                          <span className="charity-donation-description">
+                            {item.description || t('common.operations.charity.noDescription')}
+                          </span>
+                          <small
+                            className="charity-donation-meta"
+                            title={[
+                              item.id,
+                              ...item.sources.map(
+                                (source) =>
+                                  `${source.kind === 'mainstream' ? `${source.name} · ` : ''}${source.base_url}`,
+                              ),
+                            ].join(' · ')}
+                          >
+                            {t('common.itemId', { id: item.id })} ·{' '}
+                            {item.sources[0] ? safeSourceLabel(item.sources[0], t) : '—'}
+                            {BigInt(item.source_count) > 1n
+                              ? ' · ' +
+                                t('common.operations.charity.sourcePreview', {
+                                  shown: Math.min(1, item.sources.length),
+                                  total: item.source_count,
+                                })
+                              : ''}
+                          </small>
+                        </div>
+                      ),
+                    },
+                    {
+                      key: 'owner',
+                      header: t('common.operations.charity.owner'),
+                      mobileLabel: t('common.operations.charity.owner'),
+                      cell: 'meta',
+                      render: (item) =>
+                        item.owner?.display_name ?? t('common.operations.charity.deidentified'),
+                    },
+                    {
+                      key: 'status',
+                      header: t('common.status'),
+                      cell: 'status',
+                      render: (item) => (
+                        <div>
+                          <DonationStatusBadge status={item.status} summary={item.use_summary} />
+                        </div>
+                      ),
+                    },
+                    {
+                      key: 'handling',
+                      header: t('common.donationHandling.title'),
+                      mobileLabel: t('common.donationHandling.title'),
+                      cell: 'meta',
+                      render: (item) => <DonationHandlingStatus handling={item.handling} />,
+                    },
+                    {
+                      key: 'keys',
+                      header: t('common.operations.charity.keys'),
+                      mobileLabel: t('common.operations.charity.keys'),
+                      cell: 'meta',
+                      render: (item) => (
+                        <>
+                          {item.key_count}
+                          <small className="charity-available-count">
+                            {t(charityStateKey('available'))}: {item.state_counts.available}
+                          </small>
+                        </>
+                      ),
+                    },
+                    {
+                      key: 'actions',
+                      header: t('common.operations.charity.open'),
+                      cell: 'action',
+                      render: (item) => (
+                        <button
+                          type="button"
+                          className="nb-btn nb-btn--secondary ops-row-action"
+                          disabled={list.isFetching}
+                          onClick={() => setSelected(item.id)}
+                        >
+                          {t('common.operations.charity.openReview')}
+                        </button>
+                      ),
+                    },
+                  ]}
+                />
+              </>
+            )}
+            {list.data && !list.error ? (
+              <PagePagination
+                metadata={list.data.pagination}
+                requestedPage={pager.page}
+                onPageChange={pager.setPage}
+                onPageSizeChange={pager.setPageSize}
+                busy={list.isFetching}
               />
             ) : null}
-          </div>
-          {batch ? (
-            <button type="button" className="nb-btn nb-btn--ghost" onClick={() => setBatch(null)}>
-              {t('common.close')}
-            </button>
-          ) : null}
-          {list.isPending ? (
-            <LoadingState />
-          ) : list.error ? (
-            <ErrorState error={list.error} onRetry={() => void list.refetch()} />
-          ) : list.data.data.length === 0 ? (
-            <EmptyState
-              title={t(charityCopyKey(role, 'noDonations'))}
-              body={t(charityCopyKey(role, 'noDonationsBody'))}
-            />
-          ) : (
-            <>
-              <DataTable
-                caption={t(charityCopyKey(role, 'donationsTitle'))}
-                rows={list.data.data}
-                rowKey={(item) => item.id}
-                selectedKey={selected}
-                columns={[
-                  {
-                    key: 'description',
-                    header: t('common.operations.charity.description'),
-                    cell: 'title',
-                    render: (item) => (
-                      <div className="charity-donation-summary">
-                        <span className="charity-donation-description">
-                          {item.description || t('common.operations.charity.noDescription')}
-                        </span>
-                        <small
-                          className="charity-donation-meta"
-                          title={[
-                            item.id,
-                            ...item.sources.map(
-                              (source) =>
-                                `${source.kind === 'mainstream' ? `${source.name} · ` : ''}${source.base_url}`,
-                            ),
-                          ].join(' · ')}
-                        >
-                          {t('common.itemId', { id: item.id })} ·{' '}
-                          {item.sources[0] ? safeSourceLabel(item.sources[0], t) : '—'}
-                          {BigInt(item.source_count) > 1n
-                            ? ' · ' +
-                              t('common.operations.charity.sourcePreview', {
-                                shown: Math.min(1, item.sources.length),
-                                total: item.source_count,
-                              })
-                            : ''}
-                        </small>
-                      </div>
-                    ),
-                  },
-                  {
-                    key: 'owner',
-                    header: t('common.operations.charity.owner'),
-                    mobileLabel: t('common.operations.charity.owner'),
-                    cell: 'meta',
-                    render: (item) =>
-                      item.owner?.display_name ?? t('common.operations.charity.deidentified'),
-                  },
-                  {
-                    key: 'status',
-                    header: t('common.status'),
-                    cell: 'status',
-                    render: (item) => (
-                      <div>
-                        <DonationStatusBadge status={item.status} summary={item.use_summary} />
-                      </div>
-                    ),
-                  },
-                  {
-                    key: 'handling',
-                    header: t('common.donationHandling.title'),
-                    mobileLabel: t('common.donationHandling.title'),
-                    cell: 'meta',
-                    render: (item) => <DonationHandlingStatus handling={item.handling} />,
-                  },
-                  {
-                    key: 'keys',
-                    header: t('common.operations.charity.keys'),
-                    mobileLabel: t('common.operations.charity.keys'),
-                    cell: 'meta',
-                    render: (item) => (
-                      <>
-                        {item.key_count}
-                        <small className="charity-available-count">
-                          {t(charityStateKey('available'))}: {item.state_counts.available}
-                        </small>
-                      </>
-                    ),
-                  },
-                  {
-                    key: 'actions',
-                    header: t('common.operations.charity.open'),
-                    cell: 'action',
-                    render: (item) => (
-                      <button
-                        type="button"
-                        className="nb-btn nb-btn--secondary ops-row-action"
-                        disabled={list.isFetching}
-                        onClick={() => setSelected(item.id)}
-                      >
-                        {t('common.operations.charity.openReview')}
-                      </button>
-                    ),
-                  },
-                ]}
-              />
-            </>
-          )}
-          {list.data && !list.error ? (
-            <PagePagination
-              metadata={list.data.pagination}
-              requestedPage={pager.page}
-              onPageChange={pager.setPage}
-              onPageSizeChange={pager.setPageSize}
-              busy={list.isFetching}
-            />
-          ) : null}
-        </Card>
-      </div>
-      {selected ? (
-        <div className="ops-stack ops-detail-target" ref={detailRef} tabIndex={-1}>
-          <button
-            className="nb-btn nb-btn--ghost"
-            type="button"
-            disabled={reviewPending}
-            onClick={() => setSelected('')}
-          >
-            {t(
-              oneParam(searchParams, 'donation_from') === 'models'
-                ? 'common.operations.charity.returnToModel'
-                : 'common.operations.charity.returnToList',
-            )}
-          </button>
-          {detail.isPending ? (
-            <LoadingState />
-          ) : reviewedTargetUnavailable ? (
-            <Note>{t('common.pendingReviews.noLongerPending')}</Note>
-          ) : detail.error ? (
-            <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
-          ) : (
-            <>
-              <DonationPresetApply
-                role={role}
-                accountId={accountId}
-                item={detail.data}
-                busy={detail.isFetching}
-                onCapabilityLoss={onCapabilityLoss}
-              />
-              <DonationDetail
-                key={detail.data.id}
-                item={detail.data}
-                accountId={accountId}
-                busy={detail.isFetching}
-                role={role}
-                refresh={refresh}
-                reviewRefresh={refreshReviewList}
-                onCapabilityLoss={onCapabilityLoss}
-                onPendingChange={setReviewPending}
-                onReviewed={(value) => {
-                  setReceipt(value);
-                  setUseReceipt(null);
-                  setSelected('');
-                }}
-                onUsesReviewed={(results, labels) => {
-                  setReceipt(null);
-                  setUseReceipt({ donationId: selected, results, labels });
-                }}
-              />
-            </>
-          )}
+          </Card>
         </div>
-      ) : null}
+        {selected ? (
+          <div className="ops-stack ops-detail-target" ref={detailRef} tabIndex={-1}>
+            <button
+              className="nb-btn nb-btn--ghost"
+              type="button"
+              disabled={reviewPending}
+              onClick={() => setSelected('')}
+            >
+              {t(
+                oneParam(searchParams, 'donation_from') === 'models'
+                  ? 'common.operations.charity.returnToModel'
+                  : 'common.operations.charity.returnToList',
+              )}
+            </button>
+            {detail.isPending ? (
+              <LoadingState />
+            ) : reviewedTargetUnavailable ? (
+              <Note>{t('common.pendingReviews.noLongerPending')}</Note>
+            ) : detail.error ? (
+              <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
+            ) : (
+              <>
+                <DonationPresetApply
+                  role={role}
+                  accountId={accountId}
+                  item={detail.data}
+                  busy={detail.isFetching}
+                  onCapabilityLoss={onCapabilityLoss}
+                />
+                <DonationDetail
+                  key={detail.data.id}
+                  item={detail.data}
+                  accountId={accountId}
+                  busy={detail.isFetching}
+                  role={role}
+                  refresh={refresh}
+                  reviewRefresh={refreshReviewList}
+                  onCapabilityLoss={onCapabilityLoss}
+                  onPendingChange={setReviewPending}
+                  onReviewed={(value) => {
+                    setReceipt(value);
+                    setUseReceipt(null);
+                    setSelected('');
+                  }}
+                  onUsesReviewed={(results, labels) => {
+                    setReceipt(null);
+                    setUseReceipt({ donationId: selected, results, labels });
+                  }}
+                />
+              </>
+            )}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
