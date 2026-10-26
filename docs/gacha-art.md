@@ -45,6 +45,8 @@ Create the character-free theme background first. Author transparent character f
 
 Inspect transparent corrections on light and dark neutral backgrounds and on the actual scene. Check corners, finger gaps, fine hair and translucent fabric for unwanted opacity, dark haze, patch seams and duplicated outlines. A transparent preview alone does not establish clean alpha. Keep accepted and rejected revisions distinct so a later export cannot restore an earlier defect.
 
+Keep the objects that make an action coherent in the same registered foreground: a receiving cup beneath a pouring teapot, a supported saucer, a table beneath writing or sealing, a seat beneath a seated figure, and water contact beneath a fingertip. Verify these relationships in the complete scene, small previews and independent character views. Prop corrections must reach standard and high-resolution cards, thumbnails and foreground layers together.
+
 Existing N/R/SR cards use separate theme backgrounds and character layers. Existing group illustrations and covers retain their original cast compositions as registered foreground layers. Existing SSR/SP character, eyelid and scene layers remain reusable. The asset composition manifest records the inputs and placement. Keep the former flattened masters in the local archive.
 
 SSR card backgrounds stay static while their characters animate. SP also requires coordinated background animation and the complete dedicated site appearance. Heartfelt moments uses a static theme background for every selected card, including SP, and only animates SSR/SP characters.
