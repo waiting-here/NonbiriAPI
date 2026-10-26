@@ -83,11 +83,10 @@ export function Shop({
       ticket: 'limited' as const,
     },
   ];
-  const redeem = (product: string) =>
-    act(
-      { action: 'redeem', product, revision: s.revision },
-      t('兑换成功，已放入你的收藏', 'Exchange complete'),
-    );
+  const redeem = (
+    product: string,
+    message = t('兑换成功，抽奖券已到账', 'Exchange complete. Tickets added.'),
+  ) => act({ action: 'redeem', product, revision: s.revision }, message);
   const limited = new Set(
     state.pools.filter((p) => poolOpen(p, state.server_time)).flatMap((p) => p.featured),
   );
@@ -134,18 +133,22 @@ export function Shop({
               const used = state.redeemed.includes(offer.id);
               const label =
                 offer.ticket === 'permanent'
-                  ? t('10张常驻抽奖券', '10 standard tickets')
-                  : t('10张限定抽奖券', '10 limited tickets');
+                  ? t('常驻抽奖券', 'Standard ticket')
+                  : t('限定抽奖券', 'Limited ticket');
               return (
                 <div className="gacha-offer" key={offer.id}>
                   <TicketIcon limited={offer.ticket === 'limited'} />
-                  <h3>{label}</h3>
-                  <p className="gacha-bulk-offer__number">
+                  <h3>
+                    {label} ×{formatCount(bulkTicketQuantity).display}
+                  </h3>
+                  <p className="gacha-offer__number">
+                    {t('需要：', 'Cost: ')}
                     {formatCredits(bulkTicketPrice)} {t('悠哉积分', 'credits')}
                   </p>
-                  <p className="gacha-bulk-offer__number">
+                  <p className="gacha-offer__number">
                     {t('今日剩余：', 'Remaining today: ')}
-                    {used ? 0 : 1}/1
+                    <br />
+                    {used ? 0 : 1}/1 {t('件', 'bundles')}
                   </p>
                   <Button
                     disabled={busy || used || bulkInsufficient}
@@ -171,7 +174,7 @@ export function Shop({
           </div>
         </PanelBody>
       </Panel>
-      <Panel>
+      <Panel aria-label={t('再一次相遇', 'One more encounter')}>
         <PanelHead
           title={t('再一次相遇', 'One more encounter')}
           description={t(
@@ -198,9 +201,9 @@ export function Shop({
         <PanelBody>
           <div className="gacha-offers">
             {ticketOffers.map((offer) => {
-              const full =
-                state.month_used[offer.ticket] + offer.quantity >
-                (offer.ticket === 'permanent' ? s.permanent_cap : s.limited_cap);
+              const cap = offer.ticket === 'permanent' ? s.permanent_cap : s.limited_cap;
+              const remaining = Math.max(0, cap - state.month_used[offer.ticket]);
+              const full = offer.quantity > remaining;
               const insufficient = state.fragments[offer.rarity] < offer.cost;
               return (
                 <div className="gacha-offer" key={offer.id}>
@@ -209,10 +212,16 @@ export function Shop({
                     {offer.ticket === 'permanent'
                       ? t('常驻抽奖券', 'Standard ticket')
                       : t('限定抽奖券', 'Limited ticket')}{' '}
-                    ×{offer.quantity}
+                    ×{formatCount(offer.quantity).display}
                   </h3>
-                  <p>
-                    {offer.cost} {offer.rarity} {t('卡牌碎片', 'shards')}
+                  <p className="gacha-offer__number">
+                    {t('需要：', 'Cost: ')}
+                    {formatCount(offer.cost).display} {offer.rarity} {t('卡牌碎片', 'shards')}
+                  </p>
+                  <p className="gacha-offer__number">
+                    {t('本月剩余：', 'Remaining this month: ')}
+                    <br />
+                    {formatCount(remaining).display}/{formatCount(cap).display} {t('张', 'tickets')}
                   </p>
                   <Button disabled={busy || full || insufficient} onClick={() => redeem(offer.id)}>
                     {full
@@ -228,6 +237,14 @@ export function Shop({
         </PanelBody>
       </Panel>
       {[
+        {
+          source: 'permanent',
+          title: t('常驻 SSR', 'Permanent SSR'),
+          sub: t(
+            '随时可兑换，每张卡牌限兑换一次。',
+            'Always available. Each card can be exchanged once.',
+          ),
+        },
         {
           source: 'shop',
           title: t('口袋应援团', 'Pocket cheer squad'),
@@ -250,7 +267,9 @@ export function Shop({
               .filter(
                 (card) =>
                   card.source === section.source &&
-                  (card.source === 'shop' || limited.has(card.id)),
+                  (card.source === 'permanent'
+                    ? card.rarity === 'SSR'
+                    : card.source === 'shop' || limited.has(card.id)),
               )
               .map((card) => {
                 const owned = !!state.owned[card.id],
@@ -293,7 +312,9 @@ export function Shop({
                     <Button
                       block
                       disabled={busy || owned || insufficient}
-                      onClick={() => redeem(card.id)}
+                      onClick={() =>
+                        redeem(card.id, t('兑换成功，已放入你的收藏', 'Added to your collection.'))
+                      }
                     >
                       {owned
                         ? t('已珍藏', 'Collected')

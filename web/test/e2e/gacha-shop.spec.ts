@@ -67,13 +67,15 @@ for (const theme of ['light', 'dark'] as const)
       await page.getByRole('tab', { name: '神秘商店', exact: true }).click();
       const shop = page.getByRole('region', { name: '量大管饱' });
       await expect(
-        shop.getByRole('heading', { name: '10张常驻抽奖券', exact: true }),
+        shop.getByRole('heading', { name: '常驻抽奖券 ×10', exact: true }),
       ).toBeVisible();
       await expect(
-        shop.getByRole('heading', { name: '10张限定抽奖券', exact: true }),
+        shop.getByRole('heading', { name: '限定抽奖券 ×10', exact: true }),
       ).toBeVisible();
-      await expect(shop.getByText('10,000 悠哉积分', { exact: true })).toHaveCount(2);
-      await expect(shop.getByText('今日剩余：1/1', { exact: true })).toHaveCount(2);
+      await expect(shop.getByText('需要：10,000 悠哉积分', { exact: true })).toHaveCount(2);
+      await expect(shop.getByText('今日剩余：1/1 件', { exact: true })).toHaveCount(2);
+      await expect(page.getByRole('heading', { name: '常驻 SSR', exact: true })).toBeVisible();
+      await expect(page.getByText('兑换需要：3 SSR 碎片', { exact: true })).toHaveCount(5);
       await shop.scrollIntoViewIfNeeded();
       if (process.env.NONBIRI_VISUAL_DIR)
         await page.screenshot({
@@ -87,7 +89,7 @@ for (const theme of ['light', 'dark'] as const)
       await expect(page.getByText('购买成功，10张抽奖券已到账', { exact: true })).toBeVisible();
       await shop.getByRole('button', { name: '购买', exact: true }).click();
       await expect(shop.getByRole('button', { name: '今日已购买', exact: true })).toHaveCount(2);
-      await expect(shop.getByText('今日剩余：0/1', { exact: true })).toHaveCount(2);
+      await expect(shop.getByText('今日剩余：0/1 件', { exact: true })).toHaveCount(2);
       expect(purchases).toEqual(['bulk-permanent', 'bulk-limited']);
       guard.assertNone();
     });
