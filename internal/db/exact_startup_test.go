@@ -44,7 +44,7 @@ func assertExactStartupRejection(t *testing.T, path string, vault *secret.Vault,
 	assertBootstrapSourcesUnchanged(t, path, before)
 }
 func TestExactStartupRejectsHistoricalAndNewerSchemasBeforeWriting(t *testing.T) {
-	for _, version := range []int{33, 34, 35, 36, CurrentSchemaVersion + 1} {
+	for _, version := range []int{33, 34, 35, 36, 37, CurrentSchemaVersion + 1} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			var path string
 			var vault *secret.Vault
@@ -64,8 +64,11 @@ func TestExactStartupRejectsHistoricalAndNewerSchemasBeforeWriting(t *testing.T)
 				if version == 35 {
 					restoreSchema35ForTest(t, source)
 				}
+				if version == 37 {
+					dropCharityModelIndexesForTest(t, source.DB())
+				}
 				if version == 36 {
-					dropAgentFoundationForTest(t, source.DB())
+					restoreSchema36LayoutForTest(t, source.DB())
 				}
 				hostileMustExec(t, source.DB(), "UPDATE schema_state SET version=?", version)
 			}

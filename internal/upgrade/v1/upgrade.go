@@ -63,12 +63,14 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 	{from: 34, version: 35, manifest: db.Schema35ManifestHash, sql: db.DonationDiscoveryAuthorizationSQL, impact: &migrationImpact{
 		constraintTables: []string{"discovery_runs", "charity_model_catalog"}, credentials: credentialsUnchanged}},
 	{from: 35, version: 36, manifest: db.Schema36ManifestHash, sql: db.StewardPermissionsSQL + db.StewardAuditRolesSQL + db.EndpointTagsSQL, impact: &migrationImpact{rebuiltTables: []string{"risk_client_rules", "client_rule_auto_bans", "discord_blacklist_origins", "discord_blacklist_events", "admin_endpoint_tags"}, addedTables: []string{"steward_permissions", "steward_permission_audits"}, credentials: credentialsUnchanged}},
-	{from: 36, version: 37, manifest: db.PinnedGenerationTwoManifestHash, sql: db.AgentRequestsSQL + db.AgentWorkflowSQL, apply: func(ctx context.Context, tx *sql.Tx) error {
+	{from: 36, version: 37, manifest: db.Schema37ManifestHash, sql: db.AgentRequestsSQL + db.AgentWorkflowSQL, apply: func(ctx context.Context, tx *sql.Tx) error {
 		if err := db.UpgradeModelTypes(ctx, tx); err != nil {
 			return err
 		}
 		return db.UpgradeStewardAIPermissions(ctx, tx)
 	}, impact: &migrationImpact{controlTables: []string{"steward_permissions", "models", "charity_models"}, addedTables: []string{"ai_agent_plans", "ai_agent_model_results", "ai_agent_review_events", "ai_agent_jobs", "ai_agent_messages", "ai_agent_conversations", "ai_agent_memory_history", "ai_agent_memories", "ai_agent_settings", "agent_request_response_chunks", "agent_request_settings", "agent_requests", "agent_request_usage", "agent_request_usage_totals", "agent_request_usage_hours"}, credentials: credentialsUnchanged}},
+	{from: 37, version: 38, manifest: db.PinnedGenerationTwoManifestHash, sql: db.CharityModelDeletionIndexesSQL, impact: &migrationImpact{
+		indexedTables: []string{"charity_reservations", "charity_dispatch_receipts", "charity_key_affinities", "charity_header_sessions", "charity_header_uses"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {
@@ -107,6 +109,7 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{34, db.Schema34ManifestHash, "8576d726e49bd76db6d191914cb4f3637b25f493"},
 		{35, db.Schema35ManifestHash, "2df56fe8814e6a9968380fc8461942065eed3f12"},
 		{36, db.Schema36ManifestHash, "1fc9527f0c9023542dfc7decf59789733a6a834f"},
+		{37, db.Schema37ManifestHash, "4413e15527dff68e42386ca4841c38fc93911539"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,
