@@ -23,6 +23,7 @@ interface Fixture {
   users: { id: string; level: number; cookie: Cookie }[];
   management: {
     automatic_backoff_key_ids: string[];
+    pending_donation_id: string;
     workflow: {
       owner: { id: string; cookie: Cookie };
       models: string[];
@@ -1089,14 +1090,18 @@ test('level 5 with full donation scope handles four custom-source keys and edits
     const browserSource = page
       .locator('.charity-source-browser__source-button')
       .filter({ has: page.getByText('Mainstream channel: Browser service', { exact: true }) });
-    const sourceKeysRead = (keyState: string) =>
-      page.waitForResponse((response) => {
+    const sourceKeysRead = (keyState: string, keyID?: string) =>
+      page.waitForResponse(async (response) => {
         const url = new URL(response.url());
         return (
           response.request().method() === 'GET' &&
           /^\/api\/steward\/donation-sources\/[^/]+\/keys$/.test(url.pathname) &&
           url.searchParams.get('key_state') === keyState &&
-          url.searchParams.get('charity_model_id') === data.models[0]
+          url.searchParams.get('charity_model_id') === data.models[0] &&
+          (!keyID ||
+            ((await response.json()).data as { key_id: string }[]).some(
+              (row) => row.key_id === keyID,
+            ))
         );
       });
     const disabledRead = sourceKeysRead('disabled');
@@ -1116,6 +1121,13 @@ test('level 5 with full donation scope handles four custom-source keys and edits
       streak: { failure_disabled: false },
     });
     const sourceKeys = page.locator('.charity-source-browser');
+    const pendingDonation = await read(
+      context,
+      state.user_url,
+      '/api/steward/donations/' + state.management.pending_donation_id,
+    );
+    const pendingKeyID = pendingDonation.keys[0].id;
+    expect(pendingDonation.keys[0].charity_state).toBe('pending');
     await expect(
       sourceKeys.getByRole('button', {
         name: `Manage key #${state.management.automatic_backoff_key_ids[1]}`,
@@ -1123,17 +1135,27 @@ test('level 5 with full donation scope handles four custom-source keys and edits
       }),
     ).toBeVisible();
     await expect(
-      sourceKeys.getByRole('button', { name: `Manage key #${data.pending_key_id}`, exact: true }),
+      sourceKeys.getByRole('button', { name: `Manage key #${pendingKeyID}`, exact: true }),
     ).toHaveCount(0);
-    const pendingRead = sourceKeysRead('pending');
+    const pendingSource = pendingDonation.keys[0].safe_source;
     await sourceState.selectOption('pending');
+    const pendingSourceButton = page.locator('.charity-source-browser__source-button').filter({
+      has: page.getByText(
+        pendingSource.kind === 'mainstream'
+          ? operations.sourceBrowser.mainstreamSource.replace('{{name}}', pendingSource.name)
+          : operations.sourceBrowser.customSource.replace('{{baseUrl}}', pendingSource.base_url),
+        { exact: true },
+      ),
+    });
+    const pendingRead = sourceKeysRead('pending', pendingKeyID);
+    await pendingSourceButton.click();
     const pendingResponse = await pendingRead;
     expect(pendingResponse.status()).toBe(200);
     expect((await pendingResponse.json()).data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          key_id: data.pending_key_id,
-          donation_id: data.pending_donation_id,
+          key_id: pendingKeyID,
+          donation_id: pendingDonation.id,
           charity_state: 'pending',
           can_manage: false,
           endpoint_key_id: null,
@@ -1142,12 +1164,13 @@ test('level 5 with full donation scope handles four custom-source keys and edits
     );
     await expect(browserSource).toHaveCount(1);
     await expect(
-      sourceKeys.getByRole('button', { name: `Manage key #${data.pending_key_id}`, exact: true }),
+      sourceKeys.getByRole('button', { name: `Manage key #${pendingKeyID}`, exact: true }),
     ).toBeVisible();
     await expect(
       sourceKeys.getByRole('button', { name: `Manage key #${pausedID}`, exact: true }),
     ).toHaveCount(0);
     await sourceState.selectOption('disabled');
+    await browserSource.click();
     await sourceKeys.getByRole('button', { name: `Manage key #${pausedID}`, exact: true }).click();
     const concurrency = page.getByLabel(common.common.keyLimits.concurrency, { exact: true });
     const rpm = page.getByLabel(common.common.keyLimits.rpm, { exact: true });

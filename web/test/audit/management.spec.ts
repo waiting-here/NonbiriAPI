@@ -30,6 +30,9 @@ interface Fixture {
     automatic_donation_id: string;
     pending_donation_id: string;
     binding_donation_id: string;
+    custom_binding_donation_id: string;
+    multiline_review_donation_id: string;
+    resource_health: { donation_id: string };
     automatic_backoff_donation_id: string;
     recurring_discount: { donation_id: string };
     denials: Record<'client_rules' | 'charity' | 'manual', { cookie: Cookie }>;
@@ -150,7 +153,7 @@ test('level 5 reads accounts and retains the lower-user ban boundary', async ({ 
     await expect(page.getByLabel(copy.endpointLimit, { exact: true })).toBeVisible();
     await page.getByRole('tab', { name: copy.tabPenalties, exact: true }).click();
     await expect(page.getByRole('button', { name: copy.unban, exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: copy.ban, exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: copy.ban, exact: true })).toHaveCount(0);
     const unban = await context.request.post(state.user_url + root + '/unban', {
       headers: { Origin: state.user_url, 'Idempotency-Key': randomUUID() },
       data: { expected_revision: after.revision },
@@ -180,6 +183,9 @@ test('owner reads donation keys and details from current API responses', async (
         state.management.automatic_donation_id,
         state.management.pending_donation_id,
         state.management.binding_donation_id,
+        state.management.custom_binding_donation_id,
+        state.management.multiline_review_donation_id,
+        state.management.resource_health.donation_id,
         state.management.automatic_backoff_donation_id,
         state.management.recurring_discount.donation_id,
       ].sort(),
@@ -260,7 +266,9 @@ test('level 5 saves only message-role fields, reads logs and cannot open abuse a
   try {
     const page = await context.newPage();
     await page.goto(
-      state.user_url + '/steward?tab=charity&charity_model=' + state.management.charity_model_id,
+      state.user_url +
+        '/steward?tab=charity&charity_section=models&charity_model=' +
+        state.management.charity_model_id,
     );
     const fallback = page.getByLabel('Default action for unlisted roles');
     await page.locator('details').filter({ has: fallback }).locator('summary').click();
@@ -279,15 +287,23 @@ test('level 5 saves only message-role fields, reads logs and cannot open abuse a
           '/charity-models/' + state.management.charity_model_id,
         ),
     );
-    await page.getByRole('button', { name: 'Save model', exact: true }).click();
+    await page
+      .getByRole('button', {
+        name: commonEn.common.workflow.saveTarget.replace(
+          '{{id}}',
+          state.management.charity_model_id,
+        ),
+        exact: true,
+      })
+      .click();
     const result = await saved;
     expect(result.ok()).toBe(true);
     const intent = result.request().postDataJSON();
     expect(Object.keys(intent).sort()).toEqual(['expected_revision', 'role_policy']);
     expect(intent.role_policy).toEqual({ default_action: 'reject', rules: { developer: 'user' } });
-    await expect(page.getByText('Message role settings saved.', { exact: true })).toBeVisible();
+    await expect(fallback).toHaveValue('reject');
     await fallback.selectOption('native');
-    await expect(page.getByText('Message role settings saved.', { exact: true })).toHaveCount(0);
+    await expect(fallback).toHaveValue('native');
     await page.screenshot({ path: info.outputPath('steward-role-narrow.png'), fullPage: true });
     const model = await read(
       context,

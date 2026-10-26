@@ -328,7 +328,7 @@ test('administrator saves inherited five-limit profiles and batches only the sel
   }
 });
 
-test('level five edits lower-user inference limits without exposing profile or protected-user writes', async ({
+test('level five preserves denied profile drafts and edits lower-user limits within its hierarchy', async ({
   browser,
 }, info) => {
   const { context, origin } = await session(browser, 5);
@@ -339,8 +339,25 @@ test('level five edits lower-user inference limits without exposing profile or p
     const page = await context.newPage();
     await page.goto(origin + '/steward?tab=users&user=' + id);
     await page.getByRole('tab', { name: limits.tabLimits, exact: true }).click();
-    await expect(page.getByLabel(limits.endpointLimit, { exact: true })).toHaveCount(0);
-    await expect(page.getByLabel(limits.language, { exact: true })).toHaveCount(0);
+    const endpointLimit = page.getByLabel(limits.endpointLimit, { exact: true });
+    await expect(endpointLimit).toBeVisible();
+    await expect(page.getByLabel(limits.language, { exact: true })).toBeVisible();
+    const deniedDraft = before.endpoint_limit === '123' ? '124' : '123';
+    await endpointLimit.fill(deniedDraft);
+    const deniedSave = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PATCH' && new URL(response.url()).pathname === path,
+    );
+    await page.getByRole('button', { name: limits.saveProfile, exact: true }).click();
+    const denied = await deniedSave;
+    expect(denied.status()).toBe(403);
+    expect((await denied.json()).error.code).toBe('steward_permission_denied');
+    await expect(
+      page.getByText(common.management.permissions.denied, { exact: true }),
+    ).toBeVisible();
+    await expect(endpointLimit).toHaveValue(deniedDraft);
+    expect(await read<AdminUser>(context, origin, path)).toEqual(before);
+    await endpointLimit.fill(before.endpoint_limit ?? '');
     for (const [, label, value] of fields)
       await page.getByLabel(label, { exact: true }).fill(value);
     const response = await save(

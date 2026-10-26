@@ -1,0 +1,10 @@
+.donation-key-use-controls > .nb-actions {
+  min-width: 0;
+}
+
+.donation-key-use-controls > .nb-actions > .nb-btn {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

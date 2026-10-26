@@ -151,11 +151,10 @@ test('administrator saves report timing and approves matching credential deletio
     await page.getByRole('button', { name: copy.approveDeletion, exact: true }).click();
     await dialog.getByRole('button', { name: copy.approveDeletion, exact: true }).click();
     await expect
-      .poll(
-        async () => (await read(context, state.admin_url, '/admin/api/reports/' + caseID)).status,
-        { timeout: 40_000 },
-      )
-      .toBe('approved');
+      .poll(async () => read(context, state.admin_url, '/admin/api/reports/' + caseID), {
+        timeout: 40_000,
+      })
+      .toMatchObject({ status: 'approved' });
     const persisted: ReportCase = await read(
       context,
       state.admin_url,

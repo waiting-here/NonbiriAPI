@@ -111,6 +111,19 @@ async function visuals(page: Page, info: TestInfo, name: string, focus: () => Pr
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
+      if (name === 'review-return-6' && width === 390) {
+        const widerFont = await page.addStyleTag({
+          content:
+            '.charity-management, .charity-management :is(input, select, textarea, button) { font-family: Verdana, sans-serif; }',
+        });
+        try {
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          ).toBe(true);
+        } finally {
+          await widerFont.evaluate((node) => node.parentNode?.removeChild(node));
+        }
+      }
       await page.screenshot({
         path: process.env.NONBIRI_VISUAL_DIR
           ? resolve(process.env.NONBIRI_VISUAL_DIR, `${name}-${theme}-${width}.png`)
@@ -592,9 +605,7 @@ test('custom donations select matching or other channel templates without changi
         await page.getByText(presets.applyTitle, { exact: true }).click();
         const picker = page.getByRole('region', { name: presets.choosePreset });
         await expect(picker.getByText(presets.recommended, { exact: true })).toBeVisible();
-        await expect(picker.getByRole('row').nth(1)).toContainText(
-          'Custom preset browser service',
-        );
+        await expect(picker.getByRole('row').nth(1)).toContainText('Custom preset browser service');
         if (role === 'admin') {
           await visuals(page, info, 'custom-preset-candidates', () =>
             picker.getByRole('heading').scrollIntoViewIfNeeded(),
