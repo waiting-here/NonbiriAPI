@@ -21,7 +21,8 @@ func TestAgentOfflineSchema36PreservesPolicyRepresentationAndFacts(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	step := storageSchema.versions[len(storageSchema.versions)-1]
+	dropCharityModelIndexesForTest(t, database)
+	step := storageSchema.versions[migrationIndex(t, 36)]
 	if step.from != 36 || !reflect.DeepEqual(step.impact.controlTables, []string{"steward_permissions", "models", "charity_models"}) {
 		t.Fatal("unclassified policy normalization", step.impact)
 	}

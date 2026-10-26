@@ -6491,7 +6491,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,37);
+INSERT INTO schema_state(id,version) VALUES(1,38);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
@@ -7933,3 +7933,9 @@ CREATE TABLE agent_request_usage_hours (
  unknown_count INTEGER NOT NULL CHECK(unknown_count>=0),
  PRIMARY KEY(hour,source,kind,actor_id)
 ) STRICT;
+
+CREATE INDEX idx_charity_reservations_model ON charity_reservations(charity_model_id);
+CREATE INDEX idx_charity_dispatch_receipts_model ON charity_dispatch_receipts(model_id);
+CREATE INDEX idx_charity_affinities_model ON charity_key_affinities(model_id);
+CREATE INDEX idx_charity_header_sessions_model ON charity_header_sessions(model_id);
+CREATE INDEX idx_charity_header_uses_model ON charity_header_uses(model_id);

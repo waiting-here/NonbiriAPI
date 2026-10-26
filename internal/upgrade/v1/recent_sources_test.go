@@ -212,8 +212,9 @@ INSERT INTO request_attempts(
  'response',200,0,0,0,0,0,0,1)`, claimID, logID, seq)
 }
 
-func dropAgentFoundationForTest(t *testing.T, database *sql.DB) {
+func restoreSchema36LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	dropCharityModelIndexesForTest(t, database)
 	for _, table := range []string{"ai_agent_plans", "ai_agent_model_results", "ai_agent_review_events", "ai_agent_jobs", "ai_agent_messages", "ai_agent_conversations", "ai_agent_memory_history", "ai_agent_memories", "ai_agent_settings", "agent_request_response_chunks", "agent_request_settings", "agent_requests", "agent_request_usage", "agent_request_usage_totals", "agent_request_usage_hours"} {
 		hostileMustExec(t, database, "DROP TABLE "+table)
 	}
@@ -221,7 +222,7 @@ func dropAgentFoundationForTest(t *testing.T, database *sql.DB) {
 
 func restoreSchema35ForTest(t *testing.T, store *db.Store) {
 	t.Helper()
-	dropAgentFoundationForTest(t, store.DB())
+	restoreSchema36LayoutForTest(t, store.DB())
 	old := strings.ReplaceAll(strings.ReplaceAll(db.StewardAuditRolesSQL, "'admin','level5','level6'", "'admin','level6'"), "'admin','steward5','steward6'", "'admin','steward6'")
 	hostileMustExec(t, store.DB(), strings.ReplaceAll(old, "level IN (5,6)", "level=6"))
 	hostileMustExec(t, store.DB(), strings.ReplaceAll(db.EndpointTagsSQL, ",'user_gateway','steward_gateway','invalid_entry'", ""))
@@ -624,7 +625,7 @@ INSERT INTO discord_blacklist_events(id,discord_id,operation_key,actor_kind,reas
 INSERT INTO admin_endpoint_tags(base_url,tag) VALUES('https://historical.example/v1','community_charity');`); err != nil {
 		t.Fatal(err)
 	}
-	dropAgentFoundationForTest(t, store.DB())
+	restoreSchema36LayoutForTest(t, store.DB())
 	if _, err := store.DB().Exec(strings.ReplaceAll(db.EndpointTagsSQL, ",'user_gateway','steward_gateway','invalid_entry'", "")); err != nil {
 		t.Fatal(err)
 	}
@@ -681,7 +682,7 @@ func TestAgentPolicyOfflineMigrationPreservesAuthorityAndAudit(t *testing.T) {
 	original := oldStewardPolicyForTest(t)
 	hostileMustExec(t, store.DB(), `INSERT INTO steward_permissions(user_id,revision,permissions,limits,donation_scope,created_at,updated_at) VALUES(?,9,?,'{"saved":"17"}','enhanced',10,20)`, user, original)
 	hostileMustExec(t, store.DB(), `INSERT INTO steward_permission_audits(user_id,from_revision,to_revision,previous_policy,next_policy,created_at) VALUES(?,8,9,?,?,20)`, user, original, original)
-	dropAgentFoundationForTest(t, store.DB())
+	restoreSchema36LayoutForTest(t, store.DB())
 	hostileMustExec(t, store.DB(), "UPDATE schema_state SET version=36")
 	if hash, err := db.SchemaManifestHash(t.Context(), store.DB()); err != nil || hash != db.Schema36ManifestHash {
 		t.Fatal(hash, err)
@@ -749,7 +750,7 @@ func TestModelInterfaceOfflineMigrationPreservesLegacyMeaningOnce(t *testing.T) 
 		charity := hostileMustLastID(t, hostileMustExec(t, store.DB(), `INSERT INTO charity_models(provider,model,full_name,pricing_mode,model_types,revision,binding_revision,created_at,updated_at) VALUES('p',?,?,'per_request',?,7,11,13,17)`, name, "[公益]p/"+name, mask))
 		facts = append(facts, modelFact{"models", name, "p/" + name, personal, mask, want}, modelFact{"charity_models", name, "[公益]p/" + name, charity, mask, want})
 	}
-	dropAgentFoundationForTest(t, store.DB())
+	restoreSchema36LayoutForTest(t, store.DB())
 	hostileMustExec(t, store.DB(), "UPDATE schema_state SET version=36")
 	if hash, err := db.SchemaManifestHash(t.Context(), store.DB()); err != nil || hash != db.Schema36ManifestHash {
 		t.Fatal("source identity changed", hash, err)
@@ -807,7 +808,7 @@ func TestAgentPolicyUpgradeFailureRollsBackAndNewerSchemaRejects(t *testing.T) {
 	}
 	personal := hostileMustLastID(t, hostileMustExec(t, store.DB(), `INSERT INTO models(user_id,provider,model,full_name,model_types,revision,created_at,updated_at) VALUES(?,'p','rollback','p/rollback',1,7,2,3)`, valid))
 	charity := hostileMustLastID(t, hostileMustExec(t, store.DB(), `INSERT INTO charity_models(provider,model,full_name,pricing_mode,model_types,revision,created_at,updated_at) VALUES('p','rollback','[公益]p/rollback','per_request',16,7,2,3)`))
-	dropAgentFoundationForTest(t, store.DB())
+	restoreSchema36LayoutForTest(t, store.DB())
 	hostileMustExec(t, store.DB(), "UPDATE schema_state SET version=36")
 	if err = store.Close(); err != nil {
 		t.Fatal(err)
@@ -842,7 +843,7 @@ func TestAgentPolicyUpgradeFailureRollsBackAndNewerSchemaRejects(t *testing.T) {
 	if err != nil {
 		t.Fatal("retry", err)
 	}
-	hostileMustExec(t, store.DB(), "UPDATE schema_state SET version=38")
+	hostileMustExec(t, store.DB(), "UPDATE schema_state SET version=?", db.CurrentSchemaVersion+1)
 	store.Close()
 	before, err := os.ReadFile(path)
 	if err != nil {
@@ -874,7 +875,7 @@ func TestAgentOfflineUpgradePreservesExactSchema36(t *testing.T) {
 	if err = store.DB().QueryRow("SELECT username FROM users WHERE id=?", user).Scan(&originalName); err != nil {
 		t.Fatal(err)
 	}
-	dropAgentFoundationForTest(t, store.DB())
+	restoreSchema36LayoutForTest(t, store.DB())
 	hostileMustExec(t, store.DB(), "UPDATE schema_state SET version=36")
 	manifest, err := db.SchemaManifestHash(context.Background(), store.DB())
 	if err != nil || manifest != db.Schema36ManifestHash {
