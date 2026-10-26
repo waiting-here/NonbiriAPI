@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import common from '../../src/shared/i18n/common/en.json' with { type: 'json' };
 
 type Cookie = { Name: string; Value: string };
 type Asset = 'general' | 'game' | 'sketch_paper' | 'sketch_brush';
@@ -236,7 +237,7 @@ async function requestDiagnostics(page: Page, admin: boolean, keyboard = false, 
   await expect(event.locator('pre')).toHaveText(expectedBody);
   if (redacted) {
     await expect(event.getByRole('status')).toContainText(
-      'IPv4 addresses and non-mainstream channel domain identifiers are hidden',
+      common.common.diagnostics.logPrivacyRedacted,
     );
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     await event.getByRole('button', { name: 'Copy text', exact: true }).click();
@@ -925,7 +926,7 @@ test('audit presentation keeps folds, role tabs and mobile content within the vi
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.goto(f.user_url + '/steward?tab=charity');
       const tabs = page.locator('.page > .nb-tabs').first();
-      await expect(tabs.getByRole('tab')).toHaveCount(level === 5 ? 3 : 7);
+      await expect(tabs.getByRole('tab')).toHaveCount(7);
       for (const width of [1440, 768, 390]) {
         await page.setViewportSize({ width, height: 900 });
         await noOverflow(page);

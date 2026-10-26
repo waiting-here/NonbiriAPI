@@ -1,3 +1,10 @@
+import {
+  fillService,
+  protocolServices,
+  readService,
+  servicePanel,
+  submitService,
+} from '../service-onboarding';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
@@ -670,48 +677,38 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
           : 'https://cache.example.test/ai',
       upstream = 'anthropic/browser-cache';
     try {
-      let endpoint: { id: string };
+      let endpoint: { id: string }, key: { id: string };
       if (connectorType === 'ai-sdk-gateway-v4') {
         const ownerPage = await owner.newPage();
-        const c = commonEn.common.connections;
         await ownerPage.goto(state.user_url + '/endpoints?quickstart=1');
-        const connectionPanel = ownerPage
-          .locator('.nb-expandable-panel')
-          .filter({ has: ownerPage.getByRole('heading', { name: c.addConnection, exact: true }) });
-        await connectionPanel
-          .getByLabel(c.name, { exact: true })
-          .fill('Synthetic Gateway v4 connection');
-        const connectionSaved = ownerPage.waitForResponse(
-          (response) =>
-            new URL(response.url()).pathname === '/api/connections' &&
-            response.request().method() === 'POST',
-        );
-        await connectionPanel.getByRole('button', { name: c.create, exact: true }).click();
-        expect((await connectionSaved).status()).toBe(201);
-        await ownerPage.getByRole('button', { name: c.addEntry, exact: true }).first().click();
-        const entryPanel = ownerPage
-          .locator('.nb-expandable-panel')
-          .filter({ has: ownerPage.getByRole('heading', { name: c.addEntry, exact: true }) });
-        await entryPanel
-          .getByRole('combobox', { name: c.protocol, exact: true })
-          .selectOption(connectorType);
-        await entryPanel.getByLabel(c.entryURL, { exact: true }).fill(baseURL);
-        await entryPanel
-          .getByLabel(c.note + ' ' + c.optional, { exact: true })
-          .fill('Synthetic Gateway v4');
+        const panel = servicePanel(ownerPage);
+        await fillService(panel, {
+          name: 'Synthetic Gateway v4',
+          url: baseURL,
+          protocol: connectorType,
+          secret: 'synthetic-gateway-cache-key',
+        });
         const created = ownerPage.waitForResponse(
           (response) =>
             new URL(response.url()).pathname === '/api/endpoints' &&
             response.request().method() === 'POST',
         );
-        await entryPanel.getByRole('button', { name: c.saveEntries, exact: true }).click();
+        await submitService(panel);
         const response = await created;
         expect(response.status()).toBe(201);
         expect(response.request().postDataJSON()).toMatchObject({
           connector_type: connectorType,
           base_url: baseURL,
         });
-        endpoint = await response.json();
+        const saved = await readService(ownerPage, 'Synthetic Gateway v4');
+        endpoint = saved.endpoint;
+        key = saved.key;
+        expect(saved.endpoint.native_services.slice().sort()).toEqual(
+          (await protocolServices(ownerPage, connectorType)).slice().sort(),
+        );
+        expect(saved.key.native_services.slice().sort()).toEqual(
+          saved.endpoint.native_services.slice().sort(),
+        );
         expect(await read(owner, state.user_url, '/api/endpoints/' + endpoint.id)).toMatchObject({
           connector_type: connectorType,
           base_url: baseURL,
@@ -729,14 +726,14 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
           note: 'Synthetic Gateway',
           enabled: true,
         });
+        key = await write(owner, state.user_url, '/api/endpoints/' + endpoint.id + '/keys', {
+          secret: 'synthetic-gateway-cache-key',
+          note: 'Synthetic cache credential',
+          enabled: true,
+          force_store_false: false,
+          ownership_confirmed: true,
+        });
       }
-      const key = await write(owner, state.user_url, '/api/endpoints/' + endpoint.id + '/keys', {
-        secret: 'synthetic-gateway-cache-key',
-        note: 'Synthetic cache credential',
-        enabled: true,
-        force_store_false: false,
-        ownership_confirmed: true,
-      });
       const donation = await write(owner, state.user_url, '/api/donations', {
         description: 'Synthetic Gateway cache source',
         discord_public_thanks: false,
@@ -807,7 +804,8 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
       );
       if (connectorType === 'ai-sdk-gateway-v4') {
         for (const label of [
-          'Chat Completions / Responses',
+          commonEn.common.modelTypes.chat_completions,
+          commonEn.common.modelTypes.responses,
           'Image generation',
           'Embeddings',
           'Rerank',
@@ -823,6 +821,7 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
         expect((await read(admin, state.admin_url, modelPath)).model_types).toEqual(
           expect.arrayContaining([
             'chat_completions',
+            'responses',
             'images_generations',
             'embeddings',
             'rerank',
@@ -830,7 +829,8 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
         );
         await page.reload();
         for (const label of [
-          'Chat Completions / Responses',
+          commonEn.common.modelTypes.chat_completions,
+          commonEn.common.modelTypes.responses,
           'Image generation',
           'Embeddings',
           'Rerank',

@@ -1,3 +1,10 @@
+import {
+  fillService,
+  protocolServices,
+  readService,
+  servicePanel,
+  submitService,
+} from '../service-onboarding';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -570,91 +577,54 @@ test('modality prices, long-context rewards, template application and search-uni
   }
 });
 
-test('native Chat services retain storage policy and one Chat Responses group alongside other services', async ({
+test('native Chat services retain storage policy and combined platform support alongside other services', async ({
   browser,
 }, info) => {
   const { context, origin } = await session(browser, 1);
   const core = userEn.user.core;
   try {
     const page = await context.newPage();
-    const c = common.common.connections;
     await page.goto(origin + '/endpoints?quickstart=1');
-    const connectionPanel = page
-      .locator('.nb-expandable-panel')
-      .filter({ has: page.getByRole('heading', { name: c.addConnection, exact: true }) });
-    await connectionPanel.getByLabel(c.name, { exact: true }).fill('Native Chat connection');
-    await save(
-      page,
-      connectionPanel.getByRole('button', { name: c.create, exact: true }),
-      '/api/connections',
-      'POST',
-    );
-    await page.getByRole('button', { name: c.addEntry, exact: true }).first().click();
-    const entryPanel = page
-      .locator('.nb-expandable-panel')
-      .filter({ has: page.getByRole('heading', { name: c.addEntry, exact: true }) });
-    await entryPanel
-      .getByRole('combobox', { name: c.protocol, exact: true })
-      .selectOption({ label: core['connector.openai'] });
-    await entryPanel
-      .getByLabel(c.entryURL, { exact: true })
-      .fill('https://native-chat.example.test/v1');
-    await entryPanel
-      .getByRole('checkbox', { name: common.common.modelTypes.chat_completions, exact: true })
-      .check();
-    await entryPanel
-      .getByRole('checkbox', { name: common.common.modelTypes.responses, exact: true })
-      .uncheck();
-    const created = await save(
-      page,
-      entryPanel.getByRole('button', { name: c.saveEntries, exact: true }),
-      '/api/endpoints',
-      'POST',
-    );
-    const endpoint = (await created.json()) as {
-      id: string;
-      configuration_type: string;
-      native_services: string[];
-    };
+    const panel = servicePanel(page);
+    await fillService(panel, {
+      name: 'Native Chat connection',
+      url: 'https://native-chat.example.test/v1',
+      secret: 'synthetic-native-chat-secret',
+    });
+    await submitService(panel);
+    const { endpoint, key } = await readService(page, 'Native Chat connection');
     expect(endpoint.configuration_type).toBe('openai-compatible');
-    expect(endpoint.native_services).toEqual(['chat_completions']);
-    await entryPanel
-      .getByRole('radio', { name: c.newCredential, exact: true })
-      .locator('..')
+    expect(endpoint.native_services.slice().sort()).toEqual(
+      (await protocolServices(page, 'openai-compatible')).slice().sort(),
+    );
+    expect(endpoint.native_services).toEqual(
+      expect.arrayContaining(['chat_completions', 'responses']),
+    );
+    expect(key.native_services.slice().sort()).toEqual(endpoint.native_services.slice().sort());
+    expect(key.force_store_false).toBe(false);
+    const keyLabel = key.note || key.display_head + '…' + key.display_tail;
+    await page.goto(origin + '/endpoints/' + endpoint.id);
+    await page
+      .getByRole('button', { name: userEn.user.services.more + ' · ' + keyLabel, exact: true })
       .click();
-    await expect(
-      entryPanel.getByRole('radio', { name: c.newCredential, exact: true }),
-    ).toBeChecked();
-    await entryPanel
-      .getByLabel(c.credentialName + ' ' + c.optional, { exact: true })
-      .fill('Native Chat credential');
-    await entryPanel.getByLabel(c.secret, { exact: true }).fill('synthetic-native-chat-secret');
-    await entryPanel.getByRole('checkbox', { name: c.ownership, exact: true }).check();
     await save(
       page,
-      entryPanel.getByRole('button', { name: c.saveCredential, exact: true }),
-      '/api/connections/' + new URL(page.url()).searchParams.get('connection_id') + '/credentials',
-      'POST',
+      page.getByRole('menuitem', { name: core['endpoints.storePolicyOn'], exact: true }),
+      '/api/endpoints/' + endpoint.id + '/keys/' + key.id,
     );
-    const grant = entryPanel
-      .locator('form')
-      .filter({ has: page.getByRole('button', { name: c.authorizeEntry, exact: true }) });
-    await grant
-      .getByLabel(c.note + ' ' + c.optional, { exact: true })
-      .fill('Native Chat browser key');
-    await entryPanel.getByLabel(core['endpoints.storePolicy'], { exact: true }).check();
-    const keyResponse = await save(
-      page,
-      entryPanel.getByRole('button', { name: c.authorizeEntry, exact: true }),
-      '/api/endpoints/' + endpoint.id + '/keys',
-      'POST',
-    );
-    const key = (await keyResponse.json()) as { id: string; force_store_false: boolean };
-    expect(key.force_store_false).toBe(true);
+    expect(
+      (
+        await read<{ data: { id: string; force_store_false: boolean }[] }>(
+          context,
+          origin,
+          '/api/endpoints/' + endpoint.id + '/keys?page=1&page_size=20',
+        )
+      ).data.find((row) => row.id === key.id)?.force_store_false,
+    ).toBe(true);
     await page.goto(origin + '/endpoints/' + endpoint.id);
     await page
       .getByRole('button', {
-        name: userEn.user.services.more + ' · Native Chat browser key',
+        name: userEn.user.services.more + ' · ' + keyLabel,
         exact: true,
       })
       .click();
