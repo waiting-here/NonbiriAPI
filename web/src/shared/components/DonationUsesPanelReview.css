@@ -1,0 +1,10 @@
+.donation-review-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.donation-review-results > li {
+  min-width: 0;
+}

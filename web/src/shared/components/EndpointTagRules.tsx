@@ -150,6 +150,7 @@ export function EndpointTagRules({
       ) : null}
       {editor && canTag ? (
         <form
+          key={editor.editing ? editor.rule.pattern : 'new'}
           className="endpoint-rule-editor nb-stack"
           onSubmit={(event) => {
             event.preventDefault();
@@ -178,6 +179,7 @@ export function EndpointTagRules({
                 <input
                   {...field}
                   type="text"
+                  autoFocus
                   required
                   value={editor.rule.pattern}
                   readOnly={editor.editing}

@@ -307,10 +307,26 @@ for (const theme of ['light', 'dark'] as const)
       await expectBlurred(cover);
       await expect(entry.locator('.gacha-pool-entry__hint')).toBeVisible();
       await expect(text).toHaveAttribute('href', '/activities/gacha?pool=' + ratedEntrance.id);
+      if (process.env.NONBIRI_VISUAL_DIR) {
+        await entry.screenshot({
+          path: resolve(
+            process.env.NONBIRI_VISUAL_DIR,
+            `gacha-rated-blurred-${theme}-${width}.png`,
+          ),
+        });
+      }
       await cover.click();
       await expect(cover).toHaveAttribute('aria-pressed', 'true');
       await expect(cover).toHaveAccessibleName('Blur R-18 cover: ' + ratedEntrance.name_en);
       await expect(cover.locator('img')).toHaveCSS('filter', 'none');
+      if (process.env.NONBIRI_VISUAL_DIR) {
+        await entry.screenshot({
+          path: resolve(
+            process.env.NONBIRI_VISUAL_DIR,
+            `gacha-rated-revealed-${theme}-${width}.png`,
+          ),
+        });
+      }
       await expect(page).toHaveURL(USER_ORIGIN + '/activities');
       expect(enters()).toBe(0);
       await cover.press('Enter');

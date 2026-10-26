@@ -1520,8 +1520,11 @@ test('steward list permission loss clears an already visible private donation de
       403,
     );
   });
-  await page.locator('.charity-donation-search input').fill('permission recheck');
-  await page.locator('.charity-donation-search input').press('Enter');
+  const donationSearch = page.getByRole('searchbox', {
+    name: 'Search public description or donation ID',
+  });
+  await donationSearch.fill('permission recheck');
+  await donationSearch.press('Enter');
   await expect(page).toHaveURL(/tab=logs/);
   await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toHaveCount(0);
   await expect(privateNote).toHaveCount(0);

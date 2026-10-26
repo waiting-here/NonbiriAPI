@@ -265,7 +265,8 @@ test('admin creates, edits and deletes a domain rule while original manual tags 
     await expect(
       editor.getByRole('textbox', { name: labels.pattern, exact: true }),
     ).toHaveAttribute('readonly', '');
-    await editor.getByRole('radio', { name: labels.clear, exact: true }).check();
+    await editor.getByText(labels.clear, { exact: true }).click();
+    await expect(editor.getByRole('radio', { name: labels.clear, exact: true })).toBeChecked();
     await saveEditor(page, actor);
     await expect(ruleRow(panel, crudPattern)).toContainText(labels.clear);
     expect(await endpoint(actor, url)).toMatchObject({ tags: [], manual_tags: ['mysterious'] });
@@ -421,11 +422,9 @@ test('a separate pending donation needs manual approval and keeps its receipt ou
     });
     const container = page.locator('.charity-donations');
     const panes = container.locator(':scope > .charity-donations__panes');
-    const receipt = container.locator(':scope > .nb-stack').filter({
-      has: page.locator('ul[role="status"]').filter({ hasText: connectionCopy.reviewSaved }),
-    });
+    const receipt = container.locator(':scope > .donation-review-results');
     await expect(receipt).toBeVisible();
-    await expect(receipt.locator('ul > li')).toHaveCount(data.pending_key_ids.length);
+    await expect(receipt.locator(':scope > li')).toHaveCount(data.pending_key_ids.length);
     for (const theme of ['light', 'dark']) {
       await page.evaluate((value) => {
         document.documentElement.dataset.theme = value;
