@@ -32,6 +32,8 @@ Each version entry describes its source and compatibility boundary; a release ta
   review. Keep recoverable saves, optional multiline review notes and previous
   approvals when replacements are rejected. Select Chat Completions, Responses
   and other authorized native services independently when binding models.
+- Restore optional mainstream-channel suggestions when entering a custom service
+  address. Wrap long donation-action labels to keep narrow screens usable.
 - Add exact donor account/Discord filters and safe complete donation history in
   user management. Show current approved service health, timed backoff and partial
   availability without rejecting valid mixed donation states in the browser.
