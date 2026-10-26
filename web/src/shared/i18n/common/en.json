@@ -2184,7 +2184,6 @@
       "existingCredential": "Use existing key",
       "existingModel": "Existing model",
       "filters": "Filters",
-      "groupOrderKept": "Targets are tried in group order. The group keeps one position and weight.",
       "impact": "Usage scope",
       "impactCounts": "Personal keys {{keys}} · Charity members {{donations}} · Discovery sources {{sources}}",
       "independentDiscovery": "Change the list address for this endpoint and key; API calls keep their current address.",
@@ -2251,7 +2250,6 @@
       "select": "Select",
       "selectPreset": "Choose preset",
       "selectProtocol": "Choose protocol",
-      "selected": "Selected",
       "separateLimits": "Each entry key keeps its own limits. Sharing a credential does not pool quotas.",
       "shareExactVersion": "Share credential version {{version}} for all APIs supported by this protocol. Administrators and authorized stewards can fetch its model list.",
       "sharedDiscoveryState": "Catalog: {{state}} · Models {{count}}",
@@ -2259,7 +2257,6 @@
       "sourceSearch": "Search source names or URLs",
       "staleCatalog": "Retained last successful result",
       "status": "Status",
-      "targetGroup": "Target group {{number}}",
       "targetOrderNote": "One logical binding can contain ordered entries. Select each entry's model name and native services explicitly.",
       "title": "My services",
       "unavailableReasons": {

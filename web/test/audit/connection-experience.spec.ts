@@ -1200,7 +1200,7 @@ async function exerciseTargets(
   personalSources?: { endpoint: Entry; key: Key }[],
 ) {
   await page.goto(origin + destination);
-  const title = charity ? c.targetGroup.replace('{{number}}', '1') : bindingCopy.combination + ' 1';
+  const title = charity ? c.editBindingSources : bindingCopy.combination + ' 1';
   let editor = await openTargetEditor(page, title, charity);
   await expect(targetRows(editor)).toHaveCount(2);
   const before = await api<Bindings>(context, origin, path);

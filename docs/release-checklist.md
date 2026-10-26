@@ -20,8 +20,8 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh/exact-current schema 39 startup and explicit offline conversion
-  of registered schema 16–26 and 33–38 sources: target equality,
+- Validate fresh/exact-current schema 40 startup and explicit offline conversion
+  of registered schema 16–26 and 33–39 sources: target equality,
   rollback/cancellation, re-entry and upgrade-then-start. Verify older, newer,
   unknown and incomplete storage is rejected by the service before migration,
   repair, checkpoint or recovery writes. Check descriptor source coverage and
@@ -35,7 +35,7 @@ has passed.
 - Keep content-only catalog/template/period edits free of DDL and preserve administrator
   edits, historical eligibility, pity and claims. Recheck exports and deletion
   for every new user-associated record.
-- Check account export 30 includes own stored/effective steward permissions,
+- Check account export 31 includes own stored/effective steward permissions,
   retained policy history and personal-model header configuration, but excludes
   temporary generated values, shared charity settings, pressure samples and
   caller-parameter receipts. Verify model/user deletion, late completions and

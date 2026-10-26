@@ -142,11 +142,11 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 39. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts exact registered schema 16–26 and 33–38 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 40. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts exact registered schema 16–26 and 33–39 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
 
-`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=39`, `minimum_schema_version=39`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
+`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=40`, `minimum_schema_version=40`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
 
-Current account export `schema_version=30` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v30.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
+Current account export `schema_version=31` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v31.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
 ### 1.5 Display time context
 
@@ -1805,7 +1805,7 @@ Conversation originals, their model/tool results and execution receipts, shared 
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v30.json`, with `schema_version:30` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v31.json`, with `schema_version:31` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
 
 `user` includes the five nullable inference limits and their effective values
 from §7.1. The safe `charity` aggregate may include `usage_details` with optional
@@ -1818,6 +1818,12 @@ model/endpoint/key identity or request content.
 The top-level `steward_permissions` contains the owner's current `effective` policy, nullable `stored` configuration and retained `history`. Each history entry contains `previous,next,created_at` without editor identities. Policy changes are retained for 90 days by bounded cleanup; account deletion removes the target policy/history. Existing export bounds apply.
 
 Connection metadata adds `connections,credentials,credential_versions,grants,discovery_sources,source_revisions,binding_targets,native_service_evidence,donation_uses`. These owner-scoped collections expose public versions and revision numbers, safe settings, review snapshots and current approved health. They exclude secret material, fingerprints, review HMACs and internal authorization identities. See [service connections](service-connections.md) for rotation, approval and deletion semantics.
+
+Format 31 adds nullable `endpoint_key_id,last_success_at,added_count,removed_count`
+to each exported discovery source. Counts are decimal strings; the timestamp is
+UTC Unix seconds. Sources belong to one endpoint/key pair, and keys belong to
+one service. Legacy cross-service references are split by the explicit schema-40
+upgrade without changing saved binding, budget or donation-approval identities.
 
 The top-level fields include `limited_activities`, `image_tasks` and `inactivity`. Limited activities contain the safe general/paper/brush wallet projection and own exchange receipts; the existing game wallet remains separate. Image tasks contain only local ID, state, requested/actual image counts, times, billing state and two-currency charge/refund facts. Inactivity contains safe own activity timestamps and retained execution outcomes. No prompts, complete execution parameters, images, source facts, raw errors, risk rules, private adapter/configuration or upstream task identifiers are included.
 
@@ -1835,7 +1841,7 @@ The following fields are top-level (an excerpt, not a complete export):
 
 ```json
 {
-  "schema_version": 27,
+  "schema_version": 31,
   "request_adaptations": [],
   "continuity": [],
   "fat_fish": {"summaries": [], "progress": []}
@@ -1856,7 +1862,7 @@ Deletion keeps a separate minimum security projection for administrator and stew
 
 `appearance` contains `selected,unlocked,moment,updated_at`; eligibility derives from collection ownership and pool history, while the derived `moments` catalogue is omitted. `rewards` contains personal successful receipts. `gacha` contains ticket/shard balances, collection, pity, claims, retained transactions and draw records, without retry-key digests. Model request adaptations include excluded parameter names and partition modes without saved values. `user` contains `discord_gate_policy`; personal models include `model_types` and accept `cache_balanced` as a `route_strategy`. Current personal models also include `role_policy`, `transport_rule` and the saved `cloudflare_proxy_enabled` preference; deployment mode and proxy secrets are excluded; saved Likes preset names are currently omitted from the account export. `lake_notes` contains `rules_id,profile_revision,profile,casts,entries,exchanges`, excluding private encounter/reward randomness and internal checkpoints. Safe cast entries include identity, nullable source period, rules/generation/revision, acknowledged tick, phase/pause and public motion state. Entry/exchange receipts retain exact amounts and financial references.
 
-Export 30 also includes personal models' saved `session_headers` entries (`name,idle_seconds,format`). Generated header values and shared charity-model header configuration are excluded.
+Export 31 also includes personal models' saved `session_headers` entries (`name,idle_seconds,format`). Generated header values and shared charity-model header configuration are excluded.
 
 `steadycatch` contains the owner's first-clear status, retained sessions and accepted replay inputs. `gwent` uses the duel export with owner-only competitive results and the current Elo aggregate. Neither adds access to another player's private state. See [Steady Catch](steady-catch.md), [AI Gwent](ai-gwent.md) and the [lifecycle checklist](data-lifecycle-checklist.md) for routes and retention.
 

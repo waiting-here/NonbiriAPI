@@ -2184,7 +2184,6 @@
       "existingCredential": "使用已有密钥",
       "existingModel": "已有模型",
       "filters": "筛选",
-      "groupOrderKept": "目标在组内按顺序尝试；组间排序与权重保持一份。",
       "impact": "使用范围",
       "impactCounts": "自用密钥 {{keys}} · 公益成员 {{donations}} · 发现来源 {{sources}}",
       "independentDiscovery": "仅调整此端点与密钥的列表地址，调用地址保持原设置。",
@@ -2251,7 +2250,6 @@
       "select": "选择",
       "selectPreset": "选择预置",
       "selectProtocol": "选择协议",
-      "selected": "已选择",
       "separateLimits": "各入口密钥保持自己的限额；共享凭据不会合并额度。",
       "shareExactVersion": "分享凭据版本 {{version}}，用于此协议支持的所有 API。管理员和协管可拉取模型列表。",
       "sharedDiscoveryState": "模型目录：{{state}} · 型号 {{count}}",
@@ -2259,7 +2257,6 @@
       "sourceSearch": "搜索来源名称或地址",
       "staleCatalog": "保留的上次成功结果",
       "status": "状态",
-      "targetGroup": "目标组 {{number}}",
       "targetOrderNote": "一个逻辑绑定可包含多个有序入口。每个入口的型号和原生服务均需明确选择。",
       "title": "我的服务",
       "unavailableReasons": {

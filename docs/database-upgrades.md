@@ -2,7 +2,7 @@
 
 ## Supported databases
 
-The service opens only the exact current schema **39**, or initializes current
+The service opens only the exact current schema **40**, or initializes current
 storage when the database and its sidecars are absent. An existing zero-byte,
 partial or unknown database is not a fresh instance. Older and newer schemas are
 rejected before migration, repair, WAL checkpoint or unfinished-work recovery.
@@ -11,7 +11,7 @@ version, with the explicit upgrade entry point. Current-schema identity,
 structure, configuration and encryption-root checks remain required.
 
 The standalone Go upgrader accepts exact registered schema **16–26** and
-**33–38** sources and targets schema 39. Schemas 27–32 and unregistered layouts
+**33–39** sources and targets schema 40. Schemas 27–32 and unregistered layouts
 are not supported. A developer or deployer must deliberately invoke the matching
 tool; the service, startup scripts and deployment helpers must not run
 `--apply` implicitly. Preserve the complete matching recovery set before any
@@ -24,7 +24,7 @@ also rejected by the upgrader. Failure or cancellation rolls back the conversion
 Do not replace newly accepted data with an old snapshot.
 
 SQLite identity remains `application_id=0x4E425249`, `user_version=2`. Account
-exports use format **30**, independently of the storage schema. Schema versions
+exports use format **31**, independently of the storage schema. Schema versions
 advance when storage changes require it, not with every software patch.
 
 ```sh
@@ -34,11 +34,11 @@ advance when storage changes require it, not with every software patch.
 
 Both commands read compiled metadata without loading application configuration
 or opening a database. Their format-version-1 descriptors identify the same
-target schema and hashes. The service reports `schema_version=39`,
-`minimum_schema_version=39`, `startup_policy="exact"` and
+target schema and hashes. The service reports `schema_version=40`,
+`minimum_schema_version=40`, `startup_policy="exact"` and
 `upgrade_tool="nonbiri-upgrade-v1"`, with empty `source_schema_versions`,
 `source_manifest_hashes` and `offline_conversions` arrays. The upgrader adds
-17 `offline_conversions` entries, one for each supported source, with its tool
+18 `offline_conversions` entries, one for each supported source, with its tool
 name, source commit, source version, pinned manifest hash and target version.
 An empty service list does not remove the separate upgrader.
 
@@ -48,6 +48,20 @@ It must not infer permission to migrate from the upgrader's advertised sources,
 parse Go files or derive schema versions from array lengths.
 
 ## Schema changes
+
+Schema 40 assigns keys to services and model catalogs to individual endpoint/key
+pairs. The offline conversion splits cross-service credentials and shared catalog
+histories, re-encrypting copied secrets with independent contexts. Existing
+endpoint-key, grant, binding and donation-use identities remain stable, including
+approved older versions and pending replacements. Unassigned endpoints and keys
+receive a service so they remain manageable. Interrupted fetches become failed
+attempts; their last successful results remain available.
+
+`discovery_source_keys` records catalog ownership and `discovery_run_changes`
+records successful fetch additions/removals. Both follow their parent's deletion
+lifecycle. Export 31 includes the owner's catalog pair, last-success timestamp and
+latest change counts. No credential plaintext is exported. Runtime requests reject
+cross-service key references and cross-pair catalog attachment.
 
 Schema 39 extends endpoint tags with `mainstream`, `mysterious` and
 `other_third_party`, retaining original manual labels. `endpoint_tag_rules` and
@@ -169,7 +183,7 @@ review HMACs, generated session headers, deployment settings and internal dispat
 authorizations. See [service connections](service-connections.md) and the
 [data lifecycle](data-lifecycle-checklist.md).
 
-The registered offline sources are schemas 16–26 and 33–38 with their exact
+The registered offline sources are schemas 16–26 and 33–39 with their exact
 manifests. Other intermediate database layouts are not supported sources.
 
 Schema 26 adds shared channel binding presets and their ordered upstream-model
@@ -270,7 +284,7 @@ donation terminal clocks, expiry, balances or historical settlements.
 ## One-time conversion
 
 Build `./cmd/nonbiri-upgrade-v1` from the same commit as the target application.
-The converter accepts exact registered schema 16–26 and 33–38 structures. For rc.7,
+The converter accepts exact registered schema 16–26 and 33–39 structures. For rc.7,
 the reference source is `82f1711b674425745a768f781e0e0c34dcb37ac3`. The database
 manifest determines eligibility, not a guess based on a release label.
 
@@ -282,7 +296,7 @@ repeated immediately before conversion. Ordinary `--apply` validates the exact
 source, encryption-root identity, required configuration and migration-affected relationships, without scanning
 unrelated historical tables. Run it with the service stopped and its existing
 master key available. The converter acquires exclusive
-database access and converts the source to schema 39 in one transaction. A matching
+database access and converts the source to schema 40 in one transaction. A matching
 current schema is a no-op; structural drift, an unknown source or a wrong key is
 rejected. Failure or cancellation rolls back.
 

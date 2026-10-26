@@ -4,7 +4,19 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## 1.2.2 — Unreleased
+## 1.3.0 — Unreleased
+
+### Service and model workflows
+
+- Add an OpenAI-compatible service with an address and API key, then fetch and
+  manage models directly. Additional keys and advanced protocol settings remain
+  available; keys are managed within their service and reusable at its endpoints.
+- Maintain fetched and manual model lists independently for each endpoint/key
+  pair. Failed fetches retain the last successful list; successful fetches report
+  additions and removals without deleting manual entries.
+- Bind personal models through endpoint, key and model selection with a visible
+  service filter and selections retained across pages. Existing call combinations
+  keep their routing behavior and are edited through advanced call-type settings.
 
 ### Fixed and improved
 
@@ -24,8 +36,11 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Compatibility
 
-- Storage remains schema 39 and account export remains format 30. Duplicate
-  cards from redemption codes and site-wide rewards continue to grant one
+- Storage advances to schema 40 and account export to format 31. Run the explicit
+  upgrader before opening an existing database. Shared keys from older versions
+  become independent service-owned records; key, binding and donation-use IDs,
+  approved and pending versions, route order and limits are preserved.
+- Duplicate cards from redemption codes and site-wide rewards continue to grant one
   matching shard per duplicate; duplicate SP cards grant SSR shards.
 
 ## 1.2.1 — 2026-10-26

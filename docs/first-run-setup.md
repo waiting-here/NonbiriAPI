@@ -192,10 +192,10 @@ material.
 ## 6. Prepare a Generation 2 database path
 
 For a fresh start, the configured database and its exact `-wal` and `-shm` paths
-must all be absent. Fresh storage uses schema 39. The service opens only the
+must all be absent. Fresh storage uses schema 40. The service opens only the
 exact current schema and rejects older, newer, unknown or incomplete storage
 before migration, repair or recovery writes. Exact registered schema 16–26 and
-33–38 sources require the matching [standalone upgrader](database-upgrades.md#one-time-conversion).
+33–39 sources require the matching [standalone upgrader](database-upgrades.md#one-time-conversion).
 Preserve a complete matching recovery set, stop the old service and deliberately
 invoke the tool before starting the target. The service, startup scripts and
 deployment helpers must not apply upgrades implicitly. Empty placeholder files
