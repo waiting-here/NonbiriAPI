@@ -250,7 +250,7 @@ func TestCompactionNoInputBudgetPreservesOriginal(t *testing.T) {
 	if err := f.s.run(context.Background(), job.ID); err != nil {
 		t.Fatal(err)
 	}
-	f.driver.settings = &agentrequest.Settings{ContextWindow: 1024, MaxOutputTokens: 1023}
+	f.driver.settings = &agentrequest.Settings{ContextWindow: 1024, MaxOutputTokens: 1023, OutputReserveTokens: 1023}
 	job = f.send(t, "/compact", "n")
 	if err := f.s.run(context.Background(), job.ID); !errors.Is(err, ErrInvalid) {
 		t.Fatal(err)

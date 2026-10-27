@@ -69,7 +69,7 @@ func toolMessage(call toolCall, value json.RawMessage) json.RawMessage {
 }
 
 func modelInputBudget(settings agentrequest.Settings) int {
-	budget := settings.ContextWindow - settings.MaxOutputTokens
+	budget := settings.ContextWindow - settings.OutputReserveTokens
 	return budget - max(128, budget/10)
 }
 
@@ -200,7 +200,7 @@ func (b *toolRoundBudget) accept(call toolCall, value json.RawMessage) json.RawM
 }
 
 func (s *Service) prepareToolRound(ctx context.Context, job Job, actor Actor, settings Settings, messages []json.RawMessage, tools, format []byte, calls, writes []toolCall, planError error) ([]json.RawMessage, *toolRoundBudget, error) {
-	driver, err := s.config.Driver.Settings(ctx)
+	driver, err := s.config.Driver.ResolveSettings(ctx, jobAttribution(job, "model"))
 	if err != nil {
 		return nil, nil, err
 	}

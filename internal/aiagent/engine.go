@@ -279,7 +279,7 @@ func (s *Service) run(ctx context.Context, id int64) error {
 				return err
 			}
 		} else {
-			driver, e := s.config.Driver.Settings(ctx)
+			driver, e := s.config.Driver.ResolveSettings(ctx, jobAttribution(job, "model"))
 			if e != nil {
 				return e
 			}

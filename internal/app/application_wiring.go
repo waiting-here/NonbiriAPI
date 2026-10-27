@@ -23,6 +23,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/charity"
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
+	"github.com/waiting-here/NonbiriAPI/internal/chatgptauth"
 	"github.com/waiting-here/NonbiriAPI/internal/checkin"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
@@ -596,22 +597,29 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create assistant account operations: %w", err)
 	}
+	assistantAdminAuthorize := func(ctx context.Context, tx *sql.Tx) error {
+		actor, ok := auth.ActorFromContext(ctx)
+		if !ok {
+			return authz.ErrUnauthorized
+		}
+		_, err := authorizer.Authorize(ctx, tx, actor, authz.Requirement{Role: authz.RoleAdministrator})
+		return err
+	}
+	assistantChatGPT, err := chatgptauth.New(chatgptauth.Config{
+		DB: store.DB(), ReadDB: store.ReadDB(), Stack: outbound, Secrets: vault, AdminAuthorize: assistantAdminAuthorize,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create assistant ChatGPT connection: %w", err)
+	}
 	assistantRequests, err = agentrequest.New(agentrequest.Config{
-		DB: store.DB(), ReadDB: store.ReadDB(), Stack: outbound, Flow: forwardRuntime.flow, Secrets: vault,
+		DB: store.DB(), ReadDB: store.ReadDB(), Stack: outbound, Flow: forwardRuntime.flow, Secrets: vault, ChatGPT: assistantChatGPT,
 		Authorize: func(ctx context.Context, attr agentrequest.Attribution) error {
 			if assistant == nil {
 				return aiagent.ErrUnavailable
 			}
 			return assistant.AuthorizeRequest(ctx, attr)
 		},
-		AdminAuthorize: func(ctx context.Context, tx *sql.Tx) error {
-			actor, ok := auth.ActorFromContext(ctx)
-			if !ok {
-				return authz.ErrUnauthorized
-			}
-			_, err := authorizer.Authorize(ctx, tx, actor, authz.Requirement{Role: authz.RoleAdministrator})
-			return err
-		},
+		AdminAuthorize: assistantAdminAuthorize,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create assistant model runtime: %w", err)
@@ -627,6 +635,9 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	userInvalidations.agentChanged = assistant.InvalidateActor
 	if err = aiagent.RegisterRoutes(agentRouteRegistrar{runtime: authRuntime, database: store.ReadDB()}, assistant, assistantRequests); err != nil {
 		return nil, fmt.Errorf("register assistant routes: %w", err)
+	}
+	if err = aiagent.RegisterDriverRoutes(agentRouteRegistrar{runtime: authRuntime, database: store.ReadDB()}, assistant, assistantRequests, assistantChatGPT); err != nil {
+		return nil, fmt.Errorf("register assistant driver routes: %w", err)
 	}
 	app := &application{
 		agent: assistant, agentRequests: assistantRequests,
