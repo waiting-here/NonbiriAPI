@@ -45,7 +45,12 @@ func (r *Runtime) recoverInterrupted(ctx context.Context) error {
 				return err
 			}
 		}
-		result, _ := parseResult(item.id, item.body)
+		detail, detailErr := r.Detail(ctx, item.id)
+		if detailErr != nil {
+			return detailErr
+		}
+		detail.ResponseBody = string(item.body)
+		result, _ := parseStoredResult(item.id, detail)
 		if err = r.complete(item.id, item.input, "interrupted", "interrupted", item.status, item.body, false, redacted, result.Usage, true); err != nil {
 			return err
 		}
