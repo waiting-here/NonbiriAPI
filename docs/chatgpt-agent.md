@@ -33,6 +33,14 @@ ChatGPT requests use `store: false`, `stream: true`, and the Responses API. Opti
 
 The adapter requests encrypted reasoning output for stateless continuation. It preserves the native response items for the same driver, endpoint, model, and ChatGPT connection. Normal token refresh preserves continuation. Switching account, source, or model carries over compatible messages and function calls; opaque reasoning items are not sent to the new source.
 
+## Read connection and usage information
+
+The connection page shows the access token expiry and the latest connection record update, including initial import, automatic refresh, disconnect, or invalidation. Refresh happens when a model or discovery request needs it. Reloading the status page only reads local state; it does not refresh credentials or call a model.
+
+The public sign-in API does not expose the account's remaining subscription allowance or its reset time. The page marks that information unavailable and links to [ChatGPT usage settings](https://chatgpt.com/settings/usage). A reported usage-limit error is evidence of that failed request; it does not establish that the entire account allowance is exhausted.
+
+Local usage covers requests completed and recorded in the last 24 hours whose request details and ChatGPT provider snapshot are still retained. It includes earlier account connections, model calls and compaction. Requests still running, old records without a provider snapshot, and deleted request details are excluded. Token counts include only reported usage; requests without usage are counted separately as unknown. Cached input and reasoning tokens are subsets of input and output respectively. These figures are not an account balance or usage across other applications. The latest recognized subscription-limit error is shown only within this same retained window. No private account API or background quota polling is used.
+
 ## Disconnect and recover
 
 Disconnect stops active ChatGPT model requests and clears the locally stored session. The server also attempts to revoke the refresh token. If remote revocation cannot be confirmed, the page reports that separately; review the connection in your ChatGPT account if necessary. Registration metadata remains available for reconnecting.

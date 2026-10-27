@@ -140,7 +140,7 @@ func TestWritePreviewFailureKeepsMixedRoundRecoverable(t *testing.T) {
 				messages, history, _, _, _ := f.s.contextMessages(t.Context(), job, settings)
 				tools, allowed, _ := f.s.tools(t.Context(), f.actor, settings, false)
 				toolJSON, _ := json.Marshal(tools)
-				driver, _ := f.driver.Settings(t.Context())
+				driver, _ := f.driver.ResolveSettings(t.Context(), jobAttribution(job, "model"))
 				_, writes, reads, _ := collectToolWrites(calls, allowed)
 				budget := newToolRoundBudget(messages, history, toolJSON, nil, driver, reads)
 				budget.reservePlanFailures(writes, nil)
@@ -149,7 +149,7 @@ func TestWritePreviewFailureKeepsMixedRoundRecoverable(t *testing.T) {
 			last := f.driver.inputs[len(f.driver.inputs)-1]
 			assertResultBudgetProtocol(t, last.Messages)
 			var dispatched []json.RawMessage
-			driver, _ := f.driver.Settings(t.Context())
+			driver, _ := f.driver.ResolveSettings(t.Context(), jobAttribution(job, "model"))
 			if json.Unmarshal(last.Messages, &dispatched) != nil || !modelInputFits(dispatched, last.Tools, last.ResponseFormat, driver) {
 				t.Fatal("actual failure-recovery request exceeded the configured budget")
 			}
@@ -163,7 +163,7 @@ func TestWritePreviewFailureKeepsMixedRoundRecoverable(t *testing.T) {
 func TestPlanFailureReservationIncludesWorstJSONEscaping(t *testing.T) {
 	calls := []toolCall{resultBudgetCall("first", `{}`), resultBudgetCall("later", `{}`)}
 	for _, message := range []string{strings.Repeat("<", 256), strings.Repeat("\"", 512), strings.Repeat("é", 512), strings.Repeat("界", 512), strings.Repeat("\n", 256)} {
-		b := newToolRoundBudget(nil, nil, nil, nil, agentrequest.Settings{ContextWindow: 10000, MaxOutputTokens: 1000}, nil)
+		b := newToolRoundBudget(nil, nil, nil, nil, agentrequest.Settings{ContextWindow: 10000, MaxOutputTokens: 1000, OutputReserveTokens: 1000}, nil)
 		b.reservePlanFailures(calls, nil)
 		for _, call := range calls {
 			value := planFailureReceipts(calls, errors.New(message))[call.ID]
@@ -249,7 +249,7 @@ func TestReadResultBudgetLetsChatAndReviewNarrowAndContinue(t *testing.T) {
 }
 
 func TestReadResultBudgetCountsTheWholeToolRound(t *testing.T) {
-	settings := agentrequest.Settings{ContextWindow: 4096, MaxOutputTokens: 512}
+	settings := agentrequest.Settings{ContextWindow: 4096, MaxOutputTokens: 512, OutputReserveTokens: 512}
 	calls := []toolCall{resultBudgetCall("one", `{}`), resultBudgetCall("two", `{}`)}
 	value, _ := json.Marshal(map[string]string{"data": strings.Repeat("x", 7000)})
 	for _, call := range calls {

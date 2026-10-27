@@ -214,8 +214,8 @@ type Config struct {
 }
 
 type ModelDriver interface {
-	Settings(context.Context) (agentrequest.Settings, error)
-	Ready(context.Context, *sql.Tx) (bool, error)
+	ResolveSettings(context.Context, agentrequest.Attribution) (agentrequest.Settings, error)
+	ReadyFor(context.Context, *sql.Tx, agentrequest.Attribution) (bool, error)
 	Submit(context.Context, agentrequest.Input) (agentrequest.Request, error)
 	Wait(context.Context, int64) (agentrequest.Result, error)
 	Cancel(context.Context, int64) error

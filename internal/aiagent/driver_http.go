@@ -97,7 +97,7 @@ func RegisterDriverRoutes(registrar Registrar, service *Service, requests *agent
 			write(w, map[string]any{"models": v}, e)
 		}},
 		{"GET", "/chatgpt", func(w http.ResponseWriter, r *http.Request, _ Actor) {
-			v, e := connection.Status(r.Context())
+			v, e := requests.ChatGPTStatus(r.Context())
 			write(w, v, e)
 		}},
 		{"POST", "/chatgpt/target", func(w http.ResponseWriter, r *http.Request, _ Actor) {

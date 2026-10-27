@@ -67,7 +67,7 @@ func (s *Service) Conversation(ctx context.Context, actor Actor) (Conversation, 
 		return Conversation{}, err
 	}
 	out := Conversation{Messages: []Message{}, Plans: []Plan{}}
-	out.Enabled, err = s.chatEnabled(ctx, tx)
+	out.Enabled, err = s.chatEnabled(ctx, tx, actor)
 	if err != nil {
 		return out, err
 	}

@@ -80,12 +80,12 @@ func (s *Service) compactContext(ctx context.Context, job Job, actor Actor, sett
 	if err != nil {
 		return nil, err
 	}
-	driver, err := s.config.Driver.Settings(ctx)
+	driver, err := s.config.Driver.ResolveSettings(ctx, jobAttribution(job, "model"))
 	if err != nil {
 		return nil, err
 	}
 	raw, _ := json.Marshal(messages)
-	budget := driver.ContextWindow - driver.MaxOutputTokens
+	budget := driver.ContextWindow - driver.OutputReserveTokens
 	reserve := budget / 10
 	if reserve < 128 {
 		reserve = 128
@@ -153,15 +153,17 @@ func (s *Service) summarize(ctx context.Context, job Job, actor Actor, history [
 	}
 	source := []json.RawMessage{}
 	for _, m := range history[:cut] {
+		// Summaries quote visible conversation content. Native reasoning items
+		// belong only to a matching provider replay, never to quoted text.
+		m.Wire = nil
 		source = append(source, wireMessage(m))
 	}
 	raw, _ := json.Marshal(source)
-	driver, err := s.config.Driver.Settings(ctx)
+	driver, err := s.config.Driver.ResolveSettings(ctx, jobAttribution(job, "compaction"))
 	if err != nil {
 		return err
 	}
-	budget := driver.ContextWindow - driver.MaxOutputTokens
-	budget -= max(128, budget/10)
+	budget := modelInputBudget(driver)
 	summary := previous
 	for part := 0; len(raw) > 0; part++ {
 		if part >= 64 {

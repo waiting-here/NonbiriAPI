@@ -23,12 +23,19 @@ type Config struct {
 	Now            func() time.Time
 }
 type Status struct {
-	Connected    bool   `json:"connected"`
-	Revision     int64  `json:"revision,string"`
-	HostID       string `json:"host_id"`
-	AccountLabel string `json:"account_label"`
-	ExpiresAt    int64  `json:"expires_at"`
-	NeedsLogin   bool   `json:"needs_login"`
+	Connected     bool                `json:"connected"`
+	Revision      int64               `json:"revision,string"`
+	HostID        string              `json:"host_id"`
+	AccountLabel  string              `json:"account_label"`
+	ExpiresAt     int64               `json:"expires_at"`
+	UpdatedAt     int64               `json:"updated_at"`
+	NeedsLogin    bool                `json:"needs_login"`
+	OfficialUsage OfficialUsageStatus `json:"official_usage"`
+}
+type OfficialUsageStatus struct {
+	Availability string `json:"availability"`
+	Reason       string `json:"reason"`
+	UsageURL     string `json:"usage_url"`
 }
 type LogoutResult struct {
 	RemoteRevocationConfirmed bool `json:"remote_revocation_confirmed"`
@@ -61,12 +68,13 @@ type session struct {
 	Private, Encrypted string
 	Label              string
 	Expires            int64
+	UpdatedAt          int64
 }
 
 func loadSession(ctx context.Context, q sessionReader) (session, error) {
 	var s session
 	s.Target.Version = 1
-	err := q.QueryRowContext(ctx, "SELECT revision,host_id,public_key,encrypted_private_key,encrypted_credentials,client_id,subject,account_label,expires_at FROM agent_chatgpt_session WHERE id=1").Scan(&s.Target.Revision, &s.Target.HostID, &s.Target.PublicKey, &s.Private, &s.Encrypted, &s.Target.ClientID, &s.Target.Subject, &s.Label, &s.Expires)
+	err := q.QueryRowContext(ctx, "SELECT revision,host_id,public_key,encrypted_private_key,encrypted_credentials,client_id,subject,account_label,expires_at,updated_at FROM agent_chatgpt_session WHERE id=1").Scan(&s.Target.Revision, &s.Target.HostID, &s.Target.PublicKey, &s.Private, &s.Encrypted, &s.Target.ClientID, &s.Target.Subject, &s.Label, &s.Expires, &s.UpdatedAt)
 	return s, err
 }
 func (m *Manager) authorize(ctx context.Context) error {
@@ -78,7 +86,7 @@ func (m *Manager) authorize(ctx context.Context) error {
 	return m.config.AdminAuthorize(ctx, tx)
 }
 func sessionStatus(s session) Status {
-	return Status{Connected: s.Encrypted != "", Revision: s.Target.Revision, HostID: s.Target.HostID, AccountLabel: s.Label, ExpiresAt: s.Expires, NeedsLogin: s.Encrypted == ""}
+	return Status{Connected: s.Encrypted != "", Revision: s.Target.Revision, HostID: s.Target.HostID, AccountLabel: s.Label, ExpiresAt: s.Expires, UpdatedAt: s.UpdatedAt, NeedsLogin: s.Encrypted == "", OfficialUsage: OfficialUsageStatus{Availability: "unavailable", Reason: "not_exposed_by_public_api", UsageURL: "https://chatgpt.com/settings/usage"}}
 }
 func (m *Manager) Status(ctx context.Context) (Status, error) {
 	if err := m.authorize(ctx); err != nil {
@@ -86,7 +94,7 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 	}
 	s, err := loadSession(ctx, m.config.ReadDB)
 	if errors.Is(err, sql.ErrNoRows) {
-		return Status{NeedsLogin: true}, nil
+		return sessionStatus(session{}), nil
 	}
 	return sessionStatus(s), err
 }
@@ -196,7 +204,8 @@ func (m *Manager) Import(ctx context.Context, envelope Envelope) (Status, error)
 	if err = m.config.AdminAuthorize(ctx, tx); err != nil {
 		return Status{}, err
 	}
-	result, err := tx.ExecContext(ctx, "UPDATE agent_chatgpt_session SET revision=revision+1,encrypted_credentials=?,client_id=?,subject=?,account_label=?,expires_at=?,updated_at=? WHERE id=1 AND revision=?", sealed, creds.ClientID, sub, label, creds.ExpiresAt, m.config.Now().UnixMilli(), s.Target.Revision)
+	updatedAt := m.config.Now().UnixMilli()
+	result, err := tx.ExecContext(ctx, "UPDATE agent_chatgpt_session SET revision=revision+1,encrypted_credentials=?,client_id=?,subject=?,account_label=?,expires_at=?,updated_at=? WHERE id=1 AND revision=?", sealed, creds.ClientID, sub, label, creds.ExpiresAt, updatedAt, s.Target.Revision)
 	if err != nil {
 		return Status{}, err
 	}
@@ -212,6 +221,7 @@ func (m *Manager) Import(ctx context.Context, envelope Envelope) (Status, error)
 	s.Encrypted = sealed
 	s.Label = label
 	s.Expires = creds.ExpiresAt
+	s.UpdatedAt = updatedAt
 	return sessionStatus(s), nil
 }
 func (m *Manager) seal(c Credentials) (string, error) {
