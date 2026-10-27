@@ -45,24 +45,28 @@ func TestEndpointHistoryPreservesNoChangeAndReplay(t *testing.T) {
 	if response.Code != 204 {
 		t.Fatal(response.Code, response.Body.String())
 	}
-	rows, err := f.store.ReadDB().Query("SELECT outcome FROM management_operations ORDER BY id")
+	rows, err := f.store.ReadDB().Query("SELECT domain,outcome FROM management_operations ORDER BY id")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	var outcomes []string
+	var domains, outcomes []string
 	for rows.Next() {
-		var outcome string
-		if err := rows.Scan(&outcome); err != nil {
+		var domain, outcome string
+		if err := rows.Scan(&domain, &outcome); err != nil {
 			t.Fatal(err)
 		}
 		outcomes = append(outcomes, outcome)
+		domains = append(domains, domain)
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(outcomes, []string{"succeeded", "no_change", "partial", "no_change"}) {
 		t.Fatal(outcomes)
+	}
+	if !slices.Equal(domains, []string{"endpoint-tags", "endpoint-tags", "endpoint-tags", "endpoint-tag-rules"}) {
+		t.Fatal(domains)
 	}
 	var leaked int
 	if err := f.store.ReadDB().QueryRow("SELECT count(*) FROM management_operation_items WHERE instr(target_id,'private-path')>0 OR instr(target_name,'private-path')>0").Scan(&leaked); err != nil || leaked != 0 {

@@ -631,7 +631,8 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	}
 	assistant, err = aiagent.New(aiagent.Config{
 		DB: store.DB(), ReadDB: store.ReadDB(), Driver: assistantRequests, Authorize: assistantAuthority.Authorize,
-		Operations: &agentOperations{read: store.ReadDB(), donations: donationService, charity: charityRoutingService, users: assistantUsers, authority: assistantAuthority, pressure: audits.pressure},
+		History:    managementHistory,
+		Operations: &agentOperations{read: store.ReadDB(), donations: donationService, charity: charityRoutingService, users: assistantUsers, authority: assistantAuthority, pressure: audits.pressure, history: managementHistory},
 		Search:     agentSearch(store.ReadDB(), outbound, forwardRuntime.flow, assistantAuthority), Secrets: vault,
 	})
 	if err != nil {

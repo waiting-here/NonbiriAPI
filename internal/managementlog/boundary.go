@@ -46,6 +46,14 @@ func DescribeRoute(method, pattern string) (Metadata, bool) {
 	path = strings.TrimPrefix(path, "automation/")
 	parts := strings.Split(path, "/")
 	domain := parts[0]
+	if len(parts) == 3 && parts[0] == "overview" && parts[1] == "endpoints" {
+		switch parts[2] {
+		case "tags":
+			domain = "endpoint-tags"
+		case "tag-rules":
+			domain = "endpoint-tag-rules"
+		}
+	}
 	action, summary := routeAction(method, parts)
 	meta := Metadata{Source: SourceWeb, ExecutorKind: "human", Domain: domain, Action: action, Summary: summary}
 	if strings.HasPrefix(pattern, "/api/steward/automation/") {

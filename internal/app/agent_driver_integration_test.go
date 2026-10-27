@@ -33,7 +33,7 @@ func TestAgentDriverRoutesSelectionAndNativeContinuation(t *testing.T) {
 			if calls.Add(1) == 1 {
 				output = []any{
 					map[string]any{"type": "reasoning", "id": "reason-fixture", "summary": []any{}, "encrypted_content": "synthetic-opaque-reasoning"},
-					map[string]any{"type": "function_call", "id": "function-fixture", "call_id": "call-fixture", "name": "donations", "arguments": "{}"},
+					map[string]any{"type": "function_call", "id": "function-fixture", "call_id": "call-fixture", "name": "management_history", "arguments": `{"action":"list","filter":{"domain":"ai"}}`},
 				}
 			}
 			event, _ := json.Marshal(map[string]any{"type": "response.completed", "response": map[string]any{"status": "completed", "output": output, "usage": map[string]int{"input_tokens": 20, "output_tokens": 5}}})
@@ -100,6 +100,28 @@ func TestAgentDriverRoutesSelectionAndNativeContinuation(t *testing.T) {
 	first, second := <-requests, <-requests
 	if strings.Contains(first, "max_output_tokens") || !strings.Contains(second, "synthetic-opaque-reasoning") || !strings.Contains(second, "function_call_output") {
 		t.Fatal("native output or default parameters were lost")
+	}
+	var wire struct {
+		Input []struct {
+			Type   string `json:"type"`
+			Output string `json:"output"`
+		} `json:"input"`
+	}
+	if err := json.Unmarshal([]byte(second), &wire); err != nil {
+		t.Fatal(err)
+	}
+	historyReturned := false
+	for _, item := range wire.Input {
+		if item.Type != "function_call_output" {
+			continue
+		}
+		var page map[string]any
+		if json.Unmarshal([]byte(item.Output), &page) == nil && page["view"] == "groups" && page["total"] != nil {
+			historyReturned = true
+		}
+	}
+	if !historyReturned {
+		t.Fatal("administrator history tool did not return a real page")
 	}
 	f.call("POST", "/admin/api/ai/chat/messages", map[string]any{"content": "Continue", "expected_generation": chat["generation"], "request_key": "responses-round-two"}, f.adminCookie, true)
 	waitAgentChat(t, f, "completed")
