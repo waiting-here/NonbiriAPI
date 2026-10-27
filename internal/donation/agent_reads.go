@@ -151,21 +151,31 @@ SELECT donation_id,record_id,revision,reviewer_id,role,action,note,at,kind,use_i
 	query := `WITH visible_donations AS (` + selection + `), catalog AS (
  SELECT dk.donation_id,dk.id AS key_id,m.normalized_model_id AS model,m.display_name AS name,'manual' AS source FROM donation_key_manual_models m JOIN donation_keys dk ON dk.id=m.donation_key_id JOIN visible_donations vd ON vd.id=dk.donation_id
  UNION SELECT dk.donation_id,dk.id,c.normalized_model_id,c.normalized_model_id,'automatic' FROM donation_keys dk JOIN visible_donations vd ON vd.id=dk.donation_id JOIN donation_uses u ON u.donation_key_id=dk.id JOIN donation_use_revisions ur ON ur.id IN (u.current_pending_revision_id,u.current_approved_revision_id) JOIN endpoint_grant_authorizations a ON a.grant_revision_id=ur.grant_revision_id JOIN discovery_source_states st ON st.source_revision_id=` + connectionstore.DiscoverySourceRevisionSQL + ` JOIN model_catalog_entries c ON c.discovery_run_id=st.current_run_id AND c.source_type='automatic'
- ) SELECT CAST(donation_id AS TEXT),CAST(key_id AS TEXT),model,name,source FROM catalog WHERE (?=0 OR key_id=?) AND (?='' OR source=?) AND (?='' OR instr(lower(model),lower(?))>0 OR instr(lower(name),lower(?))>0) ORDER BY donation_id DESC,key_id,model,source`
+ ) SELECT CAST(c.donation_id AS TEXT),CAST(c.key_id AS TEXT),c.model,c.name,c.source,
+dk.connector_type,dk.canonical_base_url,dk.mainstream_channel_id,dk.mainstream_channel_name,dk.mainstream_channel_revision,dk.mainstream_channel_category,` + endpointTagsProjectionSQL + `
+FROM catalog c JOIN donation_keys dk ON dk.id=c.key_id
+WHERE (?=0 OR c.key_id=?) AND (?='' OR c.source=?) AND (?='' OR instr(lower(c.model),lower(?))>0 OR instr(lower(c.name),lower(?))>0) ORDER BY c.donation_id DESC,c.key_id,c.model,c.source`
 	values = append(values, keyID, keyID, in.Source, in.Source, in.Query, in.Query, in.Query)
 	rows, err := tx.QueryContext(ctx, query, values...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	data := []map[string]string{}
+	data := []map[string]any{}
 	var budget agentplan.ReadBudget
 	for rows.Next() {
 		var donationID, key, model, name, source string
-		if err = rows.Scan(&donationID, &key, &model, &name, &source); err != nil {
+		var context AdminSafeSource
+		var tags string
+		if err = rows.Scan(&donationID, &key, &model, &name, &source, &context.ConnectorType, &context.BaseURL, &context.ChannelID, &context.Name, &context.ChannelRevision, &context.Category, &tags); err != nil {
 			return nil, err
 		}
-		item := map[string]string{"donation_id": donationID, "key_id": key, "model": model, "name": name, "source": source}
+		context.Kind = "custom"
+		if context.ChannelID != nil {
+			context.Kind = "mainstream"
+		}
+		context.EndpointTags = sourceTags(tags)
+		item := map[string]any{"donation_id": donationID, "key_id": key, "model": model, "name": name, "source": source, "safe_source": context}
 		if err = budget.Add(item); err != nil {
 			return nil, err
 		}

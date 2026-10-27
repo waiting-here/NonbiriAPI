@@ -549,28 +549,26 @@ describe('donation page operations', () => {
     expect(result.data[0]?.rules[0]?.state).toBe('limited');
   });
 
-  it('strips unused fields and rejects duplicate IDs, cursor mixing and wrong windows', () => {
+  it('keeps source context and rejects duplicate IDs, cursor mixing and wrong windows', () => {
     expect(
       normalizeManagedDonationsPage(
         page([
           donation({
-            sources: [mainstreamSource({ channel_revision: '2', category: 'subscription' })],
+            sources: [
+              mainstreamSource({
+                channel_revision: '2',
+                category: 'subscription',
+                endpoint_tags: ['mainstream'],
+              }),
+            ],
           }),
         ]),
         'admin',
         {},
         '1',
         20,
-      ),
-    ).toEqual(
-      normalizeManagedDonationsPage(
-        page([donation({ sources: [mainstreamSource()] })]),
-        'admin',
-        {},
-        '1',
-        20,
-      ),
-    );
+      ).data[0]?.sources[0],
+    ).toMatchObject({ category: 'subscription', endpoint_tags: ['mainstream'] });
     expect(
       normalizeManagedDonationsPage(page([donation({ keys: [] })]), 'admin', {}, '1', 20),
     ).toEqual(normalizeManagedDonationsPage(page([donation()]), 'admin', {}, '1', 20));
@@ -578,21 +576,18 @@ describe('donation page operations', () => {
       normalizeManagedDonationKeysPage(
         page([
           keySummary({
-            safe_source: mainstreamSource({ channel_revision: '2', category: 'subscription' }),
+            safe_source: mainstreamSource({
+              channel_revision: '2',
+              category: 'api_platform',
+              endpoint_tags: ['user_gateway'],
+            }),
           }),
         ]),
         '7',
         '1',
         20,
-      ),
-    ).toEqual(
-      normalizeManagedDonationKeysPage(
-        page([keySummary({ safe_source: mainstreamSource() })]),
-        '7',
-        '1',
-        20,
-      ),
-    );
+      ).data[0]?.safe_source,
+    ).toMatchObject({ category: 'api_platform', endpoint_tags: ['user_gateway'] });
     expect(() =>
       normalizeManagedDonationsPage(page([donation(), donation()]), 'admin', {}, '1', 20),
     ).toThrow(ApiError);

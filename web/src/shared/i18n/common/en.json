@@ -862,7 +862,8 @@
           "opencodeSession": "OpenCode session ID (ses)",
           "opencodeMessage": "OpenCode message ID (msg)",
           "opencodePart": "OpenCode part ID (prt)"
-        }
+        },
+        "currentEndpointTags": "Current endpoint tags"
       },
       "management": {
         "details": "Technical details",

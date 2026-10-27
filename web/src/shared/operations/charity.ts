@@ -102,7 +102,7 @@ type CharityConnectorType =
   | 'typesafe-systemone'
   | 'openai-chat-completions';
 
-export type ManagedSafeSource =
+export type ManagedSafeSource = { endpoint_tags?: string[] } & (
   | {
       kind: 'custom';
       connector_type: CharityConnectorType;
@@ -115,8 +115,9 @@ export type ManagedSafeSource =
       channel_id: string;
       name: string;
       channel_revision?: string;
-      category?: 'subscription' | 'api_platform';
-    };
+      category?: string;
+    }
+);
 
 export interface ManagedDonationKey extends SmartBackoffFields {
   service_statuses?: ServiceStatus[];
@@ -217,7 +218,16 @@ export function normalizeManagedSource(
 ): ManagedSafeSource {
   const discriminator = record(
     value,
-    ['kind', 'connector_type', 'base_url', 'channel_id', 'name', 'channel_revision', 'category'],
+    [
+      'kind',
+      'connector_type',
+      'base_url',
+      'channel_id',
+      'name',
+      'channel_revision',
+      'category',
+      'endpoint_tags',
+    ],
     label,
     ['kind', 'connector_type', 'base_url'],
   );
@@ -242,23 +252,34 @@ export function normalizeManagedSource(
     `${label} connector`,
   );
   const baseURL = sourceText(discriminator.base_url, `${label} canonical base URL`);
+  const tags =
+    discriminator.endpoint_tags === undefined
+      ? {}
+      : {
+          endpoint_tags: array(discriminator.endpoint_tags, `${label} endpoint tags`).map((tag) =>
+            string(tag, `${label} endpoint tag`),
+          ),
+        };
   if (kind === 'custom') {
-    record(value, ['kind', 'connector_type', 'base_url'], label);
-    return { kind, connector_type: connectorType, base_url: baseURL };
+    return { kind, connector_type: connectorType, base_url: baseURL, ...tags };
   }
-  const fields =
-    role === 'admin'
-      ? ([
-          'kind',
-          'connector_type',
-          'base_url',
-          'channel_id',
-          'name',
-          'channel_revision',
-          'category',
-        ] as const)
-      : (['kind', 'connector_type', 'base_url', 'channel_id', 'name'] as const);
-  const source = record(value, fields, label);
+  const fields = [
+    'kind',
+    'connector_type',
+    'base_url',
+    'channel_id',
+    'name',
+    'channel_revision',
+    'category',
+    'endpoint_tags',
+  ] as const;
+  const source = record(value, fields, label, [
+    'kind',
+    'connector_type',
+    'base_url',
+    'channel_id',
+    'name',
+  ]);
   const name = sourceText(source.name, `${label} channel name`);
   if (name.trim() !== name) invalidResponse(`${label} channel name`);
   const mainstream: Extract<ManagedSafeSource, { kind: 'mainstream' }> = {
@@ -267,17 +288,15 @@ export function normalizeManagedSource(
     base_url: baseURL,
     channel_id: opaqueID(source.channel_id, 'mch_', `${label} channel id`),
     name,
+    ...tags,
   };
-  if (role === 'admin') {
+  if (role === 'admin' && source.channel_revision !== undefined) {
     mainstream.channel_revision = decimal(source.channel_revision, `${label} channel revision`, {
       positive: true,
     });
-    mainstream.category = oneOf(
-      source.category,
-      ['subscription', 'api_platform'] as const,
-      `${label} channel category`,
-    );
   }
+  if (source.category !== undefined)
+    mainstream.category = string(source.category, `${label} channel category`);
   return mainstream;
 }
 

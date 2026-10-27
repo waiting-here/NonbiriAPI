@@ -27,6 +27,7 @@ type donationPageItem struct {
 	header   AdminDonation
 	summary  DonationSummary
 	keyCount int64
+	sources  []AdminSafeSource
 }
 
 // ids come from the authorized current page in the same snapshot. Every query
@@ -62,7 +63,7 @@ func readDonationPageSummariesTx(ctx context.Context, tx *sql.Tx, ids []int64, n
 			rows.Close()
 			return nil, err
 		}
-		items[header.ID] = &donationPageItem{header: header}
+		items[header.ID] = &donationPageItem{header: header, sources: []AdminSafeSource{}}
 	}
 	err = rows.Err()
 	rows.Close()
@@ -156,7 +157,8 @@ WHERE dk.donation_id IN (`+marks+`) GROUP BY dk.donation_id,state`, timed(4)...)
  SELECT donation_id,source_key,preview,COUNT(*) OVER(PARTITION BY donation_id) AS source_count,
  ROW_NUMBER() OVER(PARTITION BY donation_id ORDER BY source_key) AS position FROM grouped
 )
-SELECT ranked.donation_id,ranked.source_count,dk.connector_type,dk.canonical_base_url,dk.mainstream_channel_id,dk.mainstream_channel_name
+SELECT ranked.donation_id,ranked.source_count,dk.connector_type,dk.canonical_base_url,dk.mainstream_channel_id,dk.mainstream_channel_name,
+dk.mainstream_channel_revision,dk.mainstream_channel_category,`+endpointTagsProjectionSQL+`
 FROM ranked JOIN donation_keys dk ON dk.id=ranked.preview WHERE ranked.position<=3
 ORDER BY ranked.donation_id,ranked.source_key`, args...)
 	if err != nil {
@@ -165,8 +167,9 @@ ORDER BY ranked.donation_id,ranked.source_key`, args...)
 	for rows.Next() {
 		var id string
 		var count int64
-		var source SafeSource
-		if err := rows.Scan(&id, &count, &source.ConnectorType, &source.BaseURL, &source.ChannelID, &source.Name); err != nil {
+		var source AdminSafeSource
+		var tags string
+		if err := rows.Scan(&id, &count, &source.ConnectorType, &source.BaseURL, &source.ChannelID, &source.Name, &source.ChannelRevision, &source.Category, &tags); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -180,7 +183,9 @@ ORDER BY ranked.donation_id,ranked.source_key`, args...)
 			source.Kind = "mainstream"
 		}
 		item.summary.SourceCount = strconv.FormatInt(count, 10)
-		item.summary.Sources = append(item.summary.Sources, source)
+		source.EndpointTags = sourceTags(tags)
+		item.summary.Sources = append(item.summary.Sources, ownerSource(source))
+		item.sources = append(item.sources, source)
 	}
 	err = rows.Err()
 	rows.Close()

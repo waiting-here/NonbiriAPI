@@ -4,17 +4,19 @@ package endpointtags
 import (
 	"net/netip"
 	"net/url"
+	"slices"
 	"strings"
 )
 
 const Mainstream = "mainstream"
 
+var values = [...]string{"abusive_third_party", "community_charity", "noncommercial_gateway", "user_gateway", "steward_gateway", "invalid_entry", Mainstream, "mysterious", "other_third_party"}
+
+// Values returns a copy of the supported administrative tag vocabulary.
+func Values() []string { return slices.Clone(values[:]) }
+
 func Valid(tag string) bool {
-	switch tag {
-	case "abusive_third_party", "community_charity", "noncommercial_gateway", "user_gateway", "steward_gateway", "invalid_entry", Mainstream, "mysterious", "other_third_party":
-		return true
-	}
-	return false
+	return slices.Contains(values[:], tag)
 }
 
 // Domain follows the existing endpoint ASCII/punycode hostname contract. It
