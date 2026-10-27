@@ -6491,7 +6491,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,40);
+INSERT INTO schema_state(id,version) VALUES(1,41);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,
