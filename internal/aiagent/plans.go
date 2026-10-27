@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
 type memoryEdit struct {
@@ -57,6 +58,10 @@ func (s *Service) previewOperations(ctx context.Context, actor Actor, ops []Oper
 }
 
 func (s *Service) propose(ctx context.Context, job Job, actor Actor, ops []Operation, callIDs []string) error {
+	ops, err := s.freezeHistoryOperations(ctx, actor, ops)
+	if err != nil {
+		return err
+	}
 	preview, err := s.previewOperations(ctx, actor, ops)
 	if err != nil {
 		return err
@@ -133,10 +138,11 @@ func readPlan(ctx context.Context, tx *sql.Tx, id int64) (Plan, Job, []string, e
 }
 
 type prepared struct {
-	business PreparedBatch
-	steps    []preparedStep
-	service  *Service
-	actor    Actor
+	business   PreparedBatch
+	steps      []preparedStep
+	operations []Operation
+	service    *Service
+	actor      Actor
 }
 type preparedStep struct {
 	memory        *memoryEdit
@@ -144,7 +150,7 @@ type preparedStep struct {
 }
 
 func (s *Service) prepare(ctx context.Context, actor Actor, ops []Operation) (*prepared, error) {
-	p := &prepared{service: s, actor: actor}
+	p := &prepared{service: s, actor: actor, operations: ops}
 	business := []Operation{}
 	for _, op := range ops {
 		if op.Kind == "memory.edit" {
@@ -177,7 +183,9 @@ func (p *prepared) Finalize(committed bool) {
 }
 func (p *prepared) Apply(ctx context.Context, tx *sql.Tx) (json.RawMessage, error) {
 	values := []json.RawMessage{}
-	for _, step := range p.steps {
+	items := historyItems(p.operations, managementlog.Succeeded, "")
+	for index, step := range p.steps {
+		managementlog.SetResult(ctx, managementlog.Result{})
 		if item := step.memory; item != nil {
 			var v Memory
 			var err error
@@ -203,12 +211,20 @@ func (p *prepared) Apply(ctx context.Context, tx *sql.Tx) (json.RawMessage, erro
 				return nil, err
 			}
 			values = append(values, value)
+			historyReceipt(&items[index], p.operations[index], value)
+		}
+		if outcome := managementlog.OutcomeFromContext(ctx); outcome != "" {
+			items[index].Outcome = outcome
+		}
+		if step.memory != nil && step.memory.Kind == "personal" && step.memory.OwnerID == 0 {
+			items[index].TargetID = fmt.Sprint(p.actor.ID)
 		}
 	}
+	managementlog.SetItemsResult(ctx, items)
 	return json.Marshal(map[string]any{"status": "completed", "operations": values})
 }
 
-func (s *Service) Decide(ctx context.Context, actor Actor, id int64, approve bool, feedback string) (Plan, error) {
+func (s *Service) Decide(ctx context.Context, actor Actor, id int64, approve bool, feedback string) (resultPlan Plan, resultErr error) {
 	if len(feedback) > 1<<20 {
 		return Plan{}, ErrInvalid
 	}
@@ -232,6 +248,9 @@ func (s *Service) Decide(ctx context.Context, actor Actor, id int64, approve boo
 			err = s.authorize(ctx, tx, actor, "ai.archives")
 		}
 	}
+	if err == nil && job.ActorID == actor.ID && plan.State == "pending" {
+		ctx, err = s.planHistory(ctx, tx, actor, plan, approve)
+	}
 	_ = tx.Rollback()
 	if err != nil {
 		return Plan{}, err
@@ -240,8 +259,12 @@ func (s *Service) Decide(ctx context.Context, actor Actor, id int64, approve boo
 		return Plan{}, ErrForbidden
 	}
 	if plan.State != "pending" {
+		managementlog.MarkReplay(ctx)
 		return plan, nil
 	}
+	defer func() {
+		resultErr = errors.Join(resultErr, s.historyFailureAfterRollback(ctx, plan.Operations, resultErr))
+	}()
 	var pending *prepared
 	if approve {
 		pending, err = s.prepare(ctx, actor, plan.Operations)
@@ -267,11 +290,19 @@ func (s *Service) Decide(ctx context.Context, actor Actor, id int64, approve boo
 	if err != nil {
 		return Plan{}, err
 	}
+	if plan.State != "pending" {
+		if err = s.authorize(ctx, tx, actor, "ai.chat"); err != nil {
+			return Plan{}, err
+		}
+		managementlog.MarkReplay(ctx)
+		return plan, nil
+	}
 	if err = s.checkChatJob(ctx, tx, actor, job.ID, job.Generation, "waiting_confirmation"); err != nil {
 		return Plan{}, err
 	}
-	if plan.State != "pending" {
-		return plan, nil
+	ctx, err = s.planHistory(ctx, tx, actor, plan, approve)
+	if err != nil {
+		return Plan{}, err
 	}
 	state := "rejected"
 	payload := map[string]any{"status": "rejected", "feedback": feedback}
@@ -288,12 +319,15 @@ func (s *Service) Decide(ctx context.Context, actor Actor, id int64, approve boo
 		}
 		state = "approved"
 		payload = map[string]any{"status": "completed", "feedback": feedback, "result": result}
+	} else {
+		managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.Rejected, Code: "human_declined",
+			Items: []managementlog.Item{{Action: "plan.reject", TargetKind: "ai_plan", TargetID: fmt.Sprint(id), Outcome: managementlog.Rejected, Code: "human_declined"}}})
 	}
 	raw, _ := json.Marshal(payload)
 	if err = s.finishPlan(ctx, tx, plan, job, ids, state, raw); err != nil {
 		return Plan{}, err
 	}
-	if err = tx.Commit(); err != nil {
+	if err = managementlog.Commit(ctx, tx); err != nil {
 		return Plan{}, err
 	}
 	committed = true
@@ -337,17 +371,22 @@ func (s *Service) planFailed(ctx context.Context, actor Actor, id int64, cause e
 	if err != nil {
 		return Plan{}, err
 	}
+	if plan.State != "pending" {
+		if err = s.authorize(ctx, tx, actor, "ai.chat"); err != nil {
+			return Plan{}, err
+		}
+		managementlog.MarkReplay(ctx)
+		return plan, nil
+	}
 	if err = s.checkChatJob(ctx, tx, actor, job.ID, job.Generation, "waiting_confirmation"); err != nil {
 		return Plan{}, err
 	}
-	if plan.State != "pending" {
-		return plan, nil
-	}
+	setHistoryFailure(ctx, plan.Operations, cause)
 	raw, _ := json.Marshal(map[string]any{"status": "failed", "reason": cause.Error(), "applied": false})
 	if err = s.finishPlan(ctx, tx, plan, job, ids, "failed", raw); err != nil {
 		return Plan{}, err
 	}
-	if err = tx.Commit(); err != nil {
+	if err = managementlog.Commit(ctx, tx); err != nil {
 		return Plan{}, err
 	}
 	plan.State = "failed"

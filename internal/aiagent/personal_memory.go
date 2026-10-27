@@ -5,9 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
+
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
 func (s *Service) memoryAccess(ctx context.Context, tx *sql.Tx, actor Actor, kind string, owner int64, write bool) error {
@@ -125,7 +128,16 @@ func (s *Service) PutPersonalMemory(ctx context.Context, actor Actor, owner int6
 	if err != nil {
 		return Memory{}, err
 	}
-	return value, tx.Commit()
+	ctx, err = s.humanHistory(ctx, tx, actor, "memory.personal.update", "修改 AI 专属记忆")
+	if err != nil {
+		return Memory{}, err
+	}
+	managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.Succeeded, Items: []managementlog.Item{{
+		Action: "memory.personal.update", TargetKind: "ai_personal_memory", TargetID: fmt.Sprint(value.OwnerID),
+		Outcome: managementlog.Succeeded,
+		Changes: []managementlog.Change{{Field: "content", Operation: "updated"}},
+	}}})
+	return value, managementlog.Commit(ctx, tx)
 }
 
 func (s *Service) MemoryOwners(ctx context.Context, actor Actor, query string, page, size int) (MemoryOwnerPage, error) {

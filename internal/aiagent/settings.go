@@ -8,9 +8,11 @@ import (
 	"math"
 	"net/url"
 	"strings"
+
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
-var toolNames = []string{"donations", "donation_models", "review_history", "charity_models", "charity_binding_presets", "users", "site_status", "web_search", "propose_operations", "edit_memory"}
+var toolNames = []string{"donations", "donation_models", "review_history", "charity_models", "charity_binding_presets", "users", "site_status", "web_search", "propose_operations", "edit_memory", "management_history"}
 
 func defaultSettings() Settings {
 	tools := make(map[string]bool, len(toolNames))
@@ -101,7 +103,7 @@ func (s *Service) PutSettings(ctx context.Context, actor Actor, input SettingsUp
 		}
 	}
 	for _, name := range toolNames {
-		if _, ok := input.Tools[name]; !ok {
+		if _, ok := input.Tools[name]; !ok && name != "management_history" {
 			return Settings{}, ErrInvalid
 		}
 	}
@@ -137,6 +139,14 @@ func (s *Service) PutSettings(ctx context.Context, actor Actor, input SettingsUp
 	}
 	if input.SearchAPIKey == nil {
 		encrypted = stored
+	}
+	if _, present := input.Tools["management_history"]; !present {
+		copied := make(map[string]bool, len(input.Tools)+1)
+		for name, enabled := range input.Tools {
+			copied[name] = enabled
+		}
+		copied["management_history"] = previous.Tools["management_history"]
+		input.Tools = copied
 	}
 	value := input.Settings
 	value.ToolDescriptions = mergeToolDescriptions(previous.ToolDescriptions, descriptions)
@@ -176,7 +186,15 @@ func (s *Service) PutSettings(ctx context.Context, actor Actor, input SettingsUp
 			return Settings{}, err
 		}
 	}
-	if err = tx.Commit(); err != nil {
+	ctx, err = s.humanHistory(ctx, tx, actor, "config.update", "修改 AI 设置")
+	if err != nil {
+		return Settings{}, err
+	}
+	managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.Succeeded, Items: []managementlog.Item{{
+		Action: "config.update", TargetKind: "ai_config", TargetID: "1", Outcome: managementlog.Succeeded,
+		Changes: settingsHistoryChanges(previous, value, input.SearchAPIKey != nil),
+	}}})
+	if err = managementlog.Commit(ctx, tx); err != nil {
 		return Settings{}, err
 	}
 	if value.Mode == "off" {
@@ -249,7 +267,15 @@ func (s *Service) PutMemory(ctx context.Context, actor Actor, kind, content stri
 	if err != nil {
 		return Memory{}, err
 	}
-	if err = tx.Commit(); err != nil {
+	ctx, err = s.humanHistory(ctx, tx, actor, "memory.update", "修改 AI 全局记忆")
+	if err != nil {
+		return Memory{}, err
+	}
+	managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.Succeeded, Items: []managementlog.Item{{
+		Action: "memory.update", TargetKind: "ai_memory", TargetID: kind, Outcome: managementlog.Succeeded,
+		Changes: []managementlog.Change{{Field: "content", Operation: "updated"}},
+	}}})
+	if err = managementlog.Commit(ctx, tx); err != nil {
 		return Memory{}, err
 	}
 	return result, nil
