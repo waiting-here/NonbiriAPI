@@ -173,24 +173,25 @@ async function associateSource(page: Page) {
     page.getByRole('button', { name: servicesCopy('en').fetchModels, exact: true }),
   ).toBeDisabled();
   const associating = waitForWrite();
-  await page.evaluate(
+  const associationResult = await page.evaluate(
     async ({ path, source, revision }) => {
       const response = await fetch(path, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
         body: JSON.stringify({ discovery_source_id: source, expected_revision: revision }),
       });
-      return response.status;
+      return { status: response.status, body: await response.json() };
     },
     { path, source: meta.sourceId, revision: detachedKey.revision },
   );
   const associated = await associating;
   expect(associated.status()).toBe(200);
+  expect(associationResult.status).toBe(200);
   expect(associated.request().postDataJSON()).toEqual({
     discovery_source_id: meta.sourceId,
     expected_revision: detachedKey.revision,
   });
-  expect(await associated.json()).toMatchObject({
+  expect(associationResult.body).toMatchObject({
     credential_id: savedKey.credential_id,
     credential_version: savedKey.credential_version,
     discovery_source_id: meta.sourceId,
@@ -205,11 +206,9 @@ async function manual(page: Page, upstream: string, prefix: string, locale: Loca
   const c = connectionCopy(locale),
     meta = resources.get(page)!;
   const core = (locale === 'zh' ? zh : en).user.core;
-  const fold = page
-    .locator('details')
-    .filter({
-      has: page.locator(':scope > summary').filter({ hasText: servicesCopy(locale).manualModels }),
-    });
+  const fold = page.locator('details').filter({
+    has: page.locator(':scope > summary').filter({ hasText: servicesCopy(locale).manualModels }),
+  });
   if ((await fold.getAttribute('open')) === null) await fold.locator(':scope > summary').click();
   const modelInput = fold.getByLabel(core['endpoints.manualModel'], { exact: true });
   await modelInput.fill(upstream);
