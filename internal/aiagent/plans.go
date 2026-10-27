@@ -12,6 +12,7 @@ import (
 
 type memoryEdit struct {
 	Kind             string `json:"kind"`
+	OwnerID          int64  `json:"owner_id,string,omitempty"`
 	Content          string `json:"content"`
 	ExpectedRevision int64  `json:"expected_revision,string"`
 }
@@ -27,7 +28,7 @@ func (s *Service) previewOperations(ctx context.Context, actor Actor, ops []Oper
 			if err := json.Unmarshal(op.Input, &input); err != nil {
 				return nil, ErrInvalid
 			}
-			old, err := s.Memory(ctx, actor, input.Kind)
+			old, err := s.previewMemory(ctx, actor, input)
 			if err != nil {
 				return nil, err
 			}
@@ -37,6 +38,8 @@ func (s *Service) previewOperations(ctx context.Context, actor Actor, ops []Oper
 			label := "对话记忆"
 			if input.Kind == "auto_review" {
 				label = "自动审批记忆"
+			} else if input.Kind == "personal" {
+				label = fmt.Sprintf("专属记忆（站内 ID %d）", old.OwnerID)
 			}
 			out = append(out, OperationPreview{Title: "修改" + label, Before: old.Content, After: input.Content})
 		} else {
@@ -176,10 +179,16 @@ func (p *prepared) Apply(ctx context.Context, tx *sql.Tx) (json.RawMessage, erro
 	values := []json.RawMessage{}
 	for _, step := range p.steps {
 		if item := step.memory; item != nil {
-			if err := p.service.authorize(ctx, tx, p.actor, "ai.memory.edit"); err != nil {
-				return nil, err
+			var v Memory
+			var err error
+			if item.Kind == "personal" {
+				v, err = p.service.writePersonalMemory(ctx, tx, p.actor, item.OwnerID, item.Content, item.ExpectedRevision, p.service.now().UnixMilli())
+			} else {
+				if err = p.service.memoryAccess(ctx, tx, p.actor, item.Kind, item.OwnerID, true); err != nil {
+					return nil, err
+				}
+				v, err = writeMemory(ctx, tx, p.actor, item.Kind, item.Content, item.ExpectedRevision, p.service.now().UnixMilli())
 			}
-			v, err := writeMemory(ctx, tx, p.actor, item.Kind, item.Content, item.ExpectedRevision, p.service.now().UnixMilli())
 			if err != nil {
 				return nil, err
 			}

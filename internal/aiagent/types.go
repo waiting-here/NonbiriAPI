@@ -30,7 +30,8 @@ type TemplateMessage struct {
 	Content string `json:"content"`
 }
 
-// Templates support {{memory}}, {{intelligence}} and {{conversation}}.
+// Templates support shared memories, intelligence, interlocutor identity,
+// personal memory and the conversation node.
 // A conversation placeholder is a separate node so original tool messages
 // retain their roles and call identifiers rather than becoming quoted text.
 type Settings struct {
@@ -59,6 +60,19 @@ type Memory struct {
 	Revision  int64  `json:"revision,string"`
 	UpdatedAt int64  `json:"updated_at"`
 	UpdatedBy string `json:"updated_by"`
+	OwnerID   int64  `json:"owner_id,string,omitempty"`
+	Writable  bool   `json:"writable"`
+}
+
+type MemoryOwner struct {
+	ID    int64  `json:"id,string"`
+	Role  string `json:"role"`
+	Label string `json:"label"`
+}
+
+type MemoryOwnerPage struct {
+	Page[MemoryOwner]
+	CurrentOwnerID int64 `json:"current_owner_id,string"`
 }
 
 type Message struct {

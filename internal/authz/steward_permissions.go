@@ -245,8 +245,10 @@ func StewardRoutePermission(method, path string) string {
 		return "ai.chat"
 	case read && (p == "ai/reviews" || strings.HasPrefix(p, "ai/reviews/")):
 		return "ai.review.read"
-	case (read || method == "PUT") && (p == "ai/memories/auto_review" || p == "ai/memories/chat"):
-		return "ai.memory.edit"
+	case read && (p == "ai/memories/auto_review" || p == "ai/memories/chat"):
+		return "ai.chat"
+	case (read || method == "PUT") && p == "ai/personal-memory":
+		return "ai.chat"
 	case strings.HasPrefix(p, "ai/"):
 		return "unconfigured"
 	case strings.HasPrefix(p, "automation/"):

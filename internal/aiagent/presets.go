@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 )
@@ -13,6 +14,8 @@ var presetFiles embed.FS
 
 type presetBundle struct {
 	auto, chat             []TemplateMessage
+	previousChat           []TemplateMessage
+	previousMemoryTool     string
 	descriptions           map[string]string
 	autoMemory, chatMemory string
 }
@@ -31,6 +34,7 @@ func loadPresets() presetBundle {
 	for name, target := range map[string]any{
 		"auto-review.json":       &value.auto,
 		"chat.json":              &value.chat,
+		"previous-chat.json":     &value.previousChat,
 		"tool-descriptions.json": &value.descriptions,
 	} {
 		if err := json.Unmarshal(read(name), target); err != nil {
@@ -47,7 +51,17 @@ func loadPresets() presetBundle {
 	value.descriptions = descriptions
 	value.autoMemory = string(read("auto-review-memory.md"))
 	value.chatMemory = string(read("chat-memory.md"))
+	value.previousMemoryTool = string(read("previous-memory-description.txt"))
 	return value
+}
+
+func refreshDefaultTemplate(settings *Settings) {
+	if reflect.DeepEqual(settings.ChatTemplate, builtInPresets.previousChat) {
+		settings.ChatTemplate = append([]TemplateMessage(nil), builtInPresets.chat...)
+	}
+	if settings.ToolDescriptions["edit_memory"] == builtInPresets.previousMemoryTool {
+		settings.ToolDescriptions["edit_memory"] = builtInPresets.descriptions["edit_memory"]
+	}
 }
 
 func mergeToolDescriptions(current, updates map[string]string) map[string]string {

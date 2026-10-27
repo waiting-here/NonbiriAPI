@@ -112,7 +112,7 @@ func TestAIPermissionsDefaultsCurrentFormatAndRoutes(t *testing.T) {
 	for path, want := range map[string]string{
 		"/ai/chat": "ai.chat", "/ai/chat/sessions/1/messages": "ai.chat", "/ai/chat/plans/1/approve": "ai.chat",
 		"/ai/reviews": "ai.review.read", "/ai/reviews/1": "ai.review.read",
-		"/ai/memories/chat": "ai.memory.edit", "/ai/memories/auto_review": "ai.memory.edit",
+		"/ai/memories/chat": "ai.chat", "/ai/memories/auto_review": "ai.chat", "/ai/personal-memory": "ai.chat",
 		"/ai/config": "unconfigured", "/ai/requests": "unconfigured", "/ai/usage": "unconfigured", "/ai/archives": "unconfigured", "/ai/cleanup": "unconfigured",
 	} {
 		if got := StewardRoutePermission("GET", "/api/steward"+path); got != want {
@@ -125,8 +125,8 @@ func TestAIPermissionsDefaultsCurrentFormatAndRoutes(t *testing.T) {
 	if StewardRoutePermission("PUT", "/api/steward/ai/chat/messages/1") != "ai.chat" {
 		t.Fatal("chat message edit mapping")
 	}
-	if StewardRoutePermission("PUT", "/api/steward/ai/memories/chat") != "ai.memory.edit" {
-		t.Fatal("memory write mapping")
+	if StewardRoutePermission("PUT", "/api/steward/ai/memories/chat") != "unconfigured" || StewardRoutePermission("PUT", "/api/steward/ai/personal-memory") != "ai.chat" {
+		t.Fatal("memory write scope mapping")
 	}
 	if StewardRoutePermission("POST", "/api/steward/ai/reviews") != "unconfigured" {
 		t.Fatal("review write mapping")

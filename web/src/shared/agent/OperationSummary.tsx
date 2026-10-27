@@ -224,7 +224,11 @@ export function OperationSummary({
                   ? t('common.agent.chatMemory')
                   : operation.target_id === 'auto_review'
                     ? t('common.agent.reviewMemory')
-                    : operation.target_id,
+                    : operation.target_id === 'personal'
+                      ? input.owner_id
+                        ? t('common.agent.personalMemoryOwner', { id: String(input.owner_id) })
+                        : t('common.agent.myMemory')
+                      : operation.target_id,
             },
           )}
         </p>

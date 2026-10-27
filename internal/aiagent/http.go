@@ -49,6 +49,7 @@ func RegisterRoutes(registrar Registrar, service *Service, requests RequestAdmin
 		{"PUT", "/chat/messages/{id}", api.edit}, {"POST", "/chat/clear", api.clear}, {"POST", "/chat/jobs/{id}/cancel", api.cancel},
 		{"GET", "/chat/plans", api.plans}, {"POST", "/chat/plans/{id}/decision", api.decision}, {"GET", "/reviews", api.reviews}, {"GET", "/reviews/{id}", api.review},
 		{"GET", "/memories/{kind}", api.memory}, {"PUT", "/memories/{kind}", api.putMemory},
+		{"GET", "/personal-memory", api.personalMemory}, {"PUT", "/personal-memory", api.putPersonalMemory},
 	}
 	for _, r := range shared {
 		if err := registrar.RegisterAdminRoute(r.method, "/admin/api/ai"+r.path, r.handler); err != nil {
@@ -60,6 +61,11 @@ func RegisterRoutes(registrar Registrar, service *Service, requests RequestAdmin
 	}
 	admin := []route{{"GET", "/config", api.settings}, {"PUT", "/config", api.putSettings}, {"GET", "/driver", api.driver}, {"PUT", "/driver", api.putDriver}, {"POST", "/driver/models", api.models}, {"GET", "/requests", api.requestsPage}, {"GET", "/requests/{id}", api.requestDetail}, {"POST", "/requests/cleanup", api.cleanup}, {"GET", "/usage", api.usage}, {"GET", "/archives", api.archives}, {"GET", "/archives/{owner}/messages", api.archiveMessages}, {"GET", "/archives/{owner}/results", api.archiveResults}}
 	for _, r := range admin {
+		if err := registrar.RegisterAdminRoute(r.method, "/admin/api/ai"+r.path, r.handler); err != nil {
+			return err
+		}
+	}
+	for _, r := range []route{{"GET", "/personal-memories", api.memoryOwners}, {"GET", "/personal-memories/{owner}", api.personalMemory}, {"PUT", "/personal-memories/{owner}", api.putPersonalMemory}} {
 		if err := registrar.RegisterAdminRoute(r.method, "/admin/api/ai"+r.path, r.handler); err != nil {
 			return err
 		}

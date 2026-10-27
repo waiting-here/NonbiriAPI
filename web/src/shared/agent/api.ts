@@ -4,7 +4,7 @@ import { array, decimal, integer, invalidResponse, record } from '@shared/operat
 import type { PageMetadata, PageSize } from '@shared/operations/pageNumbers';
 
 export type AgentRole = 'admin' | 'steward';
-export type MemoryKind = 'auto_review' | 'chat';
+export type MemoryKind = 'auto_review' | 'chat' | 'personal';
 export interface AgentMessage {
   id: string;
   role: string;
@@ -87,6 +87,13 @@ export interface AgentMemory {
   revision: string;
   updated_at: number;
   updated_by: string;
+  owner_id?: string;
+  writable?: boolean;
+}
+export interface MemoryOwner {
+  id: string;
+  role: string;
+  label: string;
 }
 export interface TemplateMessage {
   role: 'system' | 'user' | 'assistant';
@@ -321,14 +328,15 @@ function page<T>(value: unknown, decode: (item: unknown) => T): AgentPage<T> {
   return { ...row, items: array(row.items, 'items', 100).map(decode) };
 }
 function memory(value: unknown): AgentMemory {
-  const row = object<AgentMemory>(value, [
-    'kind',
-    'content',
-    'revision',
-    'updated_at',
-    'updated_by',
-  ]);
+  const row = object<AgentMemory>(
+    value,
+    ['kind', 'content', 'revision', 'updated_at', 'updated_by'],
+    ['owner_id', 'writable'],
+  );
   decimal(row.revision, 'memory revision');
+  if (row.owner_id !== undefined) decimal(row.owner_id, 'memory owner');
+  if (row.writable !== undefined && typeof row.writable !== 'boolean')
+    invalidResponse('memory access');
   rawString(row.content);
   return row;
 }
@@ -498,14 +506,44 @@ export const getReviews = (role: AgentRole, p: string, n: PageSize, signal?: Abo
   );
 export const getReview = (role: AgentRole, id: string, signal?: AbortSignal) =>
   read(base(role) + '/reviews/' + encodeURIComponent(id), review, signal);
-export const getMemory = (role: AgentRole, kind: MemoryKind, signal?: AbortSignal) =>
-  read(base(role) + '/memories/' + kind, memory, signal);
+const memoryPath = (role: AgentRole, kind: MemoryKind, owner = '') =>
+  base(role) +
+  (kind !== 'personal'
+    ? '/memories/' + kind
+    : owner
+      ? '/personal-memories/' + encodeURIComponent(owner)
+      : '/personal-memory');
+export const getMemory = (role: AgentRole, kind: MemoryKind, signal?: AbortSignal, owner = '') =>
+  read(memoryPath(role, kind, owner), memory, signal);
 export const putMemory = (
   role: AgentRole,
   kind: MemoryKind,
   input: { content: string; expected_revision: string },
   signal?: AbortSignal,
-) => write(base(role) + '/memories/' + kind, 'PUT', input, memory, signal);
+  owner = '',
+) => write(memoryPath(role, kind, owner), 'PUT', input, memory, signal);
+export const getMemoryOwners = (query: string, p: string, n: PageSize, signal?: AbortSignal) =>
+  read(
+    queryPath(base('admin') + '/personal-memories', {
+      q: query || undefined,
+      page: p,
+      page_size: n,
+    }),
+    (value) => ({
+      ...page(value, (item) => {
+        const row = object<MemoryOwner>(item, ['id', 'role', 'label']);
+        decimal(row.id, 'memory owner');
+        rawString(row.label);
+        rawString(row.role);
+        return row;
+      }),
+      current_owner_id: decimal(
+        object<{ current_owner_id: string }>(value, ['current_owner_id']).current_owner_id,
+        'current memory owner',
+      ),
+    }),
+    signal,
+  );
 export const getSettings = (signal?: AbortSignal) =>
   read(base('admin') + '/config', settings, signal);
 export const putSettings = (input: AgentSettingsUpdate, signal?: AbortSignal) =>

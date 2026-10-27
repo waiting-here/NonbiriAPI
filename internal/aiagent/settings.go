@@ -43,12 +43,15 @@ func readSettings(ctx context.Context, query interface {
 	if err = json.Unmarshal([]byte(raw), &result); err != nil {
 		return Settings{}, nil, Actor{}, err
 	}
+	refreshDefaultTemplate(&result)
 	result.ToolDescriptions = mergeToolDescriptions(defaultToolDescriptions(), result.ToolDescriptions)
 	if result.Tools == nil {
 		result.Tools = map[string]bool{}
 	}
-	if _, configured := result.Tools["charity_binding_presets"]; !configured {
-		result.Tools["charity_binding_presets"] = true
+	for _, name := range toolNames {
+		if _, configured := result.Tools[name]; !configured {
+			result.Tools[name] = true
+		}
 	}
 	result.Revision, result.Mode, result.SearchHasKey = revision, mode, len(secret) > 0
 	return result, secret, Actor{ID: owner, Role: "admin", Label: label}, nil
@@ -96,9 +99,6 @@ func (s *Service) PutSettings(ctx context.Context, actor Actor, input SettingsUp
 		if err != nil || u.Hostname() == "" || u.Scheme != "https" && u.Scheme != "http" || u.User != nil || u.Fragment != "" {
 			return Settings{}, ErrInvalid
 		}
-	}
-	if len(input.Tools) != len(toolNames) {
-		return Settings{}, ErrInvalid
 	}
 	for _, name := range toolNames {
 		if _, ok := input.Tools[name]; !ok {
@@ -198,10 +198,12 @@ func (s *Service) Memory(ctx context.Context, actor Actor, kind string) (Memory,
 		return Memory{}, err
 	}
 	defer tx.Rollback()
-	if err = s.authorize(ctx, tx, actor, "ai.memory.edit"); err != nil {
+	if err = s.memoryAccess(ctx, tx, actor, kind, 0, false); err != nil {
 		return Memory{}, err
 	}
-	return readMemory(ctx, tx, kind)
+	value, err := readMemory(ctx, tx, kind)
+	value.Writable = actor.Role == "admin"
+	return value, err
 }
 
 func readMemory(ctx context.Context, tx *sql.Tx, kind string) (Memory, error) {
@@ -215,6 +217,7 @@ func readMemory(ctx context.Context, tx *sql.Tx, kind string) (Memory, error) {
 }
 
 func writeMemory(ctx context.Context, tx *sql.Tx, actor Actor, kind, content string, expected, now int64) (Memory, error) {
+	content = strings.ReplaceAll(strings.ReplaceAll(content, "\r\n", "\n"), "\r", "\n")
 	if kind != "auto_review" && kind != "chat" || expected < 0 || expected == math.MaxInt64 || len(content) > 4<<20 {
 		return Memory{}, ErrInvalid
 	}
@@ -230,7 +233,7 @@ func writeMemory(ctx context.Context, tx *sql.Tx, actor Actor, kind, content str
 		return Memory{}, err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO ai_agent_memory_history(kind,before_content,after_content,revision,actor_id,actor_label,created_at) VALUES(?,?,?,?,?,?,?)`, kind, before.Content, content, expected+1, actor.ID, actor.Label, now)
-	return Memory{Kind: kind, Content: content, Revision: expected + 1, UpdatedAt: now, UpdatedBy: actor.Label}, err
+	return Memory{Kind: kind, Content: content, Revision: expected + 1, UpdatedAt: now, UpdatedBy: actor.Label, Writable: true}, err
 }
 
 func (s *Service) PutMemory(ctx context.Context, actor Actor, kind, content string, expected int64) (Memory, error) {
@@ -239,7 +242,7 @@ func (s *Service) PutMemory(ctx context.Context, actor Actor, kind, content stri
 		return Memory{}, err
 	}
 	defer tx.Rollback()
-	if err = s.authorize(ctx, tx, actor, "ai.memory.edit"); err != nil {
+	if err = s.memoryAccess(ctx, tx, actor, kind, 0, true); err != nil {
 		return Memory{}, err
 	}
 	result, err := writeMemory(ctx, tx, actor, kind, content, expected, s.now().UnixMilli())
