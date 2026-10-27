@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
@@ -60,6 +61,14 @@ func (s *Service) finishBindingHistory(ctx context.Context, modelID int64, resul
 		outcome := managementlog.Failed
 		if item.Status == "incomplete" {
 			outcome = managementlog.Unknown
+		} else {
+			switch item.Code {
+			case httperr.CodeUnauthorized, httperr.CodeForbidden, httperr.CodeStewardPermissionDenied,
+				httperr.CodeInvalidRequest, httperr.CodeNotFound, httperr.CodeConflict,
+				httperr.CodeResourceLimitExceeded, httperr.CodeResourceLocked, httperr.CodeFeatureDisabled,
+				"model_not_found":
+				outcome = managementlog.Rejected
+			}
 		}
 		if err = managementlog.AppendContextTx(work, tx, managementlog.Item{Action: "bind", TargetKind: "donation_key_model", TargetID: item.DonationKeyID + "/" + fmt.Sprint(modelID), Outcome: outcome, Code: item.Code}, false); err != nil {
 			return err

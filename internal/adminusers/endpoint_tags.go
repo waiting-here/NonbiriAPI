@@ -2,13 +2,18 @@ package adminusers
 
 import (
 	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/endpointtags"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
 const routeEndpointTags = routeEndpointOverview + "/tags"
@@ -66,6 +71,7 @@ func (s *Service) setManagedEndpointTags(ctx context.Context, adminID int64, rol
 		}
 		return replayJSON[struct{}](decision)
 	}
+	items := make([]managementlog.Item, 0, len(input.BaseURLs))
 	for _, baseURL := range input.BaseURLs {
 		var exists bool
 		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM endpoints e JOIN users u ON u.id=e.user_id AND u.is_admin=0 WHERE e.base_url=?)`, baseURL).Scan(&exists); err != nil {
@@ -74,15 +80,35 @@ func (s *Service) setManagedEndpointTags(ctx context.Context, adminID int64, rol
 		if !exists {
 			return empty, ErrNotFound
 		}
+		var result sql.Result
+		operation := "deleted"
 		if input.Add {
-			_, err = tx.ExecContext(ctx, `INSERT INTO admin_endpoint_tags(base_url,tag) VALUES(?,?) ON CONFLICT DO NOTHING`, baseURL, input.Tag)
+			operation = "created"
+			result, err = tx.ExecContext(ctx, `INSERT INTO admin_endpoint_tags(base_url,tag) VALUES(?,?) ON CONFLICT DO NOTHING`, baseURL, input.Tag)
 		} else {
-			_, err = tx.ExecContext(ctx, `DELETE FROM admin_endpoint_tags WHERE base_url=? AND tag=?`, baseURL, input.Tag)
+			result, err = tx.ExecContext(ctx, `DELETE FROM admin_endpoint_tags WHERE base_url=? AND tag=?`, baseURL, input.Tag)
 		}
 		if err != nil {
 			return empty, err
 		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return empty, err
+		}
+		outcome := managementlog.Succeeded
+		if affected == 0 {
+			outcome = managementlog.NoChange
+		}
+		// Addresses can contain private path/query values. Retain a stable
+		// identifier and hostname while recording only the controlled tag name.
+		digest := sha256.Sum256([]byte(baseURL))
+		name := ""
+		if parsed, err := url.Parse(baseURL); err == nil {
+			name = parsed.Hostname()
+		}
+		items = append(items, managementlog.Item{Action: "tags.update", TargetKind: "endpoint_address", TargetID: hex.EncodeToString(digest[:]), TargetName: name, Outcome: outcome, Changes: []managementlog.Change{{Field: "tags." + input.Tag, Operation: operation}}})
 	}
+	managementlog.SetItemsResult(ctx, items)
 	if err = idempotency.Complete(ctx, tx, decision, http.StatusNoContent, []byte{}); err != nil {
 		return empty, err
 	}

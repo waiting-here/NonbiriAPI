@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
 func (r *Runtime) complete(id int64, in Input, state, code string, status int, raw []byte, complete, redacted bool, usage Usage, count bool) (resultErr error) {
@@ -112,8 +114,7 @@ func (r *Runtime) List(ctx context.Context, filter ListFilter) (Page, error) {
 	}
 	return out, rows.Err()
 }
-func (r *Runtime) Cleanup(ctx context.Context, in CleanupInput) (CleanupResult, error) {
-	out := CleanupResult{}
+func (r *Runtime) Cleanup(ctx context.Context, in CleanupInput) (out CleanupResult, resultErr error) {
 	if (len(in.IDs) == 0) == (in.ThroughID == 0) || in.ThroughID < 0 || len(in.IDs) > 1000 {
 		return out, ErrInvalid
 	}
@@ -136,6 +137,16 @@ func (r *Runtime) Cleanup(ctx context.Context, in CleanupInput) (CleanupResult, 
 		where += " AND id<=?"
 		args = append(args, in.ThroughID)
 	}
+	_, audited := managementlog.MetadataFromContext(ctx)
+	if audited {
+		meta, _ := managementlog.MetadataFromContext(ctx)
+		managementlog.SetCorrelation(ctx, "request_cleanup", meta.EventID)
+		defer func() {
+			if resultErr != nil && out.DeletedCount > 0 {
+				r.finishFailedCleanup(ctx)
+			}
+		}()
+	}
 	for {
 		tx, err := r.db.BeginTx(ctx, nil)
 		if err != nil {
@@ -145,12 +156,27 @@ func (r *Runtime) Cleanup(ctx context.Context, in CleanupInput) (CleanupResult, 
 			tx.Rollback()
 			return out, err
 		}
-		result, err := tx.ExecContext(ctx, "DELETE FROM agent_requests WHERE id IN (SELECT id FROM agent_requests WHERE "+where+" AND consumed_at IS NOT NULL ORDER BY id LIMIT 100)", args...)
+		rows, err := tx.QueryContext(ctx, "DELETE FROM agent_requests WHERE id IN (SELECT id FROM agent_requests WHERE "+where+" AND consumed_at IS NOT NULL ORDER BY id LIMIT 100) RETURNING id", args...)
 		if err != nil {
 			tx.Rollback()
 			return out, err
 		}
-		n, err := result.RowsAffected()
+		var n int64
+		items := []managementlog.Item{}
+		for rows.Next() {
+			var id int64
+			if err = rows.Scan(&id); err != nil {
+				break
+			}
+			n++
+			if audited {
+				items = append(items, managementlog.Item{Action: "delete", TargetKind: "agent_request", TargetID: strconv.FormatInt(id, 10), Outcome: managementlog.Succeeded})
+			}
+		}
+		if err == nil {
+			err = rows.Err()
+		}
+		rows.Close()
 		if err != nil {
 			tx.Rollback()
 			return out, err
@@ -162,6 +188,10 @@ func (r *Runtime) Cleanup(ctx context.Context, in CleanupInput) (CleanupResult, 
 				return out, err
 			}
 		}
+		if err = managementlog.AppendItemsContextTx(ctx, tx, items, n < 100); err != nil {
+			tx.Rollback()
+			return out, err
+		}
 		if err = tx.Commit(); err != nil {
 			return out, err
 		}
@@ -169,6 +199,22 @@ func (r *Runtime) Cleanup(ctx context.Context, in CleanupInput) (CleanupResult, 
 		if n < 100 {
 			return out, nil
 		}
+	}
+}
+
+// A cleanup can commit several bounded chunks before cancellation or a later
+// failure. Close its record using a fresh context after the failed chunk rolls
+// back; process-exit recovery handles an interrupted attempt to save this result.
+func (r *Runtime) finishFailedCleanup(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancel()
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return
+	}
+	defer tx.Rollback()
+	if err = managementlog.AppendContextTx(ctx, tx, managementlog.Item{Action: "cleanup", TargetKind: "agent_requests", Outcome: managementlog.Failed, Code: "cleanup_interrupted"}, true); err == nil {
+		_ = tx.Commit()
 	}
 }
 

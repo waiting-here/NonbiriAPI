@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/chatgptauth"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
 const (
@@ -326,7 +328,9 @@ func (r *Runtime) PutDriver(ctx context.Context, id int64, in DriverUpdate) (Dri
 	if err != nil {
 		return p, err
 	}
-	if err = tx.Commit(); err == nil {
+	managementlog.SetTarget(ctx, "agent_driver", strconv.FormatInt(id, 10), p.Name)
+	managementlog.ChangedFields(ctx, raw)
+	if err = managementlog.Commit(ctx, tx); err == nil {
 		r.signal()
 	}
 	return p, err
@@ -358,7 +362,8 @@ func (r *Runtime) DeleteDriver(ctx context.Context, id, revision int64) error {
 	if n != 1 {
 		return ErrConflict
 	}
-	return tx.Commit()
+	managementlog.SetTarget(ctx, "agent_driver", strconv.FormatInt(id, 10), "")
+	return managementlog.Commit(ctx, tx)
 }
 func (r *Runtime) PutBinding(ctx context.Context, in BindingUpdate) (DriverBinding, error) {
 	if in.Scope != "default" && in.Scope != "auto_review" && in.Scope != "admin_chat" && in.Scope != "steward_chat" || in.ActorID < 0 || in.ActorID != 0 && in.Scope != "steward_chat" || in.ExpectedRevision < 0 || in.DriverID != nil && *in.DriverID < 0 {
@@ -394,7 +399,11 @@ func (r *Runtime) PutBinding(ctx context.Context, in BindingUpdate) (DriverBindi
 	if err != nil {
 		return out, err
 	}
-	if err = tx.Commit(); err == nil {
+	managementlog.SetTarget(ctx, "agent_driver_binding", in.Scope+"/"+strconv.FormatInt(in.ActorID, 10), "")
+	if in.DriverID == nil && rev == 0 {
+		managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.NoChange})
+	}
+	if err = managementlog.Commit(ctx, tx); err == nil {
 		r.signal()
 	}
 	return out, err

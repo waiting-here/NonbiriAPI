@@ -582,6 +582,11 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create automation service: %w", err)
 	}
+	managementHistory, err := configureManagementOperations(store, authRuntime, roleAuthorizer)
+	if err != nil {
+		return nil, fmt.Errorf("configure management history: %w", err)
+	}
+	automationService.ConfigureManagementHistory(managementHistory)
 	lifecycleCoordinator, err = newLifecycleCoordinator(
 		store, vault, authRuntime, roleAuthorizer, forwardRuntime, gameRuntimes,
 		claimService, resourceRepository, issueService, logRepository,
@@ -641,43 +646,44 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	}
 	app := &application{
 		agent: assistant, agentRequests: assistantRequests,
-		workerCancel:    workerCancel,
-		audits:          audits,
-		activityRuntime: activityEngines,
-		authRuntime:     authRuntime,
-		bridge:          bridgeRuntime,
-		claims:          claimService,
-		resourceRepo:    resourceRepository,
-		automation:      automationService,
-		discoveryWorker: discoveryWorker,
-		donations:       donationService,
-		charity:         charityService,
-		charityRouting:  charityRoutingService,
-		adaptations:     adaptations,
-		checkin:         checkinService,
-		homeGames:       homeGameService,
-		announcements:   announcementService,
-		issues:          issueService,
-		reports:         reportRepository,
-		activities:      activityService,
-		activityRepo:    activityRepository,
-		activityEvents:  activityEvents,
-		adminConfig:     adminConfigRuntime,
-		adminAlerts:     adminAlertRepository,
-		returnAlerts:    returnAlerts,
-		adminUsers:      adminUserService,
-		lifecycle:       lifecycleCoordinator,
-		debug:           debugHub,
-		logs:            logRepository,
-		accountEvents:   accountConnections,
-		forward:         forwardRuntime,
-		games:           gameRuntimes,
-		authorizer:      authorizer,
-		elevation:       elevationManager,
-		gate:            gate,
-		registry:        registry,
-		maintenance:     maintenanceService,
-		egress:          outbound,
+		managementHistory: managementHistory,
+		workerCancel:      workerCancel,
+		audits:            audits,
+		activityRuntime:   activityEngines,
+		authRuntime:       authRuntime,
+		bridge:            bridgeRuntime,
+		claims:            claimService,
+		resourceRepo:      resourceRepository,
+		automation:        automationService,
+		discoveryWorker:   discoveryWorker,
+		donations:         donationService,
+		charity:           charityService,
+		charityRouting:    charityRoutingService,
+		adaptations:       adaptations,
+		checkin:           checkinService,
+		homeGames:         homeGameService,
+		announcements:     announcementService,
+		issues:            issueService,
+		reports:           reportRepository,
+		activities:        activityService,
+		activityRepo:      activityRepository,
+		activityEvents:    activityEvents,
+		adminConfig:       adminConfigRuntime,
+		adminAlerts:       adminAlertRepository,
+		returnAlerts:      returnAlerts,
+		adminUsers:        adminUserService,
+		lifecycle:         lifecycleCoordinator,
+		debug:             debugHub,
+		logs:              logRepository,
+		accountEvents:     accountConnections,
+		forward:           forwardRuntime,
+		games:             gameRuntimes,
+		authorizer:        authorizer,
+		elevation:         elevationManager,
+		gate:              gate,
+		registry:          registry,
+		maintenance:       maintenanceService,
+		egress:            outbound,
 	}
 	if err := app.registerRoutes(store, roleAuthorizer, debugMutations); err != nil {
 		return nil, err
@@ -700,11 +706,15 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err := assistant.Recover(startupContext); err != nil {
 		return nil, fmt.Errorf("recover assistant workflows: %w", err)
 	}
+	if err := managementHistory.RecoverInterrupted(startupContext); err != nil {
+		return nil, fmt.Errorf("recover management history: %w", err)
+	}
 
 	automationHandler, err := newAutomationHandler(automationService, resourceRepository, forwardRuntime.lifecycle, gate)
 	if err != nil {
 		return nil, err
 	}
+	automationHandler = wrapAutomationHistory(managementHistory, automationHandler)
 	mux, err := generationTwoMux(cfg, store, authRuntime, forwardRuntime.handler, artworkPolicy.disabled, automationHandler)
 	if err != nil {
 		return nil, err
@@ -749,6 +759,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		})
 	}()
 	app.performanceDone = performanceDone
+	_, app.managementDone = startManagementCleanup(workerContext, managementHistory)
 	app.readiness, app.handler, app.failures = readiness, performance.Wrap(handler), failures
 	app.lifecycleCancel, app.lifecycleDone = lifecycleCancel, lifecycleDone
 	app.rankingCancel, app.rankingDone = rankingCancel, rankingDone

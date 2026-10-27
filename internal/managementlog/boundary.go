@@ -47,7 +47,11 @@ func DescribeRoute(method, pattern string) (Metadata, bool) {
 	parts := strings.Split(path, "/")
 	domain := parts[0]
 	action, summary := routeAction(method, parts)
-	return Metadata{Source: SourceWeb, ExecutorKind: "human", Domain: domain, Action: action, Summary: summary}, true
+	meta := Metadata{Source: SourceWeb, ExecutorKind: "human", Domain: domain, Action: action, Summary: summary}
+	if strings.HasPrefix(pattern, "/api/steward/automation/") {
+		meta.Source, meta.ExecutorKind = SourceCallerKey, "caller_key"
+	}
+	return meta, true
 }
 
 type statusWriter struct {

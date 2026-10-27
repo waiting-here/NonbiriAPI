@@ -7,6 +7,8 @@ import (
 	"errors"
 	"math"
 	"strings"
+
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
 const MaxBodyBytes = 64 << 20
@@ -134,7 +136,9 @@ func (r *Runtime) PutSettings(ctx context.Context, in SettingsUpdate) (Settings,
 	if err != nil {
 		return Settings{}, err
 	}
-	if err = tx.Commit(); err != nil {
+	managementlog.SetTarget(ctx, "agent_driver", "0", "")
+	managementlog.ChangedFields(ctx, body)
+	if err = managementlog.Commit(ctx, tx); err != nil {
 		return Settings{}, err
 	}
 	r.signal()

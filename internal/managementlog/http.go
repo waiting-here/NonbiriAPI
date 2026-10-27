@@ -22,7 +22,7 @@ func (s *Service) RegisterRoutes(registrar AdminRegistrar, actorID func(*http.Re
 	}{
 		{"GET", base, s.listHTTP}, {"GET", base + "/{id}", s.detailHTTP}, {"GET", base + "/{id}/items", s.itemsHTTP},
 		{"POST", base + "/cleanup/prepare", s.prepareHTTP}, {"POST", base + "/cleanup", s.cleanupHTTP},
-		{"GET", base + "/cleanup/{id}", s.cleanupStatusHTTP}, {"POST", base + "/cleanup/{id}/resume", s.resumeHTTP},
+		{"GET", base + "/cleanup/{id}/status", s.cleanupStatusHTTP}, {"POST", base + "/cleanup/{id}/resume", s.resumeHTTP},
 	}
 	for _, route := range routes {
 		if err := registrar.RegisterAdminRoute(route.method, route.path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

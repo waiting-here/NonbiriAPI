@@ -91,6 +91,11 @@ func newAuthFixture(t *testing.T) *authFixture {
 				t.Error("unexpected revocation token")
 			}
 			f.revocations.Add(1)
+			if f.mode.Load() == 3 {
+				w.WriteHeader(503)
+				_, _ = io.WriteString(w, `{"error":"private-revocation-detail"}`)
+				return
+			}
 			w.WriteHeader(200)
 		default:
 			http.NotFound(w, r)

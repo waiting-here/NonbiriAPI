@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -213,7 +214,8 @@ func (m *Manager) Import(ctx context.Context, envelope Envelope) (Status, error)
 	if n != 1 {
 		return Status{}, ErrConflict
 	}
-	if err = tx.Commit(); err != nil {
+	managementlog.SetTarget(ctx, "chatgpt_connection", "1", "")
+	if err = managementlog.Commit(ctx, tx); err != nil {
 		return Status{}, err
 	}
 	m.pending = nil
@@ -331,6 +333,7 @@ func (m *Manager) Logout(ctx context.Context, revision int64) (LogoutResult, err
 	}
 	s, err := loadSession(ctx, m.config.ReadDB)
 	if errors.Is(err, sql.ErrNoRows) {
+		managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.NoChange})
 		return LogoutResult{RemoteRevocationConfirmed: true}, nil
 	}
 	if err != nil {
@@ -365,7 +368,11 @@ func (m *Manager) Logout(ctx context.Context, revision int64) (LogoutResult, err
 	if n != 1 {
 		return LogoutResult{}, ErrConflict
 	}
-	if err = tx.Commit(); err != nil {
+	managementlog.SetTarget(ctx, "chatgpt_connection", "1", "")
+	if !confirmed {
+		managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.Partial, Code: "remote_revocation_unconfirmed"})
+	}
+	if err = managementlog.Commit(ctx, tx); err != nil {
 		return LogoutResult{}, err
 	}
 	m.pending = nil

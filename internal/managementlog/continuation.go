@@ -44,10 +44,8 @@ func appendOperationTx(ctx context.Context, tx *sql.Tx, parent Operation, items 
 		}
 	}
 	unknown := parent.Code == "outcome_unconfirmed"
-	partial := false
 	for _, item := range items {
 		unknown = unknown || item.Outcome == Unknown
-		partial = partial || item.Outcome == Partial
 	}
 	if unknown {
 		parent.Code = "outcome_unconfirmed"
@@ -65,24 +63,23 @@ func appendOperationTx(ctx context.Context, tx *sql.Tx, parent Operation, items 
 	parent.Failed += failed
 	parent.Outcome = Accepted
 	if terminal {
+		var partial, rejected bool
+		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(outcome='partial'),0),COALESCE(MIN(outcome='rejected'),0) FROM management_operation_items WHERE operation_id=?", parent.ID).Scan(&partial, &rejected); err != nil {
+			return err
+		}
 		switch {
-		case unknown && parent.Succeeded == 0:
+		case unknown && parent.Succeeded == 0 && parent.Failed == 0:
 			parent.Outcome = Unknown
 		case partial || unknown:
 			parent.Outcome = Partial
+		case rejected:
+			parent.Outcome = Rejected
 		case parent.Failed > 0 && parent.Succeeded > 0:
 			parent.Outcome = Partial
 		case parent.Failed > 0:
 			parent.Outcome = Failed
-			if parent.Failed == failed {
-				rejected := len(items) > 0
-				for _, item := range items {
-					rejected = rejected && item.Outcome == Rejected
-				}
-				if rejected {
-					parent.Outcome = Rejected
-				}
-			}
+		case parent.Succeeded > 0 && parent.Skipped > 0:
+			parent.Outcome = Partial
 		case parent.Succeeded > 0:
 			parent.Outcome = Succeeded
 		default:
@@ -103,27 +100,38 @@ func appendOperationTx(ctx context.Context, tx *sql.Tx, parent Operation, items 
 // AppendContextTx maintains a partial batch across its existing per-item
 // transactions without changing the atomicity of the business operation.
 func AppendContextTx(ctx context.Context, tx *sql.Tx, item Item, terminal bool) error {
+	return AppendItemsContextTx(ctx, tx, []Item{item}, terminal)
+}
+
+// AppendItemsContextTx adds one committed chunk without rewriting its rollup
+// once per target. Callers retain their existing transaction and chunk limits.
+func AppendItemsContextTx(ctx context.Context, tx *sql.Tx, items []Item, terminal bool) error {
 	meta, ok := MetadataFromContext(ctx)
 	if !ok {
 		return nil
 	}
 	parent, err := scanOperation(tx.QueryRowContext(ctx, "SELECT "+operationColumns+" FROM management_operations WHERE event_id=?", meta.EventID))
 	if errors.Is(err, sql.ErrNoRows) {
-		outcome := Accepted
-		if terminal {
-			outcome = item.Outcome
+		if len(items) == 0 && terminal {
+			_, err = RecordTx(ctx, tx, Record{Metadata: meta, Result: Result{Outcome: NoChange}})
+			return err
 		}
 		code := ""
-		if item.Outcome == Unknown {
-			code = "outcome_unconfirmed"
+		for _, item := range items {
+			if item.Outcome == Unknown {
+				code = "outcome_unconfirmed"
+			}
 		}
-		_, err = RecordTx(ctx, tx, Record{Metadata: meta, Result: Result{Outcome: outcome, Code: code, Items: []Item{item}}})
+		_, err = RecordTx(ctx, tx, Record{Metadata: meta, Result: Result{Outcome: Accepted, Code: code, Items: items}})
+		if err == nil && terminal {
+			err = FinalizeContextTx(ctx, tx)
+		}
 		return err
 	}
 	if err != nil {
 		return err
 	}
-	return appendOperationTx(ctx, tx, parent, []Item{item}, terminal)
+	return appendOperationTx(ctx, tx, parent, items, terminal)
 }
 func FinalizeContextTx(ctx context.Context, tx *sql.Tx) error {
 	meta, ok := MetadataFromContext(ctx)
@@ -149,7 +157,7 @@ func (s *Service) RecoverInterrupted(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		rows, err := tx.QueryContext(ctx, "SELECT "+operationColumns+" FROM management_operations WHERE correlation_kind='automation_batch' AND outcome='accepted' ORDER BY id LIMIT 32")
+		rows, err := tx.QueryContext(ctx, "SELECT "+operationColumns+" FROM management_operations WHERE correlation_kind IN ('automation_batch','request_cleanup') AND outcome='accepted' ORDER BY id LIMIT 32")
 		if err != nil {
 			tx.Rollback()
 			return err
@@ -171,7 +179,7 @@ func (s *Service) RecoverInterrupted(ctx context.Context) error {
 			return err
 		}
 		for _, parent := range parents {
-			err = appendOperationTx(ctx, tx, parent, []Item{{Action: "interrupted", TargetKind: "automation_batch", TargetID: parent.CorrelationID, Outcome: Unknown, Code: "process_interrupted"}}, true)
+			err = appendOperationTx(ctx, tx, parent, []Item{{Action: "interrupted", TargetKind: parent.CorrelationKind, TargetID: parent.CorrelationID, Outcome: Unknown, Code: "process_interrupted"}}, true)
 			if err != nil {
 				tx.Rollback()
 				return err
