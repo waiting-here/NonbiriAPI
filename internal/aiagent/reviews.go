@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/waiting-here/NonbiriAPI/internal/agentplan"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
 // PendingSubmission is called only by a successful donor submission, inside
@@ -103,7 +105,7 @@ func (s *Service) collectReviewEvents(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) finishReview(ctx context.Context, job Job, actor Actor, outcome ReviewResult) error {
+func (s *Service) finishReview(ctx context.Context, job Job, actor Actor, outcome ReviewResult) (resultErr error) {
 	if outcome.Decision != "approve" && outcome.Decision != "reject" && outcome.Decision != "manual" || outcome.InternalReason == "" || outcome.Decision == "approve" && len(outcome.Bindings) == 0 || outcome.Decision != "approve" && len(outcome.Bindings) > 0 {
 		return ErrInvalid
 	}
@@ -112,6 +114,9 @@ func (s *Service) finishReview(ctx context.Context, job Job, actor Actor, outcom
 		return err
 	}
 	operations, validationErr := s.config.Operations.ReviewOperations(ctx, job.DonationID, signature, outcome)
+	if validationErr != nil && len(operations) == 0 {
+		operations = []Operation{{Kind: "donation.review", TargetID: fmt.Sprint(job.DonationID)}}
+	}
 	var pending *prepared
 	if validationErr == nil && mode == "auto" && outcome.Decision != "manual" {
 		pending, validationErr = s.prepare(ctx, actor, operations)
@@ -122,6 +127,7 @@ func (s *Service) finishReview(ctx context.Context, job Job, actor Actor, outcom
 			pending.Finalize(committed && applied)
 		}
 	}()
+	defer func() { resultErr = errors.Join(resultErr, s.historyFailureAfterRollback(ctx, operations, resultErr)) }()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -134,18 +140,25 @@ func (s *Service) finishReview(ctx context.Context, job Job, actor Actor, outcom
 	if state != "running" {
 		return ErrConflict
 	}
-	settings, _, _, err := readSettings(ctx, tx)
+	settings, _, owner, err := readSettings(ctx, tx)
 	if err != nil {
 		return err
 	}
 	if settings.Mode == "off" {
 		return ErrConflict
 	}
+	if mode == "auto" && settings.Mode == "auto" && outcome.Decision != "manual" {
+		ctx, err = s.reviewHistory(ctx, tx, owner, settings.Revision, job)
+		if err != nil {
+			return err
+		}
+	}
 	if err = s.authorize(ctx, tx, actor, "ai.auto"); err != nil {
 		return err
 	}
 	execution := json.RawMessage(`{"status":"preview","applied":false}`)
 	if validationErr != nil {
+		setHistoryFailure(ctx, operations, validationErr)
 		execution, _ = json.Marshal(map[string]any{"status": "invalid", "applied": false, "reason": validationErr.Error()})
 	} else if outcome.Decision == "manual" {
 		execution = json.RawMessage(`{"status":"manual","applied":false}`)
@@ -155,6 +168,7 @@ func (s *Service) finishReview(ctx context.Context, job Job, actor Actor, outcom
 			_ = tx.Rollback()
 			pending.Finalize(false)
 			pending = nil
+			setHistoryFailure(ctx, operations, err)
 			return s.saveReviewFailure(ctx, job, outcome, err)
 		}
 		applied = true
@@ -163,7 +177,7 @@ func (s *Service) finishReview(ctx context.Context, job Job, actor Actor, outcom
 	if _, err = tx.ExecContext(ctx, `UPDATE ai_agent_jobs SET state='completed',review_result=?,execution=?,updated_at=? WHERE id=? AND state='running'`, string(raw), string(execution), s.now().UnixMilli(), job.ID); err != nil {
 		return err
 	}
-	if err = tx.Commit(); err != nil {
+	if err = managementlog.Commit(ctx, tx); err != nil {
 		return err
 	}
 	committed = true
@@ -173,8 +187,23 @@ func (s *Service) finishReview(ctx context.Context, job Job, actor Actor, outcom
 func (s *Service) saveReviewFailure(ctx context.Context, job Job, outcome ReviewResult, cause error) error {
 	raw, _ := json.Marshal(outcome)
 	execution, _ := json.Marshal(map[string]any{"status": "failed", "applied": false, "reason": cause.Error()})
-	_, err := s.db.ExecContext(ctx, `UPDATE ai_agent_jobs SET state='completed',review_result=?,execution=?,updated_at=? WHERE id=? AND state='running'`, string(raw), string(execution), s.now().UnixMilli(), job.ID)
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	updated, err := tx.ExecContext(ctx, `UPDATE ai_agent_jobs SET state='completed',review_result=?,execution=?,updated_at=? WHERE id=? AND state='running'`, string(raw), string(execution), s.now().UnixMilli(), job.ID)
+	if err != nil {
+		return err
+	}
+	n, err := updated.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrConflict
+	}
+	return managementlog.Commit(ctx, tx)
 }
 
 func (s *Service) Reviews(ctx context.Context, actor Actor, page, size int) (Page[Review], error) {

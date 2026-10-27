@@ -11,6 +11,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/agentplan"
 	"github.com/waiting-here/NonbiriAPI/internal/agentrequest"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
 var (
@@ -202,6 +203,7 @@ type SearchSecrets interface {
 }
 
 type Config struct {
+	History    *managementlog.Service
 	DB         *sql.DB
 	ReadDB     *sql.DB
 	Driver     ModelDriver
