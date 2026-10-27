@@ -228,8 +228,11 @@ func readCardStatistics(ctx context.Context, tx *sql.Tx, query string, args []an
 	return out, rows.Err()
 }
 func rarityStatisticsTx(ctx context.Context, tx *sql.Tx, id, roster string) ([]RarityStatistics, error) {
+	return readRarityStatistics(ctx, tx, statisticsCardsSQL, statisticsCardArgs(id, roster))
+}
+func readRarityStatistics(ctx context.Context, tx *sql.Tx, query string, args []any) ([]RarityStatistics, error) {
 	out := []RarityStatistics{}
-	rows, err := tx.QueryContext(ctx, statisticsCardsSQL+`SELECT rarity,nbi_u128_sum(draw_count),nbi_u128_sum(first_acquisition_count) FROM cards GROUP BY rarity ORDER BY `+statisticsRarityOrder, statisticsCardArgs(id, roster)...)
+	rows, err := tx.QueryContext(ctx, query+`SELECT rarity,nbi_u128_sum(draw_count),nbi_u128_sum(first_acquisition_count) FROM cards GROUP BY rarity ORDER BY `+statisticsRarityOrder, args...)
 	if err != nil {
 		return nil, err
 	}

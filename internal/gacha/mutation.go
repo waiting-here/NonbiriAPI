@@ -446,7 +446,10 @@ func redeem(ctx context.Context, tx *sql.Tx, user, at int64, product string, sho
 		return err
 	}
 	_, err := tx.ExecContext(ctx, "INSERT INTO gacha_claims(user_id,kind,target,created_at) VALUES(?,'card',?,?)", user, product, at)
-	return err
+	if err != nil {
+		return err
+	}
+	return recordShopStatisticsTx(ctx, tx, user, product)
 }
 func claim(ctx context.Context, tx *sql.Tx, user, at int64, id, themeID string, p *profile) error {
 	var theme *Theme
