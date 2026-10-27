@@ -41,3 +41,13 @@ export interface PoolCardStatistics extends StatisticsPage<CardStatistics> {
   rarity_totals: RarityStatistics[];
   top_cards: CardStatistics[];
 }
+
+export interface ShopStatisticsSummary {
+  total_redemptions: string;
+  participant_count: string;
+}
+export interface ShopCardStatistics extends StatisticsPage<CardStatistics> {
+  summary: ShopStatisticsSummary;
+  rarity_totals: RarityStatistics[];
+  top_cards: CardStatistics[];
+}

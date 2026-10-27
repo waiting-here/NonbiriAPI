@@ -23,6 +23,7 @@ import { TimeInput } from '@shared/components/TimeInput';
 import { createTimeDraft, timeDraftValue } from '@shared/time';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { operationKey } from '@shared/operations/api';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { useAdminSession } from '../data';
 import { getGachaConfiguration, saveGachaConfiguration } from '../../user/activities/gacha/api';
@@ -40,6 +41,7 @@ import type {
 import '../../user/activities/gacha/gacha.css';
 import './gacha-settings.css';
 import { GachaPoolStatistics } from '../features/gacha/GachaPoolStatistics';
+import { GachaShopStatistics } from '../features/gacha/GachaShopStatistics';
 
 const queryKey = ['admin', 'gacha'] as const;
 type Copy = (zh: string, en: string) => string;
@@ -631,8 +633,21 @@ function GachaSettingsContent() {
     enabled: !!session.data,
     retry: false,
   });
-  const [section, setSection] = useState('pools'),
-    [draft, setDraft] = useState<Draft | null>(null);
+  const [params, setParams] = useSearchState();
+  const requestedSection = params.get('gacha_view');
+  const section =
+    requestedSection &&
+    ['settings', 'presets', 'statistics', 'shop-statistics'].includes(requestedSection)
+      ? requestedSection
+      : 'pools';
+  const setSection = (value: string) =>
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (value === 'pools') next.delete('gacha_view');
+      else next.set('gacha_view', value);
+      return next;
+    });
+  const [draft, setDraft] = useState<Draft | null>(null);
   const mutation = useRetainedOperation<AdminInput, Configuration>(
     async (input, key, context) => {
       const result = await saveGachaConfiguration(input, key, context.signal);
@@ -709,10 +724,17 @@ function GachaSettingsContent() {
               { value: 'settings', label: t('规则与商店', 'Rules and shop') },
               { value: 'presets', label: t('配置模板', 'Templates') },
               { value: 'statistics', label: ui('admin.gachaStats.tab') },
+              { value: 'shop-statistics', label: ui('admin.gachaShopStats.tab') },
             ]}
           />
           {section === 'statistics' && session.data && !session.error ? (
             <GachaPoolStatistics
+              key={session.data.admin.username}
+              accountKey={session.data.admin.username}
+            />
+          ) : null}
+          {section === 'shop-statistics' && session.data && !session.error ? (
+            <GachaShopStatistics
               key={session.data.admin.username}
               accountKey={session.data.admin.username}
             />
