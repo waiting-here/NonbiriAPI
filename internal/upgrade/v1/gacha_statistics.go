@@ -46,5 +46,8 @@ func backfillGachaStatistics(ctx context.Context, tx *sql.Tx) error {
  total_draws=(SELECT nbi_u128_sum(draw_count) FROM gacha_card_statistics c WHERE c.pool_id=gacha_pool_statistics.pool_id),
  participant_count=(SELECT nbi_u128(count(*)) FROM gacha_pool_participants p WHERE p.pool_id=gacha_pool_statistics.pool_id);
  DROP TABLE temp.gacha_statistics_draw_pools;`)
-	return err
+	if err != nil {
+		return err
+	}
+	return backfillGachaShopStatistics(ctx, tx)
 }

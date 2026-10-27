@@ -221,7 +221,7 @@ func (s *Service) ExportUserTx(ctx context.Context, tx *sql.Tx, user, at int64, 
 	return out, nil
 }
 func (s *Service) DeleteUserTx(ctx context.Context, tx *sql.Tx, user int64) error {
-	for _, table := range []string{"gacha_card_participants", "gacha_pool_participants", "gacha_draws", "gacha_claims", "gacha_pity", "gacha_owned", "gacha_profiles"} {
+	for _, table := range []string{"gacha_shop_participants", "gacha_card_participants", "gacha_pool_participants", "gacha_draws", "gacha_claims", "gacha_pity", "gacha_owned", "gacha_profiles"} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE user_id=?", user); err != nil {
 			return err
 		}

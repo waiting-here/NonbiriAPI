@@ -7,7 +7,7 @@ import (
 
 func restoreSchema39LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
-	for _, table := range []string{"gacha_card_participants", "gacha_pool_participants", "gacha_card_statistics", "gacha_pool_statistics"} {
+	for _, table := range []string{"gacha_shop_participants", "gacha_shop_card_statistics", "gacha_shop_statistics", "gacha_card_participants", "gacha_pool_participants", "gacha_card_statistics", "gacha_pool_statistics"} {
 		hostileMustExec(t, database, "DROP TABLE "+table)
 	}
 	hostileMustExec(t, database, "DROP TABLE discovery_source_keys")

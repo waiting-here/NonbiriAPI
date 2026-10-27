@@ -22,7 +22,7 @@ var serviceScopeImpact = &migrationImpact{
 	// These parents are rewritten together while their deferred identities are
 	// remapped. Their incoming relationships are checked before commit.
 	rebuiltTables:  []string{"credentials", "credential_versions", "endpoint_key_grant_revisions", "discovery_sources", "discovery_source_revisions", "discovery_runs", "donation_use_revisions", "donation_service_health", "dispatch_claims"},
-	relationTables: []string{"endpoints", "endpoint_key_discovery_sources", "discovery_source_states", "model_catalog_entries", "dispatch_claim_targets", "discovery_source_keys", "gacha_pool_statistics", "gacha_card_statistics", "gacha_pool_participants", "gacha_card_participants"},
+	relationTables: []string{"endpoints", "endpoint_key_discovery_sources", "discovery_source_states", "model_catalog_entries", "dispatch_claim_targets", "discovery_source_keys", "gacha_pool_statistics", "gacha_card_statistics", "gacha_pool_participants", "gacha_card_participants", "gacha_shop_statistics", "gacha_shop_card_statistics", "gacha_shop_participants"},
 	credentials:    credentialsRebuilt,
 }
 
