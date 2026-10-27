@@ -4,6 +4,7 @@ import { renderWithProviders } from '../../../test/unit/support';
 import common from '@shared/i18n/common/en.json';
 import type { AgentSettings, DriverSettings } from './api';
 import { AdminSettings } from './AdminSettings';
+vi.mock('./DriverPanel', () => ({ DriverPanel: () => null }));
 const mocks = vi.hoisted(() => ({
   driver: vi.fn(),
   settings: vi.fn(),
