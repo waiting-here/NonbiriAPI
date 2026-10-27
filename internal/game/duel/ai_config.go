@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"strconv"
 	"strings"
 	"time"
@@ -210,6 +211,7 @@ func (s *Service) mutateAIAdmin(ctx context.Context, key, route string, input an
 	if err != nil {
 		return MutationResult{}, ErrInvalidRequest
 	}
+	managementlog.ChangedFields(ctx, canonical)
 	hash, err := idempotency.RequestDigest(idempotency.DigestInput{ActorScopeHash: actor, Method: "POST", Route: route, Body: canonical})
 	if err != nil {
 		return MutationResult{}, ErrInvalidRequest

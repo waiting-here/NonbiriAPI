@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"maps"
 	"math"
 	"net/http"
@@ -86,6 +87,7 @@ func (service *Service) PatchGamesConfig(ctx context.Context, body []byte, idemp
 	if err != nil {
 		return game.WireConfiguration{}, ErrInvariant
 	}
+	managementlog.ChangedFields(ctx, canonical)
 	requestHash, err := idempotency.RequestDigest(idempotency.DigestInput{
 		ActorScopeHash: actorHash,
 		Method:         http.MethodPatch,

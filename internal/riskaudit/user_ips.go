@@ -43,7 +43,7 @@ func (r *Repository) processUserIPsBatch(ctx context.Context, tx *sql.Tx, scan C
 			if err != nil {
 				return false, err
 			}
-			return true, tx.Commit()
+			return true, commitScanResult(ctx, tx, scan.ID)
 		}
 		if err != nil {
 			return false, err
@@ -232,7 +232,7 @@ func (r *Repository) processUserIPsBatch(ctx context.Context, tx *sql.Tx, scan C
 	if err != nil {
 		return false, err
 	}
-	return true, tx.Commit()
+	return true, commitScanResult(ctx, tx, scan.ID)
 }
 
 func readWindowSources(ctx context.Context, tx *sql.Tx, id string) ([]windowSource, error) {

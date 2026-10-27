@@ -8,6 +8,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"math"
 	"strconv"
 )
@@ -96,6 +97,7 @@ func (s *Service) Put(ctx context.Context, input Update, key string) (Configurat
 		return out, err
 	}
 	actorHash, _ := idempotency.ActorScopeHash("admin", strconv.FormatInt(actor, 10))
+	managementlog.ChangedFields(ctx, payload)
 	hash, err := idempotency.RequestDigest(idempotency.DigestInput{ActorScopeHash: actorHash, Method: "PUT", Route: "/admin/api/inactivity-policy", Body: payload})
 	if err != nil {
 		return out, ErrInvalid

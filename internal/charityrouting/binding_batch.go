@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"net/http"
 	"strconv"
 
@@ -319,6 +320,17 @@ func applyBindingMatrix(ctx context.Context, tx *sql.Tx, targets []bindingTarget
 		}
 		out.Models = append(out.Models, BindingModelRevision{strconv.FormatInt(id, 10), strconv.FormatInt(head.revision, 10)})
 	}
+	auditItems := make([]managementlog.Item, 0, len(keys)*len(targets))
+	for _, row := range out.Items {
+		for i, code := range row.Results {
+			outcome := managementlog.NoChange
+			if code == "added" {
+				outcome = managementlog.Succeeded
+			}
+			auditItems = append(auditItems, managementlog.Item{Action: "bind", TargetKind: "donation_key_model", TargetID: row.DonationKeyID + "/" + strconv.FormatInt(targets[i].modelID, 10), Outcome: outcome, Code: code})
+		}
+	}
+	managementlog.SetItemsResult(ctx, auditItems)
 	out.AddedCount = strconv.Itoa(added)
 	return out, nil
 }

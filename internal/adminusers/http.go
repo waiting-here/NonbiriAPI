@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"io"
 	"math/big"
 	"net/http"
@@ -289,6 +290,7 @@ func (api *httpAPI) patchUser(writer http.ResponseWriter, request *http.Request,
 	}
 	switch mode {
 	case "profile":
+		managementlog.SetAction(request.Context(), "profile.update", "更新用户资料")
 		input, ok := decodeProfileMutation(object)
 		if !ok {
 			writeError(writer, ErrInvalidRequest)
@@ -305,6 +307,7 @@ func (api *httpAPI) patchUser(writer http.ResponseWriter, request *http.Request,
 		}
 		writeDisplayMutation(writer, result.Status, result.Body)
 	case "economy":
+		managementlog.SetAction(request.Context(), "economy.update", "调整用户余额")
 		input, ok := decodeEconomyMutation(object)
 		if !ok {
 			writeError(writer, ErrInvalidRequest)

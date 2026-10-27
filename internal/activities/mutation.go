@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -19,6 +20,7 @@ func beginControlMutation(ctx context.Context, tx *sql.Tx, actorKind string, act
 	if err != nil {
 		return idempotency.Decision{}, ErrInvalidRequest
 	}
+	managementlog.ChangedFields(ctx, input.CanonicalBody)
 	digest, err := idempotency.RequestDigest(idempotency.DigestInput{
 		ActorScopeHash: actor, Method: input.Method, Route: input.Route,
 		PathResourceIDs: input.PathIDs, Query: input.Query, Body: input.CanonicalBody,

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"math"
 	"reflect"
 	"strconv"
@@ -379,6 +380,13 @@ func (repository *Repository) SetResolved(ctx context.Context, adminID, alertID 
 	}
 	committed := false
 	defer finishTransaction(tx, &committed)
+	var previous bool
+	if err = tx.QueryRowContext(ctx, "SELECT resolved FROM admin_alerts WHERE id=?", alertID).Scan(&previous); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return AdminAlert{}, ErrNotFound
+		}
+		return AdminAlert{}, err
+	}
 	if resolved {
 		_, err = tx.ExecContext(ctx, `UPDATE admin_alerts SET resolved=1,resolved_at=?,resolution_kind='manual' WHERE id=? AND resolved=0`, now, alertID)
 	} else {
@@ -405,6 +413,14 @@ FROM admin_alerts WHERE id=?`, alertID))
 		if err != nil {
 			return AdminAlert{}, err
 		}
+	}
+	outcome := managementlog.Succeeded
+	if previous == resolved {
+		outcome = managementlog.NoChange
+	}
+	managementlog.SetResult(ctx, managementlog.Result{Outcome: outcome, Items: []managementlog.Item{{Action: "resolve", TargetKind: "alert", TargetID: strconv.FormatInt(alertID, 10), Outcome: outcome}}})
+	if err := managementlog.RecordContextTx(ctx, tx); err != nil {
+		return AdminAlert{}, err
 	}
 	if err := commitTransaction(tx, &committed); err != nil {
 		return AdminAlert{}, err

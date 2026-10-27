@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"net/http"
 	"time"
 
@@ -60,6 +62,9 @@ func (s *Service) bind(ctx context.Context, userID int64, input bindingInput) (b
 	out, status := runBindings(ctx, input, ids, func(ctx context.Context, id int64) error {
 		return s.bindOne(ctx, userID, modelID, id, input.UpstreamModelID, input.Manual)
 	})
+	if err := s.finishBindingHistory(ctx, modelID, out); err != nil {
+		return out, status, err
+	}
 	return out, status, nil
 }
 
@@ -118,6 +123,10 @@ func (s *Service) bindOne(ctx context.Context, userID, modelID, donationKeyID in
 		discovery, err = ownDiscoveryTx(ctx, tx, userID, donationKeyID, now)
 	}
 	if err == nil && discovery.createdSource {
+		if auditErr := managementlog.AppendContextTx(ctx, tx, managementlog.Item{Action: "create", TargetKind: "discovery_source", TargetID: fmt.Sprint(donationKeyID), Outcome: managementlog.Succeeded}, false); auditErr != nil {
+			_ = tx.Rollback()
+			return auditErr
+		}
 		err = tx.Commit()
 	} else {
 		_ = tx.Rollback()
@@ -127,7 +136,7 @@ func (s *Service) bindOne(ctx context.Context, userID, modelID, donationKeyID in
 	}
 	var revision int64
 	if !manual {
-		discoveryContext, cancel := context.WithTimeout(ctx, s.discoveryTimeout)
+		discoveryContext, cancel := context.WithTimeout(managementlog.WithoutOperation(ctx), s.discoveryTimeout)
 		revision, err = s.resources.RefreshDonationDiscoveryAndWait(discoveryContext, userID, key.donationID, donationKeyID, discovery.selection)
 		cancel()
 		if err != nil {
@@ -146,6 +155,7 @@ func (s *Service) bindOne(ctx context.Context, userID, modelID, donationKeyID in
 	if current != key {
 		return resources.ErrConflict
 	}
+	managementlog.SetResult(ctx, managementlog.Result{})
 	if manual {
 		if err := s.charity.EnsureOwnBindingInTransaction(ctx, tx, userID, modelID, donationKeyID, upstreamModelID, 0); err != nil {
 			return err
@@ -157,6 +167,13 @@ func (s *Service) bindOne(ctx context.Context, userID, modelID, donationKeyID in
 		if err := s.charity.EnsureOwnBindingInTransaction(ctx, tx, userID, modelID, donationKeyID, upstreamModelID, revision, discovery.identity); err != nil {
 			return err
 		}
+	}
+	outcome := managementlog.OutcomeFromContext(ctx)
+	if outcome == "" {
+		outcome = managementlog.Succeeded
+	}
+	if err = managementlog.AppendContextTx(ctx, tx, managementlog.Item{Action: "bind", TargetKind: "donation_key_model", TargetID: fmt.Sprint(donationKeyID) + "/" + fmt.Sprint(modelID), Outcome: outcome}, false); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

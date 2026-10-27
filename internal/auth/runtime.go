@@ -22,6 +22,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -31,6 +32,7 @@ var adminCredentialPurpose = []byte("NonbiriAPI/admin-session-credential-generat
 
 type Runtime struct {
 	db                                *sql.DB
+	managementLog                     *managementlog.Service
 	readDB                            *sql.DB
 	mfaCodec                          secret.AccountMFACodec
 	provider                          DiscordProvider
@@ -239,10 +241,10 @@ func validServeMuxPattern(pattern string) (valid bool) {
 
 func (r *Runtime) registerUserInternal(method, pattern string, handler http.Handler, anonymous, maintenanceExempt bool) error {
 	wrapped := r.wrapUser(handler, anonymous, maintenanceExempt, !maintenanceExempt)
-	return r.mountRoute(r.userMux, method, pattern, wrapped)
+	return r.mountRoute(r.userMux, method, pattern, r.managementBoundary(method, pattern, wrapped))
 }
 func (r *Runtime) registerAdminInternal(method, pattern string, handler http.Handler, anonymous, logout bool) error {
-	return r.mountRoute(r.adminMux, method, pattern, r.wrapAdmin(handler, anonymous, logout))
+	return r.mountRoute(r.adminMux, method, pattern, r.managementBoundary(method, pattern, r.wrapAdmin(handler, anonymous, logout)))
 }
 
 func (r *Runtime) mountRoute(mux *http.ServeMux, method, pattern string, handler http.Handler) (err error) {
@@ -421,6 +423,10 @@ func (r *Runtime) wrapUser(next http.Handler, anonymous, maintenanceExempt, rene
 			r.writeSessionFailure(w, err)
 			return
 		}
+		if err := managementlog.SetIdentity(req.Context(), r.readDatabase(), p.actor.UserID, managementlog.SourceWeb); err != nil {
+			writeStableError(w, httperr.CodeInternal, "authentication failed")
+			return
+		}
 		requestContext, release, err := r.admitUserLifecycle(req.Context(), p.actor, mfaBootstrapRequest(req))
 		if err != nil {
 			r.writeUserLifecycleFailure(w, err)
@@ -555,6 +561,10 @@ func (r *Runtime) wrapAdmin(next http.Handler, anonymous, logout bool) http.Hand
 		p, err := r.authenticate(req.Context(), raw, authz.ActorAdminSession, elevated)
 		if err != nil {
 			r.writeSessionFailure(w, err)
+			return
+		}
+		if err := managementlog.SetIdentity(req.Context(), r.readDatabase(), p.actor.UserID, managementlog.SourceWeb); err != nil {
+			writeStableError(w, httperr.CodeInternal, "authentication failed")
 			return
 		}
 		if !logout {

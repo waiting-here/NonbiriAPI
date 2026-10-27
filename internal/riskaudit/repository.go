@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"sync"
 	"time"
 
@@ -147,10 +148,12 @@ func (r *Repository) UpdateConfig(ctx context.Context, actor Actor, c Config) (C
 	if c.Revision != old.Revision || old.Revision == 1<<63-1 {
 		return Config{}, ErrConflict
 	}
+	metadata, _ := json.Marshal(c)
+	managementlog.ChangedFields(ctx, metadata)
 	c.Revision++
 	c.UpdatedAt = r.now().Unix()
 	_, err = tx.ExecContext(ctx, `UPDATE risk_audit_config SET threshold_percent=?,consecutive_minutes=?,shared_ip_hours=?,shared_ip_users=?,revision=?,updated_at=?,user_ip_window_hours=?,user_ip_min_ips=? WHERE id=1`, c.ThresholdPercent, c.ConsecutiveMinutes, c.SharedIPHours, c.SharedIPUsers, c.Revision, c.UpdatedAt, c.UserIPWindowHours, c.UserIPMinIPs)
-	if err != nil || tx.Commit() != nil {
+	if err != nil || managementlog.Commit(ctx, tx) != nil {
 		return Config{}, ErrUnavailable
 	}
 	if r.configChanged != nil {
@@ -441,7 +444,10 @@ func (r *Repository) PutRuleWithAction(ctx context.Context, actor Actor, rule Ru
 	if err != nil {
 		return Rule{}, err
 	}
-	if tx.Commit() != nil {
+	managementlog.SetTarget(ctx, "client_rule", out.ID, out.Name)
+	metadata, _ := json.Marshal(out)
+	managementlog.ChangedFields(ctx, metadata)
+	if managementlog.Commit(ctx, tx) != nil {
 		return Rule{}, ErrUnavailable
 	}
 	return out, nil
@@ -475,7 +481,7 @@ func (r *Repository) DeleteRule(ctx context.Context, actor Actor, id string, rev
 	if n != 1 {
 		return ErrConflict
 	}
-	if tx.Commit() != nil {
+	if managementlog.Commit(ctx, tx) != nil {
 		return ErrUnavailable
 	}
 	return nil

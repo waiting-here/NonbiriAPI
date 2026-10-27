@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"reflect"
 	"strconv"
 	"time"
@@ -171,6 +172,7 @@ func beginAnnouncementMutation(ctx context.Context, tx *sql.Tx, adminID int64, r
 	if err != nil {
 		return idempotency.Decision{}, ErrInvalidRequest
 	}
+	managementlog.ChangedFields(ctx, mutation.CanonicalBody)
 	digest, err := idempotency.RequestDigest(idempotency.DigestInput{
 		ActorScopeHash: actor, Method: mutation.Method, Route: mutation.Route,
 		PathResourceIDs: mutation.PathIDs, Query: mutation.Query, Body: mutation.CanonicalBody,

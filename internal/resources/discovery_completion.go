@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
@@ -147,7 +148,11 @@ func (r *Repository) finishDiscoveryRunTx(ctx context.Context, tx *sql.Tx, run d
 			return mapConnectionStoreError(err)
 		}
 	}
-	return nil
+	resultOutcome := managementlog.Failed
+	if outcome.Succeeded {
+		resultOutcome = managementlog.Succeeded
+	}
+	return managementlog.AppendRelatedTx(ctx, tx, "model_discovery", run.operationID, managementlog.Item{Action: "discover", TargetKind: "discovery_job", TargetID: run.operationID, Outcome: resultOutcome, Code: string(outcome.FailureClass)}, true)
 }
 
 func modelEvidenceOrigin(model DiscoveredModel) string {

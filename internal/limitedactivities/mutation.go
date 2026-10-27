@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"math"
 	"math/big"
 	"net/http"
@@ -27,6 +28,7 @@ func (s *Service) beginReplay(ctx context.Context, tx *sql.Tx, actorKind string,
 	if err != nil {
 		return idempotency.Decision{}, ErrInvalid
 	}
+	managementlog.ChangedFields(ctx, raw)
 	digest, err := idempotency.RequestDigest(idempotency.DigestInput{ActorScopeHash: a, Method: method, Route: route, PathResourceIDs: []string{activity}, Body: raw})
 	if err != nil {
 		return idempotency.Decision{}, ErrInvalid

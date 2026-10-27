@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"io"
 	"net/http"
 	"strconv"
@@ -41,17 +42,39 @@ func (repository *Repository) ResolveMany(ctx context.Context, adminID int64, id
 	defer tx.Rollback()
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
 	var count int
-	if err = tx.QueryRowContext(ctx, "SELECT count(*) FROM admin_alerts WHERE id IN ("+placeholders+")", args...).Scan(&count); err != nil {
+	rows, err := tx.QueryContext(ctx, "SELECT id,resolved FROM admin_alerts WHERE id IN ("+placeholders+")", args...)
+	if err != nil {
+		return BulkResolution{}, err
+	}
+	items := []managementlog.Item{}
+	for rows.Next() {
+		var id int64
+		var resolved bool
+		if err = rows.Scan(&id, &resolved); err != nil {
+			rows.Close()
+			return BulkResolution{}, err
+		}
+		count++
+		outcome := managementlog.Succeeded
+		if resolved {
+			outcome = managementlog.NoChange
+		}
+		items = append(items, managementlog.Item{Action: "resolve", TargetKind: "alert", TargetID: strconv.FormatInt(id, 10), Outcome: outcome})
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
 		return BulkResolution{}, err
 	}
 	if count != len(ids) {
 		return BulkResolution{}, ErrNotFound
 	}
+	managementlog.SetItemsResult(ctx, items)
 	updateArgs := append([]any{now}, args...)
 	if _, err = tx.ExecContext(ctx, "UPDATE admin_alerts SET resolved=1,resolved_at=?,resolution_kind='manual' WHERE resolved=0 AND id IN ("+placeholders+")", updateArgs...); err != nil {
 		return BulkResolution{}, err
 	}
-	if err = tx.Commit(); err != nil {
+	if err = managementlog.Commit(ctx, tx); err != nil {
 		return BulkResolution{}, err
 	}
 	return BulkResolution{ResolvedCount: count}, nil

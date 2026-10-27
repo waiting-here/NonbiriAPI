@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"math/big"
 	"net/http"
@@ -1378,6 +1379,7 @@ func beginMutation(ctx context.Context, tx *sql.Tx, actorKind string, actorID in
 	if err != nil {
 		return idempotency.Decision{}, ErrInvalidRequest
 	}
+	managementlog.ChangedFields(ctx, mutation.CanonicalBody)
 	digest, err := idempotency.RequestDigest(idempotency.DigestInput{
 		ActorScopeHash: actorHash, Method: mutation.Method, Route: mutation.Route,
 		PathResourceIDs: mutation.PathIDs, Query: mutation.Query, Body: mutation.CanonicalBody,

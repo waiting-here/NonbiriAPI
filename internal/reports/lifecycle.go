@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"math"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -204,6 +205,31 @@ GROUP BY c.id,c.status,c.target_version ORDER BY c.id`, userID)
 		return fmt.Errorf("reports: close protected account targets: %w", err)
 	}
 	for _, item := range affected {
+		if item.status == "approved_processing" {
+			rows, err := tx.QueryContext(ctx, "SELECT id FROM report_targets WHERE case_id=? AND owner_user_id=? AND state='protected'", item.id, userID)
+			if err != nil {
+				return err
+			}
+			ids := []string{}
+			for rows.Next() {
+				var id string
+				if err = rows.Scan(&id); err != nil {
+					rows.Close()
+					return err
+				}
+				ids = append(ids, id)
+			}
+			err = rows.Err()
+			rows.Close()
+			if err != nil {
+				return err
+			}
+			for _, id := range ids {
+				if err = managementlog.AppendRelatedTx(ctx, tx, "report_case", item.id, managementlog.Item{Action: "delete", TargetKind: "report_target", TargetID: id, Outcome: managementlog.NoChange, Code: "account_deleted"}, false); err != nil {
+					return err
+				}
+			}
+		}
 		newVersion := item.version + 1
 		result, err := tx.ExecContext(ctx, `UPDATE report_targets SET
  state='deleted_by_account',endpoint_key_id=NULL,owner_user_id=NULL,owner_discord_id=NULL,owner_display_name=NULL,

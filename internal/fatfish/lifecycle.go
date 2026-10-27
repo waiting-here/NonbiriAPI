@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"sync"
 	"time"
 
@@ -167,6 +168,9 @@ func (s *Service) cancelChallengeTx(ctx context.Context, tx *sql.Tx, c challenge
 	}
 	if count != 1 {
 		return ErrConflict
+	}
+	if c.playtest {
+		return managementlog.AppendRelatedTx(ctx, tx, "fatfish_playtest", c.id, managementlog.Item{Action: "verify", TargetKind: "playtest", TargetID: c.id, Outcome: managementlog.Failed, Code: "interrupted"}, true)
 	}
 	return nil
 }
