@@ -1219,8 +1219,25 @@
       "downloadSVG": "Download SVG",
       "chartDownloadError": "Could not download the chart. Retry, or download the SVG or full statistics instead.",
       "selectedPoolStatistics": "Selected pool statistics",
-      "pageDescription": "Manage permanent rules, limited pools, the mystery shop and draw statistics.",
+      "pageDescription": "Manage pool periods and shop settings, and view draw and card-redemption statistics.",
       "firstOwners": "First-time owners"
+    },
+    "gachaShopStats": {
+      "tab": "Shop card statistics",
+      "title": "Mystery-shop card statistics",
+      "description": "Card redemptions from the mystery shop, with totals and per-card details.",
+      "totalRedemptions": "Total cards redeemed",
+      "participants": "Redeeming accounts",
+      "redemptions": "Cards redeemed",
+      "metricHelp": "Only completed card redemptions count. Ticket purchases and bundles are excluded. Each account can redeem a card once under the current shop rule.",
+      "noRedemptions": "No cards have been redeemed from the shop yet.",
+      "fullShopData": "Charts and CSV/JSON downloads cover the whole shop, independently of the table search and page.",
+      "rarityChart": "Redemptions by rarity",
+      "topCardsChart": "Most-redeemed cards",
+      "cardsTitle": "Card redemption counts",
+      "mostRedeemed": "Most redeemed",
+      "noCardsTitle": "No shop card statistics",
+      "noCardsBody": "Cards appear here when they are available to redeem or have been redeemed before."
     }
   },
   "user": {

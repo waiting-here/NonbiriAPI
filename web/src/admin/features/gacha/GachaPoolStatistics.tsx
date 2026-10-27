@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -19,6 +19,10 @@ import { formatCount } from '@shared/utils/formatNumber';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { listPoolCardStatistics, listPoolStatistics, poolStatisticsExportURL } from './api';
 import { GachaStatisticsChart } from './GachaStatisticsChart';
+import {
+  StatisticsCount as Count,
+  StatisticsSearchField as SearchField,
+} from './StatisticsControls';
 import type { CardSort, PoolSort, PoolStatistics } from './types';
 import './gacha-statistics.css';
 
@@ -506,60 +510,5 @@ export function GachaPoolStatistics({ accountKey }: { accountKey: string }) {
         </div>
       ) : null}
     </div>
-  );
-}
-function Count({ value }: { value: string }) {
-  const exact = formatCount(value).display;
-  const groups = exact.split(',');
-  return (
-    <span className="gacha-stats-count" aria-label={exact} title={exact}>
-      {groups.map((group, index) => (
-        <Fragment key={index}>
-          <span className="gacha-stats-count-group">
-            {group}
-            {index < groups.length - 1 ? ',' : ''}
-          </span>
-          {index < groups.length - 1 ? <wbr /> : null}
-        </Fragment>
-      ))}
-    </span>
-  );
-}
-function SearchField({
-  label,
-  placeholder,
-  value,
-  onSearch,
-}: {
-  label: string;
-  placeholder: string;
-  value: string;
-  onSearch: (value: string) => void;
-}) {
-  const { t } = useTranslation();
-  const [draft, setDraft] = useState(value);
-  return (
-    <>
-      <Field label={label}>
-        {(props) => (
-          <input
-            {...props}
-            type="search"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder={placeholder}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                onSearch(draft.trim());
-              }
-            }}
-          />
-        )}
-      </Field>
-      <Button type="button" onClick={() => onSearch(draft.trim())}>
-        {t('admin.gachaStats.search')}
-      </Button>
-    </>
   );
 }

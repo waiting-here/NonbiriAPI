@@ -19,6 +19,7 @@ import type {
   RarityStatistics,
   StatisticsPage,
   StatisticsWindow,
+  ShopCardStatistics,
 } from './types';
 
 const root = '/admin/api/gacha/statistics/pools';
@@ -140,4 +141,43 @@ export function listPoolCardStatistics(
 }
 export function poolStatisticsExportURL(poolId: string, format: 'csv' | 'json'): string {
   return queryPath(root + '/' + encodeURIComponent(poolId) + '/export', { format });
+}
+
+const shopRoot = '/admin/api/gacha/statistics/shop';
+export function normalizeShopCardStatistics(value: unknown): ShopCardStatistics {
+  const row = record(
+    value,
+    ['summary', 'items', 'pagination', 'rarity_totals', 'top_cards'],
+    'shop card statistics',
+  );
+  const summary = record(
+    row.summary,
+    ['total_redemptions', 'participant_count'],
+    'shop statistics summary',
+  );
+  return {
+    summary: {
+      total_redemptions: decimal(summary.total_redemptions, 'total card redemptions'),
+      participant_count: decimal(summary.participant_count, 'card redemption participants'),
+    },
+    items: array(row.items, 'shop card statistics').map(normalizeCardStatistics),
+    pagination: normalizePageMetadata(row.pagination),
+    rarity_totals: array(row.rarity_totals, 'shop rarity totals').map(normalizeRarityStatistics),
+    top_cards: array(row.top_cards, 'most redeemed cards').map(normalizeCardStatistics),
+  };
+}
+export function listShopCardStatistics(
+  window: StatisticsWindow,
+  q: string,
+  sort: CardSort,
+  signal?: AbortSignal,
+) {
+  return decoded(
+    queryPath(shopRoot + '/cards', { page: window.page, page_size: window.pageSize, q, sort }),
+    normalizeShopCardStatistics,
+    { signal },
+  );
+}
+export function shopStatisticsExportURL(format: 'csv' | 'json'): string {
+  return queryPath(shopRoot + '/export', { format });
 }

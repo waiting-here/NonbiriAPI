@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  shopStatisticsCards,
+  shopStatisticsRarities,
+  shopStatisticsSummary,
+} from '../../../../test/fixtures/gacha-shop-statistics';
+import {
   statisticsCards,
   statisticsPool,
   statisticsRarities,
@@ -10,6 +15,9 @@ import {
   normalizePoolCardStatistics,
   normalizePoolStatistics,
   poolStatisticsExportURL,
+  listShopCardStatistics,
+  normalizeShopCardStatistics,
+  shopStatisticsExportURL,
 } from './api';
 
 describe('administrator pool statistics wire', () => {
@@ -53,5 +61,53 @@ describe('administrator pool statistics wire', () => {
     const download = new URL(poolStatisticsExportURL('pool/one', 'csv'), 'https://admin.example');
     expect(download.pathname).toBe('/admin/api/gacha/statistics/pools/pool%2Fone/export');
     expect([...download.searchParams]).toEqual([['format', 'csv']]);
+  });
+});
+
+describe('administrator shop statistics wire', () => {
+  it('keeps exact whole-shop aggregates and card fields without account identities', () => {
+    const data = normalizeShopCardStatistics({
+      summary: { ...shopStatisticsSummary, account_ids: ['private'] },
+      ...statisticsPage(shopStatisticsCards),
+      rarity_totals: shopStatisticsRarities,
+      top_cards: shopStatisticsCards.slice(0, 2),
+      account_ids: ['private'],
+    });
+    expect(data.summary.total_redemptions).toBe('9007199254741001');
+    expect(data.items[0]).toMatchObject({
+      count: '9007199254740993',
+      participant_count: '9007199254740993',
+      first_acquisition_count: '9007199254740993',
+    });
+    expect(data).not.toHaveProperty('account_ids');
+    expect(data.summary).not.toHaveProperty('account_ids');
+  });
+  it('requests a shop card page while both complete exports omit table filters', async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          summary: shopStatisticsSummary,
+          ...statisticsPage(shopStatisticsCards),
+          rarity_totals: shopStatisticsRarities,
+          top_cards: [],
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetch);
+    await listShopCardStatistics({ page: '2', pageSize: 10 }, 'silver moon', 'name');
+    const url = new URL(String(fetch.mock.calls[0]?.[0]), 'https://admin.example');
+    expect(url.pathname).toBe('/admin/api/gacha/statistics/shop/cards');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      page: '2',
+      page_size: '10',
+      q: 'silver moon',
+      sort: 'name',
+    });
+    for (const format of ['csv', 'json'] as const) {
+      const download = new URL(shopStatisticsExportURL(format), 'https://admin.example');
+      expect(download.pathname).toBe('/admin/api/gacha/statistics/shop/export');
+      expect([...download.searchParams]).toEqual([['format', format]]);
+    }
   });
 });

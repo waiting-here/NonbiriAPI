@@ -1219,8 +1219,25 @@
       "downloadSVG": "下载 SVG",
       "chartDownloadError": "图表下载失败，请重试。也可下载 SVG 或完整统计数据。",
       "selectedPoolStatistics": "当前奖池统计",
-      "pageDescription": "管理常驻规则、限定奖池、神秘商店和抽卡统计。",
+      "pageDescription": "管理奖池期次与商店设置，查看抽卡和卡牌兑换统计。",
       "firstOwners": "首次获得人数"
+    },
+    "gachaShopStats": {
+      "tab": "商店卡牌统计",
+      "title": "神秘商店卡牌统计",
+      "description": "查看神秘商店的卡牌兑换总数、人数与逐卡明细。",
+      "totalRedemptions": "兑换卡牌总数",
+      "participants": "兑换人数",
+      "redemptions": "兑换数量",
+      "metricHelp": "只统计已完成的卡牌兑换，不含抽奖券购买和券包。按当前商店规则，每个账户只能兑换同一张卡一次。",
+      "noRedemptions": "商店暂时还没有已完成的卡牌兑换。",
+      "fullShopData": "图表与 CSV／JSON 下载覆盖整店数据，不受下方表格搜索和分页影响。",
+      "rarityChart": "按稀有度统计兑换",
+      "topCardsChart": "兑换最多的卡牌",
+      "cardsTitle": "卡牌兑换明细",
+      "mostRedeemed": "兑换数量最多",
+      "noCardsTitle": "暂无商店卡牌统计",
+      "noCardsBody": "可在商店兑换或曾经兑换过的卡牌会显示在这里。"
     }
   },
   "user": {

@@ -3,6 +3,7 @@
   scroll-margin-block-start: var(--nb-space-16);
 }
 .gacha-pool-statistics,
+.gacha-shop-statistics,
 .gacha-stats-chart {
   min-inline-size: 0;
 }
@@ -11,6 +12,9 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--nb-space-4);
   margin: 0;
+}
+.gacha-stats-summary--pair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .gacha-stats-summary > div {
   min-inline-size: 0;
