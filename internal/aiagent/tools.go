@@ -23,10 +23,17 @@ func (s *Service) tools(ctx context.Context, actor Actor, settings Settings, aut
 		if e != nil {
 			return nil, nil, e
 		}
-		e = s.authorize(ctx, tx, actor, "ai.memory.edit")
+		e = s.memoryAccess(ctx, tx, actor, "personal", 0, false)
 		tx.Rollback()
 		if e == nil {
-			domain = append(domain, Tool{Name: "edit_memory", Description: "读取或建议修改两份共用Markdown记忆。write必须带读取时的revision与完整新正文，会显示差异并等待人类同意。", Parameters: objectSchema(map[string]any{"action": map[string]any{"type": "string", "enum": []string{"read", "write"}}, "kind": map[string]any{"type": "string", "enum": []string{"auto_review", "chat"}}, "content": stringSchema(), "expected_revision": stringSchema()}, "action", "kind"), ChatOnly: true})
+			kinds := []string{"personal"}
+			properties := map[string]any{"action": map[string]any{"type": "string", "enum": []string{"read", "write"}}, "content": stringSchema(), "expected_revision": stringSchema()}
+			if actor.Role == "admin" {
+				kinds = append(kinds, "chat", "auto_review")
+				properties["owner_id"] = map[string]any{"type": "string", "description": "For personal memory only; omit for the current interlocutor. Administrators may select another existing interlocutor by site ID."}
+			}
+			properties["kind"] = map[string]any{"type": "string", "enum": kinds}
+			domain = append(domain, Tool{Name: "edit_memory", Description: "Read or propose changes to long-term memories while working with the current interlocutor. Writes show a diff and require one human approval.", Parameters: objectSchema(properties, "action", "kind"), ChatOnly: true})
 		}
 	}
 	if settings.SearchURL != "" && settings.SearchHasKey && s.config.Search != nil {

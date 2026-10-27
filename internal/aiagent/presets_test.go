@@ -267,7 +267,7 @@ func TestPresetsLiveDescriptionsReachDriverWithoutChangingAvailability(t *testin
 		if i == 1 {
 			want = "Live description"
 		}
-		if len(tools) != 1 || tools["donations"].Description != want ||
+		if len(tools) != 2 || tools["edit_memory"].Name != "edit_memory" || tools["donations"].Description != want ||
 			string(tools["donations"].Parameters) != `{"type":"object","properties":{}}` {
 			t.Fatalf("description changed tool availability or schema: %+v", tools)
 		}

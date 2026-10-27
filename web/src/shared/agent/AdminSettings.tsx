@@ -192,6 +192,28 @@ function TemplateEditor({
                   >
                     {t('common.agent.insertMemory')}
                   </Button>
+                  {chat ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() =>
+                          patch(index, { content: row.content + '\n{{interlocutor}}' })
+                        }
+                      >
+                        {t('common.agent.insertInterlocutor')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() =>
+                          patch(index, { content: row.content + '\n{{personal_memory}}' })
+                        }
+                      >
+                        {t('common.agent.insertPersonalMemory')}
+                      </Button>
+                    </>
+                  ) : null}
                   {!chat ? (
                     <Button
                       type="button"

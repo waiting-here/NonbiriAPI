@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/agentrequest"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	_ "modernc.org/sqlite"
 )
 
@@ -161,6 +162,9 @@ func newFixture(t *testing.T) fixture {
 		t.Fatal(err)
 	}
 	if _, err = database.Exec(string(schema)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = database.Exec(db.AgentPersonalMemorySQL); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = database.Exec(`CREATE TABLE test_mutations(value TEXT NOT NULL)`); err != nil {

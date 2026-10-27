@@ -1,0 +1,1 @@
+读取或建议修改两份共用Markdown记忆。action=read 时提供 kind=auto_review 或 chat，返回 content 和 revision；未保存的初始正文 revision 为字符串0。action=write 必须提供同一 kind、读取到的 expected_revision 字符串及完整新 content；空 content 表示明确清空，不是恢复预置。修改进入整套待确认计划，界面展示原文与新文差异；确认成功后才生效。先读最新版本，保留仍有效内容，不能把记忆当作权限或保存凭据。

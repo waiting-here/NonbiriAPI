@@ -7,6 +7,9 @@ import {
   getPlans,
   getArchivePlans,
   putSettings,
+  getMemory,
+  getMemoryOwners,
+  putMemory,
 } from './api';
 const job = {
   id: '9007199254740993',
@@ -60,6 +63,41 @@ function respond(value: unknown) {
   return network;
 }
 describe('Agent HTTP projections', () => {
+  it('keeps exact personal-memory owners and paginated historical choices', async () => {
+    const personal = {
+      kind: 'personal',
+      owner_id: '9007199254740993',
+      content: 'Prefer concise replies',
+      revision: '2',
+      updated_at: 1700000000000,
+      updated_by: 'Operator',
+      writable: true,
+    };
+    let network = respond(personal);
+    expect(await getMemory('steward', 'personal')).toEqual(personal);
+    expect(network.mock.calls[0]?.[0]).toBe('/api/steward/ai/personal-memory');
+    network = respond(personal);
+    await putMemory(
+      'admin',
+      'personal',
+      { content: '', expected_revision: '2' },
+      undefined,
+      personal.owner_id,
+    );
+    expect(network.mock.calls[0]?.[0]).toBe('/admin/api/ai/personal-memories/9007199254740993');
+    network = respond({
+      items: [{ id: personal.owner_id, role: 'level6', label: 'Former operator' }],
+      total: '51',
+      page: 2,
+      page_size: 20,
+      current_owner_id: '1',
+    });
+    const owners = await getMemoryOwners('Former', '2', 20);
+    expect(owners.items[0]?.id).toBe(personal.owner_id);
+    expect(network.mock.calls[0]?.[0]).toBe(
+      '/admin/api/ai/personal-memories?q=Former&page=2&page_size=20',
+    );
+  });
   it.each([
     { path: '/admin/api/ai/chat/plans', read: (before: string) => getPlans('admin', before) },
     { path: '/api/steward/ai/chat/plans', read: (before: string) => getPlans('steward', before) },

@@ -155,10 +155,12 @@ function PermissionForm({
     setDonationScope(next.donation_scope);
     setInputs(inputsFor(next));
   };
-  const rows = stewardPermissionKeys.filter((key) =>
-    t(`management.permissions.labels.${copyKey(key)}`)
-      .toLocaleLowerCase()
-      .includes(filter.toLocaleLowerCase()),
+  const rows = stewardPermissionKeys.filter(
+    (key) =>
+      key !== 'ai.memory.edit' &&
+      t(`management.permissions.labels.${copyKey(key)}`)
+        .toLocaleLowerCase()
+        .includes(filter.toLocaleLowerCase()),
   );
   return (
     <div className="nb-stack">
