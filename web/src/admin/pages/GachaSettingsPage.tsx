@@ -39,6 +39,7 @@ import type {
 } from '../../user/activities/gacha/types';
 import '../../user/activities/gacha/gacha.css';
 import './gacha-settings.css';
+import { GachaPoolStatistics } from '../features/gacha/GachaPoolStatistics';
 
 const queryKey = ['admin', 'gacha'] as const;
 type Copy = (zh: string, en: string) => string;
@@ -620,7 +621,7 @@ export function GachaSettingsPage() {
 }
 function GachaSettingsContent() {
   const formatDateTime = useDateTimeFormatter();
-  const { i18n } = useTranslation();
+  const { i18n, t: ui } = useTranslation();
   const t: Copy = (zh, en) => (i18n.language.startsWith('en') ? en : zh);
   const client = useQueryClient(),
     session = useAdminSession();
@@ -684,10 +685,7 @@ function GachaSettingsContent() {
     <div className="page gacha-admin-page">
       <PageHeader
         title={t('真·抽卡模拟器', 'The Gacha Simulator')}
-        description={t(
-          '管理常驻规则、限定奖池和神秘商店。',
-          'Manage permanent rules, limited pools and the mystery shop.',
-        )}
+        description={ui('admin.gachaStats.pageDescription')}
         icon="spark"
         back={
           <Link className="nb-btn nb-btn--ghost" to="/activities">
@@ -710,8 +708,15 @@ function GachaSettingsContent() {
               { value: 'pools', label: t('限定奖池', 'Limited pools') },
               { value: 'settings', label: t('规则与商店', 'Rules and shop') },
               { value: 'presets', label: t('配置模板', 'Templates') },
+              { value: 'statistics', label: ui('admin.gachaStats.tab') },
             ]}
           />
+          {section === 'statistics' && session.data && !session.error ? (
+            <GachaPoolStatistics
+              key={session.data.admin.username}
+              accountKey={session.data.admin.username}
+            />
+          ) : null}
           {section === 'settings' && (
             <SettingsForm
               key={query.data.revision}

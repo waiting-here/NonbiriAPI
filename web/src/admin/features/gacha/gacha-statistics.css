@@ -1,0 +1,97 @@
+.gacha-stats-detail {
+  min-inline-size: 0;
+  scroll-margin-block-start: var(--nb-space-16);
+}
+.gacha-pool-statistics,
+.gacha-stats-chart {
+  min-inline-size: 0;
+}
+.gacha-stats-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--nb-space-4);
+  margin: 0;
+}
+.gacha-stats-summary > div {
+  min-inline-size: 0;
+  padding: var(--nb-space-4);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-muted);
+}
+.gacha-stats-summary dt {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.gacha-stats-summary dd {
+  margin: var(--nb-space-2) 0 0;
+  font-size: clamp(var(--nb-font-size-md), 1.5vw, var(--nb-font-size-xl));
+  font-weight: var(--nb-font-weight-bold);
+}
+.gacha-stats-count {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.gacha-stats-count-group {
+  white-space: nowrap;
+}
+.gacha-stats-name {
+  display: block;
+  min-inline-size: 0;
+  max-inline-size: min(28rem, calc(100vw - var(--nb-space-16)));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gacha-stats-period {
+  display: block;
+  max-inline-size: 25rem;
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+  overflow-wrap: anywhere;
+}
+.gacha-stats-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--nb-space-5);
+  align-items: start;
+}
+.gacha-stats-chart {
+  display: grid;
+  gap: var(--nb-space-3);
+  margin: 0;
+  padding: var(--nb-space-4);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-lg);
+  background: var(--nb-color-surface);
+}
+.gacha-stats-chart__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--nb-space-3);
+}
+.gacha-stats-chart__head h3 {
+  margin: 0;
+  font-size: var(--nb-font-size-lg);
+}
+.gacha-stats-chart__canvas {
+  position: relative;
+  min-inline-size: 0;
+  block-size: 24rem;
+}
+@media (width < 64rem) {
+  .gacha-stats-charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (width < 40rem) {
+  .gacha-stats-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .gacha-stats-chart {
+    padding: var(--nb-space-3);
+  }
+}
