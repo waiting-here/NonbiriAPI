@@ -9,6 +9,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/chatgptauth"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -27,6 +28,10 @@ var (
 )
 
 type Settings struct {
+	ConnectionRevision   int64           `json:"connection_revision,string"`
+	DriverID             int64           `json:"driver_id,string"`
+	Provider             string          `json:"provider"`
+	OutputReserveTokens  int             `json:"output_reserve_tokens"`
 	OutputTokenParameter string          `json:"output_token_parameter"`
 	Revision             int64           `json:"revision,string"`
 	BaseURL              string          `json:"base_url"`
@@ -78,7 +83,9 @@ type Usage struct {
 	Unknown               bool  `json:"unknown"`
 }
 type Request struct {
-	ID int64 `json:"id,string"`
+	ID       int64  `json:"id,string"`
+	DriverID int64  `json:"driver_id,string"`
+	Provider string `json:"provider"`
 	Attribution
 	State            string `json:"state"` // pending, running, succeeded, failed, cancelled, interrupted
 	BaseURL          string `json:"base_url"`
@@ -94,7 +101,8 @@ type Request struct {
 	Usage            Usage  `json:"usage"`
 }
 type Detail struct {
-	QueuedInput json.RawMessage `json:"queued_input"`
+	DriverSettings json.RawMessage `json:"driver_settings"`
+	QueuedInput    json.RawMessage `json:"queued_input"`
 	Request
 	RequestBody        string `json:"request_body"`
 	ResponseBody       string `json:"response_body"`
@@ -162,6 +170,7 @@ type UsageReport struct {
 	AsOf        int64          `json:"as_of"`
 }
 type Config struct {
+	ChatGPT        *chatgptauth.Manager
 	AdminAuthorize func(context.Context, *sql.Tx) error
 	DB             *sql.DB
 	ReadDB         *sql.DB

@@ -10,6 +10,9 @@ import (
 )
 
 func (r *Runtime) complete(id int64, in Input, state, code string, status int, raw []byte, complete, redacted bool, usage Usage, count bool) (resultErr error) {
+	if raw == nil {
+		raw = []byte{}
+	}
 	defer func() {
 		if resultErr != nil {
 			r.mu.Lock()
