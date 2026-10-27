@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"math"
 	"net/http"
 	"strconv"
@@ -230,6 +231,17 @@ func (s *Service) reviewUses(ctx context.Context, role reviewerRole, actorID, do
 		// material view rather than embedding up to three snapshots per item.
 		receipt.Results = append(receipt.Results, result)
 	}
+	auditItems := make([]managementlog.Item, 0, len(receipt.Results))
+	for index, item := range receipt.Results {
+		outcome := managementlog.Succeeded
+		code := ""
+		if !item.OK {
+			outcome = managementlog.Rejected
+			code = item.Error.Code
+		}
+		auditItems = append(auditItems, managementlog.Item{Action: items[index].Decision, TargetKind: "donation_use", TargetID: item.UseID, Outcome: outcome, Code: code, Changes: []managementlog.Change{{Field: "review", Operation: "updated"}}})
+	}
+	managementlog.SetItemsResult(ctx, auditItems)
 	result, err := finishJSON(ctx, tx, decision, http.StatusOK, receipt)
 	if err != nil {
 		return empty, err

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"math"
 	"net/http"
 	"sort"
@@ -174,6 +175,19 @@ func (repository *SiteConfigRepository) PatchSiteConfigBatch(ctx context.Context
 			}
 		}
 		revision++
+	}
+	auditItems := make([]managementlog.Item, 0, len(changed))
+	for _, key := range changed {
+		operation := "updated"
+		if patches[key].remove {
+			operation = "cleared"
+		}
+		auditItems = append(auditItems, managementlog.Item{Action: "configure", TargetKind: "site_config", TargetID: key, Outcome: managementlog.Succeeded, Changes: []managementlog.Change{{Field: key, Operation: operation}}})
+	}
+	if len(auditItems) == 0 {
+		managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.NoChange, Code: "unchanged"})
+	} else {
+		managementlog.SetItemsResult(ctx, auditItems)
 	}
 	responseBody, err := json.Marshal(SiteConfigBatchResponse{Revision: strconv.FormatInt(revision, 10), ChangedKeys: changed})
 	if err != nil {

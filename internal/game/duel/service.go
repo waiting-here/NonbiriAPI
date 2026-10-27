@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"math/big"
 	"strconv"
 	"strings"
@@ -353,6 +354,7 @@ func (s *Service) replay(ctx context.Context, tx *sql.Tx, identity Identity, key
 	if id != "" {
 		ids = []string{id}
 	}
+	managementlog.ChangedFields(ctx, canonical)
 	hash, err := idempotency.RequestDigest(idempotency.DigestInput{ActorScopeHash: actor, Method: method, Route: route, PathResourceIDs: ids, Body: canonical})
 	if err != nil {
 		return idempotency.Decision{}, ErrInvalidRequest

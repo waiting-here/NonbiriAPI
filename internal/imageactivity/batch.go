@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"math"
 	"net/http"
 	"strconv"
@@ -201,6 +202,11 @@ func (s *Service) PutModels(ctx context.Context, admin int64, key string, input 
 		}
 	}
 	if len(out.Value.Issues) > 0 {
+		auditItems := make([]managementlog.Item, 0, len(out.Value.Issues))
+		for _, issue := range out.Value.Issues {
+			auditItems = append(auditItems, managementlog.Item{Action: "models.update", TargetKind: "image_model", TargetID: issue.ModelID, Outcome: managementlog.Rejected, Code: issue.Code})
+		}
+		managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.Rejected, Code: "validation_failed", Items: auditItems})
 		return out, nil
 	}
 	for _, item := range input.Models {
@@ -239,6 +245,11 @@ func (s *Service) PutModels(ctx context.Context, admin int64, key string, input 
 		}
 		out.Value.Receipts = append(out.Value.Receipts, ModelReceipt{ID: item.id, Revision: strconv.FormatInt(next, 10), CapabilityRevision: strconv.FormatInt(next, 10), PricingRevision: strconv.FormatInt(next, 10)})
 	}
+	auditItems := make([]managementlog.Item, 0, len(validated))
+	for _, item := range validated {
+		auditItems = append(auditItems, managementlog.Item{Action: "models.update", TargetKind: "image_model", TargetID: item.id, TargetName: item.input.DisplayName, Outcome: managementlog.Succeeded, Changes: []managementlog.Change{{Field: "configuration", Operation: "updated"}}})
+	}
+	managementlog.SetItemsResult(ctx, auditItems)
 	if err = finishReplay(ctx, tx, d, out.Value); err != nil {
 		return out, err
 	}

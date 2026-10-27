@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"net/http"
 	"strconv"
 
@@ -29,6 +30,7 @@ func (s *Service) beginMutationTx(ctx context.Context, tx *sql.Tx, actorKind str
 	if err != nil {
 		return mutationDecision{}, ErrInvalid
 	}
+	managementlog.ChangedFields(ctx, raw)
 	digest, err := idempotency.RequestDigest(idempotency.DigestInput{ActorScopeHash: actor, Method: method, Route: route, PathResourceIDs: pathIDs, Body: raw})
 	if err != nil {
 		return mutationDecision{}, ErrInvalid

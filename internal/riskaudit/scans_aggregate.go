@@ -28,7 +28,7 @@ func (r *Repository) processAggregateScanBatch(ctx context.Context, tx *sql.Tx, 
 			if err != nil {
 				return false, err
 			}
-			return true, tx.Commit()
+			return true, commitScanResult(ctx, tx, scan.ID)
 		}
 	} else {
 		var err error
@@ -43,7 +43,7 @@ func (r *Repository) processAggregateScanBatch(ctx context.Context, tx *sql.Tx, 
 			if err != nil {
 				return false, err
 			}
-			return true, tx.Commit()
+			return true, commitScanResult(ctx, tx, scan.ID)
 		}
 		if err != nil {
 			return false, err
@@ -92,7 +92,7 @@ func (r *Repository) processAggregateScanBatch(ctx context.Context, tx *sql.Tx, 
 	if err != nil {
 		return false, err
 	}
-	return true, tx.Commit()
+	return true, commitScanResult(ctx, tx, scan.ID)
 }
 
 func startUserGroup(ctx context.Context, tx *sql.Tx, scan *ClientScan, checkpoint *scanCheckpoint) error {

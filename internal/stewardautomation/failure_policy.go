@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"io"
 	"net/http"
 	"net/url"
@@ -140,6 +141,7 @@ func (s *Service) setFailurePolicy(ctx context.Context, userID int64, key string
 	if err != nil {
 		return nil, err
 	}
+	managementlog.ChangedFields(ctx, canonical)
 	digest, err := idempotency.RequestDigest(idempotency.DigestInput{ActorScopeHash: actor, Method: http.MethodPatch, Route: FailurePolicyPath, Body: canonical})
 	if err != nil {
 		return nil, errInvalid

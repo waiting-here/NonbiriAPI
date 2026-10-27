@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"math"
 
 	"github.com/waiting-here/NonbiriAPI/internal/worker"
@@ -94,6 +95,11 @@ state=?,last_error_class=?,terminal_at=? WHERE id=? AND state=?`,
 	}
 	if class == worker.ErrorInvariant {
 		if err := insertInvariantAlertTx(batchCtx, tx, caseID, "report_worker_invariant", now); err != nil {
+			return err
+		}
+	}
+	if operationKind == "report_approved_processing" {
+		if err := managementlog.AppendRelatedTx(batchCtx, tx, "report_case", caseID, managementlog.Item{Action: "process", TargetKind: "report_case", TargetID: caseID, Outcome: managementlog.Failed, Code: string(class)}, class == worker.ErrorInvariant); err != nil {
 			return err
 		}
 	}

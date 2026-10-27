@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base32"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -399,6 +400,12 @@ func (r *Runtime) mfaAdminHTTP(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		writeMFAError(w, err)
 		return
+	}
+	if reset {
+		if err = managementlog.RecordContextTx(req.Context(), tx); err != nil {
+			writeMFAError(w, err)
+			return
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		writeMFAError(w, err)

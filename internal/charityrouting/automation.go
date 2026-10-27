@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"math"
 	"strconv"
 
@@ -123,6 +124,7 @@ WHERE st.source_revision_id=? AND r.credential_version_id=? AND r.result_generat
 		return err
 	}
 	if exists {
+		managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.NoChange, Code: "already_bound"})
 		return nil
 	}
 	var targetsCount int

@@ -3,6 +3,8 @@ package donation
 import (
 	"context"
 	"database/sql"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -70,6 +72,23 @@ func (s *Service) autoApproveSubmittedUsesTx(ctx context.Context, tx *sql.Tx, do
 	if blocked {
 		return false, nil
 	}
+	var ownerID sql.NullInt64
+	if err := tx.QueryRowContext(ctx, "SELECT user_id FROM donations WHERE id=?", donationID).Scan(&ownerID); err != nil {
+		return false, err
+	}
+	actor := managementlog.Subject{}
+	if ownerID.Valid {
+		var err error
+		actor, err = managementlog.SubjectTx(ctx, tx, ownerID.Int64)
+		if err != nil {
+			return false, err
+		}
+	}
+	auditItems := make([]managementlog.Item, 0, len(items))
+	for _, item := range items {
+		auditItems = append(auditItems, managementlog.Item{Action: "approve", TargetKind: "donation_use", TargetID: strconv.FormatInt(item.use, 10), Outcome: managementlog.Succeeded, Changes: []managementlog.Change{{Field: "review_state", Operation: "updated"}}})
+	}
+	audit := managementlog.TrackInternalAttempt(ctx, managementlog.Record{Metadata: managementlog.Metadata{CreatedAt: now * 1000, Source: managementlog.SourceMainstreamRule, ExecutorKind: "rule", Actor: actor, AuthorizationRef: "mainstream_endpoint_rule", Domain: "donations", Action: "approve", CorrelationKind: "donation", CorrelationID: strconv.FormatInt(donationID, 10), Summary: "主流规则自动审批捐赠"}, Result: managementlog.Result{Outcome: managementlog.Succeeded, Items: auditItems}})
 	for _, item := range items {
 		if err := s.reviewMaterial.ApproveUseRevision(ctx, tx, item.pending, nil, time.Unix(now, 0)); err != nil {
 			return false, mapReviewError(err)
@@ -102,6 +121,9 @@ func (s *Service) autoApproveSubmittedUsesTx(ctx context.Context, tx *sql.Tx, do
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_reviews(donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at)
  SELECT id,revision,NULL,'','approve','',? FROM donations WHERE id=?`, now, donationID); err != nil {
+		return false, err
+	}
+	if _, err := managementlog.RecordTx(ctx, tx, audit); err != nil {
 		return false, err
 	}
 	return true, nil

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"math"
 	"net/http"
 	"strconv"
@@ -289,6 +290,15 @@ func (s *Service) resetFailureBatch(ctx context.Context, role reviewerRole, user
 			}
 		}
 	}
+	auditItems := make([]managementlog.Item, 0, len(value.Results))
+	for _, item := range value.Results {
+		outcome := managementlog.NoChange
+		if item.Status == "reset" {
+			outcome = managementlog.Succeeded
+		}
+		auditItems = append(auditItems, managementlog.Item{Action: "failure_streak.reset", TargetKind: "donation_key", TargetID: item.KeyID, Outcome: outcome, Code: item.Status, Changes: []managementlog.Change{{Field: "failure_streak", Operation: "cleared"}}})
+	}
+	managementlog.SetItemsResult(ctx, auditItems)
 	value.Counts.Processed = strconv.Itoa(len(items))
 	value.Counts.Reset = strconv.Itoa(reset)
 	value.Counts.Skipped = strconv.Itoa(len(items) - reset)

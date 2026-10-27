@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"net/http"
 	"strconv"
 
@@ -265,6 +266,7 @@ func (api *httpAPI) mutate(
 		writeHTTPError(writer, ErrInvalidMutation)
 		return
 	}
+	managementlog.ChangedFields(request.Context(), canonicalBody)
 	requestHash, err := idempotency.RequestDigest(idempotency.DigestInput{
 		ActorScopeHash: actorHash,
 		Method:         http.MethodPost,

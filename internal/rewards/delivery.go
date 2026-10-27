@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"strconv"
 	"time"
@@ -164,6 +165,23 @@ func (s *Service) processOne(ctx context.Context) (_ bool, resultErr error) {
 			}
 		}
 	}
+	var status, failure string
+	if err = tx.QueryRowContext(ctx, "SELECT status,COALESCE(failure,'') FROM reward_claims WHERE id=?", id).Scan(&status, &failure); err != nil {
+		return false, err
+	}
+	outcome := managementlog.Succeeded
+	if status == "failed" {
+		outcome = managementlog.Failed
+	} else if status == "skipped" {
+		outcome = managementlog.NoChange
+	}
+	var pending bool
+	if err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM reward_claims WHERE campaign_id=? AND status='pending')", campaign).Scan(&pending); err != nil {
+		return false, err
+	}
+	if err = managementlog.AppendRelatedTx(ctx, tx, "reward_campaign", campaign, managementlog.Item{Action: "deliver", TargetKind: "reward_claim", TargetID: strconv.FormatInt(id, 10), Outcome: outcome, Code: failure}, !pending); err != nil {
+		return false, err
+	}
 	return true, tx.Commit()
 }
 func (s *Service) Run(ctx context.Context, report func(error)) {
@@ -211,10 +229,44 @@ func (s *Service) DeleteUserTx(ctx context.Context, tx *sql.Tx, user int64) erro
 	if _, err := tx.ExecContext(ctx, "DELETE FROM idempotency_records WHERE scope=? AND actor_scope_hash=?", idempotency.ScopeRewardRedemption, actor[:]); err != nil {
 		return err
 	}
+	rows, err := tx.QueryContext(ctx, "SELECT id,campaign_id FROM reward_claims WHERE user_id=? AND status='pending'", user)
+	if err != nil {
+		return err
+	}
+	type pendingClaim struct {
+		id       int64
+		campaign string
+	}
+	claims := []pendingClaim{}
+	for rows.Next() {
+		var claim pendingClaim
+		if err = rows.Scan(&claim.id, &claim.campaign); err != nil {
+			rows.Close()
+			return err
+		}
+		claims = append(claims, claim)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
 	// Aggregate counts retain economic facts without a former account identity.
 	if _, err := tx.ExecContext(ctx, "UPDATE reward_campaigns SET skipped=skipped+(SELECT count(*) FROM reward_claims WHERE campaign_id=reward_campaigns.id AND user_id=? AND status IN ('pending','failed')) WHERE kind='broadcast'", user); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, "DELETE FROM reward_claims WHERE user_id=?", user)
-	return err
+	if err != nil {
+		return err
+	}
+	for _, claim := range claims {
+		var pending bool
+		if err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM reward_claims WHERE campaign_id=? AND status='pending')", claim.campaign).Scan(&pending); err != nil {
+			return err
+		}
+		if err = managementlog.AppendRelatedTx(ctx, tx, "reward_campaign", claim.campaign, managementlog.Item{Action: "deliver", TargetKind: "reward_claim", TargetID: strconv.FormatInt(claim.id, 10), Outcome: managementlog.NoChange, Code: "recipient_deleted"}, !pending); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"encoding/hex"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"net/http"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -203,6 +204,9 @@ func (s *Service) submit(ctx context.Context, userID int64, id string, input Sub
 		return ChallengeView{}, err
 	}
 	if decision.Kind != idempotency.Replay {
+		if playtest {
+			managementlog.SetCorrelation(ctx, "fatfish_playtest", id)
+		}
 		if err = completeMutationTx(ctx, tx, decision, view, http.StatusAccepted); err != nil {
 			return ChallengeView{}, err
 		}

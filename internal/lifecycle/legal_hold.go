@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -322,6 +323,7 @@ func beginAdminMutation(ctx context.Context, tx *sql.Tx, adminID int64, key, met
 	if err != nil {
 		return idempotency.Decision{}, ErrInvalid
 	}
+	managementlog.ChangedFields(ctx, body)
 	digest, err := idempotency.RequestDigest(idempotency.DigestInput{
 		ActorScopeHash: actor, Method: method, Route: route, PathResourceIDs: pathIDs, Body: body,
 	})
