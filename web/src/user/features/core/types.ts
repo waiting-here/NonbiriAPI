@@ -163,6 +163,7 @@ export interface KeyBindingView {
 
 export interface Endpoint {
   connection_id?: string | null;
+  connection_name?: string;
   configuration_type?: ConnectorType;
   native_services?: NativeService[];
   rerank_format?: RerankFormat | '';
@@ -184,6 +185,7 @@ export interface EndpointKey {
   credential_available?: boolean;
   discovery_source_id?: string | null;
   credential_id?: string;
+  credential_note?: string;
   credential_version?: string;
   grant_revision?: string;
   native_services?: NativeService[];
@@ -234,6 +236,9 @@ export type DiscoverySafeClass =
   | 'unavailable';
 
 export interface DiscoveryEvidence {
+  last_success_at?: number | null;
+  added_count?: string | null;
+  removed_count?: string | null;
   state: DiscoveryState;
   revision: string;
   result: DiscoveryResult;
@@ -595,7 +600,7 @@ export interface HomeAdapters {
 export type LifecycleIntent = 'export' | 'delete';
 
 export const ACCOUNT_EXPORT_VERSIONS = [
-  11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+  11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
 ] as const;
 
 export interface AccountExportAttachment {

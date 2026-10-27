@@ -39,32 +39,67 @@ describe('ordered native target matrix', () => {
       ),
     );
     const requests: string[] = [];
+    const endpoint = JSON.parse(
+      readFileSync(resolve(process.cwd(), '../internal/resources/testdata/endpoint.json'), 'utf8'),
+    );
+    const key = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), '../internal/resources/testdata/endpoint_key.json'),
+        'utf8',
+      ),
+    );
     vi.stubGlobal(
       'fetch',
       vi.fn<typeof fetch>(async (input) => {
         requests.push(String(input));
+        const path = new URL(String(input), 'https://app.example').pathname;
+        const rows =
+          path === '/api/connections'
+            ? []
+            : path === '/api/endpoints'
+              ? [{ ...endpoint, id: '11', key_count: '1' }]
+              : path === '/api/endpoints/11/keys'
+                ? [{ ...key, id: '13', endpoint_id: '11' }]
+                : path === '/api/models/31/binding-candidates'
+                  ? [
+                      {
+                        ...fixture.data[0],
+                        endpoint_key_id: '13',
+                        upstream_model_id: 'vendor/c',
+                        endpoint_note: 'Entry C',
+                      },
+                    ]
+                  : undefined;
+        if (!rows) throw new Error('Unexpected request: ' + path);
         return new Response(
           JSON.stringify({
-            data: [
-              {
-                ...fixture.data[0],
-                endpoint_key_id: '13',
-                upstream_model_id: 'vendor/c',
-                endpoint_note: 'Entry C',
-              },
-            ],
+            data: rows,
             next_cursor: null,
-            pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+            pagination: {
+              page: '1',
+              page_size: 20,
+              total_items: String(rows.length),
+              total_pages: '1',
+            },
           }),
           { headers: { 'Content-Type': 'application/json' } },
         );
       }),
     );
     const view = await renderWithProviders(<Harness />, environment);
-    await view.user.click(screen.getByText('Add target', { exact: true }));
-    const table = await screen.findByRole('table', { name: 'Available targets' });
-    expect(requests).toEqual(['/api/models/31/binding-candidates?page=1&page_size=20']);
-    await view.user.click(within(table).getByRole('button', { name: 'Add target' }));
+    await view.user.click(screen.getByText('Add model sources', { exact: true }));
+    await view.user.click(await screen.findByRole('checkbox', { name: /vendor\/c/ }));
+    const candidateRequest = requests.find((path) =>
+      path.startsWith('/api/models/31/binding-candidates?'),
+    );
+    expect(candidateRequest).toBeDefined();
+    const filters = new URL(candidateRequest!, 'https://app.example').searchParams;
+    expect(Object.fromEntries(filters)).toMatchObject({
+      endpoint_id: '11',
+      key_id: '13',
+      page: '1',
+      page_size: '20',
+    });
     const added = screen.getByRole('group', { name: '3. Entry C' });
     const chat = within(added).getByRole('checkbox', { name: 'Chat completions' });
     expect(chat).toBeChecked();

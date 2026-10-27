@@ -4,6 +4,62 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.3.0 — 2026-10-27
+
+### Service and model workflows
+
+- Add an OpenAI-compatible service with an address and API key, then fetch and
+  manage models directly. Additional keys and advanced protocol settings remain
+  available; keys are managed within their service and reusable at its endpoints.
+- Maintain fetched and manual model lists independently for each endpoint/key
+  pair. Failed fetches retain the last successful list; successful fetches report
+  additions and removals without deleting manual entries.
+- Bind personal models through endpoint, key and model selection with a visible
+  service filter and selections retained across pages. Existing call combinations
+  keep their routing behavior and are edited through advanced call-type settings.
+- Preserve endpoint pages and selection through reload and browser history,
+  clear key filters when changing endpoints, and display current mainstream
+  classifications in endpoint details.
+
+### Fixed and improved
+
+- Add permanent administrator statistics for the permanent pool and every limited
+  period: draws, distinct participants, per-card copies and first acquisitions,
+  with charts and complete CSV/JSON and PNG/SVG downloads. Existing draw records
+  are incorporated by the explicit database upgrade.
+- Track mystery-shop card redemptions separately, with lifetime quantities,
+  distinct participants, per-card analysis and full data/chart downloads. Ticket
+  purchases and exchanges are excluded.
+- Present sign-in, OAuth and browser navigation failures as responsive pages
+  with clear recovery actions, language and theme preferences. API clients,
+  fetch requests and public inference retain their JSON errors and HTTP status.
+- Keep search and filter controls aligned across both stations, including
+  donation review and the card collection. Closed mobile administrator menus
+  no longer leave invisible navigation links in the keyboard focus order.
+- Correct tea pouring, saucer support, writing and sealing tables, travel seats
+  and puddle contact in seven N/R/SR portraits and their image derivatives.
+- Correct ChatGPT's outstretched hand in the permanent-pool cover to five fingers,
+  including its standard, high-resolution and transparent-layer variants.
+- Make permanent SSR cards exchangeable without an open limited pool. Unify
+  ticket-offer quantities, prices, remaining limits and success messages.
+- Distinguish unavailable model resources from unsupported request features,
+  and return safe field, reason and next-step guidance in API errors and logs.
+  Historical missing reasons remain explicitly unknown.
+- Reduce work in the recent single-fish leaderboard by selecting each user's
+  best eligible catch through the existing expiry index before ranking users.
+  Ranking, time windows and privacy rules remain unchanged.
+- Prevent a late refresh of an abandoned Catch round from replacing a newly
+  started round in the browser.
+
+### Compatibility
+
+- Storage advances to schema 40 and account export to format 31. Run the explicit
+  upgrader before opening an existing database. Shared keys from older versions
+  become independent service-owned records; key, binding and donation-use IDs,
+  approved and pending versions, route order and limits are preserved.
+- Duplicate cards from redemption codes and site-wide rewards continue to grant one
+  matching shard per duplicate; duplicate SP cards grant SSR shards.
+
 ## 1.2.1 — 2026-10-26
 
 ### Added

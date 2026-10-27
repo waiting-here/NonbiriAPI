@@ -1,11 +1,13 @@
-# Service connections
+# Services, endpoints and keys
 
-A connection groups upstream entries, saved credentials and model directories.
-Each entry names a complete base URL and protocol. New or edited submissions
+A service groups upstream endpoints and saved keys. Each endpoint names a
+complete base URL and protocol. New or edited submissions
 explicitly authorize that protocol's complete native-service set. Grouping entries
 does not authorize a credential at another destination.
-The same credential can be attached to several entries without re-entering its
-secret. Users must select each destination explicitly.
+The same key can be used by several endpoints within its own service without
+re-entering its secret. Users select each destination explicitly. Other services
+cannot read, select or reference that key. API routes retain their existing
+connection and credential names.
 
 Connection lists show the primary entry's address and note. Search includes the
 name and note of the connection and the addresses and notes of all its entries.
@@ -14,18 +16,20 @@ hostname for display. Custom names and stored metadata remain unchanged.
 
 ## Set up and continue
 
-The new-service form collects custom or mainstream entries and their protocols,
-credential selection and ownership confirmation, and an applicable model directory.
-It submits the full service set for each protocol; finer service choices are made
-when configuring model bindings.
-Choose Save once to run the required steps. These remain separate authorized API
+The default form requires an address and API key, suggests an editable service
+name, and selects OpenAI-compatible. More keys can be added before saving.
+Protocol selection, mainstream presets and special list formats remain available
+under advanced setup. The form submits the full service set for each protocol;
+finer service choices are made when configuring model bindings.
+Choose **Add and fetch models** once to run the required steps. These remain separate authorized API
 operations: if a later step fails, already-created resources stay available.
 Resolve an unknown response with the retained request before resuming the next
 step; do not create a second service to retry.
 
-After saving, continue directly to personal model setup, donation or connection
-management. A preset can supply model mappings; otherwise refresh the configured
-directory or enter exact model IDs manually. Donation starts with the selected
+After saving, the service opens its model lists. A single endpoint and key are
+selected automatically. Multiple endpoints and keys have explicit selectors;
+each endpoint/key pair has its own fetched and manual model lists. A preset can
+supply model mappings. Donation starts with the selected
 entry, and the donor chooses the keys and authorized lifetime to share. Existing
 entry IDs and credentials remain editable through the same connection workspace.
 
@@ -53,7 +57,15 @@ attach the same credential explicitly and select the applicable entries on each
 model. Model identifiers may differ between entries and must be supplied for
 each target.
 
-A logical binding contains ordered targets. New bindings start with the currently
+Personal model configuration offers one primary **Add model sources** action.
+Its visible service filter narrows endpoints, then users select a key and its
+models. Selections persist across endpoint/key changes, filters and pages.
+Each selected key/model pair becomes an independent binding. Already-bound pairs
+are marked, and manual model entry remains available for the selected pair.
+
+Advanced call combinations retain ordered targets within one logical binding.
+Existing multi-target bindings keep their original order, routing and retry
+semantics. New bindings start with the currently
 authorized native services selected; editing a binding preserves its saved subset.
 Keep at least one service that can serve the target model through the existing
 routing matrix. Extra authorized services may remain selected. For each request,
@@ -64,30 +76,29 @@ increase a binding's weight. Existing protocol, body and transport checks still
 apply; a service declaration does not promise arbitrary lossless conversion.
 See [direct inference](direct-inference.md) for the supported operation matrix.
 
-A model directory is independent of inference entries. It has its own complete
-base URL, list format and selected credential version. This allows several
-protocol entries to share one model-list endpoint. A directory refresh does not
+A model list belongs to one endpoint/key pair. Its advanced settings can specify
+a different complete base URL and list format, using that pair's credential
+version. Even when two endpoints use the same key and list URL, their fetched
+and manual lists are independent. A list refresh does not
 send a paid inference request. Recognized Gateway model types and Gemini methods
 provide service suggestions; an ordinary OpenAI model ID alone does not prove
 service support. Check the upstream model's actual support when choosing a binding
 subset; suggestions do not expand its authorization or conversion capabilities.
 Saved models and bindings survive a failed refresh or credential rotation.
+A failed fetch retains the previous successful list and timestamp. A successful
+fetch reports added/removed counts and replaces only fetched entries, including
+when the new result is empty. Manual entries are never removed by a refresh.
 
 Mainstream presets may suggest entries, a directory and per-model mappings.
 Existing entry IDs are retained when editing; save new entries before assigning
 model mappings to them. Updating a preset does not change existing destinations,
 expand grants or approve donations.
 
-When authorizing a credential for a newly created mainstream entry, its suggested
-directory is selected by default. Saving reuses a compatible directory or creates
-one for that credential and associates it with the entry's key. Clear the option
-to authorize without it, or select an existing compatible directory. Custom
-entries and previously saved authorizations keep their existing behavior.
-
-If a key has no directory, its model controls offer a catalog selection action.
-Move an ungrouped entry into a connection first, then select a directory for the
-same credential version. The directory management link can add one if needed.
-Manual model entries remain available without a directory. Importing or connecting
+Saving a key normally creates its pair's list settings automatically. Explicitly
+opting out keeps the pair manual-only; **Model list settings** can enable fetching
+later or change the pair's list address and format. Users do not create or link a
+separate discovery source. Manual model entries remain available without a
+fetched list and support entering one model ID per line. Importing or connecting
 a model reuses an existing manual entry with the same upstream model ID under
 the selected key; its existing metadata is preserved.
 
@@ -100,7 +111,7 @@ protocol's full service set. Switching back to **Custom** preserves the address,
 protocol and note. Saving remains a separate action. Empty or unavailable suggestions do not block custom
 creation, and adopting a preset does not attach credentials or approve donations.
 
-## Credentials and donations
+## Key changes and donations
 
 Changing a secret creates a new immutable version. Personal grants and current
 model directories move to the new version. Approved charity uses retain their
@@ -169,8 +180,12 @@ key still consume its existing limits. Existing key-wide recovery gates are
 preserved during upgrades. No cross-entry quota pool is created, and one failed
 service is not treated as proof that the whole credential is unusable.
 
-Deleting an entry removes that entry's authorization and bindings while keeping
-independent credentials. Deleting a credential revokes its grants. Already
+Removing a key from one endpoint revokes only that endpoint's use. Deleting an
+endpoint removes its authorization and bindings while keeping the service's
+keys available to its other endpoints. Replacing, disabling or deleting an
+entire key affects all its uses in that service, with the affected endpoints and
+charity uses shown in its settings. Deleting a service revokes its endpoints,
+keys and uses. Already
 accepted work retains only the references required for safe completion and
 settlement; cleanup releases unused encrypted versions. See the
 [data lifecycle](data-lifecycle-checklist.md) for export and retention details.
@@ -207,3 +222,15 @@ resource again for complete materials rather than embedding them in a replay
 response. A stale revision returns a conflict; refresh before constructing a new
 intent. Omitted service fields on legacy APIs preserve their documented original
 scope and never imply every newly supported service.
+
+An omitted `discovery_source_id` when creating an endpoint key creates its default
+pair-scoped source. Explicit `null` opts out. Sources expose `endpoint_key_id`;
+cross-service credential/source references are unavailable, and attaching a source
+already scoped to another key returns a conflict. An endpoint with keys cannot
+be moved to another service. Discovery evidence may include `last_success_at`
+and string-valued `added_count` / `removed_count`.
+
+Schema 40 explicitly separates legacy cross-service credentials and shared
+catalogs while retaining endpoint/key IDs, bindings, budgets and approved/pending
+donation material. It does not run implicitly at startup. See
+[database upgrades](database-upgrades.md) for the required offline upgrade path.

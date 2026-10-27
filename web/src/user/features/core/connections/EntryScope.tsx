@@ -1,4 +1,10 @@
 import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { CoreErrorPanel, CoreLoading } from '../components';
+import { CredentialDetail } from './CredentialsPanel';
+import { SourceForm } from './SourceForm';
+import { connectionKeys } from './ResourceList';
+import type { DiscoverySource } from './types';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Field, Fold, Note } from '@shared/components/ui';
@@ -8,15 +14,9 @@ import { getEndpoint } from '../api';
 import { readEndpointKey } from '../resourceOperation';
 import type { Endpoint, EndpointKey } from '../types';
 import type { RerankFormat } from '@shared/nativeServices';
-import { CredentialPicker, credentialLabel } from './CredentialPicker';
 import { connectionAPI, resourcePath } from './api';
 import { useMetadataOperation } from './useMetadataOperation';
 import { ConnectionOperationNotice } from './OperationNotice';
-import { ConnectionCreateForm } from './ConnectionForm';
-import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
-import { ConnectionResourceList } from './ResourceList';
-import { ConnectionSummary } from './ConnectionSummary';
-import type { Credential, DiscoverySource } from './types';
 
 export function EntryScope(props: {
   accountId: string;
@@ -28,7 +28,7 @@ export function EntryScope(props: {
   return (
     <Fold
       lazy
-      title={t('user.workflows.editService')}
+      title={t('user.services.endpointSettings')}
       open={props.open}
       onOpenChange={props.onOpenChange}
     >
@@ -46,8 +46,6 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
   const [note, setNote] = useState(endpoint.note);
   const [format, setFormat] = useState<RerankFormat | null>(endpoint.rerank_format || null);
   const selectedFormat = format ?? (allowed?.rerank_formats.includes('generic') ? 'generic' : '');
-  const [group, setGroup] = useState<string | null>(null);
-  const [creatingConnection, setCreatingConnection] = useState(false);
   const [expectedRevision, setExpectedRevision] = useState(endpoint.revision);
   const [baseline, setBaseline] = useState(endpoint);
   const operation = useMetadataOperation(
@@ -61,7 +59,6 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
       setBaseline(saved);
       setNote(saved.note);
       setFormat(saved.rerank_format || null);
-      setGroup(null);
     },
   );
   const locked =
@@ -70,7 +67,6 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
     operation.outcome === 'refresh-failed';
   const dirty =
     note !== baseline.note ||
-    Boolean(group) ||
     JSON.stringify(services) !== JSON.stringify(baseline.native_services ?? []) ||
     selectedFormat !== (baseline.rerank_format ?? '');
   return (
@@ -86,13 +82,12 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
               ...(selectedFormat !== (baseline.rerank_format ?? '')
                 ? { rerank_format: selectedFormat }
                 : {}),
-              ...(group ? { connection_id: group } : {}),
               expected_revision: expectedRevision,
             })
             .catch(() => undefined);
         }}
       >
-        <Field label={t('user.workflows.serviceName')}>
+        <Field label={t('user.services.endpointName')}>
           {(props) => (
             <input
               {...props}
@@ -114,55 +109,6 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
           onChange={setFormat}
           disabled={locked}
         />
-        <Fold
-          lazy
-          title={t('common.connections.moveConnection')}
-          defaultOpen={!endpoint.connection_id}
-        >
-          <button
-            type="button"
-            className="nb-btn nb-btn--secondary"
-            disabled={locked}
-            onClick={() => setCreatingConnection(true)}
-          >
-            {t('common.connections.addConnection')}
-          </button>
-          <ConnectionResourceList
-            embedded
-            accountId={accountId}
-            scope={endpoint.id}
-            listType="move-connection"
-            title={t('common.connections.yourConnections')}
-            searchPlaceholder={t('common.connections.connectionSearch')}
-            load={connectionAPI.list}
-            rowKey={(row) => row.id}
-            columns={[
-              {
-                key: 'name',
-                header: t('common.connections.name'),
-                cell: 'title',
-                render: (row) => <ConnectionSummary connection={row} />,
-              },
-              {
-                key: 'select',
-                header: t('common.connections.actions'),
-                cell: 'action',
-                render: (row) => (
-                  <button
-                    type="button"
-                    className="nb-btn nb-btn--secondary"
-                    disabled={locked || group === row.id || endpoint.connection_id === row.id}
-                    onClick={() => setGroup(row.id)}
-                  >
-                    {group === row.id
-                      ? t('common.connections.selected')
-                      : t('common.connections.select')}
-                  </button>
-                ),
-              },
-            ]}
-          />
-        </Fold>
         <ConnectionOperationNotice operation={operation} />
         {operation.outcome === 'conflict' ? (
           <button
@@ -185,22 +131,6 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
           {t('common.connections.save')}
         </button>
       </form>
-      <ExpandablePanel
-        open={creatingConnection}
-        onClose={() => setCreatingConnection(false)}
-        title={t('common.connections.addConnection')}
-        closeLabel={t('common.connections.close')}
-      >
-        {creatingConnection ? (
-          <ConnectionCreateForm
-            accountId={accountId}
-            onSaved={(value) => {
-              setGroup(value.id);
-              setCreatingConnection(false);
-            }}
-          />
-        ) : null}
-      </ExpandablePanel>
     </div>
   );
 }
@@ -218,22 +148,136 @@ export function KeyCredentialScope({
   revealCatalog?: number;
 }) {
   const { t } = useTranslation();
+  return (
+    <div className="nb-stack">
+      <Fold lazy title={t('user.services.manageServiceKey')}>
+        <Note>{t('user.services.serviceKeyImpact')}</Note>
+        {entryKey.credential_id ? (
+          <CredentialDetail
+            accountId={accountId}
+            id={entryKey.credential_id}
+            onBack={() => undefined}
+          />
+        ) : null}
+      </Fold>
+      <Fold lazy title={t('user.services.protocolAccess')}>
+        <KeyProtocolAccess accountId={accountId} endpoint={endpoint} entryKey={entryKey} />
+      </Fold>
+      <Fold
+        key={revealCatalog}
+        lazy
+        title={t('user.services.modelListSettings')}
+        defaultOpen={defaultOpen || revealCatalog > 0}
+      >
+        <Note>{t('user.services.pairListSettings')}</Note>
+        <PairListSettings accountId={accountId} endpoint={endpoint} entryKey={entryKey} />
+      </Fold>
+    </div>
+  );
+}
+function PairListSettings({
+  accountId,
+  endpoint,
+  entryKey,
+}: {
+  accountId: string;
+  endpoint: Endpoint;
+  entryKey: EndpointKey;
+}) {
+  const { t } = useTranslation();
+  const client = useQueryClient();
+  const [created, setCreated] = useState<DiscoverySource | null>(null);
+  const [expected, setExpected] = useState(entryKey.revision);
+  const sourceId = entryKey.discovery_source_id;
+  const source = useQuery({
+    queryKey: [...connectionKeys.root(accountId), 'pair-list-settings', sourceId],
+    queryFn: ({ signal }) => connectionAPI.source(sourceId!, signal),
+    enabled: Boolean(sourceId),
+  });
+  const link = useMetadataOperation(
+    accountId,
+    '/api/endpoints/' + resourcePath(endpoint.id) + '/keys/' + resourcePath(entryKey.id),
+    'PATCH',
+    (signal) => readEndpointKey(endpoint.id, entryKey.id, signal),
+    () => {
+      setCreated(null);
+    },
+    (saved) => setExpected(saved.revision),
+  );
+  const attach = (saved: DiscoverySource) => {
+    setCreated(saved);
+    void link
+      .mutateAsync({ discovery_source_id: saved.id, expected_revision: expected })
+      .catch(() => undefined);
+  };
+  if (created)
+    return (
+      <div className="nb-stack">
+        <ConnectionOperationNotice operation={link} />
+        {link.outcome === 'conflict' ? (
+          <button
+            type="button"
+            className="nb-btn nb-btn--secondary"
+            onClick={() => {
+              setExpected(entryKey.revision);
+              link.reset();
+            }}
+          >
+            {t('common.connections.useCurrentRevision')}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="nb-btn nb-btn--primary"
+          disabled={
+            link.isPending ||
+            link.outcome === 'unknown' ||
+            link.outcome === 'refresh-failed' ||
+            link.outcome === 'conflict'
+          }
+          onClick={() => attach(created)}
+        >
+          {t('user.services.saveListSettings')}
+        </button>
+      </div>
+    );
+  return sourceId && source.isPending ? (
+    <CoreLoading />
+  ) : sourceId && (source.error || !source.data) ? (
+    <CoreErrorPanel error={source.error} onRetry={() => void source.refetch()} />
+  ) : (
+    <SourceForm
+      key={source.data?.revision ?? 'new'}
+      accountId={accountId}
+      connectionId={endpoint.connection_id ?? ''}
+      source={source.data}
+      preset={{ base_url: endpoint.base_url, list_format: 'openai' }}
+      pairSettings
+      fixedCredentialId={entryKey.credential_id ?? undefined}
+      onSaved={(saved) =>
+        sourceId
+          ? void client.invalidateQueries({ queryKey: connectionKeys.root(accountId) })
+          : attach(saved)
+      }
+    />
+  );
+}
+
+function KeyProtocolAccess({
+  accountId,
+  endpoint,
+  entryKey,
+}: {
+  accountId: string;
+  endpoint: Endpoint;
+  entryKey: EndpointKey;
+}) {
+  const { t } = useTranslation();
   const options = useEndpointCreateOptions(accountId);
   const services =
     options.data?.native_service_options?.find(
       (row) => row.connector_type === endpoint.connector_type,
     )?.native_services ?? [];
-  const [expanded, setExpanded] = useState({
-    request: revealCatalog,
-    scope: defaultOpen,
-    catalog: defaultOpen,
-  });
-  if (expanded.request !== revealCatalog) {
-    setExpanded({ request: revealCatalog, scope: true, catalog: true });
-  }
-  const [credential, setCredential] = useState<Credential | null>(null);
-  const [source, setSource] = useState<DiscoverySource | null>(null);
-  const [sourceChanged, setSourceChanged] = useState(false);
   const [expectedRevision, setExpectedRevision] = useState(entryKey.revision);
   const operation = useMetadataOperation(
     accountId,
@@ -241,176 +285,43 @@ export function KeyCredentialScope({
     'PATCH',
     (signal) => readEndpointKey(endpoint.id, entryKey.id, signal),
     () => undefined,
-    (saved) => {
-      setExpectedRevision(saved.revision);
-      setCredential(null);
-      setSource(null);
-      setSourceChanged(false);
-    },
+    (saved) => setExpectedRevision(saved.revision),
   );
   const locked =
     operation.isPending ||
     operation.outcome === 'unknown' ||
     operation.outcome === 'refresh-failed';
-  const credentialId = credential?.id ?? entryKey.credential_id;
-  const version = credential?.credential_version ?? entryKey.credential_version;
   return (
-    <Fold
-      lazy
-      title={t('common.connections.credentialAndServices')}
-      open={expanded.scope}
-      onOpenChange={(scope) => setExpanded((current) => ({ ...current, scope }))}
+    <form
+      className="nb-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void operation
+          .mutateAsync({ native_services: services, expected_revision: expectedRevision })
+          .catch(() => undefined);
+      }}
     >
-      <form
-        className="nb-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void operation
-            .mutateAsync({
-              native_services: services,
-              ...(credential ? { credential_id: credential.id } : {}),
-              ...(sourceChanged ? { discovery_source_id: source?.id ?? null } : {}),
-              expected_revision: expectedRevision,
-            })
-            .catch(() => undefined);
-        }}
-      >
-        <Note>
-          {entryKey.credential_available === false ? (
-            <p>{t('common.connections.credentialUnavailable')}</p>
-          ) : null}
-          <p>
-            {credential
-              ? credentialLabel(credential)
-              : entryKey.display_head + '…' + entryKey.display_tail}{' '}
-            · {t('common.connections.versionNumber', { version })}
-          </p>
-          <p>
-            {t('common.connections.grantRevision', { revision: entryKey.grant_revision ?? '—' })}
-          </p>
-        </Note>
-        {endpoint.connection_id ? (
-          <Fold lazy title={t('common.connections.changeCredential')}>
-            <CredentialPicker
-              accountId={accountId}
-              connectionId={endpoint.connection_id}
-              onPick={(value) => {
-                setCredential(value);
-                setSource(null);
-                setSourceChanged(true);
-              }}
-            />
-          </Fold>
-        ) : null}
-        <Fold
-          lazy
-          title={t('common.connections.discoveryOptional')}
-          open={expanded.catalog}
-          onOpenChange={(catalog) => setExpanded((current) => ({ ...current, catalog }))}
-        >
-          {endpoint.connection_id ? (
-            <Link
-              className="nb-btn nb-btn--secondary"
-              to={
-                '/endpoints?connection_id=' +
-                encodeURIComponent(endpoint.connection_id) +
-                '&connection_view=discovery'
-              }
-            >
-              {t('common.connections.discoverySources')}
-            </Link>
-          ) : null}
-          <p>
-            {sourceChanged
-              ? source?.name || source?.models_url || t('common.connections.noDiscovery')
-              : entryKey.discovery_source_id
-                ? t('common.connections.sourceLinked')
-                : t('common.connections.noDiscovery')}
-          </p>
-          <button
-            type="button"
-            className="nb-btn nb-btn--secondary"
-            disabled={locked}
-            onClick={() => {
-              setSource(null);
-              setSourceChanged(true);
-            }}
-          >
-            {t('common.connections.noDiscovery')}
-          </button>
-          {endpoint.connection_id ? (
-            <ConnectionResourceList
-              embedded
-              accountId={accountId}
-              scope={endpoint.id}
-              listType="key-sources"
-              title={t('common.connections.discoverySources')}
-              searchPlaceholder={t('common.connections.sourceSearch')}
-              load={(window, q, signal) =>
-                connectionAPI.sources(endpoint.connection_id!, window, q, signal)
-              }
-              rowKey={(row) => row.id}
-              columns={[
-                {
-                  key: 'name',
-                  header: t('common.connections.name'),
-                  cell: 'title',
-                  render: (row) => row.name || row.models_url,
-                },
-                {
-                  key: 'select',
-                  header: t('common.connections.actions'),
-                  cell: 'action',
-                  render: (row) => (
-                    <button
-                      type="button"
-                      className="nb-btn nb-btn--secondary"
-                      disabled={
-                        locked ||
-                        !row.enabled ||
-                        row.credential_id !== credentialId ||
-                        row.credential_version !== version
-                      }
-                      onClick={() => {
-                        setSource(row);
-                        setSourceChanged(true);
-                      }}
-                    >
-                      {t('common.connections.useSource')}
-                    </button>
-                  ),
-                },
-              ]}
-            />
-          ) : null}
-        </Fold>
-        <ConnectionOperationNotice operation={operation} />
-        {operation.outcome === 'conflict' ? (
-          <Note tone="warn">
-            <p>{t('common.connections.conflictDraft')}</p>
-            <button
-              type="button"
-              className="nb-btn nb-btn--secondary"
-              onClick={() => {
-                setExpectedRevision(entryKey.revision);
-                setCredential(null);
-                setSource(null);
-                setSourceChanged(false);
-                operation.reset();
-              }}
-            >
-              {t('common.connections.useCurrentRevision')}
-            </button>
-          </Note>
-        ) : null}
+      <p className="nb-small nb-muted">{t('user.services.protocolAccessHelp')}</p>
+      <ConnectionOperationNotice operation={operation} />
+      {operation.outcome === 'conflict' ? (
         <button
-          type="submit"
-          className="nb-btn nb-btn--primary"
-          disabled={locked || !services.length || operation.outcome === 'conflict'}
+          type="button"
+          className="nb-btn nb-btn--secondary"
+          onClick={() => {
+            setExpectedRevision(entryKey.revision);
+            operation.reset();
+          }}
         >
-          {t('common.connections.save')}
+          {t('common.connections.useCurrentRevision')}
         </button>
-      </form>
-    </Fold>
+      ) : null}
+      <button
+        type="submit"
+        className="nb-btn nb-btn--primary"
+        disabled={locked || !services.length || operation.outcome === 'conflict'}
+      >
+        {t('common.connections.save')}
+      </button>
+    </form>
   );
 }

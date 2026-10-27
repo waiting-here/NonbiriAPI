@@ -114,7 +114,7 @@ Each duplicate card grants one shard of its rarity. Duplicate SP cards grant one
 | 1 SSR shard | 2 limited tickets | Same combined limit; room for both tickets is required |
 | 30 N + 15 R shards | One 口袋应援团 card | Once per card; unavailable if owned |
 
-While a limited pool is open, its limited SR cards cost ten SR shards each and SSR cards cost three SSR shards each. SP cards cost nine SSR shards each. A card shared by multiple open pools appears once. It remains available while at least one containing pool is open. Paused, future and ended pools do not make cards available. Offers are once per card and unavailable for owned cards, including on reruns. Redemptions do not alter pity.
+Permanent SSR cards are always available for three SSR shards each by default, including when no limited pool is open. While a limited pool is open, its limited SR cards cost ten SR shards each and SSR cards cost three SSR shards each. SP cards cost nine SSR shards each. A limited card shared by multiple open pools appears once. It remains available while at least one containing pool is open. Paused, future and ended pools do not make limited cards available. All card offers are once per card and unavailable for owned cards, including on reruns. Redemptions do not alter pity.
 
 The **量大管饱 (Bulk bargains)** group offers ten standard tickets or ten limited tickets for 10,000 credits per bundle. Each account may buy each bundle once per calendar day, with independent limits. Both bundles use game credits first and cover any remainder with general credits. Daily availability resets at midnight in the configured site time zone. The charge, ten-ticket grant and daily limit are committed together. Failed purchases consume neither credits nor availability. These fixed offers do not use the configurable single-ticket prices or monthly shard-exchange limits.
 
@@ -127,6 +127,44 @@ Administrators may publish any number of limited pools and reuse saved templates
 A pool has a name, built-in cover, schedule, featured card selection and rules. Once opened, its start time, rules and roster are fixed. Administrators may rename it, change its cover, pause/resume it or extend its end time. Different configurations use new pools.
 
 Base probabilities use 0.01% increments and total 100%. The SR threshold is 1–100; SSR is at least the SR threshold and at most 1,000. Consolidated probabilities are calculated from the actual hard-pity algorithm. The SSR featured guarantee supports one or two consecutive misses. Ticket prices, shard prices, separate SSR/SP card prices and monthly limits are configurable.
+
+## Pool statistics
+
+Administrators can open **Statistics** in the activity settings to compare the
+permanent pool and each limited period. Pool identity is independent of shared
+pity rules, names and repeated themes. The dashboard shows total draws and
+distinct participating accounts, rarity totals, the most frequently drawn cards
+and a searchable, sortable card table.
+
+Each card has three separate measures: total copies drawn including duplicates,
+distinct accounts that drew it in this pool, and first acquisitions that added
+it to an account's collection. Owning it before the draw, including through a
+different pool, shop or reward, prevents that draw from counting as a first
+acquisition. Shop purchases, redemption codes and site-wide rewards are not pool
+draws. One ten-pull contributes ten draws; replaying a completed request adds none.
+
+CSV and JSON downloads contain the complete selected pool, including zero-count
+cards, independently of the table's current search and page. Chart downloads use
+PNG or SVG. Counts remain exact decimal integers in the data downloads; chart
+positions and percentages are display calculations. Aggregate statistics persist
+when draw details expire, an account is deleted or a pool configuration is removed.
+Downloads and administrator statistics contain no participant identities.
+
+## Mystery-shop card statistics
+
+The administrator's shop statistics count successful card redemptions across
+the permanent, limited and shop-only card selections. The dashboard shows
+redeemed card quantities, distinct redeeming accounts, rarity distribution and
+the most redeemed cards, with searchable, sortable card details. Ticket purchases,
+daily ticket bundles, shard-to-ticket exchanges, draws and rewards are excluded.
+Under the shop's ownership rule, an account can redeem each card once; each
+successful card redemption is a first acquisition.
+
+Shop counts use their own lifetime aggregates and do not add to pool draw totals.
+The card grant, shard debit and counts commit together; failed or replayed
+requests do not add counts. Deleting an account removes its participation
+association without subtracting accumulated totals. CSV/JSON downloads contain
+the full shop card statistics, and charts support PNG/SVG downloads.
 
 ## Site appearance
 
@@ -159,6 +197,11 @@ These routes use station sessions and existing same-origin checks; they are not 
 | GET | `/api/appearance` | Selected appearance, remembered artwork and available artwork keys |
 | POST | `/api/appearance` | Replace selection and optionally the Heartfelt moments artwork |
 | GET | `/admin/api/gacha` | Administrator configuration |
+| GET | `/admin/api/gacha/statistics/pools` | Pool totals and distinct participants, numbered pagination |
+| GET | `/admin/api/gacha/statistics/pools/{id}/cards` | Per-card counts, first acquisitions and whole-pool chart summaries |
+| GET | `/admin/api/gacha/statistics/pools/{id}/export?format=json\|csv` | Complete selected-pool aggregate download |
+| GET | `/admin/api/gacha/statistics/shop/cards` | Shop card quantities, distinct participants and chart summaries |
+| GET | `/admin/api/gacha/statistics/shop/export?format=json\|csv` | Complete shop-card aggregate download |
 | POST | `/admin/api/gacha` | Save settings, a pool or a template |
 
 Themes consisting entirely of limited cards stay hidden until a pool containing their cards has opened. Past openings continue to count after a pool ends or is paused; already owned cards remain visible. Scheduled pools paused before opening do not reveal their themes.

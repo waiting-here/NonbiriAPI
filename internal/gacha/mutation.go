@@ -290,13 +290,10 @@ func (s *Service) draw(ctx context.Context, tx *sql.Tx, user, at int64, id strin
 	if err = savePity(ctx, tx, user, pool.Group, pity); err != nil {
 		return nil, Rules{}, nil, err
 	}
-	roster := []string{}
-	for _, card := range catalog.Cards {
-		if card.Source == "permanent" {
-			roster = append(roster, card.ID)
-		}
+	roster := poolRoster(pool)
+	if err := recordDrawStatisticsTx(ctx, tx, user, pool, result, roster); err != nil {
+		return nil, Rules{}, nil, err
 	}
-	roster = append(roster, pool.Featured...)
 	return result, pool.Rules, roster, nil
 }
 func purchase(ctx context.Context, tx *sql.Tx, user, at int64, id string, input Action, shop ShopSettings, p *profile) error {
@@ -383,7 +380,7 @@ func redeem(ctx context.Context, tx *sql.Tx, user, at int64, product string, sho
 		cap = shop.LimitedCap
 	default:
 		card, ok := cardsByID[product]
-		if !ok || card.Source == "permanent" {
+		if !ok || card.Source == "permanent" && card.Rarity != SSR {
 			return ErrInvalid
 		}
 		owns, err := readOwned(ctx, tx, user)
@@ -403,6 +400,8 @@ func redeem(ctx context.Context, tx *sql.Tx, user, at int64, product string, sho
 		if card.Source == "shop" {
 			spend[0] = shop.ChibiN
 			spend[1] = shop.ChibiR
+		} else if card.Source == "permanent" {
+			spend[3] = shop.SSRCard
 		} else {
 			open := false
 			err := tx.QueryRowContext(ctx, `SELECT EXISTS(
@@ -447,7 +446,10 @@ func redeem(ctx context.Context, tx *sql.Tx, user, at int64, product string, sho
 		return err
 	}
 	_, err := tx.ExecContext(ctx, "INSERT INTO gacha_claims(user_id,kind,target,created_at) VALUES(?,'card',?,?)", user, product, at)
-	return err
+	if err != nil {
+		return err
+	}
+	return recordShopStatisticsTx(ctx, tx, user, product)
 }
 func claim(ctx context.Context, tx *sql.Tx, user, at int64, id, themeID string, p *profile) error {
 	var theme *Theme

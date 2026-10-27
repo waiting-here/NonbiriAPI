@@ -19,14 +19,15 @@ type DiscoveryUseAuthorization struct {
 }
 
 // DiscoverySourceRevisionSQL selects the pinned catalog, the key's configured
-// catalog for this exact version, or an existing standard catalog. A different
-// credential version is never substituted.
+// catalog for this exact version, or this key's existing standard catalog.
+// A different key or credential version is never substituted.
 const DiscoverySourceRevisionSQL = `COALESCE(ur.discovery_source_revision_id,
  (SELECT sr.id FROM endpoint_key_discovery_sources ks JOIN discovery_source_revisions sr ON sr.source_id=ks.source_id
  WHERE ks.endpoint_key_id=dk.endpoint_key_id AND sr.owner_user_id=a.owner_user_id AND sr.credential_id=a.credential_id AND sr.credential_version_id=a.credential_version_id
  ORDER BY sr.source_revision DESC LIMIT 1),
  (SELECT sr.id FROM discovery_source_revisions sr JOIN discovery_sources ds ON ds.id=sr.source_id
  WHERE sr.owner_user_id=a.owner_user_id AND sr.credential_id=a.credential_id AND sr.credential_version_id=a.credential_version_id
+ AND EXISTS(SELECT 1 FROM discovery_source_keys scope WHERE scope.source_id=ds.id AND scope.endpoint_key_id=dk.endpoint_key_id)
  AND sr.canonical_base_url=a.canonical_base_url AND sr.list_format=CASE a.configured_type
  WHEN 'openai-compatible' THEN 'openai' WHEN 'openai-responses' THEN 'openai' WHEN 'openai-chat-completions' THEN 'openai' WHEN 'openai-decisions' THEN 'openai' WHEN 'anthropic-compatible' THEN 'anthropic' WHEN 'google-gemini' THEN 'gemini'
  WHEN 'ai-sdk-gateway-v3' THEN 'ai-sdk-gateway-v3' WHEN 'ai-sdk-gateway-v4' THEN 'ai-sdk-gateway-v4' END
@@ -170,6 +171,9 @@ func EnsureDiscoverySourceTx(ctx context.Context, tx *sql.Tx, use DiscoveryUseAu
 	if err != nil {
 		return 0, err
 	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO discovery_source_keys(source_id,endpoint_key_id) VALUES(?,?)`, sourceID, g.EndpointKeyID); err != nil {
+		return 0, err
+	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO discovery_source_revisions(id,source_id,owner_user_id,source_revision,credential_id,credential_version_id,canonical_base_url,list_format,created_at) VALUES(?,?,?,1,?,?,?,?,?)`, revisionID, sourceID, g.OwnerUserID, g.CredentialID, g.CredentialVersionID, g.CanonicalBaseURL, format, now)
 	if err != nil {
 		return 0, err
@@ -193,4 +197,30 @@ func ConfiguredDiscoverySourceRevisionTx(ctx context.Context, tx *sql.Tx, grant 
 		return nil, err
 	}
 	return &id, nil
+}
+
+// ClaimDiscoverySourceKeyTx makes a catalog's endpoint/key scope permanent,
+// including catalogs selected directly when submitting a donation use.
+func ClaimDiscoverySourceKeyTx(ctx context.Context, tx *sql.Tx, ownerID, keyID, sourceID int64) error {
+	var matches bool
+	err := tx.QueryRowContext(ctx, `SELECT
+ NOT EXISTS(SELECT 1 FROM discovery_source_keys scope WHERE scope.source_id=ds.id AND scope.endpoint_key_id<>k.id)
+ AND NOT EXISTS(SELECT 1 FROM endpoint_key_discovery_sources other WHERE other.source_id=ds.id AND other.endpoint_key_id<>k.id)
+ AND NOT EXISTS(SELECT 1 FROM donation_use_revisions ur JOIN discovery_source_revisions sr ON sr.id=ur.discovery_source_revision_id
+ JOIN donation_uses u ON u.id=ur.use_id JOIN donation_keys dk ON dk.id=u.donation_key_id
+ WHERE sr.source_id=ds.id AND dk.endpoint_key_id IS NOT NULL AND dk.endpoint_key_id<>k.id)
+ FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id
+ JOIN discovery_sources ds ON ds.id=? AND ds.user_id=e.user_id AND ds.connection_id IS e.connection_id
+ WHERE k.id=? AND e.user_id=?`, sourceID, keyID, ownerID).Scan(&matches)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if !matches {
+		return ErrConflict
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO discovery_source_keys(source_id,endpoint_key_id) VALUES(?,?) ON CONFLICT(source_id) DO NOTHING`, sourceID, keyID)
+	return err
 }

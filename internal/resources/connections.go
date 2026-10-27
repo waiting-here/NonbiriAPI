@@ -29,16 +29,8 @@ const (
 	routeSourceModels          = "/api/discovery-sources/{id}/models"
 )
 
-// A credential belongs in a connection's list when created there or explicitly
-// referenced there. Approved older versions remain visible beside current ones.
-const connectionCredentialMembership = `(cr.connection_id=sc.id OR EXISTS(
- SELECT 1 FROM endpoint_key_grant_revisions g JOIN endpoint_keys k ON k.id=g.endpoint_key_id
- JOIN endpoints e ON e.id=k.endpoint_id WHERE g.credential_id=cr.id AND e.connection_id=sc.id
- AND (g.id=k.current_grant_revision_id OR EXISTS(
-  SELECT 1 FROM donation_use_revisions ur JOIN donation_uses u ON u.id=ur.use_id
-  WHERE ur.grant_revision_id=g.id AND ur.id IN (u.current_approved_revision_id,u.current_pending_revision_id))))
- OR EXISTS(SELECT 1 FROM discovery_sources ds JOIN discovery_source_revisions sr ON sr.id=ds.current_revision_id
- WHERE ds.connection_id=sc.id AND sr.credential_id=cr.id))`
+// Services are the ownership boundary for reusable upstream keys.
+const connectionCredentialMembership = `cr.connection_id=sc.id`
 
 const connectionSelect = `SELECT sc.id,sc.name,sc.note,sc.revision,
 (SELECT count(*) FROM endpoints e WHERE e.connection_id=sc.id AND e.user_id=sc.user_id),

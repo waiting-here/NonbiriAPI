@@ -24,6 +24,14 @@ func TestGrantQueriesBoundAuthorizationMaterialization(t *testing.T) {
 	if _, err := database.ExecContext(t.Context(), string(schema)); err != nil {
 		t.Fatal(err)
 	}
+	// This plan-only fixture loads the base DDL without db's Go extensions.
+	if _, err := database.ExecContext(t.Context(), `CREATE TABLE discovery_source_keys (
+ source_id INTEGER PRIMARY KEY REFERENCES discovery_sources(id) ON DELETE CASCADE,
+ endpoint_key_id INTEGER NOT NULL REFERENCES endpoint_keys(id) ON DELETE CASCADE
+) STRICT;
+CREATE INDEX idx_discovery_source_keys_key ON discovery_source_keys(endpoint_key_id,source_id);`); err != nil {
+		t.Fatal(err)
+	}
 	for _, test := range []struct {
 		name  string
 		query string

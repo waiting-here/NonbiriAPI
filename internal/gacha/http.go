@@ -88,6 +88,9 @@ func RegisterRoutes(users limitedactivities.UserRouteRegistrar, admins limitedac
 	}); err != nil {
 		return err
 	}
+	if err := registerStatisticsRoutes(admins, s); err != nil {
+		return err
+	}
 	return admins.RegisterAdminRoute(http.MethodPost, "/admin/api/gacha", func(w http.ResponseWriter, r *http.Request, p limitedactivities.AdminPrincipal) {
 		var input AdminInput
 		if err := decode(w, r, &input); err != nil {

@@ -29,6 +29,7 @@ type MutationResult[T any] struct {
 
 type Endpoint struct {
 	ConnectionID      *string                           `json:"connection_id"`
+	ConnectionName    string                            `json:"connection_name"`
 	ConfigurationType string                            `json:"configuration_type"`
 	NativeServices    []connectorcontract.NativeService `json:"native_services"`
 	RerankFormat      connectorcontract.RerankFormat    `json:"rerank_format"`
@@ -90,6 +91,7 @@ type MainstreamEntryMatch struct {
 }
 
 type EndpointKey struct {
+	CredentialNote      string                            `json:"credential_note,omitempty"`
 	CredentialAvailable bool                              `json:"credential_available"`
 	CredentialID        string                            `json:"credential_id"`
 	CredentialVersion   string                            `json:"credential_version"`
@@ -130,12 +132,15 @@ type CallerKeySecret struct {
 }
 
 type DiscoveryEvidence struct {
-	State      string  `json:"state"`
-	Revision   string  `json:"revision"`
-	Result     *string `json:"result"`
-	SafeClass  string  `json:"safe_class"`
-	ObservedAt *int64  `json:"observed_at"`
-	Count      *string `json:"count"`
+	LastSuccessAt *int64  `json:"last_success_at,omitempty"`
+	AddedCount    *string `json:"added_count,omitempty"`
+	RemovedCount  *string `json:"removed_count,omitempty"`
+	State         string  `json:"state"`
+	Revision      string  `json:"revision"`
+	Result        *string `json:"result"`
+	SafeClass     string  `json:"safe_class"`
+	ObservedAt    *int64  `json:"observed_at"`
+	Count         *string `json:"count"`
 }
 
 type CatalogEntry struct {

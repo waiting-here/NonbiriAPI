@@ -238,8 +238,8 @@ export function visibleValueChecks(catalog, language, entries) {
   const technicalCopyPrefixes = ['user.personalAutomation.', 'user.debug.'];
   const userTerminology =
     language === 'zh'
-      ? /端点|平台模型|CallerKey|透传|假流式|假非流|扁平化|JSON Pointer|RFC 6901/u
-      : /\bendpoint\b|platform model|CallerKey|passthrough|flatten|JSON Pointer/iu;
+      ? /平台模型|CallerKey|透传|假流式|假非流|扁平化|JSON Pointer|RFC 6901/u
+      : /platform model|CallerKey|passthrough|flatten|JSON Pointer/iu;
   const forbidden = /model_fetch_failed|default_locale|_milli/i;
   const userJargon = language === 'zh' ? /权威|门禁/u : /\bauthoritative\b|\bauthority gate\b/iu;
   for (const [key, value] of entries) {

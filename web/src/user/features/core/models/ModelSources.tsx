@@ -2,29 +2,18 @@ import { NativeServicesField } from '@shared/components/NativeServicesField';
 import type { NativeService } from '@shared/nativeServices';
 import { BindingTargets } from '../connections/BindingTargets';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import { MoreMenu, Panel, PanelBody, PanelHead, Segmented } from '@shared/components/ui';
+import { Fold, MoreMenu, Panel, PanelBody, PanelHead, Segmented } from '@shared/components/ui';
 import type { PageMetadata, PageSize } from '@shared/operations/pageNumbers';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { usePagePager } from '@shared/operations/usePagePager';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { useQueryClient } from '@tanstack/react-query';
-import {
-  useEffect,
-  useEffectEvent,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-  type DragEvent,
-} from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState, type DragEvent } from 'react';
 import { addBindings, deleteBinding, getBindings, orderBindings } from '../api';
 import { CoreErrorPanel, CoreLoading, MutationNotice } from '../components';
 import { useCoreCopy } from '../copy';
-import { useNumberedBindingCandidates } from '../modelNumberedQueries';
-import { useNumberedEndpointKeys, useNumberedEndpoints } from '../numberedQueries';
 import { getBindingCandidatesPage } from '../pageApi';
 import { applyBindingsResponse, coreKeys, useBindings } from '../queries';
-import { useQuickstartCopy } from '../quickstartCopy';
 import { isConflict, isOutcomeUnknown } from '../request';
 import { resourceStatus } from '../resourceOperation';
 import { bindingDraftReducer, initialBindingDraftState } from '../stateMachines';
@@ -33,21 +22,15 @@ import type {
   BindingCandidate,
   BindingSelection,
   BindingsResponse,
-  Endpoint,
-  EndpointKey,
   Model,
   RouteStrategy,
 } from '../types';
 import { useModelText } from './copy';
-import { ManualSource } from './ManualSource';
+import { PersonalBindingPicker } from './PersonalBindingPicker';
+import { boundIdentities, candidateIdentity } from './bindingIdentity';
+import { useBindingCopy } from './bindingCopy';
 
 import { asNotice, isAccessLoss, type VisibleOutcome } from './feedback';
-
-function candidateIdentity(
-  candidate: Pick<BindingCandidate, 'endpoint_key_id' | 'upstream_model_id'>,
-): string {
-  return `${candidate.endpoint_key_id}\u0000${candidate.upstream_model_id}`;
-}
 
 function BindingSelector({
   accountId,
@@ -61,140 +44,32 @@ function BindingSelector({
   onSearchFocused?: () => void;
 }) {
   const { t } = useCoreCopy();
+  const copy = useBindingCopy();
   const queryClient = useQueryClient();
-  const textModel = useModelText();
   const bindings = useBindings(accountId, model.id);
-  const [endpointQuery, setEndpointQuery] = useState(''),
-    [keyQuery, setKeyQuery] = useState('');
-  const { t: text } = useQuickstartCopy();
-  const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint | undefined>();
-  const [selectedKey, setSelectedKey] = useState<EndpointKey | undefined>();
-  const [endpointId, setEndpointId] = useState('');
-  const [keyId, setKeyId] = useState('');
-  const [modelQuery, setModelQuery] = useState('');
-  const [queryDraft, setQueryDraft] = useState('');
   const [selectionDetails, setSelectionDetails] = useState<Record<string, BindingCandidate>>({});
   const [invalidSelection, setInvalidSelection] = useState(false);
+  const [readAccessError, setReadAccessError] = useState<Error | null>(null);
   const [nativeSelections, setNativeSelections] = useState<Record<string, NativeService[]>>({});
   const servicesFor = (id: string) =>
     nativeSelections[id] ?? selectionDetails[id]?.native_services ?? [];
-  const endpointPager = usePagePager({
-    station: 'user',
-    listType: 'models-binding-endpoints',
-    scopeKey: accountId,
-    resetKey: endpointQuery,
-  });
-  const keyPager = usePagePager({
-    station: 'user',
-    listType: 'models-binding-keys',
-    scopeKey: `${accountId}\u0000${model.id}`,
-    resetKey: `${endpointId}:${keyQuery}`,
-  });
-  const [manualOpen, setManualOpen] = useState(false);
-  const serviceFilter = useRef<HTMLDetailsElement>(null);
-  const [candidatePageSize, setCandidatePageSize] = useState<PageSize>(10);
-  const [manualLocked, setManualLocked] = useState(false);
-  const [manualSaved, setManualSaved] = useState(false);
-  const candidatePager = usePagePager({
-    station: 'user',
-    listType: 'models-binding-candidates',
-    scopeKey: `${accountId}\u0000${model.id}`,
-    resetKey: `${endpointId}\u0000${modelQuery}\u0000${candidatePageSize}`,
-  });
-  const endpoints = useNumberedEndpoints(
-    accountId,
-    { page: endpointPager.page, pageSize: endpointPager.pageSize },
-    true,
-    { q: endpointQuery },
-  );
-  const keys = useNumberedEndpointKeys(
-    accountId,
-    endpointId || undefined,
-    { page: keyPager.page, pageSize: keyPager.pageSize },
-    Boolean(manualOpen && endpointId),
-    { q: keyQuery },
-  );
-  const candidates = useNumberedBindingCandidates(
-    accountId,
-    model.id,
-    { endpointId: endpointId || undefined, query: modelQuery },
-    { page: candidatePager.page, pageSize: candidatePageSize },
-  );
-  useEffect(() => {
-    const timer = window.setTimeout(() => setModelQuery(queryDraft.trim()), 300);
-    return () => window.clearTimeout(timer);
-  }, [queryDraft]);
   const [draft, dispatch] = useReducer(bindingDraftReducer, undefined, () =>
     initialBindingDraftState(accountId, model.id, model.binding_revision),
   );
   const bindingsKnown = Boolean(bindings.data);
-  const searchInput = useRef<HTMLInputElement>(null);
-  const focusedSearch = useRef(false);
-  useEffect(() => {
-    if (focusSearch && bindingsKnown && !focusedSearch.current) {
-      searchInput.current?.focus();
-      focusedSearch.current = true;
-      onSearchFocused?.();
-    }
-  }, [focusSearch, bindingsKnown, onSearchFocused]);
-  const queryPermissionError = [bindings.error, endpoints.error, keys.error, candidates.error].find(
-    (error) => isAccessLoss(error),
-  );
-  const resetDraft = useEffectEvent(() =>
-    dispatch({
-      type: 'boundary',
-      accountId,
-      modelId: model.id,
-      bindingRevision: model.binding_revision,
-    }),
-  );
-  useEffect(() => {
-    resetDraft();
-    let active = true;
-    queueMicrotask(() => {
-      if (!active) return;
-      setSelectedEndpoint(undefined);
-      setSelectedKey(undefined);
-      setEndpointId('');
-      setKeyId('');
-      setModelQuery('');
-      setQueryDraft('');
-      setSelectionDetails({});
-      setInvalidSelection(false);
-    });
-    return () => {
-      active = false;
-    };
-  }, [accountId, model.id]);
-
   useEffect(() => {
     const revision = bindings.data?.binding_revision;
-    if (revision && revision !== draft.bindingRevision) {
+    if (revision && revision !== draft.bindingRevision)
       dispatch({ type: 'authoritative', accountId, modelId: model.id, bindingRevision: revision });
-    }
   }, [accountId, bindings.data?.binding_revision, draft.bindingRevision, model.id]);
-
   const selected = useMemo(
     () => new Set(draft.selections.map(candidateIdentity)),
     [draft.selections],
   );
   const bound = useMemo(
-    () => new Set((bindings.data?.bindings ?? []).map(candidateIdentity)),
+    () => boundIdentities(bindings.data?.bindings ?? []),
     [bindings.data?.bindings],
   );
-
-  const chooseEndpoint = (next: string) => {
-    setSelectedEndpoint(endpoints.data?.data.find((entry) => entry.id === next));
-    setSelectedKey(undefined);
-    setEndpointId(next);
-    setKeyId('');
-    setManualSaved(false);
-  };
-  const chooseKey = (next: string) => {
-    setSelectedKey(keys.data?.data.find((entry) => entry.id === next));
-    setKeyId(next);
-    setManualSaved(false);
-  };
   const toggleCandidate = (candidate: BindingCandidate) => {
     if (candidate.capabilities?.can_bind === false) return;
     setSelectionDetails((current) => ({ ...current, [candidateIdentity(candidate)]: candidate }));
@@ -205,7 +80,7 @@ function BindingSelector({
   const retryAllowed = useRef(false);
   const publish = (response: BindingsResponse, intent: Intent) => {
     applyBindingsResponse(queryClient, accountId, model.id, response);
-    const bound = new Set(response.bindings.map(candidateIdentity));
+    const bound = boundIdentities(response.bindings);
     for (const candidate of intent.selections)
       if (bound.has(candidateIdentity(candidate)))
         dispatch({ type: 'candidate-invalid', accountId, modelId: model.id, candidate });
@@ -271,7 +146,7 @@ function BindingSelector({
         queryClient.invalidateQueries({ queryKey: coreKeys.candidatesRoot(accountId, model.id) }),
       ]);
       context.assertCurrent();
-      const bound = new Set(response.bindings.map(candidateIdentity));
+      const bound = boundIdentities(response.bindings);
       const confirmed = intent.selections.every((item) => bound.has(candidateIdentity(item)));
       if (!error || confirmed) context.commit(() => publish(response, intent));
       if (error && confirmed) return { operationConfirmed: true };
@@ -322,12 +197,13 @@ function BindingSelector({
   };
 
   const accessLossError =
-    (isAccessLoss(operation.error) ? operation.error : null) ?? queryPermissionError;
+    (isAccessLoss(operation.error) ? operation.error : null) ??
+    (isAccessLoss(bindings.error) ? bindings.error : null) ?? readAccessError;
   if (accessLossError) {
     return (
       <section className="core-card">
         <div className="core-card__header">
-          <h2>{t('models.selectorTitle')}</h2>
+          <h2>{copy.addSources}</h2>
         </div>
         <CoreErrorPanel compact error={accessLossError} />
       </section>
@@ -337,246 +213,25 @@ function BindingSelector({
   return (
     <section className="core-card">
       <div className="core-card__header">
-        <h2>{t('models.selectorTitle')}</h2>
+        <h2>{copy.addSources}</h2>
       </div>
       {bindings.isPending && !bindings.data ? <CoreLoading compact /> : null}
       {!bindings.data && bindings.error ? (
         <CoreErrorPanel compact error={bindings.error} onRetry={() => void bindings.refetch()} />
       ) : null}
-      <label className="model-source-search">
-        <span>{textModel('sourceSearch')}</span>
-        <input
-          type="search"
-          ref={searchInput}
-          data-testid="model-source-search"
-          aria-label={textModel('sourceSearch')}
-          maxLength={256}
-          placeholder={textModel('sourcePlaceholder')}
-          value={queryDraft}
-          disabled={!bindingsKnown || operation.isPending || Boolean(replayAttempt)}
-          onChange={(event) => setQueryDraft(event.target.value)}
-        />
-        <small>{textModel('sourceSearchHelp')}</small>
-      </label>
-      <details ref={serviceFilter} className="nb-fold nb-fold--plain model-service-filter">
-        <summary>
-          {textModel('filterService')}
-          {selectedEndpoint ? ` · ${selectedEndpoint.note || selectedEndpoint.base_url}` : ''}
-        </summary>
-        <div className="nb-fold__body core-form">
-          <label>
-            <span>{text('serviceSearch')}</span>
-            <input
-              type="search"
-              value={endpointQuery}
-              maxLength={128}
-              placeholder={text('searchHelp')}
-              disabled={manualLocked || operation.isPending || Boolean(replayAttempt)}
-              onChange={(event) => setEndpointQuery(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>{textModel('service')}</span>
-            <select
-              value={endpointId}
-              disabled={
-                manualLocked ||
-                endpoints.isFetching ||
-                operation.isPending ||
-                Boolean(replayAttempt)
-              }
-              onChange={(event) => chooseEndpoint(event.target.value)}
-            >
-              <option value="">{textModel('allServices')}</option>
-              {selectedEndpoint &&
-              !endpoints.data?.data.some((endpoint) => endpoint.id === endpointId) ? (
-                <option value={selectedEndpoint.id}>
-                  {selectedEndpoint.note || selectedEndpoint.base_url}
-                </option>
-              ) : null}
-              {endpoints.data?.data.map((endpoint) => (
-                <option key={endpoint.id} value={endpoint.id} disabled={!endpoint.enabled}>
-                  {endpoint.note || endpoint.base_url}
-                </option>
-              ))}
-            </select>
-          </label>
-          {endpoints.error ? (
-            <CoreErrorPanel
-              compact
-              error={endpoints.error}
-              onRetry={() => void endpoints.refetch()}
-            />
-          ) : null}
-          {endpoints.data ? (
-            <PagePagination
-              metadata={endpoints.data.pagination}
-              requestedPage={endpointPager.page}
-              busy={endpoints.isFetching || manualLocked}
-              onPageChange={endpointPager.setPage}
-              onPageSizeChange={endpointPager.setPageSize}
-            />
-          ) : null}
-        </div>
-      </details>
-      <section
-        className="model-source-results"
-        aria-label={textModel('sourceSearch')}
-        aria-busy={candidates.isFetching}
-      >
-        {candidates.isPending || queryDraft.trim() !== modelQuery ? (
-          <CoreLoading compact />
-        ) : candidates.error ? (
-          <CoreErrorPanel
-            compact
-            error={candidates.error}
-            onRetry={() => void candidates.refetch()}
-          />
-        ) : !candidates.data?.data.length ? (
-          <p className="core-muted">{t('models.candidateEmpty')}</p>
-        ) : (
-          <ul className="model-source-list">
-            {candidates.data.data.map((candidate) => {
-              const identity = candidateIdentity(candidate);
-              return (
-                <li key={identity}>
-                  <button
-                    type="button"
-                    className="model-source-result"
-                    aria-pressed={selected.has(identity)}
-                    disabled={
-                      bound.has(identity) ||
-                      !bindingsKnown ||
-                      candidates.isFetching ||
-                      operation.isPending ||
-                      Boolean(replayAttempt)
-                    }
-                    onClick={() => toggleCandidate(candidate)}
-                  >
-                    <span className="model-source-main">
-                      <strong className="core-mono">{candidate.upstream_model_id}</strong>
-                      <span className="nb-sub">
-                        {candidate.endpoint_note || candidate.endpoint_base_url} ·{' '}
-                        {candidate.endpoint_key_note ||
-                          `${candidate.endpoint_key_display_head}…${candidate.endpoint_key_display_tail}`}{' '}
-                        ·{' '}
-                        {candidate.source_types
-                          .map((source) =>
-                            source === 'automatic' ? t('models.automatic') : t('models.manual'),
-                          )
-                          .join(' + ')}
-                      </span>
-                    </span>
-                    <span className="nb-badge">
-                      {bound.has(identity)
-                        ? t('models.alreadyBound')
-                        : selected.has(identity)
-                          ? t('models.candidateSelected')
-                          : text('choose')}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {candidates.data && queryDraft.trim() === modelQuery ? (
-          <>
-            <p className="core-muted">
-              {textModel('searchCount', { count: candidates.data.pagination.total_items })}
-            </p>
-            <PagePagination
-              metadata={candidates.data.pagination}
-              requestedPage={candidatePager.page}
-              busy={candidates.isFetching || operation.isPending || Boolean(replayAttempt)}
-              onPageChange={candidatePager.setPage}
-              onPageSizeChange={setCandidatePageSize}
-            />
-          </>
-        ) : null}
-      </section>
-      <button
-        type="button"
-        className="nb-btn nb-btn--ghost"
-        aria-expanded={manualOpen}
-        disabled={manualLocked || operation.isPending || Boolean(replayAttempt)}
-        onClick={() => {
-          if (!manualOpen && serviceFilter.current) serviceFilter.current.open = true;
-          setManualOpen(!manualOpen);
-        }}
-      >
-        {textModel('manual')}
-      </button>
-      {manualOpen ? (
-        <section className="model-manual core-form">
-          {!endpointId ? (
-            <p className="core-muted">{t('models.chooseEndpoint')}</p>
-          ) : (
-            <>
-              <label>
-                <span>{text('keySearch')}</span>
-                <input
-                  type="search"
-                  value={keyQuery}
-                  maxLength={128}
-                  disabled={manualLocked}
-                  onChange={(event) => setKeyQuery(event.target.value)}
-                />
-              </label>
-              <label>
-                <span>{textModel('key')}</span>
-                <select
-                  value={keyId}
-                  disabled={manualLocked || keys.isFetching}
-                  onChange={(event) => chooseKey(event.target.value)}
-                >
-                  <option value="">{t('models.chooseKey')}</option>
-                  {selectedKey && !keys.data?.data.some((key) => key.id === keyId) ? (
-                    <option value={selectedKey.id}>{selectedKey.note}</option>
-                  ) : null}
-                  {keys.data?.data.map((key) => (
-                    <option
-                      key={key.id}
-                      value={key.id}
-                      disabled={!key.enabled || key.suspension_state !== 'none'}
-                    >
-                      {key.note || `${key.display_head}…${key.display_tail}`}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {keys.error ? (
-                <CoreErrorPanel compact error={keys.error} onRetry={() => void keys.refetch()} />
-              ) : null}
-              {keys.data ? (
-                <PagePagination
-                  metadata={keys.data.pagination}
-                  requestedPage={keyPager.page}
-                  busy={keys.isFetching || manualLocked}
-                  onPageChange={keyPager.setPage}
-                  onPageSizeChange={keyPager.setPageSize}
-                />
-              ) : null}
-              {keyId && selectedKey && selectedEndpoint ? (
-                <ManualSource
-                  key={`${accountId}:${endpointId}:${keyId}`}
-                  accountId={accountId}
-                  endpointId={endpointId}
-                  keyId={keyId}
-                  onLock={setManualLocked}
-                  onEdit={() => setManualSaved(false)}
-                  onCreated={(upstreamModel) => {
-                    setQueryDraft(upstreamModel);
-                    setManualSaved(true);
-                  }}
-                />
-              ) : null}
-            </>
-          )}
-          {manualSaved ? <p role="status">{textModel('manualSaved')}</p> : null}
-        </section>
-      ) : null}
-
+      <PersonalBindingPicker
+        key={`${accountId}:${model.id}`}
+        accountId={accountId}
+        modelId={model.id}
+        selected={selected}
+        bound={bound}
+        onToggle={toggleCandidate}
+        locked={!bindingsKnown || operation.isPending || Boolean(replayAttempt)}
+        focusSearch={focusSearch}
+        onSearchFocused={onSearchFocused}
+        onAccessLoss={setReadAccessError}
+      />
+      <p className="nb-small nb-muted">{copy.selectedHelp}</p>
       <p className="core-muted">{t('models.selectedCount', { count: draft.selections.length })}</p>
       {draft.selections.length ? (
         <ul className="core-selection-list">
@@ -595,17 +250,19 @@ function BindingSelector({
                   ) : null}
                 </div>
                 {detail?.native_services ? (
-                  <NativeServicesField
-                    options={detail.native_services}
-                    value={servicesFor(candidateIdentity(candidate))}
-                    onChange={(value) =>
-                      setNativeSelections((previous) => ({
-                        ...previous,
-                        [candidateIdentity(candidate)]: value,
-                      }))
-                    }
-                    disabled={operation.isPending || Boolean(replayAttempt)}
-                  />
+                  <Fold title={copy.calls}>
+                    <NativeServicesField
+                      options={detail.native_services}
+                      value={servicesFor(candidateIdentity(candidate))}
+                      onChange={(value) =>
+                        setNativeSelections((previous) => ({
+                          ...previous,
+                          [candidateIdentity(candidate)]: value,
+                        }))
+                      }
+                      disabled={operation.isPending || Boolean(replayAttempt)}
+                    />
+                  </Fold>
                 ) : null}
                 <button
                   type="button"
@@ -621,6 +278,19 @@ function BindingSelector({
             );
           })}
         </ul>
+      ) : null}
+      {draft.selections.length ? (
+        <button
+          type="button"
+          className="nb-btn nb-btn--ghost"
+          disabled={operation.isPending || Boolean(replayAttempt)}
+          onClick={() => {
+            for (const candidate of draft.selections)
+              dispatch({ type: 'candidate-invalid', accountId, modelId: model.id, candidate });
+          }}
+        >
+          {copy.clear}
+        </button>
       ) : null}
       {invalidSelection ? (
         <p className="core-inline-warning">{t('models.selectionInvalid')}</p>
@@ -704,6 +374,7 @@ function localBindingPagination(
 
 function BindingOrder({ accountId, model }: { accountId: string; model: Model }) {
   const { t } = useCoreCopy();
+  const copy = useBindingCopy();
   const textModel = useModelText();
   const queryClient = useQueryClient();
   const bindings = useBindings(accountId, model.id);
@@ -900,12 +571,27 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
                   >
                     <span className="model-source-number">{absoluteIndex + 1}</span>
                     <span className="model-source-main">
-                      <strong className="core-mono">{binding.upstream_model_id}</strong>
-                      <span className="nb-sub">
-                        {binding.endpoint_note || binding.endpoint_base_url} ·{' '}
-                        {binding.endpoint_key_note ||
-                          `${binding.endpoint_key_display_head}…${binding.endpoint_key_display_tail}`}
-                      </span>
+                      {binding.targets && binding.targets.length > 1 ? (
+                        <>
+                          <strong>
+                            {copy.combination} · {binding.targets.length} {copy.combinationCount}
+                          </strong>
+                          {binding.targets.map((target) => (
+                            <span key={target.id} className="nb-sub">
+                              {target.upstream_model_id} · {target.base_url}
+                            </span>
+                          ))}
+                        </>
+                      ) : (
+                        <>
+                          <strong className="core-mono">{binding.upstream_model_id}</strong>
+                          <span className="nb-sub">
+                            {binding.endpoint_note || binding.endpoint_base_url} ·{' '}
+                            {binding.endpoint_key_note ||
+                              `${binding.endpoint_key_display_head}…${binding.endpoint_key_display_tail}`}
+                          </span>
+                        </>
+                      )}
                     </span>
                     {model.browse?.preview.find((entry) => entry.id === binding.id)?.state ? (
                       <span className="nb-badge">
@@ -1058,14 +744,15 @@ export function ModelSources({
       />
       <PanelBody>
         {strategy === 'cache_balanced' ? <p className="nb-sub">{text('balancedHelp')}</p> : null}
-        <BindingOrder accountId={accountId} model={model} />
-        <BindingTargets accountId={accountId} model={model} />
         <BindingSelector
+          key={`${accountId}:${model.id}`}
           accountId={accountId}
           model={model}
           focusSearch={focusSearch}
           onSearchFocused={onSearchFocused}
         />
+        <BindingOrder accountId={accountId} model={model} />
+        <BindingTargets accountId={accountId} model={model} />
       </PanelBody>
     </Panel>
   );

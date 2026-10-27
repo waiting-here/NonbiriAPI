@@ -5,7 +5,7 @@ import { renderWithProviders } from '../../../../../test/unit/support';
 import { ServiceCreateForm } from './ServiceCreateForm';
 import type { ConnectionIntent } from './resourceOperation';
 import type { Endpoint, EndpointKey } from '../types';
-import type { Credential } from './types';
+import type { Connection, Credential } from './types';
 import common from '@shared/i18n/common/en.json';
 import userEn from '../../../i18n/en.json';
 
@@ -118,7 +118,9 @@ beforeEach(() => {
       return {
         kind: 'discovery_source',
         source: {
-          id: '41',
+          id: String(
+            40 + mocks.execute.mock.calls.filter(([row]) => row.kind === 'discovery_source').length,
+          ),
           credential_id: credential.id,
           credential_version: credential.credential_version,
           base_url: intent.input.base_url,
@@ -135,57 +137,108 @@ beforeEach(() => {
     throw new Error('Unexpected stage');
   });
 });
-async function fillCustom() {
-  const view = await renderWithProviders(<ServiceCreateForm accountId="7" />, {
-    station: 'user',
-    role: 'user',
-  });
+async function fillCustom(connection?: Connection) {
+  const view = await renderWithProviders(
+    <ServiceCreateForm accountId="7" connection={connection} />,
+    {
+      station: 'user',
+      role: 'user',
+    },
+  );
   view.queryClient.setQueryData(['user', 'session'], {
     user: { id: '7', username: 'fixture-user', effective_level: 1 },
   });
-  await view.user.selectOptions(
-    screen.getByLabelText(common.common.connections.protocol),
-    'openai-compatible',
-  );
+  if (connection)
+    await view.user.click(
+      screen.getByRole('radio', { name: common.common.connections.newCredential }),
+    );
   await view.user.type(
-    screen.getByLabelText(common.common.connections.entryURL),
+    screen.getByLabelText(userEn.user.services.serviceAddress),
     'https://service.example/v1',
   );
   await view.user.type(
     screen.getByLabelText(common.common.connections.secret),
     'synthetic-upstream-secret',
   );
-  await view.user.click(screen.getByLabelText(common.common.connections.ownership));
-  expect(screen.getByLabelText(common.common.connections.ownership)).toBeChecked();
   return view;
 }
 describe('service setup as one task', () => {
   it('creates a custom service, credential and grant with one main submission', async () => {
     const view = await fillCustom();
     expect(screen.getByLabelText(userEn.user.workflows.serviceName)).toHaveValue('service.example');
-    await view.user.click(screen.getByRole('button', { name: userEn.user.workflows.addService }));
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
     await screen.findByText(userEn.user.workflows.serviceReady);
     expect(mocks.execute.mock.calls.map(([intent]) => intent.kind)).toEqual([
       'connection',
       'endpoint',
       'credential',
-      'discovery_source',
       'key',
     ]);
     expect(mocks.execute.mock.calls[2]![1]).toBe('synthetic-upstream-secret');
-    expect(new Set(mocks.execute.mock.calls.map((call) => call[2])).size).toBe(5);
-    await view.user.click(screen.getByRole('button', { name: userEn.user.workflows.useModels }));
+    expect(new Set(mocks.execute.mock.calls.map((call) => call[2])).size).toBe(4);
     expect(screen.getByText('Models use grant 31')).toBeVisible();
-    expect(screen.getByText('Catalog 41')).toBeVisible();
+    expect(screen.getByText('Catalog none')).toBeVisible();
     expect(
-      mocks.execute.mock.calls.find(([intent]) => intent.kind === 'discovery_source')![0],
-    ).toMatchObject({
-      input: { base_url: 'https://service.example/v1', list_format: 'openai', credential_id: '21' },
-    });
+      mocks.execute.mock.calls.find(([intent]) => intent.kind === 'key')![0].input,
+    ).not.toHaveProperty('discovery_source_id');
     expect(screen.getByRole('link', { name: userEn.user.workflows.donateService })).toHaveAttribute(
       'href',
       '/charity?tab=donate&endpoint_id=11',
     );
+  });
+  it('adds multiple secrets in one task without sharing their internal catalogs', async () => {
+    const original = mocks.execute.getMockImplementation()!;
+    let credentialNumber = 20;
+    mocks.execute.mockImplementation(async (...args) =>
+      args[0].kind === 'credential'
+        ? { kind: 'credential', credential: { ...credential, id: String(++credentialNumber) } }
+        : original(...args),
+    );
+    const view = await fillCustom();
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAnotherKey }));
+    await view.user.type(
+      screen.getByLabelText(userEn.user.services.additionalKey.replace('{{number}}', '2')),
+      'synthetic-second-key',
+    );
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
+    await screen.findByText(userEn.user.workflows.serviceReady);
+    expect(mocks.execute.mock.calls.map(([intent]) => intent.kind)).toEqual([
+      'connection',
+      'endpoint',
+      'credential',
+      'key',
+      'credential',
+      'key',
+    ]);
+    const grants = mocks.execute.mock.calls.filter(([intent]) => intent.kind === 'key');
+    expect(grants.map(([intent]) => intent.input.credential_id)).toEqual(['21', '22']);
+    expect(grants.every(([intent]) => !('discovery_source_id' in intent.input))).toBe(true);
+    expect(
+      mocks.execute.mock.calls
+        .filter(([intent]) => intent.kind === 'credential')
+        .map((call) => call[1]),
+    ).toEqual(['synthetic-upstream-secret', 'synthetic-second-key']);
+  });
+  it('removes extra drafts and discards them when switching to an existing service key', async () => {
+    const view = await fillCustom({ id: '1', credential_count: '1' } as Connection);
+    const add = screen.getByRole('button', { name: userEn.user.services.addAnotherKey });
+    const extraLabel = userEn.user.services.additionalKey.replace('{{number}}', '2');
+    await view.user.click(add);
+    await view.user.type(screen.getByLabelText(extraLabel), 'synthetic-unused-extra');
+    await view.user.click(
+      screen.getByRole('button', { name: userEn.user.services.removeAdditionalKey }),
+    );
+    expect(screen.queryByLabelText(extraLabel)).not.toBeInTheDocument();
+    await view.user.click(add);
+    await view.user.click(
+      screen.getByRole('radio', { name: common.common.connections.existingCredential }),
+    );
+    await view.user.click(screen.getByRole('button', { name: 'Choose shared credential' }));
+    const save = screen.getByRole('button', { name: userEn.user.services.addAndFetch });
+    expect(save).toBeEnabled();
+    await view.user.click(save);
+    await screen.findByText(userEn.user.workflows.serviceReady);
+    expect(mocks.execute.mock.calls.map(([intent]) => intent.kind)).toEqual(['endpoint', 'key']);
   });
   it('creates the chosen preset without asking for separate entry and grant saves', async () => {
     const view = await renderWithProviders(<ServiceCreateForm accountId="7" />, {
@@ -195,6 +248,9 @@ describe('service setup as one task', () => {
     view.queryClient.setQueryData(['user', 'session'], {
       user: { id: '7', username: 'fixture-user', effective_level: 1 },
     });
+    await view.user.click(
+      screen.getByText(userEn.user.services.advancedSetup, { selector: 'strong' }),
+    );
     await view.user.click(
       screen.getByRole('radio', { name: common.common.connections.mainstream }),
     );
@@ -217,8 +273,7 @@ describe('service setup as one task', () => {
       screen.getByLabelText(common.common.connections.secret),
       'synthetic-preset-secret',
     );
-    await view.user.click(screen.getByLabelText(common.common.connections.ownership));
-    await view.user.click(screen.getByRole('button', { name: userEn.user.workflows.addService }));
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
     await screen.findByText(userEn.user.workflows.serviceReady);
     expect(mocks.execute.mock.calls[1]![0]).toMatchObject({
       kind: 'endpoint',
@@ -232,9 +287,9 @@ describe('service setup as one task', () => {
       ([intent]) => intent.kind === 'discovery_source',
     );
     const grants = mocks.execute.mock.calls.filter(([intent]) => intent.kind === 'key');
-    expect(sources).toHaveLength(1);
+    expect(sources).toHaveLength(2);
     expect(grants).toHaveLength(3);
-    expect(grants.map(([intent]) => intent.input.discovery_source_id)).toEqual(['41', '41', null]);
+    expect(grants.map(([intent]) => intent.input.discovery_source_id)).toEqual(['41', '42', null]);
   });
   it('reuses a selected credential and retries only an unfinished grant', async () => {
     const original = mocks.execute.getMockImplementation()!;
@@ -246,12 +301,12 @@ describe('service setup as one task', () => {
       }
       return original(...args);
     });
-    const view = await fillCustom();
+    const view = await fillCustom({ id: '1', credential_count: '1' } as Connection);
     await view.user.click(
       screen.getByRole('radio', { name: common.common.connections.existingCredential }),
     );
     await view.user.click(screen.getByRole('button', { name: 'Choose shared credential' }));
-    await view.user.click(screen.getByRole('button', { name: userEn.user.workflows.addService }));
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
     await screen.findByText(userEn.user.workflows.continueSetup);
     await waitFor(() =>
       expect(
@@ -263,9 +318,7 @@ describe('service setup as one task', () => {
     );
     await screen.findByText(userEn.user.workflows.serviceReady);
     expect(mocks.execute.mock.calls.map(([intent]) => intent.kind)).toEqual([
-      'connection',
       'endpoint',
-      'discovery_source',
       'key',
       'key',
     ]);
@@ -286,7 +339,7 @@ describe('service setup as one task', () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ kind: 'credential', credential });
     const view = await fillCustom();
-    await view.user.click(screen.getByRole('button', { name: userEn.user.workflows.addService }));
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
     const check = await screen.findByRole('button', {
       name: common.common.connections.checkResult,
     });
@@ -304,7 +357,6 @@ describe('service setup as one task', () => {
       'connection',
       'endpoint',
       'credential',
-      'discovery_source',
       'key',
     ]);
     expect(mocks.status.mock.calls[0]![0]).toBe(mocks.status.mock.calls[1]![0]);
@@ -325,7 +377,10 @@ describe('service setup as one task', () => {
       }),
     );
     const view = await fillCustom();
-    await view.user.click(screen.getByRole('button', { name: userEn.user.workflows.addService }));
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAnotherKey }));
+    const extraLabel = userEn.user.services.additionalKey.replace('{{number}}', '2');
+    await view.user.type(screen.getByLabelText(extraLabel), 'synthetic-session-extra');
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
     await waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(1));
     await act(async () => {
       view.queryClient.setQueryData(['user', 'session'], {
@@ -335,5 +390,6 @@ describe('service setup as one task', () => {
     });
     expect(mocks.execute).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText(common.common.connections.secret)).toHaveValue('');
+    expect(screen.getByLabelText(extraLabel)).toHaveValue('');
   });
 });

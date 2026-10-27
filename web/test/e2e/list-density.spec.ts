@@ -376,11 +376,11 @@ for (const [timezoneId, expectedTime] of [
   });
 }
 
-test('mainstream resources retain their channel name and protocol in the list', async ({
+test('mainstream resources retain their channel name and protocol when switching endpoints', async ({
   page,
 }) => {
   const guard = await prepare(page, 'user');
-  await mockConnectionResources(page, () => [
+  const entries = [
     {
       ...endpoint(1),
       key_count: '0',
@@ -391,15 +391,29 @@ test('mainstream resources retain their channel name and protocol in the list', 
         name: 'Example Gateway',
       },
     },
-    endpoint(2),
-  ]);
+    { ...endpoint(2), key_count: '0' },
+  ];
+  await mockConnectionResources(page, () => entries);
+  await page.route(`${USER_ORIGIN}/api/endpoints/**`, async (route) => {
+    const url = new URL(route.request().url());
+    if (/^\/api\/endpoints\/[12]\/keys$/.test(url.pathname))
+      return route.fulfill({ json: numberedFixturePage([], url) });
+    const entry = entries.find((row) => url.pathname === '/api/endpoints/' + row.id);
+    if (entry) return route.fulfill({ json: entry });
+    return route.fallback();
+  });
   await page.goto(`${USER_ORIGIN}/endpoints?connection_id=1`);
-  const entries = page.locator('.services-detail .nb-table tbody tr');
-  await expect(entries).toHaveCount(2);
-  await expect(entries.first().locator('strong')).toHaveText('Example Gateway');
-  await expect(entries.first()).toContainText('OpenAI-compatible');
-  await expect(entries.nth(1).locator('strong')).toHaveText(endpoint(2).note);
-  await expect(entries.nth(1)).toContainText('OpenAI-compatible');
+  const selector = page.getByRole('combobox', {
+    name: commonCopy.common.connections.entry,
+    exact: true,
+  });
+  await expect(selector.locator('option')).toHaveCount(2);
+  const detail = page.locator('.services-detail--enabled');
+  await expect(detail.locator('.nb-facts')).toContainText('Example Gateway');
+  await expect(detail.locator('.nb-facts')).toContainText('OpenAI-compatible');
+  await selector.selectOption('2');
+  await expect(detail.getByRole('heading', { name: endpoint(2).note, exact: true })).toBeVisible();
+  await expect(detail.locator('.nb-facts')).toContainText('OpenAI-compatible');
   for (const width of [320, 390, 1935]) {
     await page.setViewportSize({ width, height: 1000 });
     await fitsPage(page);
@@ -753,6 +767,10 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
   const guard = await prepare(page, 'user');
   let submitted: Record<string, unknown> | undefined;
   let savedBindings: Array<Record<string, unknown>> = [];
+  const endpoints = Array.from({ length: 61 }, (_, i) => ({
+    ...endpoint(i + 1),
+    connection_id: String(i + 1),
+  }));
   const model = {
     model_types: ['chat_completions', 'embeddings'],
     id: '7',
@@ -798,15 +816,11 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
         json: { bindings: savedBindings, binding_revision: '1' },
       });
     } else if (url.pathname.endsWith('/binding-candidates')) {
-      expect(url.searchParams.has('key_id')).toBe(false);
       const endpointId = url.searchParams.get('endpoint_id');
-      let items = ['50', '61']
-        .filter((id) => !endpointId || endpointId === id)
-        .flatMap((id) =>
-          Array.from({ length: 61 }, (_, i) =>
-            candidate(id, id === '50' ? '50061' : '61001', i + 1),
-          ),
-        );
+      const keyId = url.searchParams.get('key_id');
+      expect(endpointId).toMatch(/^(50|61)$/);
+      expect(keyId).toBe(endpointId === '50' ? '50061' : '61001');
+      let items = Array.from({ length: 61 }, (_, i) => candidate(endpointId!, keyId!, i + 1));
       const query = url.searchParams.get('q');
       if (query) items = items.filter((item) => item.upstream_model_id.includes(query));
       await route.fulfill({ json: numberedFixturePage(items, url) });
@@ -835,7 +849,7 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
     else if (url.pathname === '/api/endpoints')
       await route.fulfill({
         json: numberedFixturePage(
-          Array.from({ length: 61 }, (_, i) => endpoint(i + 1)).filter((entry) =>
+          endpoints.filter((entry) =>
             `${entry.note} ${entry.base_url}`.toLowerCase().includes(query),
           ),
           url,
@@ -843,25 +857,62 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
       });
     else await route.fallback();
   });
+  await page.route(`${USER_ORIGIN}/api/connections**`, async (route) => {
+    const url = new URL(route.request().url());
+    const query = url.searchParams.get('q')?.toLowerCase() ?? '';
+    if (url.pathname === '/api/connections')
+      return route.fulfill({
+        json: numberedFixturePage(
+          endpoints
+            .filter((entry) => `${entry.note} ${entry.base_url}`.toLowerCase().includes(query))
+            .map((entry) => ({
+              id: entry.connection_id,
+              name: entry.note,
+              display_name: entry.note,
+              primary_entry: { id: entry.id, base_url: entry.base_url, note: entry.note },
+              note: '',
+              revision: '1',
+              entry_count: '1',
+              credential_count: '61',
+              created_at: entry.created_at,
+              updated_at: entry.updated_at,
+            })),
+          url,
+        ),
+      });
+    const entries = url.pathname.match(/^\/api\/connections\/(\d+)\/entries$/);
+    if (entries)
+      return route.fulfill({
+        json: numberedFixturePage(
+          endpoints.filter(
+            (entry) =>
+              entry.connection_id === entries[1] &&
+              `${entry.note} ${entry.base_url}`.toLowerCase().includes(query),
+          ),
+          url,
+        ),
+      });
+    return route.fallback();
+  });
   await page.addInitScript(() => {
     for (const listType of [
       'models',
+      'binding-services',
       'models-binding-endpoints',
       'models-binding-keys',
-      'models-binding-candidates-automatic',
-      'models-binding-candidates-manual',
     ])
       localStorage.setItem(`nonbiri:user:${listType}-page-size:v1`, '50');
+    localStorage.setItem('nonbiri:user:models-binding-candidates-page-size:v1', '10');
   });
   await page.setViewportSize({ width: 1935, height: 1000 });
   await page.goto(`${USER_ORIGIN}/models`);
   await page.getByRole('button', { name: 'Edit model', exact: true }).click();
-  const results = page.locator('.model-source-results');
-  await expect(results.locator('.model-source-result')).toHaveCount(10);
-  const services = page.locator('.model-service-filter');
-  await services.locator(':scope > summary').click();
-  const serviceSearch = services.getByRole('searchbox', { name: 'Find a service' });
-  const service = services.getByRole('combobox', { name: 'Service', exact: true });
+  const picker = page.locator('.personal-binding-picker');
+  const results = picker.getByRole('region', { name: 'Models', exact: true });
+  await expect(results.locator('.personal-binding-picker__model')).toHaveCount(0);
+  const serviceSearch = picker.getByRole('searchbox', { name: 'Search service names' });
+  const service = picker.getByRole('combobox', { name: 'Filter by service', exact: true });
+  const servicePages = picker.locator(':scope > .page-pagination');
   await expect(service.locator('option')).toHaveCount(51);
   await screenshot(page, 'personal-endpoints-desktop');
   expect((await service.boundingBox())!.height).toBeLessThanOrEqual(514);
@@ -872,20 +923,26 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
   await serviceSearch.fill('Endpoint 50 —');
   await expect(service.locator('option')).toHaveCount(2);
   await service.selectOption('50');
-  await expect(results.locator('.model-source-result')).toHaveCount(10);
-  await results.getByRole('button', { name: /^model-1-/ }).click();
+  const keys = picker.getByRole('region', { name: 'Keys', exact: true });
+  await expect(keys.locator('.personal-binding-picker__choice')).toHaveCount(50);
+  await keys.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(keys.locator('.personal-binding-picker__choice')).toHaveCount(11);
+  await keys.getByRole('button', { name: /^Key 61 ·/ }).click();
+  await expect(results.locator('.personal-binding-picker__model')).toHaveCount(10);
+  await results.getByRole('checkbox', { name: /^model-1-/ }).check();
   await results.getByRole('button', { name: '7', exact: true }).click();
-  await expect(results.locator('.model-source-result')).toHaveCount(1);
-  await results.getByRole('button', { name: /^model-61-/ }).click();
+  await expect(results.locator('.personal-binding-picker__model')).toHaveCount(1);
+  await results.getByRole('checkbox', { name: /^model-61-/ }).check();
   await serviceSearch.clear();
   await expect(service.locator('option')).toHaveCount(51);
-  await services.getByRole('button', { name: 'Next', exact: true }).click();
+  await servicePages.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(service.locator('option')).toHaveCount(13);
   await serviceSearch.fill('Endpoint 61 —');
   await expect(service.locator('option')).toHaveCount(3);
   await service.selectOption('61');
+  await keys.getByRole('button', { name: /^Key 1 ·/ }).click();
   await expect(results.getByRole('button', { name: 'Previous', exact: true })).toBeDisabled();
-  await results.getByRole('button', { name: /^model-2-/ }).click();
+  await results.getByRole('checkbox', { name: /^model-2-/ }).check();
   await expect(page.locator('.core-selection-list > li')).toHaveCount(3);
   await page.setViewportSize({ width: 390, height: 1000 });
   await screenshot(page, 'personal-models-mobile');

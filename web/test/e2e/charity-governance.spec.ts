@@ -426,6 +426,17 @@ test('admin pending badge opens the shared queue and processing survives refresh
   ).toBeVisible();
   expect(listReads).toContain('?page=1&page_size=20');
   expect(listReads).toContain('?handling=pending&page=1&page_size=20');
+  const filterLayout = await page.locator('.charity-donations .nb-filter').evaluate((element) => ({
+    search: element.querySelector('.nb-filter__search')!.getBoundingClientRect().toJSON(),
+    fields: [...element.querySelectorAll('.nb-filter__fields .nb-field')].map((field) =>
+      field.getBoundingClientRect().toJSON(),
+    ),
+  }));
+  expect(filterLayout.search.y).toBeLessThan(filterLayout.fields[0].y);
+  expect(Math.abs(filterLayout.search.x - filterLayout.fields[0].x)).toBeLessThan(2);
+  expect(
+    Math.max(...filterLayout.fields.map((field) => field.y)) - filterLayout.fields[0].y,
+  ).toBeLessThan(2);
   await saveScreenshot(page, 'admin-pending-queue-1280-light-en');
 
   await page.getByRole('button', { name: 'Review', exact: true }).click();

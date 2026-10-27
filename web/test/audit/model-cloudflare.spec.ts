@@ -17,6 +17,7 @@ import {
   type TestInfo,
 } from '@playwright/test';
 import common from '../../src/shared/i18n/common/en.json' with { type: 'json' };
+import bindingCopy from '../../src/user/features/core/models/binding-copy/en.json' with { type: 'json' };
 
 type Cookie = { Name: string; Value: string };
 interface Fixture {
@@ -218,13 +219,18 @@ test('personal models default on and retain a changed setting after a real revis
     await configureManagedHeaders(page);
     await toggle.uncheck();
     await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page).toHaveURL((url) =>
+      /^[1-9]\d*$/.test(url.searchParams.get('model_id') ?? ''),
+    );
     await expect(page.getByRole('button', { name: 'Edit model', exact: true })).toBeVisible();
     const id = new URL(page.url()).searchParams.get('model_id');
     expect(id).toMatch(/^[1-9]\d*$/);
     const path = '/api/models/' + id;
     let current = await read(context, origin, path);
     expect(current.cloudflare_proxy_enabled).toBe(false);
-    expect(current.cloudflare_proxy_mode).toBe('worker');
+    expect(current.cloudflare_proxy_mode).toBe(
+      process.env.NONBIRI_ENDPOINT_POLICIES_BROWSER === '1' ? 'worker' : 'direct',
+    );
     expect(current.session_headers).toEqual(managedHeaders);
     await saveSeparateAdaptation(page, context, origin, path);
     await page.getByRole('button', { name: 'Edit model', exact: true }).click();
@@ -292,7 +298,9 @@ for (const role of ['admin', 6] as const) {
       const path = prefix + '/charity-models/' + id;
       let current = await read(context, origin, path);
       expect(current.cloudflare_proxy_enabled).toBe(true);
-      expect(current.cloudflare_proxy_mode).toBe('worker');
+      expect(current.cloudflare_proxy_mode).toBe(
+        process.env.NONBIRI_ENDPOINT_POLICIES_BROWSER === '1' ? 'worker' : 'direct',
+      );
       expect(current.session_headers).toEqual(managedHeaders);
       await expectManagedHeaders(page);
       if (role === 'admin') await saveSeparateAdaptation(page, context, origin, path);
@@ -412,8 +420,7 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
     const page = await context.newPage();
     let connectionId = '',
       sharedCredential = '',
-      sharedVersion = '',
-      credentialLabel = '';
+      sharedVersion = '';
     const cases = [
       {
         type: 'openai-compatible',
@@ -468,7 +475,6 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
         connectionId = endpoint.connection_id;
         sharedCredential = key.credential_id;
         sharedVersion = key.credential_version;
-        credentialLabel = key.display_head + '••••' + key.display_tail;
       }
       expect(endpoint.connection_id).toBe(connectionId);
       expect(key.credential_id).toBe(sharedCredential);
@@ -477,45 +483,19 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
       expect(await panel.getByLabel(c.secret, { exact: true }).count()).toBe(0);
       entries.push({ id: endpoint.id, keyId: key.id, services: item.services });
     }
-    const connection = { id: connectionId };
-    await page.goto(origin + '/endpoints?connection_id=' + connectionId);
-    await page.getByRole('tab', { name: c.discoverySources, exact: true }).click();
-    await page.getByRole('button', { name: c.addSource, exact: true }).click();
-    const sourcePanel = page
-      .locator('.nb-expandable-panel')
-      .filter({ has: page.getByRole('heading', { name: c.addSource, exact: true }) });
-    await sourcePanel
-      .getByLabel(c.name + ' ' + c.optional, { exact: true })
-      .fill(name + ' catalog');
-    await sourcePanel
-      .getByLabel(c.discoveryBaseURL, { exact: true })
-      .fill('https://api.example.com/v1');
-    await sourcePanel
-      .getByRole('combobox', { name: c.listFormat, exact: true })
-      .selectOption('openai');
-    await sourcePanel
-      .getByRole('table', { name: c.chooseCredential, exact: true })
-      .getByRole('row')
-      .filter({ hasText: credentialLabel })
-      .getByRole('button', { name: c.select, exact: true })
-      .click();
-    const sourceSaved = page.waitForResponse(
-      (response) =>
-        response.url().endsWith('/api/connections/' + connection.id + '/discovery-sources') &&
-        response.request().method() === 'POST',
-    );
-    await sourcePanel.getByRole('button', { name: c.saveSource, exact: true }).click();
-    const source = (await (await sourceSaved).json()) as {
-      id: string;
-      models_url: string;
-      credential_id: string;
-      credential_version: string;
-      discovery_source_revision: string;
-    };
-    await expect(page.getByText(source.models_url, { exact: true })).toBeVisible();
-    expect(source.models_url).toBe('https://api.example.com/v1/models');
     const refs = [] as { key: Record<string, unknown>; upstream: string }[];
+    const sourceIds: string[] = [];
     for (const [index, entry] of entries.entries()) {
+      const source = await create('/api/connections/' + connectionId + '/discovery-sources', {
+        name: name + ' catalog ' + index,
+        base_url: 'https://api.example.com/v1',
+        list_format: 'openai',
+        credential_id: sharedCredential,
+        enabled: true,
+      });
+      expect(source.models_url).toBe('https://api.example.com/v1/models');
+      expect(source.credential_version).toBe(sharedVersion);
+      sourceIds.push(source.id);
       const keyPage = await read<{ data: Record<string, unknown>[] }>(
         context,
         origin,
@@ -538,32 +518,52 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
       });
       refs.push({ key: await associated.json(), upstream });
     }
+    expect(new Set(sourceIds).size).toBe(entries.length);
     const logical = (await create('/api/models', {
       provider: 'browser',
       model: name,
       model_types: ['chat_completions', 'responses'],
     })) as { id: string };
     await page.goto(origin + '/models?model_id=' + logical.id);
+    await page
+      .locator('summary')
+      .filter({ has: page.getByText(bindingCopy.advanced, { exact: true }) })
+      .click();
     const groupSummary = page
       .locator('summary')
-      .filter({ has: page.getByText(c.addTargetGroup, { exact: true }) });
+      .filter({ has: page.getByText(bindingCopy.addCombination, { exact: true }) });
     await groupSummary.click();
     const group = groupSummary.locator('..');
     await group
       .locator('summary')
-      .filter({ has: page.getByText(c.addTarget, { exact: true }) })
+      .filter({ has: page.getByText(bindingCopy.addSources, { exact: true }) })
       .click();
+    const picker = group.locator('.personal-binding-picker');
+    await picker
+      .getByRole('searchbox', { name: bindingCopy.searchServices, exact: true })
+      .fill(name);
+    await picker
+      .getByRole('combobox', { name: bindingCopy.filterService, exact: true })
+      .selectOption(connectionId);
     for (const [index] of entries.entries()) {
-      const candidates = group.getByRole('table', { name: c.availableTargets, exact: true });
-      await candidates
-        .getByRole('row')
-        .filter({ hasText: refs[index]!.upstream })
-        .getByRole('button', { name: c.addTarget, exact: true })
+      if (index)
+        await picker.getByRole('button', { name: bindingCopy.changeEndpoint, exact: true }).click();
+      await picker
+        .locator('.personal-binding-picker__browse')
+        .getByRole('button')
+        .filter({ has: page.getByText(cases[index]!.url, { exact: true }) })
         .click();
-      const target = group.getByRole('group', {
-        name: index + 1 + '. ' + name + '-' + index,
-        exact: true,
-      });
+      await picker
+        .getByRole('searchbox', { name: bindingCopy.searchModels, exact: true })
+        .fill(refs[index]!.upstream);
+      await picker
+        .locator('.personal-binding-picker__model')
+        .filter({ has: page.getByText(refs[index]!.upstream, { exact: true }) })
+        .getByRole('checkbox')
+        .check();
+      const target = group
+        .locator('fieldset')
+        .filter({ has: page.getByText(refs[index]!.upstream, { exact: true }) });
       const labels =
         index === 0
           ? [common.common.modelTypes.chat_completions, common.common.modelTypes.responses]
@@ -579,7 +579,7 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
         response.url().endsWith('/api/models/' + logical.id + '/bindings/batch-receipt') &&
         response.request().method() === 'POST',
     );
-    await group.getByRole('button', { name: c.addTargetGroup, exact: true }).click();
+    await group.getByRole('button', { name: bindingCopy.addCombination, exact: true }).click();
     expect((await bindingSaved).ok()).toBe(true);
     const bindings = await read<{
       bindings: {
@@ -599,7 +599,11 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
       bindings.bindings[0]!.targets.map((target) => target.native_services.slice().sort()),
     ).toEqual([['chat_completions', 'responses'], ['anthropic_messages'], ['gateway_text']]);
     await page.reload();
-    await expect(page.getByText(c.addTargetGroup, { exact: true }).first()).toBeVisible();
+    await page
+      .locator('summary')
+      .filter({ has: page.getByText(bindingCopy.advanced, { exact: true }) })
+      .click();
+    await expect(page.getByText(bindingCopy.addCombination, { exact: true }).first()).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );

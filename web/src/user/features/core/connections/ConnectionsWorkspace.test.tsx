@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installNativeDialog } from '../../../../../test/unit/nativeDialog';
 import { renderWithProviders } from '../../../../../test/unit/support';
@@ -95,9 +95,15 @@ describe('connection identification', () => {
     const view = await renderWithProviders(<ConnectionsWorkspace user={account} />, {
       station: 'user',
       role: 'user',
-      route: '/endpoints',
+      route: '/endpoints?endpoint_id=99&key_id=88&focus_key_id=88&entry_id=99&credential_id=77',
     });
-    await screen.findByRole('link', { name: 'My API provider' });
+    const serviceLink = await screen.findByRole('link', { name: 'My API provider' });
+    for (const field of ['endpoint_id', 'entry_id', 'key_id', 'focus_key_id', 'credential_id'])
+      expect(
+        new URL(serviceLink.getAttribute('href')!, 'https://fixture.example').searchParams.has(
+          field,
+        ),
+      ).toBe(false);
     expect(screen.getByText(connection.primary_entry.base_url)).toHaveAttribute(
       'title',
       connection.primary_entry.base_url,
@@ -106,7 +112,7 @@ describe('connection identification', () => {
     expect(screen.getByText(connection.note)).toBeVisible();
     expect(screen.queryByText(connection.name)).not.toBeInTheDocument();
     expect(requests.map((request) => request.pathname)).toEqual(['/api/connections']);
-    fireEvent.change(screen.getByPlaceholderText('Search connection names, entry URLs or notes'), {
+    fireEvent.change(screen.getByPlaceholderText('Search service names, endpoint URLs or notes'), {
       target: { value: 'api.example' },
     });
     await view.user.click(screen.getByRole('button', { name: 'Search' }));
@@ -117,34 +123,29 @@ describe('connection identification', () => {
     );
     await view.user.click(await screen.findByRole('link', { name: 'My API provider' }));
     await screen.findByRole('heading', { level: 1, name: 'My API provider' });
-    await view.user.click(screen.getByRole('button', { name: 'Edit connection' }));
+    await view.user.click(screen.getByRole('button', { name: 'Service settings' }));
     expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue(connection.name);
-    const back = screen.getByRole('link', { name: 'Back to connections' });
+    const back = screen.getByRole('link', { name: 'Back to my services' });
     expect(back.getAttribute('href')).toContain('connections_q=api.example');
   });
 
-  it('includes the same name, URL and multi-entry count in connection selection', async () => {
+  it('lists only the current service keys and offers no cross-service navigation', async () => {
+    const paths: string[] = [];
     vi.stubGlobal(
       'fetch',
       vi.fn<typeof fetch>(async (input) => {
         const url = new URL(String(input), 'https://fixture.example');
-        if (url.pathname === '/api/connections') return json(page([connection]));
+        paths.push(url.pathname);
         if (url.pathname === '/api/connections/2/credentials') return json(page([]));
         throw new Error('Unexpected request: ' + url.pathname);
       }),
     );
-    const view = await renderWithProviders(
-      <CredentialPicker accountId={account.id} connectionId="" onPick={vi.fn()} />,
-      {
-        station: 'user',
-        role: 'user',
-      },
+    await renderWithProviders(
+      <CredentialPicker accountId={account.id} connectionId="2" onPick={vi.fn()} />,
+      { station: 'user', role: 'user' },
     );
-    const table = await screen.findByRole('table', { name: 'Service connections' });
-    expect(within(table).getByText('My API provider')).toBeVisible();
-    expect(within(table).getByText(connection.primary_entry.base_url)).toBeVisible();
-    expect(within(table).getByText('2 entries')).toBeVisible();
-    await view.user.click(within(table).getByRole('button', { name: 'Show credentials' }));
-    await screen.findByRole('heading', { name: 'Choose credential' });
+    await screen.findByRole('heading', { name: 'Choose a service key' });
+    await waitFor(() => expect(paths).toEqual(['/api/connections/2/credentials']));
+    expect(screen.queryByText('Choose from another connection')).not.toBeInTheDocument();
   });
 });

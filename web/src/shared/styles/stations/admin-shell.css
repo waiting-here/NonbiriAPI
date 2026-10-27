@@ -244,12 +244,14 @@
     z-index: var(--nb-z-drawer);
     width: min(20rem, calc(100vw - 3.5rem));
     transform: translateX(-110%);
+    visibility: hidden;
     box-shadow: var(--nb-elevation-overlay);
     transition: transform var(--nb-motion-standard) var(--nb-motion-ease);
   }
 
   .nb-admin-sidebar.is-open {
     transform: translateX(0);
+    visibility: visible;
   }
 }
 

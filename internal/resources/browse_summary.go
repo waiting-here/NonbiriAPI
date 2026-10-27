@@ -9,7 +9,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
-// Browse projections are attached only to numbered collections. Existing
+// Browse projections accompany numbered collections and endpoint details. Existing
 // cursor and mutation responses retain their original resource shape.
 type EndpointBrowse struct {
 	ModelCount           string   `json:"model_count"`

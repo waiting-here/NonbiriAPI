@@ -251,8 +251,6 @@ export const rejectionDescriptionKeys: Record<string, string> = {
     'logs.rejectionDescriptions.variations do not support streaming',
   'expected valid and consistent output-token limits':
     'logs.rejectionDescriptions.expected valid and consistent output-token limits',
-  'Check the request format and selected model capabilities. If it persists, share the request ID with support.':
-    'logs.rejectionSuggestions.Check the request format and selected model capabilities. If it persists, share the request ID with support.',
   'Remove URL query parameters and send supported fields in the JSON body.':
     'logs.rejectionSuggestions.Remove URL query parameters and send supported fields in the JSON body.',
   'Send an uncompressed UTF-8 JSON body with Content-Type: application/json.':
@@ -281,4 +279,12 @@ export const rejectionDescriptionKeys: Record<string, string> = {
     'logs.rejectionSuggestions.Use a supported streaming value and valid stream options.',
   'Correct the field type or value according to the stated requirement.':
     'logs.rejectionSuggestions.Correct the field type or value according to the stated requirement.',
+  'no usable model resource is available for this request':
+    'logs.rejectionDescriptions.no usable model resource is available for this request',
+  'shared model resources are temporarily at capacity':
+    'logs.rejectionDescriptions.shared model resources are temporarily at capacity',
+  'No upstream request was sent. Retry later or choose another available model.':
+    'logs.rejectionSuggestions.No upstream request was sent. Retry later or choose another available model.',
+  'The specific cause was not recorded. Share the request ID with support if the problem persists.':
+    'logs.rejectionSuggestions.The specific cause was not recorded. Share the request ID with support if the problem persists.',
 };

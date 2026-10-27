@@ -49,17 +49,34 @@ func setKeySourceTx(ctx context.Context, tx *sql.Tx, userID, keyID int64, source
 		_, err := tx.ExecContext(ctx, `DELETE FROM endpoint_key_discovery_sources WHERE endpoint_key_id=? AND EXISTS(SELECT 1 FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id WHERE k.id=? AND e.user_id=?)`, keyID, keyID, userID)
 		return err
 	}
+	var accessible bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM discovery_sources ds
+ JOIN endpoint_keys k ON k.id=? JOIN endpoints e ON e.id=k.endpoint_id
+ WHERE ds.id=? AND ds.user_id=? AND e.user_id=ds.user_id AND ds.connection_id IS e.connection_id)`, keyID, *sourceID, userID).Scan(&accessible); err != nil {
+		return err
+	}
+	if !accessible {
+		return ErrNotFound
+	}
 	var grantID, revisionID, versionID int64
 	err := tx.QueryRowContext(ctx, `SELECT k.current_grant_revision_id,ds.current_revision_id,g.credential_version_id
  FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id
  JOIN endpoint_key_grant_revisions g ON g.id=k.current_grant_revision_id
- JOIN discovery_sources ds ON ds.id=? AND ds.user_id=e.user_id
+ JOIN discovery_sources ds ON ds.id=? AND ds.user_id=e.user_id AND ds.connection_id IS e.connection_id
  JOIN discovery_source_revisions sr ON sr.id=ds.current_revision_id AND sr.credential_version_id=g.credential_version_id
- WHERE k.id=? AND e.user_id=?`, *sourceID, keyID, userID).Scan(&grantID, &revisionID, &versionID)
+ WHERE k.id=? AND e.user_id=?
+ AND NOT EXISTS(SELECT 1 FROM discovery_source_keys scope WHERE scope.source_id=ds.id AND scope.endpoint_key_id<>k.id)
+ AND NOT EXISTS(SELECT 1 FROM endpoint_key_discovery_sources other WHERE other.source_id=ds.id AND other.endpoint_key_id<>k.id)
+ AND NOT EXISTS(SELECT 1 FROM donation_use_revisions ur JOIN discovery_source_revisions old ON old.id=ur.discovery_source_revision_id
+ JOIN donation_uses u ON u.id=ur.use_id JOIN donation_keys dk ON dk.id=u.donation_key_id
+ WHERE old.source_id=ds.id AND dk.endpoint_key_id IS NOT NULL AND dk.endpoint_key_id<>k.id)`, *sourceID, keyID, userID).Scan(&grantID, &revisionID, &versionID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrConflict
 	}
 	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO discovery_source_keys(source_id,endpoint_key_id) VALUES(?,?) ON CONFLICT(source_id) DO NOTHING`, *sourceID, keyID); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO endpoint_key_discovery_sources(endpoint_key_id,source_id,grant_revision_id,source_revision_id,credential_version_id) VALUES(?,?,?,?,?)

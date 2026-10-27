@@ -51,6 +51,8 @@ type CredentialImpactSummary struct {
 }
 
 type CredentialImpactItem struct {
+	EndpointNote      string                   `json:"endpoint_note"`
+	EndpointBaseURL   string                   `json:"endpoint_base_url"`
 	EndpointID        *string                  `json:"endpoint_id"`
 	EndpointKeyID     *string                  `json:"endpoint_key_id"`
 	DonationID        *string                  `json:"donation_id"`
@@ -69,6 +71,7 @@ type CredentialImpact struct {
 }
 
 type DiscoverySource struct {
+	EndpointKeyID           *string `json:"endpoint_key_id"`
 	CredentialAvailable     bool    `json:"credential_available"`
 	ModelsURL               string  `json:"models_url"`
 	ID                      string  `json:"id"`

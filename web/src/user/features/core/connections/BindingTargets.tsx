@@ -12,21 +12,26 @@ import { ConnectionOperationNotice } from './OperationNotice';
 import { useConnectionOperation } from './useConnectionOperation';
 import { useMetadataOperation } from './useMetadataOperation';
 import { resourcePath } from './api';
+import { useBindingCopy } from '../models/bindingCopy';
+import { boundIdentities } from '../models/bindingIdentity';
 
 export function BindingTargetEditor({
   accountId,
   model,
   binding,
+  bindings = [],
   latestRevision,
   onSaved,
 }: {
   accountId: string;
   model: Model;
   binding?: Binding;
+  bindings?: readonly Binding[];
   latestRevision: string | undefined;
   onSaved?: () => void;
 }) {
   const { t } = useTranslation();
+  const copy = useBindingCopy();
   const [targets, setTargets] = useState<MatrixTarget[]>(
     () =>
       binding?.targets?.map((row) => ({
@@ -90,6 +95,7 @@ export function BindingTargetEditor({
         value={targets}
         onChange={setTargets}
         disabled={locked}
+        bound={boundIdentities(bindings.filter((row) => row.id !== binding?.id))}
       />
       <ConnectionOperationNotice operation={operation} />
       {operation.outcome === 'conflict' ? (
@@ -114,23 +120,25 @@ export function BindingTargetEditor({
         disabled={locked || !ready || operation.outcome === 'conflict'}
         onClick={save}
       >
-        {binding ? t('common.connections.saveTargets') : t('common.connections.addTargetGroup')}
+        {binding ? copy.saveCombination : copy.addCombination}
       </button>
     </div>
   );
 }
 export function BindingTargets({ accountId, model }: { accountId: string; model: Model }) {
-  const { t } = useTranslation();
+  const copy = useBindingCopy();
   const query = useQuery({
     queryKey: coreKeys.bindings(accountId, model.id),
     queryFn: ({ signal }) => getBindings(model.id, signal),
   });
   return (
-    <div className="nb-stack">
-      <Fold lazy title={t('common.connections.addTargetGroup')}>
+    <Fold lazy title={copy.advanced}>
+      <p className="nb-sub">{copy.advancedHelp}</p>
+      <Fold lazy title={copy.addCombination}>
         {query.data ? (
           <BindingTargetEditor
             accountId={accountId}
+            bindings={query.data.bindings}
             model={{ ...model, binding_revision: query.data.binding_revision }}
             latestRevision={
               query.isFetching || query.isError ? undefined : query.data.binding_revision
@@ -143,12 +151,8 @@ export function BindingTargets({ accountId, model }: { accountId: string; model:
         )}
       </Fold>
       {query.data?.bindings.map((binding) => (
-        <Fold
-          lazy
-          key={binding.id}
-          title={t('common.connections.targetGroup', { number: binding.ord + 1 })}
-        >
-          <p className="nb-sub">{t('common.connections.groupOrderKept')}</p>
+        <Fold lazy key={binding.id} title={`${copy.combination} ${binding.ord + 1}`}>
+          <p className="nb-sub">{copy.combinationOrder}</p>
           {binding.targets?.map((target) => (
             <div key={target.id}>
               <strong>
@@ -159,6 +163,7 @@ export function BindingTargets({ accountId, model }: { accountId: string; model:
           ))}
           <BindingTargetEditor
             accountId={accountId}
+            bindings={query.data.bindings}
             model={{ ...model, binding_revision: query.data.binding_revision }}
             latestRevision={
               query.isFetching || query.isError ? undefined : query.data.binding_revision
@@ -167,6 +172,6 @@ export function BindingTargets({ accountId, model }: { accountId: string; model:
           />
         </Fold>
       ))}
-    </div>
+    </Fold>
   );
 }

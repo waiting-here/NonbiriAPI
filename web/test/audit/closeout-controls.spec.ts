@@ -578,11 +578,15 @@ test('matching presets remain suggestions until an entry is explicitly selected'
     const beginCustom = async () => {
       await page.goto(url);
       await page.getByRole('button', { name: c.addEntry, exact: true }).first().click();
-      const panel = page.locator('.nb-expandable-panel:not([hidden])');
+      const panel = page.getByRole('region', { name: c.addEntry, exact: true });
+      await panel.getByLabel(user.user.services.serviceAddress, { exact: true }).fill(address);
+      await panel
+        .locator('summary')
+        .filter({ has: page.getByText(user.user.services.advancedSetup, { exact: true }) })
+        .click();
       await panel
         .getByLabel(c.protocol, { exact: true })
         .selectOption({ label: user.user.core['connector.openai'] });
-      await panel.getByLabel(c.entryURL, { exact: true }).fill(address);
       const suggestions = panel.getByRole('region', { name: matching.title, exact: true });
       await expect(
         suggestions.getByRole('button', { name: matching.usePreset, exact: false }),
@@ -650,7 +654,6 @@ test('matching presets remain suggestions until an entry is explicitly selected'
       .getByRole('table', { name: c.chooseCredential, exact: true })
       .getByRole('button', { name: c.select, exact: true })
       .click();
-    await second.panel.getByLabel(c.ownership, { exact: true }).check();
     await submitService(second.panel);
     const selectedResponse = await selectedSaved;
     expect(selectedResponse.status()).toBe(201);
@@ -678,23 +681,29 @@ test('matching presets remain suggestions until an entry is explicitly selected'
       base_url: address,
       configuration_type: 'openai-compatible',
     });
+    let selectedKeyId = '';
     for (const entry of entries.data) {
-      const keys = await api<{ data: { native_services: string[] }[] }>(
+      const keys = await api<{ data: { id: string; native_services: string[] }[] }>(
         owner,
         state.user_url,
         '/api/endpoints/' + entry.id + '/keys',
       );
       expect(keys.data).toHaveLength(1);
       expect(keys.data[0]).toMatchObject({ native_services: services });
+      if (entry.id === selected.id) selectedKeyId = keys.data[0].id;
     }
     expect(await donations()).toEqual(beforeDonations);
-    expect(writes).toEqual([
-      'POST /api/endpoints',
-      'POST /api/connections/' + connection.id + '/credentials',
-      'POST /api/endpoints/' + custom.id + '/keys',
-      'POST /api/endpoints',
-      'POST /api/endpoints/' + selected.id + '/keys',
-    ]);
+    expect(selectedKeyId).toMatch(/^[1-9][0-9]*$/);
+    await expect
+      .poll(() => writes)
+      .toEqual([
+        'POST /api/endpoints',
+        'POST /api/connections/' + connection.id + '/credentials',
+        'POST /api/endpoints/' + custom.id + '/keys',
+        'POST /api/endpoints',
+        'POST /api/endpoints/' + selected.id + '/keys',
+        'POST /api/endpoints/' + selected.id + '/keys/' + selectedKeyId + '/models/refresh',
+      ]);
   } finally {
     await owner.close();
     await manager.close();

@@ -97,6 +97,9 @@ func spaHandlerWithArtworkPolicy(fsys fs.FS, catalog *artwork.Catalog, disabled 
 			if rating, known := catalog.AssetRating(relative); (!known && artworkImagePath(relative)) || rating == artwork.R18 {
 				w.Header().Set("Cache-Control", "no-store")
 				if !known || disabled == nil || disabled() {
+					if httperr.WriteBrowserError(w, httperr.New(httperr.CodeForbidden, "artwork unavailable")) {
+						return
+					}
 					http.Error(w, "artwork unavailable", http.StatusForbidden)
 					return
 				}
@@ -130,6 +133,9 @@ func artworkImagePath(relative string) bool {
 func serveIndexNoStore(w http.ResponseWriter, fsys fs.FS) {
 	b, err := fs.ReadFile(fsys, "index.html")
 	if err != nil {
+		if httperr.WriteBrowserError(w, httperr.New(httperr.CodeNotFound, "not found")) {
+			return
+		}
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}

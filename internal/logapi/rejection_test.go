@@ -149,3 +149,48 @@ func TestHandlerErrorDiagnosticDoesNotBecomeUserRejectionDetail(t *testing.T) {
 		t.Fatal("handler error reclassified", string(body))
 	}
 }
+
+func TestUndispatchedResourceDetailKeepsHandlerPhaseAndPrivacy(t *testing.T) {
+	f := newLogFixture(t)
+	want := requestattempt.NewDetail("model", "no usable model resource is available for this request")
+	for _, tc := range []struct {
+		code, source string
+		attempts     int
+		visible      bool
+	}{
+		{"unbound_model", "platform", 0, true},
+		{"rate_limited", "platform", 0, true},
+		{"unbound_model", "platform", 1, false},
+		{"unbound_model", "upstream", 0, false},
+		{"internal_error", "platform", 0, false},
+	} {
+		f.mustExec(`UPDATE request_logs SET caller_result_class='failed',caller_status=503,caller_error_code=?,error_source=?,attempt_count=?,error_diag=? WHERE logical_request_id=?`, tc.code, tc.source, tc.attempts, requestattempt.EncodeDetail(want), f.charityID)
+		admin, err := f.repo.GetAdmin(t.Context(), f.charityID, AttemptFilter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		steward, err := f.repo.GetSteward(t.Context(), 999, f.charityID, AttemptFilter{}, allowLogStewardRead{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range []RejectionFields{admin.Request.RejectionFields, steward.Request.RejectionFields} {
+			if row.Phase != "handler" || row.RejectionStage != nil || (row.RejectionDetail != nil) != tc.visible {
+				t.Fatal("wrong detail boundary or phase", tc, row)
+			}
+			if tc.visible && *row.RejectionDetail != *want {
+				t.Fatal("changed safe detail", row)
+			}
+		}
+		owner, err := f.repo.GetUser(t.Context(), logUserOne, f.charityID, AttemptFilter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := json.Marshal(owner)
+		if strings.Contains(string(body), want.Reason) != tc.visible || !strings.Contains(string(body), `"phase":"handler"`) {
+			t.Fatal("wrong owner detail", string(body))
+		}
+		if _, err := f.repo.GetUser(t.Context(), logUserTwo, f.charityID, AttemptFilter{}); !errors.Is(err, ErrNotFound) {
+			t.Fatal("cross-account diagnostic", err)
+		}
+	}
+}

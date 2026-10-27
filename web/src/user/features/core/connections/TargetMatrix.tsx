@@ -1,5 +1,3 @@
-import { ConnectionUnavailable } from '@shared/components/ConnectionUnavailable';
-import { ManualCatalog } from './ManualCatalog';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Fold, Note } from '@shared/components/ui';
@@ -7,9 +5,9 @@ import { NativeServicesField } from '@shared/components/NativeServicesField';
 import { ServiceRoutesSummary } from '@shared/components/ServiceRoutesSummary';
 import type { NativeService } from '@shared/nativeServices';
 import type { ServiceProjection } from '@shared/connections';
-import { getBindingCandidatesPage } from '../pageApi';
 import type { BindingCandidate, BindingTargetInput } from '../types';
-import { ConnectionResourceList } from './ResourceList';
+import { PersonalBindingPicker } from '../models/PersonalBindingPicker';
+import { useBindingCopy } from '../models/bindingCopy';
 
 export interface MatrixTarget
   extends BindingTargetInput, Partial<Omit<ServiceProjection, 'native_services'>> {
@@ -22,14 +20,17 @@ export function TargetMatrix({
   value,
   onChange,
   disabled = false,
+  bound = new Set<string>(),
 }: {
   accountId: string;
   modelId: string;
   value: MatrixTarget[];
   onChange: (value: MatrixTarget[]) => void;
   disabled?: boolean;
+  bound?: ReadonlySet<string>;
 }) {
   const { t } = useTranslation();
+  const copy = useBindingCopy();
   const [bulk, setBulk] = useState<NativeService[]>([]);
   const options = [...new Set(value.flatMap((row) => row.options))];
   const identity = (row: Pick<BindingTargetInput, 'endpoint_key_id' | 'upstream_model_id'>) =>
@@ -58,7 +59,7 @@ export function TargetMatrix({
   };
   return (
     <div className="nb-stack">
-      <Note>{t('common.connections.targetOrderNote')}</Note>
+      <Note>{copy.combinationOrder}</Note>
       {value.length > 1 ? (
         <Fold title={t('common.connections.bulkNativeServices')}>
           <NativeServicesField
@@ -127,74 +128,18 @@ export function TargetMatrix({
           </div>
         </fieldset>
       ))}
-      <Fold title={t('common.connections.manualModel')} lazy>
-        <ManualCatalog accountId={accountId} />
-      </Fold>
-      <Fold title={t('common.connections.addTarget')}>
-        <ConnectionResourceList<BindingCandidate>
-          embedded
+      <Fold title={copy.addSources}>
+        <PersonalBindingPicker
           accountId={accountId}
-          scope={modelId}
-          listType="target-candidates"
-          title={t('common.connections.availableTargets')}
-          searchPlaceholder={t('common.connections.modelSearch')}
-          load={(window, q, signal) =>
-            getBindingCandidatesPage(modelId, { query: q }, window, signal)
-          }
-          rowKey={identity}
-          columns={[
-            {
-              key: 'model',
-              header: t('common.connections.upstreamModel'),
-              cell: 'title',
-              render: (row) => (
-                <div>
-                  <strong className="nb-mono">{row.upstream_model_id}</strong>
-                  <p className="nb-sub">
-                    {row.endpoint_note || row.endpoint_base_url} ·{' '}
-                    {row.endpoint_key_note ||
-                      row.endpoint_key_display_head + '…' + row.endpoint_key_display_tail}
-                  </p>
-                </div>
-              ),
-            },
-            {
-              key: 'routes',
-              header: t('common.connections.availableServices'),
-              cell: 'meta',
-              render: (row) =>
-                row.service_routes ? (
-                  <ServiceRoutesSummary value={row.service_routes} />
-                ) : (
-                  <span>{t('common.nativeServices.pending')}</span>
-                ),
-            },
-            {
-              key: 'choose',
-              header: t('common.connections.actions'),
-              cell: 'action',
-              render: (row) => {
-                const selected = value.some((item) => identity(item) === identity(row));
-                return (
-                  <div>
-                    <button
-                      type="button"
-                      className="nb-btn nb-btn--secondary"
-                      disabled={disabled || selected || !row.capabilities?.can_bind}
-                      onClick={() => add(row)}
-                    >
-                      {selected
-                        ? t('common.connections.selected')
-                        : t('common.connections.addTarget')}
-                    </button>
-                    {!row.capabilities?.can_bind && row.capabilities?.unavailable_reason ? (
-                      <ConnectionUnavailable reason={row.capabilities.unavailable_reason} />
-                    ) : null}
-                  </div>
-                );
-              },
-            },
-          ]}
+          modelId={modelId}
+          selected={new Set(value.map(identity))}
+          bound={bound}
+          locked={disabled}
+          onToggle={(candidate) => {
+            if (value.some((row) => identity(row) === identity(candidate)))
+              onChange(value.filter((row) => identity(row) !== identity(candidate)));
+            else add(candidate);
+          }}
         />
       </Fold>
     </div>

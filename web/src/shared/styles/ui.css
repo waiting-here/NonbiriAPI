@@ -724,6 +724,9 @@
 .nb-filter__more {
   display: contents;
 }
+.nb-filter__more::details-content {
+  display: contents;
+}
 .nb-filter__more > summary {
   display: none;
 }

@@ -2,9 +2,9 @@
 
 [简体中文](README.zh-CN.md)
 
-NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage service connections, shared encrypted credentials, model discovery and routing, then use revocable CallerKeys for personal or shared charity calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
+NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage services, endpoints and service-scoped API keys, maintain model lists per endpoint/key pair, and configure personal or shared charity routing. Revocable CallerKeys authenticate gateway calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.2.1** adds persistent domain-based endpoint tags, fixes donation-review layout and collection progress, and improves shared filters and controls. Existing databases require an explicit upgrade to schema 39. GitHub Releases provide source code; build instructions are below. Version history is in [CHANGELOG](CHANGELOG.md).
+**v1.3.0** simplifies service setup and personal model binding, isolates keys by service, and improves both stations, card artwork and request diagnostics. Existing databases require an explicit upgrade to schema 40. GitHub Releases provide source code; build instructions are below. Version history is in [CHANGELOG](CHANGELOG.md).
 
 ## Architecture
 
@@ -88,12 +88,13 @@ configuration. Existing AI Gateway mappings remain compatible when no Worker is 
 | Shared components and separate stations | `web/src/shared/`, `web/src/user/`, `web/src/admin/` |
 | Verification and deployment examples | `scripts/`, `.github/workflows/`, `deploy/` |
 
-[Service connections](docs/service-connections.md) group explicitly authorized entries around shared credentials and an independent model directory. New or edited service and donation submissions authorize the selected protocol's complete service set. Existing donations retain their original authorization until the donor submits an edit; approved snapshots are not expanded automatically. Native-service choices belong to model bindings, where at least one retained service must support the target model. New bindings start with the authorized set selected, while editing preserves saved choices. Credential rotation preserves approved charity versions until explicit review.
+[Services](docs/service-connections.md) group endpoints and service-owned keys. Keys can be explicitly reused within a service; fetched and manual model lists belong to each endpoint/key pair. New or edited service and donation submissions authorize the selected protocol's complete service set. Existing donations retain their original authorization until the donor submits an edit; approved snapshots are not expanded automatically. Personal model binding selects endpoints, keys and models, preserving applicable call types. Credential rotation preserves approved charity versions until explicit review.
 
-New service setup collects entries, credential authorization and applicable
-model-directory choices in one form. One save completes the necessary stages;
-a failure preserves completed resources for recovery. Continue directly to
-personal model setup or donation.
+Default service setup asks for an address and API key, with additional keys and
+advanced protocols available as needed. One save starts model fetching;
+a failure preserves completed resources for recovery. Failed fetches retain the
+last successful list, and manual entries remain separately editable. Continue
+directly to personal model setup or donation.
 
 Reviewers approve or reject the whole current pending donation submission with
 one decision and an optional note. The complete versioned pending set, audit and
@@ -210,14 +211,14 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 39.
+Fresh databases start in maintenance with public features closed and use schema 40.
 The service opens only the exact current schema; older, newer, unknown or
 incomplete storage is rejected before migration, repair or recovery writes.
-For exact registered schema 16–26 and 33–38 sources, preserve a complete recovery
+For exact registered schema 16–26 and 33–39 sources, preserve a complete recovery
 set before deliberately running the matching standalone
 [upgrader](cmd/nonbiri-upgrade-v1/README.md) with `--check` or `--apply`.
 The service, startup scripts and deployment helpers must not apply upgrades
-implicitly. Account export remains format 30. Schema versions change when
+implicitly. Account export uses format 31. Schema versions change when
 storage requires it, independently of software patch releases.
 Use the matching binaries' schema descriptors to check accepted sources.
 Upgrades are one-way: a server expecting an older or different schema cannot

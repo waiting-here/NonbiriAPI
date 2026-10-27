@@ -252,7 +252,7 @@ time and the editor reference; bounded retention cleanup removes entries at
 deleting an editor clears that editor reference without deleting another
 account's history. Audit labels retain the actual acting level.
 
-Account export 30 includes the owner's `steward_permissions` with
+Account export 31 includes the owner's `steward_permissions` with
 `effective`, nullable `stored` and retained `history`, including donation scope.
 Each history entry
 contains `previous,next,created_at`; editor identities are excluded. Existing

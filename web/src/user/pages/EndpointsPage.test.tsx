@@ -159,6 +159,8 @@ describe('connection entry list', () => {
     expect(createButtons).toHaveLength(2);
     await view.user.click(createButtons[1]);
     const form = screen.getByRole('region', { name: 'Add service' });
+    expect(await within(form).findByRole('textbox', { name: 'Service address' })).toBeVisible();
+    await view.user.click(within(form).getByText('Service name', { selector: 'strong' }));
     expect(await within(form).findByRole('textbox', { name: 'Service name' })).toBeVisible();
   });
   it('returns to the same connection search and page from a real detail route', async () => {
@@ -184,7 +186,7 @@ describe('connection entry list', () => {
     });
     await rendered.user.click(await screen.findByRole('link', { name: 'connection-21' }));
     expect(await screen.findByRole('heading', { name: 'connection-21' })).toBeVisible();
-    await rendered.user.click(screen.getByRole('link', { name: 'Back to connections' }));
+    await rendered.user.click(screen.getByRole('link', { name: 'Back to my services' }));
     expect(await screen.findByText('connection-21')).toBeVisible();
     expect(screen.getByTestId('location')).toHaveTextContent(route);
     expect(screen.getByRole('searchbox')).toHaveValue('shared');

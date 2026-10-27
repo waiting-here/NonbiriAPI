@@ -152,6 +152,6 @@ from personal account exports. They contain no donor or operator identity.
 Mutations use the existing role-scoped control receipts and their retention
 boundary. Schema 33 extends the presets with entries, independent discovery
 suggestions and model-to-entry mappings. Shared presets are excluded from account
-export 30. Use the matching [offline converter](database-upgrades.md) for an
+export 31. Use the matching [offline converter](database-upgrades.md) for an
 existing published database. See [service connections](service-connections.md)
 for per-service approvals and ordered alternative binding targets.

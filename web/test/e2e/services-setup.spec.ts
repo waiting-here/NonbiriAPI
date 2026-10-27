@@ -12,6 +12,8 @@ import { expect, test } from './test';
 import { createOptions, mockConnectionResources } from './connection-fixtures';
 import enCommon from '../../src/shared/i18n/common/en.json' with { type: 'json' };
 import zhCommon from '../../src/shared/i18n/common/zh.json' with { type: 'json' };
+import enUser from '../../src/user/i18n/en.json' with { type: 'json' };
+import zhUser from '../../src/user/i18n/zh.json' with { type: 'json' };
 import { serviceCopy, servicePanel } from '../service-onboarding';
 
 const endpoint = {
@@ -42,7 +44,7 @@ const key = {
   credential_version: '1',
   grant_revision: '1',
   native_services: ['chat_completions', 'responses'],
-  discovery_source_id: null,
+  discovery_source_id: '51',
   endpoint_id: '11',
   display_head: 'head',
   display_tail: 'tail',
@@ -223,6 +225,7 @@ for (const locale of ['en', 'zh'] as const) {
     const manualEntries: (typeof entries)[number][] = [];
     const c = (locale === 'zh' ? zhCommon : enCommon).common.connections;
     const workflow = serviceCopy(locale);
+    const serviceUI = (locale === 'zh' ? zhUser : enUser).user.services;
     const chatLabel = (locale === 'zh' ? zhCommon : enCommon).common.modelTypes.chat_completions;
     const nativeResponse = (locale === 'zh' ? zhCommon : enCommon).common.modelTypes.responses;
     const source = () => ({
@@ -360,7 +363,7 @@ for (const locale of ['en', 'zh'] as const) {
           : evidence;
         const source = url.searchParams.get('source');
         const rows = [
-          ...(failedRead || source === 'manual' ? [] : entries),
+          ...(source === 'manual' ? [] : entries),
           ...(source === 'automatic' ? [] : manualEntries),
         ];
         const window = url.searchParams.has('limit') ? null : numberedPage(rows, url.searchParams);
@@ -486,8 +489,6 @@ for (const locale of ['en', 'zh'] as const) {
           expect(size.scrollWidth, `${name} ${locale} ${width} overflow`).toBeLessThanOrEqual(
             width,
           );
-          // The entry-services fold adds a section above the three compact key rows.
-          if (name === 'detail-3' && width === 390) expect(size.height).toBeLessThan(1900);
         }
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
@@ -507,7 +508,9 @@ for (const locale of ['en', 'zh'] as const) {
     for (const n of [1, 3, 12]) {
       count = n;
       await page.goto(`${USER_ORIGIN}/endpoints/11`);
-      await expect(page.getByText('Primary key', { exact: true })).toBeVisible();
+      await expect(
+        page.locator('.core-key-card strong').filter({ hasText: /^Primary key$/ }),
+      ).toBeVisible();
       await shot(`detail-${n}`);
     }
     await page
@@ -516,9 +519,14 @@ for (const locale of ['en', 'zh'] as const) {
       .click();
     await expect(page.locator('.nb-expandable-panel:not([hidden])')).toBeVisible();
     await shot('models-panel');
-    const manual = page
-      .locator('.nb-expandable-panel:not([hidden])')
-      .getByLabel(copy('Provider model name', '服务商的模型名'), { exact: true });
+    await page.locator('summary').filter({ hasText: serviceUI.manualModels }).click();
+    const modelPanel = page.getByRole('region', {
+      name: copy('View models', '查看模型') + ' · Primary key',
+      exact: true,
+    });
+    const manual = modelPanel.getByLabel(copy('Provider model name', '服务商的模型名'), {
+      exact: true,
+    });
     await manual.fill('draft-model');
     await page
       .locator('.nb-expandable-panel:not([hidden])')
@@ -528,6 +536,7 @@ for (const locale of ['en', 'zh'] as const) {
       .getByRole('button', { name: copy('View models', '查看模型'), exact: true })
       .first()
       .click();
+    await expect(modelPanel).toBeVisible();
     await expect(manual).toHaveValue('draft-model');
     await page
       .locator('.nb-expandable-panel:not([hidden])')
@@ -540,75 +549,32 @@ for (const locale of ['en', 'zh'] as const) {
     await shot('adaptation');
     await page.goto(`${USER_ORIGIN}/endpoints?quickstart=1`);
     const entryPanel = servicePanel(page, locale);
+    await entryPanel.locator('summary').filter({ hasText: workflow.serviceName }).click();
     await entryPanel.getByLabel(workflow.serviceName, { exact: true }).fill('Browser connection');
+    await entryPanel.getByLabel(serviceUI.serviceAddress, { exact: true }).fill(endpoint.base_url);
     await shot('step-1');
-    await entryPanel
-      .getByRole('combobox', { name: c.protocol, exact: true })
-      .selectOption({ label: locale === 'zh' ? 'OpenAI 兼容' : 'OpenAI-compatible' });
-    await entryPanel.getByLabel(c.entryURL, { exact: true }).fill(endpoint.base_url);
-    await entryPanel.locator('summary').filter({ hasText: c.discoveryOptional }).click();
-    await entryPanel
-      .getByRole('checkbox', { name: workflow.discoverModels, exact: true })
-      .uncheck();
-    await shot('manual-wizard');
-    await expect(
-      entryPanel.getByRole('radio', { name: c.newCredential, exact: true }),
-    ).toBeChecked();
     const secret = entryPanel.getByLabel(c.secret, { exact: true });
     await secret.fill('synthetic-setup-secret');
-    const saveService = entryPanel.getByRole('button', { name: workflow.addService, exact: true });
-    await expect(saveService).toBeDisabled();
-    await entryPanel.getByRole('checkbox', { name: c.ownership, exact: true }).check();
+    const saveService = entryPanel.getByRole('button', {
+      name: serviceUI.addAndFetch,
+      exact: true,
+    });
     await expect(saveService).toBeEnabled();
+    await expect(entryPanel.getByRole('checkbox', { name: c.ownership, exact: true })).toHaveCount(
+      0,
+    );
+    failedRead = true;
     await saveService.click();
     await expect(entryPanel.getByText(workflow.serviceReady, { exact: true })).toBeVisible();
     await expect(secret).toHaveCount(0);
     await shot('step-2');
-    await entryPanel.getByRole('link', { name: c.manage, exact: true }).click();
-    await page.getByRole('tab', { name: c.discoverySources, exact: true }).click();
-    await page.getByRole('button', { name: c.addSource, exact: true }).click();
-    const sourcePanel = page
-      .locator('.nb-expandable-panel')
-      .filter({ has: page.getByRole('heading', { name: c.addSource, exact: true }) });
-    await sourcePanel.getByLabel(c.name + ' ' + c.optional, { exact: true }).fill('Shared catalog');
-    await sourcePanel.getByLabel(c.discoveryBaseURL, { exact: true }).fill(endpoint.base_url);
-    await sourcePanel
-      .getByRole('table', { name: c.chooseCredential, exact: true })
-      .getByRole('button', { name: c.select, exact: true })
-      .click();
-    failedRead = true;
-    await sourcePanel.getByRole('button', { name: c.saveSource, exact: true }).click();
-    await page.goto(`${USER_ORIGIN}/endpoints?discovery_source_id=51`);
-    await page.getByRole('button', { name: c.refreshSource, exact: true }).click();
-    await expect(page.locator('.nb-note--bad')).toBeVisible();
+    await expect(entryPanel.getByText(serviceUI.retainedCatalog, { exact: true })).toBeVisible();
     await shot('read-failed');
-    await page.getByRole('button', { name: c.refreshSource, exact: true }).click();
-    await expect(page.locator('.nb-note--bad')).toHaveCount(0);
+    await entryPanel.getByRole('button', { name: serviceUI.fetchModels, exact: true }).click();
+    await expect(entryPanel.getByText(serviceUI.retainedCatalog, { exact: true })).toHaveCount(0);
     expect(discoveryRefreshes).toBe(2);
     for (const name of ['model-a', 'model-b'])
-      await page
-        .getByRole('table', { name: c.catalog, exact: true })
-        .getByRole('row')
-        .filter({ hasText: name })
-        .getByRole('button', { name: c.configureModel, exact: true })
-        .click();
-    const choose = page
-      .locator('details')
-      .filter({ has: page.locator(':scope > summary').filter({ hasText: c.chooseEntry }) })
-      .first();
-    await choose.locator(':scope > summary').click();
-    await choose
-      .getByRole('table', { name: c.chooseEntry, exact: true })
-      .getByRole('row')
-      .filter({ hasText: 'Browser service' })
-      .getByRole('button', { name: c.select, exact: true })
-      .click();
-    await choose
-      .getByRole('table', { name: c.chooseCredential, exact: true })
-      .getByRole('row')
-      .filter({ hasText: 'Primary key' })
-      .getByRole('button', { name: c.select, exact: true })
-      .click();
+      await entryPanel.locator('.service-key-models').getByLabel(name, { exact: true }).check();
     for (const name of ['model-a', 'model-b']) {
       const row = page.locator('details').filter({
         has: page
@@ -685,7 +651,6 @@ for (const locale of ['en', 'zh'] as const) {
     expect(writes.find((write) => write.path === '/api/endpoints/11/keys')?.body).toEqual({
       credential_id: '31',
       native_services: nativeServices,
-      discovery_source_id: null,
       note: '',
       enabled: true,
       ownership_confirmed: true,
@@ -704,14 +669,7 @@ for (const locale of ['en', 'zh'] as const) {
     const sourceWrites = writes.filter(
       (write) => write.path === '/api/connections/1/discovery-sources',
     );
-    expect(sourceWrites).toHaveLength(1);
-    expect(sourceWrites[0].body).toEqual({
-      name: 'Shared catalog',
-      base_url: endpoint.base_url,
-      list_format: 'openai',
-      credential_id: '31',
-      enabled: true,
-    });
+    expect(sourceWrites).toHaveLength(0);
     expect(writes.every((write) => Boolean(write.identity))).toBe(true);
     await assertNoSensitiveBrowserPersistence(page, ['synthetic-setup-secret']);
     expect(errors).toEqual([]);

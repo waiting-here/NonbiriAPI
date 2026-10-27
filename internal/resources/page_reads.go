@@ -71,8 +71,22 @@ func userPageRead[T any](ctx context.Context, r *Repository, userID int64, page 
 const endpointPageSelect = `SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
 (SELECT COUNT(*) FROM endpoint_key_current_credentials k WHERE k.endpoint_id=e.id),e.created_at,e.updated_at,
 e.mainstream_channel_id,e.mainstream_channel_revision,e.mainstream_channel_name,e.mainstream_channel_category,
-e.connection_id,e.native_service_mask,e.rerank_format
+e.connection_id,e.native_service_mask,e.rerank_format,COALESCE((SELECT name FROM service_connections WHERE id=e.connection_id),'')
 FROM endpoints e WHERE e.user_id=?`
+
+func (r *Repository) GetEndpointWithBrowse(ctx context.Context, userID, endpointID int64) (Endpoint, error) {
+	if endpointID <= 0 {
+		return Endpoint{}, ErrNotFound
+	}
+	return userPageRead(ctx, r, userID, pagination.Default(), func(ctx context.Context, tx *sql.Tx) (Endpoint, error) {
+		endpoint, err := getEndpointTx(ctx, tx, userID, endpointID)
+		if err != nil {
+			return Endpoint{}, err
+		}
+		endpoint.Browse, err = endpointBrowseTx(ctx, tx, userID, endpoint)
+		return endpoint, err
+	})
+}
 
 func (r *Repository) ListEndpointsPage(ctx context.Context, userID int64, page pagination.Request) (Page[Endpoint], error) {
 	return r.SearchEndpointsPage(ctx, userID, "", page)

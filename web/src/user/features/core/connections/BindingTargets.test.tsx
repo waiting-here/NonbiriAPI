@@ -123,7 +123,10 @@ it('loads bindings once, keeps a folded draft, and adopts only a refreshed confl
   view.queryClient.setQueryData(['user', 'session'], {
     user: { id: '1', username: 'owner', effective_level: 1 },
   });
-  const group = await screen.findByText('Target group 1', { selector: 'strong' });
+  await view.user.click(
+    await screen.findByText('Configure sources by call type', { selector: 'strong' }),
+  );
+  const group = await screen.findByText('Call combination 1', { selector: 'strong' });
   expect(screen.queryByLabelText('Target draft')).toBeNull();
   await view.user.click(group);
   const draft = await screen.findByLabelText('Target draft');
@@ -133,7 +136,7 @@ it('loads bindings once, keeps a folded draft, and adopts only a refreshed confl
   await view.user.click(group);
   expect(draft).toHaveValue('draft-model');
   expect(reads).toBe(1);
-  await view.user.click(screen.getByRole('button', { name: 'Save targets' }));
+  await view.user.click(screen.getByRole('button', { name: 'Save call combination' }));
   const adopt = await screen.findByRole('button', { name: 'Continue with current revision' });
   await waitFor(() => expect(pendingRead).toBeDefined());
   expect(adopt).toBeDisabled();
@@ -143,10 +146,12 @@ it('loads bindings once, keeps a folded draft, and adopts only a refreshed confl
   await waitFor(() => expect(adopt).toBeEnabled());
   expect(draft).toHaveValue('draft-model');
   await view.user.click(adopt);
-  await view.user.click(screen.getByRole('button', { name: 'Save targets' }));
+  await view.user.click(screen.getByRole('button', { name: 'Save call combination' }));
   await screen.findByText('Saved');
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Save targets' })).toBeEnabled());
-  await view.user.click(screen.getByRole('button', { name: 'Save targets' }));
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Save call combination' })).toBeEnabled(),
+  );
+  await view.user.click(screen.getByRole('button', { name: 'Save call combination' }));
   await waitFor(() => expect(writes).toHaveLength(3));
   expect(writes.map((row) => row.expected_binding_revision)).toEqual(['1', '2', '3']);
   expect(writes[2]?.targets).toEqual([

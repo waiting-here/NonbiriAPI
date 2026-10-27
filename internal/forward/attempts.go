@@ -338,12 +338,12 @@ func (service *Service) runAttempts(
 				run.failure = &value
 			}
 		} else {
-			value := platformFailure(httperr.CodeUnboundModel, "model has no usable binding")
+			value := rejectionFailure(httperr.CodeUnboundModel, "model has no usable binding", "model", "no usable model resource is available for this request")
 			if plan.charity {
-				value = platformFailure(httperr.CodeRateLimited, "charity candidates are temporarily unavailable")
+				value = rejectionFailure(httperr.CodeRateLimited, "charity candidates are temporarily unavailable", "model", "no usable model resource is available for this request")
 			}
 			if keyLimited {
-				value = platformFailure(httperr.CodeRateLimited, "model connections are temporarily at capacity")
+				value = rejectionFailure(httperr.CodeRateLimited, "model connections are temporarily at capacity", "model", "shared model resources are temporarily at capacity")
 			}
 			run.failure = &value
 		}

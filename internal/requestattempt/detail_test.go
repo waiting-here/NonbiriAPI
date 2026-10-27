@@ -31,3 +31,10 @@ func TestPreviouslyRecordedContentLengthRemainsReadable(t *testing.T) {
 		}
 	}
 }
+
+func TestHistoricalUnknownReasonRebuildsSuggestion(t *testing.T) {
+	detail := DecodeDetail(`{"field":"request","reason":"request validation failed without a recorded field","suggestion":"Check the request format and selected model capabilities. If it persists, share the request ID with support."}`)
+	if detail == nil || detail.Suggestion != "The specific cause was not recorded. Share the request ID with support if the problem persists." {
+		t.Fatal("historical suggestion was not rebuilt", detail)
+	}
+}

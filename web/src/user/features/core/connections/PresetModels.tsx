@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ModelMapping } from '@shared/connections';
 import type { NativeService } from '@shared/nativeServices';
-import type { ModelType } from '@shared/modelTypes';
+import { MODEL_TYPES, type ModelType } from '@shared/modelTypes';
 import { ModelTypesField } from '@shared/components/ModelTypesField';
 import { NativeServicesField } from '@shared/components/NativeServicesField';
 import { Field, Fold, Note } from '@shared/components/ui';
@@ -80,7 +80,11 @@ export function PresetModelRow({
   const [services, setServices] = useState<Record<string, NativeService[] | null>>({});
   const [provider, setProvider] = useState(initialProvider);
   const [name, setName] = useState(mapping.model_id);
-  const [types, setTypes] = useState<ModelType[]>([]);
+  const [types, setTypes] = useState<ModelType[]>(() =>
+    MODEL_TYPES.filter((type) =>
+      mapping.entries.some((entry) => entry.native_services.includes(type)),
+    ),
+  );
   const [model, setModel] = useState<Model | null>(null);
   const [catalogs, setCatalogs] = useState<Record<string, boolean>>({});
   const active = useRef('');
@@ -107,7 +111,12 @@ export function PresetModelRow({
     const endpoint = entries[entry.entry_id];
     const key = endpoint ? grants[grantsByEntry ? entry.entry_id : endpoint.id] : undefined;
     const known = key?.native_services ?? [];
-    return known.length ? known : undefined;
+    if (!known.length) return undefined;
+    return entry.native_services.length
+      ? entry.native_services.filter((service) => known.includes(service))
+      : known.length === 1
+        ? known
+        : [];
   };
   const targets = mapping.entries.flatMap((entry) => {
     const endpoint = entries[entry.entry_id];
@@ -257,9 +266,10 @@ export function PresetModelRow({
               <NativeServicesField
                 options={key.native_services ?? []}
                 value={selected}
-                onChange={(value) =>
-                  setServices((previous) => ({ ...previous, [entry.entry_id]: value }))
-                }
+                onChange={(value) => {
+                  setServices((previous) => ({ ...previous, [entry.entry_id]: value }));
+                  if (!types.length) setTypes(MODEL_TYPES.filter((type) => value.includes(type)));
+                }}
                 disabled={locked}
               />
             ) : !key ? (

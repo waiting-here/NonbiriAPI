@@ -16,7 +16,8 @@ COALESCE((SELECT ce.delta_mag
  WHERE co.source_type='logical_request' AND co.source_id=l.logical_request_id
    AND co.kind IN ('forward_settle','charity_settle')
    AND ce.account_kind_snapshot='platform' AND ce.delta_sign=1
- ORDER BY co.ledger_seq DESC,ce.line_no ASC LIMIT 1),zeroblob(16)),l.rejection_stage,l.rejection_reason,l.request_method,l.request_path,l.requested_streaming,l.automatic_actions,l.usage_details,CASE WHEN l.rejection_stage IS NOT NULL THEN l.error_diag END`
+ ORDER BY co.ledger_seq DESC,ce.line_no ASC LIMIT 1),zeroblob(16)),l.rejection_stage,l.rejection_reason,l.request_method,l.request_path,l.requested_streaming,l.automatic_actions,l.usage_details,CASE WHEN l.rejection_stage IS NOT NULL OR
+ (l.attempt_count=0 AND l.caller_result_class='failed' AND l.error_source='platform' AND l.caller_error_code IN ('unbound_model','rate_limited')) THEN l.error_diag END`
 
 // Each condition can match a different attempt. Independent sets also prevent
 // repeated attempts from duplicating logical requests or their count.

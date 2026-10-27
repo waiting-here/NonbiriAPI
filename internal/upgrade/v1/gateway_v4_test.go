@@ -26,7 +26,7 @@ func TestConnectionsUpgradePreservesPublishedHistoryAndCredentials(t *testing.T)
 	defer database.Close()
 	mustExec(t, database, "PRAGMA foreign_keys=ON")
 	plan, err := storageSchema.plan(ctx, database)
-	if err != nil || len(plan.steps) != 7 || plan.steps[0].version != 33 || plan.steps[1].version != 34 || plan.steps[2].version != 35 || plan.steps[3].version != 36 || plan.steps[4].version != 37 || plan.steps[5].version != 38 || plan.steps[6].version != db.CurrentSchemaVersion || !plan.auditsCredentials() {
+	if err != nil || len(plan.steps) != 8 || plan.steps[0].version != 33 || plan.steps[1].version != 34 || plan.steps[2].version != 35 || plan.steps[3].version != 36 || plan.steps[4].version != 37 || plan.steps[5].version != 38 || plan.steps[6].version != 39 || plan.steps[7].version != db.CurrentSchemaVersion || !plan.auditsCredentials() {
 		t.Fatalf("connection migration plan: %+v, %v", plan, err)
 	}
 	owner := hostileInsertUser(t, database, "connection-owner", 0, 1)

@@ -52,6 +52,15 @@ export async function fillService(
   const locale = input.locale ?? 'en';
   const copy = (locale === 'zh' ? commonZh : commonEn).common.connections;
   const core = (locale === 'zh' ? zh : en).user.core;
+  const services = (locale === 'zh' ? zh : en).user.services;
+  const open = async (title: string) => {
+    const fold = panel
+      .locator('summary')
+      .filter({ has: panel.page().getByText(title, { exact: true }) })
+      .locator('..');
+    if ((await fold.getAttribute('open')) === null) await fold.locator(':scope > summary').click();
+    return fold;
+  };
   const protocols: Record<string, string> = {
     'openai-compatible': core['connector.openai'],
     'anthropic-compatible': core['connector.anthropic'],
@@ -59,28 +68,34 @@ export async function fillService(
   };
   const label = protocols[input.protocol ?? 'openai-compatible'];
   expect(label).toBeTruthy();
-  await panel
-    .getByRole('combobox', { name: copy.protocol, exact: true })
-    .selectOption({ label: label! });
-  await panel.getByLabel(copy.entryURL, { exact: true }).fill(input.url);
+  await panel.getByLabel(services.serviceAddress, { exact: true }).fill(input.url);
+  await open(serviceCopy(locale).serviceName);
   await panel.getByLabel(serviceCopy(locale).serviceName, { exact: true }).fill(input.name);
+  if (input.protocol !== undefined || input.discovery === false) {
+    await open(services.advancedSetup);
+    await panel
+      .getByRole('combobox', { name: copy.protocol, exact: true })
+      .selectOption({ label: label! });
+  }
   if (input.discovery === false) {
-    const fold = panel
-      .locator('details')
-      .filter({ has: panel.page().getByText(copy.discoveryOptional, { exact: true }) });
-    if ((await fold.getAttribute('open')) === null) await fold.locator(':scope > summary').click();
+    await open(copy.discoveryOptional);
     await panel
       .getByRole('checkbox', { name: serviceCopy(locale).discoverModels, exact: true })
       .uncheck();
   }
   if (input.secret !== undefined) {
+    const newKey = panel.getByRole('radio', { name: copy.newCredential, exact: true });
+    if (await newKey.count()) await newKey.locator('..').click();
     await panel.getByLabel(copy.secret, { exact: true }).fill(input.secret);
   } else {
+    await panel
+      .getByRole('radio', { name: copy.existingCredential, exact: true })
+      .locator('..')
+      .click();
     const choices = panel.getByRole('table', { name: copy.chooseCredential, exact: true });
     await expect(choices.getByRole('button', { name: copy.select, exact: true })).toHaveCount(1);
     await choices.getByRole('button', { name: copy.select, exact: true }).click();
   }
-  await panel.getByRole('checkbox', { name: copy.ownership, exact: true }).check();
 }
 export async function submitService(
   panel: Locator,
@@ -88,12 +103,13 @@ export async function submitService(
   recoverLost = false,
 ) {
   const copy = serviceCopy(locale);
+  const services = (locale === 'zh' ? zh : en).user.services;
   const check = panel.getByRole('button', {
     name: (locale === 'zh' ? commonZh : commonEn).common.connections.checkResult,
     exact: true,
   });
   const submit = panel
-    .getByRole('button', { name: copy.addService, exact: true })
+    .getByRole('button', { name: services.addAndFetch, exact: true })
     .or(panel.getByRole('button', { name: copy.continueService, exact: true }));
   for (let attempt = 0; attempt < (recoverLost ? 6 : 1); attempt++) {
     if (await panel.getByText(copy.serviceReady, { exact: true }).isVisible()) break;

@@ -41,6 +41,7 @@ func validateEndpointSecretPlaintext(value []byte) bool {
 
 type endpointRow struct {
 	connectionID              sql.NullInt64
+	connectionName            string
 	nativeServiceMask         int64
 	rerankFormat              connectorcontract.RerankFormat
 	id                        int64
@@ -85,7 +86,7 @@ func (row endpointRow) dto() (Endpoint, error) {
 		origin = EndpointOrigin{Kind: "custom"}
 	}
 	return Endpoint{
-		ConnectionID: connectionID, ConfigurationType: string(kind.ConfigurationType()), NativeServices: services.Services(), RerankFormat: row.rerankFormat,
+		ConnectionID: connectionID, ConnectionName: row.connectionName, ConfigurationType: string(kind.ConfigurationType()), NativeServices: services.Services(), RerankFormat: row.rerankFormat,
 		ID: id, ConnectorType: row.connectorType, BaseURL: row.baseURL, Origin: origin, Note: row.note,
 		Enabled: row.enabled == 1, Revision: strconv.FormatInt(row.revision, 10),
 		KeyCount: strconv.FormatInt(row.keyCount, 10), CreatedAt: row.createdAt, UpdatedAt: row.updatedAt,
@@ -97,7 +98,7 @@ func scanEndpoint(scanner interface{ Scan(...any) error }) (Endpoint, error) {
 	if err := scanner.Scan(&row.id, &row.connectorType, &row.baseURL, &row.note, &row.enabled,
 		&row.revision, &row.keyCount, &row.createdAt, &row.updatedAt,
 		&row.mainstreamChannelID, &row.mainstreamChannelRevision, &row.mainstreamChannelName, &row.mainstreamChannelCategory,
-		&row.connectionID, &row.nativeServiceMask, &row.rerankFormat); err != nil {
+		&row.connectionID, &row.nativeServiceMask, &row.rerankFormat, &row.connectionName); err != nil {
 		return Endpoint{}, err
 	}
 	return row.dto()
@@ -128,7 +129,7 @@ SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
        (SELECT count(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id),
        e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
        e.mainstream_channel_name,e.mainstream_channel_category,
-       e.connection_id,e.native_service_mask,e.rerank_format
+       e.connection_id,e.native_service_mask,e.rerank_format,COALESCE((SELECT name FROM service_connections WHERE id=e.connection_id),'')
 FROM endpoints e
 WHERE e.user_id=?
   AND (?=0 OR e.updated_at<? OR (e.updated_at=? AND e.id<?))
@@ -174,7 +175,7 @@ SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
        (SELECT count(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id),
        e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
        e.mainstream_channel_name,e.mainstream_channel_category,
-       e.connection_id,e.native_service_mask,e.rerank_format
+       e.connection_id,e.native_service_mask,e.rerank_format,COALESCE((SELECT name FROM service_connections WHERE id=e.connection_id),'')
 FROM endpoints e WHERE e.id=? AND e.user_id=?`, endpointID, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Endpoint{}, ErrNotFound
@@ -419,6 +420,15 @@ func (r *Repository) PatchEndpoint(ctx context.Context, userID, endpointID int64
 		if err := requireConnectionTx(ctx, tx, userID, *input.ConnectionID); err != nil {
 			return MutationResult[Endpoint]{}, err
 		}
+		if current.ConnectionID == nil || *current.ConnectionID != strconv.FormatInt(*input.ConnectionID, 10) {
+			var hasKeys bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM endpoint_keys WHERE endpoint_id=?)`, endpointID).Scan(&hasKeys); err != nil {
+				return MutationResult[Endpoint]{}, err
+			}
+			if hasKeys {
+				return MutationResult[Endpoint]{}, ErrConflict
+			}
+		}
 		value := strconv.FormatInt(*input.ConnectionID, 10)
 		connectionID = &value
 	}
@@ -614,7 +624,7 @@ SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
        (SELECT count(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id),
        e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
        e.mainstream_channel_name,e.mainstream_channel_category,
-       e.connection_id,e.native_service_mask,e.rerank_format
+       e.connection_id,e.native_service_mask,e.rerank_format,COALESCE((SELECT name FROM service_connections WHERE id=e.connection_id),'')
 FROM endpoints e WHERE e.id=? AND e.user_id=?`, endpointID, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Endpoint{}, ErrNotFound
@@ -787,6 +797,7 @@ type endpointKeyRow struct {
 	id, endpointID, revision, createdAt, updatedAt                    int64
 	maxConcurrency, maxRPM                                            int64
 	displayHead, displayTail, note                                    string
+	credentialNote                                                    string
 	enabled, forceStoreFalse, suspended                               int
 }
 
@@ -812,6 +823,7 @@ func (row endpointKeyRow) dto() (EndpointKey, error) {
 		state = "security_processing"
 	}
 	return EndpointKey{
+		CredentialNote:      row.credentialNote,
 		CredentialAvailable: row.credentialAvailable, CredentialID: strconv.FormatInt(row.credentialID, 10), CredentialVersion: strconv.FormatInt(row.credentialVersion, 10),
 		GrantRevision: strconv.FormatInt(row.grantRevision, 10), NativeServices: services.Services(), DiscoverySourceID: sourceID,
 		ID: id, EndpointID: endpointID, DisplayHead: row.displayHead, DisplayTail: row.displayTail,
@@ -825,7 +837,7 @@ func (row endpointKeyRow) dto() (EndpointKey, error) {
 func scanEndpointKey(scanner interface{ Scan(...any) error }) (EndpointKey, error) {
 	var row endpointKeyRow
 	if err := scanner.Scan(&row.id, &row.endpointID, &row.displayHead, &row.displayTail, &row.note,
-		&row.enabled, &row.forceStoreFalse, &row.suspended, &row.revision, &row.createdAt, &row.updatedAt, &row.maxConcurrency, &row.maxRPM, &row.credentialID, &row.credentialVersion, &row.grantRevision, &row.nativeServiceMask, &row.discoverySourceID, &row.credentialAvailable); err != nil {
+		&row.enabled, &row.forceStoreFalse, &row.suspended, &row.revision, &row.createdAt, &row.updatedAt, &row.maxConcurrency, &row.maxRPM, &row.credentialID, &row.credentialVersion, &row.grantRevision, &row.nativeServiceMask, &row.discoverySourceID, &row.credentialAvailable, &row.credentialNote); err != nil {
 		return EndpointKey{}, err
 	}
 	return row.dto()
@@ -836,7 +848,8 @@ SELECT k.id,k.endpoint_id,k.display_head,k.display_tail,k.note,k.enabled,k.force
        EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id),
        k.revision,k.created_at,k.updated_at,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),
        k.credential_id,k.credential_version,k.grant_revision,k.native_service_mask,ks.source_id,
- EXISTS(SELECT 1 FROM credentials cr JOIN credential_versions cv ON cv.credential_id=cr.id AND cv.id=k.credential_version_id JOIN endpoint_key_secrets s ON s.id=cv.secret_ref_id WHERE cr.id=k.credential_id AND cr.deleted_at IS NULL AND cr.enabled=1 AND cv.enabled=1 AND s.orphaned_at IS NULL)
+ EXISTS(SELECT 1 FROM credentials cr JOIN credential_versions cv ON cv.credential_id=cr.id AND cv.id=k.credential_version_id JOIN endpoint_key_secrets s ON s.id=cv.secret_ref_id WHERE cr.id=k.credential_id AND cr.deleted_at IS NULL AND cr.enabled=1 AND cv.enabled=1 AND s.orphaned_at IS NULL),
+ COALESCE((SELECT note FROM credentials WHERE id=k.credential_id),'')
 FROM endpoint_key_current_credentials k JOIN endpoints e ON e.id=k.endpoint_id
 LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
 LEFT JOIN endpoint_key_discovery_sources ks ON ks.endpoint_key_id=k.id`

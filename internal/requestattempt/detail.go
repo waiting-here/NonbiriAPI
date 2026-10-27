@@ -86,6 +86,8 @@ var rejectionFieldsAllowed = map[string]bool{
 }
 
 var rejectionReasonsAllowed = map[string]bool{
+	"no usable model resource is available for this request":                                                    true,
+	"shared model resources are temporarily at capacity":                                                        true,
 	"expected valid and consistent output-token limits":                                                         true,
 	"Gateway image generation does not support streaming":                                                       true,
 	"Gateway images require b64_json":                                                                           true,

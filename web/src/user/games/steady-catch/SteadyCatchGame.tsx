@@ -703,6 +703,8 @@ export function SteadyCatchGame() {
           idempotencyKey: startKey.current,
         })
       ).data;
+      // A terminal-state refresh may still contain the previous round.
+      await cache.cancelQueries({ queryKey: sessionKey, exact: true });
       setCreated(value.id);
       cache.setQueryData(sessionKey, value);
       startKey.current = null;

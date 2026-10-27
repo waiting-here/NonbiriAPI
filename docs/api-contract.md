@@ -1,8 +1,8 @@
 # NonbiriAPI HTTP API Contract
 
-Service connection, shared credential, discovery-source and per-service donation semantics are described in [service connections](service-connections.md). Existing endpoint and single-target clients retain their original explicit scope.
+Service, endpoint, service-owned key, model-list and donation semantics are described in [service connections](service-connections.md). Existing endpoint and single-target clients retain their original explicit scope.
 
-- Status: **v1.2.1 source contract**. Check an instance's deployed build before using routes or configuration added by an update.
+- Status: **v1.3.0 source contract**. Check an instance's deployed build before using routes or configuration added by an update.
 - Scope: model discovery and direct HTTP/SSE text, image, audio, embedding, moderation, rerank, Decisions and System One inference. See the [operation and connector matrix](direct-inference.md) for exact paths, conversion limits and the excluded persistent/realtime APIs. There is no Anthropic-native public ingress.
 - Authority: this document reflects the current source route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically. The session-authenticated picture-book activity has its own configuration and accounting, separate from the public image-generation model route.
 - Release boundary: new source behavior is listed in the [changelog](../CHANGELOG.md). This document does not assert that an instance has deployed it.
@@ -99,6 +99,16 @@ Shared numbered-page metadata is `{page:string,page_size:number,total_items:stri
 
 ### 1.3 Error envelope
 
+API clients receive the JSON envelope below. Browser document navigation that
+explicitly prefers HTML receives a localized error page with safe recovery
+links and the same HTTP status. This includes sign-in and OAuth callback
+failures, session requirements and station navigation errors. Fetch/XHR,
+non-document resources and JSON-preferred requests retain their existing
+responses; `/v1` inference errors always remain machine-readable. Error pages
+do not reflect OAuth codes, state, provider descriptions or callback query
+strings. Both presentations retain `Cache-Control: no-store` and relevant
+`Retry-After` or `Allow` headers.
+
 ```json
 {
   "error": {
@@ -142,11 +152,11 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 39. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts exact registered schema 16–26 and 33–38 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 40. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts exact registered schema 16–26 and 33–39 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
 
-`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=39`, `minimum_schema_version=39`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
+`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=40`, `minimum_schema_version=40`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
 
-Current account export `schema_version=30` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v30.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
+Current account export `schema_version=31` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v31.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
 ### 1.5 Display time context
 
@@ -346,7 +356,7 @@ user logs show caller pricing only, never donor reward decisions.
 
 Request logs and JSON/CSV exports include nullable `requested_streaming` (the caller's validated original mode before upstream overrides) and nullable `automatic_actions`. Actions are `short_content_deduction`, `short_content_ban`, `short_content_suspension`, `rpm_ban`, `client_rule_ban` and `context_penalty`. The list records effects in the same transaction as their application; a matched rule or ordinary rejection alone is not a punishment. An empty array means no recorded automatic action; null means historical information is unavailable. Missing or invalid request bodies can leave the mode null. These safe facts share existing log access, export, deletion and retention rules and reveal no rule definitions or request body.
 
-Request-log list/detail and JSON exports may include safe `rejection_detail:{field,reason,suggestion?}` for a recorded pre-handler validation refusal. Administrators, authorized stewards and the ordinary caller viewing **their own** log receive the same server-authored check and corrective suggestion, subject to existing display privacy. For example:
+Request-log list/detail and JSON exports may include safe `rejection_detail:{field,reason,suggestion?}` for a recorded pre-handler refusal or a platform resource refusal before any upstream attempt. Administrators, authorized stewards and the ordinary caller viewing **their own** log receive the same server-authored check and corrective suggestion, subject to existing display privacy. For example:
 
 ```json
 {
@@ -360,7 +370,9 @@ Request-log list/detail and JSON exports may include safe `rejection_detail:{fie
 
 These fields describe validated field names, type/format/capability requirements and bounded length facts; they never echo submitted values, request bodies, credentials or raw upstream diagnostics. Typed protocol-conversion refusals retain their actual safe field/reason instead of being flattened to a generic `invalid_request`. CSV exports append `rejection_field,rejection_detail,rejection_suggestion`; the CSV `rejection_detail` cell contains the reason text. Existing `rejection_stage,rejection_reason,caller_error_code` remain stable and separate.
 
-An older log without a recorded cause omits `rejection_detail` and leaves these CSV cells empty. Clients should say that the detailed cause was not recorded, never infer one from the route, streaming flag or error code. New generic validation fallbacks explicitly state that no field was recorded and offer only general corrective guidance. These safe diagnostics follow ordinary request-log ownership, retention and export rules and do not open the restricted raw-error/header routes in §11.
+API error messages include the available safe field, reason and next step, localized for a supported `Accept-Language`. A model with no usable resource for the requested operation returns `503 unbound_model`; a healthy resource for an unrelated operation does not make the request invalid. Temporary shared capacity limits retain `429 rate_limited`. Healthy resources that cannot represent the requested features still return a specific `400 invalid_request`. These refusals do not dispatch an upstream request or charge for one.
+
+An older log without a recorded cause omits `rejection_detail` and leaves these CSV cells empty. Clients should say that the detailed cause was not recorded, never infer one from the route, streaming flag or error code. Generic validation fallbacks state that the specific cause was not recorded and suggest sharing the request ID for investigation. These safe diagnostics follow ordinary request-log ownership, retention and export rules and do not open the restricted raw-error/header routes in §11.
 
 Personal requests reserve no general credits and remain available with a negative general-credit balance. Their zero-value accounting lifecycle and resource limits still apply; charity admission retains its balance requirements.
 
@@ -1803,7 +1815,7 @@ Conversation originals, their model/tool results and execution receipts, shared 
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v30.json`, with `schema_version:30` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v31.json`, with `schema_version:31` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
 
 `user` includes the five nullable inference limits and their effective values
 from §7.1. The safe `charity` aggregate may include `usage_details` with optional
@@ -1816,6 +1828,12 @@ model/endpoint/key identity or request content.
 The top-level `steward_permissions` contains the owner's current `effective` policy, nullable `stored` configuration and retained `history`. Each history entry contains `previous,next,created_at` without editor identities. Policy changes are retained for 90 days by bounded cleanup; account deletion removes the target policy/history. Existing export bounds apply.
 
 Connection metadata adds `connections,credentials,credential_versions,grants,discovery_sources,source_revisions,binding_targets,native_service_evidence,donation_uses`. These owner-scoped collections expose public versions and revision numbers, safe settings, review snapshots and current approved health. They exclude secret material, fingerprints, review HMACs and internal authorization identities. See [service connections](service-connections.md) for rotation, approval and deletion semantics.
+
+Format 31 adds nullable `endpoint_key_id,last_success_at,added_count,removed_count`
+to each exported discovery source. Counts are decimal strings; the timestamp is
+UTC Unix seconds. Sources belong to one endpoint/key pair, and keys belong to
+one service. Legacy cross-service references are split by the explicit schema-40
+upgrade without changing saved binding, budget or donation-approval identities.
 
 The top-level fields include `limited_activities`, `image_tasks` and `inactivity`. Limited activities contain the safe general/paper/brush wallet projection and own exchange receipts; the existing game wallet remains separate. Image tasks contain only local ID, state, requested/actual image counts, times, billing state and two-currency charge/refund facts. Inactivity contains safe own activity timestamps and retained execution outcomes. No prompts, complete execution parameters, images, source facts, raw errors, risk rules, private adapter/configuration or upstream task identifiers are included.
 
@@ -1833,7 +1851,7 @@ The following fields are top-level (an excerpt, not a complete export):
 
 ```json
 {
-  "schema_version": 27,
+  "schema_version": 31,
   "request_adaptations": [],
   "continuity": [],
   "fat_fish": {"summaries": [], "progress": []}
@@ -1854,7 +1872,7 @@ Deletion keeps a separate minimum security projection for administrator and stew
 
 `appearance` contains `selected,unlocked,moment,updated_at`; eligibility derives from collection ownership and pool history, while the derived `moments` catalogue is omitted. `rewards` contains personal successful receipts. `gacha` contains ticket/shard balances, collection, pity, claims, retained transactions and draw records, without retry-key digests. Model request adaptations include excluded parameter names and partition modes without saved values. `user` contains `discord_gate_policy`; personal models include `model_types` and accept `cache_balanced` as a `route_strategy`. Current personal models also include `role_policy`, `transport_rule` and the saved `cloudflare_proxy_enabled` preference; deployment mode and proxy secrets are excluded; saved Likes preset names are currently omitted from the account export. `lake_notes` contains `rules_id,profile_revision,profile,casts,entries,exchanges`, excluding private encounter/reward randomness and internal checkpoints. Safe cast entries include identity, nullable source period, rules/generation/revision, acknowledged tick, phase/pause and public motion state. Entry/exchange receipts retain exact amounts and financial references.
 
-Export 30 also includes personal models' saved `session_headers` entries (`name,idle_seconds,format`). Generated header values and shared charity-model header configuration are excluded.
+Export 31 also includes personal models' saved `session_headers` entries (`name,idle_seconds,format`). Generated header values and shared charity-model header configuration are excluded.
 
 `steadycatch` contains the owner's first-clear status, retained sessions and accepted replay inputs. `gwent` uses the duel export with owner-only competitive results and the current Elo aggregate. Neither adds access to another player's private state. See [Steady Catch](steady-catch.md), [AI Gwent](ai-gwent.md) and the [lifecycle checklist](data-lifecycle-checklist.md) for routes and retention.
 
@@ -2181,6 +2199,54 @@ Bidding Duel adds session-authenticated AI offers, preferences and unpaid admiss
 ## Collectible-card activity
 
 The session-authenticated card activity uses `/api/gacha/state`, `/api/gacha/history` and `/api/gacha/actions`; administrator configuration uses `/admin/api/gacha`. User site cosmetics use `GET/POST /api/appearance` and server-validated collection unlocks. See [The Gacha Simulator](gacha.md#records-and-http-access) for transaction, retry, revision and retention semantics.
+
+Administrator pool statistics use three session-only GET routes:
+
+- `/admin/api/gacha/statistics/pools` accepts numbered `page`/`page_size`, `q`
+  (at most 128 characters) and `sort=recent|draws`; it returns `{items,pagination}`.
+  Permanent comes first. Each pool has `id`, `name`, `name_en`, `kind`, nullable
+  `starts_at`/`ends_at`, `total_draws`, `participant_count` and `available`.
+  `available` means its configuration still exists, not that the pool is open.
+- `/admin/api/gacha/statistics/pools/{id}/cards` accepts numbered pagination,
+  `q` and `sort=count|rarity|name`; it returns
+  `{pool,items,pagination,rarity_totals,top_cards}`. Card fields are `card_id`,
+  `name`, `name_en`, nullable `rarity`, `count`, `participant_count` and
+  `first_acquisition_count`. The two chart summaries always describe the whole
+  pool: rarity rows contain `rarity`, `count`, `first_acquisition_count`; top
+  cards are at most ten nonzero card rows. Table filtering does not change them.
+- `/admin/api/gacha/statistics/pools/{id}/export?format=json|csv` downloads one
+  complete authorized read snapshot, without search or page parameters. JSON
+  contains `{pool,rarity_totals,cards}`. CSV repeats pool ID/name, total draws and
+  participant count alongside each card's safe fields; formula prefixes are
+  escaped. An output failure after streaming begins aborts the response.
+
+Counts are exact canonical decimal strings. Every successful draw, including
+duplicates, counts once; a ten-pull adds ten. Participants are distinct accounts
+within the selected pool, or within that pool/card pair. A first acquisition is
+a draw that adds a previously unowned card to the account's collection. Rewards,
+codes and shop redemptions do not count as pool draws. Statistics outlive draw
+detail retention and account deletion. They expose no participant identities and
+do not enter personal exports. Stewards and ordinary users cannot read or export
+them. Detached pool IDs retain their separate period and cannot be reused.
+
+Mystery-shop card statistics use independent administrator-only GET routes:
+
+- `/admin/api/gacha/statistics/shop/cards` accepts numbered pagination, `q`
+  and `sort=count|rarity|name`. It returns
+  `{summary,items,pagination,rarity_totals,top_cards}`; `summary` contains exact
+  decimal-string `total_redemptions` and `participant_count`. Card and chart
+  rows use the same fields as pool statistics. The shop rejects already-owned
+  or previously-redeemed cards, so each card's quantity, participant count and
+  first-acquisition count are equal under the current redemption rules.
+- `/admin/api/gacha/statistics/shop/export?format=json|csv` downloads complete
+  shop-card statistics independently of table filters/pages. JSON contains
+  `{summary,rarity_totals,cards}`; CSV contains summary and card fields without
+  pool columns. Charts always describe the whole shop card dataset.
+
+Only successful card redemptions contribute. Ticket purchases, daily bundles,
+shard-to-ticket exchanges, draws, codes and site-wide rewards do not contribute.
+Shop and pool counters are separate, with the same atomic-write, exact-count,
+administrator-only and lifetime aggregate semantics.
 
 `redeem` accepts `product=bulk-permanent|bulk-limited` with the current shop
 `revision`. Each grants ten tickets for 10,000 credits total, using game credits

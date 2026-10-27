@@ -6,6 +6,10 @@ High-resolution WebP derivatives retain the established compositions and use ima
 
 All cards now have retained background and foreground inputs. Forty ordinary card foregrounds, nineteen character-free theme backgrounds, and the registered foregrounds and plates for group illustrations and covers were derived from the established artwork. `composition.json` records source-over composition and retained rare-card layers. Native generated portraits are 1024×1536; native landscape plates are approximately 1672×941. Larger derivatives are resampled from these inputs and do not add native detail.
 
+Seven ordinary foregrounds retain generative corrections of their established portraits: `a-chatgpt` pours into a cup on a table; `c-deepseek` touches a visible puddle; `d-chatgpt` supports her saucer; `e-claude` and `e-glm` retain their tables; and `f-chatgpt` and `f-claude` retain their seat and trunk. Their character designs, theme backgrounds and composition registration are preserved. Each revised 1024 × 1536 transparent source supplies its standard card, 256 × 384 thumbnail, foreground and 2560 × 3840 resampled derivatives. Independent group illustrations and covers retain their own compositions.
+
+The permanent-pool cover retains a localized generative correction of ChatGPT's outstretched hand to five fingers. Only the hand region of the generated 1672 × 941 foreground edit is adopted; the remaining character artwork, background and composition registration are preserved. Both transparent foregrounds and composited covers share the correction at standard size and 3840 × 2160 resampled size.
+
 ChatGPT, Claude, GLM, DeepSeek and Gemini names identify the fictional character inspirations. Related names and marks belong to their respective holders. The activity is not affiliated with or endorsed by those holders.
 
 The soundtrack `audio/lobby.mp3` is the project's lobby arrangement of **Elevate** by **Fupi**, based on the [Elevate instrument tracks](https://opengameart.org/content/elevate-instrument-tracks), released under [CC0](https://creativecommons.org/publicdomain/zero/1.0/). The source composition and instrument tracks retain that dedication.

@@ -29,6 +29,7 @@ func convertOffline(ctx context.Context, path string, codec secret.GenerationTwo
 	if ctx == nil || codec == nil || len(sources) == 0 || convert == nil {
 		return false, errors.New("offline conversion dependencies are required")
 	}
+	ctx = context.WithValue(ctx, serviceScopeCodecKey{}, codec)
 	for _, source := range sources {
 		if source.Version < 1 || source.ManifestHash == "" {
 			return false, errors.New("offline source identity is required")

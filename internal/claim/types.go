@@ -15,6 +15,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -360,6 +361,8 @@ type CompleteRequestInput struct {
 	Caller            CallerResult
 	Disposition       AccountingDisposition
 	ActualChargeMilli int64
+	// RejectionDetail is used only for resource failures without a dispatch.
+	RejectionDetail *requestattempt.RejectionDetail
 }
 
 type DiscoveryClaimInput struct {

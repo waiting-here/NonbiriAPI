@@ -417,9 +417,13 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 	// Failed attempt completion leaves recovery responsible for unresolved
 	// accounting; do not mark the logical request terminal ahead of it.
 	if !run.terminalBlocked {
-		_, completionErr := service.claims.CompleteRequest(settleContext, claim.CompleteRequestInput{
+		completion := claim.CompleteRequestInput{
 			RequestID: accepted.ID, Caller: caller, Disposition: disposition, ActualChargeMilli: actualCharge,
-		})
+		}
+		if !run.dispatched && failure != nil {
+			completion.RejectionDetail = failure.detail
+		}
+		_, completionErr := service.claims.CompleteRequest(settleContext, completion)
 		if completionErr != nil {
 			run.err = completionErr
 			run.terminalBlocked = true
@@ -681,15 +685,15 @@ func failureForError(err error, charity bool) wireFailure {
 	case errors.Is(err, routing.ErrAmbiguousIdentity), errors.Is(err, routing.ErrInvalidIdentity):
 		return rejectionFailure(httperr.CodeInvalidRequest, "invalid request", "model", "model identity is invalid or ambiguous")
 	case errors.Is(err, openai.ErrInvalidRequest), errors.Is(err, charityrouting.ErrInvalidRequest):
-		return platformFailure(httperr.CodeInvalidRequest, "invalid request")
+		return rejectionFailure(httperr.CodeInvalidRequest, "invalid request", "request", "request validation failed without a recorded field")
 	case errors.Is(err, openai.ErrPayloadTooLarge):
 		return platformFailure(httperr.CodePayloadTooLarge, "request body too large")
 	case errors.Is(err, charityrouting.ErrEntropyUnavailable):
 		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
 	case errors.Is(err, donationquota.ErrLimited):
-		return platformFailure(httperr.CodeRateLimited, "charity candidates are temporarily at capacity")
+		return rejectionFailure(httperr.CodeRateLimited, "charity candidates are temporarily at capacity", "model", "shared model resources are temporarily at capacity")
 	case errors.Is(err, routing.ErrUnbound), errors.Is(err, charityrouting.ErrUnavailable):
-		return platformFailure(httperr.CodeUnboundModel, "model has no usable binding")
+		return rejectionFailure(httperr.CodeUnboundModel, "model has no usable binding", "model", "no usable model resource is available for this request")
 	case errors.Is(err, routing.ErrResourceLimit), errors.Is(err, charityrouting.ErrResourceLimit):
 		return platformFailure(httperr.CodeResourceLimitExceeded, "resource limit exceeded")
 	case errors.Is(err, charityrouting.ErrFeatureDisabled):
