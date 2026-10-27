@@ -48,18 +48,19 @@ func availableCandidateCountSQL(bindingID string, callerScoped bool, memberID ..
 	quota := `(CASE WHEN dk.input_token_limit_mag IS NULL AND dk.output_token_limit_mag IS NULL
  AND NOT EXISTS(SELECT 1 FROM donation_quota_rules qr WHERE qr.donation_key_id=dk.id AND qr.current_epoch IS NOT NULL)
  THEN 1 ELSE ` + donationquota.AvailabilityPredicate("dk.id", "cx.decision_now", price, "dk.token_reserve") + ` END)`
-	// Start with this model's bindings. Reordering these joins around the
-	// authorization views otherwise revisits every live donation key per model.
+	// Count each binding once and stop at its first eligible target. A binding
+	// can hold many equivalent keys/models; testing every target before DISTINCT
+	// repeats the authorization and quota work without changing availability.
 	return `(CASE WHEN cx.charity_enabled=1 AND cm.enabled=1 AND (cm.pricing_mode='per_request' OR ` + price + `>0) THEN (SELECT COUNT(*) FROM (
- SELECT DISTINCT b.id FROM charity_model_bindings b
- CROSS JOIN charity_binding_targets target ON target.binding_id=b.id
+ SELECT b.id FROM charity_model_bindings b WHERE b.charity_model_id=cm.id AND EXISTS(
+ SELECT 1 FROM charity_binding_targets target
  CROSS JOIN donation_keys dk ON dk.id=target.donation_key_id
  JOIN donations d ON d.id=dk.donation_id
  JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
  JOIN endpoint_keys k ON k.id=m.endpoint_key_id
  JOIN endpoints e ON e.id=k.endpoint_id
 
- WHERE b.charity_model_id=cm.id AND d.status IN ('pending','approved') AND d.terminal_at IS NULL AND d.user_id IS NOT NULL
+ WHERE target.binding_id=b.id AND d.status IN ('pending','approved') AND d.terminal_at IS NULL AND d.user_id IS NOT NULL
  AND ` + donorAvailableSQL("cx.decision_now") + `
  AND dk.ended_at IS NULL AND dk.enabled=1 AND dk.failure_disabled=0
  AND ` + smartbackoff.EffectiveUntilSQL("dk.id") + `<=cx.decision_now
@@ -72,6 +73,6 @@ func availableCandidateCountSQL(bindingID string, callerScoped bool, memberID ..
  AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>nbi_u128(0)
  AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>=nbi_u128(COALESCE(dk.input_token_reserve+dk.output_token_reserve,dk.token_reserve))
  AND ` + quota + `
- ` + scope + `
+	` + scope + `)
 	 LIMIT ` + strconv.Itoa(MaxRuntimeCandidates+1) + `)) ELSE 0 END)`
 }
