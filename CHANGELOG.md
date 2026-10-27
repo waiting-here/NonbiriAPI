@@ -17,6 +17,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Bind personal models through endpoint, key and model selection with a visible
   service filter and selections retained across pages. Existing call combinations
   keep their routing behavior and are edited through advanced call-type settings.
+- Preserve endpoint pages and selection through reload and browser history,
+  clear key filters when changing endpoints, and display current mainstream
+  classifications in endpoint details.
 
 ### Fixed and improved
 
@@ -35,6 +38,8 @@ Each version entry describes its source and compatibility boundary; a release ta
   no longer leave invisible navigation links in the keyboard focus order.
 - Correct tea pouring, saucer support, writing and sealing tables, travel seats
   and puddle contact in seven N/R/SR portraits and their image derivatives.
+- Correct ChatGPT's outstretched hand in the permanent-pool cover to five fingers,
+  including its standard, high-resolution and transparent-layer variants.
 - Make permanent SSR cards exchangeable without an open limited pool. Unify
   ticket-offer quantities, prices, remaining limits and success messages.
 - Distinguish unavailable model resources from unsupported request features,
@@ -43,6 +48,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Reduce work in the recent single-fish leaderboard by selecting each user's
   best eligible catch through the existing expiry index before ranking users.
   Ranking, time windows and privacy rules remain unchanged.
+- Prevent a late refresh of an abandoned Catch round from replacing a newly
+  started round in the browser.
 
 ### Compatibility
 

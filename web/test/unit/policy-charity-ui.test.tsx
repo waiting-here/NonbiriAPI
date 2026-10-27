@@ -835,6 +835,12 @@ describe('experimental policy and charity controls', () => {
       }
       if (
         method === 'GET' &&
+        path === '/api/endpoints/1/keys/2/models?page=1&page_size=20&source=automatic'
+      ) {
+        return jsonResponse(coreNumberedCatalog(coreCatalogUnknown));
+      }
+      if (
+        method === 'GET' &&
         path === '/api/endpoints/1/keys/2/models?page=1&page_size=20&source=manual'
       ) {
         return jsonResponse(coreNumberedCatalog(coreManualCatalog));
@@ -849,6 +855,7 @@ describe('experimental policy and charity controls', () => {
     });
 
     await rendered.user.click(await screen.findByRole('button', { name: 'View models' }));
+    await rendered.user.click(screen.getByText('Manual models', { selector: 'strong' }));
     const entryRow = (await screen.findByText('Vendor/Exact')).closest('li');
     if (!entryRow) throw new Error('Manual catalog row not found');
     await rendered.user.click(within(entryRow).getByRole('button', { name: 'Edit' }));
@@ -1148,7 +1155,9 @@ describe('experimental policy and charity controls', () => {
         return jsonResponse(coreNumberedPage([]));
       if (
         method === 'GET' &&
-        /^\/api\/endpoints\/1\/keys\/(2|4)\/models\?page=1&page_size=20&source=manual$/.test(path)
+        /^\/api\/endpoints\/1\/keys\/(2|4)\/models\?page=1&page_size=20&source=(automatic|manual)$/.test(
+          path,
+        )
       )
         return jsonResponse(coreNumberedCatalog(coreCatalogUnknown));
       if (method === 'POST' && path === '/api/endpoints/1/keys') {
@@ -1175,9 +1184,13 @@ describe('experimental policy and charity controls', () => {
     );
     await rendered.user.click(screen.getByLabelText(/I own this credential/));
     await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
-    await screen.findByText('sk-new…tail2');
     await waitFor(() => expect(keyReads).toBeGreaterThan(1));
-    expect(screen.queryByLabelText('Key')).toBeNull();
+    await rendered.user.selectOptions(
+      await screen.findByRole('combobox', { name: 'Current key' }),
+      '4',
+    );
+    await screen.findByText('sk-new…tail2');
+    await waitFor(() => expect(screen.queryByLabelText('Key')).toBeNull());
     const original = fetchMock.mock.calls.find(
       (call) => requestPath(call[0]) === '/api/endpoints/1/keys' && call[1]?.method === 'POST',
     )!;
@@ -1294,15 +1307,17 @@ describe('experimental policy and charity controls', () => {
         bindingReads += 1;
         return jsonResponse({ bindings: [], binding_revision: '0' });
       }
+      if (method === 'GET' && path === '/api/connections?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([]));
       if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20')
         return jsonResponse(coreNumberedPage([anthropicEndpoint]));
       if (method === 'GET' && path === '/api/endpoints/4/keys?page=1&page_size=20')
         return jsonResponse(coreNumberedPage([anthropicKey]));
       if (method === 'GET' && path.startsWith('/api/models/3/binding-candidates?')) {
-        return jsonResponse({
-          ...coreNumberedPage([candidate]),
-          pagination: { page: '1', page_size: 10, total_items: '1', total_pages: '1' },
-        });
+        const params = new URLSearchParams(path.split('?')[1]);
+        expect(params.get('endpoint_id')).toBe('4');
+        expect(params.get('key_id')).toBe('5');
+        return jsonResponse(coreNumberedPage([candidate]));
       }
       if (method === 'POST' && path === '/api/models/3/bindings/batch') {
         return jsonResponse(
@@ -1316,7 +1331,7 @@ describe('experimental policy and charity controls', () => {
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
     await screen.findByRole('heading', { name: 'My models' });
     await rendered.user.click(await screen.findByRole('button', { name: 'provider/model' }));
-    await rendered.user.click(await screen.findByRole('button', { name: /claude-3/ }));
+    await rendered.user.click(await screen.findByRole('checkbox', { name: /^claude-3 / }));
     await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected sources' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'POST', '/api/models/3/bindings/batch')).toEqual({
@@ -3601,7 +3616,9 @@ describe('experimental policy and charity controls', () => {
         return jsonResponse(coreNumberedPage([]));
       if (
         method === 'GET' &&
-        path === '/api/endpoints/1/keys/2/models?page=1&page_size=20&source=manual'
+        /^\/api\/endpoints\/1\/keys\/2\/models\?page=1&page_size=20&source=(automatic|manual)$/.test(
+          path,
+        )
       )
         return jsonResponse(coreNumberedCatalog(coreCatalogUnknown));
       if (method === 'DELETE' && path === '/api/endpoints/1/keys/2') {
@@ -3620,9 +3637,13 @@ describe('experimental policy and charity controls', () => {
     expect(rendered.queryClient.getQueryState(coreKeys.endpoints('1'))?.isInvalidated).toBe(false);
     await screen.findByText('sk-a…tail');
     await rendered.user.click(screen.getByRole('button', { name: 'More actions · key note' }));
-    await rendered.user.click(await screen.findByRole('menuitem', { name: 'Delete key…' }));
+    await rendered.user.click(
+      await screen.findByRole('menuitem', { name: 'Remove key from endpoint…' }),
+    );
     const dialog = screen.getByRole('alertdialog');
-    await rendered.user.click(within(dialog).getByRole('button', { name: 'Delete key' }));
+    await rendered.user.click(
+      within(dialog).getByRole('button', { name: 'Remove key from endpoint' }),
+    );
     await waitFor(() => expect(screen.queryByText('sk-a…tail')).toBeNull());
     expect(lastBody(fetchMock, 'DELETE', '/api/endpoints/1/keys/2')).toEqual({
       expected_revision: '1',
@@ -3679,9 +3700,9 @@ describe('experimental policy and charity controls', () => {
     );
 
     await screen.findByRole('heading', { name: 'primary' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Delete service' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Delete endpoint' }));
     await rendered.user.click(
-      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete service' }),
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete endpoint' }),
     );
 
     await waitFor(() => {
@@ -3740,9 +3761,9 @@ describe('experimental policy and charity controls', () => {
     );
 
     await screen.findByRole('heading', { name: 'primary' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Delete service' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Delete endpoint' }));
     await rendered.user.click(
-      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete service' }),
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete endpoint' }),
     );
 
     expect(await screen.findByText(/Could not confirm the result/)).toBeVisible();

@@ -1,4 +1,5 @@
 import { mockConnectionResources } from './connection-fixtures';
+import { numberedPage } from './numbered-fixtures';
 import { USER_ORIGIN } from './ports';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
 import { expect, test } from './test';
@@ -15,7 +16,7 @@ for (const width of [1440, 390]) {
       await mockPublicConfig(page, 'user');
       await mockRoleSession(page, 'user', 'user');
       let current = true;
-      await mockConnectionResources(page, () =>
+      const entries = () =>
         ['subscription', 'api_platform'].map((category, index) => ({
           id: String(index + 1),
           connection_id: '1',
@@ -26,20 +27,32 @@ for (const width of [1440, 390]) {
           note: index ? '常用 API 服务' : '常用订阅服务',
           enabled: true,
           revision: '1',
-          key_count: '1',
+          key_count: '0',
           created_at: 1_700_000_000,
           updated_at: 1_700_000_001,
           browse: {
             model_count: '3',
-            available_key_count: '1',
-            state: 'available',
+            available_key_count: '0',
+            state: 'no_keys',
             mainstream_categories: current ? [category] : [],
           },
-        })),
-      );
+        }));
+      await mockConnectionResources(page, entries);
+      await page.route(`${USER_ORIGIN}/api/endpoints/**`, async (route) => {
+        const url = new URL(route.request().url());
+        if (/^\/api\/endpoints\/[12]\/keys$/.test(url.pathname))
+          return route.fulfill({ json: numberedPage([], url.searchParams) });
+        const entry = entries().find((row) => url.pathname === '/api/endpoints/' + row.id);
+        if (entry) return route.fulfill({ json: entry });
+        return route.fallback();
+      });
       await page.goto(`${USER_ORIGIN}/endpoints?connection_id=1`);
+      const endpoint = page.getByRole('combobox', { name: '端点', exact: true });
       await expect(page.getByText('主流订阅', { exact: true })).toBeVisible();
+      await expect(page.getByText('主流 API 平台', { exact: true })).toHaveCount(0);
+      await endpoint.selectOption('2');
       await expect(page.getByText('主流 API 平台', { exact: true })).toBeVisible();
+      await expect(page.getByText('主流订阅', { exact: true })).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
@@ -50,6 +63,10 @@ for (const width of [1440, 390]) {
       });
       current = false;
       await page.reload();
+      await expect(page.getByText('常用 API 服务', { exact: true })).toBeVisible();
+      await expect(page.getByText('主流订阅', { exact: true })).toHaveCount(0);
+      await expect(page.getByText('主流 API 平台', { exact: true })).toHaveCount(0);
+      await endpoint.selectOption('1');
       await expect(page.getByText('常用订阅服务', { exact: true })).toBeVisible();
       await expect(page.getByText('主流订阅', { exact: true })).toHaveCount(0);
       await expect(page.getByText('主流 API 平台', { exact: true })).toHaveCount(0);

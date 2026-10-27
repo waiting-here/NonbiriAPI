@@ -489,7 +489,7 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/endpoints/1/keys/2/models?page=1&page_size=20&source=manual',
+    path: '/api/endpoints/1/keys/2/models?page=1&page_size=20&source=automatic',
     body: {
       evidence: {
         state: 'unknown',
@@ -507,12 +507,11 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
   });
 
   await page.goto(`${USER_ORIGIN}/endpoints`);
-  await expect(page.getByRole('heading', { name: 'Service connections' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My services', level: 1 })).toBeVisible();
   await page.getByRole('link', { name: 'Manage', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'Browser connection', exact: true }),
   ).toBeVisible();
-  await page.getByRole('link', { name: 'Manage entry', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'primary', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'More actions · key note', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Edit note and limits', exact: true }).click();

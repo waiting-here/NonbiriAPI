@@ -60,7 +60,8 @@ for (const width of [1440, 390]) {
           };
         } else if (
           url.pathname.endsWith('/binding-candidates') ||
-          url.pathname === '/api/endpoints'
+          url.pathname === '/api/endpoints' ||
+          url.pathname === '/api/connections'
         ) {
           body = numberedPage([], url.searchParams);
         } else if (url.pathname === '/api/models') body = numberedPage([model], url.searchParams);

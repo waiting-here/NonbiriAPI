@@ -202,7 +202,7 @@ func (api *httpAPI) getEndpoint(writer http.ResponseWriter, request *http.Reques
 	if !ok || !requireEmptyQuery(writer, request) || !requireNoBody(writer, request) {
 		return
 	}
-	endpoint, err := api.repository.GetEndpoint(request.Context(), principal.UserID, endpointID)
+	endpoint, err := api.repository.GetEndpointWithBrowse(request.Context(), principal.UserID, endpointID)
 	if err != nil {
 		writeResourceError(writer, err)
 		return

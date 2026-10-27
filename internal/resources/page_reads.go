@@ -74,6 +74,20 @@ e.mainstream_channel_id,e.mainstream_channel_revision,e.mainstream_channel_name,
 e.connection_id,e.native_service_mask,e.rerank_format,COALESCE((SELECT name FROM service_connections WHERE id=e.connection_id),'')
 FROM endpoints e WHERE e.user_id=?`
 
+func (r *Repository) GetEndpointWithBrowse(ctx context.Context, userID, endpointID int64) (Endpoint, error) {
+	if endpointID <= 0 {
+		return Endpoint{}, ErrNotFound
+	}
+	return userPageRead(ctx, r, userID, pagination.Default(), func(ctx context.Context, tx *sql.Tx) (Endpoint, error) {
+		endpoint, err := getEndpointTx(ctx, tx, userID, endpointID)
+		if err != nil {
+			return Endpoint{}, err
+		}
+		endpoint.Browse, err = endpointBrowseTx(ctx, tx, userID, endpoint)
+		return endpoint, err
+	})
+}
+
 func (r *Repository) ListEndpointsPage(ctx context.Context, userID int64, page pagination.Request) (Page[Endpoint], error) {
 	return r.SearchEndpointsPage(ctx, userID, "", page)
 }

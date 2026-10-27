@@ -83,16 +83,33 @@ for (const locale of ['en', 'zh'] as const) {
         body = endpoints.find((row) => row.id === url.pathname.split('/').pop());
       } else if (/^\/api\/endpoints\/[0-9]+\/keys$/.test(url.pathname)) {
         keySearches.push(url.searchParams);
+        const endpointId = url.pathname.split('/')[3];
         const enabled = url.searchParams.get('enabled');
         const security = url.searchParams.get('suspension_state');
         const rows = keys.filter(
           (key) =>
+            key.endpoint_id === endpointId &&
             key.note.toLowerCase().includes(q) &&
             (!enabled || String(key.enabled) === enabled) &&
             (!security || key.suspension_state === security) &&
             url.searchParams.get('donated') !== 'false',
         );
         body = numberedPage(rows, url.searchParams);
+      } else if (/^\/api\/endpoints\/19\/keys\/[0-9]+\/models$/.test(url.pathname)) {
+        body = {
+          evidence: {
+            state: 'unknown',
+            revision: '0',
+            result: null,
+            safe_class: 'none',
+            observed_at: null,
+            count: null,
+          },
+          automatic_entries: [],
+          manual_entries: [],
+          next_cursor: null,
+          pagination: numberedPage([], url.searchParams).pagination,
+        };
       } else {
         await route.fallback();
         return;
@@ -102,13 +119,7 @@ for (const locale of ['en', 'zh'] as const) {
     const searchLabel = locale === 'en' ? 'Search' : '搜索';
     const connectionList = page.locator('section.nb-panel').filter({
       has: page.getByRole('heading', {
-        name: locale === 'en' ? 'Your connections' : '我的连接',
-        exact: true,
-      }),
-    });
-    const entryList = page.locator('section.nb-panel').filter({
-      has: page.getByRole('heading', {
-        name: locale === 'en' ? 'Entries' : '入口',
+        name: locale === 'en' ? 'My services' : '我的服务',
         exact: true,
       }),
     });
@@ -121,40 +132,46 @@ for (const locale of ['en', 'zh'] as const) {
     await expect.poll(() => new URL(page.url()).searchParams.get('connections_page')).toBe('1');
     await expect.poll(() => new URL(page.url()).searchParams.get('connections_q')).toBe('Needle');
     await connectionList.getByRole('button', { name: '2', exact: true }).click();
-    await page.getByRole('link', { name: 'Needle connection 19', exact: true }).click();
+    const connectionLink = page.getByRole('link', { name: 'Needle connection 19', exact: true });
+    await connectionLink.evaluate((link) =>
+      link.scrollIntoView({ block: 'center', behavior: 'instant' }),
+    );
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    const before = await page.evaluate(() => scrollY);
+    expect(before).toBeGreaterThan(0);
+    await connectionLink.click();
     await expect(
       page.getByRole('heading', { name: 'Needle connection 19', exact: true }),
     ).toBeVisible();
     expect(new URL(page.url()).searchParams.get('connection_id')).toBe('19');
     expect(new URL(page.url()).searchParams.get('connection_view')).toBe('entries');
-    await entryList.getByRole('searchbox').fill(' resource ');
-    await entryList.getByRole('button', { name: searchLabel, exact: true }).click();
-    await entryList
+    const endpointPicker = page.getByRole('combobox', {
+      name: locale === 'en' ? 'Endpoint' : '端点',
+      exact: true,
+    });
+    const endpointPagination = endpointPicker.locator(
+      'xpath=../following-sibling::nav[contains(@class,"page-pagination")]',
+    );
+    await endpointPagination
       .getByRole('combobox', {
         name: locale === 'en' ? 'Items per page' : '每页条数',
       })
       .selectOption('10');
-    await expect(page.getByText('Needle resource 1', { exact: true })).toBeVisible();
-    await entryList
+    await expect(endpointPicker).toHaveValue('1');
+    await endpointPagination
       .getByRole('button', {
         name: locale === 'en' ? 'Next' : '下一页',
         exact: true,
       })
       .click();
-    await expect(page.getByText('Needle resource 11', { exact: true })).toBeVisible();
     await expect
-      .poll(() => new URL(page.url()).searchParams.get('connection-entries_page'))
+      .poll(() => new URL(page.url()).searchParams.get('service-endpoint-switch_page'))
       .toBe('2');
-    const entryReturnURL = page.url();
-    await page
-      .locator('a[href="/endpoints/19"]')
-      .evaluate((link) => link.scrollIntoView({ block: 'center', behavior: 'instant' }));
-    const before = await page.evaluate(() => scrollY);
-    expect(before).toBeGreaterThan(0);
-    await page.locator('a[href="/endpoints/19"]').click();
+    await endpointPicker.selectOption('19');
     await expect(
       page.getByRole('heading', { name: 'Needle resource 19', exact: true }),
     ).toBeVisible();
+    expect(new URL(page.url()).searchParams.get('endpoint_id')).toBe('19');
     const keyFilters = page.getByRole('form', {
       name: locale === 'en' ? 'Resource filters' : '资源筛选',
     });
@@ -189,44 +206,44 @@ for (const locale of ['en', 'zh'] as const) {
         ),
       )
       .toBe(true);
-    await page
-      .getByRole('link', {
-        name: locale === 'en' ? 'My services' : '我的服务',
-        exact: true,
-      })
-      .click();
-    await expect(page).toHaveURL(entryReturnURL);
-    await expect(entryList.getByRole('searchbox')).toHaveValue('resource');
-    expect(new URL(page.url()).searchParams.get('connections_q')).toBe('Needle');
-    expect(new URL(page.url()).searchParams.get('connections_page')).toBe('2');
-    expect(new URL(page.url()).searchParams.get('connection-entries_page_size')).toBe('10');
+    const filteredURL = page.url();
+    const backToServices = page.getByRole('link', {
+      name: locale === 'en' ? 'Back to my services' : '返回我的服务',
+      exact: true,
+    });
+    await backToServices.click();
+    await expect(connectionList.getByRole('searchbox')).toHaveValue('Needle');
     await expect
       .poll(async () => Math.abs((await page.evaluate(() => scrollY)) - before))
       .toBeLessThan(100);
+    await page.goBack();
+    await expect(page).toHaveURL(filteredURL);
+    await expect(endpointPicker).toHaveValue('19');
+    await expect(keyFilters.getByRole('searchbox')).toHaveValue('masked-tail');
     await page.reload();
-    await expect(entryList.getByRole('searchbox')).toHaveValue('resource');
-    await entryList.getByRole('searchbox').fill('absent');
-    await entryList.getByRole('button', { name: searchLabel, exact: true }).click();
+    await expect(endpointPicker).toHaveValue('19');
     await expect(
-      entryList.getByText(
-        locale === 'en'
-          ? 'No matches. Adjust your search or filters.'
-          : '没有匹配结果，可调整搜索或筛选。',
-        { exact: true },
-      ),
+      endpointPagination.getByRole('combobox', {
+        name: locale === 'en' ? 'Items per page' : '每页条数',
+      }),
+    ).toHaveValue('10');
+    await expect(keyFilters.getByRole('searchbox')).toHaveValue('masked-tail');
+    expect(new URL(page.url()).searchParams.get('service-endpoint-switch_page')).toBe('2');
+    expect(new URL(page.url()).searchParams.get('service-endpoint-switch_page_size')).toBe('10');
+    await endpointPicker.selectOption('20');
+    await expect(endpointPicker).toHaveValue('20');
+    await expect(
+      page.getByRole('heading', { name: 'Needle resource 20', exact: true }),
     ).toBeVisible();
-    await entryList.getByRole('searchbox').fill('');
-    await entryList.getByRole('button', { name: searchLabel, exact: true }).click();
-    await expect(page.getByText('Needle resource 1', { exact: true })).toBeVisible();
-    await expect
-      .poll(() => new URL(page.url()).searchParams.get('connection-entries_q'))
-      .toBeNull();
-    await page
-      .getByRole('link', {
-        name: locale === 'en' ? 'Back to connections' : '返回连接列表',
-        exact: true,
-      })
-      .click();
+    await expect(keyFilters).toHaveCount(0);
+    expect(
+      [...new URL(page.url()).searchParams.keys()].some((key) => key.startsWith('keys_')),
+    ).toBe(false);
+    await page.goBack();
+    await expect(page).toHaveURL(filteredURL);
+    await expect(endpointPicker).toHaveValue('19');
+    await expect(keyFilters.getByRole('searchbox')).toHaveValue('masked-tail');
+    await backToServices.click();
     await expect(connectionList.getByRole('searchbox')).toHaveValue('Needle');
     await expect(
       page.getByRole('link', { name: 'Needle connection 11', exact: true }),
@@ -234,6 +251,8 @@ for (const locale of ['en', 'zh'] as const) {
     expect(new URL(page.url()).searchParams.get('connection_id')).toBeNull();
     expect(new URL(page.url()).searchParams.get('connections_page')).toBe('2');
     expect(new URL(page.url()).searchParams.get('connections_page_size')).toBe('10');
+    expect(new URL(page.url()).searchParams.get('service-endpoint-switch_page')).toBeNull();
+    expect(new URL(page.url()).searchParams.get('keys_q')).toBeNull();
     await page.reload();
     await expect(connectionList.getByRole('searchbox')).toHaveValue('Needle');
     await connectionList.getByRole('searchbox').fill('absent');
@@ -258,7 +277,7 @@ for (const locale of ['en', 'zh'] as const) {
     ).toBe(true);
     expect(
       entrySearches.some(
-        (p) => p.get('q') === 'resource' && p.get('page') === '2' && p.get('page_size') === '10',
+        (p) => !p.has('q') && p.get('page') === '2' && p.get('page_size') === '10',
       ),
     ).toBe(true);
     expect([...connectionSearches, ...entrySearches].every((p) => !p.has('source'))).toBe(true);
@@ -301,6 +320,9 @@ test('personal models send all filters before pagination and preserve them throu
   };
   const requests: URLSearchParams[] = [];
   await page.route(`${USER_ORIGIN}/api/endpoints?**`, (route) =>
+    route.fulfill({ json: numberedPage([], new URL(route.request().url()).searchParams) }),
+  );
+  await page.route(`${USER_ORIGIN}/api/connections?**`, (route) =>
     route.fulfill({ json: numberedPage([], new URL(route.request().url()).searchParams) }),
   );
   await page.route(`${USER_ORIGIN}/api/models**`, async (route) => {

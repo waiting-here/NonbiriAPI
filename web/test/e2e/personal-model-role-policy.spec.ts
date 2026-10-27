@@ -62,7 +62,7 @@ for (const locale of ['en', 'zh'] as const) {
             body = numberedPage([], url.searchParams);
           } else if (url.pathname === '/api/models') {
             body = numberedPage([model], url.searchParams);
-          } else if (url.pathname === '/api/endpoints') {
+          } else if (url.pathname === '/api/endpoints' || url.pathname === '/api/connections') {
             body = numberedPage([], url.searchParams);
           } else {
             await route.fallback();

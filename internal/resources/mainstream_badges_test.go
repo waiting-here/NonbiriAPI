@@ -40,6 +40,14 @@ func TestEndpointBrowseFollowsCurrentMainstreamChannels(t *testing.T) {
 			if item.ID == custom.ID && item.Origin.Kind != "custom" {
 				t.Fatal("current classification changed the creation origin")
 			}
+			id, err := parseDecimalID(item.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			detail, err := env.repository.GetEndpointWithBrowse(context.Background(), owner, id)
+			if err != nil || !reflect.DeepEqual(detail.Browse, item.Browse) {
+				t.Fatalf("endpoint detail differs from its list projection: %+v, %v", detail.Browse, err)
+			}
 		}
 		if len(page.Data) != wantCount {
 			t.Fatalf("owner endpoint count=%d", len(page.Data))

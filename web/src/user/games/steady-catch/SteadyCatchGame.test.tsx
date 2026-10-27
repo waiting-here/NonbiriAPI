@@ -120,8 +120,7 @@ beforeEach(() => {
     throw new Error('Unexpected fixture route: ' + path);
   });
 });
-function mount() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function mount(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(
     <StrictMode>
       <QueryClientProvider client={client}>
@@ -181,6 +180,40 @@ it('starts once under StrictMode and waits for the saved pause before closing a 
   expect(screen.getByRole('button', { name: '暂停游戏' })).toBeEnabled();
   view.unmount();
   await waitFor(() => expect(controls).toEqual(['resume', 'pause', 'resume', 'pause']));
+});
+
+it('keeps a newly paid round when the abandoned round refresh arrives late', async () => {
+  const originalRequest = calls.request.getMockImplementation()!;
+  await originalRequest('/api/games/steady-catch/sessions');
+  authority = { ...authority!, id: 'sc_previous' };
+  let releasePrevious: (() => void) | undefined;
+  calls.request.mockImplementation(async (path: string, options?: { json: Controls }) => {
+    if (path.endsWith('/controls') && options?.json.action === 'abandon') {
+      authority = { ...authority!, status: 'abandoned', terminal_at: 2 };
+      return { data: authority };
+    }
+    if (path.endsWith('/session') && authority?.status === 'abandoned') {
+      const previous = authority;
+      return new Promise((resolve) => {
+        releasePrevious = () => resolve({ data: previous });
+      });
+    }
+    return originalRequest(path, options);
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  mount(client);
+  await act(async () => TestImage.instances.at(-1)!.onload?.());
+  fireEvent.click(await screen.findByRole('button', { name: '重新开一局' }));
+  const dialog = screen.getByRole('dialog', { name: '重新开一局？' });
+  fireEvent.click(dialog.querySelector('button.primary')!);
+  const key = ['user', 'games', 'steadycatch', 'session'];
+  await waitFor(() => expect(client.getQueryData<Session>(key)?.id).toBe('sc_fixture'));
+  expect(releasePrevious).toBeTypeOf('function');
+  await act(async () => releasePrevious!());
+  expect(client.getQueryData<Session>(key)?.id).toBe('sc_fixture');
+  expect(screen.queryByRole('heading', { name: '本局已放弃' })).not.toBeInTheDocument();
+  await waitFor(() => expect(controls).toEqual(['resume']), { timeout: 3500 });
+  expect(screen.getByRole('button', { name: '暂停游戏' })).toBeEnabled();
 });
 
 it('shows the record gain, misses and the golden catch from this round', () => {

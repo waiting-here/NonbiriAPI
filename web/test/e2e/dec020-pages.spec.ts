@@ -1,4 +1,4 @@
-import { numberedResponse } from './numbered-fixtures';
+import { numberedPage, numberedResponse } from './numbered-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
   assertNoSensitiveBrowserPersistence,
@@ -516,6 +516,18 @@ test('user endpoint source wizard submits an immutable mainstream channel select
   };
   let postBody: Record<string, unknown> | null = null;
   let grantBody: Record<string, unknown> | null = null;
+  const grantedKey = {
+    ...endpointKeySummary('41', endpointID),
+    credential_id: credential.id,
+    credential_version: credential.credential_version,
+    native_services: endpoint.native_services,
+    max_concurrency: 0,
+    max_rpm: 0,
+  };
+  await page.route(`${USER_ORIGIN}/api/endpoints/${endpointID}`, async (route) => {
+    expect(route.request().method()).toBe('GET');
+    await route.fulfill({ json: { ...endpoint, key_count: grantBody ? '1' : '0' } });
+  });
   await mockConnectionResources(page, () => (postBody ? [endpoint] : []));
   await mockJson(page, {
     origin: USER_ORIGIN,
@@ -567,20 +579,35 @@ test('user endpoint source wizard submits an immutable mainstream channel select
       body: JSON.stringify(endpoint),
     });
   });
-  await page.route(`${USER_ORIGIN}/api/endpoints/${endpointID}/keys`, async (route) => {
-    expect(route.request().method()).toBe('POST');
-    grantBody = route.request().postDataJSON() as Record<string, unknown>;
-    await route.fulfill({
-      status: 201,
-      json: {
-        ...endpointKeySummary('41', endpointID),
-        credential_id: credential.id,
-        credential_version: credential.credential_version,
-        native_services: endpoint.native_services,
-        max_concurrency: 0,
-        max_rpm: 0,
-      },
-    });
+  await page.route(`${USER_ORIGIN}/api/endpoints/${endpointID}/keys**`, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === 'GET' && url.pathname === `/api/endpoints/${endpointID}/keys`)
+      return route.fulfill({ json: numberedPage(grantBody ? [grantedKey] : [], url.searchParams) });
+    if (
+      request.method() === 'GET' &&
+      url.pathname === `/api/endpoints/${endpointID}/keys/41/models`
+    )
+      return route.fulfill({
+        json: {
+          evidence: {
+            state: 'unknown',
+            revision: '1',
+            result: null,
+            safe_class: 'none',
+            observed_at: null,
+            count: null,
+          },
+          automatic_entries: [],
+          manual_entries: [],
+          next_cursor: null,
+          pagination: numberedPage([], url.searchParams).pagination,
+        },
+      });
+    if (url.pathname !== `/api/endpoints/${endpointID}/keys`) return route.fallback();
+    expect(request.method()).toBe('POST');
+    grantBody = request.postDataJSON() as Record<string, unknown>;
+    return route.fulfill({ status: 201, json: grantedKey });
   });
 
   await page.goto(`${USER_ORIGIN}/endpoints?connection_id=1`);
@@ -588,6 +615,10 @@ test('user endpoint source wizard submits an immutable mainstream channel select
   const wizard = page
     .locator('.nb-expandable-panel')
     .filter({ has: page.getByRole('heading', { name: connectionCopy.addEntry, exact: true }) });
+  await wizard
+    .locator('.nb-fold > summary')
+    .filter({ hasText: userCopy.user.services.advancedSetup })
+    .click();
   const mainstream = wizard.getByRole('radio', { name: connectionCopy.mainstream, exact: true });
   await mainstream.locator('..').click();
   await expect(mainstream).toBeChecked();
@@ -604,9 +635,11 @@ test('user endpoint source wizard submits an immutable mainstream channel select
     .filter({ hasText: credential.note })
     .getByRole('button', { name: connectionCopy.select, exact: true })
     .click();
-  await wizard.getByRole('checkbox', { name: connectionCopy.ownership, exact: true }).check();
+  await expect(
+    wizard.getByText(userCopy.user.services.keyOwnership, { exact: true }),
+  ).toBeVisible();
   await wizard
-    .getByRole('button', { name: userCopy.user.workflows.continueService, exact: true })
+    .getByRole('button', { name: userCopy.user.services.addAndFetch, exact: true })
     .click();
   await expect(
     wizard.getByText(userCopy.user.workflows.serviceReady, { exact: true }),
@@ -625,7 +658,6 @@ test('user endpoint source wizard submits an immutable mainstream channel select
   expect(grantBody).toEqual({
     credential_id: credential.id,
     native_services: ['chat_completions', 'responses', 'decisions', 'embeddings'],
-    discovery_source_id: null,
     note: '',
     enabled: true,
     ownership_confirmed: true,

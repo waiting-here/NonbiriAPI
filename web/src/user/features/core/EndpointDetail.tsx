@@ -46,6 +46,7 @@ import {
   MutationNotice,
   CoreTime,
   SafeCopyValue,
+  StatusPill,
 } from './components';
 import { useCoreCopy } from './copy';
 import { useQuickstartCopy } from './quickstartCopy';
@@ -1793,6 +1794,15 @@ export function EndpointDetail({
                 {endpoint.data.origin.kind === 'mainstream'
                   ? t('endpoints.originMainstream', { name: endpoint.data.origin.name })
                   : t('endpoints.originCustom')}
+                {endpoint.data.browse?.mainstream_categories?.length ? (
+                  <div className="core-resource-summary">
+                    {endpoint.data.browse.mainstream_categories.map((category) => (
+                      <StatusPill key={category} tone="success">
+                        {t(`endpoints.category.${category}`)}
+                      </StatusPill>
+                    ))}
+                  </div>
+                ) : null}
               </dd>
             </div>
             <div>

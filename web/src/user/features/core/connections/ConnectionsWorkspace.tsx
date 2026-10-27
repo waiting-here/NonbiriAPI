@@ -7,7 +7,7 @@ import { PageHeader } from '@shared/components/States';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import { Field, Fold, Note } from '@shared/components/ui';
 import { PagePagination } from '@shared/operations/PagePagination';
-import { usePagePager } from '@shared/operations/usePagePager';
+import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { EndpointDetail } from '../EndpointDetail';
 import { getEndpoint } from '../api';
 import { coreKeys } from '../queries';
@@ -35,7 +35,8 @@ function clearDetailScope(params: URLSearchParams) {
   ])
     params.delete(field);
   for (const field of [...params.keys()])
-    if (/^(keys_|manual_|routes_|impact_|source_models_)/.test(field)) params.delete(field);
+    if (/^(keys_|manual_|routes_|impact_|source_models_|service-endpoint-switch_)/.test(field))
+      params.delete(field);
 }
 function connectionURL(search: string, id: string) {
   const next = new URLSearchParams(search);
@@ -260,10 +261,12 @@ function ConnectionEndpoints({
   const [modelsLocked, setModelsLocked] = useState(false);
   const { t } = useTranslation();
   const [params, setParams] = useSearchState();
-  const pager = usePagePager({
+  const pager = useUrlPagePager({
     station: 'user',
     listType: 'service-endpoint-switch',
     scopeKey: accountId + ':' + connectionId,
+    pageParam: 'service-endpoint-switch_page',
+    pageSizeParam: 'service-endpoint-switch_page_size',
   });
   const query = useQuery({
     queryKey: [
@@ -307,6 +310,8 @@ function ConnectionEndpoints({
                         next.set('endpoint_id', event.target.value);
                         next.delete('key_id');
                         next.delete('focus_key_id');
+                        for (const field of [...next.keys()])
+                          if (/^(keys_|manual_|routes_)/.test(field)) next.delete(field);
                         return next;
                       })
                     }
