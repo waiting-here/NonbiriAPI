@@ -1398,7 +1398,6 @@ function EndpointKeyCard({
                   accountId={accountId}
                   entry={endpoint}
                   entryKey={keyData}
-                  autoRefresh={keyData.browse?.discovery.state === 'unknown'}
                 />
                 <KeyBrowseSummary
                   accountId={accountId}

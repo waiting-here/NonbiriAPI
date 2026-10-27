@@ -695,16 +695,15 @@ test('matching presets remain suggestions until an entry is explicitly selected'
     expect(await donations()).toEqual(beforeDonations);
     expect(selectedKeyId).toMatch(/^[1-9][0-9]*$/);
     await expect
-      .poll(() => writes.filter((write) => write.endsWith('/models/refresh')).length)
-      .toBe(1);
-    expect(writes).toEqual([
-      'POST /api/endpoints',
-      'POST /api/connections/' + connection.id + '/credentials',
-      'POST /api/endpoints/' + custom.id + '/keys',
-      'POST /api/endpoints',
-      'POST /api/endpoints/' + selected.id + '/keys',
-      'POST /api/endpoints/' + selected.id + '/keys/' + selectedKeyId + '/models/refresh',
-    ]);
+      .poll(() => writes)
+      .toEqual([
+        'POST /api/endpoints',
+        'POST /api/connections/' + connection.id + '/credentials',
+        'POST /api/endpoints/' + custom.id + '/keys',
+        'POST /api/endpoints',
+        'POST /api/endpoints/' + selected.id + '/keys',
+        'POST /api/endpoints/' + selected.id + '/keys/' + selectedKeyId + '/models/refresh',
+      ]);
   } finally {
     await owner.close();
     await manager.close();
