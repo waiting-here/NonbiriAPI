@@ -20,7 +20,7 @@ import { EmptyState, ErrorState, LoadingState, PageHeader, SectionHead } from '.
 import { StewardPermissionNotice } from './StewardPermissionNotice';
 import { Button, DataTable, Field, FilterBar, Fold, Note, Panel, PanelBody } from './ui';
 import { EndpointTagRules } from './EndpointTagRules';
-import { endpointTagKeys } from './endpointTagLabels';
+import { endpointTagBadgeClass, endpointTagKeys } from './endpointTagLabels';
 import './EndpointManagement.css';
 
 type Props = {
@@ -484,7 +484,7 @@ export function EndpointManagement({
                       <div className="endpoint-tag-badges">
                         {group.tags.length
                           ? group.tags.map((value) => (
-                              <span className="nb-badge" key={value}>
+                              <span className={endpointTagBadgeClass(value)} key={value}>
                                 {endpointTagKeys[value as keyof typeof endpointTagKeys]
                                   ? t(endpointTagKeys[value as keyof typeof endpointTagKeys])
                                   : value}

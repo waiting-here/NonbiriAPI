@@ -37,6 +37,22 @@
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
+.gacha-stats-rarity[data-rarity='R'] {
+  color: var(--nb-color-info);
+  background: var(--nb-color-info-soft);
+}
+.gacha-stats-rarity[data-rarity='SR'] {
+  color: var(--nb-color-violet);
+  background: var(--nb-color-violet-soft);
+}
+.gacha-stats-rarity[data-rarity='SSR'] {
+  color: var(--nb-color-warning);
+  background: var(--nb-color-warning-soft);
+}
+.gacha-stats-rarity[data-rarity='SP'] {
+  color: var(--nb-color-rose);
+  background: var(--nb-color-rose-soft);
+}
 .gacha-stats-count-group {
   white-space: nowrap;
 }

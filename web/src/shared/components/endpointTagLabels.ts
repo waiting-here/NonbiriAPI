@@ -9,3 +9,18 @@ export const endpointTagKeys = {
   mysterious: 'management.endpoints.tag.mysterious',
   other_third_party: 'management.endpoints.tag.other_third_party',
 } as const;
+
+const endpointTagTones: Record<string, string> = {
+  abusive_third_party: 'bad',
+  community_charity: 'ok',
+  noncommercial_gateway: 'teal',
+  user_gateway: 'info',
+  steward_gateway: 'violet',
+  mainstream: 'warn',
+  mysterious: 'rose',
+};
+
+export function endpointTagBadgeClass(tag: string): string {
+  const tone = endpointTagTones[tag];
+  return tone ? `nb-badge nb-badge--${tone}` : 'nb-badge';
+}

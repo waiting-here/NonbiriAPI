@@ -343,6 +343,18 @@
   background: var(--nb-color-info-soft);
   color: var(--nb-color-info);
 }
+.nb-badge--violet {
+  background: var(--nb-color-violet-soft);
+  color: var(--nb-color-violet);
+}
+.nb-badge--teal {
+  background: var(--nb-color-teal-soft);
+  color: var(--nb-color-teal);
+}
+.nb-badge--rose {
+  background: var(--nb-color-rose-soft);
+  color: var(--nb-color-rose);
+}
 .nb-badge--plain::before {
   display: none;
 }
