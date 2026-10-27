@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage services, endpoints and service-scoped API keys, maintain model lists per endpoint/key pair, and configure personal or shared charity routing. Revocable CallerKeys authenticate gateway calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.3.0** simplifies service setup and personal model binding, isolates keys by service, and improves both stations, card artwork and request diagnostics. Existing databases require an explicit upgrade to schema 40. GitHub Releases provide source code; build instructions are below. Version history is in [CHANGELOG](CHANGELOG.md).
+**v1.3.1 (unreleased)** adds Responses and ChatGPT assistant sources, personal memories and separate management operation records. Existing databases require an explicit upgrade to schema 41; account export remains format 31. GitHub Releases provide source code; build instructions are below. Version history is in [CHANGELOG](CHANGELOG.md).
 
 ## Architecture
 
@@ -15,6 +15,8 @@ with batched candidate and success-rate queries. Personal model lists use the
 same bounded read pool. There is no complete-list cache or TTL; caller identity,
 level, donation ownership and current quotas still affect the result. See
 [database access](docs/database-access.md) and [runtime metrics](docs/deployment.md).
+Availability counts each binding once and stops at its first eligible target,
+avoiding repeated permission and quota checks for equivalent targets.
 
 Lake Notes checkpoints reuse authoritative values within their transaction, and
 activity event snapshots use the existing read pool. Revision, replay and lease
@@ -175,25 +177,67 @@ Inspecting loaded egress routes requires the separate egress-read permission. [G
 covers AI Studio and Vertex AI's OpenAI-compatible Chat endpoints.
 
 The experimental [management assistant](docs/api-contract.md#78-experimental-ai-assistant)
-uses a dedicated encrypted Chat Completions key. [Built-in presets](docs/ai-agent-presets.md)
-provide editable messages, initial shared memories and tool descriptions. Chat
-is closed by default and requires a configured endpoint, key and model. Each authorized operator has one
-conversation, with editable context, retained originals and context compaction.
-In conversation mode, business and memory changes require approval of an exact
-plan; all operations
-recheck current authority and commit together or all roll back.
+supports Chat Completions APIs, external Responses APIs and a connected ChatGPT
+account. Administrators configure a default source, purpose overrides and individual
+steward overrides; removing an override restores inheritance. Source selection
+does not change the operator's permissions, and failures never silently switch to
+another source. Existing API settings remain usable. Local context and response
+reserve budgets are separate from an upstream output cap.
+
+To connect ChatGPT, download an instance target in administrator AI settings,
+then run this repository's helper on the computer with your browser:
+
+```sh
+go build -o nonbiri-chatgpt-login ./cmd/nonbiri-chatgpt-login
+./nonbiri-chatgpt-login --target instance-target.json --output connection.json
+```
+
+On Windows, use `nonbiri-chatgpt-login.exe`. Open the printed link, authorize
+NonbiriAPI, then import the encrypted `connection.json` into the same instance
+over HTTPS and delete the transfer file. Keep the local host-ID file; choose a
+new output filename on another attempt. One ChatGPT connection serves the
+instance, with request-triggered token refresh and account-specific model
+discovery. Availability depends on the account and current preview policy.
+Connection status shows update and token-expiry times. Remaining
+account quota and reset time are unavailable through the public API; use
+[ChatGPT usage settings](https://chatgpt.com/settings/usage). Local 24-hour usage
+counts only retained completed ChatGPT requests, including earlier connections,
+and decreases when those details are cleared. See the [connection guide](docs/chatgpt-agent.md)
+and OpenAI's [self-hosted instructions](https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms)
+and [preview limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations).
+
+[Built-in presets](docs/ai-agent-presets.md) provide editable messages, memories
+and tool descriptions. Default chat messages include `{{interlocutor}}` and
+`{{personal_memory}}`; existing custom templates stay unchanged. Chat remains off
+by default. Each authorized operator has
+one conversation with editable context and compaction. Shared chat and review
+memories are editable only by administrators; personal memory is maintained by
+its authorized interlocutor and administrators. It remains available to administrators after
+account deletion and is excluded from ordinary personal exports. Conversation
+changes require approval of an exact plan, recheck current authority and versions,
+then commit together or roll back.
 
 Automatic review is separate and off by default. Preview saves advice; automatic
 mode can approve and bind existing charity models atomically after deterministic
 rules have run. It handles only new or modified pending submissions, with no
 backlog scan or manual enqueue. Each actual model HTTP call joins the shared FIFO
 queue and counts against global limits, without personal RPM or credit charges.
+Automatic reviews record the administrator who authorized their configuration.
 
-Administrators can inspect complete assistant request/response logs and manually
-clean a fixed selection. These logs have no automatic expiry. Conversations,
-memories and token statistics remain independent administrator assets; automatic
-review evidence follows the associated donation lifecycle. Ordinary request logs
-keep their existing content and retention boundary.
+Administrators can inspect full assistant request/response logs and clear a
+confirmed selection. Conversations, memories and cumulative token statistics
+remain independent administrator assets; review evidence follows the donation
+lifecycle. Ordinary request logs retain their existing rules.
+
+Separate management records cover writes from the upgrade onward, with success,
+failure, refusal and partial or unchanged outcomes. They distinguish browser
+actions, CallerKey automation, mainstream rules, automatic AI reviews and approved
+AI plans, retaining actor and authorizer snapshots, safe targets and results.
+Ordinary reads are excluded. Administrators can search grouped summaries and
+paged details and clear a filter, time range or all retained records through a
+resumable batch job. Records have no automatic expiry, survive account/resource
+deletion and are excluded from personal exports. Cleanup retains its own summary
+and records created after its cutoff.
 
 ## Build and develop
 
@@ -211,10 +255,10 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 40.
+Fresh databases start in maintenance with public features closed and use schema 41.
 The service opens only the exact current schema; older, newer, unknown or
 incomplete storage is rejected before migration, repair or recovery writes.
-For exact registered schema 16–26 and 33–39 sources, preserve a complete recovery
+For exact registered schema 16–26 and 33–40 sources, preserve a complete recovery
 set before deliberately running the matching standalone
 [upgrader](cmd/nonbiri-upgrade-v1/README.md) with `--check` or `--apply`.
 The service, startup scripts and deployment helpers must not apply upgrades
