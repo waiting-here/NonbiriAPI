@@ -21,6 +21,7 @@ import {
   type TemplateMessage,
 } from './api';
 import { AgentError } from './AgentParts';
+import { DriverPanel } from './DriverPanel';
 
 const toolLabels: Record<string, string> = {
   donations: 'common.agent.tools.donations',
@@ -763,6 +764,7 @@ export function AdminSettings({ account, active }: { account: string; active: bo
   });
   return (
     <div className="nb-stack">
+      <DriverPanel key={account} account={account} active={active} />
       {driver.isPending ? (
         <LoadingState />
       ) : driver.error ? (
