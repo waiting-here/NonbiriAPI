@@ -489,6 +489,14 @@ on deletion, without subtracting from aggregates. A new registration is a new
 participant; no deleted account identifier or hash is retained for these counts.
 Neither aggregate nor deduplication tables enter personal account exports.
 
+`gacha_shop_statistics` and `gacha_shop_card_statistics` separately retain lifetime
+card redemption and participant counts, without account identities. Only actual
+card grants enter these counters. `gacha_shop_participants` records the minimal
+active-account membership needed for the shop's distinct participant count and
+cascades on account deletion. Existing unique card claims already prevent repeat
+card redemption per account. Deletion does not reduce accumulated shop totals;
+none of these three tables enters personal exports.
+
 `gacha_operations` retains the activity balance journal and durable idempotency receipt independently of draw details. Exports omit request/key hashes. Account deletion clears user links and retry hashes while preserving de-identified balance facts and credit-operation links. Credit entries follow their existing 30-day compaction policy; referenced compacted operations keep only minimal headers.
 
 `gacha_settings`, `gacha_pools` and `gacha_presets` are administrator configuration. `gacha_config_events` preserves revisions and clears deleted actor links. Public state omits drafts. Configuration history also determines whether limited-card themes have ever opened; the entry display switch is stored in the existing settings JSON. The activity collects no device identifiers, IP addresses, prompts, upstream keys or private image uploads.

@@ -1231,7 +1231,7 @@
       "redemptions": "Cards redeemed",
       "metricHelp": "Only completed card redemptions count. Ticket purchases and bundles are excluded. Each account can redeem a card once under the current shop rule.",
       "noRedemptions": "No cards have been redeemed from the shop yet.",
-      "fullShopData": "Charts and CSV/JSON downloads cover the whole shop, independently of the table search and page.",
+      "fullShopData": "Charts and CSV/JSON downloads cover all shop card redemptions, independently of the table search and page.",
       "rarityChart": "Redemptions by rarity",
       "topCardsChart": "Most-redeemed cards",
       "cardsTitle": "Card redemption counts",

@@ -1,4 +1,4 @@
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { expect, test, type Page } from './test';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
@@ -64,7 +64,7 @@ async function setup(page: Page, theme: string, locale: 'en' | 'zh' = 'en', fail
     }),
   );
   const requests: URL[] = [];
-  let failed = false;
+  let failures = 0;
   await page.route('**/admin/api/gacha/statistics/**', async (route) => {
     const url = new URL(route.request().url());
     requests.push(url);
@@ -91,41 +91,9 @@ async function setup(page: Page, theme: string, locale: 'en' | 'zh' = 'en', fail
     const rarities = removed
       ? [{ rarity: null, count: '0', first_acquisition_count: '0' }]
       : exportRarities;
-    if (url.pathname.endsWith('/export')) {
-      expect([...url.searchParams.keys()]).toEqual(['format']);
-      if (url.searchParams.get('format') === 'csv') {
-        const csv = [
-          'pool_id,pool_name,total_draws,pool_participant_count,card_id,name,name_en,rarity,count,participant_count,first_acquisition_count',
-          ...all.map((card) =>
-            [
-              pool.id,
-              pool.name,
-              pool.total_draws,
-              pool.participant_count,
-              card.card_id,
-              card.name,
-              card.name_en,
-              card.rarity ?? '',
-              card.count,
-              card.participant_count,
-              card.first_acquisition_count,
-            ].join(','),
-          ),
-        ].join('\n');
-        return route.fulfill({
-          body: csv,
-          contentType: 'text/csv;charset=utf-8',
-          headers: { 'Content-Disposition': 'attachment; filename="pool.csv"' },
-        });
-      }
-      return route.fulfill({
-        json: { pool, cards: all, rarity_totals: rarities },
-        headers: { 'Content-Disposition': 'attachment; filename="pool.json"' },
-      });
-    }
     if (url.pathname.endsWith('/cards')) {
-      if (failCards && !failed) {
-        failed = true;
+      // Exhaust the shared query client's automatic retry before testing manual retry.
+      if (failCards && failures++ < 2) {
         return route.fulfill({
           status: 503,
           json: { error: { code: 'internal_error', message: 'Statistics unavailable' } },
@@ -204,16 +172,16 @@ for (const theme of ['light', 'dark'])
             .getByRole('table', { name: copy.cardsTitle, exact: true })
             .getByText('Silver moon', { exact: true }),
         ).toBeVisible();
-        const jsonWait = page.waitForEvent('download');
-        await details.getByRole('link', { name: copy.downloadJSON, exact: true }).click();
-        const jsonFile = await jsonWait;
-        const raw = JSON.parse(await readFile((await jsonFile.path())!, 'utf8'));
-        expect(raw.pool.total_draws).toBe(hugeTotal);
-        expect(raw.cards).toHaveLength(32);
-        expect(raw.cards.at(-1).card_id).toBe('card-32');
-        const csvWait = page.waitForEvent('download');
-        await details.getByRole('link', { name: copy.downloadCSV, exact: true }).click();
-        expect(await readFile((await (await csvWait).path())!, 'utf8')).toContain('card-32');
+        // Native attachment responses are exercised against the real backend in audit.
+        // Here, verify that table filtering never enters either complete export URL.
+        for (const [format, label] of [
+          ['json', copy.downloadJSON],
+          ['csv', copy.downloadCSV],
+        ])
+          await expect(details.getByRole('link', { name: label, exact: true })).toHaveAttribute(
+            'href',
+            '/admin/api/gacha/statistics/pools/permanent/export?format=' + format,
+          );
         const svgWait = page.waitForEvent('download');
         await details.getByRole('button', { name: copy.downloadSVG, exact: true }).last().click();
         const svg = await readFile((await (await svgWait).path())!, 'utf8');
@@ -245,6 +213,11 @@ for (const theme of ['light', 'dark'])
         const png = await readFile((await (await pngWait).path())!);
         expect(png.readUInt32BE(16)).toBe(1600);
         expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+        if (process.env.NONBIRI_VISUAL_DIR) {
+          const prefix = resolve(process.env.NONBIRI_VISUAL_DIR, 'export-' + theme + '-' + width);
+          await writeFile(prefix + '.svg', svg);
+          await writeFile(prefix + '.png', png);
+        }
         guard.assertNone();
       },
     );
@@ -259,6 +232,16 @@ test('administrator statistics retry and removed zero pool are readable in Chine
   await capture(page, 'gacha-statistics-error-zh');
   await details.getByRole('button', { name: '重试', exact: true }).click();
   await expect(details.getByRole('table', { name: copy.cardsTitle, exact: true })).toBeVisible();
+  for (const [extension, label] of [
+    ['svg', copy.downloadSVG],
+    ['png', copy.downloadPNG],
+  ]) {
+    const pending = page.waitForEvent('download');
+    await details.getByRole('button', { name: label, exact: true }).last().click();
+    const file = await pending;
+    if (process.env.NONBIRI_VISUAL_DIR)
+      await file.saveAs(resolve(process.env.NONBIRI_VISUAL_DIR, 'export-zh.' + extension));
+  }
   const pools = page.getByRole('table', { name: copy.poolsTitle, exact: true });
   await pools
     .getByRole('row')

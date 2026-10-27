@@ -150,6 +150,22 @@ positions and percentages are display calculations. Aggregate statistics persist
 when draw details expire, an account is deleted or a pool configuration is removed.
 Downloads and administrator statistics contain no participant identities.
 
+## Mystery-shop card statistics
+
+The administrator's shop statistics count successful card redemptions across
+the permanent, limited and shop-only card selections. The dashboard shows
+redeemed card quantities, distinct redeeming accounts, rarity distribution and
+the most redeemed cards, with searchable, sortable card details. Ticket purchases,
+daily ticket bundles, shard-to-ticket exchanges, draws and rewards are excluded.
+Under the shop's ownership rule, an account can redeem each card once; each
+successful card redemption is a first acquisition.
+
+Shop counts use their own lifetime aggregates and do not add to pool draw totals.
+The card grant, shard debit and counts commit together; failed or replayed
+requests do not add counts. Deleting an account removes its participation
+association without subtracting accumulated totals. CSV/JSON downloads contain
+the full shop card statistics, and charts support PNG/SVG downloads.
+
 ## Site appearance
 
 Obtaining an SP card by drawing, shop redemption or an administrator reward immediately unlocks its matching appearance. It remains available after the pool ends. The site does not select it automatically: choose **Appearance** in the user site and apply an unlocked design. The existing light, dark or system preference chooses its matching palette and background. Each design preserves page layout and provides responsive background cropping; game scenes retain their own style.
@@ -184,6 +200,8 @@ These routes use station sessions and existing same-origin checks; they are not 
 | GET | `/admin/api/gacha/statistics/pools` | Pool totals and distinct participants, numbered pagination |
 | GET | `/admin/api/gacha/statistics/pools/{id}/cards` | Per-card counts, first acquisitions and whole-pool chart summaries |
 | GET | `/admin/api/gacha/statistics/pools/{id}/export?format=json\|csv` | Complete selected-pool aggregate download |
+| GET | `/admin/api/gacha/statistics/shop/cards` | Shop card quantities, distinct participants and chart summaries |
+| GET | `/admin/api/gacha/statistics/shop/export?format=json\|csv` | Complete shop-card aggregate download |
 | POST | `/admin/api/gacha` | Save settings, a pool or a template |
 
 Themes consisting entirely of limited cards stay hidden until a pool containing their cards has opened. Past openings continue to count after a pool ends or is paused; already owned cards remain visible. Scheduled pools paused before opening do not reveal their themes.

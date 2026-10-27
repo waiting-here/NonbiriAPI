@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
+  Button,
   DataTable,
   Field,
   FilterBar,
@@ -101,6 +102,9 @@ export function GachaShopStatistics({ accountKey }: { accountKey: string }) {
           description={t('admin.gachaShopStats.description')}
           actions={
             <div className="nb-actions">
+              <Button onClick={() => void query.refetch()} disabled={query.isFetching}>
+                {t('admin.gachaStats.refresh')}
+              </Button>
               <a
                 className="nb-btn nb-btn--secondary"
                 href={shopStatisticsExportURL('csv')}

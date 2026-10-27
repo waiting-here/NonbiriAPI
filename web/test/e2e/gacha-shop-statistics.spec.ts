@@ -67,45 +67,15 @@ async function setup(
     }),
   );
   const requests: URL[] = [];
-  let failed = false;
+  let failures = 0;
   await page.route('**/admin/api/gacha/statistics/shop/**', (route) => {
     const url = new URL(route.request().url());
     requests.push(url);
     const cards = mode === 'empty' ? [] : exportCards;
     const totals = mode === 'empty' ? { total_redemptions: '0', participant_count: '0' } : summary;
     const rarity_totals = mode === 'empty' ? [] : rarities;
-    if (url.pathname.endsWith('/export')) {
-      expect([...url.searchParams.keys()]).toEqual(['format']);
-      if (url.searchParams.get('format') === 'csv') {
-        const csv = [
-          'total_redemptions,shop_participant_count,card_id,name,name_en,rarity,count,participant_count,first_acquisition_count',
-          ...cards.map((card) =>
-            [
-              totals.total_redemptions,
-              totals.participant_count,
-              card.card_id,
-              card.name,
-              card.name_en,
-              card.rarity ?? '',
-              card.count,
-              card.participant_count,
-              card.first_acquisition_count,
-            ].join(','),
-          ),
-        ].join('\n');
-        return route.fulfill({
-          body: csv,
-          contentType: 'text/csv;charset=utf-8',
-          headers: { 'Content-Disposition': 'attachment; filename="shop.csv"' },
-        });
-      }
-      return route.fulfill({
-        json: { summary: totals, cards, rarity_totals },
-        headers: { 'Content-Disposition': 'attachment; filename="shop.json"' },
-      });
-    }
-    if (mode === 'fail' && !failed) {
-      failed = true;
+    // Exhaust the shared query client's automatic retry before testing manual retry.
+    if (mode === 'fail' && failures++ < 2) {
       return route.fulfill({
         status: 503,
         json: { error: { code: 'internal_error', message: 'Shop statistics unavailable' } },
@@ -194,31 +164,15 @@ for (const theme of ['light', 'dark'])
           ),
         )
         .toBe(true);
-      const raw = JSON.parse(
-        (
-          await download(
-            page,
-            () => panel.getByRole('link', { name: common.downloadJSON, exact: true }).click(),
-            prefix + '.json',
-          )
-        ).toString('utf8'),
-      );
-      expect(raw.summary).toEqual(summary);
-      expect(raw).not.toHaveProperty('pool');
-      expect(raw.cards).toHaveLength(32);
-      expect(raw.cards.at(-1).card_id).toBe('historical-card');
-      expect(raw.cards[0].count).toBe(firstCount);
-      const csv = (
-        await download(
-          page,
-          () => panel.getByRole('link', { name: common.downloadCSV, exact: true }).click(),
-          prefix + '.csv',
-        )
-      ).toString('utf8');
-      expect(csv).toContain('historical-card');
-      expect(csv.split('\n')[0]).toBe(
-        'total_redemptions,shop_participant_count,card_id,name,name_en,rarity,count,participant_count,first_acquisition_count',
-      );
+      // Real attachment responses and complete rows are covered by the audit fixture.
+      for (const [format, label] of [
+        ['json', common.downloadJSON],
+        ['csv', common.downloadCSV],
+      ])
+        await expect(panel.getByRole('link', { name: label, exact: true })).toHaveAttribute(
+          'href',
+          '/admin/api/gacha/statistics/shop/export?format=' + format,
+        );
       const svg = (
         await download(
           page,

@@ -2229,6 +2229,25 @@ detail retention and account deletion. They expose no participant identities and
 do not enter personal exports. Stewards and ordinary users cannot read or export
 them. Detached pool IDs retain their separate period and cannot be reused.
 
+Mystery-shop card statistics use independent administrator-only GET routes:
+
+- `/admin/api/gacha/statistics/shop/cards` accepts numbered pagination, `q`
+  and `sort=count|rarity|name`. It returns
+  `{summary,items,pagination,rarity_totals,top_cards}`; `summary` contains exact
+  decimal-string `total_redemptions` and `participant_count`. Card and chart
+  rows use the same fields as pool statistics. The shop rejects already-owned
+  or previously-redeemed cards, so each card's quantity, participant count and
+  first-acquisition count are equal under the current redemption rules.
+- `/admin/api/gacha/statistics/shop/export?format=json|csv` downloads complete
+  shop-card statistics independently of table filters/pages. JSON contains
+  `{summary,rarity_totals,cards}`; CSV contains summary and card fields without
+  pool columns. Charts always describe the whole shop card dataset.
+
+Only successful card redemptions contribute. Ticket purchases, daily bundles,
+shard-to-ticket exchanges, draws, codes and site-wide rewards do not contribute.
+Shop and pool counters are separate, with the same atomic-write, exact-count,
+administrator-only and lifetime aggregate semantics.
+
 `redeem` accepts `product=bulk-permanent|bulk-limited` with the current shop
 `revision`. Each grants ten tickets for 10,000 credits total, using game credits
 first, once per product per user per site-calendar day. Debit, grant and purchase

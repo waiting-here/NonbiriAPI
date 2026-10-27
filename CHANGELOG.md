@@ -4,7 +4,7 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## 1.3.0 — Unreleased
+## 1.3.0 — 2026-10-27
 
 ### Service and model workflows
 
@@ -24,6 +24,9 @@ Each version entry describes its source and compatibility boundary; a release ta
   period: draws, distinct participants, per-card copies and first acquisitions,
   with charts and complete CSV/JSON and PNG/SVG downloads. Existing draw records
   are incorporated by the explicit database upgrade.
+- Track mystery-shop card redemptions separately, with lifetime quantities,
+  distinct participants, per-card analysis and full data/chart downloads. Ticket
+  purchases and exchanges are excluded.
 - Present sign-in, OAuth and browser navigation failures as responsive pages
   with clear recovery actions, language and theme preferences. API clients,
   fetch requests and public inference retain their JSON errors and HTTP status.

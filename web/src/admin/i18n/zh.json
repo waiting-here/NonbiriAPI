@@ -1231,7 +1231,7 @@
       "redemptions": "兑换数量",
       "metricHelp": "只统计已完成的卡牌兑换，不含抽奖券购买和券包。按当前商店规则，每个账户只能兑换同一张卡一次。",
       "noRedemptions": "商店暂时还没有已完成的卡牌兑换。",
-      "fullShopData": "图表与 CSV／JSON 下载覆盖整店数据，不受下方表格搜索和分页影响。",
+      "fullShopData": "图表与 CSV／JSON 下载覆盖全部商店卡牌兑换数据，不受下方表格搜索和分页影响。",
       "rarityChart": "按稀有度统计兑换",
       "topCardsChart": "兑换最多的卡牌",
       "cardsTitle": "卡牌兑换明细",

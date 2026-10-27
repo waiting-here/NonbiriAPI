@@ -79,6 +79,18 @@ export function GachaStatisticsChart({
     const labels = rows.map((row) =>
       [...row.label].length > 22 ? [...row.label].slice(0, 21).join('') + '…' : row.label,
     );
+    const labelFont = '12px ' + getComputedStyle(element).fontFamily;
+    const measure = (value: string) => {
+      context.font = labelFont;
+      return context.measureText(value).width;
+    };
+    // Keep exact values in tooltips, the data table and downloads. A count that
+    // cannot fit beside a bar must not run outside the canvas on small screens.
+    const valueLabels = rows.map((row) => {
+      const value = formatCompact(row.count).display;
+      return measure(value) <= 84 ? value : '';
+    });
+    const valueSpace = Math.max(0, ...valueLabels.map(measure)) + 16;
     const config: ChartConfiguration<'bar'> = {
       type: 'bar',
       data: {
@@ -98,7 +110,7 @@ export function GachaStatisticsChart({
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        layout: { padding: { right: 92 } },
+        layout: { padding: { right: valueSpace } },
         color: colors.foreground,
         interaction: { mode: 'nearest', intersect: false },
         plugins: {
@@ -119,7 +131,17 @@ export function GachaStatisticsChart({
         scales: {
           y: {
             grid: { display: false },
-            ticks: { color: colors.foreground, font: { size: 12 } },
+            ticks: {
+              color: colors.foreground,
+              font: { size: 12 },
+              callback: function (value) {
+                const label = labels[Number(value)] ?? '';
+                const limit = Math.max(40, this.chart.width * 0.36 - 16);
+                const parts = [...label];
+                while (parts.length > 1 && measure(parts.join('')) > limit) parts.pop();
+                return parts.length < [...label].length ? parts.join('') + '…' : label;
+              },
+            },
             border: { display: false },
           },
           x: {
@@ -129,13 +151,18 @@ export function GachaStatisticsChart({
             grid: { color: colors.border },
             ticks: {
               color: colors.muted,
-              maxTicksLimit: 4,
-              callback: (value) =>
-                maximum === 0n
-                  ? Number(value) === 0
-                    ? '0'
-                    : ''
-                  : formatCompact(countAtRatio(Number(value), maximum)).display,
+              maxTicksLimit: 3,
+              maxRotation: 0,
+              minRotation: 0,
+              callback: function (value) {
+                const label =
+                  maximum === 0n
+                    ? Number(value) === 0
+                      ? '0'
+                      : ''
+                    : formatCompact(countAtRatio(Number(value), maximum)).display;
+                return measure(label) <= Math.max(24, this.width / 3 - 8) ? label : '';
+              },
             },
           },
         },
@@ -158,11 +185,11 @@ export function GachaStatisticsChart({
             const ctx = chart.ctx;
             ctx.save();
             ctx.fillStyle = colors.foreground;
-            ctx.font = '12px ' + getComputedStyle(element).fontFamily;
+            ctx.font = labelFont;
             ctx.textBaseline = 'middle';
             chart.getDatasetMeta(0).data.forEach((bar, index) => {
               const position = bar as BarElement;
-              ctx.fillText(formatCompact(rows[index]!.count).display, position.x + 8, position.y);
+              ctx.fillText(valueLabels[index]!, position.x + 8, position.y);
             });
             ctx.restore();
           },
