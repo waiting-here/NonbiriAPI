@@ -1,8 +1,8 @@
 # NonbiriAPI HTTP API Contract
 
-Service connection, shared credential, discovery-source and per-service donation semantics are described in [service connections](service-connections.md). Existing endpoint and single-target clients retain their original explicit scope.
+Service, endpoint, service-owned key, model-list and donation semantics are described in [service connections](service-connections.md). Existing endpoint and single-target clients retain their original explicit scope.
 
-- Status: **v1.2.1 source contract**. Check an instance's deployed build before using routes or configuration added by an update.
+- Status: **v1.3.0 source contract**. Check an instance's deployed build before using routes or configuration added by an update.
 - Scope: model discovery and direct HTTP/SSE text, image, audio, embedding, moderation, rerank, Decisions and System One inference. See the [operation and connector matrix](direct-inference.md) for exact paths, conversion limits and the excluded persistent/realtime APIs. There is no Anthropic-native public ingress.
 - Authority: this document reflects the current source route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically. The session-authenticated picture-book activity has its own configuration and accounting, separate from the public image-generation model route.
 - Release boundary: new source behavior is listed in the [changelog](../CHANGELOG.md). This document does not assert that an instance has deployed it.
@@ -98,6 +98,16 @@ Session, administrator and steward automation routes have no cross-origin permis
 Shared numbered-page metadata is `{page:string,page_size:number,total_items:string,total_pages:string}`. `page`, `total_items`, and `total_pages` use exact canonical decimal strings; only `total_items` may be zero. Nested `attempt_pagination` and `materials_pagination` use the same shape. Credit history retains its separately documented top-level pagination envelope.
 
 ### 1.3 Error envelope
+
+API clients receive the JSON envelope below. Browser document navigation that
+explicitly prefers HTML receives a localized error page with safe recovery
+links and the same HTTP status. This includes sign-in and OAuth callback
+failures, session requirements and station navigation errors. Fetch/XHR,
+non-document resources and JSON-preferred requests retain their existing
+responses; `/v1` inference errors always remain machine-readable. Error pages
+do not reflect OAuth codes, state, provider descriptions or callback query
+strings. Both presentations retain `Cache-Control: no-store` and relevant
+`Retry-After` or `Allow` headers.
 
 ```json
 {
@@ -2189,6 +2199,35 @@ Bidding Duel adds session-authenticated AI offers, preferences and unpaid admiss
 ## Collectible-card activity
 
 The session-authenticated card activity uses `/api/gacha/state`, `/api/gacha/history` and `/api/gacha/actions`; administrator configuration uses `/admin/api/gacha`. User site cosmetics use `GET/POST /api/appearance` and server-validated collection unlocks. See [The Gacha Simulator](gacha.md#records-and-http-access) for transaction, retry, revision and retention semantics.
+
+Administrator pool statistics use three session-only GET routes:
+
+- `/admin/api/gacha/statistics/pools` accepts numbered `page`/`page_size`, `q`
+  (at most 128 characters) and `sort=recent|draws`; it returns `{items,pagination}`.
+  Permanent comes first. Each pool has `id`, `name`, `name_en`, `kind`, nullable
+  `starts_at`/`ends_at`, `total_draws`, `participant_count` and `available`.
+  `available` means its configuration still exists, not that the pool is open.
+- `/admin/api/gacha/statistics/pools/{id}/cards` accepts numbered pagination,
+  `q` and `sort=count|rarity|name`; it returns
+  `{pool,items,pagination,rarity_totals,top_cards}`. Card fields are `card_id`,
+  `name`, `name_en`, nullable `rarity`, `count`, `participant_count` and
+  `first_acquisition_count`. The two chart summaries always describe the whole
+  pool: rarity rows contain `rarity`, `count`, `first_acquisition_count`; top
+  cards are at most ten nonzero card rows. Table filtering does not change them.
+- `/admin/api/gacha/statistics/pools/{id}/export?format=json|csv` downloads one
+  complete authorized read snapshot, without search or page parameters. JSON
+  contains `{pool,rarity_totals,cards}`. CSV repeats pool ID/name, total draws and
+  participant count alongside each card's safe fields; formula prefixes are
+  escaped. An output failure after streaming begins aborts the response.
+
+Counts are exact canonical decimal strings. Every successful draw, including
+duplicates, counts once; a ten-pull adds ten. Participants are distinct accounts
+within the selected pool, or within that pool/card pair. A first acquisition is
+a draw that adds a previously unowned card to the account's collection. Rewards,
+codes and shop redemptions do not count as pool draws. Statistics outlive draw
+detail retention and account deletion. They expose no participant identities and
+do not enter personal exports. Stewards and ordinary users cannot read or export
+them. Detached pool IDs retain their separate period and cannot be reused.
 
 `redeem` accepts `product=bulk-permanent|bulk-limited` with the current shop
 `revision`. Each grants ten tickets for 10,000 credits total, using game credits

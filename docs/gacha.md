@@ -128,6 +128,28 @@ A pool has a name, built-in cover, schedule, featured card selection and rules. 
 
 Base probabilities use 0.01% increments and total 100%. The SR threshold is 1–100; SSR is at least the SR threshold and at most 1,000. Consolidated probabilities are calculated from the actual hard-pity algorithm. The SSR featured guarantee supports one or two consecutive misses. Ticket prices, shard prices, separate SSR/SP card prices and monthly limits are configurable.
 
+## Pool statistics
+
+Administrators can open **Statistics** in the activity settings to compare the
+permanent pool and each limited period. Pool identity is independent of shared
+pity rules, names and repeated themes. The dashboard shows total draws and
+distinct participating accounts, rarity totals, the most frequently drawn cards
+and a searchable, sortable card table.
+
+Each card has three separate measures: total copies drawn including duplicates,
+distinct accounts that drew it in this pool, and first acquisitions that added
+it to an account's collection. Owning it before the draw, including through a
+different pool, shop or reward, prevents that draw from counting as a first
+acquisition. Shop purchases, redemption codes and site-wide rewards are not pool
+draws. One ten-pull contributes ten draws; replaying a completed request adds none.
+
+CSV and JSON downloads contain the complete selected pool, including zero-count
+cards, independently of the table's current search and page. Chart downloads use
+PNG or SVG. Counts remain exact decimal integers in the data downloads; chart
+positions and percentages are display calculations. Aggregate statistics persist
+when draw details expire, an account is deleted or a pool configuration is removed.
+Downloads and administrator statistics contain no participant identities.
+
 ## Site appearance
 
 Obtaining an SP card by drawing, shop redemption or an administrator reward immediately unlocks its matching appearance. It remains available after the pool ends. The site does not select it automatically: choose **Appearance** in the user site and apply an unlocked design. The existing light, dark or system preference chooses its matching palette and background. Each design preserves page layout and provides responsive background cropping; game scenes retain their own style.
@@ -159,6 +181,9 @@ These routes use station sessions and existing same-origin checks; they are not 
 | GET | `/api/appearance` | Selected appearance, remembered artwork and available artwork keys |
 | POST | `/api/appearance` | Replace selection and optionally the Heartfelt moments artwork |
 | GET | `/admin/api/gacha` | Administrator configuration |
+| GET | `/admin/api/gacha/statistics/pools` | Pool totals and distinct participants, numbered pagination |
+| GET | `/admin/api/gacha/statistics/pools/{id}/cards` | Per-card counts, first acquisitions and whole-pool chart summaries |
+| GET | `/admin/api/gacha/statistics/pools/{id}/export?format=json\|csv` | Complete selected-pool aggregate download |
 | POST | `/admin/api/gacha` | Save settings, a pool or a template |
 
 Themes consisting entirely of limited cards stay hidden until a pool containing their cards has opened. Past openings continue to count after a pool ends or is paused; already owned cards remain visible. Scheduled pools paused before opening do not reveal their themes.

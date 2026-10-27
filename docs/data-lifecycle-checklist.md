@@ -412,7 +412,7 @@ repair, WAL checkpoint or recovery writes. Exact registered schema 16–26 and
 matching recovery set is preserved; service startup and deployment helpers must
 not apply upgrades implicitly. Atomic conversion preserves the relevant indexes,
 authorization, steward policy/audit/tag data and assistant storage. Pending
-catalog reads do not grant inference access. Current export format is 30.
+catalog reads do not grant inference access. Current export format is 31.
 Upgrades are one-way;
 there is no old-server startup on an upgraded database or reverse migration.
 Fresh creation requires the main database and sidecars to be absent. Conversion
@@ -478,6 +478,16 @@ AI callbacks, cancellation, financial settlement, memory extraction and deletion
 `gacha_profiles`, `gacha_owned`, `gacha_pity` and `gacha_claims` store six integer activity balances, welcome/check-in state, monthly ticket redemption counts, first acquisition times, pool-group guarantees and once-only claims. These account-owned records persist for the account lifetime and are included in safe export. Deletion removes them atomically with account closure.
 
 `gacha_draws` stores results, rule and roster snapshots, catalog version and pool name for 180 days. History uses owner-scoped cursor pages; expiry also applies to export and retry receipts before physical cleanup. Removing details does not reset collections or permit another charge or reward.
+
+`gacha_pool_statistics` and `gacha_card_statistics` retain permanent aggregate
+draw, participant and first-acquisition counts with pool metadata and rosters.
+They contain no account IDs and are available only to administrators, including
+aggregate downloads. `gacha_pool_participants` and `gacha_card_participants` keep
+the minimal account associations needed to avoid recounting a participant after
+draw-history expiry. They last while the account exists and are removed atomically
+on deletion, without subtracting from aggregates. A new registration is a new
+participant; no deleted account identifier or hash is retained for these counts.
+Neither aggregate nor deduplication tables enter personal account exports.
 
 `gacha_operations` retains the activity balance journal and durable idempotency receipt independently of draw details. Exports omit request/key hashes. Account deletion clears user links and retry hashes while preserving de-identified balance facts and credit-operation links. Credit entries follow their existing 30-day compaction policy; referenced compacted operations keep only minimal headers.
 

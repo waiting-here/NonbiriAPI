@@ -20,6 +20,13 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed and improved
 
+- Add permanent administrator statistics for the permanent pool and every limited
+  period: draws, distinct participants, per-card copies and first acquisitions,
+  with charts and complete CSV/JSON and PNG/SVG downloads. Existing draw records
+  are incorporated by the explicit database upgrade.
+- Present sign-in, OAuth and browser navigation failures as responsive pages
+  with clear recovery actions, language and theme preferences. API clients,
+  fetch requests and public inference retain their JSON errors and HTTP status.
 - Keep search and filter controls aligned across both stations, including
   donation review and the card collection. Closed mobile administrator menus
   no longer leave invisible navigation links in the keyboard focus order.
