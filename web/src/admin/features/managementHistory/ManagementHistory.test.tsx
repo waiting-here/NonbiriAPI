@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
   start: vi.fn(),
   progress: vi.fn(),
+  resume: vi.fn(),
 }));
 vi.mock('./api', async (original) => ({
   ...(await original<typeof import('./api')>()),
@@ -20,6 +21,7 @@ vi.mock('./api', async (original) => ({
   prepareCleanup: mocks.prepare,
   startCleanup: mocks.start,
   getCleanup: mocks.progress,
+  resumeCleanup: mocks.resume,
 }));
 const person = { id: '7', name: 'Example operator', role: 'level5' };
 const counts = { targets: '123', succeeded: '120', skipped: '2', failed: '1' };
@@ -180,6 +182,39 @@ describe('management history workflows', () => {
         '',
         expect.any(AbortSignal),
       ),
+    );
+  });
+  it('checks an uncertain resume without repeating the write after the connection returns', async () => {
+    mocks.progress
+      .mockResolvedValueOnce({ ...job, state: 'failed', error_code: 'storage_unavailable' })
+      .mockRejectedValueOnce(new ApiError('network_error', 'Connection unavailable', 0))
+      .mockResolvedValue(job);
+    mocks.resume.mockRejectedValueOnce(new ApiError('network_error', 'Response lost', 0));
+    const view = await renderWithProviders(<ManagementHistory account="synthetic" />, {
+      station: 'admin',
+      role: 'admin',
+      route: '/management-operations?mh_job=9',
+    });
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'synthetic' } });
+    await view.user.click(await screen.findByRole('button', { name: 'Resume cleanup' }));
+    await waitFor(() => expect(mocks.progress).toHaveBeenCalledTimes(2));
+    await view.user.click(screen.getByRole('button', { name: 'Check saved result' }));
+    await screen.findByText(/^Completed/);
+    expect(mocks.resume).toHaveBeenCalledTimes(1);
+    expect(mocks.progress).toHaveBeenCalledTimes(3);
+    expect(screen.queryByRole('button', { name: 'Resume cleanup' })).not.toBeInTheDocument();
+  });
+  it('marks the actual view when a search requires individual operations', async () => {
+    mocks.list.mockResolvedValue(history('operations'));
+    await renderWithProviders(<ManagementHistory account="synthetic" />, {
+      station: 'admin',
+      role: 'admin',
+      route: '/management-operations?mh_search=event-1',
+    });
+    await screen.findByRole('button', { name: 'Details · 9007199254740993' });
+    expect(screen.getByRole('tab', { name: 'Individual operations' })).toHaveAttribute(
+      'aria-selected',
+      'true',
     );
   });
 });

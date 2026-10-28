@@ -453,7 +453,7 @@ export function ManagementHistory({ account }: { account: string }) {
           <div className="nb-actions">
             <Tabs
               label={t('admin.managementHistory.view')}
-              value={view}
+              value={query.data?.view ?? view}
               onChange={changeView}
               tabs={[
                 { value: 'groups', label: t('admin.managementHistory.groups') },
@@ -902,8 +902,8 @@ function CleanupProgress({
     async (value, error, context) => {
       const current = await getCleanup(value, context.signal);
       context.commit(() => client.setQueryData([...root, 'cleanup', value], current));
-      if (error && responseOutcomeUnknown(error) && current.state !== 'failed')
-        return { operationConfirmed: true };
+      // A successful status read resolves uncertainty, including a job still needing a retry.
+      if (error && responseOutcomeUnknown(error)) return { operationConfirmed: true };
     },
     ['admin'],
   );
@@ -953,13 +953,23 @@ function CleanupProgress({
                 <Button
                   variant="secondary"
                   disabled={resume.isPending}
-                  onClick={() => resume.mutate(id)}
+                  onClick={() => {
+                    if (resume.outcome === 'unknown') void resume.check();
+                    else if (resume.outcome === 'refresh-failed') void resume.refresh();
+                    else resume.mutate(id);
+                  }}
                 >
-                  {t('admin.managementHistory.resume')}
+                  {t(
+                    resume.outcome === 'unknown' || resume.outcome === 'refresh-failed'
+                      ? 'common.connections.checkResult'
+                      : 'admin.managementHistory.resume',
+                  )}
                 </Button>
               </Note>
             ) : null}
-            {resume.error ? <ErrorState error={resume.error} /> : null}
+            {resume.refreshError || resume.error ? (
+              <ErrorState error={resume.refreshError ?? resume.error} />
+            ) : null}
             <p className="nb-small nb-muted">{t('admin.managementHistory.progressHelp')}</p>
           </div>
         )}
