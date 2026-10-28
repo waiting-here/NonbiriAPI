@@ -223,6 +223,8 @@ rules have run. It handles only new or modified pending submissions, with no
 backlog scan or manual enqueue. Each actual model HTTP call joins the shared FIFO
 queue and counts against global limits, without personal RPM or credit charges.
 Automatic reviews record the administrator who authorized their configuration.
+Donation review pages and assistant tools show the submitted mainstream
+subscription/API category and the endpoint's current effective tags.
 
 Administrators can inspect full assistant request/response logs and clear a
 confirmed selection. Conversations, memories and cumulative token statistics

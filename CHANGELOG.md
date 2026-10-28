@@ -25,6 +25,8 @@ Each version entry describes its source and compatibility boundary; a release ta
   refusal, partial success and unchanged results without logging ordinary reads.
   Search summaries and paged details; clear a confirmed filter, time range or all
   records through resumable batches. Retain records until administrator cleanup.
+- Show mainstream subscription/API categories and current endpoint tags during
+  donation review, including the corresponding assistant tool results.
 
 ### Fixed and improved
 
