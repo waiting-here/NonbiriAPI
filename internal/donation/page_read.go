@@ -131,7 +131,7 @@ func managedKeySummary(key AdminDonationKey, header AdminDonation, rules Recurri
 		note := header.ReviewResult.Reason
 		approval = &note
 	}
-	return ManagedKeySummary{CanManage: key.CanManage, DonationNote: header.Description, ApprovalNote: approval, VisibleModels: []charityscope.VisibleModel{}, DonationKey: ownerKey(key), RecurringReceipt: RecurringReceipt{
+	return ManagedKeySummary{SafeSource: key.SafeSource, CanManage: key.CanManage, DonationNote: header.Description, ApprovalNote: approval, VisibleModels: []charityscope.VisibleModel{}, DonationKey: ownerKey(key), RecurringReceipt: RecurringReceipt{
 		DonationID: header.ID, KeyID: key.ID, DonationRevision: header.Revision}, RecurringSummary: rules,
 		AuthorizedExpiresAt: key.AuthorizedExpiresAt, SafeNote: key.SafeNote,
 		MaxConcurrency: key.MaxConcurrency, MaxRPM: key.MaxRPM, KeyLimitsRevision: key.KeyLimitsRevision, BindingCount: key.BindingCount, Idle: key.Idle, Handling: header.Handling}

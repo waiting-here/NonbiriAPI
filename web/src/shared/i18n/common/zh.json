@@ -862,7 +862,8 @@
           "opencodeSession": "OpenCode 会话 ID（ses）",
           "opencodeMessage": "OpenCode 消息 ID（msg）",
           "opencodePart": "OpenCode 分段 ID（prt）"
-        }
+        },
+        "currentEndpointTags": "当前端点标签"
       },
       "management": {
         "details": "技术详情",

@@ -385,6 +385,79 @@ function installDonationFetch(initial: AdminDonation) {
 
 const operationKeyPattern = /^[A-Za-z0-9_-]{22,128}$/;
 
+describe('donation review source context', () => {
+  it.each(['admin', 'level5', 'level6'] as const)(
+    'shows classifications and current labels for %s',
+    async (role) => {
+      const current = pendingDonation();
+      current.keys = [
+        managedKey({
+          charity_state: 'pending',
+          safe_source: {
+            kind: 'mainstream',
+            connector_type: 'openai-compatible',
+            base_url: 'https://sub.test/v1',
+            channel_id: 'mch_AAAAAAAAAAAAAAAAAAAAAA',
+            name: 'Subscription snapshot',
+            channel_revision: '1',
+            category: 'subscription',
+            endpoint_tags: ['user_gateway'],
+          },
+        }),
+        managedKey({
+          id: '12',
+          endpoint_key_id: '22',
+          charity_state: 'pending',
+          safe_source: {
+            kind: 'mainstream',
+            connector_type: 'openai-compatible',
+            base_url: 'https://api.test/v1',
+            channel_id: 'mch_BAAAAAAAAAAAAAAAAAAAAA',
+            name: 'API snapshot',
+            channel_revision: '2',
+            category: 'api_platform',
+            endpoint_tags: ['mainstream'],
+          },
+        }),
+      ];
+      if (role === 'level5') {
+        current.owner = null;
+        current.reviewer = null;
+      }
+      installDonationFetch(current);
+      const admin = role === 'admin';
+      const view = await renderWithProviders(
+        <CharityManagement
+          frame={admin ? 'admin' : 'steward'}
+          accountId="1"
+          trainee={role === 'level5'}
+        />,
+        {
+          station: admin ? 'admin' : 'user',
+          role,
+          route: '/?charity_section=donations',
+        },
+      );
+      view.queryClient.setQueryData(
+        admin ? ['admin', 'session'] : ['user', 'session'],
+        admin
+          ? adminSession
+          : {
+              ...stewardSession,
+              user: { ...stewardSession.user, effective_level: role === 'level5' ? 5 : 6 },
+            },
+      );
+      await view.user.click(await screen.findByRole('button', { name: 'Review' }));
+      await screen.findByRole('heading', { name: 'Review pending submission' });
+      expect(
+        screen.getAllByText(/Mainstream subscription.*Subscription snapshot/i).length,
+      ).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Mainstream API.*API snapshot/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByLabelText('Current endpoint tags').length).toBeGreaterThan(0);
+    },
+  );
+});
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((next) => {

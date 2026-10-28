@@ -9,6 +9,7 @@ import {
 import { StewardPermissionNotice } from './StewardPermissionNotice';
 import { DonationStatusBadge } from './UseSummary';
 import { DonationKeyUseControls } from './DonationKeyUseControls';
+import { DonationSourceContext } from './DonationSourceContext';
 import { ServiceHealth } from './ResourceHealth';
 import { DonationUseReviewResults, DonationUsesPanel } from './DonationUsesPanel';
 import type { UseReviewResult } from '@shared/operations/donationUses';
@@ -45,7 +46,6 @@ import {
   type CharityRole,
   type DonationEndedReason,
   type ManagedDonationKey,
-  type ManagedSafeSource,
   type StewardDonation,
 } from '@shared/operations/charity';
 import { validManagementSearch } from '@shared/operations/charityModelPages';
@@ -272,25 +272,6 @@ const endedReasonKey: Record<DonationEndedReason, string> = {
   account_deleted: 'accountDeleted',
 };
 
-function safeSourceLabel(
-  source: ManagedSafeSource,
-  t: (key: string, options?: Record<string, unknown>) => string,
-): string {
-  if (source.kind === 'custom') {
-    return t('common.operations.charity.customSource', {
-      connector: source.connector_type,
-      baseUrl: source.base_url,
-    });
-  }
-  if (source.category === 'subscription') {
-    return t('common.operations.charity.mainstreamSubscription', { name: source.name });
-  }
-  if (source.category === 'api_platform') {
-    return t('common.operations.charity.mainstreamApiPlatform', { name: source.name });
-  }
-  return t('common.operations.charity.mainstreamSource', { name: source.name });
-}
-
 function KeyExpiryEditor({
   station,
   draft,
@@ -429,7 +410,7 @@ function DonationKeyEditor(
           tail: props.item.display_tail,
         })}
       </h4>
-      <p>{safeSourceLabel(props.item.safe_source, t)}</p>
+      <DonationSourceContext source={props.item.safe_source} />
       <ServiceHealth statuses={props.item.service_statuses} />
       <DonationKeyUseControls
         role={props.role}
@@ -1017,6 +998,7 @@ function DonationReview({
                     <h4>
                       {entry.display_head}…{entry.display_tail} · {entry.safe_source.base_url}
                     </h4>
+                    <DonationSourceContext source={entry.safe_source} />
                     {entry.review?.required ? (
                       <p role="note">
                         {t(
@@ -2007,16 +1989,18 @@ function DonationsPanel({
                               ),
                             ].join(' · ')}
                           >
-                            {t('common.itemId', { id: item.id })} ·{' '}
-                            {item.sources[0] ? safeSourceLabel(item.sources[0], t) : '—'}
-                            {BigInt(item.source_count) > 1n
+                            {t('common.itemId', { id: item.id })}
+                            {BigInt(item.source_count) > BigInt(item.sources.length)
                               ? ' · ' +
                                 t('common.operations.charity.sourcePreview', {
-                                  shown: Math.min(1, item.sources.length),
+                                  shown: item.sources.length,
                                   total: item.source_count,
                                 })
                               : ''}
                           </small>
+                          {item.sources.map((source, index) => (
+                            <DonationSourceContext key={index} source={source} showAddress />
+                          ))}
                         </div>
                       ),
                     },

@@ -31,6 +31,7 @@ type DonationSummary struct {
 
 type AdminDonationSummary struct {
 	DonationSummary
+	Sources  []AdminSafeSource `json:"sources"`
 	Owner    *DonationOwner    `json:"owner"`
 	Reviewer *DonationReviewer `json:"reviewer"`
 	Handling DonationHandling  `json:"handling"`
@@ -38,6 +39,7 @@ type AdminDonationSummary struct {
 
 type StewardDonationSummary struct {
 	DonationSummary
+	Sources  []AdminSafeSource     `json:"sources"`
 	Owner    *StewardDonationOwner `json:"owner"`
 	Reviewer *DonationReviewer     `json:"reviewer"`
 	Handling DonationHandling      `json:"handling"`
@@ -58,6 +60,7 @@ type OwnerKeySummary struct {
 // Even an administrator obtains those private details only via original detail.
 type ManagedKeySummary struct {
 	DonationKey
+	SafeSource AdminSafeSource `json:"safe_source"`
 	// Only owner pages set this shadow field; role projections omit it.
 	EndpointID               *string `json:"endpoint_id,omitempty"`
 	CanManage                bool    `json:"can_manage"`

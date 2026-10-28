@@ -561,7 +561,7 @@ func readDonationKeySelectionTx(ctx context.Context, tx *sql.Tx, donationID int6
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT dk.id,dk.endpoint_key_id,dk.display_head,dk.display_tail,
 dk.canonical_base_url,dk.connector_type,dk.mainstream_channel_id,dk.mainstream_channel_revision,
-dk.mainstream_channel_name,dk.mainstream_channel_category,COALESCE(e.enabled,0),COALESCE(k.enabled,0),
+dk.mainstream_channel_name,dk.mainstream_channel_category,`+endpointTagsProjectionSQL+`,COALESCE(e.enabled,0),COALESCE(k.enabled,0),
 dk.price_limit_mag,dk.call_limit_mag,dk.token_limit_mag,
 dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.tokens_used,dk.tokens_reserved,
 dk.token_reserve,dk.failure_disabled,dk.failure_streak,dk.streak_generation,dk.failure_disable_threshold,dk.safe_note,
@@ -601,12 +601,13 @@ WHERE `+where+` ORDER BY dk.id`, append([]any{now, now, now, now, now}, args...)
 		var ended sql.NullString
 		var authorizedExpires, expires sql.NullInt64
 		var channelID, channelName, channelCategory sql.NullString
+		var tags string
 		var channelRevision sql.NullInt64
 		var bindingCount int64
 		var reviewRevision sql.NullInt64
 		if err := rows.Scan(&id, &endpointKeyID, &item.DisplayHead, &item.DisplayTail,
 			&item.SafeSource.BaseURL, &item.SafeSource.ConnectorType, &channelID, &channelRevision,
-			&channelName, &channelCategory, &endpointEnabled, &keyPhysicalEnabled,
+			&channelName, &channelCategory, &tags, &endpointEnabled, &keyPhysicalEnabled,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceReserved, &callsUsed, &callsReserved,
 			&tokensUsed, &tokensReserved, &item.TokenReserve, &failureDisabled, &streak,
 			&generation, &item.FailureDisableThreshold, &item.SafeNote, &authorizedExpires, &expires, &ended, &item.MaxConcurrency, &item.MaxRPM, &item.KeyLimitsRevision, &item.RateLimitedUntil, &bperiod, &bsource, &until, &probing, &bindingCount, &item.Review.MaterialAvailable, &item.Review.Required, &reviewRevision, &item.CanManage, &endpointID, &item.CharityState); err != nil {
@@ -637,6 +638,7 @@ WHERE `+where+` ORDER BY dk.id`, append([]any{now, now, now, now, now}, args...)
 			item.ExpiresAt = &value
 		}
 		item.SafeSource.Kind = "custom"
+		item.SafeSource.EndpointTags = sourceTags(tags)
 		completeMainstream := channelID.Valid && channelRevision.Valid && channelName.Valid && channelCategory.Valid
 		completeCustom := !channelID.Valid && !channelRevision.Valid && !channelName.Valid && !channelCategory.Valid
 		if !completeMainstream && !completeCustom {
