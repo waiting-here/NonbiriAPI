@@ -285,7 +285,9 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
             {field('target_kind')}
             {field('target_id')}
             {field('event_id')}
-            <p className="nb-small nb-muted">{t('admin.managementHistory.filterHelp')}</p>
+            <p className="management-history__filter-help nb-small nb-muted">
+              {t('admin.managementHistory.filterHelp')}
+            </p>
           </>
         }
       />
