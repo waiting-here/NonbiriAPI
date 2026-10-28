@@ -1,7 +1,6 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test, type Browser, type BrowserContext } from '@playwright/test';
-import { installLoopbackNetworkBoundary } from '../e2e/support';
 import copy from '../../src/shared/i18n/common/en.json' with { type: 'json' };
 
 interface User {
@@ -61,7 +60,12 @@ async function session(
     viewport: { width: 1440, height: 1000 },
     reducedMotion: 'reduce',
   });
-  await installLoopbackNetworkBoundary(context);
+  const origins = new Set([state.admin_url, state.user_url]);
+  await context.route('**/*', (route) =>
+    origins.has(new URL(route.request().url()).origin)
+      ? route.continue()
+      : route.abort('blockedbyclient'),
+  );
   await context.addCookies([
     {
       name: cookie.Name,
@@ -109,16 +113,17 @@ for (const actor of ['admin', 'five', 'six'] as const) {
           q: sample.description,
         });
         if (actor !== 'admin') query.set('tab', 'charity');
-        const listResponse = page.waitForResponse((response) => {
-          const url = new URL(response.url());
-          return (
-            response.request().method() === 'GET' &&
-            url.pathname === api &&
-            url.searchParams.get('q') === sample.description
-          );
-        });
-        await page.goto(origin + (actor === 'admin' ? '/charity?' : '/steward?') + query);
-        const list = await listResponse;
+        const [list] = await Promise.all([
+          page.waitForResponse((response) => {
+            const url = new URL(response.url());
+            return (
+              response.request().method() === 'GET' &&
+              url.pathname === api &&
+              url.searchParams.get('q') === sample.description
+            );
+          }),
+          page.goto(origin + (actor === 'admin' ? '/charity?' : '/steward?') + query),
+        ]);
         expect(list.status()).toBe(200);
         const listed = (await list.json()) as { data: { id: string; sources: Source[] }[] };
         const summary = listed.data.find((item) => item.id === sample.donation_id);
@@ -126,13 +131,14 @@ for (const actor of ['admin', 'five', 'six'] as const) {
         assertSource(summary!.sources[0], sample);
         const row = page.getByRole('row').filter({ hasText: sample.description });
         await expect(row).toBeVisible();
-        const detailResponse = page.waitForResponse(
-          (response) =>
-            response.request().method() === 'GET' &&
-            new URL(response.url()).pathname === api + '/' + sample.donation_id,
-        );
-        await row.getByRole('button', { name: 'Review', exact: true }).click();
-        const received = await detailResponse;
+        const [received] = await Promise.all([
+          page.waitForResponse(
+            (response) =>
+              response.request().method() === 'GET' &&
+              new URL(response.url()).pathname === api + '/' + sample.donation_id,
+          ),
+          row.getByRole('button', { name: 'Review', exact: true }).click(),
+        ]);
         expect(received.status()).toBe(200);
         const detail = (await received.json()) as Detail;
         assertSource(detail.keys[0].safe_source, sample);

@@ -78,6 +78,7 @@ describe('central route and navigation wiring', () => {
       '/blacklist:admin-blacklist',
       '/users:admin-users',
       '/logs:admin-logs',
+      '/management-operations:admin-management-operations',
       '/endpoints:admin-endpoints',
       '/ai:admin-agent',
       '/alerts:admin-alerts',
