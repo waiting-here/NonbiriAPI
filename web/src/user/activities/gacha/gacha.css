@@ -505,6 +505,16 @@
   display: flex;
   gap: var(--nb-space-3);
 }
+.gacha-draw-actions--upcoming {
+  flex-wrap: wrap;
+  row-gap: var(--nb-space-1);
+}
+.gacha-draw-actions__notice {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--g-muted);
+  font-size: var(--nb-font-size-xs);
+}
 .gacha-draw-actions .nb-btn {
   min-width: 156px;
   padding: var(--nb-space-3) var(--nb-space-5);
@@ -1593,8 +1603,15 @@
     padding-bottom: 96px;
     scroll-padding-bottom: 96px;
   }
+  .gacha-app:has(.gacha-draw-actions--upcoming) {
+    padding-bottom: calc(var(--nb-space-16) + var(--nb-space-16) + var(--nb-space-4));
+    scroll-padding-bottom: calc(var(--nb-space-16) + var(--nb-space-16) + var(--nb-space-4));
+  }
   .gacha-toast {
     bottom: 110px;
+  }
+  .gacha-app:has(.gacha-draw-actions--upcoming) .gacha-toast {
+    bottom: calc(var(--nb-space-16) + var(--nb-space-16) + var(--nb-space-8));
   }
   .gacha-underbar {
     padding: 0 var(--nb-space-4) var(--nb-space-4);
