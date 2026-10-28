@@ -377,6 +377,8 @@ export function GachaApp({
     gameBalance: state.credits.game,
   });
   const currentTime = state.server_time + Math.max(0, Math.floor((clock - receivedAt) / 1000));
+  const upcoming =
+    pool.kind === 'limited' && pool.starts_at !== null && currentTime < pool.starts_at;
   const currentState = { ...state, server_time: currentTime };
   const repeatPool = draw && state.pools.find((value) => value.id === draw.pool_id);
   const repeatQuantity = draw?.items.length === 10 ? 10 : 1;
@@ -590,7 +592,9 @@ export function GachaApp({
                 <span className="gacha-kicker">
                   {pool.kind === 'permanent'
                     ? t('常驻召唤 · 永久开放', 'STANDARD · ALWAYS OPEN')
-                    : t('限定召唤 · 期间开放', 'LIMITED · FOR A MOMENT')}
+                    : upcoming
+                      ? t('限定召唤 · 尚未开始', 'LIMITED · NOT STARTED')
+                      : t('限定召唤 · 期间开放', 'LIMITED · FOR A MOMENT')}
                 </span>
                 <ArtworkBadge artworkKey={'cover:' + pool.cover} />
                 <ArtworkUnavailable artworkKey={'cover:' + pool.cover} />
@@ -619,6 +623,12 @@ export function GachaApp({
                     ? t('全部常驻卡牌', 'All permanent cards')
                     : t('同规则奖池共享保底', 'Shared pity within this rule group')}
                 </span>
+                {upcoming && (
+                  <p className="gacha-banner__time">
+                    {t('开始时间 ', 'Starts ')}
+                    {formatDateTime(pool.starts_at)}
+                  </p>
+                )}
                 {pool.ends_at && (
                   <p className="gacha-banner__time">
                     {t('开放至 ', 'Until ')}
@@ -703,8 +713,19 @@ export function GachaApp({
                   </p>
                 )}
               </div>
-              <div className="gacha-draw-actions">
+              <div
+                className={'gacha-draw-actions' + (upcoming ? ' gacha-draw-actions--upcoming' : '')}
+              >
+                {upcoming && (
+                  <p className="gacha-draw-actions__notice" id="gacha-upcoming-notice">
+                    {t(
+                      '奖池尚未开始，暂不可召唤。',
+                      'Pool not started yet. Summoning unavailable.',
+                    )}
+                  </p>
+                )}
                 <Button
+                  aria-describedby={upcoming ? 'gacha-upcoming-notice' : undefined}
                   disabled={busy || !poolOpen(pool, currentTime)}
                   onClick={() =>
                     state.tickets[pool.kind] < 1
@@ -725,6 +746,7 @@ export function GachaApp({
                 </Button>
                 <Button
                   variant="primary"
+                  aria-describedby={upcoming ? 'gacha-upcoming-notice' : undefined}
                   disabled={busy || !poolOpen(pool, currentTime)}
                   onClick={() =>
                     state.tickets[pool.kind] < 10

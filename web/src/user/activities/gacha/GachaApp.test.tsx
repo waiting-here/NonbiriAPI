@@ -4,6 +4,7 @@ import { GachaApp } from './GachaApp';
 import { Shop } from './Shop';
 import { themes } from './catalog';
 import { ArtworkPolicyProvider } from '@shared/artwork/policy';
+import { formatDateTime } from '@shared/utils/datetime';
 import { gachaSnapshot } from '../../../../test/fixtures/gacha';
 import type { GachaPort, Outcome, Snapshot } from './types';
 
@@ -186,6 +187,99 @@ it('keeps entry identity through a lost response and language change', async () 
   expect(await screen.findByRole('button', { name: /Check in.*standard/i })).toBeEnabled();
   expect(act).toHaveBeenCalledTimes(2);
 });
+
+it.each([
+  [false, false],
+  [true, false],
+  [false, true],
+  [true, true],
+])(
+  'explains an upcoming limited pool and respects its time boundaries, English=%s paused=%s',
+  async (english, paused) => {
+    const state = snapshot();
+    const localNow = 1_700_000_000_000;
+    state.tickets.limited = 10;
+    state.pools.push({
+      ...state.pools[0],
+      id: 'future',
+      name: '未来奖池',
+      name_en: 'Future pool',
+      kind: 'limited',
+      cover: 'i',
+      group: 'future',
+      featured: ['i-chatgpt'],
+      starts_at: state.server_time + 60,
+      ends_at: state.server_time + 120,
+      paused,
+    });
+    const action = vi.fn<GachaPort['act']>(async () => ({ snapshot: state }));
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(localNow);
+    const originalLang = document.documentElement.lang;
+    document.documentElement.lang = english ? 'en' : 'zh';
+    try {
+      render(
+        <GachaApp
+          port={{
+            scope: `upcoming:${english}:${paused}`,
+            load: async () => state,
+            act: action,
+            history: async () => ({ items: [] }),
+          }}
+          initialPoolId="future"
+          english={english}
+        />,
+      );
+
+      const once = await screen.findByRole('button', {
+        name: english ? /Summon once/ : /召唤一次/,
+      });
+      const ten = screen.getByRole('button', { name: english ? /Summon ten/ : /十次召唤/ });
+      const status = english ? 'LIMITED · NOT STARTED' : '限定召唤 · 尚未开始';
+      const notice = english
+        ? 'Pool not started yet. Summoning unavailable.'
+        : '奖池尚未开始，暂不可召唤。';
+      expect(screen.getByText(status)).toBeVisible();
+      expect(
+        screen.getByText(
+          (english ? 'Starts ' : '开始时间 ') +
+            formatDateTime(state.pools[1].starts_at).replace(/\s+/g, ' '),
+        ),
+      ).toBeVisible();
+      expect(screen.getByText(notice)).toBeVisible();
+      expect(once).toBeDisabled();
+      expect(ten).toBeDisabled();
+      expect(once).toHaveAttribute('aria-describedby', 'gacha-upcoming-notice');
+      expect(ten).toHaveAttribute('aria-describedby', 'gacha-upcoming-notice');
+
+      clock.mockReturnValue(localNow + 59_000);
+      fireEvent.focus(window);
+      expect(screen.getByText(status)).toBeVisible();
+      expect(ten).toBeDisabled();
+
+      clock.mockReturnValue(localNow + 60_000);
+      fireEvent.focus(window);
+      expect(screen.queryByText(status)).not.toBeInTheDocument();
+      expect(screen.queryByText(notice)).not.toBeInTheDocument();
+      if (paused) {
+        expect(once).toBeDisabled();
+        expect(ten).toBeDisabled();
+      } else {
+        expect(once).toBeEnabled();
+        expect(ten).toBeEnabled();
+      }
+
+      clock.mockReturnValue(localNow + 120_000);
+      fireEvent.focus(window);
+      expect(screen.queryByText(status)).not.toBeInTheDocument();
+      expect(once).toBeDisabled();
+      expect(ten).toBeDisabled();
+      expect(action).toHaveBeenCalledTimes(1);
+    } finally {
+      document.documentElement.lang = originalLang;
+      clock.mockRestore();
+    }
+  },
+);
 
 it.each([false, true])(
   'labels every shop card with its actual shard cost, English=%s',
