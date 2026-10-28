@@ -204,6 +204,7 @@ function AttemptTable({
   const { t } = useTranslation();
   if (!('attempts' in detail)) return null;
   const attempts = detail.attempts;
+  const isDiscovery = detail.request.route_kind === 'model_discovery';
   return (
     <div className="ops-stack" aria-busy={busy}>
       {attempts.data.length === 0 ? (
@@ -224,7 +225,9 @@ function AttemptTable({
                 <span className="status-badge">
                   {t(
                     attempt.result_kind === 'synthetic'
-                      ? 'common.operations.logs.platformRecord'
+                      ? isDiscovery
+                        ? 'common.operations.logs.discoveryNoResponse'
+                        : 'common.operations.logs.platformRecord'
                       : 'common.operations.logs.upstreamResponse',
                   )}
                 </span>
@@ -234,7 +237,11 @@ function AttemptTable({
               </div>
               {attempt.result_kind === 'synthetic' ? (
                 <p className="log-attempt-notice">
-                  {t('common.operations.logs.syntheticExplanation')}
+                  {t(
+                    isDiscovery
+                      ? 'common.operations.logs.discoveryNoResponseHint'
+                      : 'common.operations.logs.syntheticExplanation',
+                  )}
                 </p>
               ) : null}
               <dl>
@@ -265,13 +272,15 @@ function AttemptTable({
                 <div>
                   <dt>
                     {t(
-                      attempt.result_kind === 'synthetic'
+                      attempt.result_kind === 'synthetic' && !isDiscovery
                         ? 'common.operations.logs.recordedStatus'
                         : 'common.operations.logs.upstreamStatus',
                     )}
                   </dt>
                   <dd>
-                    {attempt.status_code ?? '—'}{' '}
+                    {isDiscovery && attempt.result_kind === 'synthetic'
+                      ? t('common.operations.logs.discoveryNoResponse')
+                      : (attempt.status_code ?? '—')}{' '}
                     <span className="mono">{attempt.upstream_code ?? ''}</span>
                   </dd>
                 </div>
@@ -624,9 +633,11 @@ function ScopedRoleLogPanel({
   }, [role, t]);
   const routeLabel = (route: LogRouteKind) => t(ROUTE_LABEL_KEYS[route]);
   const resultLabel = (row: RoleLogRow) =>
-    row.caller_result_class
-      ? t(RESULT_LABEL_KEYS[row.caller_result_class])
-      : t('common.operations.logs.resultValue.pending');
+    logResult(row).key === 'discoveryAccepted'
+      ? t('common.operations.logs.discoveryAccepted')
+      : row.caller_result_class
+        ? t(RESULT_LABEL_KEYS[row.caller_result_class])
+        : t('common.operations.logs.resultValue.pending');
 
   const clearDetailURL = () => {
     setSearchParams(
@@ -845,6 +856,7 @@ function ScopedRoleLogPanel({
       keyHint: 'common.operations.logs.presentation.keyHint',
       rateHint: 'common.operations.logs.presentation.rateHint',
       retryHint: 'common.operations.logs.presentation.retryHint',
+      discoveryAcceptedHint: 'common.operations.logs.discoveryAcceptedHint',
     } as const;
     return result.hint ? t(hintKeys[result.hint]) : null;
   };
@@ -1011,7 +1023,9 @@ function ScopedRoleLogPanel({
                   wide: true,
                   value: (
                     <Fold
+                      key={detailRequest.id}
                       plain
+                      defaultOpen={detailRequest.route_kind === 'model_discovery'}
                       title={t('common.operations.logs.attempts')}
                       summary={
                         'attempt_count' in detailRequest ? detailRequest.attempt_count : undefined

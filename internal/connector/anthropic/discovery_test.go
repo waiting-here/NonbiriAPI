@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -211,10 +212,13 @@ func TestModelDiscoveryFailureBoundaries(t *testing.T) {
 		}, do: func(request *http.Request) (*http.Response, error) { return nil, request.Context().Err() }, wantFailure: connectorcontract.DiscoveryFailureInterrupted, wantDiag: "model discovery canceled", wantCalls: 0},
 		{name: "transport", do: func(*http.Request) (*http.Response, error) {
 			return nil, errors.New("private transport detail sk-boundary")
-		}, wantFailure: connectorcontract.DiscoveryFailureTransport, wantDiag: "upstream request failed", wantCalls: 1},
+		}, wantFailure: connectorcontract.DiscoveryFailureTransport, wantDiag: "model discovery request failed; no further cause was available", wantCalls: 1},
 		{name: "auth response and error", do: func(*http.Request) (*http.Response, error) {
 			return fakeResponse(http.StatusUnauthorized, "application/json", `{"private":"sk-boundary"}`), errors.New("private redirect detail")
-		}, wantFailure: connectorcontract.DiscoveryFailureAuth, wantStatus: http.StatusUnauthorized, wantReceived: true, wantDiag: "upstream request failed", wantCalls: 1},
+		}, wantFailure: connectorcontract.DiscoveryFailureAuth, wantStatus: http.StatusUnauthorized, wantReceived: true, wantDiag: "model discovery request failed; no further cause was available", wantCalls: 1},
+		{name: "TLS certificate failure", do: func(*http.Request) (*http.Response, error) {
+			return nil, &tls.CertificateVerificationError{Err: errors.New("private certificate detail")}
+		}, wantFailure: connectorcontract.DiscoveryFailureTransport, wantDiag: "model discovery TLS certificate verification failed", wantCalls: 1},
 		{name: "nil response", do: func(*http.Request) (*http.Response, error) {
 			return nil, nil
 		}, wantFailure: connectorcontract.DiscoveryFailureTransport, wantDiag: "upstream response was unavailable", wantCalls: 1},

@@ -4,10 +4,19 @@ import type { RoleLogRow } from './data';
 export function logResult(
   row: Pick<
     RoleLogRow,
-    'caller_result_class' | 'caller_status' | 'caller_error_code' | 'phase' | 'rejection_reason'
+    | 'route_kind'
+    | 'caller_result_class'
+    | 'caller_status'
+    | 'caller_error_code'
+    | 'phase'
+    | 'rejection_reason'
   >,
 ) {
-  if (row.caller_result_class === 'success') return { key: 'success', tone: 'ok' } as const;
+  if (row.caller_result_class === 'success') {
+    if (row.route_kind === 'model_discovery' && row.caller_status === 202)
+      return { key: 'discoveryAccepted', tone: 'info', hint: 'discoveryAcceptedHint' } as const;
+    return { key: 'success', tone: 'ok' } as const;
+  }
   if (row.caller_result_class === null) return { key: 'pending', tone: 'info' } as const;
   if (row.caller_result_class === 'cancelled') return { key: 'cancelled', tone: 'warn' } as const;
   const code = row.caller_error_code ?? row.rejection_reason;
@@ -29,6 +38,7 @@ export function logResult(
 }
 
 const userResultKeys = {
+  discoveryAccepted: 'common.operations.logs.discoveryAccepted',
   success: 'user.logs.result.success',
   pending: 'user.logs.result.pending',
   cancelled: 'user.logs.result.cancelled',
@@ -44,6 +54,7 @@ const userResultKeys = {
 } as const;
 
 const resultKeys = {
+  discoveryAccepted: 'common.operations.logs.discoveryAccepted',
   success: 'common.operations.logs.presentation.result.success',
   pending: 'common.operations.logs.presentation.result.pending',
   cancelled: 'common.operations.logs.presentation.result.cancelled',

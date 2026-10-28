@@ -15,6 +15,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/discoverydiag"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
@@ -76,6 +77,9 @@ func (d ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.D
 		if kind, failed := discoveryContextFailure(ctx, err); failed {
 			return failedDiscoveryResult(kind, nil, discoveryContextDiagnostic(kind))
 		}
+		if err != nil {
+			return failedDiscoveryResult(connectorcontract.DiscoveryFailureTransport, nil, discoverydiag.RequestError(err))
+		}
 		return failedDiscoveryResult(connectorcontract.DiscoveryFailureTransport, nil, "egress client unavailable")
 	}
 	plaintext, ciphertext, ok := input.Credential.Take()
@@ -118,9 +122,9 @@ func (d ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.D
 			if response.StatusCode < http.StatusOK || response.StatusCode > 299 {
 				kind = discoveryStatusFailure(response.StatusCode)
 			}
-			return failedDiscoveryResult(kind, response, "upstream request failed")
+			return failedDiscoveryResult(kind, response, discoverydiag.RequestError(err))
 		}
-		return failedDiscoveryResult(connectorcontract.DiscoveryFailureTransport, nil, "upstream request failed")
+		return failedDiscoveryResult(connectorcontract.DiscoveryFailureTransport, nil, discoverydiag.RequestError(err))
 	}
 	if kind, failed := discoveryContextFailure(ctx, nil); failed {
 		if response != nil && response.Body != nil {

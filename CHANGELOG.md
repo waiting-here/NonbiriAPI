@@ -4,6 +4,15 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## Unreleased
+
+### Fixed and improved
+
+- Label accepted model-list refresh tasks accurately in request logs and open
+  their service call records by default, including unconfirmed HTTP responses.
+- Preserve safe DNS, TLS, timeout and connection-failure reasons for OpenAI and
+  Anthropic model discovery without exposing raw transport errors or credentials.
+
 ## 1.3.1 — 2026-10-28
 
 ### Added

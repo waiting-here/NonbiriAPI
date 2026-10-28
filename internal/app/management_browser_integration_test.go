@@ -111,8 +111,12 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 	geminiEndpoint := f.call("POST", "/api/endpoints", map[string]any{"source": "mainstream", "channel_id": geminiChannel, "note": "Gemini discovery sample", "enabled": true}, owner, false)["id"].(string)
 	geminiKey := f.call("POST", "/api/endpoints/"+geminiEndpoint+"/keys", map[string]any{"secret": imageFixtureSecret, "note": "Gemini sample key", "enabled": true, "force_store_false": false, "ownership_confirmed": true}, owner, false)["id"].(string)
 	endpoint := f.call("POST", "/api/endpoints", map[string]any{"source": "mainstream", "channel_id": channel, "note": "Browser service", "enabled": true}, owner, false)["id"].(string)
+	var discoveryKey string
 	donate := func(secret, description string) map[string]any {
 		key := f.call("POST", "/api/endpoints/"+endpoint+"/keys", map[string]any{"secret": secret, "note": "Browser credential", "enabled": true, "force_store_false": false, "ownership_confirmed": true}, owner, false)["id"].(string)
+		if secret == "synthetic-auto-donation" {
+			discoveryKey = key
+		}
 		return f.call("POST", "/api/donations", map[string]any{"description": description, "discord_public_thanks": false, "ownership_authorized": true, "keys": []map[string]any{appFixtureSharedCatalog(t, f.store, key, nil, now)}}, owner, false)
 	}
 	automatic := donate("synthetic-auto-donation", "Automatically approved browser donation")
@@ -153,6 +157,7 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 		"resource_health":              resourceHealth,
 		"multiline_review_donation_id": multiline["id"],
 		"gemini_endpoint_id":           geminiEndpoint, "gemini_key_id": geminiKey,
+		"discovery_key_id":   discoveryKey,
 		"disposable_user_id": disposable.ID,
 		"trainee_target_id":  traineeTarget.ID,
 		"denials":            denials, "channel_id": channel, "endpoint_id": endpoint, "automatic_donation_id": automatic["id"], "pending_donation_id": pending["id"], "charity_model_id": model["id"]}
