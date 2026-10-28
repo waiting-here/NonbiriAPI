@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"net/http"
 	"strings"
 )
@@ -604,6 +605,16 @@ func (api *httpAPI) reviewRole(writer http.ResponseWriter, request *http.Request
 		writeDonationError(writer, err)
 		return
 	}
+	summary := "审批捐赠"
+	switch input.Decision {
+	case "approve":
+		summary = "批准捐赠"
+	case "reject":
+		summary = "拒绝捐赠"
+	case "force_reject":
+		summary = "撤销捐赠批准"
+	}
+	managementlog.SetAction(request.Context(), "review."+input.Decision, summary)
 	route := routeAdminReview
 	if role == reviewerSteward {
 		route = routeStewardReview

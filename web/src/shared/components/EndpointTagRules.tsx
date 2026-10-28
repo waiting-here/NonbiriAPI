@@ -18,7 +18,7 @@ import { isStewardPermissionDenied, isUnauthorized } from '@shared/query/http';
 import { EmptyState, ErrorState, LoadingState } from './States';
 import { StewardPermissionNotice } from './StewardPermissionNotice';
 import { Button, DataTable, Field, FilterBar, Note, Segmented } from './ui';
-import { endpointTagKeys } from './endpointTagLabels';
+import { endpointTagBadgeClass, endpointTagKeys } from './endpointTagLabels';
 
 type RuleMutation =
   | { kind: 'save'; rule: EndpointTagRule; key: string }
@@ -289,7 +289,7 @@ export function EndpointTagRules({
                 ) : (
                   <div className="endpoint-tag-badges">
                     {rule.tags.map((tag) => (
-                      <span className="nb-badge" key={tag}>
+                      <span className={endpointTagBadgeClass(tag)} key={tag}>
                         {label(tag)}
                       </span>
                     ))}

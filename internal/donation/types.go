@@ -66,13 +66,14 @@ type SafeSource struct {
 // revision and category are management snapshot facts and must not become
 // reachable through the ordinary owner projection.
 type AdminSafeSource struct {
-	Kind            string  `json:"kind"`
-	ConnectorType   string  `json:"connector_type"`
-	BaseURL         string  `json:"base_url"`
-	ChannelID       *string `json:"channel_id,omitempty"`
-	Name            *string `json:"name,omitempty"`
-	ChannelRevision *string `json:"channel_revision,omitempty"`
-	Category        *string `json:"category,omitempty"`
+	EndpointTags    []string `json:"endpoint_tags,omitempty"`
+	Kind            string   `json:"kind"`
+	ConnectorType   string   `json:"connector_type"`
+	BaseURL         string   `json:"base_url"`
+	ChannelID       *string  `json:"channel_id,omitempty"`
+	Name            *string  `json:"name,omitempty"`
+	ChannelRevision *string  `json:"channel_revision,omitempty"`
+	Category        *string  `json:"category,omitempty"`
 }
 
 type DonationLimits struct {

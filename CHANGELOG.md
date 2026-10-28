@@ -4,6 +4,47 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.3.1 — 2026-10-28
+
+### Added
+
+- Configure Chat Completions, external Responses and ChatGPT assistant sources,
+  with a default, task-specific selections and individual steward overrides.
+  Existing API settings remain usable; failures do not switch sources silently.
+- Connect ChatGPT through the official local-browser authorization flow and an
+  instance-encrypted transfer file. Show account models, connection-update and
+  token-expiry times, and request-triggered refresh. Official remaining quota is
+  unavailable; link to ChatGPT usage settings and label retained local usage
+  separately from account-wide consumption.
+- Keep personal assistant memories for each interlocutor, editable by that person
+  and administrators. Shared memories are writable only by administrators.
+  Personal memories remain administrator assets after account deletion and are
+  excluded from ordinary account exports.
+- Keep separate, administrator-readable management write records with source,
+  actor, authorizer, safe target and outcome snapshots. Cover success, failure,
+  refusal, partial success and unchanged results without logging ordinary reads.
+  Search summaries and paged details; clear a confirmed filter, time range or all
+  records through resumable batches. Retain records until administrator cleanup.
+- Show mainstream subscription/API categories and current endpoint tags during
+  donation review, including the corresponding assistant tool results.
+
+### Fixed and improved
+
+- Stop each model-directory binding check at its first eligible target, avoiding
+  repeated permission and quota work while preserving the available-binding
+  count and current routing rules.
+- Use distinct colors for endpoint tags and card-statistic rarity badges while
+  retaining their text labels and existing meanings.
+- Show the start time and unavailable-until-open message for upcoming limited
+  gacha pools, including beside the mobile summon controls.
+
+### Compatibility
+
+- Storage advances from schema 40 to 41; account export remains format 31.
+  Back up the matching recovery set and explicitly run the standalone upgrader
+  before starting the new server. Startup does not upgrade existing databases.
+  New management records begin after the upgrade, without historical backfill.
+
 ## 1.3.0 — 2026-10-27
 
 ### Service and model workflows

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
 // InterruptCredentialDiscoveryRunsTx is used after deleting a credential. It
@@ -30,6 +31,30 @@ func InterruptCredentialDiscoveryRunsTx(ctx context.Context, tx *sql.Tx, credent
 // failed/interrupted run. Existing operation-status reads derive this terminal
 // state without rewriting the immutable acceptance result.
 func interruptDiscoveryRunsTx(ctx context.Context, tx *sql.Tx, selector string, id, now int64) error {
+	rows, err := tx.QueryContext(ctx, "SELECT operation_id FROM discovery_runs WHERE state='checking' AND ("+selector+")", id)
+	if err != nil {
+		return err
+	}
+	ids := []string{}
+	for rows.Next() {
+		var operationID string
+		if err = rows.Scan(&operationID); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, operationID)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, operationID := range ids {
+		if err = managementlog.AppendRelatedTx(ctx, tx, "model_discovery", operationID, managementlog.Item{Action: "discover", TargetKind: "discovery_job", TargetID: operationID, Outcome: managementlog.Failed, Code: "interrupted"}, true); err != nil {
+			return err
+		}
+	}
+
 	if _, err := tx.ExecContext(ctx, "UPDATE accepted_operations SET state='completed',checkpoint='',last_error_class=NULL,terminal_at=max(?,created_at) WHERE kind='model_discovery' AND state IN ('accepted','running') AND id IN(SELECT operation_id FROM discovery_runs WHERE state='checking' AND ("+selector+"))", now, id); err != nil {
 		return fmt.Errorf("connectionstore: complete interrupted discovery operation: %w", err)
 	}

@@ -7,13 +7,15 @@ import (
 	"errors"
 	"math"
 	"strings"
+
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
 const MaxBodyBytes = 64 << 20
 const MaxPendingRequests = 1000
 
 func defaultSettings() Settings {
-	return Settings{OutputTokenParameter: "max_tokens", ContextWindow: 32768, MaxOutputTokens: 4096, ExtraParameters: json.RawMessage("{}"), Concurrency: 1, TimeoutSeconds: 600}
+	return Settings{Provider: ProviderChat, OutputReserveTokens: 4096, OutputTokenParameter: "max_tokens", ContextWindow: 32768, MaxOutputTokens: 4096, ExtraParameters: json.RawMessage("{}"), Concurrency: 1, TimeoutSeconds: 600}
 }
 func (r *Runtime) Settings(ctx context.Context) (Settings, error) {
 	s, _, err := loadSettings(ctx, r.readDB)
@@ -46,10 +48,14 @@ func loadSettings(ctx context.Context, q settingsReader) (Settings, string, erro
 	}
 	s.Revision = revision
 	s.HasKey = key != ""
+	s.OutputReserveTokens = s.MaxOutputTokens
+	normalizeProvider(&s)
 	return s, key, nil
 }
 func (r *Runtime) PutSettings(ctx context.Context, in SettingsUpdate) (Settings, error) {
 	s := Settings{OutputTokenParameter: in.OutputTokenParameter, BaseURL: strings.TrimSpace(in.BaseURL), Model: strings.TrimSpace(in.Model), ContextWindow: in.ContextWindow, MaxOutputTokens: in.MaxOutputTokens, Temperature: in.Temperature, TopP: in.TopP, ExtraParameters: in.ExtraParameters, Concurrency: in.Concurrency, TimeoutSeconds: in.TimeoutSeconds}
+	s.Provider = ProviderChat
+	s.OutputReserveTokens = s.MaxOutputTokens
 	if s.OutputTokenParameter == "" {
 		s.OutputTokenParameter = "max_tokens"
 	}
@@ -130,7 +136,9 @@ func (r *Runtime) PutSettings(ctx context.Context, in SettingsUpdate) (Settings,
 	if err != nil {
 		return Settings{}, err
 	}
-	if err = tx.Commit(); err != nil {
+	managementlog.SetTarget(ctx, "agent_driver", "0", "")
+	managementlog.ChangedFields(ctx, body)
+	if err = managementlog.Commit(ctx, tx); err != nil {
 		return Settings{}, err
 	}
 	r.signal()
@@ -153,6 +161,9 @@ func extraParameters(raw json.RawMessage) (map[string]json.RawMessage, error) {
 	return extra, nil
 }
 func requestBody(in Input, s Settings) ([]byte, error) {
+	if s.Provider == ProviderResponses || s.Provider == ProviderChatGPT {
+		return responsesBody(in, s)
+	}
 	body, err := extraParameters(s.ExtraParameters)
 	if err != nil {
 		return nil, err
@@ -168,7 +179,10 @@ func requestBody(in Input, s Settings) ([]byte, error) {
 	if s.TopP != nil {
 		put("top_p", *s.TopP)
 	}
-	body["messages"] = in.Messages
+	body["messages"], err = chatMessages(in.Messages)
+	if err != nil {
+		return nil, err
+	}
 	if len(in.Tools) > 0 {
 		body["tools"] = in.Tools
 	}

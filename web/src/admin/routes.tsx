@@ -21,6 +21,12 @@ export const router = createBrowserRouter([
     errorElement: <RouteErrorPage station="admin" />,
     children: [
       {
+        path: pathFor('admin-management-operations'),
+        lazy: async () => ({
+          Component: (await import('./pages/ManagementOperationsPage')).ManagementOperationsPage,
+        }),
+      },
+      {
         path: pathFor('admin-agent'),
         lazy: async () => ({ Component: (await import('./pages/AgentPage')).AgentPage }),
       },

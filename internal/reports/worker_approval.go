@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
@@ -203,6 +204,15 @@ WHERE id=? AND case_id=? AND state='protected'`, row.targetVersion, now, target.
 			}
 			deletedIncrement++
 		}
+		outcome := managementlog.Succeeded
+		code := "deleted"
+		if physicalMissing {
+			outcome = managementlog.NoChange
+			code = "already_missing"
+		}
+		if err := managementlog.AppendRelatedTx(ctx, tx, "report_case", caseID, managementlog.Item{Action: "delete", TargetKind: "report_target", TargetID: target.id, Outcome: outcome, Code: code}, false); err != nil {
+			return false, false, err
+		}
 		lastCursor = target.sequence
 	}
 	processedIncrement := int64(len(targets))
@@ -263,6 +273,11 @@ WHERE object_kind='report_case' AND object_ref=? AND state='active')`, caseID).S
 					return false, false, fmt.Errorf("reports: delete completed retained approval: %w", err)
 				}
 			}
+		}
+	}
+	if !more {
+		if err := managementlog.AppendRelatedTx(ctx, tx, "report_case", caseID, managementlog.Item{Action: "complete", TargetKind: "report_case", TargetID: caseID, Outcome: managementlog.Succeeded, Code: "completed"}, true); err != nil {
+			return false, false, err
 		}
 	}
 	if err := commit(tx, &committed); err != nil {

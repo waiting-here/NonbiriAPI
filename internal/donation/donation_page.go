@@ -139,7 +139,7 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 		if role == recurringOwner {
 			summary.OwnerHiddenAt = hidden[id]
 		}
-		result.Data = append(result.Data, AdminDonationSummary{DonationSummary: summary, Owner: header.Owner, Reviewer: header.Reviewer, Handling: header.Handling})
+		result.Data = append(result.Data, AdminDonationSummary{Sources: item.sources, DonationSummary: summary, Owner: header.Owner, Reviewer: header.Reviewer, Handling: header.Handling})
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -172,7 +172,7 @@ func (s *Service) DonationsStewardPage(ctx context.Context, userID int64, filter
 	out := Page[StewardDonationSummary]{Data: make([]StewardDonationSummary, 0, len(result.Data)), Pagination: result.Pagination}
 	for _, item := range result.Data {
 		visible := stewardFromAdmin(AdminDonation{Owner: item.Owner, Reviewer: item.Reviewer}, userID)
-		out.Data = append(out.Data, StewardDonationSummary{DonationSummary: item.DonationSummary, Owner: visible.Owner, Reviewer: visible.Reviewer, Handling: item.Handling})
+		out.Data = append(out.Data, StewardDonationSummary{Sources: item.Sources, DonationSummary: item.DonationSummary, Owner: visible.Owner, Reviewer: visible.Reviewer, Handling: item.Handling})
 	}
 	return out, nil
 }

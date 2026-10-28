@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"net/http"
 	"reflect"
 	"slices"
@@ -302,6 +303,7 @@ func (s *Service) AdminSave(ctx context.Context, actor int64, key string, input 
 	if err != nil {
 		return out, err
 	}
+	managementlog.SetItemsResult(ctx, []managementlog.Item{{Action: "configure", TargetKind: "gacha_configuration", TargetID: target, Outcome: managementlog.Succeeded, Changes: []managementlog.Change{{Field: "configuration", Operation: "updated"}}}})
 	if err = idempotency.Complete(ctx, tx, decision, http.StatusOK, []byte("{}")); err != nil {
 		return out, err
 	}

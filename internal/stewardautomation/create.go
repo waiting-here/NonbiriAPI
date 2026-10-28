@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -39,6 +40,7 @@ func (s *Service) create(ctx context.Context, userID int64, key string, canonica
 	if err != nil {
 		return nil, err
 	}
+	managementlog.ChangedFields(ctx, canonical)
 	digest, err := idempotency.RequestDigest(idempotency.DigestInput{ActorScopeHash: actor, Method: http.MethodPost, Route: DonationsPath, Body: canonical})
 	if err != nil {
 		return nil, errInvalid

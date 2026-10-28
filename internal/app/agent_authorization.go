@@ -95,7 +95,7 @@ func (a agentAuthority) Authorize(ctx context.Context, tx *sql.Tx, actor agentpl
 	role := authz.RoleAdministrator
 	if actor.Role != "admin" {
 		switch action {
-		case "ai.config", "ai.requests", "ai.logs", "ai.archives", "users.mfa_read", "users.mfa_reset", "users.delete", "fresh_elevation", "ai.auto":
+		case "management_history", "management.cleanup", "ai.config", "ai.requests", "ai.logs", "ai.archives", "users.mfa_read", "users.mfa_reset", "users.delete", "fresh_elevation", "ai.auto":
 			return authz.ErrForbidden
 		}
 		switch actor.Role {

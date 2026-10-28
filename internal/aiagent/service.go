@@ -53,19 +53,19 @@ func (s *Service) authorize(ctx context.Context, tx *sql.Tx, actor Actor, permis
 	return s.config.Authorize(ctx, tx, actor, permission)
 }
 
-func (s *Service) chatEnabled(ctx context.Context, tx *sql.Tx) (bool, error) {
+func (s *Service) chatEnabled(ctx context.Context, tx *sql.Tx, actor Actor) (bool, error) {
 	settings, _, _, err := readSettings(ctx, tx)
 	if err != nil || !settings.ChatEnabled {
 		return false, err
 	}
-	return s.config.Driver.Ready(ctx, tx)
+	return s.config.Driver.ReadyFor(ctx, tx, jobAttribution(Job{ActorID: actor.ID, ActorRole: actor.Role, ActorLabel: actor.Label}, "model"))
 }
 
 func (s *Service) requireChat(ctx context.Context, tx *sql.Tx, actor Actor) error {
 	if err := s.authorize(ctx, tx, actor, "ai.chat"); err != nil {
 		return err
 	}
-	enabled, err := s.chatEnabled(ctx, tx)
+	enabled, err := s.chatEnabled(ctx, tx, actor)
 	if err != nil {
 		return err
 	}
@@ -311,19 +311,25 @@ func (s *Service) AuthorizeRequest(ctx context.Context, attr agentrequest.Attrib
 	return s.requireChat(ctx, tx, actor)
 }
 
-func (s *Service) call(ctx context.Context, job Job, kind string, messages, tools, responseFormat []byte) (agentrequest.Result, error) {
-	var sequence int64
-	err := s.db.QueryRowContext(ctx, `UPDATE ai_agent_jobs SET request_sequence=request_sequence+1,updated_at=? WHERE id=? AND state='running' RETURNING request_sequence`, s.now().UnixMilli(), job.ID).Scan(&sequence)
-	if err != nil {
-		return agentrequest.Result{}, ErrConflict
-	}
+func jobAttribution(job Job, kind string) agentrequest.Attribution {
 	source := "steward_chat"
 	if job.Kind == "auto_review" {
 		source = "auto_review"
 	} else if job.ActorRole == "admin" {
 		source = "admin_chat"
 	}
-	request, err := s.config.Driver.Submit(ctx, agentrequest.Input{Attribution: agentrequest.Attribution{ClientRequestID: fmt.Sprintf("job:%d:%d", job.ID, sequence), Source: source, Kind: kind, ActorID: job.ActorID, ActorRole: job.ActorRole, ActorLabel: job.ActorLabel}, Messages: messages, Tools: tools, ResponseFormat: responseFormat})
+	return agentrequest.Attribution{Source: source, Kind: kind, ActorID: job.ActorID, ActorRole: job.ActorRole, ActorLabel: job.ActorLabel}
+}
+
+func (s *Service) call(ctx context.Context, job Job, kind string, messages, tools, responseFormat []byte) (agentrequest.Result, error) {
+	var sequence int64
+	err := s.db.QueryRowContext(ctx, `UPDATE ai_agent_jobs SET request_sequence=request_sequence+1,updated_at=? WHERE id=? AND state='running' RETURNING request_sequence`, s.now().UnixMilli(), job.ID).Scan(&sequence)
+	if err != nil {
+		return agentrequest.Result{}, ErrConflict
+	}
+	attr := jobAttribution(job, kind)
+	attr.ClientRequestID = fmt.Sprintf("job:%d:%d", job.ID, sequence)
+	request, err := s.config.Driver.Submit(ctx, agentrequest.Input{Attribution: attr, Messages: messages, Tools: tools, ResponseFormat: responseFormat})
 	if err != nil {
 		return agentrequest.Result{}, err
 	}

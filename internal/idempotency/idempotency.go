@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
 const (
@@ -270,6 +271,7 @@ WHERE scope=? AND actor_scope_hash=? AND key_hash=?`,
 	case "accepted":
 		return Decision{}, ErrInProgress
 	case "completed":
+		managementlog.MarkReplay(ctx)
 		return Decision{Kind: Replay, HTTPStatus: status, ResponseBody: append([]byte(nil), body...), token: recordToken}, nil
 	default:
 		return Decision{}, ErrState
@@ -308,7 +310,8 @@ WHERE scope=? AND actor_scope_hash=? AND key_hash=? AND request_hash=? AND state
 	if updated != 1 {
 		return ErrState
 	}
-	return nil
+	managementlog.CompletedIdentity(ctx, body)
+	return managementlog.RecordCompletedTx(ctx, tx, status)
 }
 
 func framedDigest(domain string, fields ...[]byte) [32]byte {

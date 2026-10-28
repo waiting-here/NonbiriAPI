@@ -12,6 +12,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/antiabuse"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"strconv"
 	"strings"
 	"time"
@@ -195,6 +196,7 @@ func (s *Service) Create(ctx context.Context, actor int64, key string, in Input)
 		if subtle.ConstantTimeCompare(previous, digest[:]) != 1 {
 			return out, ErrConflict
 		}
+		managementlog.MarkReplay(ctx)
 		return readCampaign(ctx, tx, id)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -242,7 +244,14 @@ func (s *Service) Create(ctx context.Context, actor int64, key string, in Input)
 	if err != nil {
 		return out, err
 	}
-	return out, tx.Commit()
+	metadata, _ := json.Marshal(in)
+	managementlog.ChangedFields(ctx, metadata)
+	managementlog.SetTarget(ctx, "reward_campaign", id, in.Title)
+	managementlog.SetCorrelation(ctx, "reward_campaign", id)
+	if in.Kind == "broadcast" && out.Matched > 0 {
+		managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.Accepted})
+	}
+	return out, managementlog.Commit(ctx, tx)
 }
 
 const campaignColumns = "id,kind,title,rewards,conditions,COALESCE(code,''),enabled,quota,starts_at,ends_at,revision,claimed,matched,skipped,created_at"
@@ -362,7 +371,9 @@ func (s *Service) Update(ctx context.Context, actor int64, in Edit) (Campaign, e
 	}
 	if c.Revision != in.Revision {
 		if c.Title == in.Title && c.Enabled == in.Enabled && jsonText(c.Quota) == jsonText(in.Quota) && jsonText(c.StartsAt) == jsonText(in.StartsAt) && jsonText(c.EndsAt) == jsonText(in.EndsAt) {
-			return c, nil
+			managementlog.SetTarget(ctx, "reward_campaign", in.ID, in.Title)
+			managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.NoChange, Code: "unchanged"})
+			return c, managementlog.Commit(ctx, tx)
 		}
 		return out, ErrConflict
 	}
@@ -374,7 +385,10 @@ func (s *Service) Update(ctx context.Context, actor int64, in Edit) (Campaign, e
 	if err != nil {
 		return out, err
 	}
-	return out, tx.Commit()
+	metadata, _ := json.Marshal(in)
+	managementlog.ChangedFields(ctx, metadata)
+	managementlog.SetTarget(ctx, "reward_campaign", in.ID, in.Title)
+	return out, managementlog.Commit(ctx, tx)
 }
 func (s *Service) Retry(ctx context.Context, actor int64, id string) (Campaign, error) {
 	var out Campaign
@@ -396,12 +410,27 @@ func (s *Service) Retry(ctx context.Context, actor int64, id string) (Campaign, 
 	if c.Kind != "broadcast" {
 		return out, ErrInvalid
 	}
-	if _, err = tx.ExecContext(ctx, "UPDATE reward_claims SET status='pending',failure='' WHERE campaign_id=? AND status='failed'", id); err != nil {
+	retried, retryErr := tx.ExecContext(ctx, "UPDATE reward_claims SET status='pending',failure='' WHERE campaign_id=? AND status='failed'", id)
+	if err = retryErr; err != nil {
 		return out, err
 	}
 	out, err = readCampaign(ctx, tx, id)
 	if err != nil {
 		return out, err
 	}
-	return out, tx.Commit()
+	count, err := retried.RowsAffected()
+	if err != nil {
+		return out, err
+	}
+	managementlog.SetTarget(ctx, "reward_campaign", id, c.Title)
+	managementlog.SetCorrelation(ctx, "reward_campaign", id)
+	outcome := managementlog.NoChange
+	if count > 0 {
+		if err = managementlog.AppendRelatedTx(ctx, tx, "reward_campaign", id, managementlog.Item{Action: "retry", TargetKind: "reward_campaign", TargetID: id, Outcome: managementlog.Partial, Code: "continued_by_retry"}, true); err != nil {
+			return out, err
+		}
+		outcome = managementlog.Accepted
+	}
+	managementlog.SetResult(ctx, managementlog.Result{Outcome: outcome})
+	return out, managementlog.Commit(ctx, tx)
 }

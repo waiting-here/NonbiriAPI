@@ -21,6 +21,7 @@ import {
   type TemplateMessage,
 } from './api';
 import { AgentError } from './AgentParts';
+import { DriverPanel } from './DriverPanel';
 
 const toolLabels: Record<string, string> = {
   donations: 'common.agent.tools.donations',
@@ -33,6 +34,7 @@ const toolLabels: Record<string, string> = {
   web_search: 'common.agent.tools.web_search',
   propose_operations: 'common.agent.tools.propose_operations',
   edit_memory: 'common.agent.tools.edit_memory',
+  management_history: 'common.agent.tools.management_history',
 };
 function useAdminRequestGuard() {
   const client = useQueryClient();
@@ -192,6 +194,28 @@ function TemplateEditor({
                   >
                     {t('common.agent.insertMemory')}
                   </Button>
+                  {chat ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() =>
+                          patch(index, { content: row.content + '\n{{interlocutor}}' })
+                        }
+                      >
+                        {t('common.agent.insertInterlocutor')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() =>
+                          patch(index, { content: row.content + '\n{{personal_memory}}' })
+                        }
+                      >
+                        {t('common.agent.insertPersonalMemory')}
+                      </Button>
+                    </>
+                  ) : null}
                   {!chat ? (
                     <Button
                       type="button"
@@ -741,6 +765,7 @@ export function AdminSettings({ account, active }: { account: string; active: bo
   });
   return (
     <div className="nb-stack">
+      <DriverPanel key={account} account={account} active={active} />
       {driver.isPending ? (
         <LoadingState />
       ) : driver.error ? (

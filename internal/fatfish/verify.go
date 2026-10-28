@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"io"
 	"math/big"
 	"strconv"
@@ -264,6 +265,9 @@ func (s *Service) settleVerified(ctx context.Context, id string) error {
 		}
 		_, err = tx.ExecContext(ctx, `UPDATE fatfish_challenges SET state=?,terminal_at_ms=?,terminal_reason=?,revision=revision+1 WHERE id=? AND state='verifying' AND revision=?`, state, nowMS, result.Reason, c.id, c.revision)
 		if err != nil {
+			return err
+		}
+		if err = managementlog.AppendRelatedTx(ctx, tx, "fatfish_playtest", id, managementlog.Item{Action: "verify", TargetKind: "playtest", TargetID: id, Outcome: managementlog.Succeeded, Code: state}, true); err != nil {
 			return err
 		}
 		return tx.Commit()

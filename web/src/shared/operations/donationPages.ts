@@ -15,6 +15,7 @@ import {
   type DonationHandling,
   type DonationStatus,
   type ManagedDonationKey,
+  type ManagedSafeSource,
 } from './charity';
 import { decoded, queryPath } from './api';
 import { charityScopePath } from './charityScope';
@@ -69,45 +70,7 @@ export interface DonationPageResult<T> {
   pagination: PageMetadata;
 }
 
-export type DonationPageSafeSource =
-  | {
-      kind: 'custom';
-      connector_type:
-        | 'openai-compatible'
-        | 'anthropic-compatible'
-        | 'ai-sdk-gateway-v3'
-        | 'ai-sdk-gateway-v4'
-        | 'google-gemini'
-        | 'openai-responses'
-        | 'openai-decisions'
-        | 'cohere-rerank'
-        | 'jina-rerank'
-        | 'siliconflow-rerank'
-        | 'voyage-rerank'
-        | 'typesafe-systemone'
-        | 'openai-chat-completions';
-      base_url: string;
-    }
-  | {
-      kind: 'mainstream';
-      connector_type:
-        | 'openai-compatible'
-        | 'anthropic-compatible'
-        | 'ai-sdk-gateway-v3'
-        | 'ai-sdk-gateway-v4'
-        | 'google-gemini'
-        | 'openai-responses'
-        | 'openai-decisions'
-        | 'cohere-rerank'
-        | 'jina-rerank'
-        | 'siliconflow-rerank'
-        | 'voyage-rerank'
-        | 'typesafe-systemone'
-        | 'openai-chat-completions';
-      base_url: string;
-      channel_id: string;
-      name: string;
-    };
+export type DonationPageSafeSource = ManagedSafeSource;
 
 export interface DonationPageReviewResult {
   decision: 'approve' | 'reject' | 'force_reject';
@@ -390,15 +353,7 @@ function sourceFilters(value: unknown, allowIdle: boolean): NormalizedSourceFilt
 }
 
 function sharedSource(value: unknown, label: string): DonationPageSafeSource {
-  const source = normalizeManagedSource(value, label, 'steward');
-  if (source.kind === 'custom') return source;
-  return {
-    kind: source.kind,
-    connector_type: source.connector_type,
-    base_url: source.base_url,
-    channel_id: source.channel_id,
-    name: source.name,
-  };
+  return normalizeManagedSource(value, label, 'steward');
 }
 
 function pageHandling(value: unknown, label: string, status?: DonationStatus): DonationHandling {

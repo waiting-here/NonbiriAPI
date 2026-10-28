@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -74,6 +75,7 @@ func beginAdminMutation(
 	if err != nil {
 		return idempotency.Decision{}, ErrInvalidRequest
 	}
+	managementlog.ChangedFields(ctx, body)
 	requestHash, err := idempotency.RequestDigest(idempotency.DigestInput{
 		ActorScopeHash: actorHash,
 		Method:         http.MethodPost,
@@ -126,6 +128,9 @@ func finishDecisionMutation(
 	status int,
 	response DecisionResponse,
 ) (MutationResult, error) {
+	if status == http.StatusAccepted {
+		managementlog.SetCorrelation(ctx, "report_case", response.ID)
+	}
 	body, err := json.Marshal(response)
 	if err != nil {
 		return MutationResult{}, ErrUnavailable
@@ -250,6 +255,9 @@ id,kind,actor_user_id,actor_role,payload_hash,state,checkpoint,last_error_class,
 VALUES(?,'report_approved_processing',?,'admin',?,'accepted',?,NULL,?,NULL)`,
 		operationID, principal.UserID, row.fingerprint[:], caseID, now); err != nil {
 		return MutationResult{}, fmt.Errorf("reports: accept approval processing: %w", err)
+	}
+	if err := managementlog.AppendRelatedTx(ctx, tx, "report_case", caseID, managementlog.Item{Action: "resume", TargetKind: "report_case", TargetID: caseID, Outcome: managementlog.Partial, Code: "continued_by_resume"}, true); err != nil {
+		return MutationResult{}, err
 	}
 	result, err := finishDecisionMutation(ctx, tx, replay, http.StatusAccepted, decisionResponse(row, "approved_processing"))
 	if err != nil {
@@ -473,6 +481,9 @@ WHERE id=? AND status='approved_processing' AND target_version=? AND retry_attem
 case_id,material_version,target_version,actor_user_id,action,reason,created_at)
 VALUES(?,?,?,?,'resume_processing','',?)`, caseID, row.materialVersion, row.targetVersion, principal.UserID, now); err != nil {
 		return MutationResult{}, fmt.Errorf("reports: append resume decision: %w", err)
+	}
+	if err := managementlog.AppendRelatedTx(ctx, tx, "report_case", caseID, managementlog.Item{Action: "resume", TargetKind: "report_case", TargetID: caseID, Outcome: managementlog.Partial, Code: "continued_by_resume"}, true); err != nil {
+		return MutationResult{}, err
 	}
 	result, err := finishDecisionMutation(ctx, tx, replay, http.StatusAccepted, decisionResponse(row, "approved_processing"))
 	if err != nil {

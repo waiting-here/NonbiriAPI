@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"sync"
 	"time"
 
@@ -23,19 +24,20 @@ type Config struct {
 }
 
 type Service struct {
-	db               *sql.DB
-	auth             *authz.Authorizer
-	resources        *resources.Repository
-	donations        *donation.Service
-	charity          *charityrouting.Service
-	mu               sync.Mutex
-	active           map[int64]bool
-	cancels          map[int64]context.CancelFunc
-	closed           bool
-	now              func() time.Time
-	createTimeout    time.Duration
-	bindingTimeout   time.Duration
-	discoveryTimeout time.Duration
+	db                *sql.DB
+	managementHistory *managementlog.Service
+	auth              *authz.Authorizer
+	resources         *resources.Repository
+	donations         *donation.Service
+	charity           *charityrouting.Service
+	mu                sync.Mutex
+	active            map[int64]bool
+	cancels           map[int64]context.CancelFunc
+	closed            bool
+	now               func() time.Time
+	createTimeout     time.Duration
+	bindingTimeout    time.Duration
+	discoveryTimeout  time.Duration
 }
 
 func New(config Config) (*Service, error) {

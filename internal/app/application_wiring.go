@@ -23,6 +23,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/charity"
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
+	"github.com/waiting-here/NonbiriAPI/internal/chatgptauth"
 	"github.com/waiting-here/NonbiriAPI/internal/checkin"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
@@ -581,6 +582,11 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create automation service: %w", err)
 	}
+	managementHistory, err := configureManagementOperations(store, authRuntime, roleAuthorizer)
+	if err != nil {
+		return nil, fmt.Errorf("configure management history: %w", err)
+	}
+	automationService.ConfigureManagementHistory(managementHistory)
 	lifecycleCoordinator, err = newLifecycleCoordinator(
 		store, vault, authRuntime, roleAuthorizer, forwardRuntime, gameRuntimes,
 		claimService, resourceRepository, issueService, logRepository,
@@ -596,29 +602,37 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create assistant account operations: %w", err)
 	}
+	assistantAdminAuthorize := func(ctx context.Context, tx *sql.Tx) error {
+		actor, ok := auth.ActorFromContext(ctx)
+		if !ok {
+			return authz.ErrUnauthorized
+		}
+		_, err := authorizer.Authorize(ctx, tx, actor, authz.Requirement{Role: authz.RoleAdministrator})
+		return err
+	}
+	assistantChatGPT, err := chatgptauth.New(chatgptauth.Config{
+		DB: store.DB(), ReadDB: store.ReadDB(), Stack: outbound, Secrets: vault, AdminAuthorize: assistantAdminAuthorize,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create assistant ChatGPT connection: %w", err)
+	}
 	assistantRequests, err = agentrequest.New(agentrequest.Config{
-		DB: store.DB(), ReadDB: store.ReadDB(), Stack: outbound, Flow: forwardRuntime.flow, Secrets: vault,
+		DB: store.DB(), ReadDB: store.ReadDB(), Stack: outbound, Flow: forwardRuntime.flow, Secrets: vault, ChatGPT: assistantChatGPT,
 		Authorize: func(ctx context.Context, attr agentrequest.Attribution) error {
 			if assistant == nil {
 				return aiagent.ErrUnavailable
 			}
 			return assistant.AuthorizeRequest(ctx, attr)
 		},
-		AdminAuthorize: func(ctx context.Context, tx *sql.Tx) error {
-			actor, ok := auth.ActorFromContext(ctx)
-			if !ok {
-				return authz.ErrUnauthorized
-			}
-			_, err := authorizer.Authorize(ctx, tx, actor, authz.Requirement{Role: authz.RoleAdministrator})
-			return err
-		},
+		AdminAuthorize: assistantAdminAuthorize,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create assistant model runtime: %w", err)
 	}
 	assistant, err = aiagent.New(aiagent.Config{
 		DB: store.DB(), ReadDB: store.ReadDB(), Driver: assistantRequests, Authorize: assistantAuthority.Authorize,
-		Operations: &agentOperations{read: store.ReadDB(), donations: donationService, charity: charityRoutingService, users: assistantUsers, authority: assistantAuthority, pressure: audits.pressure},
+		History:    managementHistory,
+		Operations: &agentOperations{read: store.ReadDB(), donations: donationService, charity: charityRoutingService, users: assistantUsers, authority: assistantAuthority, pressure: audits.pressure, history: managementHistory},
 		Search:     agentSearch(store.ReadDB(), outbound, forwardRuntime.flow, assistantAuthority), Secrets: vault,
 	})
 	if err != nil {
@@ -628,45 +642,49 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err = aiagent.RegisterRoutes(agentRouteRegistrar{runtime: authRuntime, database: store.ReadDB()}, assistant, assistantRequests); err != nil {
 		return nil, fmt.Errorf("register assistant routes: %w", err)
 	}
+	if err = aiagent.RegisterDriverRoutes(agentRouteRegistrar{runtime: authRuntime, database: store.ReadDB()}, assistant, assistantRequests, assistantChatGPT); err != nil {
+		return nil, fmt.Errorf("register assistant driver routes: %w", err)
+	}
 	app := &application{
 		agent: assistant, agentRequests: assistantRequests,
-		workerCancel:    workerCancel,
-		audits:          audits,
-		activityRuntime: activityEngines,
-		authRuntime:     authRuntime,
-		bridge:          bridgeRuntime,
-		claims:          claimService,
-		resourceRepo:    resourceRepository,
-		automation:      automationService,
-		discoveryWorker: discoveryWorker,
-		donations:       donationService,
-		charity:         charityService,
-		charityRouting:  charityRoutingService,
-		adaptations:     adaptations,
-		checkin:         checkinService,
-		homeGames:       homeGameService,
-		announcements:   announcementService,
-		issues:          issueService,
-		reports:         reportRepository,
-		activities:      activityService,
-		activityRepo:    activityRepository,
-		activityEvents:  activityEvents,
-		adminConfig:     adminConfigRuntime,
-		adminAlerts:     adminAlertRepository,
-		returnAlerts:    returnAlerts,
-		adminUsers:      adminUserService,
-		lifecycle:       lifecycleCoordinator,
-		debug:           debugHub,
-		logs:            logRepository,
-		accountEvents:   accountConnections,
-		forward:         forwardRuntime,
-		games:           gameRuntimes,
-		authorizer:      authorizer,
-		elevation:       elevationManager,
-		gate:            gate,
-		registry:        registry,
-		maintenance:     maintenanceService,
-		egress:          outbound,
+		managementHistory: managementHistory,
+		workerCancel:      workerCancel,
+		audits:            audits,
+		activityRuntime:   activityEngines,
+		authRuntime:       authRuntime,
+		bridge:            bridgeRuntime,
+		claims:            claimService,
+		resourceRepo:      resourceRepository,
+		automation:        automationService,
+		discoveryWorker:   discoveryWorker,
+		donations:         donationService,
+		charity:           charityService,
+		charityRouting:    charityRoutingService,
+		adaptations:       adaptations,
+		checkin:           checkinService,
+		homeGames:         homeGameService,
+		announcements:     announcementService,
+		issues:            issueService,
+		reports:           reportRepository,
+		activities:        activityService,
+		activityRepo:      activityRepository,
+		activityEvents:    activityEvents,
+		adminConfig:       adminConfigRuntime,
+		adminAlerts:       adminAlertRepository,
+		returnAlerts:      returnAlerts,
+		adminUsers:        adminUserService,
+		lifecycle:         lifecycleCoordinator,
+		debug:             debugHub,
+		logs:              logRepository,
+		accountEvents:     accountConnections,
+		forward:           forwardRuntime,
+		games:             gameRuntimes,
+		authorizer:        authorizer,
+		elevation:         elevationManager,
+		gate:              gate,
+		registry:          registry,
+		maintenance:       maintenanceService,
+		egress:            outbound,
 	}
 	if err := app.registerRoutes(store, roleAuthorizer, debugMutations); err != nil {
 		return nil, err
@@ -689,11 +707,15 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err := assistant.Recover(startupContext); err != nil {
 		return nil, fmt.Errorf("recover assistant workflows: %w", err)
 	}
+	if err := managementHistory.RecoverInterrupted(startupContext); err != nil {
+		return nil, fmt.Errorf("recover management history: %w", err)
+	}
 
 	automationHandler, err := newAutomationHandler(automationService, resourceRepository, forwardRuntime.lifecycle, gate)
 	if err != nil {
 		return nil, err
 	}
+	automationHandler = wrapAutomationHistory(managementHistory, automationHandler)
 	mux, err := generationTwoMux(cfg, store, authRuntime, forwardRuntime.handler, artworkPolicy.disabled, automationHandler)
 	if err != nil {
 		return nil, err
@@ -738,6 +760,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		})
 	}()
 	app.performanceDone = performanceDone
+	_, app.managementDone = startManagementCleanup(workerContext, managementHistory)
 	app.readiness, app.handler, app.failures = readiness, performance.Wrap(handler), failures
 	app.lifecycleCancel, app.lifecycleDone = lifecycleCancel, lifecycleDone
 	app.rankingCancel, app.rankingDone = rankingCancel, rankingDone

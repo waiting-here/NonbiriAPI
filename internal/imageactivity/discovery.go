@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"net/http"
 	"sort"
 	"strconv"
@@ -101,6 +102,8 @@ func (s *Service) refreshModels(ctx context.Context, admin int64, key string, fi
 	if err != nil {
 		return out, err
 	}
+	managementlog.SetCorrelation(ctx, "image_model_discovery", id)
+	managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.Accepted})
 	if err = finishReplay(ctx, tx, d, out.Value); err != nil {
 		return out, err
 	}
@@ -419,6 +422,13 @@ func (s *Service) finishRefresh(ctx context.Context, id string, models []discove
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, "UPDATE accepted_operations SET state='completed',terminal_at=?,last_error_class=NULL WHERE id=?", now, id); err != nil {
+		return err
+	}
+	outcome := managementlog.Failed
+	if code == "" {
+		outcome = managementlog.Succeeded
+	}
+	if err = managementlog.AppendRelatedTx(ctx, tx, "image_model_discovery", id, managementlog.Item{Action: "discover", TargetKind: "discovery_job", TargetID: id, Outcome: outcome, Code: code}, true); err != nil {
 		return err
 	}
 	return tx.Commit()

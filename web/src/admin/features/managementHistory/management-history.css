@@ -1,0 +1,34 @@
+.management-history__filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: var(--nb-space-4);
+  align-items: start;
+}
+.management-history__filter-help {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.management-history__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nb-space-2) var(--nb-space-4);
+  font-variant-numeric: tabular-nums;
+}
+.management-history__counts > span {
+  white-space: nowrap;
+}
+.management-history__facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--nb-space-2) var(--nb-space-4);
+  overflow-wrap: anywhere;
+}
+.management-history__facts dd {
+  margin: 0;
+}
+.management-history__facts dt {
+  color: var(--nb-color-text-muted);
+}
+.management-history__target-kind {
+  display: block;
+}

@@ -73,7 +73,9 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 		indexedTables: []string{"charity_reservations", "charity_dispatch_receipts", "charity_key_affinities", "charity_header_sessions", "charity_header_uses"}, credentials: credentialsUnchanged}},
 	{from: 38, version: 39, manifest: db.Schema39ManifestHash, sql: db.EndpointTagRulesSQL, impact: &migrationImpact{
 		rebuiltTables: []string{"admin_endpoint_tags"}, addedTables: []string{"endpoint_tag_rules", "endpoint_tag_rule_tags"}, controlTables: []string{"endpoint_tag_domains"}, indexedTables: []string{"donation_keys"}, constraintTables: []string{"endpoints", "donation_keys"}, credentials: credentialsUnchanged}},
-	{from: 39, version: 40, manifest: db.PinnedGenerationTwoManifestHash, apply: isolateServiceKeys, impact: serviceScopeImpact},
+	{from: 39, version: 40, manifest: db.Schema40ManifestHash, apply: isolateServiceKeys, impact: serviceScopeImpact},
+	{from: 40, version: 41, manifest: db.PinnedGenerationTwoManifestHash, sql: db.AgentDriversSQL + db.AgentPersonalMemorySQL + db.ManagementOperationsSQL, impact: &migrationImpact{
+		addedTables: []string{"agent_driver_profiles", "agent_driver_bindings", "agent_request_drivers", "agent_chatgpt_session", "ai_agent_personal_memories", "ai_agent_personal_memory_history", "management_operations", "management_operation_items", "management_operation_rollups", "management_operation_cleanup_jobs"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {
@@ -115,6 +117,7 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{37, db.Schema37ManifestHash, "4413e15527dff68e42386ca4841c38fc93911539"},
 		{38, db.Schema38ManifestHash, "de51645924a488d742baad5ff1a35f6569f22746"},
 		{39, db.Schema39ManifestHash, "31f18116afe12c50a48bca87fe48c1a7c01ba796"},
+		{40, db.Schema40ManifestHash, "753a64a8e375632759e452ad9f1a222c84417422"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,

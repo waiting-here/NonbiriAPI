@@ -15,7 +15,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
-func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL != nil && !IsPersonalPath(r.URL.Path) {
 		r = r.WithContext(authz.WithStewardPermission(r.Context(), authz.StewardRoutePermission(r.Method, r.URL.Path)))
 	}

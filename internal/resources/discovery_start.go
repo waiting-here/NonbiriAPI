@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"net/http"
 	"strconv"
 
@@ -155,6 +156,7 @@ func beginSourceDiscovery[T any](ctx context.Context, r *Repository, mutation Co
 	if err != nil {
 		return MutationResult[T]{}, err
 	}
+	managementlog.SetCorrelation(ctx, "model_discovery", operationID)
 	out, err := finishJSONMutation(ctx, tx, decision, http.StatusAccepted, item)
 	if err != nil {
 		return MutationResult[T]{}, err

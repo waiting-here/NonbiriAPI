@@ -12,14 +12,14 @@ import (
 	"unicode/utf8"
 )
 
-const requestColumns = "id,client_request_id,source,kind,actor_id,actor_role,actor_label,state,base_url,model,created_at,started_at,completed_at,consumed_at,status_code,error_code,response_complete,content_redacted,usage_json"
+const requestColumns = "id,client_request_id,source,kind,actor_id,actor_role,actor_label,state,base_url,model,created_at,started_at,completed_at,consumed_at,status_code,error_code,response_complete,content_redacted,usage_json,COALESCE((SELECT driver_id FROM agent_request_drivers d WHERE d.request_id=agent_requests.id),0),COALESCE((SELECT provider FROM agent_request_drivers d WHERE d.request_id=agent_requests.id),'chat_completions')"
 
 type scanner interface{ Scan(...any) error }
 
 func scanRequest(row scanner) (Request, error) {
 	var out Request
 	var usage string
-	err := row.Scan(&out.ID, &out.ClientRequestID, &out.Source, &out.Kind, &out.ActorID, &out.ActorRole, &out.ActorLabel, &out.State, &out.BaseURL, &out.Model, &out.CreatedAt, &out.StartedAt, &out.CompletedAt, &out.ConsumedAt, &out.StatusCode, &out.ErrorCode, &out.ResponseComplete, &out.ContentRedacted, &usage)
+	err := row.Scan(&out.ID, &out.ClientRequestID, &out.Source, &out.Kind, &out.ActorID, &out.ActorRole, &out.ActorLabel, &out.State, &out.BaseURL, &out.Model, &out.CreatedAt, &out.StartedAt, &out.CompletedAt, &out.ConsumedAt, &out.StatusCode, &out.ErrorCode, &out.ResponseComplete, &out.ContentRedacted, &usage, &out.DriverID, &out.Provider)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, ErrNotFound
 	}
@@ -79,12 +79,19 @@ func (r *Runtime) Submit(ctx context.Context, in Input) (Request, error) {
 	if closed {
 		return Request{}, ErrClosed
 	}
-	settings, key, err := loadSettings(ctx, r.readDB)
+	if err := r.authorize(ctx, in.Attribution); err != nil {
+		return Request{}, err
+	}
+	settings, key, err := r.resolveSettingsKey(ctx, in.Attribution)
 	if err != nil {
 		return Request{}, err
 	}
 	if !settings.HasKey || settings.BaseURL == "" || settings.Model == "" {
 		return Request{}, ErrUnconfigured
+	}
+	key, err = r.modelKey(ctx, &settings, key)
+	if err != nil {
+		return Request{}, err
 	}
 	encoded, err := json.Marshal(in)
 	if err != nil || len(encoded) > MaxBodyBytes {
@@ -161,6 +168,14 @@ func (r *Runtime) Detail(ctx context.Context, id int64) (Detail, error) {
 		}
 	}
 	detail := Detail{QueuedInput: json.RawMessage(input), Request: out, RequestBody: string(request), ResponseBody: string(response)}
+	var snapshot string
+	if e := tx.QueryRowContext(ctx, "SELECT settings_json FROM agent_request_drivers WHERE request_id=?", id).Scan(&snapshot); e == nil {
+		detail.DriverSettings = json.RawMessage(snapshot)
+	} else if !errors.Is(e, sql.ErrNoRows) {
+		return Detail{}, e
+	} else {
+		detail.DriverSettings = json.RawMessage("{}")
+	}
 	if !utf8.Valid(response) {
 		detail.ResponseBodyBase64 = base64.StdEncoding.EncodeToString(response)
 	}
@@ -185,7 +200,7 @@ func (r *Runtime) Wait(ctx context.Context, id int64) (Result, error) {
 			if err != nil {
 				return Result{}, err
 			}
-			result, parseErr := parseResult(id, []byte(detail.ResponseBody))
+			result, parseErr := parseStoredResult(id, detail)
 			result.Usage = request.Usage
 			if request.State == "succeeded" {
 				return result, parseErr

@@ -281,3 +281,15 @@
   display: grid;
   gap: var(--nb-space-4);
 }
+.agent-login-steps {
+  margin: 0;
+  padding-inline-start: var(--nb-space-6);
+  display: grid;
+  gap: var(--nb-space-5);
+}
+.agent-login-steps li {
+  min-width: 0;
+}
+.agent-login-steps li > * + * {
+  margin-block-start: var(--nb-space-3);
+}

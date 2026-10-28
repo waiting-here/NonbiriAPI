@@ -9,6 +9,7 @@ import type { OperationPreview, PlanOperation } from './api';
 
 const operationNames: Record<string, string> = {
   'memory.edit': 'common.agent.operationNames.memory',
+  'management.cleanup': 'common.agent.operationNames.managementCleanup',
   'donation.review': 'common.agent.operationNames.review',
   'donation.key.update': 'common.agent.operationNames.key',
   'donation.key.failure_policy': 'common.agent.operationNames.failurePolicy',
@@ -224,12 +225,49 @@ export function OperationSummary({
                   ? t('common.agent.chatMemory')
                   : operation.target_id === 'auto_review'
                     ? t('common.agent.reviewMemory')
-                    : operation.target_id,
+                    : operation.target_id === 'personal'
+                      ? input.owner_id
+                        ? t('common.agent.personalMemoryOwner', { id: String(input.owner_id) })
+                        : t('common.agent.myMemory')
+                      : operation.target_id,
             },
           )}
         </p>
       ) : null}
       {fields(input, before)}
+      {operation.kind === 'management.cleanup' ? (
+        <>
+          <p>
+            {t('admin.managementHistory.cleanupScope', {
+              value: formatCount(String(before.matching_operations ?? '0')).display,
+              cutoff: String(before.cutoff_max_id ?? input.cutoff_max_id ?? ''),
+            })}
+          </p>
+          {before.all ? (
+            <p>{t('admin.managementHistory.allRecords')}</p>
+          ) : (
+            Object.entries(object(before.filter)).map(([key, value]) => (
+              <p key={key}>
+                <strong>
+                  {t(`admin.managementHistory.fields.${key}`, { defaultValue: key })}:{' '}
+                </strong>
+                {typeof value === 'number' ? (
+                  <AgentTime value={value} />
+                ) : key === 'source' ? (
+                  t(`admin.managementHistory.sources.${value}`, { defaultValue: String(value) })
+                ) : key === 'outcome' ? (
+                  t(`admin.managementHistory.outcomes.${value}`, { defaultValue: String(value) })
+                ) : key === 'domain' ? (
+                  t(`admin.managementHistory.domains.${value}`, { defaultValue: String(value) })
+                ) : (
+                  String(value)
+                )}
+              </p>
+            ))
+          )}
+          <p className="nb-small nb-muted">{t('admin.managementHistory.cleanupConsequence')}</p>
+        </>
+      ) : null}
       {operation.kind === 'charity.binding.apply_preset' ? (
         <>
           <p>

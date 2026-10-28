@@ -178,6 +178,9 @@ func (a *application) CloseContext(ctx context.Context) error {
 			if a.performanceDone != nil {
 				<-a.performanceDone
 			}
+			if a.managementDone != nil {
+				<-a.managementDone
+			}
 			a.setClosePhase("domains")
 			var failures []error
 			closeResource := func(close func() error) {

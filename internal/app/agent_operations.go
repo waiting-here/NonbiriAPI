@@ -19,6 +19,7 @@ import (
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
@@ -29,6 +30,7 @@ type agentOperations struct {
 	users     *agentusers.Service
 	authority agentAuthority
 	pressure  *observability.PressureMonitor
+	history   *managementlog.Service
 }
 
 func (o *agentOperations) Tools(ctx context.Context, actor agentplan.Actor, automatic bool) ([]aiagent.Tool, error) {
@@ -50,6 +52,9 @@ func (o *agentOperations) Tools(ctx context.Context, actor agentplan.Actor, auto
 	}
 	if !automatic {
 		schemas["users"] = agentusers.ReadSchema()
+		if o.history != nil {
+			schemas["management_history"] = historyReadSchema()
+		}
 		schemas["site_status"] = json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false,"description":"Read current global RPM, concurrency and retained pressure peaks."}`)
 	}
 	names := make([]string, 0, len(schemas))
@@ -65,7 +70,7 @@ func (o *agentOperations) Tools(ctx context.Context, actor agentplan.Actor, auto
 			}
 			return nil, err
 		}
-		out = append(out, aiagent.Tool{Name: name, Description: agentSchemaDescription(schemas[name]), Parameters: schemas[name], ChatOnly: name == "charity_binding_presets"})
+		out = append(out, aiagent.Tool{Name: name, Description: agentSchemaDescription(schemas[name]), Parameters: schemas[name], ChatOnly: name == "charity_binding_presets" || name == "management_history"})
 	}
 	if automatic {
 		return out, nil
@@ -76,6 +81,9 @@ func (o *agentOperations) Tools(ctx context.Context, actor agentplan.Actor, auto
 	}
 	for name, schema := range agentusers.OperationSchemas() {
 		ops[name] = schema
+	}
+	if o.history != nil {
+		ops["management.cleanup"] = historyCleanupSchema()
 	}
 	names = names[:0]
 	for name := range ops {
@@ -90,8 +98,12 @@ func (o *agentOperations) Tools(ctx context.Context, actor agentplan.Actor, auto
 			}
 			return nil, err
 		}
+		targetDescription := "Exact existing resource ID; empty only for model creation."
+		if name == "management.cleanup" {
+			targetDescription = "Empty string for site-wide management history."
+		}
 		variants = append(variants, map[string]any{"type": "object", "properties": map[string]any{
-			"kind": map[string]any{"type": "string", "const": name}, "target_id": map[string]any{"type": "string", "description": "Exact existing resource ID; empty only for model creation."}, "input": ops[name],
+			"kind": map[string]any{"type": "string", "const": name}, "target_id": map[string]any{"type": "string", "description": targetDescription}, "input": ops[name],
 		}, "required": []string{"kind", "target_id", "input"}, "additionalProperties": false})
 	}
 	if len(variants) > 0 {
@@ -130,6 +142,11 @@ func (o *agentOperations) Read(ctx context.Context, actor agentplan.Actor, name 
 		raw, err = o.charity.AgentRead(ctx, tx, actor, name, args, o.authority.Authorize)
 	case "users":
 		raw, err = o.users.Read(ctx, tx, actor, args, o.authority.Authorize)
+	case "management_history":
+		if err = tx.Rollback(); err != nil {
+			return nil, err
+		}
+		return o.readHistory(ctx, actor, args)
 	case "site_status":
 		if o.pressure == nil {
 			return nil, aiagent.ErrUnavailable
@@ -148,16 +165,29 @@ func (o *agentOperations) Read(ctx context.Context, actor agentplan.Actor, name 
 }
 
 func (o *agentOperations) Preview(ctx context.Context, actor agentplan.Actor, ops []agentplan.Operation) ([]agentplan.Preview, error) {
+	cleanupPreviews := map[int]agentplan.Preview{}
+	for i, op := range ops {
+		if op.Kind != "management.cleanup" {
+			continue
+		}
+		preview, err := o.previewHistoryCleanup(ctx, actor, op)
+		if err != nil {
+			return nil, err
+		}
+		cleanupPreviews[i] = preview
+	}
 	tx, err := o.read.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 	result := make([]agentplan.Preview, 0, len(ops))
-	for _, op := range ops {
+	for index, op := range ops {
 		var v agentplan.Preview
 		callCtx := agentContext(ctx, actor, op.Kind)
 		switch {
+		case op.Kind == "management.cleanup":
+			v = cleanupPreviews[index]
 		case strings.HasPrefix(op.Kind, "donation."):
 			v, err = o.donations.AgentPreview(callCtx, tx, actor, op, o.authority.Authorize)
 		case strings.HasPrefix(op.Kind, "charity."):
@@ -180,6 +210,7 @@ type agentPreparedOperations struct {
 	actor       agentplan.Actor
 	ops         []agentplan.Operation
 	userIndexes map[int]int
+	cleanups    map[int]managementlog.PreparedCleanup
 	users       agentplan.PreparedBatch
 	authorize   agentplan.Authorize
 	next        int
@@ -191,7 +222,7 @@ func (o *agentOperations) Prepare(ctx context.Context, actor agentplan.Actor, op
 	if len(ops) == 0 || len(ops) > 100 {
 		return nil, aiagent.ErrInvalid
 	}
-	p := &agentPreparedOperations{domains: o, actor: actor, ops: ops, userIndexes: map[int]int{}}
+	p := &agentPreparedOperations{domains: o, actor: actor, ops: ops, userIndexes: map[int]int{}, cleanups: map[int]managementlog.PreparedCleanup{}}
 	// An elevation is consumed once per final transaction, even when it
 	// confirms several sensitive account operations in the same plan.
 	var elevatedTx *sql.Tx
@@ -208,6 +239,12 @@ func (o *agentOperations) Prepare(ctx context.Context, actor agentplan.Actor, op
 	users := []agentplan.Operation{}
 	for index, op := range ops {
 		switch {
+		case op.Kind == "management.cleanup":
+			input, err := o.prepareHistoryCleanup(ctx, actor, op)
+			if err != nil {
+				return nil, err
+			}
+			p.cleanups[index] = input
 		case strings.HasPrefix(op.Kind, "users."):
 			p.userIndexes[index] = len(users)
 			users = append(users, op)
@@ -234,7 +271,9 @@ func (p *agentPreparedOperations) ApplyOperation(ctx context.Context, tx *sql.Tx
 	ctx = agentContext(ctx, p.actor, op.Kind)
 	var raw json.RawMessage
 	var err error
-	if userIndex, ok := p.userIndexes[index]; ok {
+	if op.Kind == "management.cleanup" {
+		raw, err = p.applyHistoryCleanup(ctx, tx, index)
+	} else if userIndex, ok := p.userIndexes[index]; ok {
 		raw, err = p.users.ApplyOperation(ctx, tx, userIndex)
 	} else if strings.HasPrefix(op.Kind, "donation.") {
 		raw, err = p.domains.donations.AgentApply(ctx, tx, p.actor, op, p.authorize)
@@ -381,11 +420,11 @@ func agentDomainError(err error) error {
 	switch {
 	case errors.Is(err, donation.ErrConflict), errors.Is(err, charityrouting.ErrConflict), errors.Is(err, adminusers.ErrConflict), errors.Is(err, lifecycle.ErrConflict):
 		return aiagent.ErrConflict
-	case errors.Is(err, donation.ErrNotFound), errors.Is(err, charityrouting.ErrNotFound), errors.Is(err, adminusers.ErrNotFound), errors.Is(err, lifecycle.ErrNotFound):
+	case errors.Is(err, managementlog.ErrNotFound), errors.Is(err, donation.ErrNotFound), errors.Is(err, charityrouting.ErrNotFound), errors.Is(err, adminusers.ErrNotFound), errors.Is(err, lifecycle.ErrNotFound):
 		return aiagent.ErrNotFound
-	case errors.Is(err, donation.ErrInvalidRequest), errors.Is(err, charityrouting.ErrInvalidRequest), errors.Is(err, adminusers.ErrInvalidRequest), errors.Is(err, lifecycle.ErrInvalid):
+	case errors.Is(err, managementlog.ErrInvalid), errors.Is(err, donation.ErrInvalidRequest), errors.Is(err, charityrouting.ErrInvalidRequest), errors.Is(err, adminusers.ErrInvalidRequest), errors.Is(err, lifecycle.ErrInvalid):
 		return aiagent.ErrInvalid
-	case errors.Is(err, donation.ErrForbidden), errors.Is(err, charityrouting.ErrForbidden), errors.Is(err, adminusers.ErrForbidden), errors.Is(err, lifecycle.ErrForbidden):
+	case errors.Is(err, managementlog.ErrForbidden), errors.Is(err, donation.ErrForbidden), errors.Is(err, charityrouting.ErrForbidden), errors.Is(err, adminusers.ErrForbidden), errors.Is(err, lifecycle.ErrForbidden):
 		return aiagent.ErrForbidden
 	default:
 		return err

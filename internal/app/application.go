@@ -29,6 +29,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/reports"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
@@ -39,52 +40,54 @@ import (
 )
 
 type application struct {
-	handler         http.Handler
-	authRuntime     *auth.Runtime
-	bridge          *resourcebridge.Runtime
-	claims          *claim.Service
-	resourceRepo    *resources.Repository
-	automation      *stewardautomation.Service
-	discoveryWorker *resources.DiscoveryWorkerPool
-	donations       *donation.Service
-	charity         *charity.Service
-	charityRouting  *charityrouting.Service
-	adaptations     *requestadaptation.Store
-	checkin         *checkin.Service
-	homeGames       *gamehost.Service
-	announcements   *announcements.Service
-	issues          *issues.Service
-	reports         *reports.Repository
-	activities      *activities.Service
-	activityRepo    *activities.Repository
-	activityEvents  *accountstream.Hub
-	adminConfig     *adminapi.SiteConfigRuntime
-	adminAlerts     *adminalerts.Repository
-	returnAlerts    *returnmarker.Recorder
-	adminUsers      *adminusers.Service
-	agent           *aiagent.Service
-	agentRequests   *agentrequest.Runtime
-	lifecycle       *lifecycle.Coordinator
-	lifecycleCancel context.CancelFunc
-	lifecycleDone   <-chan struct{}
-	performanceDone <-chan struct{}
-	performance     *observability.Performance
-	rankingCancel   context.CancelFunc
-	rankingDone     <-chan struct{}
-	debug           *debug.Hub
-	logs            *logapi.Repository
-	accountEvents   *accountEventConnections
-	forward         *publicForwardRuntime
-	games           *gameRuntimeBundle
-	audits          *auditRuntime
-	activityRuntime *activityRuntime
-	failures        <-chan error
-	authorizer      *authz.Authorizer
-	elevation       *elevation.Manager
-	gate            *maintenance.Gate
-	registry        *maintenance.Registry
-	maintenance     *maintenance.Service
-	egress          *egress.Stack
+	handler           http.Handler
+	authRuntime       *auth.Runtime
+	bridge            *resourcebridge.Runtime
+	claims            *claim.Service
+	resourceRepo      *resources.Repository
+	automation        *stewardautomation.Service
+	discoveryWorker   *resources.DiscoveryWorkerPool
+	donations         *donation.Service
+	charity           *charity.Service
+	charityRouting    *charityrouting.Service
+	adaptations       *requestadaptation.Store
+	checkin           *checkin.Service
+	homeGames         *gamehost.Service
+	announcements     *announcements.Service
+	issues            *issues.Service
+	reports           *reports.Repository
+	activities        *activities.Service
+	activityRepo      *activities.Repository
+	activityEvents    *accountstream.Hub
+	adminConfig       *adminapi.SiteConfigRuntime
+	adminAlerts       *adminalerts.Repository
+	returnAlerts      *returnmarker.Recorder
+	adminUsers        *adminusers.Service
+	agent             *aiagent.Service
+	agentRequests     *agentrequest.Runtime
+	managementHistory *managementlog.Service
+	managementDone    <-chan struct{}
+	lifecycle         *lifecycle.Coordinator
+	lifecycleCancel   context.CancelFunc
+	lifecycleDone     <-chan struct{}
+	performanceDone   <-chan struct{}
+	performance       *observability.Performance
+	rankingCancel     context.CancelFunc
+	rankingDone       <-chan struct{}
+	debug             *debug.Hub
+	logs              *logapi.Repository
+	accountEvents     *accountEventConnections
+	forward           *publicForwardRuntime
+	games             *gameRuntimeBundle
+	audits            *auditRuntime
+	activityRuntime   *activityRuntime
+	failures          <-chan error
+	authorizer        *authz.Authorizer
+	elevation         *elevation.Manager
+	gate              *maintenance.Gate
+	registry          *maintenance.Registry
+	maintenance       *maintenance.Service
+	egress            *egress.Stack
 
 	readiness        *readinessState
 	workerCancel     context.CancelFunc

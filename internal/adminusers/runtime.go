@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"math"
 	"math/big"
 	"net/http"
@@ -963,6 +964,7 @@ func beginControlMutation(ctx context.Context, tx *sql.Tx, adminID int64, role m
 	if err != nil {
 		return idempotency.Decision{}, ErrInvalidRequest
 	}
+	managementlog.ChangedFields(ctx, control.CanonicalBody)
 	digest, err := idempotency.RequestDigest(idempotency.DigestInput{
 		ActorScopeHash: actor, Method: control.Method, Route: control.Route,
 		PathResourceIDs: control.PathIDs, Body: control.CanonicalBody,

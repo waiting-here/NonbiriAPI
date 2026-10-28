@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"log/slog"
 	"regexp"
 	"strconv"
@@ -227,6 +228,7 @@ func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInpu
 		if priorQuery != string(encoded) || priorExpiry <= r.now().Unix() {
 			return ClientScan{}, ErrConflict
 		}
+		managementlog.MarkReplay(ctx)
 		return r.ownedScan(ctx, tx, actor, priorID, false)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -359,7 +361,14 @@ func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInpu
 	if err != nil {
 		return out, err
 	}
-	if err = tx.Commit(); err != nil {
+	managementlog.SetTarget(ctx, "risk_scan", id, "")
+	managementlog.SetCorrelation(ctx, "risk_scan", id)
+	outcome := managementlog.Accepted
+	if out.State != "queued" && out.State != "running" {
+		outcome = managementlog.Succeeded
+	}
+	managementlog.SetResult(ctx, managementlog.Result{Outcome: outcome})
+	if err = managementlog.Commit(ctx, tx); err != nil {
 		return out, err
 	}
 	if out.State == "queued" {
@@ -434,13 +443,20 @@ func (r *Repository) CancelScan(ctx context.Context, actor Actor, id string) (Cl
 	if err != nil {
 		return out, err
 	}
+	outcome := managementlog.NoChange
 	if out.State == "queued" || out.State == "running" {
+		outcome = managementlog.Succeeded
 		out.State, out.UpdatedAt = "cancelled", r.now().Unix()
 		if _, err = tx.ExecContext(ctx, `UPDATE risk_client_scans SET state='cancelled',checkpoint_json=`+scanCheckpointWithoutIdentitySQL+`,updated_at=? WHERE id=?`, out.UpdatedAt, id); err != nil {
 			return out, err
 		}
 	}
-	return out, tx.Commit()
+	managementlog.SetTarget(ctx, "risk_scan", id, "")
+	managementlog.SetResult(ctx, managementlog.Result{Outcome: outcome})
+	if err = managementlog.RecordContextTx(ctx, tx); err != nil {
+		return out, err
+	}
+	return out, commitScanResult(ctx, tx, id)
 }
 
 type ScanResults struct {
@@ -653,7 +669,15 @@ func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, resul
 		_ = tx.Rollback()
 		bounded, cancel := context.WithTimeout(parent, 2*time.Second)
 		defer cancel()
-		_, _ = r.db.ExecContext(bounded, `UPDATE risk_client_scans SET failures=failures+1,state=CASE WHEN failures>=2 THEN 'failed' ELSE state END,reason=CASE WHEN failures>=2 THEN 'scan_failed' ELSE reason END,checkpoint_json=CASE WHEN failures>=2 THEN `+scanCheckpointWithoutIdentitySQL+` ELSE checkpoint_json END WHERE id=? AND state IN ('queued','running')`, scanID)
+		recovery, beginErr := r.db.BeginTx(bounded, nil)
+		if beginErr != nil {
+			return
+		}
+		defer recovery.Rollback()
+		_, updateErr := recovery.ExecContext(bounded, `UPDATE risk_client_scans SET failures=failures+1,state=CASE WHEN failures>=2 THEN 'failed' ELSE state END,reason=CASE WHEN failures>=2 THEN 'scan_failed' ELSE reason END,checkpoint_json=CASE WHEN failures>=2 THEN `+scanCheckpointWithoutIdentitySQL+` ELSE checkpoint_json END WHERE id=? AND state IN ('queued','running')`, scanID)
+		if updateErr == nil {
+			_ = commitScanResult(bounded, recovery, scanID)
+		}
 	}()
 	phase = "batch"
 	now := r.now().Unix()
@@ -682,7 +706,7 @@ func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, resul
 		if err != nil {
 			return false, err
 		}
-		return true, tx.Commit()
+		return true, commitScanResult(ctx, tx, scan.ID)
 	}
 	if scan.ScanKind == "user_ips" && scan.UserID == 0 {
 		return r.processUserIPsBatch(ctx, tx, scan, now)
@@ -723,7 +747,7 @@ func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, resul
 	if err != nil {
 		return false, err
 	}
-	return true, tx.Commit()
+	return true, commitScanResult(ctx, tx, scan.ID)
 }
 
 type scanCandidate struct {

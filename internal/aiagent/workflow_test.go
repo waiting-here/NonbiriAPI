@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/agentrequest"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	_ "modernc.org/sqlite"
 )
 
@@ -25,21 +26,27 @@ type fakeDriver struct {
 	acked         []int64
 	unconfigured  bool
 	settings      *agentrequest.Settings
+	resolved      []agentrequest.Attribution
+	readiness     []agentrequest.Attribution
 	finishReasons []string
 	afterWait     func(int64)
 }
 
-func (d *fakeDriver) Ready(context.Context, *sql.Tx) (bool, error) {
+func (d *fakeDriver) ReadyFor(_ context.Context, _ *sql.Tx, attr agentrequest.Attribution) (bool, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.readiness = append(d.readiness, attr)
 	return !d.unconfigured, nil
 }
 
-func (d *fakeDriver) Settings(context.Context) (agentrequest.Settings, error) {
+func (d *fakeDriver) ResolveSettings(_ context.Context, attr agentrequest.Attribution) (agentrequest.Settings, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.resolved = append(d.resolved, attr)
 	if d.settings != nil {
 		return *d.settings, nil
 	}
-	return agentrequest.Settings{ContextWindow: 8192, MaxOutputTokens: 1024}, nil
+	return agentrequest.Settings{ContextWindow: 8192, MaxOutputTokens: 1024, OutputReserveTokens: 1024}, nil
 }
 func (d *fakeDriver) Submit(_ context.Context, in agentrequest.Input) (agentrequest.Request, error) {
 	d.mu.Lock()
@@ -161,6 +168,9 @@ func newFixture(t *testing.T) fixture {
 		t.Fatal(err)
 	}
 	if _, err = database.Exec(string(schema)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = database.Exec(db.AgentPersonalMemorySQL); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = database.Exec(`CREATE TABLE test_mutations(value TEXT NOT NULL)`); err != nil {

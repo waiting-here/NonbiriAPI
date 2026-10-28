@@ -52,7 +52,11 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 	}}
 	ctx = httptrace.WithClientTrace(ctx, trace)
 	ctx = egress.WithDispatchCheck(ctx, func(check context.Context) error { return r.authorize(check, in.Attribution) })
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.BaseURL, "/")+"/chat/completions", bytes.NewReader(body))
+	path := "/chat/completions"
+	if s.Provider == ProviderResponses || s.Provider == ProviderChatGPT {
+		path = "/responses"
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.BaseURL, "/")+path, bytes.NewReader(body))
 	if err != nil {
 		r.complete(id, in, state, "invalid_request", status, raw, complete, redacted, usage, false)
 		return
@@ -77,6 +81,12 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 	r.releaseSlot(id)
 	raw, redacted = sanitizeSecret(raw, key)
 	parsed, parseErr := parseResult(id, raw)
+	protocolCode := "protocol"
+	if s.Provider == ProviderResponses || s.Provider == ProviderChatGPT {
+		var protocolComplete bool
+		parsed, protocolComplete, protocolCode, parseErr = parseResponsesResult(id, raw, s)
+		complete = complete && protocolComplete
+	}
 	usage = parsed.Usage
 	switch {
 	case parent.Err() != nil:
@@ -95,7 +105,7 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 		code = "upstream_status"
 	default:
 		if parseErr != nil {
-			code = "protocol"
+			code = protocolCode
 		} else {
 			state = "succeeded"
 		}

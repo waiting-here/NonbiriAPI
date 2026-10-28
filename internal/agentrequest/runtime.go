@@ -8,12 +8,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/chatgptauth"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 type Runtime struct {
+	chatgpt         *chatgptauth.Manager
+	connectionMu    sync.Mutex
+	activeProviders map[int64]string
 	adminAuthorize  func(context.Context, *sql.Tx) error
 	db, readDB      *sql.DB
 	stack           *egress.Stack
@@ -42,7 +46,7 @@ func New(c Config) (*Runtime, error) {
 		c.Now = time.Now
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Runtime{adminAuthorize: c.AdminAuthorize, db: c.DB, readDB: c.ReadDB, stack: c.Stack, flow: c.Flow, secrets: c.Secrets, now: c.Now, authorize: c.Authorize, onEvent: c.OnEvent, context: ctx, cancel: cancel, changed: make(chan struct{}), active: map[int64]context.CancelFunc{}, failures: map[int64]error{}}, nil
+	return &Runtime{chatgpt: c.ChatGPT, activeProviders: map[int64]string{}, adminAuthorize: c.AdminAuthorize, db: c.DB, readDB: c.ReadDB, stack: c.Stack, flow: c.Flow, secrets: c.Secrets, now: c.Now, authorize: c.Authorize, onEvent: c.OnEvent, context: ctx, cancel: cancel, changed: make(chan struct{}), active: map[int64]context.CancelFunc{}, failures: map[int64]error{}}, nil
 }
 func (r *Runtime) signal() {
 	r.mu.Lock()
@@ -182,11 +186,24 @@ func (r *Runtime) dispatchNext(id int64, encoded string) {
 		r.failPending(id, "authorization")
 		return
 	}
-	settings, key, err := loadSettings(ctx, r.readDB)
+	settings, key, err := r.resolveSettingsKey(ctx, in.Attribution)
 	if err != nil || !settings.HasKey || settings.BaseURL == "" || settings.Model == "" {
 		admission.Release()
 		cancel()
 		r.failPending(id, "unconfigured")
+		return
+	}
+	if settings.Provider == ProviderChatGPT {
+		// Disconnect and dispatch share this boundary so a token obtained just
+		// before logout cannot start an untracked request afterwards.
+		r.connectionMu.Lock()
+		defer r.connectionMu.Unlock()
+	}
+	key, err = r.modelKey(ctx, &settings, key)
+	if err != nil {
+		admission.Release()
+		cancel()
+		r.failPending(id, "credential_unavailable")
 		return
 	}
 	body, err := requestBody(in, settings)
@@ -219,7 +236,15 @@ func (r *Runtime) dispatchNext(id int64, encoded string) {
 		r.failPending(id, "invalid_request")
 		return
 	}
-	result, err := r.db.ExecContext(ctx, "UPDATE agent_requests SET state='running',base_url=?,model=?,request_body=?,started_at=MAX(created_at,?) WHERE id=? AND state='pending'", settings.BaseURL, settings.Model, body, r.now().UnixMilli(), id)
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		r.recordDispatchFailure(ctx, id, err)
+		admission.Release()
+		cancel()
+		return
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, "UPDATE agent_requests SET state='running',base_url=?,model=?,request_body=?,started_at=MAX(created_at,?) WHERE id=? AND state='pending'", settings.BaseURL, settings.Model, body, r.now().UnixMilli(), id)
 	if err != nil {
 		if ctx.Err() == nil {
 			r.mu.Lock()
@@ -237,9 +262,23 @@ func (r *Runtime) dispatchNext(id int64, encoded string) {
 		cancel()
 		return
 	}
+	snapshot, _ := json.Marshal(settings)
+	if _, err = tx.ExecContext(ctx, "INSERT INTO agent_request_drivers(request_id,driver_id,provider,settings_json) VALUES(?,?,?,?)", id, settings.DriverID, settings.Provider, string(snapshot)); err != nil {
+		r.recordDispatchFailure(ctx, id, err)
+		admission.Release()
+		cancel()
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		r.recordDispatchFailure(ctx, id, err)
+		admission.Release()
+		cancel()
+		return
+	}
 	r.mu.Lock()
 	delete(r.failures, id)
 	r.active[id] = cancel
+	r.activeProviders[id] = settings.Provider
 	r.workers.Add(1)
 	r.mu.Unlock()
 	r.emit(id, in.ClientRequestID, "running")
@@ -249,9 +288,19 @@ func (r *Runtime) dispatchNext(id int64, encoded string) {
 		r.execute(ctx, id, in, settings, key, body, admission)
 		r.mu.Lock()
 		delete(r.active, id)
+		delete(r.activeProviders, id)
 		r.mu.Unlock()
 		r.signal()
 	}()
+}
+func (r *Runtime) recordDispatchFailure(ctx context.Context, id int64, err error) {
+	if ctx.Err() != nil {
+		return
+	}
+	r.mu.Lock()
+	r.failures[id] = err
+	r.mu.Unlock()
+	r.signal()
 }
 func (r *Runtime) failPending(id int64, code string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -306,6 +355,7 @@ func (r *Runtime) Run(ctx context.Context, in Input) (Result, error) {
 func (r *Runtime) releaseSlot(id int64) {
 	r.mu.Lock()
 	delete(r.active, id)
+	delete(r.activeProviders, id)
 	r.mu.Unlock()
 	r.signal()
 }

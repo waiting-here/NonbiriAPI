@@ -457,7 +457,7 @@ export function GachaPoolStatistics({ accountKey }: { accountKey: string }) {
                           header: t('admin.gachaStats.rarity'),
                           cell: 'status',
                           render: (row) => (
-                            <span className="nb-badge">
+                            <span className="nb-badge gacha-stats-rarity" data-rarity={row.rarity}>
                               {row.rarity ?? t('admin.gachaStats.unspecifiedRarity')}
                             </span>
                           ),

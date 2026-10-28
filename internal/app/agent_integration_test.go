@@ -180,6 +180,18 @@ func TestAgentRealPlanRollsBackAccountAndMemoryAndRetainsLogs(t *testing.T) {
 	if result["state"] != "failed" {
 		t.Fatal("stale second action should roll back", result)
 	}
+	history := f.call("GET", "/admin/api/management-operations?view=operations&source=ai_manual", nil, f.adminCookie, true)
+	if history["total"] != "1" {
+		t.Fatal("AI attempt missing or duplicated", history)
+	}
+	operation := history["operations"].([]any)[0].(map[string]any)
+	if operation["executor_kind"] != "ai" || operation["authorizer"].(map[string]any)["role"] != "admin" || operation["outcome"] != "rejected" || operation["succeeded"] != "0" || operation["correlation_id"] != plan["id"] {
+		t.Fatal(operation)
+	}
+	f.call("POST", "/admin/api/ai/chat/plans/"+plan["id"].(string)+"/decision", map[string]any{"approve": true, "feedback": "retry"}, f.adminCookie, true)
+	if replayed := f.call("GET", "/admin/api/management-operations?view=operations&source=ai_manual", nil, f.adminCookie, true); replayed["total"] != "1" {
+		t.Fatal("plan replay duplicated history", replayed)
+	}
 	after := f.call("GET", "/admin/api/users/"+f.users[0].ID, nil, f.adminCookie, true)
 	if after["revision"] != revision || after["endpoint_limit"] != target["endpoint_limit"] {
 		t.Fatal("partial account mutation", target, after)

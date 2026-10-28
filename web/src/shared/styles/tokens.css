@@ -46,6 +46,12 @@
   --nb-color-danger-soft: #ffeaee;
   --nb-color-info: #0e5a8f;
   --nb-color-info-soft: #e5f3fc;
+  --nb-color-violet: #694095;
+  --nb-color-violet-soft: #f1eafb;
+  --nb-color-teal: #08676b;
+  --nb-color-teal-soft: #e0f4f1;
+  --nb-color-rose: #973760;
+  --nb-color-rose-soft: #fbe8f1;
   --nb-color-focus: #7c3aed;
 
   /* Four-point spacing scale */
@@ -173,6 +179,12 @@
   --nb-color-danger-soft: #4d2730;
   --nb-color-info: #79c4f2;
   --nb-color-info-soft: #1d3e52;
+  --nb-color-violet: #cdb0ff;
+  --nb-color-violet-soft: #3d2c57;
+  --nb-color-teal: #78d7d0;
+  --nb-color-teal-soft: #1d4446;
+  --nb-color-rose: #ffacd0;
+  --nb-color-rose-soft: #4e2c40;
   --nb-color-focus: #c1a6ff;
   --nb-elevation-1: 0 1px 2px rgb(0 0 0 / 0.28), 0 4px 12px rgb(0 0 0 / 0.18);
   --nb-elevation-2: 0 12px 32px rgb(0 0 0 / 0.32), 0 2px 8px rgb(0 0 0 / 0.2);

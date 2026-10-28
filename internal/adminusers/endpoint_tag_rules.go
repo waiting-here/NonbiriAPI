@@ -10,6 +10,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/endpointtags"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -100,9 +101,18 @@ func (s *Service) mutateEndpointTagRule(ctx context.Context, actorID int64, role
 		return replayJSON[struct{}](decision)
 	}
 	domain := pattern[2:]
+	managementlog.SetTarget(ctx, "endpoint_tag_rule", domain, pattern)
 	if remove {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM endpoint_tag_rules WHERE domain=?`, domain); err != nil {
+		result, err := tx.ExecContext(ctx, `DELETE FROM endpoint_tag_rules WHERE domain=?`, domain)
+		if err != nil {
 			return empty, err
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return empty, err
+		}
+		if affected == 0 {
+			managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.NoChange})
 		}
 	} else {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM endpoint_tag_rule_tags WHERE domain=?`, domain); err != nil {

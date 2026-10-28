@@ -9,6 +9,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/agentplan"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"sync"
 )
 
@@ -26,10 +27,20 @@ func managedMFATx(ctx context.Context, tx *sql.Tx, target int64, reset bool) (bo
 	}
 	enrolled := false
 	if reset {
+		affected := int64(0)
 		for _, query := range []string{`DELETE FROM account_mfa_credentials WHERE user_id=?`, `DELETE FROM account_mfa_pending WHERE user_id=?`, `DELETE FROM sessions WHERE user_id=?`} {
-			if _, err = tx.ExecContext(ctx, query, target); err != nil {
+			result, deleteErr := tx.ExecContext(ctx, query, target)
+			if err = deleteErr; err != nil {
 				return false, err
 			}
+			rows, rowsErr := result.RowsAffected()
+			if rowsErr != nil {
+				return false, rowsErr
+			}
+			affected += rows
+		}
+		if affected == 0 {
+			managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.NoChange, Code: "already_reset"})
 		}
 	} else if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM account_mfa_credentials WHERE user_id=?)`, target).Scan(&enrolled); err != nil {
 		return false, err

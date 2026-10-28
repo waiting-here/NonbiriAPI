@@ -8,9 +8,11 @@ import (
 	"math"
 	"net/url"
 	"strings"
+
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
-var toolNames = []string{"donations", "donation_models", "review_history", "charity_models", "charity_binding_presets", "users", "site_status", "web_search", "propose_operations", "edit_memory"}
+var toolNames = []string{"donations", "donation_models", "review_history", "charity_models", "charity_binding_presets", "users", "site_status", "web_search", "propose_operations", "edit_memory", "management_history"}
 
 func defaultSettings() Settings {
 	tools := make(map[string]bool, len(toolNames))
@@ -43,12 +45,15 @@ func readSettings(ctx context.Context, query interface {
 	if err = json.Unmarshal([]byte(raw), &result); err != nil {
 		return Settings{}, nil, Actor{}, err
 	}
+	refreshDefaultTemplate(&result)
 	result.ToolDescriptions = mergeToolDescriptions(defaultToolDescriptions(), result.ToolDescriptions)
 	if result.Tools == nil {
 		result.Tools = map[string]bool{}
 	}
-	if _, configured := result.Tools["charity_binding_presets"]; !configured {
-		result.Tools["charity_binding_presets"] = true
+	for _, name := range toolNames {
+		if _, configured := result.Tools[name]; !configured {
+			result.Tools[name] = true
+		}
 	}
 	result.Revision, result.Mode, result.SearchHasKey = revision, mode, len(secret) > 0
 	return result, secret, Actor{ID: owner, Role: "admin", Label: label}, nil
@@ -97,11 +102,8 @@ func (s *Service) PutSettings(ctx context.Context, actor Actor, input SettingsUp
 			return Settings{}, ErrInvalid
 		}
 	}
-	if len(input.Tools) != len(toolNames) {
-		return Settings{}, ErrInvalid
-	}
 	for _, name := range toolNames {
-		if _, ok := input.Tools[name]; !ok {
+		if _, ok := input.Tools[name]; !ok && name != "management_history" {
 			return Settings{}, ErrInvalid
 		}
 	}
@@ -137,6 +139,14 @@ func (s *Service) PutSettings(ctx context.Context, actor Actor, input SettingsUp
 	}
 	if input.SearchAPIKey == nil {
 		encrypted = stored
+	}
+	if _, present := input.Tools["management_history"]; !present {
+		copied := make(map[string]bool, len(input.Tools)+1)
+		for name, enabled := range input.Tools {
+			copied[name] = enabled
+		}
+		copied["management_history"] = previous.Tools["management_history"]
+		input.Tools = copied
 	}
 	value := input.Settings
 	value.ToolDescriptions = mergeToolDescriptions(previous.ToolDescriptions, descriptions)
@@ -176,7 +186,15 @@ func (s *Service) PutSettings(ctx context.Context, actor Actor, input SettingsUp
 			return Settings{}, err
 		}
 	}
-	if err = tx.Commit(); err != nil {
+	ctx, err = s.humanHistory(ctx, tx, actor, "config.update", "修改 AI 设置")
+	if err != nil {
+		return Settings{}, err
+	}
+	managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.Succeeded, Items: []managementlog.Item{{
+		Action: "config.update", TargetKind: "ai_config", TargetID: "1", Outcome: managementlog.Succeeded,
+		Changes: settingsHistoryChanges(previous, value, input.SearchAPIKey != nil),
+	}}})
+	if err = managementlog.Commit(ctx, tx); err != nil {
 		return Settings{}, err
 	}
 	if value.Mode == "off" {
@@ -198,10 +216,12 @@ func (s *Service) Memory(ctx context.Context, actor Actor, kind string) (Memory,
 		return Memory{}, err
 	}
 	defer tx.Rollback()
-	if err = s.authorize(ctx, tx, actor, "ai.memory.edit"); err != nil {
+	if err = s.memoryAccess(ctx, tx, actor, kind, 0, false); err != nil {
 		return Memory{}, err
 	}
-	return readMemory(ctx, tx, kind)
+	value, err := readMemory(ctx, tx, kind)
+	value.Writable = actor.Role == "admin"
+	return value, err
 }
 
 func readMemory(ctx context.Context, tx *sql.Tx, kind string) (Memory, error) {
@@ -215,6 +235,7 @@ func readMemory(ctx context.Context, tx *sql.Tx, kind string) (Memory, error) {
 }
 
 func writeMemory(ctx context.Context, tx *sql.Tx, actor Actor, kind, content string, expected, now int64) (Memory, error) {
+	content = strings.ReplaceAll(strings.ReplaceAll(content, "\r\n", "\n"), "\r", "\n")
 	if kind != "auto_review" && kind != "chat" || expected < 0 || expected == math.MaxInt64 || len(content) > 4<<20 {
 		return Memory{}, ErrInvalid
 	}
@@ -230,7 +251,7 @@ func writeMemory(ctx context.Context, tx *sql.Tx, actor Actor, kind, content str
 		return Memory{}, err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO ai_agent_memory_history(kind,before_content,after_content,revision,actor_id,actor_label,created_at) VALUES(?,?,?,?,?,?,?)`, kind, before.Content, content, expected+1, actor.ID, actor.Label, now)
-	return Memory{Kind: kind, Content: content, Revision: expected + 1, UpdatedAt: now, UpdatedBy: actor.Label}, err
+	return Memory{Kind: kind, Content: content, Revision: expected + 1, UpdatedAt: now, UpdatedBy: actor.Label, Writable: true}, err
 }
 
 func (s *Service) PutMemory(ctx context.Context, actor Actor, kind, content string, expected int64) (Memory, error) {
@@ -239,14 +260,22 @@ func (s *Service) PutMemory(ctx context.Context, actor Actor, kind, content stri
 		return Memory{}, err
 	}
 	defer tx.Rollback()
-	if err = s.authorize(ctx, tx, actor, "ai.memory.edit"); err != nil {
+	if err = s.memoryAccess(ctx, tx, actor, kind, 0, true); err != nil {
 		return Memory{}, err
 	}
 	result, err := writeMemory(ctx, tx, actor, kind, content, expected, s.now().UnixMilli())
 	if err != nil {
 		return Memory{}, err
 	}
-	if err = tx.Commit(); err != nil {
+	ctx, err = s.humanHistory(ctx, tx, actor, "memory.update", "修改 AI 全局记忆")
+	if err != nil {
+		return Memory{}, err
+	}
+	managementlog.SetResult(ctx, managementlog.Result{Outcome: managementlog.Succeeded, Items: []managementlog.Item{{
+		Action: "memory.update", TargetKind: "ai_memory", TargetID: kind, Outcome: managementlog.Succeeded,
+		Changes: []managementlog.Change{{Field: "content", Operation: "updated"}},
+	}}})
+	if err = managementlog.Commit(ctx, tx); err != nil {
 		return Memory{}, err
 	}
 	return result, nil

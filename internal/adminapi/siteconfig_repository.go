@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"math"
 	"net/http"
 	"strconv"
@@ -294,6 +295,8 @@ func (repository *SiteConfigRepository) PatchSiteConfig(ctx context.Context, inp
 		return SiteConfigMutationResult{}, classifySiteConfigDatabase("write configuration", err)
 	}
 
+	managementlog.SetTarget(ctx, "site_config", input.Key, "")
+	managementlog.SetItemsResult(ctx, []managementlog.Item{{Action: "configure", TargetKind: "site_config", TargetID: input.Key, Outcome: managementlog.Succeeded, Changes: []managementlog.Change{{Field: input.Key, Operation: "updated"}}}})
 	response := SiteConfigPatchResponse{Key: input.Key, Value: patch.wire, Revision: strconv.FormatInt(revision+1, 10)}
 	body, err := json.Marshal(response)
 	if err != nil || len(body) > idempotency.MaxResponseBytes {

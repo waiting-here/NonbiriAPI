@@ -86,14 +86,19 @@ func wireMessage(m Message) json.RawMessage {
 	return raw
 }
 
-func renderTemplate(template []TemplateMessage, memory, intelligence string, conversation []json.RawMessage, prefill string) ([]json.RawMessage, error) {
+func renderTemplate(template []TemplateMessage, memory, intelligence string, conversation []json.RawMessage, prefill string, personal ...string) ([]json.RawMessage, error) {
 	result := []json.RawMessage{}
+	identity, personalMemory := "", ""
+	if len(personal) == 2 {
+		identity, personalMemory = personal[0], personal[1]
+	}
+	replacer := strings.NewReplacer("{{memory}}", memory, "{{intelligence}}", intelligence, "{{interlocutor}}", identity, "{{personal_memory}}", personalMemory)
 	for _, item := range template {
 		if item.Content == "{{conversation}}" {
 			result = append(result, conversation...)
 			continue
 		}
-		content := strings.ReplaceAll(strings.ReplaceAll(item.Content, "{{memory}}", memory), "{{intelligence}}", intelligence)
+		content := replacer.Replace(item.Content)
 		m, err := json.Marshal(map[string]string{"role": item.Role, "content": content})
 		if err != nil {
 			return nil, err
@@ -149,7 +154,11 @@ func (s *Service) contextMessages(ctx context.Context, job Job, settings Setting
 	for _, m := range history {
 		conversation = append(conversation, wireMessage(m))
 	}
-	messages, err := renderTemplate(settings.ChatTemplate, memory.Content, "", conversation, settings.ChatPrefill)
+	personal, err := readPersonalMemory(ctx, tx, job.ActorID)
+	if err != nil {
+		return nil, nil, "", 0, err
+	}
+	messages, err := renderTemplate(settings.ChatTemplate, memory.Content, "", conversation, settings.ChatPrefill, interlocutor(job), personal.Content)
 	return messages, history, summary, through, err
 }
 
@@ -270,7 +279,7 @@ func (s *Service) run(ctx context.Context, id int64) error {
 				return err
 			}
 		} else {
-			driver, e := s.config.Driver.Settings(ctx)
+			driver, e := s.config.Driver.ResolveSettings(ctx, jobAttribution(job, "model"))
 			if e != nil {
 				return e
 			}
@@ -348,7 +357,14 @@ func (s *Service) run(ctx context.Context, id int64) error {
 				if e != nil {
 					value = toolError(ErrInvalid)
 				} else if args.Action == "read" {
-					memory, e := s.Memory(ctx, actor, args.Kind)
+					var memory Memory
+					if args.Kind == "personal" {
+						memory, e = s.PersonalMemory(ctx, actor, args.OwnerID)
+					} else if args.OwnerID != 0 {
+						e = ErrInvalid
+					} else {
+						memory, e = s.Memory(ctx, actor, args.Kind)
+					}
 					if e != nil {
 						value = toolError(e)
 					} else {
@@ -415,6 +431,7 @@ func (s *Service) run(ctx context.Context, id int64) error {
 type memoryToolInput struct {
 	Action           string `json:"action"`
 	Kind             string `json:"kind"`
+	OwnerID          int64  `json:"owner_id,string,omitempty"`
 	Content          string `json:"content"`
 	ExpectedRevision int64  `json:"expected_revision,string"`
 }
@@ -439,7 +456,7 @@ func collectToolWrites(calls []toolCall, allowed map[string]bool) ([]Operation, 
 		if allowed[call.Function.Name] && call.Function.Name == "edit_memory" {
 			var args memoryToolInput
 			if decodeClosed([]byte(call.Function.Arguments), &args) == nil && args.Action == "write" {
-				raw, _ := json.Marshal(memoryEdit{Kind: args.Kind, Content: args.Content, ExpectedRevision: args.ExpectedRevision})
+				raw, _ := json.Marshal(memoryEdit{Kind: args.Kind, OwnerID: args.OwnerID, Content: args.Content, ExpectedRevision: args.ExpectedRevision})
 				operations = append(operations, Operation{Kind: "memory.edit", TargetID: args.Kind, Input: raw})
 				writes = append(writes, call)
 				continue

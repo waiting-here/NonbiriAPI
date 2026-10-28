@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"io"
 	"reflect"
 	"strconv"
@@ -217,6 +218,7 @@ func beginControlMutation(ctx context.Context, tx *sql.Tx, userID int64, input C
 	if len(input.CanonicalBody) > idempotency.MaxControlBodyBytes {
 		return idempotency.Decision{}, ErrInvalidRequest
 	}
+	managementlog.ChangedFields(ctx, input.CanonicalBody)
 	digest, err := idempotency.RequestDigest(idempotency.DigestInput{
 		ActorScopeHash: actor, Method: input.Method, Route: input.Route,
 		PathResourceIDs: input.PathIDs, Query: input.Query, Body: input.CanonicalBody,
@@ -245,6 +247,7 @@ func beginAdminControlMutation(ctx context.Context, tx *sql.Tx, adminID int64, i
 	if len(input.CanonicalBody) > idempotency.MaxControlBodyBytes {
 		return idempotency.Decision{}, ErrInvalidRequest
 	}
+	managementlog.ChangedFields(ctx, input.CanonicalBody)
 	digest, err := idempotency.RequestDigest(idempotency.DigestInput{
 		ActorScopeHash: actor, Method: input.Method, Route: input.Route,
 		PathResourceIDs: input.PathIDs, Query: input.Query, Body: input.CanonicalBody,
