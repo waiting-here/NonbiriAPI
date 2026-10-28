@@ -1,6 +1,6 @@
 # Prepare existing storage
 
-The server initializes an absent database as schema 40 and opens only the exact
+The server initializes an absent database as schema 41 and opens only the exact
 current schema. Older, newer, unknown and incomplete storage is rejected before
 migration, repair or recovery writes. The service, startup scripts and deployment
 helpers must not run this upgrader implicitly. A developer or deployer must
@@ -30,10 +30,11 @@ exact source structures:
 | 37 | `4413e15527dff68e42386ca4841c38fc93911539` |
 | 38 | `de51645924a488d742baad5ff1a35f6569f22746` |
 | 39 | `31f18116afe12c50a48bca87fe48c1a7c01ba796` |
+| 40 | `753a64a8e375632759e452ad9f1a222c84417422` |
 
 The machine-readable descriptor is authoritative for these exact source commits
 and their pinned manifest hashes. All supported sources convert atomically to
-schema 40. Schemas 27–32 and unregistered layouts are not supported sources.
+schema 41. Schemas 27–32 and unregistered layouts are not supported sources.
 
 The executable that last used a database may differ from the listed commit if
 its stored application identity, generation, schema version and complete
@@ -50,11 +51,11 @@ CGO_ENABLED=0 go build -trimpath -o nonbiri-upgrade-v1 ./cmd/nonbiri-upgrade-v1
 ```
 
 Both metadata commands need no database or environment. The converter reports
-its exact sources in `offline_conversions` and target schema 40. The server
-reports current and minimum schema 40, `startup_policy="exact"` and
+its exact sources in `offline_conversions` and target schema 41. The server
+reports current and minimum schema 41, `startup_policy="exact"` and
 `upgrade_tool="nonbiri-upgrade-v1"`, with empty `source_schema_versions`,
 `source_manifest_hashes` and `offline_conversions` arrays. The converter
-retains that target policy and adds its 18 offline-source entries. These describe
+retains that target policy and adds its 19 offline-source entries. These describe
 different executables; the empty server list does not remove the converter or
 authorize a deployment helper to call it automatically.
 
@@ -160,11 +161,18 @@ conversion, remove the retired Gateway variable and `NONBIRI_SMTP_HOST`,
 `NONBIRI_SMTP_FROM` and `NONBIRI_SMTP_TLS` from the deployment environment.
 
 The [rc.7 command](../nonbiri-upgrade-rc7/README.md) remains a narrow wrapper
-accepting schema 16 and current schema 40. Both commands use one engine.
+accepting schema 16 and current schema 41. Both commands use one engine.
 `scripts/check-upgrade.sh` creates a populated synthetic source with the pinned
 rc.7 program, converts it, compares retained facts and resumes economy checks.
 The offline suite also covers the registered schema 17–26 fixtures. No
 production database or instance configuration belongs in the repository.
+
+The schema-41 step adds driver profiles/bindings, per-request source snapshots,
+one encrypted ChatGPT connection, personal assistant memories/history, and
+management operation records/items/rollups/cleanup jobs. Existing settings,
+credentials and retained histories are preserved; no subscription login or
+historical management-event backfill is performed. These administrator assets
+remain outside account export 31. See the [schema changes](../../docs/database-upgrades.md#schema-changes).
 
 The schema-40 step gives each key one service owner and each model list one
 endpoint/key pair. Legacy cross-service credentials and shared catalogs are

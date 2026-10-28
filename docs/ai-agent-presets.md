@@ -1,13 +1,13 @@
 # Management assistant presets
 
 The experimental management assistant includes editable message templates, two
-shared memories and descriptions for its existing tools. They are embedded in
+shared memories, one personal memory per operator and editable tool descriptions. They are embedded in
 the binary, so deployment does not need the source files at runtime. The
 presets contain no instance configuration or credentials.
 
 Automatic review defaults to `off`, chat defaults to closed, and assistant
-prefills are empty. An administrator must configure the dedicated endpoint,
-key and model before calls can run. Tool switches default to enabled; each
+prefills are empty. An administrator must configure and select a driver before calls can run: Chat
+Completions, external Responses, or the instance's ChatGPT subscription connection. Tool switches default to enabled; each
 actual tool still depends on current permissions, configuration and whether
 the job is a conversation or automatic review.
 
@@ -35,17 +35,21 @@ guarantee correctness or grant permissions.
 
 ## Configure and adjust
 
-1. In administrator assistant settings, configure the dedicated driver and
-   choose its model. Model discovery can run before a model is selected.
-   Confirm that the upstream supports the required tool calls and structured
-   output; optional assistant prefill also depends on upstream support.
+1. In administrator assistant settings, configure a driver profile and choose
+   its model. Bind the global default, automatic review, administrator chat
+   or steward chat as needed; administrators can set an individual steward
+   override or leave that operator inheriting the workflow choice. Model discovery can precede model selection. For
+   ChatGPT, import the local helper's encrypted connection file first. Only
+   administrators can change sources or credentials; failures do not switch
+   providers. Optional prefill depends on the selected upstream's support.
 2. Read the preset messages and [tool descriptions](../internal/aiagent/presets/tool-descriptions.json).
    Adjust language, explanations and when a tool is useful. Keep the actual
    tool names and parameters; changing descriptive text does not add a tool,
    alter its input schema or expand authority.
-3. Put lasting, non-secret site guidance in the appropriate shared memory.
-   Read its current text and revision before saving. Model-proposed edits show
-   the before/after text and wait for plan approval.
+3. Administrators can put lasting, non-secret site guidance in shared memory.
+   Operators can maintain their own personal memory; only administrators can
+   select another owner. Read the current text and revision before saving.
+   Model-proposed edits show the before/after text and wait for plan approval.
 4. Enable chat when it is wanted. For automatic review, `preview` records
    advice without applying it; `auto` may apply valid results. These switches
    are independent. Review suggestions and execution receipts separately.
@@ -54,19 +58,24 @@ Templates are ordered `{role,content}` arrays using `system`, `user` and
 `assistant` roles. Both templates include `{{memory}}`; automatic review also
 includes `{{intelligence}}`. Keep exactly one standalone `{{conversation}}`
 node in the chat template so original message roles and tool-result IDs are
-preserved. Each template permits up to 100 messages and 1 MiB of combined
+preserved. The default chat template also inserts `{{interlocutor}}` and
+`{{personal_memory}}` before the conversation. The first is trusted
+`{id,role,name}` JSON for the current operator; the second is that operator's
+personal memory. Expansion is single-pass and cannot grant permissions.
+Each template permits up to 100 messages and 1 MiB of combined
 content. `auto_prefill` and `chat_prefill` append optional assistant text and
 default to empty.
 
-The ten description keys are `donations`, `donation_models`, `review_history`,
-`charity_models`, `charity_binding_presets`, `users`, `site_status`, `web_search`, `propose_operations` and
-`edit_memory`. Read tools provide only authorized data. Search additionally
+The eleven description keys are `donations`, `donation_models`, `review_history`,
+`charity_models`, `charity_binding_presets`, `users`, `site_status`,
+`web_search`, `propose_operations`, `edit_memory` and `management_history`.
+Read tools provide only authorized data. Search additionally
 requires its configured service and key. Plans and memory writes are available
 only in conversation mode, with the corresponding authority. Descriptions are
 applied after tool filtering; the next model turn reads current descriptions.
 
-Site-data tools return all matching records the operator may read in one
-response. Use optional filters to select relevant records; `page` and
+The site-data tools in the table below return all matching records the operator
+may read in one response. Use optional filters to select relevant records; `page` and
 `page_size` are not tool parameters. Lists use `{data, total}`, where `total`
 is a decimal string and equals the number of returned records. Ordinary
 management pages keep their own pagination.
@@ -84,8 +93,10 @@ List summaries include the information needed to identify records and plan the
 next step. User summaries do not load each account's wallets or usage details;
 use an exact user selection for full profile details. Donation uses,
 review signatures and charity bindings remain included because they are needed
-to form valid operation plans. These tools do not expose a request-log search;
-request-log HTTP pages are separate from the model's available tools.
+to form valid operation plans. Management donation keys and model-catalog
+items include safe submitted mainstream category and current effective
+endpoint tags. A catalog item's `source=manual|automatic` is catalog evidence,
+not its channel category. Model-request logs remain separate from these tools.
 
 For an approved donation, the assistant can read `charity_binding_presets`
 and propose `charity.binding.apply_preset`, with the donation ID as `target_id`
@@ -119,11 +130,42 @@ information out of prompts, shared memories and external search queries.
 Compaction and clearing change future conversation context; they do not erase
 retained originals or reverse completed operations.
 
+## Personal memory and management history
+
+An operator with `ai.chat` can read shared memory and read/write their own
+personal memory. Shared-memory writes and cross-owner personal-memory access
+are administrator-only, even when an older steward policy retains
+`ai.memory.edit`. The `edit_memory` tool takes `action=read|write` and
+`kind=chat|auto_review|personal`; stewards receive only the personal choice.
+Administrator-only `owner_id` selects another operator. Writes provide the
+current `expected_revision` and full replacement `content`, then await the
+same human plan approval as business changes. Automatic review cannot edit
+memory. An unsaved personal memory is empty at revision `"0"`; saved text and
+history remain after loss of role or account deletion for administrator access.
+
+The administrator-only conversation tool `management_history` reads retained
+management operations using `action=list|detail|items|cleanup_status`.
+Unlike the site-data tools above, it is paginated and supports grouped views,
+filters and a saved insertion cutoff. It does not read assistant request bodies
+or conversation archives. See the [history contract](api-contract.md#79-management-operation-history)
+for exact inputs, time units, limits and response fields.
+
+To clear history, an administrator may propose `management.cleanup` through
+`propose_operations` with an empty `target_id` and `input:{filter,all}`.
+The server freezes the selection and previews it for one human approval.
+Execution queues a bounded cleanup; active operations are skipped, and its
+status reports actual progress. Cleanup is irreversible and leaves ordinary
+business data, conversations, memories and model-request logs independent.
+Stewards and automatic review receive neither this read tool nor this action.
+
 ## Saved configuration and API clients
 
-Existing saved templates, switches and tool choices are preserved. If an older
-configuration has no tool descriptions, reads supply the built-in defaults.
-`GET /admin/api/ai/config` returns the effective descriptions for all ten tools.
+Saved custom templates and descriptions, switches and explicit tool choices
+are preserved. Only an exact prior built-in chat template or memory-tool
+description can refresh to the current built-in version. Missing new tool
+keys receive their defaults. If an older configuration has no tool descriptions,
+reads supply the built-in defaults.
+`GET /admin/api/ai/config` returns the effective descriptions for all eleven tools.
 
 `PUT /admin/api/ai/config` keeps its revision check and other configuration
 fields. Its optional `tool_descriptions` object is a partial update:
@@ -145,7 +187,7 @@ using the current `expected_revision`; this fragment is not a standalone PUT:
 }
 ```
 
-Initial memory is returned only when that memory has never been saved, with
+Initial shared memory is returned only when that memory has never been saved, with
 revision `"0"`. The displayed preset text is the before-state of its first
 edit and history entry. A saved custom body, including an explicitly empty
 body, remains unchanged after an upgrade. Clearing a memory does not restore
