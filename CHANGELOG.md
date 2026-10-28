@@ -35,6 +35,8 @@ Each version entry describes its source and compatibility boundary; a release ta
   count and current routing rules.
 - Use distinct colors for endpoint tags and card-statistic rarity badges while
   retaining their text labels and existing meanings.
+- Show the start time and unavailable-until-open message for upcoming limited
+  gacha pools, including beside the mobile summon controls.
 
 ### Compatibility
 
