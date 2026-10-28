@@ -4,7 +4,7 @@
 
 NonbiriAPI 是可自行部署的 AI 端点管理平台，提供 OpenAI-compatible 调用入口。用户管理服务、端点及服务内的 API 密钥，按端点与密钥维护模型列表，通过可撤销的 CallerKey 调用个人或公益模型。可选活动和小游戏共用服务端权威的账务及生命周期规则。
 
-**v1.3.1（未发布）** 增加 Responses 与 ChatGPT 助手来源、个人记忆及独立管理操作记录。已有数据库需显式升级至 schema 41，账号导出保持格式 31。GitHub Release 提供源码，构建方法见下文；版本沿革见 [CHANGELOG](CHANGELOG.md)。
+**v1.3.1** 增加 Responses 与 ChatGPT 助手来源、个人记忆及独立管理操作记录。已有数据库需显式升级至 schema 41，账号导出保持格式 31。GitHub Release 提供源码，构建方法见下文；版本沿革见 [CHANGELOG](CHANGELOG.md)。
 
 ## 架构
 

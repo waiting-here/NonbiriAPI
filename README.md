@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage services, endpoints and service-scoped API keys, maintain model lists per endpoint/key pair, and configure personal or shared charity routing. Revocable CallerKeys authenticate gateway calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.3.1 (unreleased)** adds Responses and ChatGPT assistant sources, personal memories and separate management operation records. Existing databases require an explicit upgrade to schema 41; account export remains format 31. GitHub Releases provide source code; build instructions are below. Version history is in [CHANGELOG](CHANGELOG.md).
+**v1.3.1** adds Responses and ChatGPT assistant sources, personal memories and separate management operation records. Existing databases require an explicit upgrade to schema 41; account export remains format 31. GitHub Releases provide source code; build instructions are below. Version history is in [CHANGELOG](CHANGELOG.md).
 
 ## Architecture
 
