@@ -2650,7 +2650,8 @@
         "site_status": "Read site status",
         "web_search": "Search the web",
         "propose_operations": "Propose operation plans",
-        "edit_memory": "Propose memory edits"
+        "edit_memory": "Propose memory edits",
+        "management_history": "Query management operations"
       },
       "tokens": {
         "input": "Input",
@@ -2664,6 +2665,7 @@
       "chatUnavailable": "Chat is not available. An administrator must enable it and finish the driver settings; stewards also need chat permission. You can still read the history.",
       "operationNames": {
         "memory": "Update memory",
+        "managementCleanup": "Clear management history",
         "review": "Review pending content",
         "approveReview": "Approve pending content",
         "rejectReview": "Return pending content",

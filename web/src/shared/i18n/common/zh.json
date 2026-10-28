@@ -2650,7 +2650,8 @@
         "site_status": "查看站点运行摘要",
         "web_search": "搜索网页",
         "propose_operations": "提出操作计划",
-        "edit_memory": "建议修改记忆"
+        "edit_memory": "建议修改记忆",
+        "management_history": "查询管理操作记录"
       },
       "tokens": {
         "input": "输入",
@@ -2663,7 +2664,8 @@
       "chatEnabledHelp": "默认关闭。还需配置驱动端点、模型和密钥；协管需有对话权限。",
       "chatUnavailable": "对话尚未开放。管理员需开启对话并配好驱动模型，协管还需有对话权限。已有记录仍可阅读。",
       "operationNames": {
-        "memory": "修改共用记忆",
+        "memory": "修改记忆",
+        "managementCleanup": "清理管理操作记录",
         "review": "审核待审内容",
         "approveReview": "通过待审内容",
         "rejectReview": "退回待审内容",

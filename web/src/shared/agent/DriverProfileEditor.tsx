@@ -450,7 +450,7 @@ export function DriverProfileEditor({
           </Button>
           {base.id ? (
             <Button type="button" variant="danger-outline" onClick={() => setDeleting(true)}>
-              {t('common.delete')}
+              {t('common.connections.delete')}
             </Button>
           ) : null}
         </div>
@@ -467,7 +467,7 @@ export function DriverProfileEditor({
                     .catch(() => undefined)
                 }
               >
-                {t('common.delete')}
+                {t('common.connections.delete')}
               </Button>
               <Button type="button" onClick={() => setDeleting(false)}>
                 {t('common.cancel')}

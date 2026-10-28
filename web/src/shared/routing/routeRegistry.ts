@@ -447,6 +447,17 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     labelKey: 'admin.logs.nav',
   }),
   admin({
+    id: 'admin-management-operations',
+    path: '/management-operations',
+    access: 'admin',
+    layout: 'wide',
+    nav: true,
+    registered: true,
+    navGroup: 'operations',
+    icon: 'logs',
+    labelKey: 'admin.managementHistory.title',
+  }),
+  admin({
     id: 'admin-endpoints',
     path: '/endpoints',
     access: 'admin',

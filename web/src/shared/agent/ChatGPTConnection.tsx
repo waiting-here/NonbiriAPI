@@ -181,7 +181,7 @@ export function ChatGPTConnection({ account, active }: { account: string; active
                         ] as const
                       ).map((metric) => (
                         <div key={metric}>
-                          <span>{t('common.agent.drivers.metrics.' + metric)}</span>
+                          <span>{t(`common.agent.drivers.metrics.${metric}`)}</span>
                           <strong className="agent-number">{localUsage[metric]}</strong>
                         </div>
                       ))}

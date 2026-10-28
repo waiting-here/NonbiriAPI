@@ -11,6 +11,7 @@ export default defineConfig({
     'account-export.spec.ts',
     'account-mfa.spec.ts',
     'management.spec.ts',
+    'agent-management.spec.ts',
     'steward-permissions.spec.ts',
     'inference-configuration.spec.ts',
     'moderation.spec.ts',

@@ -66,7 +66,7 @@ describe('shared memory recovery', () => {
     const editor = await screen.findByRole('textbox', { name: 'Markdown content' });
     await view.user.clear(editor);
     await view.user.type(editor, 'My unsaved preference');
-    const picker = screen.getByRole('combobox', { name: 'Interlocutor', exact: true });
+    const picker = screen.getByRole('combobox', { name: 'Interlocutor' });
     await view.user.selectOptions(picker, '2');
     await screen.findByDisplayValue('Original 2');
     expect(document.querySelectorAll('textarea')).toHaveLength(2);
@@ -100,7 +100,7 @@ describe('shared memory recovery', () => {
       { station: 'admin', role: 'admin', route: '/ai?ai_memory_owner=1' },
     );
     await screen.findByRole('textbox', { name: 'Markdown content' });
-    expect(screen.getByRole('combobox', { name: 'Interlocutor', exact: true })).toHaveValue('');
+    expect(screen.getByRole('combobox', { name: 'Interlocutor' })).toHaveValue('');
     expect(
       screen.queryByRole('option', { name: 'Current administrator · 1' }),
     ).not.toBeInTheDocument();
@@ -122,7 +122,7 @@ describe('shared memory recovery', () => {
     );
     await screen.findByRole('textbox', { name: 'Markdown content' });
     expect(mocks.get.mock.calls[0]?.[1]).toBe('personal');
-    await view.user.click(screen.getByRole('tab', { name: 'Chat memory', exact: true }));
+    await view.user.click(screen.getByRole('tab', { name: 'Chat memory' }));
     await screen.findByText(
       'Shared memories are maintained by administrators. Save your own habits and preferences in personal memory.',
     );

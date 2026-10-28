@@ -635,7 +635,9 @@ export const getArchiveResults = (id: string, p: string, n: PageSize, signal?: A
       ),
     signal,
   );
-export function pageMetadata(value: AgentPage<unknown>): PageMetadata {
+export function pageMetadata(
+  value: Pick<AgentPage<unknown>, 'total' | 'page' | 'page_size'>,
+): PageMetadata {
   return {
     page: String(value.page),
     page_size: value.page_size,

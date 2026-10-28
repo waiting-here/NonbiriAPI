@@ -34,6 +34,7 @@ const toolLabels: Record<string, string> = {
   web_search: 'common.agent.tools.web_search',
   propose_operations: 'common.agent.tools.propose_operations',
   edit_memory: 'common.agent.tools.edit_memory',
+  management_history: 'common.agent.tools.management_history',
 };
 function useAdminRequestGuard() {
   const client = useQueryClient();

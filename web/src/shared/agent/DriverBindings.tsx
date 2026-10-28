@@ -49,7 +49,7 @@ export function BindingEditor({
       ? t('common.agent.drivers.legacy')
       : effective.actor_id !== '0'
         ? t('common.agent.drivers.individual')
-        : t('common.agent.drivers.scopes.' + effective.scope);
+        : t(`common.agent.drivers.scopes.${effective.scope}`);
   const operation = useOperation<BindingUpdate, never, DriverBinding>({
     authorityRoot: agentRoot('admin', account),
     execute: async (input, _secret, _key, context) => {
@@ -214,7 +214,7 @@ export function DriverBindings({
           key={scope}
           config={config}
           scope={scope}
-          label={t('common.agent.drivers.scopes.' + scope)}
+          label={t(`common.agent.drivers.scopes.${scope}`)}
           account={account}
           onConfiguration={onConfiguration}
         />
