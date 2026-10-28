@@ -92,7 +92,7 @@ Session, administrator and steward automation routes have no cross-origin permis
 - Revisions, generations, sequences, exact counts, and values that may exceed the JSON safe-integer range are canonical decimal strings.
 - New opaque IDs use a documented prefix plus 22 canonical raw-base64url characters. Important prefixes include `ann_`, `op_`, `req_`, `clm_`, `pol_`, `thu_`, `fb_`, `ll_`, `rpsq_`, `rps_`, `rpc_`, `rpt_`, `iss_`, `lgh_`, `sse_`, `gle_`, `dbs_`, `dbt_`, `dbe_`, `scn_`, and `mch_`.
 - List endpoints retain the legacy `cursor` and `limit` mode and return `{data:[...],next_cursor:null|string}` unless a section states a different closed envelope. Numbered mode is selected by `page` or `page_size`; `page` is a canonical positive decimal from 1 through 2147483647 and `page_size` is 10, 20, 50, or 100, defaulting to 1 and 20. The modes are mutually exclusive, repeated/unknown values are rejected, and numbered responses add the route's `pagination` metadata with `next_cursor:null`; an excessive page clamps to the last page (empty results use page 1 of 1). Count, filters, decision time, and rows come from one authorized read snapshot. Cursors are authenticated, route/owner/filter-bound, expiring, and at most 512 bytes. A malformed, expired, or cross-scope cursor is `400 invalid_request`.
-- State-changing routes require `Idempotency-Key` unless they are authentication/session/elevation/logout, CallerKey plaintext mutation, OpenAI-compatible model calls, an explicitly business-unique ACK/lease/check-in/tutorial mutation, alert set-state, the per-item steward binding automation in §6.3, or the assistant operations in §7.8. Control replay keys contain 22–128 URL-safe ASCII characters. Same key and same canonical request replay the stored status/body; the same key with a different request is `409 conflict`. Replay records last 24 hours.
+- State-changing routes require `Idempotency-Key` unless they are authentication/session/elevation/logout, CallerKey plaintext mutation, OpenAI-compatible model calls, an explicitly business-unique ACK/lease/check-in/tutorial mutation, alert set-state, the per-item steward binding automation in §6.3, the assistant operations in §7.8, or management-history cleanup in §7.9. Control replay keys contain 22–128 URL-safe ASCII characters. Same key and same canonical request replay the stored status/body; the same key with a different request is `409 conflict`. Replay records last 24 hours.
 - Dynamic API responses and every error carry `Cache-Control: no-store`.
 
 Shared numbered-page metadata is `{page:string,page_size:number,total_items:string,total_pages:string}`. `page`, `total_items`, and `total_pages` use exact canonical decimal strings; only `total_items` may be zero. Nested `attempt_pagination` and `materials_pagination` use the same shape. Credit history retains its separately documented top-level pagination envelope.
@@ -152,9 +152,9 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 40. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts exact registered schema 16–26 and 33–39 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 41. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts exact registered schema 16–26 and 33–40 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
 
-`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=40`, `minimum_schema_version=40`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
+`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=41`, `minimum_schema_version=41`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
 
 Current account export `schema_version=31` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v31.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
@@ -703,6 +703,8 @@ Creation and pending edits require a non-whitespace donor description, with the 
 Each donation key has immutable `authorized_expires_at` and an effective `expires_at`, equal at creation. A reviewer may shorten the effective expiry or restore it only up to the donor's authorization; an unlimited effective value is permitted only when the authorization is unlimited. One key expiring removes only that key's membership and bindings and blocks new claims. The donation becomes expired only when its last live key ends. Accepted claims and reservations complete normally.
 
 Administrator and steward donation projections with `donations.read_all` contain the same management information. `owner` contains `user_id,discord_id,display_name` for any surviving donor; an absent owner remains null. `reviewer` contains `user_id` and the recorded actor `role`, with a null ID after that actor's identity is removed. Manual review may have an empty reason; automatic approval has no reviewer and an empty reason. Detailed management key sources include channel category/revision when recorded. Ordinary owner projections remain separate. Historical idempotent responses may lack newly authorized information; the current detail read provides the authoritative projection without rewriting stored receipts.
+
+Management donation lists `data[].sources[]`, key pages `data[].safe_source` and details `keys[].safe_source` additionally expose optional `category:"subscription"|"api_platform"` from the submitted mainstream-source snapshot, and optional `endpoint_tags:string[]` from the address's current effective endpoint tags, including domain rules. Custom sources have no category; empty tags are omitted. Tags use the existing nine-value endpoint-tag registry. List source groups, the first-three preview and `source_count` keep their existing meaning; each group uses its existing representative key snapshot and that address's tags, without merging tags from other addresses. Existing L5 identity projection and donation scope remain in force.
 
 Every owner-visible key carries `safe_source`: a custom Connector/base URL or a mainstream channel/name/Connector/base URL. Internal source IDs, channel category/revision, report fingerprints, secrets, and management notes are excluded. A donation containing only keys from one immutable mainstream channel is approved atomically at creation. A fully custom donation remains pending. Mixed custom/mainstream or multiple-channel submissions are `invalid_request`.
 
@@ -1708,11 +1710,11 @@ Lineage items are exactly `{donation_id,donation_key_id,donation_status,key_stat
 
 ### 7.8 Experimental AI assistant
 
-The assistant uses a dedicated OpenAI-compatible Chat Completions endpoint and encrypted key, separate from user credentials. Browser-session routes use `/admin/api/ai` for administrators and `/api/steward/ai` for stewards. CallerKeys cannot use these routes. Model output, tool results and proposed operations are untrusted data; they never confer permission.
+The assistant supports dedicated driver profiles for OpenAI-compatible Chat Completions, an external Responses API and the instance's ChatGPT subscription connection. Sources are explicit: failures never switch provider or billing source automatically. Browser-session routes use `/admin/api/ai` for administrators and `/api/steward/ai` for stewards. CallerKeys cannot use these routes. Model output, tool results and proposed operations are untrusted data; they never confer permission.
 
-Level 6 has the shared assistant capabilities. Level 5 needs the corresponding live grants: `ai.chat` for its conversation, `ai.review.read` for automatic-review records and `ai.memory.edit` for reading or editing shared memories. New default policies enable only `ai.chat`; upgrading an explicitly configured L5 policy leaves all three new grants false. Configuration, complete model-request logs, usage summaries and other operators' archives are administrator-only. Ordinary users have no assistant route. Existing target hierarchy, donation scope, field grants, numeric allowances and administrator-only actions still apply to every tool and final write.
+Level 6 has the steward assistant capabilities. Level 5 needs `ai.chat` for its conversation, reading shared memories and reading/writing its own personal memory; `ai.review.read` permits automatic-review records. Shared-memory writes require an administrator, including when a retained steward policy contains `ai.memory.edit`. New default policies enable only `ai.chat`; earlier explicitly configured policies retain their saved grants. Configuration, complete model-request logs, usage summaries and other operators' archives are administrator-only. Ordinary users have no assistant route. Existing target hierarchy, donation scope, field grants, numeric allowances and administrator-only actions still apply to every tool and final write.
 
-#### Chat, plans and shared memories
+#### Chat, plans and memories
 
 In this table, `{ai}` is either authenticated assistant prefix above.
 
@@ -1727,14 +1729,17 @@ In this table, `{ai}` is either authenticated assistant prefix above.
 | `GET {ai}/chat/plans` | Optional positive `before_id`; omit it for the first page. Returns `{items,has_older}`, up to 100 plans in descending ID order. |
 | `POST {ai}/chat/plans/{id}/decision` | `{approve,feedback,elevation_token?}`; returns the exact plan and its persisted outcome. |
 | `GET {ai}/reviews`, `GET {ai}/reviews/{id}` | Numbered automatic-review page or one review, described below. |
-| `GET {ai}/memories/{kind}` | `kind=chat|auto_review`; returns `{kind,content,revision,updated_at,updated_by}`. |
-| `PUT {ai}/memories/{kind}` | `{content,expected_revision}`; compare-and-swap update returning the memory. |
+| `GET {ai}/memories/{kind}` | `kind=chat\|auto_review`; returns `{kind,content,revision,updated_at,updated_by,writable}`; steward reads have `writable:false`. |
+| `PUT /admin/api/ai/memories/{kind}` | Administrator-only `{content,expected_revision}`; compare-and-swap update returning the memory. The steward path rejects writes. |
+| `GET {ai}/personal-memory`, `PUT {ai}/personal-memory` | Read or update the current operator's personal memory. PUT uses `{content,expected_revision}`; the memory adds `owner_id,writable`. |
+| `GET /admin/api/ai/personal-memories` | Numbered owner page with optional `q`: exact owner ID or case-insensitive name substring, at most 128 UTF-8 bytes. Returns `{items,total,page,page_size,current_owner_id}`; items have `id,role,label`. |
+| `GET /admin/api/ai/personal-memories/{owner}`, `PUT /admin/api/ai/personal-memories/{owner}` | Administrator-only cross-owner read/update; the same memory body and revision rules apply. |
 
 Assistant IDs, generations, revisions, persisted counts and token totals are decimal strings; queue counters and configuration limits are JSON numbers. Assistant timestamps, including usage `as_of`, are UTC Unix **milliseconds**. Numbered assistant lists use `page=1..1000000` and `page_size=1..100`, default 1/20, and return `{items,total,page,page_size}`; `total` is a string while page and size are numbers. They do not use the shared `pagination` envelope or clamp an excessive page. Message and plan cursors are decimal IDs, not the opaque cursors used by other API families.
 
 These assistant mutations use their documented request keys, revisions or persisted plan identity instead of the general `Idempotency-Key` header. Send/edit `content` must be nonblank and at most 4 MiB; `request_key` is 16–128 bytes. Keep the exact key, path and body after an uncertain response. The key is bound to the actual actor, operation, edited message when applicable, generation and content. An identical authorized replay returns the original job even after the edit archived its original message; conflicting reuse returns `409 conflict`. A new request with a stale generation also returns 409. Only one active chat job or pending confirmation may occupy a conversation.
 
-`chat_enabled` is an administrator setting, default false. `GET /chat` first checks the caller's current conversation grant, then reports `enabled` only when that switch is on and the driver has an endpoint, key and model. New messages, edit/regenerate, compaction, model dispatch and pending-plan execution enforce the same gate; an unavailable chat returns `503 service_unavailable`. Turning it off cancels active chat work and supersedes unapproved plans. It preserves readable history, memories and execution records and does not change the independent automatic-review mode. Replaying a completed receipt does not restart work.
+`chat_enabled` is an administrator setting, default false. `GET /chat` first checks the caller's current conversation grant, then reports `enabled` only when that switch is on and the resolved driver has a model and its required endpoint/key or ChatGPT connection. New messages, edit/regenerate, compaction, model dispatch and pending-plan execution enforce the same gate; an unavailable chat returns `503 service_unavailable`. Turning it off cancels active chat work and supersedes unapproved plans. It preserves readable history, memories and execution records and does not change the independent automatic-review mode. Replaying a completed receipt does not restart work.
 
 There is one current conversation per operator. Messages contain `id,role,content,created_at,active,generation` and optional `tool_calls,tool_call_id`. Jobs contain `id,kind,actor_id,actor_role,actor_label,conversation_id,generation,donation_id,state,request_id,error,created_at,updated_at,queue`. Job kinds are `chat|compact|auto_review`; states are `pending|running|waiting_confirmation|completed|failed|cancelled|interrupted`. Queue information is `{length,active,limit,position}`, with a one-based pending position and zero otherwise; it is an advisory snapshot.
 
@@ -1742,11 +1747,11 @@ Administrators can edit any active user/assistant message; stewards can edit onl
 
 A plan contains `id,job_id,state,operations,preview,tool_call_ids,result?,created_at,decided_at?`. Operations are ordered `{kind,target_id,input}` objects. Their corresponding previews contain `title,description,before?,after?,dangerous,requires_elevation`, including memory text before/after. Plan states are `pending|approved|rejected|failed|superseded`. A decision applies only to the exact persisted plan; retrying a completed decision reads its outcome rather than executing it again.
 
-Model-proposed business and memory writes in conversation mode require human approval. The plan can combine existing donation review/maintenance, charity model/binding management, user profile/limits/economy/ban/delegation/CallerKey/authentication/deletion actions and shared-memory changes. Every operation retains its domain's authorization and expected versions. All business changes, memory changes, audit and the execution receipt commit in one transaction or all roll back. Model calls, discovery and human waiting take place outside that write transaction. Rejection or failure is recorded as a tool result so the conversation can continue; editing chat text cannot alter the actual audit.
+Model-proposed business and memory writes in conversation mode require human approval. The plan can combine existing donation review/maintenance, charity model/binding management, user profile/limits/economy/ban/delegation/CallerKey/authentication/deletion actions, shared- or personal-memory changes, and administrator-only management-history cleanup. Every operation retains its domain's authorization and expected versions. All business changes, memory changes, audit and the execution receipt commit in one transaction or all roll back. Model calls, discovery and human waiting take place outside that write transaction. Rejection or failure is recorded as a tool result so the conversation can continue; editing chat text cannot alter the actual audit.
 
 Sensitive administrator actions require fresh elevation. Obtain it through the existing administrator elevation route and send `elevation_token` with approval; `403 elevated_required` preserves the pending plan for identity confirmation. Passwords, OTPs, session credentials and dedicated endpoint keys are never model-tool inputs. User deletion/authentication changes retain the existing lifecycle barriers and post-commit invalidation. Current session, role, grants, resource scope and revisions are rechecked before execution.
 
-A memory with no saved row returns its embedded initial text with revision `"0"`; that text is the before-state for its first diff and history entry. Saved memory, including an explicitly empty body, is preserved. Memory PUT accepts at most 4 MiB. A stale `expected_revision` returns 409; clients must reread and compare rather than overwrite a newer edit. Memories and their change history remain independent of model-request log cleanup. Model-suggested memory edits require the same explicit plan decision as other writes.
+A shared memory with no saved row returns its embedded initial text with revision `"0"`; that text is the before-state for its first diff and history entry. Saved memory, including an explicitly empty body, is preserved. Memory PUT accepts at most 4 MiB. A stale `expected_revision` returns 409; clients must reread and compare rather than overwrite a newer edit. Personal memory starts empty at revision `"0"`. Stewards can access only their own personal memory; administrators can select current or retained owners, including those deleted or no longer stewards. Personal memories and their history survive those account changes. Memories and their change history remain independent of model-request log cleanup. Model-suggested memory edits require the same explicit plan decision as other writes. The conversation-only `edit_memory` tool uses `action=read|write` and `kind=chat|auto_review|personal`. Non-administrators are limited to their own personal memory; optional `owner_id` is administrator-only. Writes provide `content,expected_revision` and produce a plan.
 
 #### Automatic review and administrator configuration
 
@@ -1764,13 +1769,115 @@ A review is `{job,intelligence,result?,execution?,turns?}`. Both list and detail
 
 Configuration updates replace the submitted configuration except for the partial tool-description merge below, and use revision CAS; stale saves return 409. Omitted key fields retain the encrypted key, an empty string removes it, and a nonempty string replaces it. Reads expose only `has_key`/`search_has_key`, never saved key text. The driver key is not a user's endpoint key and is not charged through a user's credits.
 
-Driver defaults are context window 32768, output limit 4096, shared concurrency 1 and timeout 600 seconds. Context window accepts 1024–10000000, output limit 1 through the context window, concurrency 1–128 and timeout 1–1200 seconds. Optional temperature is 0–2 and top-p 0–1. `output_token_parameter` is `max_tokens` by default or `max_completion_tokens`. `extra_parameters` is a JSON object of at most 32768 bytes and cannot override model/messages/tools, tool choice, response format, streaming, URL/authentication/headers, either output-token parameter or the dedicated sampling fields. Calls use nonstreaming Chat Completions with one choice. Optional assistant prefill depends on upstream support.
+#### Driver profiles and ChatGPT connection
 
-Templates are ordered `{role,content}` arrays with `system|user|assistant` roles, up to 100 messages and 1 MiB combined content each. Both include `{{memory}}`; the review template also includes `{{intelligence}}`. The chat template contains exactly one standalone `{{conversation}}` node preserving original roles and tool IDs. Optional auto/chat prefill is appended as an assistant message. The closed `tools` map contains `donations,donation_models,review_history,charity_models,charity_binding_presets,users,site_status,web_search,propose_operations,edit_memory`; defaults enable all, while actual tools remain restricted by current human authority. Search uses the configured full endpoint URL, Bearer key and POST JSON query; external text never changes authorization.
+The legacy `/driver` and `/driver/models` routes remain the Chat Completions
+profile with ID `"0"`. Its concurrency setting is the shared process limit,
+default 1, valid 1–128. Existing legacy configuration remains the fallback
+when no binding is selected; a selected but unavailable profile fails instead
+of falling back.
 
-`tool_descriptions` maps the same ten tool names to editable text. GET returns every effective description. PUT accepts only known names and merges provided entries with the current effective map: omitted names remain unchanged, an empty string clears one description, and an omitted or null object preserves all descriptions. Each value is limited to 16 KiB of UTF-8 text after CRLF/CR normalization to LF; the total limit is 256 KiB. Descriptions are applied after tool enablement, role and workflow filtering, and a continuing tool loop reads current descriptions for its next model request. They do not alter names, parameter schemas, authorization or atomic execution.
+All routes below require a current administrator browser session. They have
+no steward or CallerKey equivalent.
 
-Site-data model tools are independent of the HTTP management-page pagination above. `donations`, `donation_models`, `review_history`, `charity_models` and the `users` profile list return all authorized matching records as `{data,total}` when the result fits the tool budget; `total` is a decimal string equal to the result count. Their schemas expose optional filters, without `page` or `page_size`, and results have no `has_more`. Donation results include safe service-use details and a review signature when a current pending submission exists. Catalog and review-history filters may omit the donation ID; each row identifies its donation. Charity model results include authorized bindings. User lists contain profile summaries; selecting an exact user returns the full requested object, and sensitive detail still requires that target and its existing permission. No request-log search tool is currently exposed.
+| Method and path | Request / response |
+| --- | --- |
+| `GET /admin/api/ai/drivers` | `{profiles,bindings}`; profiles are `{id,name,settings}`. |
+| `POST /admin/api/ai/drivers` | `{name,settings,expected_revision:"0",api_key?}`; returns the new profile. |
+| `PUT /admin/api/ai/drivers/{id}` | The same profile update with its current `expected_revision`; returns the saved profile. |
+| `DELETE /admin/api/ai/drivers/{id}` | `{expected_revision}`; returns `{}`. Bound profiles cannot be deleted. |
+| `PUT /admin/api/ai/driver-bindings` | `{scope,actor_id,driver_id?,expected_revision}`; returns the binding. |
+| `POST /admin/api/ai/drivers/{id}/models` | Read-only discovery using saved connection settings; returns `{models:[string,...]}`. |
+| `GET /admin/api/ai/chatgpt` | Safe connection status and the separately scoped local usage described below. |
+| `POST /admin/api/ai/chatgpt/target` | Optional `{new_account:boolean}`; returns an encrypted-import target. |
+| `POST /admin/api/ai/chatgpt/import` | Local helper's encrypted envelope; returns safe connection status. |
+| `POST /admin/api/ai/chatgpt/logout` | `{expected_revision}`; returns `{remote_revocation_confirmed:boolean}`. |
+
+Profile settings include `revision,driver_id,provider,base_url,has_key,model,
+context_window,output_reserve_tokens,max_output_tokens,output_token_parameter,
+temperature?,top_p?,extra_parameters,concurrency,timeout_seconds,
+connection_revision`. Read revisions, IDs, connection revision and key-presence
+flags are safe metadata, not credential text. Provider values are
+`chat_completions`, `responses` and `chatgpt`. Profile names are nonblank,
+at most 200 UTF-8 bytes; model names allow at most 512 bytes. New profile
+settings accept a context window of 1024–10000000, a positive local output
+reserve strictly below the window and timeout 1–1200 seconds. A zero reserve
+normalizes to the configured output limit or 4096. The legacy defaults remain
+a 32768-token window, 4096-token output limit and 600-second timeout.
+
+Bindings have `scope,actor_id,driver_id,revision`, with IDs and revisions as
+decimal strings. Scopes are `default,auto_review,admin_chat,steward_chat`;
+`actor_id:"0"` selects the workflow default, and only `steward_chat` accepts
+an individual operator. Resolution is individual steward override, workflow
+override, global default, then legacy profile 0. Null or omitted `driver_id`
+removes an override; `"0"` explicitly selects the legacy profile. Profile and
+binding writes use revision CAS. Omitted `api_key` retains a key only when
+the provider stays the same; an empty key removes it, and changing provider
+clears the former key unless a new appropriate key is supplied. Request
+records capture the selected profile/provider and safe settings at admission;
+later configuration changes do not rewrite that evidence.
+
+For new profiles, external output limits must be below the local context
+window; Chat Completions requires a positive limit, while external Responses
+permits zero. Chat Completions sends one nonstreaming choice, with
+`output_token_parameter=max_tokens|max_completion_tokens`, a positive output
+limit, optional temperature 0–2 and top-p 0–1. External Responses uses streaming,
+`store:false` and encrypted-reasoning inclusion; a zero `max_output_tokens`
+omits its optional upstream output limit. ChatGPT uses the server's fixed
+subscription resource, no dedicated API key, no `max_output_tokens`,
+temperature or top-p. Its local window and output reserve guide compaction;
+they are not account quotas or upstream hard limits. A complete Responses
+stream requires `response.completed`; clean EOF alone is incomplete.
+Cancellation reaches the active upstream. Provider/account changes do not
+reuse incompatible native reasoning state.
+
+`extra_parameters` is a JSON object of at most 32768 bytes. It cannot replace
+transport, authentication, model, messages/input, tools or dedicated fields.
+Responses and ChatGPT accept optional `reasoning` fields
+`effort,summary,mode,context`, `text.verbosity`, `parallel_tool_calls`,
+`service_tier` and `prompt_cache_key`; only external Responses accepts
+`prompt_cache_retention`. Optional ChatGPT extras default to empty.
+Reasoning effort is `none|minimal|low|medium|high|xhigh|max`, summary
+`auto|concise|detailed`, mode `standard|pro`, context
+`auto|all_turns|current_turn`; verbosity is `low|medium|high`.
+Service tier is `auto|default|flex|priority|fast|ultrafast`, cache key is at
+most 64 bytes, and retention is `in-memory|24h`. Unsupported fields fail
+validation rather than being silently discarded.
+
+One instance has one administrator-managed ChatGPT connection. The local
+`nonbiri-chatgpt-login --target target.json --output connection.json
+--host-id-file host-id.txt` helper performs the browser authorization and
+produces the encrypted import file; no Codex runtime is required on the server
+and no other application's credentials are reused. The target contains
+`version,host_id,revision,public_key` and optional `client_id,subject,new_account`.
+The helper envelope contains `version,host_id,revision,ephemeral_key,nonce,
+ciphertext` and optional `new_account`; it is bound to the target instance
+and revision. Preparing a new-account target preserves the active connection
+until an accepted import replaces it. Saved credentials are encrypted and
+refresh is serialized. Disconnect clears local credentials even when remote
+revocation cannot be confirmed; inspect its returned boolean.
+
+Status contains `connected,revision,host_id,account_label,expires_at,updated_at,
+needs_login,official_usage,local_usage,last_limit_error`. `expires_at` is Unix
+seconds and describes credential expiry, not a quota reset. `updated_at` and
+the local-usage/error timestamps are Unix milliseconds.
+`official_usage` currently reports `availability:"unavailable"`,
+`reason:"not_exposed_by_public_api"` and an official `usage_url`.
+`local_usage.scope` is `retained_completed_chatgpt_requests`; its
+`window_start,window_end` bound the rolling 24-hour interval. String counts
+are `requests,input_tokens,cached_input_tokens,cache_write_input_tokens,
+output_tokens,reasoning_tokens,unknown_count`. These are retained site request
+facts, including earlier connections; request cleanup reduces them. They do
+not measure the whole subscription or a remaining quota. The independent
+`/usage` totals below survive that cleanup. `last_limit_error` is null or
+`{code:"subscription_sharing_usage_limit_exceeded",occurred_at}` from recognized
+recent evidence; a generic 429 does not establish subscription exhaustion.
+
+Templates are ordered `{role,content}` arrays with `system|user|assistant` roles, up to 100 messages and 1 MiB combined content each. Both include `{{memory}}`; the review template also includes `{{intelligence}}`. The chat template contains exactly one standalone `{{conversation}}` node preserving original roles and tool IDs. `{{interlocutor}}` inserts trusted current-operator JSON `{id,role,name}`; `{{personal_memory}}` inserts that operator's personal memory. The default chat template places both before the conversation. Macro expansion is single-pass; text inside memory does not become another macro or authority. Optional auto/chat prefill is appended as an assistant message. The closed `tools` map contains `donations,donation_models,review_history,charity_models,charity_binding_presets,users,site_status,web_search,propose_operations,edit_memory,management_history`; defaults enable all, while actual tools remain restricted by current human authority. Search uses the configured full endpoint URL, Bearer key and POST JSON query; external text never changes authorization.
+
+`tool_descriptions` maps the same eleven tool names to editable text. GET returns every effective description. PUT accepts only known names and merges provided entries with the current effective map: omitted names remain unchanged, an empty string clears one description, and an omitted or null object preserves all descriptions. Each value is limited to 16 KiB of UTF-8 text after CRLF/CR normalization to LF; the total limit is 256 KiB. Descriptions are applied after tool enablement, role and workflow filtering, and a continuing tool loop reads current descriptions for its next model request. They do not alter names, parameter schemas, authorization or atomic execution.
+
+Site-data model tools are independent of the HTTP management-page pagination above. `donations`, `donation_models`, `review_history`, `charity_models` and the `users` profile list return all authorized matching records as `{data,total}` when the result fits the tool budget; `total` is a decimal string equal to the result count. Their schemas expose optional filters, without `page` or `page_size`, and results have no `has_more`. Donation results include safe service-use details and a review signature when a current pending submission exists. Their `keys[].safe_source`, automatic-review intelligence's donation keys and each `donation_models` item carry the management `safe_source` category/effective-tag projection in §4. The catalog item's existing `source=manual|automatic` describes catalog evidence, not channel category. Catalog and review-history filters may omit the donation ID; each row identifies its donation. Charity model results include authorized bindings. User lists contain profile summaries; selecting an exact user returns the full requested object, and sensitive detail still requires that target and its existing permission. These tools do not search model-request logs. The separate administrator-only `management_history` tool is described in §7.9.
 
 Lists are bounded to 5,000 records and 1 MiB, with an additional combined-turn budget derived from the configured context window and existing token estimate. An oversized result returns a small, retryable `tool_result_too_large` tool error with guidance naming that tool's supported filters, without partial data or an unauthorized count. The error participates in the tool conversation so the model can narrow its query. These checks do not silently shorten results or alter management HTTP pagination, permissions or saved custom descriptions. A prompt/tool configuration that cannot accommodate even the minimum error conversation fails explicitly.
 
@@ -1778,7 +1885,7 @@ The conversation-only `charity_binding_presets` tool takes required `donation_id
 
 Automatic-review intelligence includes the complete catalog for its pending submission when it fits. Initial intelligence that exceeds the hard or model-context budget is recorded as requiring manual review with a reason; no approval or binding is applied, and an oversized submission does not block later events. This does not silently remove model entries or enable reviews for previously excluded submissions.
 
-The [embedded presets](ai-agent-presets.md) supply initial templates, shared memories and descriptions. Existing saved templates, switches and tool selections remain unchanged; missing description entries receive the built-in defaults. Automatic review stays off, chat stays closed and both prefills stay empty by default. Presets do not configure the driver or start model calls.
+The [embedded presets](ai-agent-presets.md) supply initial templates, shared memories and descriptions. Saved custom templates, descriptions, switches and explicit tool selections are preserved; missing entries receive built-in defaults. An exact prior built-in chat template or memory-tool description can refresh to the new built-in version. Automatic review stays off, chat stays closed and both prefills stay empty by default. Presets do not configure the driver or start model calls.
 
 The shared FIFO limit applies to each model HTTP call, including compaction. Waiting for tools or a human decision releases that slot; another model turn joins the queue again. Actual calls also consume the global RPM and outbound concurrency budgets, with no personal RPM or credit charge. Exhausted global RPM waits for the next available window without holding an HTTP slot or database transaction. Restart recovery marks interrupted in-flight calls explicitly and does not automatically resend them; unstarted queued work can resume. Committed operation receipts prevent duplicate business execution.
 
@@ -1797,13 +1904,131 @@ These routes are administrator-only and separate from ordinary user request logs
 | `GET /admin/api/ai/archives/{owner}/plans` | Optional positive `before_id`, omitted for the first page; `{items,has_older}` includes retained plans. |
 | `GET /admin/api/ai/archives/{owner}/results` | Numbered independent model-result page. |
 
-Request filters are `source=auto_review|admin_chat|steward_chat`, `kind=model|compaction`, `state=pending|running|succeeded|failed|cancelled|interrupted` and an exact actor ID; omit a filter for all. Rows include `id,client_request_id,source,kind,actor_id,actor_role,actor_label,state,base_url,model,created_at,started_at?,completed_at?,consumed_at?,status_code,error_code,content_redacted,response_complete,usage`. Actor snapshots remain after account deletion. Detail adds `queued_input`, the exact serialized `request_body` when prepared for dispatch, saved `response_body` and optional `response_body_base64` for non-UTF-8 content. A request cancelled before preparation may have an empty wire body while retaining its queued input. Incomplete/error/interrupted responses retain received content and an explicit completeness flag; no missing response is fabricated. Request/response capture remains bounded by transport limits. Authorization headers and the dedicated raw key are excluded; recognized key reflections are redacted.
+Request filters are `source=auto_review|admin_chat|steward_chat`, `kind=model|compaction`, `state=pending|running|succeeded|failed|cancelled|interrupted` and an exact actor ID; omit a filter for all. Rows include `id,client_request_id,source,kind,actor_id,actor_role,actor_label,state,base_url,model,driver_id,provider,created_at,started_at?,completed_at?,consumed_at?,status_code,error_code,content_redacted,response_complete,usage`. Actor snapshots remain after account deletion. Detail adds safe resolved `driver_settings`, `queued_input`, the exact serialized `request_body` when prepared for dispatch, saved `response_body` and optional `response_body_base64` for non-UTF-8 content. A request cancelled before preparation may have an empty wire body while retaining its queued input. Incomplete/error/interrupted responses retain received content and an explicit completeness flag; no missing response is fabricated. Request/response capture remains bounded by transport limits. Authorization headers and the dedicated raw key are excluded; recognized key reflections are redacted.
 
 Model-request logs have no automatic expiry. Cleanup is an explicit irreversible administrator action: freeze the list's `cutoff_id` and filters when confirming a range, or retain the exact selected IDs. Never replace that cutoff with a fresh value on retry. Newer rows are excluded. Only terminal requests whose reply or failure has been durably handed to the independent workflow records are eligible; pending/running or still-needed rows are skipped. Cleanup runs in bounded batches, so an interrupted call may already have removed some rows; retrying the same selection is safe but returned counts describe only that call.
 
 Usage entries group by `source,kind,actor_id` and include actor role/label, string `requests`, and `usage:{input_tokens,cached_input_tokens,cache_write_input_tokens,output_tokens,reasoning_tokens,unknown}`. `last_24_hours` covers the exact rolling 24-hour interval ending at `as_of`, not whole-hour buckets. Unknown or incomplete reporting is not zero usage. Historic totals and usage records survive request cleanup and account deletion.
 
-Conversation originals, their model/tool results and execution receipts, shared memories and memory history, and token statistics are independent administrator assets without automatic expiry. Request cleanup cannot erase them; clear/edit changes only the active context. Automatic-review evidence remains with its associated donation/approval records. These management assets are not added to ordinary account exports, and stewards cannot browse other operators' archives.
+Conversation originals, their model/tool results and execution receipts, shared and personal memories and memory history, and token statistics are independent administrator assets without automatic expiry. Request cleanup cannot erase them; clear/edit changes only the active context. Automatic-review evidence remains with its associated donation/approval records. These management assets are not added to ordinary account exports, and stewards cannot browse other operators' archives.
+
+### 7.9 Management operation history
+
+Management-operation history records management writes and their actual
+outcomes from schema 41 onward; older events are not reconstructed. It is
+separate from ordinary model-call logs, the assistant's request bodies and
+conversation history. Administrator browser sessions alone may query details
+or clear it. Stewards, ordinary users and CallerKeys have no history read or
+cleanup endpoint, even when their authorized management writes are recorded.
+
+Sources are `web,caller_key,ai_manual,ai_auto,mainstream_rule`. Trusted backend
+context determines the source, executor, actor and authorizer; clients and
+model arguments cannot select them. AI manual execution identifies the actual
+approving operator and exact plan; automatic execution identifies its
+configuration authorization and job, without implying individual human
+approval. Human rejection remains a human action. Subjects are retained
+`{id,name,role}` snapshots, not account foreign keys.
+
+Outcomes are `succeeded,failed,rejected,no_change,partial,accepted,unknown`.
+An accepted asynchronous operation is not complete; its later result extends
+the same recorded operation. HTTP 2xx alone is not business success. Successful
+business changes and their history commit together; failures are recorded
+after rollback when storage is available. Authorized idempotent replay reads
+the original result without a duplicate history entry. Reads, previews,
+exports, model discovery, ordinary conversation messages/compaction/clear and
+authentication are excluded. Assistant settings and memory writes, approved
+plans, asset cleanup and genuine management writes remain recorded.
+
+Let `{history}` be `/admin/api/management-operations`.
+
+| Method and path | Request / response |
+| --- | --- |
+| `GET {history}` | Filtered grouped or operation page. |
+| `GET {history}/{id}` | One operation header and actual outcome. |
+| `GET {history}/{id}/items` | `page,page_size`; `{items,total,page,page_size}`. |
+| `POST {history}/cleanup/prepare` | `{filter,all}`; freezes and returns `{filter,all,cutoff_max_id}` without deleting. |
+| `POST {history}/cleanup` | `{request_id,prepared}`; HTTP 202 with a durable cleanup job. |
+| `GET {history}/cleanup/{id}/status` | The durable cleanup job and progress. |
+| `POST {history}/cleanup/{id}/resume` | Requeues a failed job; HTTP 200 `{"status":"pending"}`. |
+
+All responses use `Cache-Control:no-store`. Query strings are limited to
+8192 bytes and reject unknown or repeated parameters. JSON bodies are limited
+to 16 KiB and reject unknown fields. IDs, snapshot/cutoff IDs, totals, item
+ordinals and accumulated counts are decimal strings. Timestamps, time filters
+and group `bucket` values are Unix milliseconds; page and size are numbers.
+
+List filters are `time_from,time_to,source,actor_id,authorizer_id,domain,action,
+outcome,event_id,target_kind,target_id,group_key,search`, combined with AND.
+The time interval is `[time_from,time_to)`; omit either open boundary.
+Target ID requires target kind. `search` matches an exact event ID, actor
+name or numeric operation ID; it is not substring/full-text search.
+Other string filters are exact. Domains include `management-operations`,
+`endpoint-tags` and `endpoint-tag-rules`; their spelling is independent
+of the corresponding HTTP path. Actor/authorizer/target IDs and search allow
+192 bytes, and domain/action/target-kind/event/group tokens allow 160 bytes.
+
+List controls are `view=groups|operations` (default groups), `page` (default
+1, maximum 10000000), `page_size` (default 25, maximum 100) and
+`snapshot_max_id`. Event, target, group or search filters select the operation
+view. The result is `{view,operations,groups,total,page,page_size,snapshot_max_id}`;
+`total` counts the selected view. Reuse the returned snapshot ID across pages
+to exclude new operations. Existing rows can still finish or be cleared; this
+is an insertion cutoff, not an immutable copy.
+
+An operation contains `id,event_id,created_at,source,executor_kind,actor,
+authorizer,authorization_ref?,domain,action,correlation_kind?,correlation_id?,
+summary,outcome,code,targets,succeeded,skipped,failed,cleaning`. Details are
+paged separately as `{ordinal,action,target_kind,target_id,target_name,outcome,
+code,changes}`. Each change is only `{field,operation}`; operations are
+`updated,cleared,created,deleted,enabled,disabled`. History does not copy raw
+request/response bodies, memory text, keys, passwords, tokens or full DTOs.
+
+Groups contain `key,bucket,source,domain,action,actor,authorizer,outcome,
+operations,targets,succeeded,skipped,failed`. The bucket is the start of an
+hour in milliseconds; the requested time boundaries remain exact. Indexed
+rollups support grouped browsing, with detail reads for cutoff/time edges.
+Queries have a five-second budget. A budget failure returns
+`422 query_budget_exceeded`; narrow filters and retry. Invalid input returns
+`400 invalid_request`, inaccessible identity `403 forbidden`, missing
+records `404 not_found`, and item reads during deletion
+`409 cleanup_in_progress`.
+
+#### Cleanup and assistant tools
+
+Records have no automatic expiry. Explicit cleanup selects a nonempty
+`filter` with `all:false`, or an empty filter with `all:true`. Freeze
+`cutoff_max_id` before confirmation and submit that exact prepared value.
+Use a stable opaque `request_id` of at most 128 permitted token bytes
+(URL-safe alphanumeric, hyphen and underscore are suitable). Reusing it with
+the same actor, filter and cutoff returns the same job; conflicting reuse is
+invalid. These routes use that request identity, not `Idempotency-Key`.
+New operations and the cleanup's own receipt are outside the frozen selection.
+
+A job contains `id,created_at,updated_at,actor,filter,cutoff_max_id,state,
+deleted_operations,deleted_items,skipped_active,error_code`; state is
+`pending|running|completed|failed`. Deletion is irreversible and uses bounded
+batches, including item batches within one large operation. Progress and
+rollup updates persist across restarts; no full-database vacuum is performed
+per batch. Active `accepted` operations awaiting genuine continuations are
+skipped and counted, allowing other terminal records and later cleanup jobs
+to finish. Administrators can repeat the selection after those tasks end.
+`unknown` does not by itself count as active. This cleanup affects only
+management history, leaving business data, conversations, memories,
+model-request logs and usage accounting independent.
+
+The conversation-only `management_history` tool is administrator-only.
+It accepts `action=list|detail|items|cleanup_status`, optional nested
+`filter`, `view,page,page_size,snapshot_max_id`, and string `id` for a
+detail/item lookup or cleanup status. It uses the same permissions, bounds
+and DTOs as these HTTP reads and does not itself create history.
+
+An administrator can use `propose_operations` with
+`kind:"management.cleanup"`, empty `target_id` and `input:{filter,all}`.
+The server freezes the cutoff and previews the selection/count before one
+human plan approval. Model input cannot supply the cutoff. Final execution
+rechecks current administrator authority and queues a separately recorded
+cleanup with the original AI approval attribution. The queued receipt is
+not proof that deletion has finished; read its cleanup status.
 
 ## 8. Server-sent events
 
@@ -1815,7 +2040,7 @@ Conversation originals, their model/tool results and execution receipts, shared 
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v31.json`, with `schema_version:31` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v31.json`, with `schema_version:31` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside format 31.
 
 `user` includes the five nullable inference limits and their effective values
 from §7.1. The safe `charity` aggregate may include `usage_details` with optional
