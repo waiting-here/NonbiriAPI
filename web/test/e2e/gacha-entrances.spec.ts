@@ -393,3 +393,119 @@ test('disabled R-18 policy keeps the banner placeholder while its text link stil
   expect(enters()).toBe(1);
   guard.assertNone();
 });
+
+for (const language of ['zh', 'en'] as const)
+  for (const theme of ['light', 'dark'] as const)
+    for (const width of [1440, 390]) {
+      test(`upcoming limited pool ${language} ${theme} ${width}`, async ({ page }) => {
+        const guard = collectConsoleViolations(page);
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await page.clock.setFixedTime(new Date(now * 1000));
+        await page.addInitScript(
+          ({ language, theme }) => {
+            localStorage.setItem('nb.lang', language);
+            localStorage.setItem('nb.theme', theme);
+            localStorage.setItem(
+              'nb.gacha.preferences',
+              JSON.stringify({ music: false, sound: false, reduced: true }),
+            );
+          },
+          { language, theme },
+        );
+        await mockRoleSession(page, 'user', 'user');
+        await mockPublicConfig(page, 'user');
+        await page.route('**/api/events', (route) =>
+          route.fulfill({ contentType: 'text/event-stream', body: ': connected\n\n' }),
+        );
+        await page.route('**/api/activities', (route) => route.fulfill({ json: loanActivity() }));
+        await page.route('**/api/limited-activities', (route) => route.fulfill({ json: [] }));
+
+        const snapshot = gachaSnapshot();
+        const future = {
+          ...snapshot.pools[0],
+          id: 'gp_future',
+          name: '未来奖池',
+          name_en: 'Future pool',
+          kind: 'limited' as const,
+          cover: 'i',
+          group: 'gp_future',
+          featured: ['i-chatgpt'],
+          starts_at: now + 86400,
+          ends_at: now + 172800,
+        };
+        snapshot.visible_themes.push('i');
+        snapshot.tickets.limited = 10;
+        snapshot.pools.push(future);
+        await page.route('**/api/gacha/entry', (route) =>
+          route.fulfill({ json: { enabled: true, entered: false, pools: [future] } }),
+        );
+        await page.route('**/api/gacha/state', (route) => route.fulfill({ json: snapshot }));
+        await page.route('**/api/gacha/actions', (route) => {
+          expect(route.request().postDataJSON().action).toBe('enter');
+          return route.fulfill({ json: { snapshot } });
+        });
+
+        await page.goto(USER_ORIGIN + '/activities/gacha?pool=' + future.id);
+        await expect(page.locator('#gacha-pool-title')).toHaveText(
+          language === 'en' ? future.name_en : future.name,
+        );
+        await expect(page.locator('.gacha-kicker')).toHaveText(
+          language === 'en' ? 'LIMITED · NOT STARTED' : '限定召唤 · 尚未开始',
+        );
+        const start = await page.evaluate(
+          ({ timestamp, locale }) =>
+            new Intl.DateTimeFormat(locale, {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+            }).format(new Date(timestamp * 1000)),
+          { timestamp: future.starts_at, locale: language === 'en' ? 'en-US' : 'zh-CN' },
+        );
+        await expect(page.locator('.gacha-banner__time').first()).toHaveText(
+          (language === 'en' ? 'Starts ' : '开始时间 ') + start,
+        );
+        await expect(page.locator('.gacha-draw-actions__notice')).toHaveText(
+          language === 'en'
+            ? 'Pool not started yet. Summoning unavailable.'
+            : '奖池尚未开始，暂不可召唤。',
+        );
+        const once = page.getByRole('button', {
+          name: language === 'en' ? /Summon once/ : /召唤一次/,
+        });
+        const ten = page.getByRole('button', {
+          name: language === 'en' ? /Summon ten/ : /十次召唤/,
+        });
+        await expect(once).toBeDisabled();
+        await expect(ten).toBeDisabled();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+
+        await page.locator('.gacha-banner').evaluate((element) => {
+          element.scrollIntoView({ block: 'start', behavior: 'instant' });
+        });
+        await expect(page.locator('.gacha-kicker')).toBeInViewport();
+        await expect(page.locator('.gacha-banner__time').first()).toBeInViewport();
+        await expect(page.locator('.gacha-draw-actions__notice')).toBeInViewport();
+        await expect(once).toBeInViewport();
+        await expect(ten).toBeInViewport();
+        if (process.env.NONBIRI_VISUAL_DIR) {
+          await page
+            .locator('.gacha-banner__back, .gacha-hero-card img')
+            .evaluateAll((images) =>
+              Promise.all(images.map((image) => (image as HTMLImageElement).decode())),
+            );
+          await page.screenshot({
+            path: resolve(
+              process.env.NONBIRI_VISUAL_DIR,
+              `gacha-upcoming-${language}-${theme}-${width}.png`,
+            ),
+            animations: 'disabled',
+          });
+        }
+        guard.assertNone();
+      });
+    }
