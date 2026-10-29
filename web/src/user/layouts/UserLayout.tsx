@@ -11,14 +11,20 @@ import { PublicShell } from '@shared/components/PublicShell';
 import { ErrorState, LoadingState, NoticePage, PageFooter } from '@shared/components/States';
 import { Icon } from '@shared/components/Icon';
 import { useOptionalToast } from '@shared/components/Toast';
-import { apiFetch, isApiError, isMfaRequired, isNotFoundError, isUnauthorized } from '@shared/query/http';
+import {
+  apiFetch,
+  isApiError,
+  isMfaRequired,
+  isNotFoundError,
+  isUnauthorized,
+} from '@shared/query/http';
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
 import { usePublicConfig } from '@shared/query/publicConfig';
 import { routePath } from '@shared/routing/routeRegistry';
 import { SHELL_DRAWER_MEDIA_QUERY } from '@shared/styles/tokens';
 import { useUserSession } from '../data';
 import { clearManagementSession } from '@shared/charityManagement';
-import { USER_PRIMARY_NAV } from '../navigation';
+import { USER_PRIMARY_NAV, userRouteLayout } from '../navigation';
 import { AccountAppearance } from '../appearance/AppearanceProvider';
 import { BackgroundViewButton } from '../appearance/BackgroundViewButton';
 import { AppearanceButton } from '../appearance/AppearanceButton';
@@ -249,10 +255,20 @@ export function UserLayout() {
     return (
       <PublicShell siteName={siteName} siteLogoURL={siteLogoURL} className="mfa-shell">
         <div className="mfa-challenge-page">
-          <MfaChallenge onSuccess={async () => { await session.refetch(); }} />
+          <MfaChallenge
+            onSuccess={async () => {
+              await session.refetch();
+            }}
+          />
           <div className="mfa-actions">
-            <button type="button" className="nb-btn nb-btn--ghost" disabled={logout.isPending}
-              onClick={() => logout.mutate()}>{t('common.signOut')}</button>
+            <button
+              type="button"
+              className="nb-btn nb-btn--ghost"
+              disabled={logout.isPending}
+              onClick={() => logout.mutate()}
+            >
+              {t('common.signOut')}
+            </button>
           </div>
         </div>
       </PublicShell>
@@ -261,7 +277,7 @@ export function UserLayout() {
 
   return (
     <AccountAppearance account={profile?.id}>
-      <div className="nb-user-shell">
+      <div className="nb-user-shell" data-layout={userRouteLayout(location.pathname)}>
         <a className="skip-link" href="#main">
           {t('shell.skipToContent')}
         </a>

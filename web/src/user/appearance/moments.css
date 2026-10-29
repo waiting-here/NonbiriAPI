@@ -132,6 +132,29 @@
 .nb-moment-character:has(canvas[data-ready='true']) > img:not(.nb-moment-character__plate) {
   visibility: hidden;
 }
+/*
+ * Wide screens keep the character beside the content instead of behind it. The content
+ * gives up a right-hand column; the character fills that column at full height when the
+ * window is tall enough, otherwise it shrinks to the column width. Game pages keep their
+ * own layout.
+ */
+@media (width >= 80rem) {
+  html[data-appearance='heart-moment'] {
+    --nb-moment-gutter: min(calc((100dvh - 4.25rem) * 2 / 3), max(20rem, calc(100vw - 64rem)));
+  }
+  html[data-appearance='heart-moment']
+    .nb-user-shell:not([data-layout='game'])
+    > :is(.nb-user-shell__main, .nb-user-shell__footer) {
+    padding-inline-end: calc(var(--nb-moment-gutter) + var(--nb-space-8));
+  }
+  html[data-appearance='heart-moment']:has(.nb-user-shell:not([data-layout='game']))
+    .nb-moment-character {
+    top: auto;
+    right: 0;
+    width: var(--nb-moment-gutter);
+    height: auto;
+  }
+}
 @media (width < 40rem) {
   .nb-moment-character {
     right: 50%;
