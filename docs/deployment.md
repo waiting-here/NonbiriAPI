@@ -305,12 +305,29 @@ The shared page works without the application and offers Chinese/English text, l
 
 This fallback also covers proxy timeouts or invalid upstream responses before response headers reach the client. It cannot replace an interrupted response after headers were sent, or handle failures before the request reaches Nginx. Test the actual layout with nginx -t before reload, then check both hosts with an unavailable upstream, an application-generated error and recovery.
 
+## Assistant connections and failure review
+
+Codex authorization is performed by an administrator on the displayed official
+device-code page; the server needs no external CLI or local-browser callback.
+Preserve the encrypted connection with the database and master key. Disconnect
+clears active credentials; old protected recovery sets may still contain them. Only
+explicit administrator-chat and individual-steward bindings may use it; see
+[the connection guide](codex-agent.md). A deployment check must not treat local
+fixtures as real account/workspace authorization or model availability.
+
+For failures, inspect the recorded final result, actual client HTTP delivery
+and confirmed upstream status separately. A 200 or a successful proxy write
+can precede a later protocol/read failure. Structured failure facts are bounded
+and follow existing diagnostic access and retention; missing historical facts
+remain unavailable. The separate raw-error capacity and privacy rules above
+continue to apply.
+
 ## Database compatibility and version changes
 
-The service initializes absent storage as schema **41** and opens only the exact
+The service initializes absent storage as schema **42** and opens only the exact
 current schema. Older, newer, unknown and incomplete databases are rejected
 before migration, repair, WAL checkpoint or recovery writes. Exact registered
-schema **16–26** and **33–40** sources use the matching standalone
+schema **16–26** and **33–41** sources use the matching standalone
 [v1 upgrader](../cmd/nonbiri-upgrade-v1/README.md). Other intermediate structures,
 including schema 27–32, are unsupported. SQLite identity remains Generation 2;
 exports use format **31**. See [database upgrades](database-upgrades.md) for
@@ -319,8 +336,8 @@ manifests, preserved data and content versions.
 Run `./nonbiriapi maintenance schema-info --json` and the matching tool's
 `--schema-info --json` without application configuration or a database.
 The service declares `startup_policy="exact"`,
-`upgrade_tool="nonbiri-upgrade-v1"`, current/minimum schema 41 and empty source
-and conversion arrays. The tool declares its 19 exact offline sources.
+`upgrade_tool="nonbiri-upgrade-v1"`, current/minimum schema 42 and empty source
+and conversion arrays. The tool declares its 20 exact offline sources.
 Deployment scripts must honor that policy and stop on mismatches, leaving the
 operator time to preserve the old database and deliberately invoke the tool.
 Do not run `--apply` from a service, startup hook or automatic deployment path.
@@ -359,7 +376,7 @@ instance legal text remain separate operator actions.
    `./nonbiri-upgrade-v1 --apply --database /path/to/database.sqlite` under
    exclusive database access with the existing key. Use `--check` instead for a
    full offline audit; reuse an already-valid audit rather than repeat it without
-   a new reason. Exact registered schemas 16–26 and 33–40 are supported.
+   a new reason. Exact registered schemas 16–26 and 33–41 are supported.
    No service or deployment hook performs this step for you. After a manual
    upgrade, finish this manual release switch; do not retry an automatic path
    that still identifies the source through its old server's schema descriptor.

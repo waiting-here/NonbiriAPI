@@ -20,8 +20,8 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh/exact-current schema 41 startup and explicit offline conversion
-  of registered schema 16–26 and 33–40 sources: target equality,
+- Validate fresh/exact-current schema 42 startup and explicit offline conversion
+  of registered schema 16–26 and 33–41 sources: target equality,
   rollback/cancellation, re-entry and upgrade-then-start. Verify older, newer,
   unknown and incomplete storage is rejected by the service before migration,
   repair, checkpoint or recovery writes. Check descriptor source coverage and
@@ -50,6 +50,23 @@ has passed.
   export/deletion and accounting integration. Check v3 dimensions rejection, v4
   dimension validation, image base64 boundaries and unknown rerank usage. Offline
   protocol fixtures do not establish paid deployment/model availability.
+- Check sparse Responses completion, generated-history replay, Anthropic thinking,
+  Gemini signed-part order and continuation refusal, Gateway reasoning/tool
+  metadata, optional usage and valid failure usage. Exercise both forced
+  transport directions with large audio, multiple reasoning items and
+  oversized immutable snapshots; preserve explicit failure and byte limits.
+- Verify continuation affinity against the actual selected credential version,
+  including old approved credentials, rewritten histories and mixed bindings.
+  No source identifier may leak through the opaque token.
+- Exercise Codex login, cancel/expiry, serialized refresh, disconnect and late
+  callbacks; verify individual steward assignments and reject global defaults,
+  automatic review and public routing. Distinguish controlled fixtures from a
+  real administrator-completed account/workspace authorization and model call.
+- Check failure diagnostics across preflight, transport, upstream/protocol,
+  conversion and client delivery, including assistant/image entry points.
+  Verify permission projections, missing historical evidence and cleanup.
+  Review management names after rename/deletion, true before/after values,
+  same-value writes, sampled batch impacts and asynchronous outcomes.
 - Validate pressure administrator/L5/L6 session access, CallerKey/ordinary-user
   rejection, stale values and revoked access, foreground refresh, minute-window
   boundaries and restart persistence without reading historical request logs.
@@ -113,6 +130,8 @@ has passed.
 
 Deployment, tags, GitHub releases and publishing instance legal text are separate
 actions. A deployment may use an exact commit without a tag or GitHub Release.
+For v1.3.2, use the exact reviewed merge commit and version string without
+creating either release object; report pending checks and deployment separately.
 Apply instance security prerequisites before deployment when needed. Revise the
 maintained legal draft for the intended behavior and distinguish it from the
 currently effective text; publication follows the administrator workflow.

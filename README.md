@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage services, endpoints and service-scoped API keys, maintain model lists per endpoint/key pair, and configure personal or shared charity routing. Revocable CallerKeys authenticate gateway calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.3.1** adds Responses and ChatGPT assistant sources, personal memories and separate management operation records. Existing databases require an explicit upgrade to schema 41; account export remains format 31. GitHub Releases provide source code; build instructions are below. Version history is in [CHANGELOG](CHANGELOG.md).
+**v1.3.2** adds a Codex device-code source for the management assistant, clearer request failures and management history, and protocol continuation fixes. Existing databases require an explicit upgrade to schema 42; account export remains format 31. This version uses an exact source commit without a tag or GitHub Release. Build instructions are below; version history is in [CHANGELOG](CHANGELOG.md). Source availability does not establish instance deployment status.
 
 ## Architecture
 
@@ -177,12 +177,20 @@ Inspecting loaded egress routes requires the separate egress-read permission. [G
 covers AI Studio and Vertex AI's OpenAI-compatible Chat endpoints.
 
 The experimental [management assistant](docs/api-contract.md#78-experimental-ai-assistant)
-supports Chat Completions APIs, external Responses APIs and a connected ChatGPT
-account. Administrators configure a default source, purpose overrides and individual
+supports Chat Completions APIs, external Responses APIs, a connected ChatGPT
+account and a separate Codex connection. Administrators configure a default source, purpose overrides and individual
 steward overrides; removing an override restores inheritance. Source selection
 does not change the operator's permissions, and failures never silently switch to
 another source. Existing API settings remain usable. Local context and response
 reserve budgets are separate from an upstream output cap.
+
+For [Codex](docs/codex-agent.md), start device-code login in administrator AI
+settings and complete authorization on the displayed official page. The Go
+server handles polling and encrypted credentials without an external CLI. Bind
+this source to administrator chat or to each selected steward individually; it
+cannot be inherited through global/steward defaults, used for automatic review,
+or added to personal or charity model routes. Real Business-account authorization
+and inference have not yet been verified.
 
 To connect ChatGPT, download an instance target in administrator AI settings,
 then run this repository's helper on the computer with your browser:
@@ -235,11 +243,20 @@ Separate management records cover writes from the upgrade onward, with success,
 failure, refusal and partial or unchanged outcomes. They distinguish browser
 actions, CallerKey automation, mainstream rules, automatic AI reviews and approved
 AI plans, retaining actor and authorizer snapshots, safe targets and results.
-Ordinary reads are excluded. Administrators can search grouped summaries and
+New records preserve object names at the time of the operation, allowlisted
+before/after values and actual related changes. Large changes retain counts and
+bounded samples; older missing facts remain unavailable. Ordinary reads are
+excluded. Administrators can search grouped summaries and
 paged details and clear a filter, time range or all retained records through a
 resumable batch job. Records have no automatic expiry, survive account/resource
 deletion and are excluded from personal exports. Cleanup retains its own summary
 and records created after its cutoff.
+
+Request details separate the actual client HTTP status, final result and
+confirmed upstream status. Bounded diagnostics retain observed failure stages,
+safe causes, request identifiers and stream progress, including assistant and
+image requests. Missing evidence stays explicit; raw-error permissions and
+privacy rules remain unchanged. See the [diagnostic contract](docs/api-contract.md#request-failure-observations).
 
 ## Build and develop
 
@@ -257,10 +274,10 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 41.
+Fresh databases start in maintenance with public features closed and use schema 42.
 The service opens only the exact current schema; older, newer, unknown or
 incomplete storage is rejected before migration, repair or recovery writes.
-For exact registered schema 16–26 and 33–40 sources, preserve a complete recovery
+For exact registered schema 16–26 and 33–41 sources, preserve a complete recovery
 set before deliberately running the matching standalone
 [upgrader](cmd/nonbiri-upgrade-v1/README.md) with `--check` or `--apply`.
 The service, startup scripts and deployment helpers must not apply upgrades

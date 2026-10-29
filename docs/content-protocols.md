@@ -68,9 +68,23 @@ Clients must return complete thinking blocks on a thinking/tool round trip. Read
 
 ## Continuation source and history integrity
 
-Generated opaque histories include `extra_content.nonbiri.continuation_id`, a bounded opaque source binding with no physical model, endpoint or credential identifiers. Retain it along with the provider namespace. Routing confines these histories to the permitted physical source and rejects tool flattening or history changes that invalidate the continuation. A compatible protocol alone does not guarantee that another model or account can reuse a signature. Older untagged third-party histories remain accepted within their protocol; callers are responsible for retaining a compatible source. Direct connector integrations without a binding policy cannot enforce platform route affinity.
+Generated opaque histories include `extra_content.nonbiri.continuation_id`, a bounded opaque source binding with no physical model, endpoint or credential identifiers. Retain it along with the provider namespace. The binding includes the caller and exact credential version; rotating to a different version does not silently reuse it. Routing confines these histories to the permitted physical source and rejects tool flattening or history changes that invalidate the continuation. A compatible protocol alone does not guarantee that another model or account can reuse a signature. Older untagged third-party histories remain accepted within their protocol; callers are responsible for retaining a compatible source. Direct connector integrations without a binding policy cannot enforce platform route affinity.
 
 Gateway Chat and bounded Responses histories use `extra_content.gateway.content`; see the [Gateway continuation contract](api-contract.md#24-native-ai-sdk-gateway-v3v4-compatibility) for its closed metadata mapping. Continuation data is carried by the caller and does not create a platform session store.
+
+Forced JSON-to-SSE conversion preserves each complete `anthropic`, `google`,
+`gateway` or `nonbiri` snapshot as a single field; it never splits the native
+part array into replacement snapshots. A snapshot that cannot fit one 256 KiB
+SSE line, including its envelope and any smaller configured limit, fails
+explicitly. OpenAI reasoning arrays can be split at complete-item boundaries
+and aggregate without repeating items or concatenating the source token.
+The full response still has its existing JSON/SSE total limits.
+
+Chat audio conversion decodes each independently encoded `audio.data` fragment,
+joins its bytes and encodes the final result once. Transcript text accumulates;
+the audio ID stays consistent and expiry metadata is retained. Large JSON audio
+and transcripts are split into bounded SSE fragments on byte/UTF-8 boundaries
+that preserve a complete round trip. Unknown metadata strings are not appended.
 
 ## Decisions
 
