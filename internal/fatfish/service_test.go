@@ -229,23 +229,44 @@ func (f *fishFixture) balance(t *testing.T) string {
 	return account.Balance.Decimal()
 }
 func (f *fishFixture) tick(ms int64) { f.clock.Add(ms) }
+func (f *fishFixture) waitWorker(t *testing.T, id string) {
+	t.Helper()
+	// Replay and settlement have separate five-second production budgets.
+	// Observe completion without repeatedly acquiring the database connection
+	// the worker needs, then assert its durable result through the real reader.
+	f.s.jobsMu.Lock()
+	job := f.s.jobs[id]
+	f.s.jobsMu.Unlock()
+	if job == nil {
+		return
+	}
+	waitCtx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	select {
+	case <-job.done:
+	case <-waitCtx.Done():
+		t.Fatalf("fixture verification worker %s did not finish: %v", id, waitCtx.Err())
+	}
+}
+
 func (f *fishFixture) waitState(t *testing.T, id, want string) ChallengeView {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	var last ChallengeView
-	for time.Now().Before(deadline) {
-		v, err := f.s.Challenge(context.Background(), f.user, id, "")
-		if err != nil {
-			t.Fatal(err)
-		}
-		last = v
-		if v.State == want {
-			return v
-		}
-		time.Sleep(5 * time.Millisecond)
+	f.waitWorker(t, id)
+	view, err := f.s.Challenge(t.Context(), f.user, id, "")
+	if err != nil || view.State != want {
+		t.Fatalf("challenge %s did not reach %s: state=%s result=%+v err=%v", id, want, view.State, view.Result, err)
 	}
-	t.Fatalf("challenge %s did not reach %s: state=%s result=%+v settlement_error=%v", id, want, last.State, last.Result, f.s.settleVerified(context.Background(), id))
-	return ChallengeView{}
+	return view
+}
+
+func (f *fishFixture) waitPlaytest(t *testing.T, id string) ChallengeView {
+	t.Helper()
+	f.waitWorker(t, id)
+	view, err := f.s.PlaytestChallenge(t.Context(), f.admin, id, "")
+	if err != nil || view.State != "settled_pass" {
+		t.Fatalf("playtest %s did not pass: state=%s result=%+v err=%v", id, view.State, view.Result, err)
+	}
+	return view
 }
 
 func (f *fishFixture) publishOne(t *testing.T) (string, string) {
@@ -275,25 +296,7 @@ func (f *fishFixture) publishWithAmounts(t *testing.T, amounts Amounts) (string,
 	if _, err = f.s.SubmitPlaytest(ctx, f.admin, p.ID, SubmitInput{TabCapability: cap, Inputs: []byte(`[]`), TerminalTick: f.terminalTick}, fishKey(5)); err != nil {
 		t.Fatal(err)
 	}
-	// Replay and settlement have separate five-second production budgets.
-	// Wait for the actual worker instead of silently proceeding to publication
-	// when a shorter polling window expires on an instrumented runner.
-	f.s.jobsMu.Lock()
-	job := f.s.jobs[p.ID]
-	f.s.jobsMu.Unlock()
-	if job != nil {
-		waitCtx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-		defer cancel()
-		select {
-		case <-job.done:
-		case <-waitCtx.Done():
-			t.Fatal("fixture playtest worker did not finish:", waitCtx.Err())
-		}
-	}
-	verified, err := f.s.PlaytestChallenge(ctx, f.admin, p.ID, "")
-	if err != nil || verified.State != "settled_pass" {
-		t.Fatalf("fixture playtest did not pass: state=%s result=%+v err=%v", verified.State, verified.Result, err)
-	}
+	f.waitPlaytest(t, p.ID)
 	period, err := f.s.SavePeriod(ctx, f.admin, "", PeriodInput{Title: "Season", Visible: true, StartsAt: fixtureNow - 10, EndsAt: fixtureNow + 1000}, fishKey(6))
 	if err != nil {
 		t.Fatal(err)
@@ -955,21 +958,10 @@ func TestVerificationHardTimeoutRefundsTicket(t *testing.T) {
 	if _, err = f.s.Submit(ctx, f.user, prepared.ID, SubmitInput{TabCapability: cap, Inputs: []byte(`[]`), TerminalTick: f.terminalTick}, fishKey(1274)); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(8 * time.Second)
-	for time.Now().Before(deadline) {
-		v, readErr := f.s.Challenge(ctx, f.user, prepared.ID, "")
-		if readErr != nil {
-			t.Fatal(readErr)
-		}
-		if v.State == "cancelled_refunded" {
-			if got := f.balance(t); got != "8500" {
-				t.Fatalf("timeout refund balance=%s", got)
-			}
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	f.waitState(t, prepared.ID, "cancelled_refunded")
+	if got := f.balance(t); got != "8500" {
+		t.Fatalf("timeout refund balance=%s", got)
 	}
-	t.Fatal("verification timeout did not refund")
 }
 
 func TestExpiredBanFlagAllowsVerifiedSettlement(t *testing.T) {

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/fatfish/engine"
 )
@@ -158,20 +157,8 @@ func TestConvertingDraftRequiresNewPlaytestAndKeepsActiveVersion(t *testing.T) {
 	if _, err := f.s.SubmitPlaytest(ctx, f.admin, play.ID, SubmitInput{TabCapability: playCap, Inputs: []byte(`[]`), TerminalTick: f.terminalTick}, fishKey(6108)); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	passed := false
-	for time.Now().Before(deadline) {
-		view, err := f.s.PlaytestChallenge(ctx, f.admin, play.ID, "")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if view.State == "settled_pass" {
-			passed = view.Result != nil && view.Result.EngineVersion == 3
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	if !passed {
+	view := f.waitPlaytest(t, play.ID)
+	if view.Result == nil || view.Result.EngineVersion != 3 {
 		t.Fatal("new playtest did not verify the new version")
 	}
 	if _, err := f.s.SaveNode(ctx, f.admin, period, node, patch, fishKey(6109)); err != nil {
