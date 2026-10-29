@@ -194,6 +194,9 @@ func (a *application) CloseContext(ctx context.Context) error {
 			if a.agentRequests != nil {
 				closeResource(a.agentRequests.Close)
 			}
+			if a.codex != nil {
+				closeResource(a.codex.Close)
+			}
 			if a.lifecycle != nil {
 				closeResource(a.lifecycle.Close)
 			}

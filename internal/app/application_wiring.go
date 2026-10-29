@@ -26,6 +26,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/chatgptauth"
 	"github.com/waiting-here/NonbiriAPI/internal/checkin"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/codexauth"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -205,6 +206,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	var claimService *claim.Service
 	var assistant *aiagent.Service
 	var assistantRequests *agentrequest.Runtime
+	var assistantCodex *codexauth.Manager
 	performance := observability.NewPerformance()
 	store.SetConnectionObserver(performance)
 	defer func() {
@@ -212,7 +214,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 			return
 		}
 		partial := &application{
-			agent: assistant, agentRequests: assistantRequests,
+			agent: assistant, agentRequests: assistantRequests, codex: assistantCodex,
 			activityRuntime: activityEngines, accountEvents: accountConnections,
 			debug: debugHub, reports: reportRepository, lifecycle: lifecycleCoordinator,
 			games: gameRuntimes, forward: forwardRuntime, audits: audits,
@@ -616,8 +618,14 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create assistant ChatGPT connection: %w", err)
 	}
+	assistantCodex, err = codexauth.New(codexauth.Config{
+		DB: store.DB(), ReadDB: store.ReadDB(), Stack: outbound, Secrets: vault, AdminAuthorize: assistantAdminAuthorize,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create assistant Codex connection: %w", err)
+	}
 	assistantRequests, err = agentrequest.New(agentrequest.Config{
-		DB: store.DB(), ReadDB: store.ReadDB(), Stack: outbound, Flow: forwardRuntime.flow, Secrets: vault, ChatGPT: assistantChatGPT,
+		DB: store.DB(), ReadDB: store.ReadDB(), Stack: outbound, Flow: forwardRuntime.flow, Secrets: vault, ChatGPT: assistantChatGPT, Codex: assistantCodex,
 		Authorize: func(ctx context.Context, attr agentrequest.Attribution) error {
 			if assistant == nil {
 				return aiagent.ErrUnavailable
@@ -646,7 +654,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		return nil, fmt.Errorf("register assistant driver routes: %w", err)
 	}
 	app := &application{
-		agent: assistant, agentRequests: assistantRequests,
+		agent: assistant, agentRequests: assistantRequests, codex: assistantCodex,
 		managementHistory: managementHistory,
 		workerCancel:      workerCancel,
 		audits:            audits,
