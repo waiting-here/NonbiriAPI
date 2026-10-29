@@ -223,6 +223,7 @@ func TestDisconnectCancelsRequestsAndRefresh(t *testing.T) {
 	defer release()
 	f.now.Add(3541)
 	entered, unblock := make(chan struct{}), make(chan struct{})
+	defer close(unblock)
 	f.refreshFn = func(w http.ResponseWriter, r *http.Request) {
 		close(entered)
 		<-unblock
@@ -234,14 +235,24 @@ func TestDisconnectCancelsRequestsAndRefresh(t *testing.T) {
 	if _, err = f.m.Disconnect(ctx, 1); err != nil {
 		t.Fatal(err)
 	}
-	close(unblock)
-	if err = <-done; !errors.Is(err, ErrDisconnected) {
-		t.Fatalf("late refresh: %v", err)
-	}
+	// Request cancellation propagates through context.AfterFunc. Wait for its
+	// notification rather than assuming that callback has already been scheduled.
 	select {
 	case <-bound.Done():
-	default:
+	case <-time.After(5 * time.Second):
 		t.Fatal("request not cancelled")
+	}
+	if !errors.Is(bound.Err(), context.Canceled) {
+		t.Fatalf("request cancellation: %v", bound.Err())
+	}
+	// The refresh must stop while the server response is still blocked.
+	select {
+	case err = <-done:
+		if !errors.Is(err, ErrDisconnected) {
+			t.Fatalf("late refresh: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("refresh did not stop after disconnect")
 	}
 	if _, _, err = f.m.RequestContext(ctx, 1); !errors.Is(err, ErrDisconnected) {
 		t.Fatalf("old generation reused: %v", err)

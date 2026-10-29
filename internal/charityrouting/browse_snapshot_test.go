@@ -88,6 +88,19 @@ func attachBrowseProbe(t *testing.T, service *Service, afterLevel func()) *brows
 	reader.SetMaxOpenConns(2)
 	reader.SetMaxIdleConns(2)
 	t.Cleanup(func() { _ = reader.Close() })
+	// Establish both probe connections and schemas outside snapshot/cancellation
+	// timing. This query does not invoke the authorization-row barrier.
+	for range reader.Stats().MaxOpenConnections {
+		conn, err := reader.Conn(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		var users int
+		if err := conn.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM users").Scan(&users); err != nil {
+			t.Fatal(err)
+		}
+	}
 	service.readDB = reader
 	return probe
 }
