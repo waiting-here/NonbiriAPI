@@ -75,6 +75,19 @@ func TestIndependentFailureDiagnosticsUseRecordedSourceAndRole(t *testing.T) {
 			if _, err := f.repository.db.Exec("INSERT INTO image_upstream_revisions SELECT 2,control_id,'https://replacement.invalid',secret_context,secret_ciphertext,adapter_json,image_origins_json,per_user_limit,global_limit,queue_timeout_seconds,execution_timeout_seconds,memory_budget_mib,actor_user_id,created_at+1 FROM image_upstream_revisions WHERE revision=1"); err != nil {
 				t.Fatal(err)
 			}
+			if kind == "image_task" {
+				// Normal settlement releases the task's source revision. Retiring
+				// its credentials must not erase the diagnostic's source identity.
+				for _, statement := range []string{
+					"UPDATE image_activity_tasks SET upstream_revision=NULL",
+					"DELETE FROM image_model_refreshes",
+					"DELETE FROM image_upstream_revisions WHERE revision=1",
+				} {
+					if _, err := f.repository.db.Exec(statement); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
 			check([]byte("\xff[redacted] [redacted]"), "[redacted] [redacted]")
 			channel := diagnosticID(t, "mch_")
 			if _, err := f.repository.db.Exec("INSERT INTO mainstream_channels(id,name,category,enabled,state,revision,created_at,updated_at) VALUES(?,'Fixture','api_platform',1,'active',1,1,1)", channel); err != nil {
@@ -102,6 +115,20 @@ func TestIndependentFailureDiagnosticsUseRecordedSourceAndRole(t *testing.T) {
 				t.Fatal("orphan diagnostic", n)
 			}
 		})
+	}
+}
+
+func TestIndependentFailureDiagnosticsDoNotInventImageSource(t *testing.T) {
+	f := newDiagnosticFixture(t)
+	task, _ := f.imageRoots(t)
+	id := captureFailure(t, f, DiagnosticRef{TaskID: task, AttemptSeq: 1}, []byte("fixture 192.0.2.7"))
+	shown, err := f.reader.Detail(diagContext(f.trainee), diagActor(f.trainee), id)
+	if err != nil || shown.Body.Body != "[redacted]" || shown.ErrorDiagnostics.Correlation[0].Value != "[redacted]" || shown.ErrorDiagnostics.Code != "unexpected_eof" {
+		t.Fatal("unrelated configured source was used", shown, err)
+	}
+	var missing bool
+	if err := f.repository.db.QueryRow("SELECT source_base_url IS NULL FROM request_error_diagnostics WHERE error_id=?", id).Scan(&missing); err != nil || !missing {
+		t.Fatal("source was invented", err)
 	}
 }
 

@@ -210,7 +210,11 @@ func (r *Repository) recordError(ctx context.Context, ref DiagnosticRef, seq int
 		}
 		facts := diagnostic.Encode(diagnostic.Finish(ctx, false, false, false, event.Status(), "The upstream response could not be completed", origin))
 		if facts != "" {
-			if _, err = tx.ExecContext(ctx, "INSERT INTO request_error_diagnostics(error_id,details) VALUES(?,?)", id, facts); err != nil {
+			base, e := imageDiagnosticSourceTx(ctx, tx, ref)
+			if e != nil {
+				return e
+			}
+			if _, err = tx.ExecContext(ctx, "INSERT INTO request_error_diagnostics(error_id,source_base_url,details) VALUES(?,?,?)", id, base, facts); err != nil {
 				return err
 			}
 		}
@@ -219,6 +223,24 @@ func (r *Repository) recordError(ctx context.Context, ref DiagnosticRef, seq int
 		return err
 	}
 	return tx.Commit()
+}
+
+// Keep only the source needed for later privacy projection. Finished image
+// tasks release their upstream revision so its credentials can be retired.
+func imageDiagnosticSourceTx(ctx context.Context, tx *sql.Tx, ref DiagnosticRef) (sql.NullString, error) {
+	var base sql.NullString
+	var err error
+	if ref.TaskID != "" {
+		err = tx.QueryRowContext(ctx, `SELECT r.base_url FROM image_activity_tasks t
+ JOIN image_upstream_revisions r ON r.revision=t.upstream_revision WHERE t.id=?`, ref.TaskID).Scan(&base)
+	} else if ref.OperationID != "" {
+		err = tx.QueryRowContext(ctx, `SELECT r.base_url FROM image_model_refreshes f
+ JOIN image_upstream_revisions r ON r.revision=f.upstream_revision WHERE f.operation_id=?`, ref.OperationID).Scan(&base)
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return sql.NullString{}, nil
+	}
+	return base, err
 }
 
 func boolInt(value bool) int {
