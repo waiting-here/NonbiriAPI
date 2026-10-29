@@ -155,3 +155,15 @@ func TestHTTPWindowPeakDoesNotSumRoutePeaksOrDatabaseWork(t *testing.T) {
 		t.Fatalf("empty HTTP window = %+v", totals)
 	}
 }
+
+func TestSessionReadAndWriteHaveSeparateFixedMetrics(t *testing.T) {
+	p := NewPerformance()
+	ctx := p.Context(t.Context())
+	for _, operation := range []string{"session", "session_read", "session_private-user"} {
+		databaseTimer(ctx, "connection", operation)(nil)
+	}
+	rows := p.Drain()
+	if len(rows) != 2 || rows[0].Route != "connection.session" || rows[1].Route != "connection.session_read" {
+		t.Fatalf("session pool phases were not separated anonymously: %+v", rows)
+	}
+}

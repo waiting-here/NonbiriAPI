@@ -156,3 +156,53 @@ func TestPerformanceWindowPoolDeltasAndShutdown(t *testing.T) {
 		<-done
 	})
 }
+
+func TestCharityManagementPerformanceUsesBoundedRouteTemplates(t *testing.T) {
+	p := NewPerformance()
+	handler := p.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	templates := map[string]string{
+		"/charity-models":                                         "/charity-models",
+		"/charity-models/private-object":                          "/charity-models/{id}",
+		"/charity-models/private-object/bindings":                 "/charity-models/{id}/bindings",
+		"/charity-models/private-object/binding-candidates":       "/charity-models/{id}/binding-candidates",
+		"/charity-models/private-object/bindings/batch-receipt":   "/charity-models/{id}/bindings/batch-receipt",
+		"/charity-models/private-object/bindings/private-binding": "/charity-models/{id}/bindings/{id}",
+		"/charity-price-templates":                                "/charity-price-templates",
+		"/charity-price-templates/private-object":                 "/charity-price-templates/{id}",
+	}
+	for _, base := range []string{"/api/steward", "/admin/api"} {
+		for path, want := range templates {
+			if got := performanceRoute(base + path); got != base+want {
+				t.Fatalf("%s: %s", base+path, got)
+			}
+			for i := range 100 {
+				unique := strings.ReplaceAll(path, "private-object", fmt.Sprintf("private-object-%d", i))
+				unique = strings.ReplaceAll(unique, "private-binding", fmt.Sprintf("private-binding-%d", i))
+				request := httptest.NewRequest(http.MethodGet, base+unique+"?private-query=private-secret", nil)
+				request.Header.Set("Authorization", "private-token")
+				handler.ServeHTTP(httptest.NewRecorder(), request)
+			}
+		}
+	}
+	for _, path := range []string{"/api/steward/charity-models//bindings", "/api/steward/charity-models/1/private-tail", "/api/steward/charity-models/1/bindings/2/private-tail", "/api/steward/charity-price-templates/1/private-tail", "/api/steward/charity-models-private"} {
+		if got := performanceRoute(path); got != "/api/other" {
+			t.Fatalf("unregistered route=%s", got)
+		}
+	}
+	rows := p.Drain()
+	if len(rows) != 2*len(templates) {
+		t.Fatalf("unexpected route cardinality: %d", len(rows))
+	}
+	encoded, err := json.Marshal(rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "private") {
+		t.Fatalf("request values leaked: %s", encoded)
+	}
+	for _, row := range rows {
+		if row.Completed != 100 {
+			t.Fatalf("split aggregate: %+v", row)
+		}
+	}
+}
