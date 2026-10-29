@@ -141,6 +141,11 @@ func (s *Service) cancelChallengeTx(ctx context.Context, tx *sql.Tx, c challenge
 	}
 	if c.playtest {
 		refund = false
+		if managementlog.CaptureEventID(ctx) == "" {
+			if err := managementlog.StartRelatedCaptureTx(ctx, tx, "fatfish_playtest", c.id); err != nil {
+				return err
+			}
+		}
 	}
 	if nowMS < c.prepared {
 		nowMS = c.prepared

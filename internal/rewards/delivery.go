@@ -116,6 +116,9 @@ func (s *Service) processOne(ctx context.Context) (_ bool, resultErr error) {
 	if err != nil {
 		return false, err
 	}
+	if err = managementlog.StartRelatedCaptureTx(ctx, tx, "reward_campaign", campaign); err != nil {
+		return false, err
+	}
 	var alive bool
 	if user.Valid {
 		err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE id=? AND is_admin=0 AND NOT EXISTS(SELECT 1 FROM user_deletion_markers WHERE user_id=users.id))", user.Int64).Scan(&alive)

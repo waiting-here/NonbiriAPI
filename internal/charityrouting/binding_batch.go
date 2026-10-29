@@ -72,6 +72,7 @@ type bindingKey struct {
 	valid          bool
 }
 type bindingHead struct {
+	name        string
 	revision    int64
 	count       int
 	targetCount int
@@ -249,7 +250,7 @@ func applyBindingMatrix(ctx context.Context, tx *sql.Tx, targets []bindingTarget
 			continue
 		}
 		var head bindingHead
-		err := tx.QueryRowContext(ctx, `SELECT binding_revision,(SELECT COUNT(*) FROM charity_model_bindings WHERE charity_model_id=cm.id),(SELECT COUNT(*) FROM charity_binding_targets t JOIN charity_model_bindings b ON b.id=t.binding_id WHERE b.charity_model_id=cm.id) FROM charity_models cm WHERE id=?`, target.modelID).Scan(&head.revision, &head.count, &head.targetCount)
+		err := tx.QueryRowContext(ctx, `SELECT full_name,binding_revision,(SELECT COUNT(*) FROM charity_model_bindings WHERE charity_model_id=cm.id),(SELECT COUNT(*) FROM charity_binding_targets t JOIN charity_model_bindings b ON b.id=t.binding_id WHERE b.charity_model_id=cm.id) FROM charity_models cm WHERE id=?`, target.modelID).Scan(&head.name, &head.revision, &head.count, &head.targetCount)
 		if errors.Is(err, sql.ErrNoRows) {
 			heads[target.modelID] = nil
 			continue
@@ -327,7 +328,11 @@ func applyBindingMatrix(ctx context.Context, tx *sql.Tx, targets []bindingTarget
 			if code == "added" {
 				outcome = managementlog.Succeeded
 			}
-			auditItems = append(auditItems, managementlog.Item{Action: "bind", TargetKind: "donation_key_model", TargetID: row.DonationKeyID + "/" + strconv.FormatInt(targets[i].modelID, 10), Outcome: outcome, Code: code})
+			name := targets[i].upstream
+			if head := heads[targets[i].modelID]; head != nil {
+				name = head.name + " / " + name
+			}
+			auditItems = append(auditItems, managementlog.Item{Action: "bind", TargetKind: "donation_key_model", TargetID: row.DonationKeyID + "/" + strconv.FormatInt(targets[i].modelID, 10), TargetName: name, Outcome: outcome, Code: code})
 		}
 	}
 	managementlog.SetItemsResult(ctx, auditItems)

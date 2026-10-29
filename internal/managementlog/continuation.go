@@ -22,8 +22,19 @@ func AppendRelatedTx(ctx context.Context, tx *sql.Tx, kind, id string, item Item
 }
 func appendOperationTx(ctx context.Context, tx *sql.Tx, parent Operation, items []Item, terminal bool) error {
 	items = cloneItems(items)
+	if len(items) > 0 {
+		var err error
+		items, _, err = enrichCaptureTx(ctx, tx, parent.EventID, items)
+		if err != nil {
+			return err
+		}
+	}
 	for i := range items {
 		items[i].TargetName = snapshotName(items[i].TargetName)
+		var dropped bool
+		items[i].Changes, dropped = normalizeChanges(items[i].Changes)
+		items[i].Details.Truncated = items[i].Details.Truncated || dropped
+		items[i].Details.Version = 1
 	}
 	check := Record{Metadata: parent.Metadata, Result: Result{Outcome: parent.Outcome, Items: items}}
 	if err := validateRecord(check); err != nil {
@@ -39,7 +50,11 @@ func appendOperationTx(ctx context.Context, tx *sql.Tx, parent Operation, items 
 			item.Changes = []Change{}
 		}
 		changes, _ := json.Marshal(item.Changes)
-		if _, err := tx.ExecContext(ctx, "INSERT INTO management_operation_items(operation_id,ordinal,action,target_kind,target_id,target_name,outcome,code,changes) VALUES(?,?,?,?,?,?,?,?,?)", parent.ID, parent.Targets, item.Action, item.TargetKind, item.TargetID, item.TargetName, item.Outcome, item.Code, string(changes)); err != nil {
+		details, _ := json.Marshal(item.Details)
+		if _, err := tx.ExecContext(ctx, "INSERT INTO management_operation_items(operation_id,ordinal,action,target_kind,target_id,target_name,outcome,code,changes,details) VALUES(?,?,?,?,?,?,?,?,?,?)", parent.ID, parent.Targets, item.Action, item.TargetKind, item.TargetID, item.TargetName, item.Outcome, item.Code, string(changes), string(details)); err != nil {
+			return err
+		}
+		if err := insertTermsTx(ctx, tx, parent.ID, parent.Targets, item); err != nil {
 			return err
 		}
 	}

@@ -106,7 +106,12 @@ func (s *Service) setManagedEndpointTags(ctx context.Context, adminID int64, rol
 		if parsed, err := url.Parse(baseURL); err == nil {
 			name = parsed.Hostname()
 		}
-		items = append(items, managementlog.Item{Action: "tags.update", TargetKind: "endpoint_address", TargetID: hex.EncodeToString(digest[:]), TargetName: name, Outcome: outcome, Changes: []managementlog.Change{{Field: "tags." + input.Tag, Operation: operation}}})
+		state := "updated"
+		changes := []managementlog.Change{{Field: "tags." + input.Tag, Operation: operation}}
+		if affected == 0 {
+			state, changes = "unchanged", nil
+		}
+		items = append(items, managementlog.Item{Action: "tags.update", TargetKind: "endpoint_address", TargetID: hex.EncodeToString(digest[:]), TargetName: name, Outcome: outcome, Changes: changes, Details: managementlog.Details{Version: 1, State: state}})
 	}
 	managementlog.SetItemsResult(ctx, items)
 	if err = idempotency.Complete(ctx, tx, decision, http.StatusNoContent, []byte{}); err != nil {

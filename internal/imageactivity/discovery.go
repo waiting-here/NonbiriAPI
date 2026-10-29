@@ -321,6 +321,9 @@ func (s *Service) finishRefresh(ctx context.Context, id string, models []discove
 	if state != "queued" && state != "running" {
 		return nil
 	}
+	if err = managementlog.StartRelatedCaptureTx(ctx, tx, "image_model_discovery", id); err != nil {
+		return err
+	}
 	result := "failed"
 	if code == "" {
 		result = "succeeded"

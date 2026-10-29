@@ -1,8 +1,75 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getHistory, startCleanup } from './api';
+import { getHistory, getOperationItems, startCleanup } from './api';
 
 afterEach(() => vi.unstubAllGlobals());
 describe('management history projections', () => {
+  it('retains safe before/after values, related effects, and missing legacy snapshots', async () => {
+    const base = {
+      ordinal: '1',
+      action: 'delete',
+      target_kind: 'charity_model',
+      target_id: '12',
+      target_name: 'Saved model',
+      outcome: 'succeeded',
+      code: '',
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            total: '2',
+            page: 1,
+            page_size: 20,
+            items: [
+              {
+                ...base,
+                changes: [
+                  {
+                    field: 'request_user_price',
+                    operation: 'updated',
+                    before: '1000',
+                    after: '2000',
+                    unit: 'milli_credits',
+                  },
+                ],
+                details: {
+                  version: 1,
+                  state: 'deleted',
+                  previous_name: 'Old name',
+                  related: [
+                    {
+                      kind: 'charity_model_bindings',
+                      id: '9',
+                      name: 'Saved binding',
+                      state: 'deleted',
+                      changes: [{ field: 'ord', operation: 'deleted', before: '2' }],
+                    },
+                  ],
+                  impacts: [
+                    {
+                      kind: 'charity_model_bindings',
+                      created: '0',
+                      updated: '0',
+                      deleted: '9007199254740993',
+                    },
+                  ],
+                },
+              },
+              { ...base, ordinal: '2' },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    );
+    const value = await getOperationItems('1', '1', 20);
+    expect(value.items[0]?.changes[0]?.after).toBe('2000');
+    expect(value.items[0]?.details?.related?.[0]?.changes?.[0]?.before).toBe('2');
+    expect(value.items[0]?.details?.impacts?.[0]?.deleted).toBe('9007199254740993');
+    expect(value.items[1]?.details).toBeUndefined();
+    expect(value.items[1]?.changes).toEqual([]);
+  });
   it('keeps large snapshot IDs and accepts independent extra response fields', async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(

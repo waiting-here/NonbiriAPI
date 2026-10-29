@@ -157,8 +157,8 @@ func filterSQL(f Filter, alias string, groups bool) (string, []any) {
 		}
 		if f.Search != "" {
 			id, _ := strconv.ParseInt(f.Search, 10, 64)
-			clauses = append(clauses, "("+alias+".event_id=? OR "+alias+".actor_name=? OR "+alias+".id=?)")
-			args = append(args, f.Search, f.Search, id)
+			clauses = append(clauses, "("+alias+".event_id=? OR "+alias+".actor_name=? OR "+alias+".id=? OR "+alias+".id IN (SELECT operation_id FROM management_operation_terms WHERE term=? UNION SELECT operation_id FROM management_operation_items WHERE target_name=?))")
+			args = append(args, f.Search, f.Search, id, f.Search, f.Search)
 		}
 		if f.TargetKind != "" {
 			sub := alias + ".id IN (SELECT i.operation_id FROM management_operation_items i WHERE i.target_kind=?"
@@ -173,13 +173,13 @@ func filterSQL(f Filter, alias string, groups bool) (string, []any) {
 	return strings.Join(clauses, " AND "), args
 }
 
-const operationColumns = "id,event_id,created_at,source,executor_kind,actor_id,actor_name,actor_role,authorizer_id,authorizer_name,authorizer_role,authorization_ref,domain,action,correlation_kind,correlation_id,outcome,code,summary,targets,succeeded,skipped,failed,cleaning"
+const operationColumns = "id,event_id,created_at,source,executor_kind,actor_id,actor_name,actor_role,authorizer_id,authorizer_name,authorizer_role,authorization_ref,domain,action,correlation_kind,correlation_id,outcome,code,summary,targets,succeeded,skipped,failed,cleaning,target_name"
 
 type scanner interface{ Scan(...any) error }
 
 func scanOperation(row scanner) (Operation, error) {
 	var v Operation
-	err := row.Scan(&v.ID, &v.EventID, &v.CreatedAt, &v.Source, &v.ExecutorKind, &v.Actor.ID, &v.Actor.Name, &v.Actor.Role, &v.Authorizer.ID, &v.Authorizer.Name, &v.Authorizer.Role, &v.AuthorizationRef, &v.Domain, &v.Action, &v.CorrelationKind, &v.CorrelationID, &v.Outcome, &v.Code, &v.Summary, &v.Targets, &v.Succeeded, &v.Skipped, &v.Failed, &v.Cleaning)
+	err := row.Scan(&v.ID, &v.EventID, &v.CreatedAt, &v.Source, &v.ExecutorKind, &v.Actor.ID, &v.Actor.Name, &v.Actor.Role, &v.Authorizer.ID, &v.Authorizer.Name, &v.Authorizer.Role, &v.AuthorizationRef, &v.Domain, &v.Action, &v.CorrelationKind, &v.CorrelationID, &v.Outcome, &v.Code, &v.Summary, &v.Targets, &v.Succeeded, &v.Skipped, &v.Failed, &v.Cleaning, &v.TargetName)
 	return v, err
 }
 func (s *Service) Query(ctx context.Context, adminID int64, q Query) (result Page, resultErr error) {
@@ -321,19 +321,22 @@ func (s *Service) Items(ctx context.Context, adminID, id int64, page, size int) 
 	if cleaning {
 		return result, ErrCleaning
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT ordinal,action,target_kind,target_id,target_name,outcome,code,changes FROM management_operation_items WHERE operation_id=? AND ordinal>? ORDER BY ordinal LIMIT ?`, id, (q.Page-1)*q.PageSize, q.PageSize)
+	rows, err := tx.QueryContext(ctx, `SELECT ordinal,action,target_kind,target_id,target_name,outcome,code,changes,details FROM management_operation_items WHERE operation_id=? AND ordinal>? ORDER BY ordinal LIMIT ?`, id, (q.Page-1)*q.PageSize, q.PageSize)
 	if err != nil {
 		return result, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var v Item
-		var encoded string
-		if err = rows.Scan(&v.Ordinal, &v.Action, &v.TargetKind, &v.TargetID, &v.TargetName, &v.Outcome, &v.Code, &encoded); err != nil {
+		var encoded, details string
+		if err = rows.Scan(&v.Ordinal, &v.Action, &v.TargetKind, &v.TargetID, &v.TargetName, &v.Outcome, &v.Code, &encoded, &details); err != nil {
 			return result, err
 		}
 		if err = json.Unmarshal([]byte(encoded), &v.Changes); err != nil {
 			return result, fmt.Errorf("read management changes: %w", err)
+		}
+		if err = json.Unmarshal([]byte(details), &v.Details); err != nil {
+			return result, fmt.Errorf("read management snapshot: %w", err)
 		}
 		result.Items = append(result.Items, v)
 	}

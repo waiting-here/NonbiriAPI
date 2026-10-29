@@ -89,6 +89,9 @@ func (s *Service) autoApproveSubmittedUsesTx(ctx context.Context, tx *sql.Tx, do
 		auditItems = append(auditItems, managementlog.Item{Action: "approve", TargetKind: "donation_use", TargetID: strconv.FormatInt(item.use, 10), Outcome: managementlog.Succeeded, Changes: []managementlog.Change{{Field: "review_state", Operation: "updated"}}})
 	}
 	audit := managementlog.TrackInternalAttempt(ctx, managementlog.Record{Metadata: managementlog.Metadata{CreatedAt: now * 1000, Source: managementlog.SourceMainstreamRule, ExecutorKind: "rule", Actor: actor, AuthorizationRef: "mainstream_endpoint_rule", Domain: "donations", Action: "approve", CorrelationKind: "donation", CorrelationID: strconv.FormatInt(donationID, 10), Summary: "主流规则自动审批捐赠"}, Result: managementlog.Result{Outcome: managementlog.Succeeded, Items: auditItems}})
+	if err := managementlog.StartCaptureTx(managementlog.WithOperation(ctx, audit.Metadata), tx); err != nil {
+		return false, err
+	}
 	for _, item := range items {
 		if err := s.reviewMaterial.ApproveUseRevision(ctx, tx, item.pending, nil, time.Unix(now, 0)); err != nil {
 			return false, mapReviewError(err)
@@ -124,6 +127,9 @@ func (s *Service) autoApproveSubmittedUsesTx(ctx context.Context, tx *sql.Tx, do
 		return false, err
 	}
 	if _, err := managementlog.RecordTx(ctx, tx, audit); err != nil {
+		return false, err
+	}
+	if err := managementlog.StartCaptureTx(ctx, tx); err != nil {
 		return false, err
 	}
 	return true, nil

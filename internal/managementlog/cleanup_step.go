@@ -70,6 +70,9 @@ func (s *Service) Step(ctx context.Context) (active bool, err error) {
 				return true, err
 			}
 		}
+		if _, err = tx.ExecContext(ctx, `DELETE FROM management_operation_terms WHERE operation_id=? AND ordinal IN (SELECT ordinal FROM management_operation_items WHERE operation_id=? ORDER BY ordinal LIMIT ?)`, id, id, remaining); err != nil {
+			return true, err
+		}
 		result, e := tx.ExecContext(ctx, `DELETE FROM management_operation_items WHERE operation_id=? AND ordinal IN (SELECT ordinal FROM management_operation_items WHERE operation_id=? ORDER BY ordinal LIMIT ?)`, id, id, remaining)
 		if e != nil {
 			return true, e

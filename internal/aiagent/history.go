@@ -26,10 +26,11 @@ func (s *Service) humanHistory(ctx context.Context, tx *sql.Tx, actor Actor, act
 		return ctx, err
 	}
 	previous, _ := managementlog.MetadataFromContext(ctx)
-	return managementlog.WithOperation(ctx, managementlog.Metadata{
+	ctx = managementlog.WithOperation(ctx, managementlog.Metadata{
 		EventID: previous.EventID, Source: managementlog.SourceWeb, ExecutorKind: "human",
 		Actor: subject, Domain: "ai", Action: action, Summary: summary,
-	}), nil
+	})
+	return ctx, managementlog.StartCaptureTx(ctx, tx)
 }
 
 func (s *Service) planHistory(ctx context.Context, tx *sql.Tx, actor Actor, plan Plan, approve bool) (context.Context, error) {
@@ -52,7 +53,8 @@ func (s *Service) planHistory(ctx context.Context, tx *sql.Tx, actor Actor, plan
 	}
 	// The HTTP envelope and the plan represent the same attempt.
 	managementlog.MarkReplay(ctx)
-	return managementlog.WithOperation(managementlog.WithoutOperation(ctx), m), nil
+	ctx = managementlog.WithOperation(managementlog.WithoutOperation(ctx), m)
+	return ctx, managementlog.StartCaptureTx(ctx, tx)
 }
 
 func (s *Service) reviewHistory(ctx context.Context, tx *sql.Tx, owner Actor, revision int64, job Job) (context.Context, error) {
@@ -63,12 +65,13 @@ func (s *Service) reviewHistory(ctx context.Context, tx *sql.Tx, owner Actor, re
 	if err != nil {
 		return ctx, err
 	}
-	return managementlog.WithOperation(managementlog.WithoutOperation(ctx), managementlog.Metadata{
+	ctx = managementlog.WithOperation(managementlog.WithoutOperation(ctx), managementlog.Metadata{
 		Source: managementlog.SourceAIAuto, ExecutorKind: "ai",
 		Actor: managementlog.Subject{ID: "ai", Name: "AI", Role: "ai"}, Authorizer: subject,
 		AuthorizationRef: fmt.Sprintf("ai_config/%d", revision), Domain: "ai", Action: "review.execute",
 		CorrelationKind: "ai_job", CorrelationID: strconv.FormatInt(job.ID, 10), Summary: "执行 AI 自动审核",
-	}), nil
+	})
+	return ctx, managementlog.StartCaptureTx(ctx, tx)
 }
 
 func historyItems(ops []Operation, outcome managementlog.Outcome, code string) []managementlog.Item {
@@ -76,6 +79,9 @@ func historyItems(ops []Operation, outcome managementlog.Outcome, code string) [
 	for _, op := range ops {
 		kind, _, _ := strings.Cut(op.Kind, ".")
 		item := managementlog.Item{Action: op.Kind, TargetKind: kind, TargetID: op.TargetID, Outcome: outcome, Code: code}
+		if strings.HasPrefix(op.Kind, "charity.model.") || strings.HasPrefix(op.Kind, "charity.binding.") && op.Kind != "charity.binding.apply_preset" {
+			item.TargetKind = "charity_model"
+		}
 		var fields map[string]json.RawMessage
 		_ = json.Unmarshal(op.Input, &fields)
 		// Only known field names are retained; model-produced values and arbitrary keys are never copied.
