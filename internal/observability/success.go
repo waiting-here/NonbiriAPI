@@ -28,26 +28,6 @@ func (r *Repository) RecordOutcomeTx(ctx context.Context, tx *sql.Tx, requestID 
 	return err
 }
 
-func (r *Repository) RecentSuccess(ctx context.Context, modelID, at int64) (SuccessRate, error) {
-	result := SuccessRate{WindowStart: at - 86400, AsOf: at, InsufficientSample: true}
-	if r == nil || modelID <= 0 || at < 0 {
-		return result, ErrInvalid
-	}
-	if result.WindowStart < 0 {
-		result.WindowStart = 0
-	}
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return result, err
-	}
-	defer tx.Rollback()
-	result, err = RecentSuccessTx(ctx, tx, modelID, at)
-	if err != nil {
-		return result, err
-	}
-	return result, tx.Commit()
-}
-
 // RecentSuccessTx lets a caller keep model authorization and statistics in
 // one read snapshot. It never reads or returns individual request details.
 func RecentSuccessTx(ctx context.Context, tx *sql.Tx, modelID, at int64) (SuccessRate, error) {

@@ -191,7 +191,12 @@ func TestRecentSuccessBatchUsesCallerSnapshot(t *testing.T) {
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
-	current, err := r.RecentSuccess(context.Background(), modelID, now)
+	currentTx, err := r.db.BeginTx(t.Context(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer currentTx.Rollback()
+	current, err := RecentSuccessTx(t.Context(), currentTx, modelID, now)
 	if err != nil || current.CaptureStartedAt != newCapture || current.Success != 1 || current.Failure != 1 {
 		t.Fatalf("new snapshot: %+v %v", current, err)
 	}
