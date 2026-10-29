@@ -109,19 +109,11 @@ async function newService(page: Page, name: string, recoverLost = false) {
     panel.locator('summary').filter({ hasText: servicesCopy('en').manualModels }),
   ).toBeVisible();
   if (recoverLost) {
-    const models = panel.locator('.service-key-models');
-    await expect
-      .poll(async () => {
-        const check = models.getByRole('button', {
-          name: connectionCopy('en').checkResult,
-          exact: true,
-        });
-        if ((await check.isVisible()) && (await check.isEnabled())) await check.click();
-        return models
-          .getByRole('button', { name: servicesCopy('en').fetchModels, exact: true })
-          .isEnabled();
-      })
-      .toBe(true);
+    await expect(
+      panel
+        .locator('.service-key-models')
+        .getByRole('button', { name: servicesCopy('en').fetchModels, exact: true }),
+    ).toBeEnabled();
   }
   await expect
     .poll(async () => {
