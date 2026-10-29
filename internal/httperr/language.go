@@ -124,6 +124,20 @@ var chineseCodes = map[string]string{
 }
 
 var chineseMessages = map[string]string{
+	"tool thinking requires the original signed content blocks":                                                 "工具调用中的思考内容需要原始签名内容块",
+	"expected a supported thinking configuration":                                                               "需要受支持的思考配置",
+	"expected summarized, omitted, or updates":                                                                  "需要 summarized、omitted 或 updates",
+	"this model uses adaptive thinking and does not support a manual budget":                                    "此模型使用自适应思考，不支持手动预算",
+	"manual thinking requires auto or none tool choice":                                                         "手动思考要求 tool_choice 为 auto 或 none",
+	"manual thinking requires an integer budget of at least 1024":                                               "手动思考预算须为不小于 1024 的整数",
+	"the thinking budget must be below max_tokens without supported interleaved thinking":                       "未启用受支持的交错思考时，思考预算必须小于 max_tokens",
+	"this thinking mode does not accept a manual budget":                                                        "此思考模式不接受手动预算",
+	"this model requires manual thinking with a budget":                                                         "此模型需要带预算的手动思考",
+	"this model does not support forced tool use":                                                               "此模型不支持强制调用工具",
+	"unsupported thinking mode":                                                                                 "不支持此思考模式",
+	"expected supported continuation parts and metadata":                                                        "需要受支持的续接内容块和元数据",
+	"continuation parts must match the assistant message":                                                       "续接内容块必须与助手消息一致",
+	"provider continuation requires the original permitted model connection":                                    "续接对话需要使用原有且仍获准的模型连接",
 	"Remove URL query parameters and send supported fields in the JSON body.":                                   "请移除地址中的查询参数，将受支持的字段放入 JSON 请求体。",
 	"Send an uncompressed UTF-8 JSON body with Content-Type: application/json.":                                 "请发送未压缩的 UTF-8 JSON，并设置 Content-Type: application/json。",
 	"Send the complete request body and retry the request.":                                                     "请完整发送请求体后重试。",

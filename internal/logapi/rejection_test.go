@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
@@ -192,5 +193,74 @@ func TestUndispatchedResourceDetailKeepsHandlerPhaseAndPrivacy(t *testing.T) {
 		if _, err := f.repo.GetUser(t.Context(), logUserTwo, f.charityID, AttemptFilter{}); !errors.Is(err, ErrNotFound) {
 			t.Fatal("cross-account diagnostic", err)
 		}
+	}
+}
+
+func TestThinkingContinuationRejectionsKeepOwnerFieldsAndLocalizedReasons(t *testing.T) {
+	f := newNumberedLogFixture(t)
+	f.mustExec("UPDATE request_logs SET rejection_stage='preflight',rejection_reason='invalid_request',caller_result_class='failed',caller_status=400,caller_error_code='invalid_request',attempt_count=0 WHERE logical_request_id=?", f.charityID)
+	for _, tc := range []struct{ field, reason, chinese string }{
+		{"extra_content.anthropic", "tool thinking requires the original signed content blocks", "工具调用中的思考内容需要原始签名内容块"},
+		{"thinking", "expected a supported thinking configuration", "需要受支持的思考配置"},
+		{"thinking.display", "expected summarized, omitted, or updates", "需要 summarized、omitted 或 updates"},
+		{"thinking.type", "this model uses adaptive thinking and does not support a manual budget", "此模型使用自适应思考，不支持手动预算"},
+		{"tool_choice", "manual thinking requires auto or none tool choice", "手动思考要求 tool_choice 为 auto 或 none"},
+		{"thinking.budget_tokens", "manual thinking requires an integer budget of at least 1024", "手动思考预算须为不小于 1024 的整数"},
+		{"thinking.budget_tokens", "the thinking budget must be below max_tokens without supported interleaved thinking", "未启用受支持的交错思考时，思考预算必须小于 max_tokens"},
+		{"thinking.budget_tokens", "this thinking mode does not accept a manual budget", "此思考模式不接受手动预算"},
+		{"thinking.type", "this model requires manual thinking with a budget", "此模型需要带预算的手动思考"},
+		{"tool_choice", "this model does not support forced tool use", "此模型不支持强制调用工具"},
+		{"thinking.type", "unsupported thinking mode", "不支持此思考模式"},
+		{"extra_content.gateway", "expected supported continuation parts and metadata", "需要受支持的续接内容块和元数据"},
+		{"extra_content.gateway", "continuation parts must match the assistant message", "续接内容块必须与助手消息一致"},
+		{"messages", "provider continuation requires the original permitted model connection", "续接对话需要使用原有且仍获准的模型连接"},
+	} {
+		t.Run(tc.reason, func(t *testing.T) {
+			detail := requestattempt.NewDetail(tc.field, tc.reason)
+			if detail == nil || detail.Field != tc.field || detail.Suggestion == "" {
+				t.Fatalf("missing fixed detail: %+v", detail)
+			}
+			f.mustExec("UPDATE request_logs SET error_diag=? WHERE logical_request_id=?", requestattempt.EncodeDetail(detail), f.charityID)
+			owner, err := f.repo.GetUser(t.Context(), logUserOne, f.charityID, AttemptFilter{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			page, err := f.repo.ListUser(t.Context(), logUserOne, ListFilter{Phase: "pre_handler"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			rows, err := f.repo.ExportUser(t.Context(), logUserOne, ListFilter{Phase: "pre_handler"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, projection := range []any{owner, page} {
+				raw, err := json.Marshal(projection)
+				if err != nil || !strings.Contains(string(raw), tc.reason) || !strings.Contains(string(raw), "\"field\":\""+tc.field+"\"") {
+					t.Fatalf("missing owner detail: %s %v", raw, err)
+				}
+			}
+			ownerJSON, err := MarshalUserJSON(rows)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ownerCSV, err := MarshalUserCSV(rows)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, exported := range [][]byte{ownerJSON, ownerCSV} {
+				if !strings.Contains(string(exported), tc.reason) || !strings.Contains(string(exported), tc.field) {
+					t.Fatalf("missing owner export: %s", exported)
+				}
+			}
+			for _, locale := range []string{"en", "zh"} {
+				want := tc.reason
+				if locale == "zh" {
+					want = tc.chinese
+				}
+				if got := httperr.Localize(httperr.New(httperr.CodeInvalidRequest, tc.reason), locale); got.Message != want {
+					t.Fatalf("%s detail: %s", locale, got.Message)
+				}
+			}
+		})
 	}
 }

@@ -788,8 +788,6 @@
           "game_fishing_treasure_clover_mult": "四叶草宝物倍率",
           "game_fishing_treasure_shell_mult": "贝壳宝物倍率"
         },
-        "enabled": "启用",
-        "disabled": "停用",
         "outcomeOnly": "本次仅记录操作结果，未保存字段快照。"
       },
       "roles": {

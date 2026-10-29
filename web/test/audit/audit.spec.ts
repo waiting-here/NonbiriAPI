@@ -299,6 +299,38 @@ async function discoveryDiagnostics(page: Page, admin: boolean, redacted = false
   await expect(entry.locator('pre')).toHaveText(
     redacted ? f.text_body.replaceAll('203.0.113.19', '[redacted]') : f.text_body,
   );
+  const failure = entry.getByRole('region', { name: common.common.failure.title, exact: true });
+  await expect(failure).toBeVisible();
+  await failure.locator('summary').filter({ hasText: common.common.failure.technical }).click();
+  await expect(
+    failure.getByRole('heading', { name: common.common.failure.causes, exact: true }),
+  ).toBeVisible();
+  if (process.env.NONBIRI_VISUAL_DIR) {
+    const viewport = page.viewportSize();
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset.theme = value;
+      }, theme);
+      for (const width of [1440, 390]) {
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+        await failure.scrollIntoViewIfNeeded();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        await page.screenshot({
+          path: resolve(
+            process.env.NONBIRI_VISUAL_DIR,
+            `independent-diagnostics-${admin ? 'admin' : redacted ? 'level5' : 'level6'}-${theme}-${width}.png`,
+          ),
+          animations: 'disabled',
+        });
+      }
+    }
+    if (viewport) await page.setViewportSize(viewport);
+    await page.evaluate(() => {
+      document.documentElement.dataset.theme = 'light';
+    });
+  }
   const source = entry.getByRole('region', { name: 'Request source' });
   await expect(source).toContainText(f.source_ip);
   await safeSink(page);

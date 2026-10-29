@@ -4,7 +4,7 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## Unreleased
+## 1.3.2 — 2026-10-29
 
 ### Added
 
@@ -21,9 +21,16 @@ Each version entry describes its source and compatibility boundary; a release ta
   changes and actual impact counts at the transaction boundary. Search current
   and previous recorded names, related identifiers and changed fields; retain
   bounded samples and explicit missing historical facts.
+- Configure separate site-wide light and heavy concurrency defaults, initially
+  15 and 5, in administrator settings. Preserve per-user overrides and apply
+  updated defaults to new admissions without restarting the service.
 
 ### Fixed and improved
 
+- Avoid taking the writer for same-second session checks whose exact expiry is
+  already stored. Recheck authority when renewal needs the writer, and move pure
+  steward model and price-template queries to the existing reader pool. Keep
+  separate bounded metrics for session reads and charity-management routes.
 - Label accepted model-list refresh tasks accurately in request logs and open
   their service call records by default, including unconfirmed HTTP responses.
 - Preserve safe DNS, TLS, timeout and connection-failure reasons for OpenAI and

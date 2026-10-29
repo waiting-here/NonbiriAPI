@@ -788,8 +788,6 @@
           "game_fishing_treasure_clover_mult": "Clover treasure multiplier",
           "game_fishing_treasure_shell_mult": "Shell treasure multiplier"
         },
-        "enabled": "Enabled",
-        "disabled": "Disabled",
         "outcomeOnly": "Only the operation outcome was recorded; no field snapshot was saved."
       },
       "roles": {
