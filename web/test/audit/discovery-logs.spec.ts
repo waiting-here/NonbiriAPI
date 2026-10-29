@@ -120,8 +120,8 @@ for (const [language, width, theme] of [
             requestID,
         );
         const panel = page.locator('.nb-expandable-panel:not([hidden])');
-        await expect(panel.getByText(copy.discoveryAccepted, { exact: true })).toBeVisible();
         const accepted = panel.getByRole('status').filter({ hasText: copy.discoveryAccepted });
+        await expect(accepted).toBeVisible();
         await expect(accepted).toContainText(copy.discoveryAcceptedHint);
         const attempts = panel
           .locator('details')
@@ -175,7 +175,10 @@ for (const [language, width, theme] of [
       await page.locator('summary').filter({ hasText: diagnosticLabel }).click();
       await expect(page.locator('.log-attempt-diagnostic')).toBeVisible();
       await expect(
-        page.locator('.nb-expandable-panel').getByText(copy.discoveryAccepted, { exact: true }),
+        page
+          .locator('.nb-expandable-panel')
+          .getByRole('status')
+          .filter({ hasText: copy.discoveryAccepted }),
       ).toBeVisible();
       const successID = await refresh('success');
       const catalog = await read(prefix + '?limit=20');
