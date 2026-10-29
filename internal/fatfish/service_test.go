@@ -249,6 +249,7 @@ func (f *fishFixture) waitState(t *testing.T, id, want string) ChallengeView {
 }
 
 func (f *fishFixture) publishOne(t *testing.T) (string, string) {
+	t.Helper()
 	return f.publishWithAmounts(t, Amounts{UnlockCost: "1.5", TicketPrice: "2", FirstClearReward: "3", StarRewards: [3]string{"1", "2", "3"}})
 }
 func (f *fishFixture) publishWithAmounts(t *testing.T, amounts Amounts) (string, string) {
@@ -274,16 +275,24 @@ func (f *fishFixture) publishWithAmounts(t *testing.T, amounts Amounts) (string,
 	if _, err = f.s.SubmitPlaytest(ctx, f.admin, p.ID, SubmitInput{TabCapability: cap, Inputs: []byte(`[]`), TerminalTick: f.terminalTick}, fishKey(5)); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		v, err := f.s.PlaytestChallenge(ctx, f.admin, p.ID, "")
-		if err != nil {
-			t.Fatal(err)
+	// Replay and settlement have separate five-second production budgets.
+	// Wait for the actual worker instead of silently proceeding to publication
+	// when a shorter polling window expires on an instrumented runner.
+	f.s.jobsMu.Lock()
+	job := f.s.jobs[p.ID]
+	f.s.jobsMu.Unlock()
+	if job != nil {
+		waitCtx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+		defer cancel()
+		select {
+		case <-job.done:
+		case <-waitCtx.Done():
+			t.Fatal("fixture playtest worker did not finish:", waitCtx.Err())
 		}
-		if v.State == "settled_pass" {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
+	}
+	verified, err := f.s.PlaytestChallenge(ctx, f.admin, p.ID, "")
+	if err != nil || verified.State != "settled_pass" {
+		t.Fatalf("fixture playtest did not pass: state=%s result=%+v err=%v", verified.State, verified.Result, err)
 	}
 	period, err := f.s.SavePeriod(ctx, f.admin, "", PeriodInput{Title: "Season", Visible: true, StartsAt: fixtureNow - 10, EndsAt: fixtureNow + 1000}, fishKey(6))
 	if err != nil {
