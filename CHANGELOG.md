@@ -6,12 +6,53 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## Unreleased
 
+### Added
+
+- Add a separate Go-native Codex device-code connection for administrator chat
+  and individually assigned stewards. Keep credentials encrypted, serialize
+  refresh and cancel related work on disconnect. No external CLI, automatic
+  review, public model routing or inherited steward access is added. Real
+  Business-account authorization and inference remain unverified.
+- Record safe request-failure causes, phases, bounded correlation identifiers
+  and observed stream progress. Separate actual client HTTP delivery from final
+  outcome and confirmed upstream status across forwarding, assistant and image
+  requests, retaining existing diagnostic permissions and privacy projections.
+- Preserve management object names, allowlisted before/after values, related
+  changes and actual impact counts at the transaction boundary. Search current
+  and previous recorded names, related identifiers and changed fields; retain
+  bounded samples and explicit missing historical facts.
+
 ### Fixed and improved
 
 - Label accepted model-list refresh tasks accurately in request logs and open
   their service call records by default, including unconfirmed HTTP responses.
 - Preserve safe DNS, TLS, timeout and connection-failure reasons for OpenAI and
   Anthropic model discovery without exposing raw transport errors or credentials.
+
+- Accept sparse Responses terminal events only after a valid terminal and
+  consistent completed items; preserve generated text/refusal and reasoning
+  histories on replay and valid usage on failed responses.
+- Preserve Anthropic thinking/redacted blocks, Gemini signed part order and
+  Gateway reasoning/tool metadata through bounded continuation extensions. Bind
+  opaque histories to their permitted physical source. Recognize unsupported
+  Gemini continuation without another call or discarding valid usage.
+- Reassemble independently encoded Chat audio fragments and transcripts during
+  forced transport conversion. Preserve immutable continuation snapshots or
+  reject an oversized snapshot explicitly.
+- Accept supported optional Anthropic metadata, omitted Gemini tool arguments,
+  Gateway raw/tail events, rerank usage variants and top-k aliases, Whisper JSON
+  fallback, input-token requests without input, and empty legacy prompt items.
+  Keep native Chat completion tolerance and respect optional usage chunks.
+- Align the public protocol matrix with explicit native service authorization.
+
+### Compatibility
+
+- Storage advances from schema 41 to 42; account export remains format 31. The
+  explicit standalone upgrader accepts exact registered schema 16–26 and 33–41
+  sources. Startup never upgrades an existing database. Existing management
+  records receive no invented historical names or values.
+- The version is identified by an exact source commit without a tag or GitHub
+  Release. This entry does not assert deployment or live-provider verification.
 
 ## 1.3.1 — 2026-10-28
 

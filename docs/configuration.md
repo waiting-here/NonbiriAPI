@@ -18,9 +18,12 @@ Preserve the database's stable encrypted renewed-review matching material with t
 
 Assistant settings use their own revisioned configuration and encrypted driver
 storage, rather than startup environment variables or the general `site_config`
-catalog. An administrator configures the dedicated Chat Completions endpoint,
-key and model, model-context/output limits, shared request concurrency and
-timeout. Built-in [presets](ai-agent-presets.md) supply editable messages, initial
+catalog. An administrator configures Chat Completions or Responses API drivers,
+the ChatGPT connection, or the separate [Codex device-code connection](codex-agent.md),
+plus local context/output-reserve budgets, shared concurrency and timeout.
+Codex is limited to administrator chat and individually assigned stewards; it
+cannot be a global/steward default, automatic-review source or public model route.
+Built-in [presets](ai-agent-presets.md) supply editable messages, initial
 shared memories and tool descriptions without overwriting saved customization.
 
 Chat defaults to closed; automatic review independently defaults to `off` and

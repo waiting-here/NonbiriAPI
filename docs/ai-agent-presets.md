@@ -7,7 +7,9 @@ presets contain no instance configuration or credentials.
 
 Automatic review defaults to `off`, chat defaults to closed, and assistant
 prefills are empty. An administrator must configure and select a driver before calls can run: Chat
-Completions, external Responses, or the instance's ChatGPT subscription connection. Tool switches default to enabled; each
+Completions, external Responses, the instance's ChatGPT connection, or a
+separately connected Codex source for explicitly assigned conversations.
+Tool switches default to enabled; each
 actual tool still depends on current permissions, configuration and whether
 the job is a conversation or automatic review.
 
@@ -39,7 +41,10 @@ guarantee correctness or grant permissions.
    its model. Bind the global default, automatic review, administrator chat
    or steward chat as needed; administrators can set an individual steward
    override or leave that operator inheriting the workflow choice. Model discovery can precede model selection. For
-   ChatGPT, import the local helper's encrypted connection file first. Only
+   ChatGPT, import the local helper's encrypted connection file first. For
+   [Codex](codex-agent.md), complete device-code authorization and bind only
+   administrator chat or a specific steward; global/steward defaults and
+   automatic review cannot use Codex. Only
    administrators can change sources or credentials; failures do not switch
    providers. Optional prefill depends on the selected upstream's support.
 2. Read the preset messages and [tool descriptions](../internal/aiagent/presets/tool-descriptions.json).
@@ -146,8 +151,11 @@ history remain after loss of role or account deletion for administrator access.
 The administrator-only conversation tool `management_history` reads retained
 management operations using `action=list|detail|items|cleanup_status`.
 Unlike the site-data tools above, it is paginated and supports grouped views,
-filters and a saved insertion cutoff. It does not read assistant request bodies
-or conversation archives. See the [history contract](api-contract.md#79-management-operation-history)
+filters and a saved insertion cutoff. Results include recorded object/previous
+names, allowlisted before/after values, related changes and actual impact counts.
+Its exact `search` also matches retained names, related IDs and change-field names;
+missing older details remain unavailable and large samples mark omissions.
+It does not read assistant request bodies or conversation archives. See the [history contract](api-contract.md#79-management-operation-history)
 for exact inputs, time units, limits and response fields.
 
 To clear history, an administrator may propose `management.cleanup` through

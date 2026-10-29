@@ -2,6 +2,10 @@
 
 An administrator can connect one ChatGPT account to an instance and use its available models for AI conversations and automatic reviews. Availability and usage limits depend on the account and OpenAI's current preview policy. The connection does not change the permissions of the person using the AI workspace.
 
+For the separate built-in device-code source and its explicit per-person access
+rules, see [Connect Codex](codex-agent.md). The connection and authorization
+procedure below remain specific to the ChatGPT source.
+
 ## Connect from your computer
 
 1. In the administrator AI settings, download the instance connection target.
