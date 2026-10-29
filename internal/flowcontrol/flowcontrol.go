@@ -72,7 +72,7 @@ const (
 // UserLimits is one live server-side snapshot. RPMLimit and LightRPMLimit are
 // independent charity caps; GlobalRPMLimit covers all inference calls. An unset
 // RPM override uses the current site default. Concurrency values are effective
-// limits, with database NULL mapped to 5 heavy and 15 light requests.
+// limits, with database NULL resolved against the current site defaults.
 type UserLimits struct {
 	RPMLimit              int
 	RPMLimitSet           bool
@@ -119,7 +119,7 @@ type Config struct {
 	RPM        ratelimit.RPMConfig
 	Continuity *continuity.Service
 	// UserLimits resolves current account state and explicit limits. Nil is a
-	// narrow test/standalone mode using the RPM default and concurrency 5.
+	// narrow test/standalone mode using the RPM default and initial concurrency defaults.
 	UserLimits UserLimitResolver
 	// MaxConcurrentUsers bounds the active-user map. Zero selects the frozen
 	// 100000 ceiling; smaller non-zero values are a test/deployment seam only.
