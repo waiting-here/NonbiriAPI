@@ -137,10 +137,16 @@ func (a *Adapter) AttemptInference(ctx context.Context, writer http.ResponseWrit
 		return callerParameterFailure(result)
 	}
 	media, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
-	if err != nil || !request.responseMedia(media) {
+	jsonFallback := request.Stream && request.operation == contract.OperationAudioTranscriptions && target.upstreamModel == "whisper-1" && media == "application/json"
+	if jsonFallback {
+		format, _ := request.RawField("response_format")
+		defer clear(format)
+		jsonFallback = len(format) == 0 || isJSONNull(format) || bytes.Equal(format, []byte(`"json"`)) || bytes.Equal(format, []byte(`"verbose_json"`))
+	}
+	if err != nil || !request.responseMedia(media) && !jsonFallback {
 		return upstreamFailure("upstream response content type was invalid", response.StatusCode)
 	}
-	if request.Stream {
+	if request.Stream && !jsonFallback {
 		if kind == contract.TypeOpenAIChatCompletions {
 			return a.responsesChatStream(ctx, writer, response, guard, errorContext, request, streamLimit, lineLimit, eventLimit)
 		}

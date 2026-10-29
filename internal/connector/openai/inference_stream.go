@@ -25,6 +25,8 @@ func (a *Adapter) inferenceStream(ctx context.Context, writer http.ResponseWrite
 	combinedImageUsage := emptyImageUsage()
 	finished := map[int64]bool{}
 	responseID := ""
+	responseItems := responseStreamSnapshot{}
+	defer responseItems.clear()
 	writtenBytes := int64(0)
 	failure := func(message string) AttemptResult {
 		return a.streamProtocolFailure(writer, controller, committed, usage, message)
@@ -92,7 +94,19 @@ func (a *Adapter) inferenceStream(ctx context.Context, writer http.ResponseWrite
 					clear(raw)
 					return failure("upstream response event was invalid")
 				}
+				if value := root["response_id"]; value != nil {
+					var id string
+					if json.Unmarshal(value, &id) != nil || !validOpaqueText(id, 512, true) || responseID != "" && id != responseID {
+						clear(raw)
+						return failure("upstream response identity changed")
+					}
+					responseID = id
+				}
 				terminal = kind == "response.completed" || kind == "response.incomplete"
+				if !responseItems.observe(kind, root) {
+					clear(raw)
+					return failure("upstream response item identity or order was invalid")
+				}
 				if nested := root["response"]; len(nested) > 0 {
 					var object map[string]json.RawMessage
 					if json.Unmarshal(nested, &object) != nil {
@@ -115,12 +129,15 @@ func (a *Adapter) inferenceStream(ctx context.Context, writer http.ResponseWrite
 					}
 					responseID = id
 					if terminal {
-						var status string
-						if json.Unmarshal(object["status"], &status) != nil || kind != "response."+status {
+						items, complete := responseItems.completed()
+						completed, completionErr := CompleteResponseTerminal(nested, kind, responseID, items)
+						if !complete || completionErr != nil {
+							clear(completed)
 							clear(raw)
 							return failure("upstream response completion did not match")
 						}
-						projected, usage, err = nativeResponseProjection(nested, request)
+						projected, usage, err = nativeResponseProjection(completed, request)
+						clear(completed)
 						if err != nil {
 							clear(raw)
 							return failure("upstream response completion was invalid")

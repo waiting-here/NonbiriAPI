@@ -266,7 +266,7 @@ func parseToolCall(value object) (toolCall, error) {
 	return call, nil
 }
 
-func translateChat(raw []byte, model string, created int64) ([]byte, contract.Usage, error) {
+func translateChat(raw []byte, model string, created int64, continuationIDs ...string) ([]byte, contract.Usage, error) {
 	root, err := parseObject(raw)
 	if err != nil || !warningsOK(root["warnings"]) {
 		return nil, contract.Usage{}, errResponse
@@ -286,12 +286,18 @@ func translateChat(raw []byte, model string, created int64) ([]byte, contract.Us
 	var textContent, reasoningContent strings.Builder
 	calls := []toolCall{}
 	seen := map[string]bool{}
+	parts := []map[string]any{}
 	for _, raw := range content {
 		part, err := parseObject(raw)
 		kind, ok := text(part["type"])
 		if err != nil || !ok {
 			return nil, usage, errResponse
 		}
+		preserved, err := continuationPart(part, false)
+		if err != nil {
+			return nil, usage, err
+		}
+		parts = append(parts, preserved)
 		switch kind {
 		case "text", "reasoning":
 			value, ok := text(part["text"])
@@ -318,6 +324,13 @@ func translateChat(raw []byte, model string, created int64) ([]byte, contract.Us
 		return nil, usage, errResponse
 	}
 	message := map[string]any{"role": "assistant", "content": textContent.String()}
+	id := ""
+	if len(continuationIDs) > 0 {
+		id = continuationIDs[0]
+	}
+	if extra := gatewayExtra(parts, id); extra != nil {
+		message["extra_content"] = extra
+	}
 	if reasoningContent.Len() != 0 {
 		message["reasoning_content"] = reasoningContent.String()
 	}
@@ -336,7 +349,7 @@ func translateChat(raw []byte, model string, created int64) ([]byte, contract.Us
 }
 
 func noCitations(raw []byte) bool {
-	if len(raw) == 0 {
+	if len(raw) == 0 || isNull(raw) {
 		return true
 	}
 	var citations []json.RawMessage

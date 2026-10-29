@@ -1,6 +1,6 @@
 # Direct inference
 
-This contract describes the v1.3.0 source. Check the instance's deployed build
+This contract describes the current source. Check the instance's deployed build
 before using newly added configuration behavior. All routes use the existing
 CallerKey, ownership, model selection, outbound protection, cancellation,
 accounting and log rules in the [HTTP contract](api-contract.md).
@@ -22,19 +22,32 @@ failure. Each upstream model must also support the requested operation.
 
 | Connector type | Supported platform operations |
 | --- | --- |
-| `openai-compatible` | Native Chat, embeddings, image generation, Responses/compact/input-token counting, legacy completions, image edits/variations, speech/transcription/translation, moderation and compatible rerank. |
-| `openai-chat-completions` | Native Chat and the bounded Responses-to-Chat conversion below. |
-| `openai-responses` | Native Responses/compact/input-token counting and the bounded Chat-to-Responses conversion below. |
+| `openai-compatible` | Explicit OpenAI family services below; legacy omission authorizes Chat, embeddings and image generation. |
+| `openai-chat-completions` | The same explicit OpenAI family services; legacy omission authorizes Chat. |
+| `openai-responses` | The same explicit OpenAI family services; legacy omission authorizes Responses. |
 | `anthropic-compatible` | The supported Chat-to-Messages subset. |
 | `ai-sdk-gateway-v3` | Chat, bounded Responses conversion, image generation, text embeddings and rerank using specification v3. |
 | `ai-sdk-gateway-v4` | The same four service families using specification v4, including common reasoning and embedding dimensions. |
 | `google-gemini` | The supported Chat-to-GenerateContent subset. |
-| `openai-decisions` | Native Decisions. |
+| `openai-decisions` | The same explicit OpenAI family services; legacy omission authorizes Decisions. |
 | `typesafe-systemone` | Native System One, with separate model discovery. |
 | `cohere-rerank` | Cohere rerank request, result and billed-unit format. |
 | `jina-rerank` | Jina rerank request, result and token format. |
 | `siliconflow-rerank` | SiliconFlow rerank request, result and token format. |
 | `voyage-rerank` | Voyage rerank request, result and token format. |
+
+OpenAI family endpoints can explicitly select Chat, Responses, compact,
+input-token counting, embeddings, image generation/edits/variations, legacy
+completions, speech/transcription/translation, moderation, Decisions and rerank.
+Rerank requires an explicit supported format. Effective `native_services` is
+the authorized endpoint/credential/binding intersection; model `model_types`
+separately enables the client interface. A native match is preferred before a
+bounded Chat/Responses conversion, and no failed call probes another protocol.
+For example, an `openai-responses` binding explicitly authorized for embeddings
+can use `/embeddings`; an `openai-chat-completions` binding authorized for
+`responses` uses `/responses` directly. The upstream model must support that
+service. Gateway omission keeps its legacy text service; other services require
+selection. Omitted legacy API fields never expand existing grants.
 
 For OpenAI-shaped direct calls, configure the complete upstream API mount: a base
 such as `https://provider.example/v1` receives `/responses`, `/rerank` or the
@@ -108,6 +121,14 @@ count. Binary and subtitle responses without usage retain unknown usage.
 The result of `/v1/responses/input_tokens` counts an input; it is not evidence
 that those tokens were consumed by a generation.
 
+Input-token counting permits omitted or null `input`, including requests with
+only instructions or tools. Responses create/compact still require inline
+non-null input. Legacy completions accept empty strings in bounded prompt
+arrays (at most 2,048 items); embeddings still reject empty inputs. For multipart
+transcription with upstream model `whisper-1`, a stream request can return the
+known JSON fallback when the requested format is omitted, JSON or verbose JSON.
+Other SSE operations and models do not gain a general JSON fallback.
+
 For example, a native stateless Responses request body is:
 
 ```json
@@ -126,10 +147,10 @@ unchanged, subject to the physical key's `force_store_false` policy.
 
 ## Chat and Responses conversion
 
-Use a native route for features outside the conversion subset. The
-`openai-compatible` type sends each protocol natively. The two dedicated types
-choose one upstream protocol before dispatch; compact and input-token counting
-never convert to Chat. JSON and SSE conversion preserve valid usage, tool-call
+Use an explicitly authorized native route for features outside the conversion
+subset. Native-service selection determines the wire, independently of the
+OpenAI family's historical type names; compact and input-token counting never
+convert to Chat. JSON and SSE conversion preserve valid usage, tool-call
 associations and protocol termination; unsupported input is rejected before
 sending upstream.
 
@@ -139,7 +160,7 @@ It does not add compact/input-token routes or arbitrary Responses parameters.
 The required `store:false` must pass an explicit target storage policy; see
 [Gateway model controls](gateway-model-controls.md#storage).
 
-With `openai-responses`, Chat messages support text, HTTPS/data images, function
+When Chat uses the Responses service, messages support text, HTTPS/data images, function
 tools and complete matched results, tool choice, parallel tools, temperature,
 top-p, reasoning effort, cache key/retention and supported text/JSON formats.
 Output limits map to `max_output_tokens`. Omitted Chat function `strict` remains
@@ -147,7 +168,7 @@ false. Stop sequences, penalties, logit bias, multiple candidates and built-in
 tools cannot be converted. Bounded encrypted reasoning continuation uses the
 explicit extension described in [Responses Chat](content-protocols.md#responses-chat).
 
-With `openai-chat-completions`, Responses input supports inline text and URL/data
+When Responses uses the Chat service, input supports inline text and URL/data
 images, `instructions`, complete function-call/output history, function tools
 and choice, `max_output_tokens`, `temperature`, `top_p`, `parallel_tool_calls`
 and representable `text.format` values (`text`, `json_object`, `json_schema`).
@@ -156,6 +177,24 @@ schemas outside that subset need an explicit representable strict setting.
 Reasoning/compaction items, audio/files, hosted tools, persistent references and
 other unrepresentable fields are rejected. Tool flattening and Chat transport
 overrides do not add capabilities to native direct operations.
+
+Generated `output_text` with empty annotations/logprobs and assistant refusal
+parts can be copied directly into the next inline input. Gateway additionally
+accepts its own reasoning items and bounded continuation extension, preserving
+part order and provider metadata; ordinary Chat conversion still rejects
+reasoning items. See [continuation histories](content-protocols.md#continuation-source-and-history-integrity).
+
+Native Responses streams require an explicit completed/incomplete terminal
+event. A sparse terminal may supply only identity and usage: omitted object,
+status and output are reconstructed from the terminal kind and complete,
+identity-consistent item snapshots. Item-done snapshots without indexes use
+their known ID or, for complete done-only items, unambiguous receive order.
+Explicit empty output remains empty; conflicting identities/status/content,
+open items and EOF without a terminal still fail. Text, multiple tool calls and
+encrypted reasoning survive reconstruction. Native incomplete status is
+retained; converting it to Chat additionally requires a supported incomplete
+reason. This compatibility has local fixture coverage; it is not a claim of
+validation against every provider or client.
 
 ## Rerank
 
@@ -176,9 +215,14 @@ The normalized response uses platform model identity and unique source indexes:
 {"object":"list","model":"provider/reranker","results":[{"index":0,"relevance_score":0.95,"document":{"text":"The library is on Main Street."}}],"usage":{"search_units":1.25}}
 ```
 
-`usage` is optional. Cohere reads `meta.billed_units.search_units`; SiliconFlow
-reads `tokens.input_tokens` and `tokens.output_tokens`; Jina, Voyage and compatible
-rerank read `usage.total_tokens`. Token reports normalize to
+`usage` is optional. Cohere reads `meta.billed_units.search_units` independently
+of tokens and prefers `meta.billed_units.input_tokens`/`output_tokens` (omitted
+output means zero), with legacy `meta.tokens` as fallback. SiliconFlow prefers
+`meta.tokens.input_tokens`/`output_tokens`, falling back to root `tokens`.
+When valid primary and legacy counts disagree, primary counts are retained
+with a mismatch diagnostic; aliases are never summed. Jina, Voyage and compatible
+rerank read `usage.total_tokens`. Gateway maps either `top_n` or `top_k` to
+`topN`, with the same one-alias and range rules. Token reports normalize to
 `prompt_tokens,completion_tokens,total_tokens`. Search units retain exact
 millionth-unit precision, independently of token availability; invalid, negative,
 overflowing or overprecise reports remain unknown. No unit is inferred from the

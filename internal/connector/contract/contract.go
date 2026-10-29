@@ -196,6 +196,8 @@ func (Target) LogValue() slog.Value {
 // Additional fields belong here only when their policy implementation needs
 // them; the initial projection carries the existing origin-scoped identifier.
 type AttemptPolicy struct {
+	// ContinuationID binds opaque provider history to a permitted physical source.
+	ContinuationID    string
 	ManagedHeaders    http.Header
 	OnRequestSent     func()
 	GatewayModel      *gatewaypolicy.Model

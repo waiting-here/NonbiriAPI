@@ -109,6 +109,12 @@ func continuationCompatible(kind contract.Type, request *openai.ChatRequest) boo
 		if _, ok := extra["google"]; ok && kind != contract.TypeGoogleGemini {
 			return false
 		}
+		if _, ok := extra["anthropic"]; ok && kind != contract.TypeAnthropicCompatible {
+			return false
+		}
+		if _, ok := extra["gateway"]; ok && !kind.AISDKGateway() {
+			return false
+		}
 		var openai map[string]json.RawMessage
 		if json.Unmarshal(extra["openai"], &openai) == nil {
 			if _, ok := openai["reasoning"]; ok && kind != contract.TypeOpenAIResponses {

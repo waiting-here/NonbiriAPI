@@ -15,10 +15,20 @@ import (
 // AsChatRequest applies the same finite conversion as a Chat upstream, without
 // sending anything. The caller owns the returned snapshot and must clear it.
 func (r *InferenceRequest) AsChatRequest() (*ChatRequest, error) {
+	return r.asChatRequest(false)
+}
+
+// AsGatewayChatRequest also accepts the bounded reasoning and continuation
+// items emitted by the Gateway Responses projection.
+func (r *InferenceRequest) AsGatewayChatRequest() (*ChatRequest, error) {
+	return r.asChatRequest(true)
+}
+
+func (r *InferenceRequest) asChatRequest(gateway bool) (*ChatRequest, error) {
 	if r == nil || r.operation != contract.OperationResponses {
 		return nil, ErrInvalidRequest
 	}
-	body, err := r.compileChatResponse(r.Model, contract.AttemptPolicy{})
+	body, err := r.compileChatResponseMode(r.Model, contract.AttemptPolicy{}, gateway)
 	defer clear(body)
 	if err != nil {
 		return nil, err

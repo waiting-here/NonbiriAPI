@@ -270,7 +270,7 @@ func compileRerank(request *openai.InferenceRequest, attribution string) ([]byte
 				return nil, reject("native compile", name, "expected a nonempty query")
 			}
 			output[name] = query
-		case "top_n":
+		case "top_n", "top_k":
 			if !isNull(value) {
 				if !number(value, 1, float64(len(documents)), true) {
 					return nil, reject("native compile", name, "expected a count no larger than documents")

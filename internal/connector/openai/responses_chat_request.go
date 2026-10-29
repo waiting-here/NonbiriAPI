@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connector/continuation"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
@@ -16,6 +17,10 @@ var responseFunctionName = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 // compileChatResponse maps only fields with an equivalent Chat representation.
 // Protocol selection is explicit and never depends on an upstream error.
 func (r *InferenceRequest) compileChatResponse(model string, policy contract.AttemptPolicy) ([]byte, error) {
+	return r.compileChatResponseMode(model, policy, false)
+}
+
+func (r *InferenceRequest) compileChatResponseMode(model string, policy contract.AttemptPolicy, gateway bool) ([]byte, error) {
 	object := fieldsByName(r.fields)
 	bad := func() ([]byte, error) {
 		return nil, invalidField("request", "Responses fields cannot be represented by the selected Chat protocol")
@@ -27,7 +32,7 @@ func (r *InferenceRequest) compileChatResponse(model string, policy contract.Att
 			return bad()
 		}
 	}
-	messages, err := responseChatMessages(object["input"], object["instructions"])
+	messages, err := responseChatMessagesMode(object["input"], object["instructions"], gateway)
 	if err != nil {
 		return nil, err
 	}
@@ -306,6 +311,10 @@ func strictResponseSchema(schema map[string]json.RawMessage, depth int) (map[str
 }
 
 func responseChatMessages(input, instructions []byte) ([]any, error) {
+	return responseChatMessagesMode(input, instructions, false)
+}
+
+func responseChatMessagesMode(input, instructions []byte, gateway bool) ([]any, error) {
 	bad := func() ([]any, error) {
 		return nil, invalidField("input", "Responses input cannot be represented as complete Chat messages")
 	}
@@ -332,13 +341,67 @@ func responseChatMessages(input, instructions []byte) ([]any, error) {
 			return bad()
 		}
 		kind, _ := decisionString(item["type"], 0, 64)
+		var extra json.RawMessage
+		if value, present := item["extra_content"]; present {
+			outer, ok := systemOneMap(value)
+			if !gateway || !ok || !continuation.ValidExtra(outer, "gateway") || outer["gateway"] == nil {
+				return bad()
+			}
+			extra = value
+		}
 		switch kind {
+		case "reasoning":
+			if !gateway || len(pending) > 0 {
+				return bad()
+			}
+			for name := range item {
+				if name != "type" && name != "id" && name != "status" && name != "summary" && name != "content" && name != "extra_content" {
+					return bad()
+				}
+			}
+			if item["status"] != nil && !bytes.Equal(item["status"], []byte(`"completed"`)) {
+				return bad()
+			}
+			if item["summary"] != nil && !bytes.Equal(bytes.TrimSpace(item["summary"]), []byte(`[]`)) {
+				return bad()
+			}
+			var parts []map[string]json.RawMessage
+			if json.Unmarshal(item["content"], &parts) != nil || parts == nil {
+				return bad()
+			}
+			var reasoning strings.Builder
+			for _, part := range parts {
+				if len(part) != 2 || string(part["type"]) != `"reasoning_text"` {
+					return bad()
+				}
+				value, ok := decisionString(part["text"], 0, int(DefaultMaxJSONResponseBytes))
+				if !ok {
+					return bad()
+				}
+				reasoning.WriteString(value)
+			}
+			message := map[string]any{"role": "assistant", "content": nil, "reasoning_content": reasoning.String()}
+			if extra != nil {
+				message["extra_content"] = extra
+			}
+			if len(messages) > 0 {
+				last := messages[len(messages)-1].(map[string]any)
+				if last["role"] == "assistant" && (extra == nil || last["extra_content"] == nil) {
+					previous, _ := last["reasoning_content"].(string)
+					last["reasoning_content"] = previous + reasoning.String()
+					if extra != nil {
+						last["extra_content"] = extra
+					}
+					continue
+				}
+			}
+			messages = append(messages, message)
 		case "", "message":
 			if len(pending) > 0 {
 				return bad()
 			}
 			for key := range item {
-				if key != "type" && key != "role" && key != "content" && key != "status" && key != "id" {
+				if key != "type" && key != "role" && key != "content" && key != "status" && key != "id" && !(gateway && key == "extra_content") {
 					return bad()
 				}
 			}
@@ -353,7 +416,24 @@ func responseChatMessages(input, instructions []byte) ([]any, error) {
 			if err != nil {
 				return bad()
 			}
-			messages = append(messages, map[string]any{"role": role, "content": content})
+			message := map[string]any{"role": role, "content": content}
+			if extra != nil {
+				if role != "assistant" {
+					return bad()
+				}
+				message["extra_content"] = extra
+			}
+			if gateway && role == "assistant" && len(messages) > 0 {
+				last := messages[len(messages)-1].(map[string]any)
+				if last["role"] == "assistant" && last["reasoning_content"] != nil && last["content"] == nil && (extra == nil || last["extra_content"] == nil) {
+					last["content"] = content
+					if extra != nil {
+						last["extra_content"] = extra
+					}
+					continue
+				}
+			}
+			messages = append(messages, message)
 		case "function_call":
 			if len(pending) > 0 && len(messages) > 0 {
 				last, _ := messages[len(messages)-1].(map[string]any)
@@ -361,7 +441,11 @@ func responseChatMessages(input, instructions []byte) ([]any, error) {
 					return bad()
 				}
 			}
-			object, ok := decisionObject(raw, "type", "id", "call_id", "name", "arguments", "status")
+			allowed := []string{"type", "id", "call_id", "name", "arguments", "status"}
+			if gateway {
+				allowed = append(allowed, "extra_content")
+			}
+			object, ok := decisionObject(raw, allowed...)
 			if !ok {
 				return bad()
 			}
@@ -379,12 +463,20 @@ func responseChatMessages(input, instructions []byte) ([]any, error) {
 			tool := map[string]any{"id": id, "type": "function", "function": map[string]string{"name": name, "arguments": arguments}}
 			if len(messages) > 0 {
 				last, _ := messages[len(messages)-1].(map[string]any)
-				if last["role"] == "assistant" && last["tool_calls"] != nil {
-					last["tool_calls"] = append(last["tool_calls"].([]any), tool)
+				if last["role"] == "assistant" && (last["tool_calls"] != nil || gateway) && (extra == nil || last["extra_content"] == nil) {
+					calls, _ := last["tool_calls"].([]any)
+					last["tool_calls"] = append(calls, tool)
+					if extra != nil {
+						last["extra_content"] = extra
+					}
 					continue
 				}
 			}
-			messages = append(messages, map[string]any{"role": "assistant", "content": nil, "tool_calls": []any{tool}})
+			message := map[string]any{"role": "assistant", "content": nil, "tool_calls": []any{tool}}
+			if extra != nil {
+				message["extra_content"] = extra
+			}
+			messages = append(messages, message)
 		case "function_call_output":
 			object, ok := decisionObject(raw, "type", "id", "call_id", "output", "status")
 			if !ok {
@@ -428,7 +520,7 @@ func responseChatContent(raw []byte, role string) (any, error) {
 		switch kind {
 		case "input_text", "output_text":
 			for key := range part {
-				if key != "type" && key != "text" && !(kind == "output_text" && key == "annotations" && bytes.Equal(part[key], []byte("[]"))) {
+				if key != "type" && key != "text" && !(kind == "output_text" && (key == "annotations" || key == "logprobs") && bytes.Equal(bytes.TrimSpace(part[key]), []byte("[]"))) {
 					return nil, ErrInvalidRequest
 				}
 			}
@@ -437,6 +529,13 @@ func responseChatContent(raw []byte, role string) (any, error) {
 				return nil, ErrInvalidRequest
 			}
 			output = append(output, map[string]any{"type": "text", "text": text})
+		case "refusal":
+			value, ok := decisionObject(raw, "type", "refusal")
+			refusal, valid := decisionString(value["refusal"], 0, int(DefaultMaxJSONResponseBytes))
+			if !ok || !valid || role != "assistant" {
+				return nil, ErrInvalidRequest
+			}
+			output = append(output, map[string]any{"type": "refusal", "refusal": refusal})
 		case "input_image":
 			value, ok := decisionObject(raw, "type", "image_url", "detail")
 			url, valid := decisionString(value["image_url"], 1, int(DefaultMaxJSONResponseBytes))

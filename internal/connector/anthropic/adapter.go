@@ -3,6 +3,7 @@ package anthropic
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -209,6 +210,10 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 		clear(body)
 		body = merged
 	}
+	if err := validateThinkingConfiguration(body, policy.AdditionalHeaders); err != nil {
+		result.Diagnostic = err.Error()
+		return result
+	}
 	client, err := a.backend.Open(target.baseURL)
 	if err != nil {
 		return connectorcontract.NormalizeOutcome(connectorcontract.AttemptResult{Failure: connectorcontract.FailureUpstream, Diagnostic: "upstream endpoint was refused"})
@@ -321,16 +326,22 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 			_ = errorContext.ReadResponse(ctx, response)
 			return upstreamFailure("upstream stream content type was invalid", response.StatusCode)
 		}
-		return a.stream(ctx, writer, response, request.Model, attemptStarted, wireGuard, semanticGuard, errorContext)
+		options, _ := request.RawField("stream_options")
+		var streamOptions struct {
+			IncludeUsage bool `json:"include_usage"`
+		}
+		_ = json.Unmarshal(options, &streamOptions)
+		clear(options)
+		return a.stream(ctx, writer, response, request.Model, attemptStarted, wireGuard, semanticGuard, errorContext, streamOptions.IncludeUsage, policy.ContinuationID)
 	}
 	if !validResponseMediaType(response, "application/json") {
 		_ = errorContext.ReadResponse(ctx, response)
 		return upstreamFailure("upstream response content type was invalid", response.StatusCode)
 	}
-	return a.nonStream(ctx, writer, response, request.Model, attemptStarted, wireGuard, semanticGuard, errorContext, policy.FlattenToolCalls)
+	return a.nonStream(ctx, writer, response, request.Model, attemptStarted, wireGuard, semanticGuard, errorContext, policy.FlattenToolCalls, policy.ContinuationID)
 }
 
-func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, response *http.Response, publicModel string, attemptStarted time.Time, wireGuard, semanticGuard *sensitiveGuard, errorContext upstreamerror.Context, flatten bool) (result connectorcontract.AttemptResult) {
+func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, response *http.Response, publicModel string, attemptStarted time.Time, wireGuard, semanticGuard *sensitiveGuard, errorContext upstreamerror.Context, flatten bool, continuationIDs ...string) (result connectorcontract.AttemptResult) {
 	if response.ContentLength > a.maxJSONResponseBytes {
 		return upstreamFailure("upstream response exceeded its limit", response.StatusCode)
 	}
@@ -358,7 +369,7 @@ func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, res
 		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		return upstreamFailure("upstream response was rejected", response.StatusCode)
 	}
-	translated, usage, _, err := translateNonStream(body, publicModel, attemptStarted)
+	translated, usage, _, err := translateNonStream(body, publicModel, attemptStarted, continuationIDs...)
 	if err != nil {
 		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		clear(translated)
