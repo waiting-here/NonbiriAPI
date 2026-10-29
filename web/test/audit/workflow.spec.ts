@@ -1349,7 +1349,12 @@ test('complete headers stay lazy, preserve duplicates and physical responses, an
         await expect(requestHeaders).toContainText('198.51.100.71');
         await expect(requestHeaders).toContainText('198.51.100.72');
       }
-      await detail.locator('summary').filter({ hasText: 'Service call attempts' }).click();
+      await expect(
+        detail
+          .locator('summary')
+          .filter({ hasText: common.common.operations.logs.attempts })
+          .locator('..'),
+      ).toHaveAttribute('open', '');
       await detail.locator('summary').filter({ hasText: common.common.headers.response }).click();
       const responses = detail.getByRole('region', {
         name: common.common.headers.response,
