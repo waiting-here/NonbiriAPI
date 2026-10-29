@@ -27,6 +27,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed and improved
 
+- Require Go 1.26.10 for builds, including the standard-library fix for
+  GO-2026-6809.
 - Avoid taking the writer for same-second session checks whose exact expiry is
   already stored. Recheck authority when renewal needs the writer, and move pure
   steward model and price-template queries to the existing reader pool. Keep

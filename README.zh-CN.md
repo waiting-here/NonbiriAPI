@@ -104,7 +104,7 @@ Windows 使用 `nonbiri-chatgpt-login.exe`。打开显示的链接，授权 Nonb
 
 ## 构建与开发
 
-使用 **Go 1.26.9**、**Node.js 22.23.4+（22.x）、24.22.1+（24.x）或 26.12.1+（26.x）**、**npm 12.0.1** 和 Bash；Windows 使用 Git Bash。最终程序无需 Node.js 或 C 运行时。
+使用 **Go 1.26.10**、**Node.js 22.23.4+（22.x）、24.22.1+（24.x）或 26.12.1+（26.x）**、**npm 12.0.1** 和 Bash；Windows 使用 Git Bash。最终程序无需 Node.js 或 C 运行时。
 
 ```sh
 npm --prefix web ci
