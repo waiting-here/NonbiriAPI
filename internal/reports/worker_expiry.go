@@ -8,7 +8,7 @@ import (
 )
 
 func (repository *Repository) processExpiries(ctx context.Context, now int64, limit int) (int, bool, error) {
-	ids, more, err := dueCaseIDs(ctx, repository.db, `SELECT id FROM report_cases
+	ids, more, err := dueCaseIDs(ctx, repository.readDB, `SELECT id FROM report_cases
 WHERE status IN ('pending_indexing','pending_review') AND deadline<=?
 ORDER BY deadline,id LIMIT ?`, now, limit)
 	if err != nil {

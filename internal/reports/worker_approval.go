@@ -28,7 +28,7 @@ type approvalTarget struct {
 }
 
 func (repository *Repository) processApprovalCases(ctx context.Context, now int64, limit int) (int, bool, error) {
-	ids, more, err := dueCaseIDs(ctx, repository.db, `SELECT id FROM report_cases
+	ids, more, err := dueCaseIDs(ctx, repository.readDB, `SELECT id FROM report_cases
 WHERE status='approved_processing' AND (next_retry_at IS NULL OR next_retry_at<=?1)
 ORDER BY COALESCE(next_retry_at,0),created_at,id LIMIT ?2`, now, limit)
 	if err != nil {

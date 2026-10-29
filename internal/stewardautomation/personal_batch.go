@@ -31,7 +31,11 @@ type batchIdentity struct {
 }
 
 func (s *Service) beginPersonal(ctx context.Context, userID int64) (*sql.Tx, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	return s.beginPersonalOn(ctx, s.db, userID, false)
+}
+
+func (s *Service) beginPersonalOn(ctx context.Context, database *sql.DB, userID int64, readOnly bool) (*sql.Tx, error) {
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: readOnly})
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +139,11 @@ func (s *Service) registerBatch(ctx context.Context, userID, target int64, kind,
 	return batch, tx.Commit()
 }
 func (s *Service) batchTx(ctx context.Context, batch batchIdentity) (*sql.Tx, error) {
-	tx, err := s.beginPersonal(ctx, batch.UserID)
+	return s.batchTxOn(ctx, s.db, batch, false)
+}
+
+func (s *Service) batchTxOn(ctx context.Context, database *sql.DB, batch batchIdentity, readOnly bool) (*sql.Tx, error) {
+	tx, err := s.beginPersonalOn(ctx, database, batch.UserID, readOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +266,7 @@ func (s *Service) discoverySnapshot(ctx context.Context, batch batchIdentity, in
 	return out, tx.Commit()
 }
 func (s *Service) batchResults(ctx context.Context, batch batchIdentity, keys []string) (batchResult, int, error) {
-	tx, err := s.batchTx(ctx, batch)
+	tx, err := s.batchTxOn(ctx, s.readDB, batch, true)
 	if err != nil {
 		return batchResult{}, 0, err
 	}
@@ -383,7 +391,7 @@ func (s *Service) appendBindings(ctx context.Context, userID, modelID int64, key
 		if ctx.Err() != nil {
 			break
 		}
-		tx, err := s.batchTx(ctx, batch)
+		tx, err := s.batchTxOn(ctx, s.readDB, batch, true)
 		if err != nil {
 			return batchResult{}, 0, err
 		}
@@ -415,7 +423,7 @@ func (s *Service) appendBindings(ctx context.Context, userID, modelID int64, key
 				discovery = &accepted
 				err = discoveryErr
 				if discoveryErr == nil {
-					read, beginErr := s.batchTx(ctx, batch)
+					read, beginErr := s.batchTxOn(ctx, s.readDB, batch, true)
 					if beginErr == nil {
 						revision, _ := strconv.ParseInt(accepted.Evidence.Revision, 10, 64)
 						var state string

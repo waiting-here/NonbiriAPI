@@ -81,7 +81,7 @@ func (r *Repository) CleanupScans(ctx context.Context) (out CleanupResult, resul
 	// transaction before deleting anything.
 	now := r.now().Unix()
 	var due bool
-	if err := r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM risk_client_scans WHERE expires_at<=? OR reason='permission_changed')`, now).Scan(&due); err != nil {
+	if err := r.readDB.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM risk_client_scans WHERE expires_at<=? OR reason='permission_changed')`, now).Scan(&due); err != nil {
 		return CleanupResult{}, err
 	}
 	if !due {

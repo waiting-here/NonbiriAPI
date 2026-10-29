@@ -166,7 +166,7 @@ func NewRuntime(c RuntimeConfig) (*Runtime, error) {
 		_ = r.Close()
 		return nil, errors.New("account MFA encryption unavailable")
 	}
-	r.continuity, err = continuity.New(c.Store.DB(), c.CredentialKeyDeriver)
+	r.continuity, err = continuity.New(c.Store.DB(), c.CredentialKeyDeriver, c.Store.ReadDB())
 	if err != nil {
 		_ = r.Close()
 		return nil, err

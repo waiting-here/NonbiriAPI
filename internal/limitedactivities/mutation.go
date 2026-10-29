@@ -215,7 +215,7 @@ func (s *Service) AdminConfig(ctx context.Context, admin int64, key string) (Det
 	if err != nil {
 		return Detail{}, err
 	}
-	tx, err := s.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Detail{}, err
 	}

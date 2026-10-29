@@ -264,6 +264,7 @@ type Config struct {
 
 type Coordinator struct {
 	database    *sql.DB
+	readDB      *sql.DB
 	userAuth    UserFinalAuthorizer
 	adminAuth   AdminFinalAuthorizer
 	systemAuth  SystemDeleteAuthorizer
@@ -304,7 +305,7 @@ func New(config Config) (*Coordinator, error) {
 		config.NewID = db.GenerateOpaqueID
 	}
 	return &Coordinator{
-		database: config.Store.DB(), userAuth: config.UserAuth, adminAuth: config.AdminAuth, systemAuth: config.SystemAuth,
+		database: config.Store.DB(), readDB: config.Store.ReadDB(), userAuth: config.UserAuth, adminAuth: config.AdminAuth, systemAuth: config.SystemAuth,
 		retirement: config.Retirement, ledger: config.Ledger, export: config.Export,
 		delete: config.Delete, recovery: config.Recovery, retention: config.Retention,
 		heldObjects: config.HeldObjects, cursorKeys: config.CursorKeys, now: config.Now, newID: config.NewID,

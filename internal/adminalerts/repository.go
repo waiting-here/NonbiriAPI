@@ -38,6 +38,7 @@ type Config struct {
 
 type Repository struct {
 	database   *sql.DB
+	readDB     *sql.DB
 	cursorKeys CursorKeyDeriver
 	finalAuth  AdminFinalAuthorizer
 	now        func() time.Time
@@ -51,7 +52,7 @@ func NewRepository(config Config) (*Repository, error) {
 		config.Now = time.Now
 	}
 	return &Repository{
-		database: config.Store.DB(), cursorKeys: config.CursorKeys,
+		database: config.Store.DB(), readDB: config.Store.ReadDB(), cursorKeys: config.CursorKeys,
 		finalAuth: config.FinalAuth, now: config.Now,
 	}, nil
 }
@@ -99,7 +100,11 @@ func (repository *Repository) beginAuthorized(ctx context.Context, adminID int64
 		return nil, errors.New("administrator alerts: repository unavailable")
 	}
 	options := &sql.TxOptions{ReadOnly: readOnly}
-	tx, err := repository.database.BeginTx(ctx, options)
+	database := repository.database
+	if readOnly {
+		database = repository.readDB
+	}
+	tx, err := database.BeginTx(ctx, options)
 	if err != nil {
 		return nil, fmt.Errorf("administrator alerts: begin transaction: %w", err)
 	}

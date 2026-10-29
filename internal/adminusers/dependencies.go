@@ -42,6 +42,7 @@ type AdminRouteRegistrar interface {
 
 type ServiceConfig struct {
 	Database          *sql.DB
+	ReadDatabase      *sql.DB
 	CursorKeys        CursorKeyDeriver
 	FinalAuth         AdminFinalAuthorizer
 	Invalidator       PostCommitInvalidator
@@ -52,6 +53,7 @@ type ServiceConfig struct {
 
 type Service struct {
 	database          *sql.DB
+	readDB            *sql.DB
 	cursorKeys        CursorKeyDeriver
 	finalAuth         AdminFinalAuthorizer
 	invalidator       PostCommitInvalidator
@@ -99,6 +101,9 @@ func NewService(config ServiceConfig) (*Service, error) {
 	if config.Database == nil || nilDependency(config.CursorKeys) || nilDependency(config.FinalAuth) || nilDependency(config.Invalidator) {
 		return nil, errors.New("adminusers: database, cursor keys, final authorizer, and invalidator are required")
 	}
+	if config.ReadDatabase == nil {
+		config.ReadDatabase = config.Database
+	}
 	key, err := config.CursorKeys.DeriveGenerationTwoSubkey([]byte("pagination-cursor/v1"))
 	if err != nil || len(key) != 32 {
 		clear(key)
@@ -106,7 +111,7 @@ func NewService(config ServiceConfig) (*Service, error) {
 	}
 	clear(key)
 	service := &Service{
-		database: config.Database, cursorKeys: config.CursorKeys,
+		database: config.Database, readDB: config.ReadDatabase, cursorKeys: config.CursorKeys,
 		finalAuth: config.FinalAuth, invalidator: config.Invalidator,
 		now: config.Now, newID: config.NewID,
 		cancelUserDuelsTx: config.CancelUserDuelsTx,

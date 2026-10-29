@@ -93,6 +93,7 @@ type Invalidator interface{ InvalidateUserAuthority(int64) }
 type CancelUserTx func(context.Context, *sql.Tx, int64, string, int64) (func(bool), error)
 type Config struct {
 	Database     *sql.DB
+	ReadDatabase *sql.DB
 	FinalAuth    AdminAuthorizer
 	CancelUserTx CancelUserTx
 	Invalidator  Invalidator
@@ -100,6 +101,7 @@ type Config struct {
 }
 type Service struct {
 	db          *sql.DB
+	readDB      *sql.DB
 	auth        AdminAuthorizer
 	cancelUser  CancelUserTx
 	invalidator Invalidator
@@ -110,9 +112,12 @@ func New(c Config) (*Service, error) {
 	if c.Database == nil || c.FinalAuth == nil || c.CancelUserTx == nil || c.Invalidator == nil {
 		return nil, ErrInvalid
 	}
+	if c.ReadDatabase == nil {
+		c.ReadDatabase = c.Database
+	}
 	if c.Now == nil {
 		c.Now = time.Now
 	}
-	return &Service{c.Database, c.FinalAuth, c.CancelUserTx, c.Invalidator, c.Now}, nil
+	return &Service{c.Database, c.ReadDatabase, c.FinalAuth, c.CancelUserTx, c.Invalidator, c.Now}, nil
 }
 func validTime(at int64) bool { return at >= 0 && at <= maxTime-auditLife }

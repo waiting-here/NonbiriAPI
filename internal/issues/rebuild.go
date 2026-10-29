@@ -202,7 +202,7 @@ func (service *Service) RebuildIncomplete(ctx context.Context, accountLimit int)
 	if service == nil || service.repository == nil || accountLimit < 1 || accountLimit > 100 {
 		return nil, ErrInvalidRequest
 	}
-	rows, err := service.repository.db.QueryContext(ctx, `
+	rows, err := service.repository.readDB.QueryContext(ctx, `
 SELECT user_id FROM user_issue_projection_state WHERE projection_incomplete=1 ORDER BY updated_at,user_id LIMIT ?`, accountLimit)
 	if err != nil {
 		return nil, fmt.Errorf("issues: list incomplete accounts: %w", err)

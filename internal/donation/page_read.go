@@ -23,7 +23,7 @@ func (s *Service) beginBrowseActorTx(ctx context.Context, role reviewerRole, use
 	if s == nil {
 		return nil, 0, ErrUnavailable
 	}
-	return s.beginBrowseActorTxOn(ctx, s.db, role, userID)
+	return s.beginBrowseActorTxOn(ctx, s.readDB, role, userID)
 }
 
 func (s *Service) beginBrowseActorTxOn(ctx context.Context, database *sql.DB, role reviewerRole, userID int64) (*sql.Tx, int64, error) {
@@ -160,7 +160,7 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 	if role == recurringOwner {
 		tx, err = s.beginBrowseTx(ctx, role, userID)
 	} else {
-		tx, scope, err = s.beginScopedTx(ctx, role, userID, true)
+		tx, scope, err = s.beginScopedTx(ctx, role, userID, false)
 	}
 	if err != nil {
 		return empty, err

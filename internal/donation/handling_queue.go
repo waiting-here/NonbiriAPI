@@ -19,7 +19,14 @@ type handlingActor struct {
 func (s *Service) beginHandlingTx(ctx context.Context, role reviewerRole, userID int64, readOnly bool) (*sql.Tx, handlingActor, error) {
 	actor := handlingActor{id: userID, hashKind: string(role), storedRole: string(role)}
 	if role == reviewerAdmin {
-		tx, id, err := s.beginRoleTx(ctx, role, userID)
+		var tx *sql.Tx
+		var id int64
+		var err error
+		if readOnly {
+			tx, id, err = s.beginBrowseActorTx(ctx, role, userID)
+		} else {
+			tx, id, err = s.beginRoleTx(ctx, role, userID)
+		}
 		actor.id = id
 		return tx, actor, err
 	}
@@ -29,7 +36,11 @@ func (s *Service) beginHandlingTx(ctx context.Context, role reviewerRole, userID
 	if role != reviewerSteward || userID <= 0 {
 		return nil, actor, ErrInvalidRequest
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: readOnly})
+	database := s.db
+	if readOnly {
+		database = s.readDB
+	}
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: readOnly})
 	if err != nil {
 		return nil, actor, err
 	}

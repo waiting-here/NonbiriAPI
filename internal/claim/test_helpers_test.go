@@ -683,6 +683,7 @@ kind TEXT NOT NULL,source_id TEXT NOT NULL,PRIMARY KEY(kind,source_id)) WITHOUT 
 	fixture.clock.Store(1_000)
 	service, err := New(Dependencies{
 		DB:         fixture.db,
+		ReadDB:     store.ReadDB(),
 		Secrets:    codec,
 		Accounting: fixture.accounting,
 		Charity:    fixture.charity,

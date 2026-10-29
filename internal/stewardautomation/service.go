@@ -15,16 +15,18 @@ import (
 )
 
 type Config struct {
-	Database   *sql.DB
-	Authorizer *authz.Authorizer
-	Resources  *resources.Repository
-	Donations  *donation.Service
-	Charity    *charityrouting.Service
-	Now        func() time.Time
+	Database     *sql.DB
+	ReadDatabase *sql.DB
+	Authorizer   *authz.Authorizer
+	Resources    *resources.Repository
+	Donations    *donation.Service
+	Charity      *charityrouting.Service
+	Now          func() time.Time
 }
 
 type Service struct {
 	db                *sql.DB
+	readDB            *sql.DB
 	managementHistory *managementlog.Service
 	auth              *authz.Authorizer
 	resources         *resources.Repository
@@ -44,15 +46,26 @@ func New(config Config) (*Service, error) {
 	if config.Database == nil || config.Authorizer == nil || config.Resources == nil || config.Donations == nil || config.Charity == nil {
 		return nil, errors.New("automation dependencies are required")
 	}
+	if config.ReadDatabase == nil {
+		config.ReadDatabase = config.Database
+	}
 	if config.Now == nil {
 		config.Now = time.Now
 	}
-	return &Service{db: config.Database, auth: config.Authorizer, resources: config.Resources, donations: config.Donations, charity: config.Charity,
+	return &Service{db: config.Database, readDB: config.ReadDatabase, auth: config.Authorizer, resources: config.Resources, donations: config.Donations, charity: config.Charity,
 		active: make(map[int64]bool), cancels: make(map[int64]context.CancelFunc), now: config.Now, createTimeout: 30 * time.Second, bindingTimeout: 60 * time.Second, discoveryTimeout: 15 * time.Second}, nil
 }
 
 func (s *Service) begin(ctx context.Context, userID int64) (*sql.Tx, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	return s.beginOn(ctx, s.db, userID, false)
+}
+
+func (s *Service) beginRead(ctx context.Context, userID int64) (*sql.Tx, error) {
+	return s.beginOn(ctx, s.readDB, userID, true)
+}
+
+func (s *Service) beginOn(ctx context.Context, database *sql.DB, userID int64, readOnly bool) (*sql.Tx, error) {
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: readOnly})
 	if err != nil {
 		return nil, err
 	}

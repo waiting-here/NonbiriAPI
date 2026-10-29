@@ -41,7 +41,7 @@ func TestPersonalRestartContinuesOnlyUnfinishedItems(t *testing.T) {
 		t.Fatal(err)
 	}
 	old := f.service
-	f.service, err = New(Config{Database: f.store.DB(), Authorizer: old.auth, Resources: f.repo, Donations: old.donations, Charity: old.charity, Now: old.now})
+	f.service, err = New(Config{Database: f.store.DB(), ReadDatabase: f.store.ReadDB(), Authorizer: old.auth, Resources: f.repo, Donations: old.donations, Charity: old.charity, Now: old.now})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestPersonalSharedAdmissionCancelCloseAndStableDiscovery(t *testing.T) {
 	}
 	old := f.service
 	var err error
-	f.service, err = New(Config{Database: f.store.DB(), Authorizer: old.auth, Resources: f.repo, Donations: old.donations, Charity: old.charity, Now: old.now})
+	f.service, err = New(Config{Database: f.store.DB(), ReadDatabase: f.store.ReadDB(), Authorizer: old.auth, Resources: f.repo, Donations: old.donations, Charity: old.charity, Now: old.now})
 	if err != nil {
 		t.Fatal(err)
 	}

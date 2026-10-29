@@ -30,7 +30,7 @@ func TestRPMDeletionRecoveryKeepsOriginalWindowAndResetsOnlyLimits(t *testing.T)
 		t.Fatal(err)
 	}
 	defer store.Close()
-	identities, err := continuity.New(store.DB(), vault)
+	identities, err := continuity.New(store.DB(), vault, store.ReadDB())
 	if err != nil {
 		t.Fatal(err)
 	}

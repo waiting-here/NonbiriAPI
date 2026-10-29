@@ -104,7 +104,7 @@ func (s *Service) bindingPresets(ctx context.Context, role roleKind, actorID int
 	if ctx == nil || !page.Valid() || !utf8.ValidString(q) || utf8.RuneCountInString(q) > 128 || state != "active" && state != "retired" && state != "all" {
 		return out, ErrInvalidRequest
 	}
-	tx, _, err := s.beginRoleTx(ctx, role, actorID)
+	tx, _, err := s.beginRoleTransaction(ctx, role, actorID, true)
 	if err != nil {
 		return out, err
 	}
@@ -145,7 +145,7 @@ func (s *Service) bindingPreset(ctx context.Context, role roleKind, actorID int6
 	if ctx == nil || !db.ValidateOpaqueID(id, "mch_") {
 		return empty, ErrInvalidRequest
 	}
-	tx, _, err := s.beginRoleTx(ctx, role, actorID)
+	tx, _, err := s.beginRoleTransaction(ctx, role, actorID, true)
 	if err != nil {
 		return empty, err
 	}

@@ -83,7 +83,7 @@ func (r *Repository) GetResourceOperationStatus(ctx context.Context, userID int6
 	if err != nil {
 		return ResourceOperationStatus{}, ErrInvalidRequest
 	}
-	tx, err := r.beginAuthorizedTx(ctx, userID)
+	tx, err := r.beginAuthorizedReadTx(ctx, userID)
 	if err != nil {
 		return ResourceOperationStatus{}, err
 	}

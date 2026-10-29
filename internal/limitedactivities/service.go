@@ -19,17 +19,19 @@ import (
 )
 
 type Config struct {
-	Database *sql.DB
-	Users    UserAuthorizer
-	Admins   AdminAuthorizer
-	Gate     AdmissionGate
-	Keys     KeyDeriver
-	Registry *Registry
-	Activity ActivityRecorder
-	Now      func() time.Time
+	Database     *sql.DB
+	ReadDatabase *sql.DB
+	Users        UserAuthorizer
+	Admins       AdminAuthorizer
+	Gate         AdmissionGate
+	Keys         KeyDeriver
+	Registry     *Registry
+	Activity     ActivityRecorder
+	Now          func() time.Time
 }
 type Service struct {
 	database *sql.DB
+	readDB   *sql.DB
 	users    UserAuthorizer
 	admins   AdminAuthorizer
 	gate     AdmissionGate
@@ -43,10 +45,13 @@ func New(c Config) (*Service, error) {
 	if c.Database == nil || nilInterface(c.Users) || nilInterface(c.Admins) || nilInterface(c.Gate) || nilInterface(c.Keys) || c.Registry == nil {
 		return nil, ErrInvalid
 	}
+	if c.ReadDatabase == nil {
+		c.ReadDatabase = c.Database
+	}
 	if c.Now == nil {
 		c.Now = time.Now
 	}
-	return &Service{c.Database, c.Users, c.Admins, c.Gate, c.Keys, c.Registry, c.Activity, c.Now}, nil
+	return &Service{c.Database, c.ReadDatabase, c.Users, c.Admins, c.Gate, c.Keys, c.Registry, c.Activity, c.Now}, nil
 }
 
 func (s *Service) decisionNow() (int64, error) {
@@ -172,7 +177,7 @@ func (s *Service) List(ctx context.Context, user int64) ([]Detail, error) {
 	if err != nil {
 		return nil, err
 	}
-	tx, err := s.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +206,7 @@ func (s *Service) Detail(ctx context.Context, user int64, key string) (Detail, e
 	if err != nil {
 		return Detail{}, err
 	}
-	tx, err := s.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Detail{}, err
 	}
@@ -224,7 +229,7 @@ func (s *Service) Wallet(ctx context.Context, user int64) (Wallet, error) {
 	if err != nil {
 		return Wallet{}, err
 	}
-	tx, err := s.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Wallet{}, err
 	}

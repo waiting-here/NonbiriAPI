@@ -126,7 +126,7 @@ func (r *Repository) GetCatalog(ctx context.Context, userID, endpointID, keyID i
 	if r == nil || userID <= 0 || endpointID <= 0 || keyID <= 0 || !validPageLimit(limit) {
 		return CatalogView{}, ErrInvalidRequest
 	}
-	tx, err := beginTx(ctx, r.db)
+	tx, err := beginTx(ctx, r.readDB)
 	if err != nil {
 		return CatalogView{}, err
 	}
@@ -219,7 +219,7 @@ func (r *Repository) runDiscovery(ctx context.Context, job discoveryJob) error {
 
 	claimResult := DiscoveryClaimResult{FailureClass: DiscoveryFailureInterrupted}
 	if markErr == nil && job.input.Authorize != nil {
-		check, err := beginTx(ctx, r.db)
+		check, err := beginTx(ctx, r.readDB)
 		if err == nil {
 			err = job.input.Authorize(ctx, check)
 			_ = check.Rollback()

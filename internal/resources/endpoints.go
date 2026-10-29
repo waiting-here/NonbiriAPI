@@ -124,7 +124,7 @@ func (r *Repository) ListEndpoints(ctx context.Context, userID int64, limit int,
 			return Page[Endpoint]{}, ErrInvalidRequest
 		}
 	}
-	rows, err := r.db.QueryContext(ctx, `
+	rows, err := r.readDB.QueryContext(ctx, `
 SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
        (SELECT count(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id),
        e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
@@ -170,7 +170,7 @@ func (r *Repository) GetEndpoint(ctx context.Context, userID, endpointID int64) 
 	if r == nil || userID <= 0 || endpointID <= 0 {
 		return Endpoint{}, ErrNotFound
 	}
-	item, err := scanEndpoint(r.db.QueryRowContext(ctx, `
+	item, err := scanEndpoint(r.readDB.QueryRowContext(ctx, `
 SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
        (SELECT count(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id),
        e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
@@ -878,7 +878,7 @@ func (r *Repository) ListEndpointKeys(ctx context.Context, userID, endpointID in
 			return Page[EndpointKey]{}, ErrInvalidRequest
 		}
 	}
-	rows, err := r.db.QueryContext(ctx, endpointKeySelect+`
+	rows, err := r.readDB.QueryContext(ctx, endpointKeySelect+`
 WHERE e.user_id=? AND e.id=?
   AND (?=0 OR k.updated_at<? OR (k.updated_at=? AND k.id<?))
 ORDER BY k.updated_at DESC,k.id DESC LIMIT ?`, userID, endpointID, afterID, afterUpdated, afterUpdated, afterID, limit+1)
@@ -918,7 +918,7 @@ func (r *Repository) GetEndpointKey(ctx context.Context, userID, endpointID, key
 	if r == nil || userID <= 0 || endpointID <= 0 || keyID <= 0 {
 		return EndpointKey{}, ErrNotFound
 	}
-	item, err := scanEndpointKey(r.db.QueryRowContext(ctx, endpointKeySelect+` WHERE e.user_id=? AND e.id=? AND k.id=?`, userID, endpointID, keyID))
+	item, err := scanEndpointKey(r.readDB.QueryRowContext(ctx, endpointKeySelect+` WHERE e.user_id=? AND e.id=? AND k.id=?`, userID, endpointID, keyID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return EndpointKey{}, ErrNotFound
 	}

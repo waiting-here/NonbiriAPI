@@ -44,7 +44,11 @@ func (s *Service) beginAdmin(ctx context.Context, write bool) (*sql.Tx, int64, e
 	if !ok || actor.Kind != authz.ActorAdminSession {
 		return nil, 0, ErrForbidden
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: !write})
+	database := s.db
+	if !write {
+		database = s.readDB
+	}
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: !write})
 	if err != nil {
 		return nil, 0, err
 	}

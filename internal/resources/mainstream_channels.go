@@ -247,7 +247,7 @@ func (r *Repository) ListMainstreamChannels(ctx context.Context, adminID int64, 
 	if r == nil || adminID <= 0 || !validMainstreamChannelState(state) || !validPageLimit(limit) {
 		return Page[MainstreamChannel]{}, ErrInvalidRequest
 	}
-	tx, now, err := r.beginAuthorizedAdminTx(ctx, adminID)
+	tx, now, err := r.beginAuthorizedAdminReadTx(ctx, adminID)
 	if err != nil {
 		return Page[MainstreamChannel]{}, err
 	}
@@ -322,7 +322,7 @@ func (r *Repository) GetMainstreamChannel(ctx context.Context, adminID int64, id
 	if r == nil || adminID <= 0 || !validMainstreamChannelID(id) {
 		return MainstreamChannel{}, ErrNotFound
 	}
-	tx, _, err := r.beginAuthorizedAdminTx(ctx, adminID)
+	tx, _, err := r.beginAuthorizedAdminReadTx(ctx, adminID)
 	if err != nil {
 		return MainstreamChannel{}, err
 	}
@@ -565,7 +565,7 @@ func (r *Repository) GetEndpointCreateOptions(ctx context.Context, userID int64)
 	if r == nil || userID <= 0 {
 		return EndpointCreateOptions{}, ErrInvalidRequest
 	}
-	tx, err := r.beginAuthorizedTx(ctx, userID)
+	tx, err := r.beginAuthorizedReadTx(ctx, userID)
 	if err != nil {
 		return EndpointCreateOptions{}, err
 	}
@@ -584,7 +584,7 @@ func (r *Repository) GetAdminEndpointCreateOptions(ctx context.Context, adminID 
 	if r == nil || adminID <= 0 {
 		return EndpointCreateOptions{}, ErrInvalidRequest
 	}
-	tx, _, err := r.beginAuthorizedAdminTx(ctx, adminID)
+	tx, _, err := r.beginAuthorizedAdminReadTx(ctx, adminID)
 	if err != nil {
 		return EndpointCreateOptions{}, err
 	}
