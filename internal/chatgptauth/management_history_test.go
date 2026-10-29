@@ -1,6 +1,7 @@
 package chatgptauth
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -10,7 +11,7 @@ import (
 func TestLogoutRetainsUnconfirmedRevocationResult(t *testing.T) {
 	f := newAuthFixture(t)
 	connected := f.importCredentials(t)
-	if _, err := f.m.config.DB.Exec(db.ManagementOperationsSQL); err != nil {
+	if _, err := f.m.config.DB.Exec(db.ManagementOperationsSQL + strings.Split(db.ManagementDetailsSQL, "\nCREATE TRIGGER")[0]); err != nil {
 		t.Fatal(err)
 	}
 	f.mode.Store(3)

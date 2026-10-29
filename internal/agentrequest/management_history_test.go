@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -19,7 +20,7 @@ func TestRequestCleanupRecordsOnlyCommittedChunks(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			f := newFixture(t, func(http.ResponseWriter, *http.Request) { t.Error("cleanup called upstream") })
-			if _, err := f.database.Exec(db.ManagementOperationsSQL); err != nil {
+			if _, err := f.database.Exec(db.ManagementOperationsSQL + strings.Split(db.ManagementDetailsSQL, "\nCREATE TRIGGER")[0]); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := f.database.Exec(`WITH RECURSIVE n(id) AS (SELECT 1 UNION ALL SELECT id+1 FROM n WHERE id<205)
