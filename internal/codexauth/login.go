@@ -115,7 +115,6 @@ func (m *Manager) completeLogin(ctx context.Context, p *pendingLogin, device dev
 		if err == nil {
 			tx, e := m.config.DB.BeginTx(ctx, nil)
 			if e == nil {
-				defer tx.Rollback()
 				e = m.config.AdminAuthorize(ctx, tx)
 				if e == nil {
 					e = m.captureLogin(ctx, tx, p)
@@ -135,6 +134,9 @@ func (m *Manager) completeLogin(ctx context.Context, p *pendingLogin, device dev
 				}
 				if e == nil {
 					e = tx.Commit()
+				}
+				if e != nil {
+					_ = tx.Rollback()
 				}
 			}
 			err = e
