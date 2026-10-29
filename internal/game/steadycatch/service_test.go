@@ -129,6 +129,7 @@ func newFixture(t *testing.T) *fixture {
 	if err = tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
+	warmReaders(t, readDatabase)
 	limiter, _ := game.NewStartLimiter(game.StartLimiterConfig{Now: func() time.Time { return time.UnixMilli(f.now.Load()) }})
 	t.Cleanup(func() { limiter.Close() })
 	ports, err := builtinfinance.ForModule(game.SteadyCatchID)
@@ -396,5 +397,27 @@ func TestTerminalConcurrentRetryAndExpiry(t *testing.T) {
 	r, err = f.s.retain(f.ctx, f.now.Load()/1000, 10, time.Now().Add(time.Second))
 	if err != nil || r.Processed != 2 {
 		t.Fatal(r, err)
+	}
+}
+
+// Load the schema on both connections before timing concurrent reads.
+func warmReaders(t *testing.T, database *sql.DB) {
+	t.Helper()
+	var readers []*sql.Conn
+	defer func() {
+		for _, reader := range readers {
+			_ = reader.Close()
+		}
+	}()
+	for range 2 {
+		reader, err := database.Conn(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		readers = append(readers, reader)
+		var users int
+		if err = reader.QueryRowContext(t.Context(), "SELECT count(*) FROM users").Scan(&users); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
