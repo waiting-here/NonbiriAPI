@@ -37,6 +37,10 @@ Each version entry describes its source and compatibility boundary; a release ta
   game queries, including idle worker checks. Preserve writer transactions for
   claims, settlement, expiry updates and legal-hold access records; release read
   snapshots before sending HTTP responses.
+- Return populated source lists in user donation history and details so
+  administrator and steward pages can render successful responses. Parse only
+  the history fields used for display, keeping unused management metadata from
+  blocking the page.
 - Retain the source needed to redact image diagnostics after a task completes,
   allowing obsolete credentials to be removed without hiding the entire error.
 - Label accepted model-list refresh tasks accurately in request logs and open

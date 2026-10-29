@@ -356,7 +356,11 @@ function sharedSource(value: unknown, label: string): DonationPageSafeSource {
   return normalizeManagedSource(value, label, 'steward');
 }
 
-function pageHandling(value: unknown, label: string, status?: DonationStatus): DonationHandling {
+export function normalizeDonationPageHandling(
+  value: unknown,
+  label: string,
+  status?: DonationStatus,
+): DonationHandling {
   const root = record(value, HANDLING_FIELDS, label);
   if (
     root.state === 'closed' &&
@@ -421,7 +425,7 @@ function donationCommon(root: ReturnType<typeof record>, label: string): Donatio
   const review = pageReview(root.review_result, `${label} review`);
   const reviewer = pageReviewer(root.reviewer, `${label} reviewer`);
   const keyCount = decimal(root.key_count, `${label} key count`);
-  const handling = pageHandling(root.handling, `${label} handling`, status);
+  const handling = normalizeDonationPageHandling(root.handling, `${label} handling`, status);
   const sourceCount = decimal(root.source_count, `${label} source count`);
   const sources = array(root.sources, `${label} sources`).map((entry, index) =>
     sharedSource(entry, `${label} source ${index + 1}`),
@@ -615,7 +619,7 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
     donation_revision: donationRevision,
     rule_count: ruleCount,
     rules,
-    handling: pageHandling(root.handling, `${label} handling`),
+    handling: normalizeDonationPageHandling(root.handling, `${label} handling`),
   };
 }
 

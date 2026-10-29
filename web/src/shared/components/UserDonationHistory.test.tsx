@@ -16,9 +16,7 @@ function item(id: string) {
     updated_at: 1800000000,
     key_count: '1',
     source_count: '1',
-    sources: [
-      { kind: 'custom', connector_type: 'openai-compatible', base_url: 'https://example.test/v1' },
-    ],
+    sources: null,
     state_counts: {
       pending: '0',
       available: '1',
