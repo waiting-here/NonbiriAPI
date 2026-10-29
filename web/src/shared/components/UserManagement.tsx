@@ -1374,7 +1374,7 @@ export function UserManagement({
         />
       ) : (
         <PageHeader
-          title={role === 'admin' ? t('admin.navigation.users') : t('management.users.title')}
+          title={t('management.users.title')}
           description={t('management.users.description')}
         />
       )}
