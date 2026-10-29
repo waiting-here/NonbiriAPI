@@ -209,6 +209,9 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 	_ = json.Unmarshal(options, &streamOptions)
 	clear(options)
 	decoder := a.protocol.Decoder(request.Model, time.Now().UTC(), streamOptions.IncludeUsage)
+	if bound, ok := decoder.(interface{ SetContinuationID(string) }); ok {
+		bound.SetContinuationID(policy.ContinuationID)
+	}
 	defer decoder.Clear()
 	if request.Stream {
 		return a.stream(ctx, w, response, decoder, guard, wireGuard, errorContext)
@@ -230,15 +233,21 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 		return failure("upstream response was rejected")
 	}
 	if upstreamerror.IsEvent(raw) {
+		if observer, ok := decoder.(interface{ ObserveFailure([]byte) }); ok {
+			observer.ObserveFailure(raw)
+		}
 		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), raw)
 		result = contract.UpstreamFailed(failure("upstream response reported an error"), contract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.Parse(raw)
+		result.Usage = decoder.Usage()
 		return result
 	}
 	out, usage, err := decoder.JSON(raw)
 	if err != nil {
 		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), raw)
-		return failure("upstream response was invalid")
+		result = failure(protocolDiagnostic(err, "upstream response was invalid"))
+		result.Usage = usage
+		return result
 	}
 	defer func() { clear(out) }()
 	if policy.FlattenToolCalls {
@@ -325,7 +334,7 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 		return controller.Flush()
 	}
 	fail := func(err error) contract.AttemptResult {
-		failed := failure("upstream stream was invalid")
+		failed := failure(protocolDiagnostic(err, "upstream stream was invalid"))
 		failed.Committed = committed
 		failed.Usage = decoder.Usage()
 		if ctx.Err() != nil {
@@ -393,6 +402,9 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 				errorBody, errorEvent = a.protocol.ErrorEvent(data)
 			}
 			if errorEvent {
+				if observer, ok := decoder.(interface{ ObserveFailure([]byte) }); ok {
+					observer.ObserveFailure(data)
+				}
 				upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), data)
 				failed := fail(errors.New("upstream error event"))
 				failed.ErrorDetail = errorContext.Parse(errorBody)

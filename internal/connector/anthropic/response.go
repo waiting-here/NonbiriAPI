@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connector/continuation"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 )
@@ -31,9 +32,11 @@ type completionChoice struct {
 }
 
 type completionMessage struct {
-	Role      string           `json:"role"`
-	Content   any              `json:"content"`
-	ToolCalls []callerToolCall `json:"tool_calls,omitempty"`
+	Role         string           `json:"role"`
+	Content      any              `json:"content"`
+	ToolCalls    []callerToolCall `json:"tool_calls,omitempty"`
+	Reasoning    string           `json:"reasoning_content,omitempty"`
+	ExtraContent any              `json:"extra_content,omitempty"`
 }
 
 type callerToolCall struct {
@@ -59,9 +62,9 @@ type callerPromptDetails struct {
 	CacheWriteTokens int64 `json:"cache_write_tokens"`
 }
 
-func translateNonStream(body []byte, publicModel string, started time.Time) ([]byte, connectorcontract.Usage, []string, error) {
+func translateNonStream(body []byte, publicModel string, started time.Time, continuationIDs ...string) ([]byte, connectorcontract.Usage, []string, error) {
 	root, err := strictObject(body)
-	if err != nil || !onlyKeys(root, "id", "type", "role", "model", "content", "stop_reason", "stop_sequence", "stop_details", "container", "usage") {
+	if err != nil || !onlyKeys(root, "id", "type", "role", "model", "content", "stop_reason", "stop_sequence", "stop_details", "container", "usage", "diagnostics") || !emptyDiagnostics(root["diagnostics"]) {
 		return nil, connectorcontract.Usage{}, nil, ErrInvalidResponse
 	}
 	var id, kind, role, upstreamModel string
@@ -90,6 +93,8 @@ func translateNonStream(body []byte, publicModel string, started time.Time) ([]b
 		return nil, connectorcontract.Usage{}, nil, ErrInvalidResponse
 	}
 	var content strings.Builder
+	var reasoning strings.Builder
+	hasThinking := false
 	textSeen := false
 	tools := make([]callerToolCall, 0)
 	toolIDs := make(map[string]struct{})
@@ -106,7 +111,7 @@ func translateNonStream(body []byte, publicModel string, started time.Time) ([]b
 		}
 		switch blockType {
 		case "text":
-			if !onlyKeys(block, "type", "text") {
+			if !onlyKeys(block, "type", "text", "citations") || !emptyCitations(block["citations"]) {
 				return nil, connectorcontract.Usage{}, nil, ErrInvalidResponse
 			}
 			var text string
@@ -115,6 +120,14 @@ func translateNonStream(body []byte, publicModel string, started time.Time) ([]b
 			}
 			content.WriteString(text)
 			textSeen = true
+			semantic = append(semantic, text)
+		case "thinking", "redacted_thinking":
+			text, err := thinkingBlock(block, true)
+			if err != nil {
+				return nil, connectorcontract.Usage{}, nil, err
+			}
+			hasThinking = true
+			reasoning.WriteString(text)
 			semantic = append(semantic, text)
 		case "tool_use":
 			if len(tools) == maxTools {
@@ -158,6 +171,13 @@ func translateNonStream(body []byte, publicModel string, started time.Time) ([]b
 		contentValue = content.String()
 	}
 	message := completionMessage{Role: "assistant", Content: contentValue, ToolCalls: tools}
+	if hasThinking {
+		message.Reasoning = reasoning.String()
+		message.ExtraContent = thinkingExtra(blocks)
+		if len(continuationIDs) > 0 {
+			message.ExtraContent = continuation.Bind(thinkingExtra(blocks), continuationIDs[0])
+		}
+	}
 	envelope := completionEnvelope{
 		ID: id, Object: "chat.completion", Created: started.Unix(), Model: publicModel,
 		Choices: []completionChoice{{Index: 0, Message: message, FinishReason: finish}},
@@ -231,7 +251,7 @@ func parseAnthropicUsage(raw []byte, full bool) (connectorcontract.Usage, error)
 		return connectorcontract.Usage{}, nil
 	}
 	object, err := strictObject(trimmed)
-	allowed := []string{"input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens", "output_tokens_details", "server_tool_use"}
+	allowed := []string{"input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens", "output_tokens_details", "server_tool_use", "speed"}
 	if full {
 		allowed = append(allowed, "cache_creation", "inference_geo", "service_tier")
 	}
@@ -281,6 +301,12 @@ func parseAnthropicUsage(raw []byte, full bool) (connectorcontract.Usage, error)
 }
 
 func validateUsageMetadata(object map[string]json.RawMessage, full bool, outputTokens int64, outputKnown bool) error {
+	if raw := object["speed"]; len(raw) > 0 && !isNull(raw) {
+		var value string
+		if json.Unmarshal(raw, &value) != nil || value != "standard" && value != "fast" {
+			return ErrInvalidResponse
+		}
+	}
 	if full {
 		if err := validateCountObject(object["cache_creation"], "ephemeral_1h_input_tokens", "ephemeral_5m_input_tokens"); err != nil {
 			return err

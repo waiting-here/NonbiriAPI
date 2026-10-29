@@ -126,7 +126,7 @@ func TestTranslateNonStreamRejectsUnrepresentableResponses(t *testing.T) {
 	base := `{"id":"msg_1","type":"message","role":"assistant","model":"claude","content":CONTENT,"stop_reason":"end_turn","stop_sequence":null,"usage":{}}`
 	tests := []string{
 		`[{"type":"thinking","thinking":"secret"}]`,
-		`[{"type":"text","text":"ok","citations":[]}]`,
+		`[{"type":"text","text":"ok","citations":[{"type":"char_location","cited_text":"source"}]}]`,
 		`[{"type":"server_tool_use","id":"x","name":"web_search","input":{}}]`,
 		`[{"type":"tool_use","id":"call_1","name":"f","input":[]}]`,
 		`[{"type":"tool_use","id":"call_1","name":"f","input":{}},{"type":"tool_use","id":"call_1","name":"g","input":{}}]`,

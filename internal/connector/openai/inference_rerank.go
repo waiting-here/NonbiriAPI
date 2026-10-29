@@ -64,20 +64,20 @@ func projectRerankResponse(raw []byte, request *InferenceRequest, kind contract.
 	case contract.TypeCohereRerank:
 		var meta struct {
 			BilledUnits map[string]json.RawMessage `json:"billed_units"`
+			Tokens      json.RawMessage            `json:"tokens"`
 		}
 		if json.Unmarshal(root["meta"], &meta) == nil {
+			billed, _ := json.Marshal(meta.BilledUnits)
+			usage = preferredRerankTokens(rerankTokens(billed, true), rerankTokens(meta.Tokens, false))
+			clear(billed)
 			usage.SearchUnitsMicros, usage.SearchUnitsPresent = contract.ParseSearchUnits(meta.BilledUnits["search_units"])
 		}
 	case contract.TypeSiliconFlowRerank:
-		var tokens map[string]json.RawMessage
-		if json.Unmarshal(root["tokens"], &tokens) == nil {
-			var input, output int64
-			if !isJSONNull(tokens["input_tokens"]) && !isJSONNull(tokens["output_tokens"]) && decodeNonNegativeInt(tokens["input_tokens"], &input) && decodeNonNegativeInt(tokens["output_tokens"], &output) {
-				if _, ok := addChecked(input, output); ok {
-					usage = Usage{Present: true, UncachedInputTokens: input, OutputTokens: output}
-				}
-			}
+		var meta struct {
+			Tokens json.RawMessage `json:"tokens"`
 		}
+		_ = json.Unmarshal(root["meta"], &meta)
+		usage = preferredRerankTokens(rerankTokens(meta.Tokens, false), rerankTokens(root["tokens"], false))
 	default:
 		var tokens map[string]json.RawMessage
 		if json.Unmarshal(root["usage"], &tokens) == nil {
@@ -102,6 +102,40 @@ func projectRerankResponse(raw []byte, request *InferenceRequest, kind contract.
 	}
 	out, err := json.Marshal(public)
 	return out, usage, err
+}
+
+// Current billing metadata takes precedence over legacy aliases. Aliases are
+// never added together; a disagreement remains observable without double billing.
+func preferredRerankTokens(primary, fallback Usage) Usage {
+	if !primary.Present {
+		return fallback
+	}
+	if fallback.Present && (primary.UncachedInputTokens != fallback.UncachedInputTokens || primary.OutputTokens != fallback.OutputTokens) {
+		primary.TotalMismatch = true
+	}
+	return primary
+}
+
+func rerankTokens(raw []byte, inputOnly bool) Usage {
+	var tokens map[string]json.RawMessage
+	if json.Unmarshal(raw, &tokens) != nil {
+		return Usage{}
+	}
+	var input, output int64
+	if len(tokens["input_tokens"]) == 0 || isJSONNull(tokens["input_tokens"]) || !decodeNonNegativeInt(tokens["input_tokens"], &input) {
+		return Usage{}
+	}
+	if value, present := tokens["output_tokens"]; present {
+		if isJSONNull(value) || !decodeNonNegativeInt(value, &output) {
+			return Usage{}
+		}
+	} else if !inputOnly {
+		return Usage{}
+	}
+	if _, ok := addChecked(input, output); !ok {
+		return Usage{}
+	}
+	return Usage{Present: true, UncachedInputTokens: input, OutputTokens: output}
 }
 
 func formatSearchUnits(value int64) string {

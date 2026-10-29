@@ -69,6 +69,10 @@ type outboundBlock struct {
 	Input     json.RawMessage `json:"input,omitempty"`
 	ToolUseID string          `json:"tool_use_id,omitempty"`
 	Content   any             `json:"content,omitempty"`
+	Thinking  *string         `json:"thinking,omitempty"`
+	Signature string          `json:"signature,omitempty"`
+	Data      string          `json:"data,omitempty"`
+	Citations json.RawMessage `json:"citations,omitempty"`
 }
 
 // newTextBlock preserves the distinction between a non-text union member and
@@ -621,7 +625,7 @@ func parseMessages(raw []byte) ([]outboundMessage, string, error) {
 			}
 			appendMessage(&messages, "user", blocks)
 		case "assistant":
-			if len(pending) != 0 || !onlyKeys(object, "role", "content", "tool_calls") {
+			if len(pending) != 0 || !onlyKeys(object, "role", "content", "tool_calls", "reasoning_content", "extra_content") {
 				clearMessages(messages)
 				return nil, "", ErrInvalidRequest
 			}
@@ -636,6 +640,11 @@ func parseMessages(raw []byte) ([]outboundMessage, string, error) {
 				return nil, "", err
 			}
 			blocks = append(blocks, calls...)
+			blocks, err = replayThinking(object, blocks)
+			if err != nil {
+				clearMessages(messages)
+				return nil, "", err
+			}
 			if len(blocks) == 0 {
 				clearMessages(messages)
 				return nil, "", ErrInvalidRequest

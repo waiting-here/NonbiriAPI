@@ -240,7 +240,7 @@ func (a *Adapter) attempt(ctx context.Context, w http.ResponseWriter, target con
 		if response.Header.Get("Content-Encoding") != "" {
 			return upstreamFailure("upstream stream encoding was invalid", response.StatusCode)
 		}
-		return a.stream(ctx, w, response, chat, guard, errorContext)
+		return a.stream(ctx, w, response, chat, guard, errorContext, policy.ContinuationID)
 	}
 	if !validContentType(response, "application/json") {
 		_ = errorContext.ReadResponse(ctx, response)
@@ -272,7 +272,7 @@ func (a *Adapter) attempt(ctx context.Context, w http.ResponseWriter, target con
 	case inference != nil:
 		translated, usage, err = translateRerank(raw, inference)
 	default:
-		translated, usage, err = translateChat(raw, chat.Model, a.now().Unix())
+		translated, usage, err = translateChat(raw, chat.Model, a.now().Unix(), policy.ContinuationID)
 	}
 	defer func() { clear(translated) }()
 	if err != nil {

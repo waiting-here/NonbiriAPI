@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector/chatwire"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/continuation"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
@@ -17,18 +19,30 @@ type decoder struct {
 	id, model                                             string
 	created                                               int64
 	terminal, finished, roleSent, usageSeen, usageInvalid bool
-	finish, textSignature                                 string
+	finish                                                string
+	needsContinuation                                     bool
+	hasSignature                                          bool
 	text, thought                                         strings.Builder
 	calls                                                 []any
+	parts                                                 []json.RawMessage
+	continuationID                                        string
 	callIDs                                               map[string]bool
 	usage                                                 contract.Usage
 }
 
 func NewDecoder(model string, now time.Time, includeUsage bool) chatwire.Decoder {
-	return &decoder{id: fmt.Sprintf("chatcmpl-%x", now.UnixNano()), model: model, created: now.Unix(), callIDs: map[string]bool{}, includeUsage: includeUsage}
+	var identity [16]byte
+	_, _ = rand.Read(identity[:])
+	return &decoder{id: fmt.Sprintf("chatcmpl-%x", identity), model: model, created: now.Unix(), callIDs: map[string]bool{}, includeUsage: includeUsage}
 }
-func (d *decoder) Clear()                { *d = decoder{} }
-func (d *decoder) Usage() contract.Usage { return d.usage }
+func (d *decoder) Clear() {
+	for _, part := range d.parts {
+		clear(part)
+	}
+	*d = decoder{}
+}
+func (d *decoder) Usage() contract.Usage       { return d.usage }
+func (d *decoder) SetContinuationID(id string) { d.continuationID = id }
 func (d *decoder) JSON(raw []byte) ([]byte, contract.Usage, error) {
 	if _, err := d.consume(raw); err != nil {
 		return nil, d.usage, err
@@ -46,8 +60,8 @@ func (d *decoder) JSON(raw []byte) ([]byte, contract.Usage, error) {
 			message["content"] = nil
 		}
 	}
-	if d.textSignature != "" {
-		message["extra_content"] = signatureExtra(d.textSignature)
+	if d.needsContinuation {
+		message["extra_content"] = d.continuationExtra()
 	}
 	out, err := chatwire.Completion(d.id, d.model, d.created, message, d.finish, d.usage)
 	return out, d.usage, err
@@ -80,6 +94,9 @@ func (d *decoder) Finish() ([][]byte, error) {
 	}
 	d.finished = true
 	delta := map[string]any{}
+	if d.needsContinuation {
+		delta["extra_content"] = d.continuationExtra()
+	}
 	if !d.roleSent {
 		delta["role"] = "assistant"
 	}
@@ -99,6 +116,16 @@ func (d *decoder) Finish() ([][]byte, error) {
 }
 func signatureExtra(value string) any {
 	return map[string]any{"google": map[string]string{"thought_signature": value}}
+}
+func partsExtra(parts []json.RawMessage) map[string]any {
+	return map[string]any{"google": map[string]any{"parts": parts}}
+}
+func (d *decoder) continuationExtra() map[string]any {
+	id := ""
+	if d.hasSignature {
+		id = d.continuationID
+	}
+	return continuation.Bind(partsExtra(d.parts), id)
 }
 func nativeSignature(raw []byte) (string, error) {
 	if len(raw) == 0 {
@@ -125,6 +152,9 @@ func (d *decoder) consume(raw []byte) ([]map[string]any, error) {
 	}
 	if usage, ok := root["usageMetadata"]; ok {
 		d.observeUsage(usage)
+	}
+	if value, ok := root["continuationToken"]; ok && !chatwire.Null(value) {
+		return nil, chatwire.ErrContinuationUnsupported
 	}
 	var candidates []json.RawMessage
 	if value, ok := root["candidates"]; ok && json.Unmarshal(value, &candidates) != nil {
@@ -165,6 +195,9 @@ func (d *decoder) consume(raw []byte) ([]map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if value, ok := candidate["continuationToken"]; ok && !chatwire.Null(value) || string(candidate["finishReason"]) == `"CONTINUATION"` {
+		return nil, chatwire.ErrContinuationUnsupported
+	}
 	if index, ok := candidate["index"]; ok {
 		value, ok := chatwire.Integer(index)
 		if !ok || value != 0 {
@@ -186,6 +219,9 @@ func (d *decoder) consume(raw []byte) ([]map[string]any, error) {
 	}
 	deltas := make([]map[string]any, 0, len(parts))
 	for _, raw := range parts {
+		if len(d.parts) >= 4096 {
+			return nil, chatwire.ErrProtocol
+		}
 		part, err := chatwire.Object(raw)
 		if err != nil || !chatwire.Keys(part, "text", "thought", "thoughtSignature", "functionCall") {
 			return nil, chatwire.ErrProtocol
@@ -198,6 +234,8 @@ func (d *decoder) consume(raw []byte) ([]map[string]any, error) {
 		if value, ok := part["thought"]; ok && json.Unmarshal(value, &thought) != nil {
 			return nil, chatwire.ErrProtocol
 		}
+		d.needsContinuation = d.needsContinuation || sig != "" || thought
+		d.hasSignature = d.hasSignature || sig != ""
 		textRaw, hasText := part["text"]
 		callRaw, hasCall := part["functionCall"]
 		if hasText && hasCall || !hasText && !hasCall && sig == "" {
@@ -215,7 +253,11 @@ func (d *decoder) consume(raw []byte) ([]map[string]any, error) {
 			if !ok || !functionPattern.MatchString(name) {
 				return nil, chatwire.ErrProtocol
 			}
-			args, err := chatwire.Object(call["args"])
+			argsRaw := call["args"]
+			if len(argsRaw) == 0 {
+				argsRaw = json.RawMessage(`{}`)
+			}
+			args, err := chatwire.Object(argsRaw)
 			if err != nil {
 				return nil, err
 			}
@@ -223,7 +265,7 @@ func (d *decoder) consume(raw []byte) ([]map[string]any, error) {
 			if err != nil {
 				return nil, err
 			}
-			id := fmt.Sprintf("call_%x_%d", d.created, len(d.calls))
+			id := fmt.Sprintf("call_%s_%d", strings.TrimPrefix(d.id, "chatcmpl-"), len(d.calls))
 			if raw, ok := call["id"]; ok {
 				id, ok = chatwire.String(raw)
 				if !ok || id == "" || len(id) > 128 || strings.ContainsAny(id, "\r\n\x00") {
@@ -234,6 +276,11 @@ func (d *decoder) consume(raw []byte) ([]map[string]any, error) {
 				return nil, chatwire.ErrProtocol
 			}
 			d.callIDs[id] = true
+			call["id"], _ = json.Marshal(id)
+			call["args"] = argsRaw
+			part["functionCall"], _ = json.Marshal(call)
+			saved, _ := json.Marshal(part)
+			d.parts = append(d.parts, saved)
 			value := map[string]any{"id": id, "type": "function", "function": map[string]string{"name": name, "arguments": string(arguments)}}
 			clear(arguments)
 			if sig != "" {
@@ -255,26 +302,14 @@ func (d *decoder) consume(raw []byte) ([]map[string]any, error) {
 				return nil, chatwire.ErrProtocol
 			}
 			if thought {
-				if d.text.Len() != 0 || len(d.calls) > 0 || d.textSignature != "" {
-					return nil, chatwire.ErrProtocol
-				}
 				d.thought.WriteString(text)
 				delta["reasoning_content"] = text
 			} else {
-				if d.textSignature != "" || len(d.calls) > 0 {
-					return nil, chatwire.ErrProtocol
-				}
 				d.text.WriteString(text)
 				delta["content"] = text
 			}
 		}
-		if sig != "" {
-			if d.textSignature != "" || len(d.calls) > 0 || d.text.Len() == 0 && d.thought.Len() == 0 {
-				return nil, chatwire.ErrProtocol
-			}
-			d.textSignature = sig
-			delta["extra_content"] = signatureExtra(sig)
-		}
+		d.parts = append(d.parts, append(json.RawMessage(nil), raw...))
 		deltas = append(deltas, delta)
 	}
 	if raw, ok := candidate["finishReason"]; ok {

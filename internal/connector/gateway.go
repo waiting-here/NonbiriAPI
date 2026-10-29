@@ -48,7 +48,7 @@ func gatewayDescriptorForType(kind contract.Type, models gatewaypolicy.Config) D
 			if request.Operation() != contract.OperationResponses {
 				return gateway.SupportsInference(request)
 			}
-			chat, err := request.AsChatRequest()
+			chat, err := request.AsGatewayChatRequest()
 			if err != nil {
 				return false
 			}
@@ -78,7 +78,7 @@ func gatewayDescriptorForType(kind contract.Type, models gatewaypolicy.Config) D
 			if policy.FlattenToolCalls {
 				return &contract.RequestRejection{Stage: "protocol preflight", Field: "tools", Reason: "tool flattening is unavailable for Responses conversion"}
 			}
-			chat, err := request.AsChatRequest()
+			chat, err := request.AsGatewayChatRequest()
 			if err != nil {
 				return err
 			}
@@ -164,7 +164,7 @@ func (c *gatewayConnector) attemptResponses(ctx context.Context, input AttemptIn
 	if input.Policy.FlattenToolCalls {
 		return failed
 	}
-	chat, err := input.Inference.AsChatRequest()
+	chat, err := input.Inference.AsGatewayChatRequest()
 	if err != nil {
 		return failed
 	}

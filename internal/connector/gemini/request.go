@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector/chatwire"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/continuation"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
@@ -262,10 +263,13 @@ func signature(raw []byte) (string, error) {
 		return "", nil
 	}
 	outer, err := chatwire.Object(raw)
-	if err != nil || !chatwire.Keys(outer, "google") {
+	if err != nil || !continuation.ValidExtra(outer, "google") {
 		return "", chatwire.Rejection("extra_content")
 	}
 	google, err := chatwire.Object(outer["google"])
+	if err == nil && chatwire.Keys(google, "parts") && len(google["parts"]) > 0 {
+		return "", nil
+	}
 	if err != nil || !chatwire.Keys(google, "thought_signature") {
 		return "", chatwire.Rejection("extra_content")
 	}
@@ -396,6 +400,10 @@ func messages(raw []byte) ([]any, []any, error) {
 					}
 					parts = append(parts, part)
 				}
+			}
+			parts, err = replayParts(message["extra_content"], parts)
+			if err != nil {
+				return nil, nil, err
 			}
 			role = "model"
 		} else if role != "user" || len(message["tool_calls"])+len(message["tool_call_id"])+len(message["extra_content"])+len(message["reasoning_content"]) > 0 {
