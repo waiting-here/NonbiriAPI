@@ -163,7 +163,7 @@ func FinalizeContextTx(ctx context.Context, tx *sql.Tx) error {
 	return appendOperationTx(ctx, tx, parent, nil, true)
 }
 
-// RecoverInterrupted closes synchronous batches interrupted by process exit.
+// RecoverInterrupted closes work whose execution state was lost on process exit.
 // Call once before serving requests; durable background tasks use their own
 // recovery paths and retain their accepted operation.
 func (s *Service) RecoverInterrupted(ctx context.Context) error {
@@ -172,7 +172,7 @@ func (s *Service) RecoverInterrupted(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		rows, err := tx.QueryContext(ctx, "SELECT "+operationColumns+" FROM management_operations WHERE correlation_kind IN ('automation_batch','request_cleanup') AND outcome='accepted' ORDER BY id LIMIT 32")
+		rows, err := tx.QueryContext(ctx, "SELECT "+operationColumns+" FROM management_operations WHERE correlation_kind IN ('automation_batch','request_cleanup','codex_login') AND outcome='accepted' ORDER BY id LIMIT 32")
 		if err != nil {
 			tx.Rollback()
 			return err
