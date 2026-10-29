@@ -540,3 +540,48 @@ it('accepts direct-inference routes and safe rejected request paths', () => {
   };
   expect(normalizeUserLogRow(rejected).request_path).toBe('/v1/audio/speech');
 });
+
+it('keeps optional failure observations without rejecting readable attempts or exposing charity attempts', () => {
+  const error_diagnostics = {
+    category: 'network',
+    phase: 'read_response',
+    code: 'connection_reset',
+    upstream_status: 200,
+    protocol_complete: false,
+    causes: [null, { type: '*net.OpError', code: 'connection_reset' }],
+  };
+  const decoded = normalizeAdminLogAttempt({ ...attempt, error_diagnostics });
+  expect(decoded.error_diagnostics).toMatchObject({
+    upstream_status: 200,
+    protocol_complete: false,
+    incomplete: true,
+    causes: [{ type: '*net.OpError', code: 'connection_reset' }],
+  });
+  expect(
+    normalizeStewardLogAttempt({ ...attempt, error_diagnostics: [] }).error_diagnostics,
+  ).toBeNull();
+  expect(
+    normalizeUserLogAttempt({ ...attempt, endpoint_note: '', key_note: '', error_diagnostics })
+      .error_diagnostics,
+  ).toMatchObject({ code: 'connection_reset' });
+  const charityRow = { ...userRow } as Partial<typeof userRow>;
+  delete charityRow.attempt_count;
+  const charity = normalizeUserLogDetail({
+    request: { ...charityRow, route_kind: 'charity_chat_completions' },
+    caller_safe_result: { class: 'success' },
+    delivery: { http_status: 200, bytes: 14, failed: false },
+    attempts: { data: [attempt], next_cursor: null },
+  });
+  expect(charity).not.toHaveProperty('attempts');
+  expect(charity.delivery).toMatchObject({ http_status: 200, bytes: 14, failed: false });
+});
+
+it('keeps diagnostic filters and exports within management roles', () => {
+  const filters = { error_category: 'network', error_phase: 'read_response' };
+  expect(validateLogFilter('admin', filters)).toMatchObject(filters);
+  expect(validateLogFilter('steward', filters)).toMatchObject(filters);
+  expect(validateLogFilter('user', filters)).toEqual({});
+  expect(roleLogExportPath('admin', filters, 'json')).toContain('error_category=network');
+  expect(roleLogExportPath('steward', filters, 'csv')).toContain('error_phase=read_response');
+  expect(roleLogExportPath('user', filters, 'json')).not.toContain('error_');
+});

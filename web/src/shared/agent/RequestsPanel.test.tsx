@@ -1,12 +1,14 @@
+import { normalizeFailure } from '@shared/observability/failure';
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import type { AgentRequest } from './api';
 import { RequestsPanel, UsageTokens } from './RequestsPanel';
-const mocks = vi.hoisted(() => ({ get: vi.fn(), cleanup: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), detail: vi.fn(), cleanup: vi.fn() }));
 vi.mock('./api', async (original) => ({
   ...(await original<typeof import('./api')>()),
   getRequests: mocks.get,
+  getRequest: mocks.detail,
   cleanupRequests: mocks.cleanup,
 }));
 const usage = {
@@ -90,4 +92,37 @@ describe('administrator Agent request history', () => {
     expect(screen.getAllByText('Unknown')).toHaveLength(4);
     expect(screen.getByText(/must not be treated as zero/)).toBeVisible();
   });
+});
+
+it('shows AI failure evidence only after opening request details', async () => {
+  mocks.get.mockResolvedValue({ items: [request], total: '1', page: 1, page_size: 20 });
+  mocks.detail.mockResolvedValue({
+    ...request,
+    state: 'failed',
+    response_complete: false,
+    queued_input: null,
+    request_body: '',
+    response_body: '',
+    error_code: 'read_failed',
+    error_diagnostics: normalizeFailure({
+      category: 'network',
+      phase: 'read_response',
+      code: 'connection_reset',
+      upstream_status: 200,
+      protocol_complete: false,
+      causes: [null],
+    }),
+  });
+  const view = await renderWithProviders(<RequestsPanel account="synthetic" active />, {
+    station: 'admin',
+    role: 'admin',
+  });
+  expect(mocks.detail).not.toHaveBeenCalled();
+  await view.user.click(await screen.findByRole('button', { name: 'Open' }));
+  expect(await screen.findByText('The peer reset the connection')).toBeVisible();
+  expect(screen.getByText('Completion was not confirmed')).toBeVisible();
+  await view.user.click(screen.getByText('Technical evidence'));
+  expect(screen.getByText(/Some diagnostic items were unreadable/)).toBeVisible();
+  await view.user.click(screen.getByRole('button', { name: 'Back to list' }));
+  expect(screen.queryByText('The peer reset the connection')).toBeNull();
 });

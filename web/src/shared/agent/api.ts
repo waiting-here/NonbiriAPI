@@ -1,3 +1,4 @@
+import { normalizeFailure, type FailureDiagnostics } from '@shared/observability/failure';
 import { apiFetch } from '@shared/query/http';
 import { queryPath } from '@shared/operations/api';
 import { array, decimal, integer, invalidResponse, record } from '@shared/operations/wire';
@@ -196,6 +197,7 @@ export interface AgentRequest {
   usage: TokenUsage;
 }
 export interface AgentRequestDetail extends AgentRequest {
+  error_diagnostics?: FailureDiagnostics | null;
   queued_input: unknown;
   request_body: string;
   response_body: string;
@@ -584,8 +586,9 @@ export const getRequest = (id: string, signal?: AbortSignal) =>
       ...object<AgentRequestDetail>(
         value,
         ['queued_input', 'request_body', 'response_body'],
-        ['response_body_base64'],
+        ['response_body_base64', 'error_diagnostics'],
       ),
+      error_diagnostics: normalizeFailure((value as Record<string, unknown>).error_diagnostics),
     }),
     signal,
   );

@@ -395,3 +395,54 @@ describe('charity model log filtering', () => {
     },
   );
 });
+
+it('keeps readable delivery and attempt details when an independent diagnostic is malformed', () => {
+  const decoded = normalizeRoleLogDetail(
+    adminDetail({
+      delivery: { http_status: 200, bytes: 9, failed: true, failure: 'damaged' },
+      attempts: {
+        data: [
+          {
+            ...adminAttempt,
+            error_diagnostics: {
+              category: 'encoding',
+              code: 'compression_checksum_invalid',
+              causes: [null],
+            },
+          },
+        ],
+        next_cursor: null,
+      },
+    }),
+    'admin',
+    '1',
+    20,
+  );
+  expect(decoded.delivery).toMatchObject({ http_status: 200, failure: null, incomplete: true });
+  expect('attempts' in decoded && decoded.attempts.data[0].error_diagnostics).toMatchObject({
+    category: 'encoding',
+    incomplete: true,
+  });
+  expect(normalizeRoleLogDetail(detail(), 'user', '1', 20).delivery).toBeUndefined();
+});
+
+it.each(['admin', 'steward'] as const)(
+  'sends %s diagnostic filters only in the page query',
+  async (role) => {
+    const path = role === 'admin' ? '/admin/api/logs' : '/api/steward/logs';
+    const fetchMock = installJsonFetchFixtures([
+      {
+        method: 'GET',
+        path: path + '?error_category=network&error_phase=read_response&page=1&page_size=20',
+        body: list([], pagination('1', 20, 0)),
+      },
+    ]);
+    await getRoleLogsPage(role, '1', 20, {
+      error_category: 'network',
+      error_phase: 'read_response',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await expect(getRoleLogsPage('user', '1', 20, { error_category: 'network' })).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  },
+);
