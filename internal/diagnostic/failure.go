@@ -386,6 +386,9 @@ func classify(err error, phase string) (string, string, string) {
 	case errors.As(err, &shape):
 		return "protocol", "json_type_mismatch", fmt.Sprintf("Unexpected JSON value type at byte %d", shape.Offset)
 	}
+	if category, code, message := socketFailure(err); code != "" {
+		return category, code, message
+	}
 	var network net.Error
 	if errors.As(err, &network) && network.Timeout() {
 		return "timeout", "network_timeout", "Network operation timed out"

@@ -76,6 +76,10 @@ func observeResponse(ctx context.Context, request *http.Request, response *http.
 		}
 	}
 	encoding := strings.ToLower(strings.TrimSpace(response.Header.Get("Content-Encoding")))
+	if response.Uncompressed && encoding == "" {
+		// net/http removes this header after automatically decoding gzip.
+		encoding = "gzip"
+	}
 	switch encoding {
 	case "", "identity", "gzip", "deflate", "br", "zstd":
 	default:

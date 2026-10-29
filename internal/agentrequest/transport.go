@@ -40,7 +40,7 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 	}
 	key, err := r.secrets.OpenAgentKey(encrypted, "model")
 	if err != nil {
-		diagnostic.RecordError(ctx, "credential", err)
+		diagnostic.RecordKnownError(ctx, "credential", "platform", "credential_unavailable", "The configured credential could not be opened", err)
 		finish(state, "credential_unavailable", false)
 		return
 	}
@@ -51,7 +51,7 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 	}
 	client, err := r.stack.NewClient(s.BaseURL)
 	if err != nil {
-		diagnostic.RecordError(ctx, "policy", err)
+		diagnostic.RecordKnownError(ctx, "policy", "policy", "endpoint_invalid", "The configured endpoint could not pass outbound policy", err)
 		finish(state, "endpoint_unavailable", false)
 		return
 	}
@@ -202,8 +202,8 @@ func parseResult(id int64, raw []byte) (Result, error) {
 			} `json:"completion_tokens_details"`
 		} `json:"usage"`
 	}
-	if json.Unmarshal(raw, &response) != nil {
-		return result, ErrProtocol
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return result, errors.Join(ErrProtocol, err)
 	}
 	if u := response.Usage; u != nil && u.Input != nil && u.Output != nil {
 		values := []int64{*u.Input, *u.Output, u.CacheWrite, u.InputDetails.Cached, u.OutputDetails.Reasoning}
