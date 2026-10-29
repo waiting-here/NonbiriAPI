@@ -69,6 +69,23 @@ does not consume the writer, retains consistent counts and results through a
 concurrent commit, and rechecks current permissions on the next request. An
 uncontended lookup microbenchmark alone does not demonstrate reduced contention.
 
+Choose the connection from the complete operation, including authorization and
+helpers. `ReadOnly: true` on the writer pool still consumes its only connection;
+`QueryRow` may execute a write with `RETURNING`. Pure projections use the existing
+query-only reader pool, with permissions and related rows in one snapshot.
+Release that snapshot before sending an HTTP response. Background
+candidate and empty-queue checks can also use readers when the subsequent writer
+transaction rechecks every predicate before changing data.
+
+Expiry materialization, legal-hold access auditing, claims and settlement remain
+writer operations. A GET route or a method named `Read` is not enough to prove
+that an operation is pure. Production constructors must receive the store's
+reader explicitly when they accept separate database handles. Tests that pass
+one handle for both pools do not validate this wiring. The shared
+`dbtest.WithoutWriter` regression helper holds the writer, checks that a read
+does not queue for it and verifies that the reader is released. Pair these cases
+with current-permission, snapshot and read-before-write regressions as applicable.
+
 Session validation uses a read snapshot when the current second and exact idle
 expiry have already been persisted. Renewal and stale-session cleanup close that
 snapshot, acquire the writer and recheck current authority before changing data.
