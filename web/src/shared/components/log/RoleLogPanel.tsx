@@ -1,3 +1,10 @@
+import { FailureDetails, RequestDelivery } from '@shared/observability/FailureDiagnostics';
+import {
+  FAILURE_CATEGORIES,
+  FAILURE_PHASES,
+  failureCategoryKey,
+  failurePhaseKey,
+} from '@shared/observability/failure';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { MODEL_TYPE_LABEL_KEYS, type ModelType } from '@shared/modelTypes';
 import { Button } from '@shared/components/ui/Button';
@@ -297,11 +304,18 @@ function AttemptTable({
                     <TokenBuckets row={attempt.usage} />
                   </dd>
                 </div>
-                <div>
-                  <dt>{t('logs.diag')}</dt>
-                  <dd className="mono log-attempt-diagnostic">{attempt.diag ?? '—'}</dd>
-                </div>
               </dl>
+              {attempt.diag && (
+                <Fold plain title={t('logs.diag')}>
+                  <p className="mono log-attempt-diagnostic">{attempt.diag}</p>
+                </Fold>
+              )}
+              {(attempt.error_diagnostics !== undefined ||
+                attempt.diag ||
+                attempt.result_kind === 'synthetic' ||
+                (attempt.status_code ?? 0) >= 400) && (
+                <FailureDetails failure={attempt.error_diagnostics} />
+              )}
               {attempt.role !== 'user' &&
               detail.request.role !== 'user' &&
               detail.request.route_kind.startsWith('charity_') ? (
@@ -445,6 +459,8 @@ function ScopedRoleLogPanel({
             'status',
             'phase',
             'usage_total_mismatch',
+            'error_category',
+            'error_phase',
           ] as const),
     [role],
   );
@@ -573,6 +589,26 @@ function ScopedRoleLogPanel({
         maxLength: 39,
       });
     if (role !== 'user') {
+      values.push(
+        {
+          name: 'error_category',
+          label: t('common.failure.categoryLabel'),
+          ariaLabel: t('common.failure.categoryLabel'),
+          options: [
+            { value: '', label: t('common.failure.allCategories') },
+            ...FAILURE_CATEGORIES.map((value) => ({ value, label: t(failureCategoryKey(value)) })),
+          ],
+        },
+        {
+          name: 'error_phase',
+          label: t('common.failure.phaseLabel'),
+          ariaLabel: t('common.failure.phaseLabel'),
+          options: [
+            { value: '', label: t('common.failure.allPhases') },
+            ...FAILURE_PHASES.map((value) => ({ value, label: t(failurePhaseKey(value)) })),
+          ],
+        },
+      );
       values.push({
         name: 'discord_id',
         label: t('logs.callerDiscordId'),
@@ -1202,6 +1238,10 @@ function ScopedRoleLogPanel({
           detailRequest ? (
             <>
               {modelManagement(detailRequest)}
+              <RequestDelivery
+                delivery={detailData?.delivery}
+                result={resultLabel(detailRequest)}
+              />
               <Note
                 tone={logResult(detailRequest).tone}
                 title={t(logResultCopyKey(role, logResult(detailRequest).key), {

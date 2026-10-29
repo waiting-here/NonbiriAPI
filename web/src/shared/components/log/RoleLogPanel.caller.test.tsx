@@ -578,3 +578,45 @@ it('shows an honest missing-detail fallback for an older owner row', async () =>
   expect(screen.queryByText('How to correct it')).not.toBeInTheDocument();
   view.unmount();
 });
+
+it.each(['admin', 'steward'] as const)(
+  'restores %s failure filters from the URL and exports the same scope',
+  async (role) => {
+    const root = role === 'admin' ? '/admin/api/logs' : '/api/steward/logs';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), window.location.origin);
+      const body = url.pathname.endsWith('/time-zones')
+        ? { version: 'go1.26.6-zoneinfo', zones: ['UTC'] }
+        : {
+            data: [],
+            next_cursor: null,
+            pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+          };
+      return new Response(JSON.stringify(body), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, {
+      station: role === 'admin' ? 'admin' : 'user',
+      role: role === 'admin' ? 'admin' : 'level6',
+      route: '/logs?error_category=network&error_phase=read_response',
+    });
+    expect(screen.getByLabelText('Failure type')).toHaveValue('network');
+    expect(screen.getByLabelText('Failure stage')).toHaveValue('read_response');
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
+        root + '?error_category=network&error_phase=read_response&page=1&page_size=20',
+      ),
+    );
+    await view.user.click(screen.getByText('Export ▾'));
+    expect(
+      screen.getByRole('link', {
+        name: view.i18n.t('common.operations.logs.presentation.exportJson'),
+      }),
+    ).toHaveAttribute(
+      'href',
+      root + '/export.json?error_category=network&error_phase=read_response',
+    );
+  },
+);

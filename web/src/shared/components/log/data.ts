@@ -1,3 +1,9 @@
+import {
+  normalizeFailure,
+  normalizeDelivery,
+  type FailureDiagnostics,
+  type DeliveryDiagnostics,
+} from '@shared/observability/failure';
 import { decoded, queryPath } from '@shared/operations/api';
 import { logOriginFields, normalizeLogOrigin, type LogOrigin } from '@shared/operations/logOrigin';
 import {
@@ -164,6 +170,7 @@ export interface StewardLogRow extends LogRowCommon, LogOrigin {
 export type RoleLogRow = UserLogRow | AdminLogRow | StewardLogRow;
 
 interface LogAttemptCommon {
+  error_diagnostics?: FailureDiagnostics | null;
   attempt_seq: string;
   result_kind: 'response' | 'synthetic';
   endpoint_key_id: string | null;
@@ -211,20 +218,25 @@ export interface StewardLogAttempt extends LogAttemptCommon {
 }
 export type RoleLogAttempt = UserLogAttempt | AdminLogAttempt | StewardLogAttempt;
 
-export type UserLogDetail =
+export type UserLogDetail = { delivery?: DeliveryDiagnostics | null } & (
   | { kind: 'self'; request: UserSelfLogRow; attempts: CursorPage<UserLogAttempt> }
-  | { kind: 'charity'; request: UserCharityLogRow; caller_safe_result: { class: LogResultClass } };
+  | { kind: 'charity'; request: UserCharityLogRow; caller_safe_result: { class: LogResultClass } }
+);
 export interface AdminLogDetail {
+  delivery?: DeliveryDiagnostics | null;
   request: AdminLogRow;
   attempts: CursorPage<AdminLogAttempt>;
 }
 export interface StewardLogDetail {
+  delivery?: DeliveryDiagnostics | null;
   request: StewardLogRow;
   attempts: CursorPage<StewardLogAttempt>;
 }
 export type RoleLogDetail = UserLogDetail | AdminLogDetail | StewardLogDetail;
 
 export interface LogFiltersValue {
+  error_category?: string;
+  error_phase?: string;
   phase?: 'handler' | 'pre_handler';
   model?: string;
   user_id?: string;
@@ -703,6 +715,7 @@ function commonAttempt(root: WireRecord, redactedDisplay = false): LogAttemptCom
   const completedAt = unixSecond(root.completed_at, 'attempt completion time');
   if (completedAt < startedAt) invalidResponse('attempt completion time');
   return {
+    error_diagnostics: normalizeFailure(root.error_diagnostics),
     attempt_seq: decimal(root.attempt_seq, 'attempt sequence', { positive: true }),
     result_kind: resultKind,
     endpoint_key_id: nullableDecimalID(root.endpoint_key_id, 'endpoint key id'),
@@ -737,7 +750,12 @@ function commonAttempt(root: WireRecord, redactedDisplay = false): LogAttemptCom
 }
 
 export function normalizeUserLogAttempt(value: unknown): UserLogAttempt {
-  const root = record(value, [...ATTEMPT_FIELDS, 'endpoint_note', 'key_note'], 'user log attempt');
+  const root = record(
+    value,
+    [...ATTEMPT_FIELDS, 'endpoint_note', 'key_note', 'error_diagnostics'],
+    'user log attempt',
+    [...ATTEMPT_FIELDS, 'endpoint_note', 'key_note'],
+  );
   return {
     ...commonAttempt(root, true),
     role: 'user',
@@ -749,7 +767,13 @@ export function normalizeUserLogAttempt(value: unknown): UserLogAttempt {
 export function normalizeAdminLogAttempt(value: unknown): AdminLogAttempt {
   const root = record(
     value,
-    [...ATTEMPT_FIELDS, 'usage_total_mismatch', 'donation_id', 'donation_key_id'],
+    [
+      ...ATTEMPT_FIELDS,
+      'usage_total_mismatch',
+      'donation_id',
+      'donation_key_id',
+      'error_diagnostics',
+    ],
     'administrator log attempt',
     [...ATTEMPT_FIELDS, 'usage_total_mismatch'],
   );
@@ -764,7 +788,13 @@ export function normalizeAdminLogAttempt(value: unknown): AdminLogAttempt {
 export function normalizeStewardLogAttempt(value: unknown): StewardLogAttempt {
   const root = record(
     value,
-    [...ATTEMPT_FIELDS, 'usage_total_mismatch', 'donation_id', 'donation_key_id'],
+    [
+      ...ATTEMPT_FIELDS,
+      'usage_total_mismatch',
+      'donation_id',
+      'donation_key_id',
+      'error_diagnostics',
+    ],
     'steward log attempt',
     [...ATTEMPT_FIELDS, 'usage_total_mismatch'],
   );
@@ -777,21 +807,34 @@ export function normalizeStewardLogAttempt(value: unknown): StewardLogAttempt {
 }
 
 export function normalizeUserLogDetail(value: unknown): UserLogDetail {
-  const probe = record(value, ['request', 'attempts', 'caller_safe_result'], 'user log detail', [
-    'request',
-  ]);
+  const probe = record(
+    value,
+    ['request', 'attempts', 'caller_safe_result', 'delivery'],
+    'user log detail',
+    ['request'],
+  );
   const request = normalizeUserLogRow(probe.request);
   if (request.kind === 'charity') {
-    const root = record(value, ['request', 'caller_safe_result'], 'charity log detail');
+    const root = record(
+      value,
+      ['request', 'caller_safe_result', 'delivery'],
+      'charity log detail',
+      ['request', 'caller_safe_result'],
+    );
     const safe = record(root.caller_safe_result, ['class'], 'charity caller-safe result');
     return {
+      delivery: normalizeDelivery(root.delivery),
       kind: 'charity',
       request,
       caller_safe_result: { class: oneOf(safe.class, RESULT_CLASSES, 'caller-safe class') },
     };
   }
-  const root = record(value, ['request', 'attempts'], 'self log detail');
+  const root = record(value, ['request', 'attempts', 'delivery'], 'self log detail', [
+    'request',
+    'attempts',
+  ]);
   return {
+    delivery: normalizeDelivery(root.delivery),
     kind: 'self',
     request,
     attempts: page(root.attempts, 'self log attempts', normalizeUserLogAttempt),
@@ -799,16 +842,24 @@ export function normalizeUserLogDetail(value: unknown): UserLogDetail {
 }
 
 export function normalizeAdminLogDetail(value: unknown): AdminLogDetail {
-  const root = record(value, ['request', 'attempts'], 'administrator log detail');
+  const root = record(value, ['request', 'attempts', 'delivery'], 'administrator log detail', [
+    'request',
+    'attempts',
+  ]);
   return {
+    delivery: normalizeDelivery(root.delivery),
     request: normalizeAdminLogRow(root.request),
     attempts: page(root.attempts, 'administrator log attempts', normalizeAdminLogAttempt),
   };
 }
 
 export function normalizeStewardLogDetail(value: unknown): StewardLogDetail {
-  const root = record(value, ['request', 'attempts'], 'steward log detail');
+  const root = record(value, ['request', 'attempts', 'delivery'], 'steward log detail', [
+    'request',
+    'attempts',
+  ]);
   return {
+    delivery: normalizeDelivery(root.delivery),
     request: normalizeStewardLogRow(root.request),
     attempts: page(root.attempts, 'steward log attempts', normalizeStewardLogAttempt),
   };
@@ -886,7 +937,11 @@ export function roleLogExportPath(
   format: 'csv' | 'json',
 ): string {
   const managementFilter = { ...filter };
-  if (role === 'user') return queryPath(`/api/logs/export.${format}`, managementFilter);
+  if (role === 'user') {
+    delete managementFilter.error_category;
+    delete managementFilter.error_phase;
+    return queryPath(`/api/logs/export.${format}`, managementFilter);
+  }
   delete managementFilter.model;
   const root = role === 'admin' ? '/admin/api/logs' : '/api/steward/logs';
   return queryPath(`${root}/export.${format}`, managementFilter);
@@ -916,6 +971,8 @@ export function validateLogFilter(role: LogRole, raw: Record<string, string>): L
   if (role !== 'user') {
     const discordID = raw.discord_id?.trim();
     if (discordID && validLogDiscordID(discordID)) result.discord_id = discordID;
+    assign('error_category', 64);
+    assign('error_phase', 64);
     assign('endpoint_base_url', 512);
     assign('upstream_model', 512);
     assign('charity_model', 512);

@@ -1,3 +1,4 @@
+import { normalizeDelivery, type DeliveryDiagnostics } from '@shared/observability/failure';
 import { useQuery, type QueryKey, type UseQueryResult } from '@tanstack/react-query';
 import { ApiError } from '@shared/query/http';
 import { decoded, queryPath } from '@shared/operations/api';
@@ -39,7 +40,7 @@ export interface NumberedLogPage<Row extends RoleLogRow = RoleLogRow> {
   pagination: PageMetadata;
 }
 
-export type NumberedUserLogDetail =
+export type NumberedUserLogDetail = { delivery?: DeliveryDiagnostics | null } & (
   | {
       kind: 'self';
       request: UserSelfLogRow;
@@ -50,15 +51,18 @@ export type NumberedUserLogDetail =
       kind: 'charity';
       request: UserCharityLogRow;
       caller_safe_result: { class: 'success' | 'failed' | 'cancelled' };
-    };
+    }
+);
 
 export interface NumberedAdminLogDetail {
+  delivery?: DeliveryDiagnostics | null;
   request: AdminLogRow;
   attempts: CursorPage<AdminLogAttempt>;
   attempt_pagination: PageMetadata;
 }
 
 export interface NumberedStewardLogDetail {
+  delivery?: DeliveryDiagnostics | null;
   request: StewardLogRow;
   attempts: CursorPage<StewardLogAttempt>;
   attempt_pagination: PageMetadata;
@@ -93,6 +97,8 @@ const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
     'to',
     'phase',
     'usage_total_mismatch',
+    'error_category',
+    'error_phase',
   ],
   admin: [
     'user_id',
@@ -107,6 +113,8 @@ const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
     'to',
     'phase',
     'usage_total_mismatch',
+    'error_category',
+    'error_phase',
   ],
 };
 const MAX_LOG_UNIX_SECOND = 253_402_300_799;
@@ -232,15 +240,21 @@ function normalizedDetail(
   if (role === 'user') {
     const probe = record(
       value,
-      ['request', 'attempts', 'attempt_pagination', 'caller_safe_result'],
+      ['request', 'attempts', 'attempt_pagination', 'caller_safe_result', 'delivery'],
       'user log detail',
       ['request'],
     );
     const request = normalizeUserLogRow(probe.request);
     if (request.kind === 'charity') {
-      const root = record(value, ['request', 'caller_safe_result'], 'charity log detail');
+      const root = record(
+        value,
+        ['request', 'caller_safe_result', 'delivery'],
+        'charity log detail',
+        ['request', 'caller_safe_result'],
+      );
       const safe = record(root.caller_safe_result, ['class'], 'charity caller-safe result');
       return {
+        delivery: normalizeDelivery(root.delivery),
         kind: 'charity',
         request,
         caller_safe_result: {
@@ -252,7 +266,12 @@ function normalizedDetail(
         },
       };
     }
-    const root = record(value, ['request', 'attempts', 'attempt_pagination'], 'self log detail');
+    const root = record(
+      value,
+      ['request', 'attempts', 'attempt_pagination', 'delivery'],
+      'self log detail',
+      ['request', 'attempts', 'attempt_pagination'],
+    );
     const attemptPagination = normalizePageMetadata(root.attempt_pagination);
     const attempts = normalizedAttempts(
       root.attempts,
@@ -261,10 +280,21 @@ function normalizedDetail(
       normalizeUserLogAttempt,
     );
     validatePageResponse(attemptPagination, window.page, window.pageSize);
-    return { kind: 'self', request, attempts, attempt_pagination: attemptPagination };
+    return {
+      kind: 'self',
+      delivery: normalizeDelivery(root.delivery),
+      request,
+      attempts,
+      attempt_pagination: attemptPagination,
+    };
   }
 
-  const root = record(value, ['request', 'attempts', 'attempt_pagination'], `${role} log detail`);
+  const root = record(
+    value,
+    ['request', 'attempts', 'attempt_pagination', 'delivery'],
+    `${role} log detail`,
+    ['request', 'attempts', 'attempt_pagination'],
+  );
   const attemptPagination = normalizePageMetadata(root.attempt_pagination);
   if (role === 'admin') {
     const attempts = normalizedAttempts(
@@ -275,6 +305,7 @@ function normalizedDetail(
     );
     validatePageResponse(attemptPagination, window.page, window.pageSize);
     return {
+      delivery: normalizeDelivery(root.delivery),
       request: normalizeAdminLogRow(root.request),
       attempts,
       attempt_pagination: attemptPagination,
@@ -288,6 +319,7 @@ function normalizedDetail(
   );
   validatePageResponse(attemptPagination, window.page, window.pageSize);
   return {
+    delivery: normalizeDelivery(root.delivery),
     request: normalizeStewardLogRow(root.request),
     attempts,
     attempt_pagination: attemptPagination,

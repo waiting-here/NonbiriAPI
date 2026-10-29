@@ -1,3 +1,4 @@
+import { FailureDetails } from '@shared/observability/FailureDiagnostics';
 import { sourceLabels } from './presentation';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -292,6 +293,11 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
                 {!detail.data.response_complete ? (
                   <Note tone="warn">{t('common.agent.responseIncomplete')}</Note>
                 ) : null}
+                {(detail.data.error_diagnostics !== undefined ||
+                  detail.data.error_code ||
+                  ['failed', 'canceled', 'cancelled'].includes(detail.data.state)) && (
+                  <FailureDetails failure={detail.data.error_diagnostics} />
+                )}
                 <UsageTokens usage={detail.data.usage} />
                 <RawData
                   title={t('common.agent.submittedInput')}

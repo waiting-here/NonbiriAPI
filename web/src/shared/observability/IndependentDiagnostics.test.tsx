@@ -72,6 +72,14 @@ describe('independent management diagnostics', () => {
     const metadata = entry();
     request.apiFetch.mockResolvedValueOnce(page()).mockResolvedValueOnce({
       item: metadata,
+      error_diagnostics: {
+        category: 'network',
+        phase: 'read_response',
+        code: 'connection_reset',
+        causes: [null],
+        upstream_status: 200,
+        protocol_complete: false,
+      },
       body: { ...metadata, encoding: 'utf-8', body: '<script>untrusted</script>' },
       source: { effective_ip: '192.0.2.17', ip_quality: 'direct_peer', user_agent: '<img src=x>' },
     });
@@ -84,6 +92,10 @@ describe('independent management diagnostics', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Load error details and source' }));
     expect(await screen.findByText('<script>untrusted</script>')).toBeInTheDocument();
     expect(screen.getByText('<img src=x>')).toBeInTheDocument();
+    expect(screen.getByText('The peer reset the connection')).toBeVisible();
+    expect(screen.getByText('Completion was not confirmed')).toBeVisible();
+    fireEvent.click(screen.getByText('Technical evidence'));
+    expect(screen.getByText(/Some diagnostic items were unreadable/)).toBeVisible();
     expect(document.querySelector('script')).toBeNull();
     expect(document.querySelector('img')).toBeNull();
     view.rerender(<IndependentDiagnostics role="admin" accountId="b" scopeReady />);

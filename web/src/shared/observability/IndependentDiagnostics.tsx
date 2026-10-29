@@ -1,3 +1,4 @@
+import { FailureDetails } from './FailureDiagnostics';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CopyValue } from '@shared/components/CopyValue';
@@ -285,6 +286,7 @@ function Detail({
       )}
       {detail && (
         <>
+          <FailureDetails failure={detail.error_diagnostics} />
           {detail.item.kind === 'image_discovery' && (
             <DispatchDetails dispatch={detail.item.dispatch} />
           )}
