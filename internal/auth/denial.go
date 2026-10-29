@@ -174,26 +174,32 @@ func (r *Runtime) accessDeniedReasons(w http.ResponseWriter, req *http.Request) 
 	hash := sha256.Sum256([]byte(raw))
 	ctx, cancel := context.WithTimeout(req.Context(), 2*time.Second)
 	defer cancel()
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := r.readDatabase().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		writeAuthFailure(w, err)
 		return
 	}
 	defer tx.Rollback()
+	readFailure := func(err error) {
+		_ = tx.Rollback()
+		writeAuthFailure(w, err)
+	}
 	var discord string
 	var domain []byte
 	err = tx.QueryRowContext(ctx, `SELECT discord_id,cursor_domain FROM auth_denial_grants WHERE token_hash=? AND expires_at>?`, hash[:], r.now().Unix()).Scan(&discord, &domain)
 	if errors.Is(err, sql.ErrNoRows) {
+		_ = tx.Rollback()
 		clearDenialCookie(w)
 		writeStableError(w, httperr.CodeUnauthorized, "verify your identity again")
 		return
 	}
 	if err != nil {
-		writeAuthFailure(w, err)
+		readFailure(err)
 		return
 	}
 	offset, err := denialOffset(domain, q)
 	if err != nil {
+		_ = tx.Rollback()
 		writeStableError(w, httperr.CodeInvalidRequest, "invalid cursor")
 		return
 	}
@@ -203,7 +209,7 @@ func (r *Runtime) accessDeniedReasons(w http.ResponseWriter, req *http.Request) 
 	var restricted bool
 	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM discord_blacklist WHERE discord_id=?) OR EXISTS(SELECT 1 FROM users WHERE discord_id=? AND is_admin=0 AND is_banned=1 AND (banned_until IS NULL OR banned_until>?))`, discord, discord, now).Scan(&restricted)
 	if err != nil {
-		writeAuthFailure(w, err)
+		readFailure(err)
 		return
 	}
 	page := DenialPage{Restricted: restricted, Items: []DenialReason{}}
@@ -214,7 +220,7 @@ func (r *Runtime) accessDeniedReasons(w http.ResponseWriter, req *http.Request) 
  UNION ALL SELECT 2,e.id,'blacklist_note',e.safe_note,e.created_at,NULL,e.reason_codes_json FROM discord_blacklist_events e WHERE e.discord_id=? AND e.safe_note<>'' AND e.id<>(SELECT f.id FROM discord_blacklist_events f WHERE f.discord_id=e.discord_id ORDER BY f.created_at,f.id LIMIT 1) AND EXISTS(SELECT 1 FROM discord_blacklist b WHERE b.discord_id=e.discord_id)
  ) ORDER BY section,ordinal LIMIT 21 OFFSET ?`, discord, now, discord, discord, offset)
 		if err != nil {
-			writeAuthFailure(w, err)
+			readFailure(err)
 			return
 		}
 		for rows.Next() {
@@ -237,7 +243,7 @@ func (r *Runtime) accessDeniedReasons(w http.ResponseWriter, req *http.Request) 
 		}
 		rows.Close()
 		if err != nil {
-			writeAuthFailure(w, err)
+			readFailure(err)
 			return
 		}
 		if len(page.Items) > 20 {
@@ -253,12 +259,12 @@ func (r *Runtime) accessDeniedReasons(w http.ResponseWriter, req *http.Request) 
 			var language string
 			err = tx.QueryRowContext(ctx, `SELECT id,lang FROM users WHERE discord_id=? AND is_admin=0`, discord).Scan(&user, &language)
 			if err != nil {
-				writeAuthFailure(w, err)
+				readFailure(err)
 				return
 			}
 			metadata, err := observability.ReadAutomaticReasonTx(ctx, tx, "user_ban", strconv.FormatInt(user, 10))
 			if err != nil {
-				writeAuthFailure(w, err)
+				readFailure(err)
 				return
 			}
 			if metadata != nil {
@@ -275,7 +281,7 @@ func (r *Runtime) accessDeniedReasons(w http.ResponseWriter, req *http.Request) 
 			} else {
 				cases, e := readAutomaticRestrictions(ctx, tx, user, now, language)
 				if e != nil {
-					writeAuthFailure(w, e)
+					readFailure(e)
 					return
 				}
 				for _, c := range cases {
@@ -295,6 +301,7 @@ func (r *Runtime) accessDeniedReasons(w http.ResponseWriter, req *http.Request) 
 		body, err = textprivacy.MarshalJSON(page)
 	}
 	if err != nil || len(body)+1 > 128*1024 {
+		_ = tx.Rollback()
 		writeStableError(w, httperr.CodeInternal, "reasons unavailable")
 		return
 	}
