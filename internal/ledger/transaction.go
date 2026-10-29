@@ -16,6 +16,23 @@ var savepointSequence atomic.Uint64
 
 func validUnix(value int64) bool { return value >= 0 && value <= maxUnix }
 
+type savepointRollbackError struct{ cause error }
+
+func (err savepointRollbackError) Error() string {
+	return fmt.Sprintf("%v: savepoint rollback after %v", ErrInvariant, err.cause)
+}
+
+func (err savepointRollbackError) Unwrap() error { return ErrInvariant }
+
+func (err savepointRollbackError) Is(target error) bool {
+	// Preserve cancellation for startup diagnostics without turning unsafe
+	// cleanup into a retryable, capacity or other ordinary business failure.
+	if target != context.Canceled && target != context.DeadlineExceeded {
+		return false
+	}
+	return errors.Is(err.cause, target)
+}
+
 func withSavepoint(ctx context.Context, tx *sql.Tx, fn func() error) error {
 	if ctx == nil || tx == nil || fn == nil {
 		return ErrInvalidPlan
@@ -28,7 +45,7 @@ func withSavepoint(ctx context.Context, tx *sql.Tx, fn func() error) error {
 		_, rollbackErr := tx.ExecContext(ctx, "ROLLBACK TO "+name)
 		_, releaseErr := tx.ExecContext(ctx, "RELEASE "+name)
 		if rollbackErr != nil || releaseErr != nil {
-			return fmt.Errorf("%w: savepoint rollback after %w", ErrInvariant, err)
+			return savepointRollbackError{cause: err}
 		}
 		return err
 	}
