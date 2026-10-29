@@ -18,6 +18,7 @@ func restoreSchema39LayoutForTest(t *testing.T, database *sql.DB) {
 
 func restoreSchema40LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema41LayoutForTest(t, database)
 	for _, table := range []string{"management_operation_items", "management_operations", "management_operation_rollups", "management_operation_cleanup_jobs", "ai_agent_personal_memory_history", "ai_agent_personal_memories", "agent_request_drivers", "agent_driver_bindings", "agent_driver_profiles", "agent_chatgpt_session"} {
 		hostileMustExec(t, database, "DROP TABLE "+table)
 	}
