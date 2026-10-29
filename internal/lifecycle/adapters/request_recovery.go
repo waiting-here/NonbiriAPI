@@ -82,6 +82,9 @@ func (adapter *ClaimRecoveryAdapter) RecoverBeforeListener(
 	if ctx == nil {
 		return lifecycle.WorkResult{}, lifecycle.ErrInvalid
 	}
+	if limit < 1 || limit > claim.MaxRecoveryBatch {
+		return lifecycle.WorkResult{}, claim.ErrInvalidInput
+	}
 	adapter.mu.Lock()
 	defer adapter.mu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -92,15 +95,20 @@ func (adapter *ClaimRecoveryAdapter) RecoverBeforeListener(
 	if adapter.finished {
 		return lifecycle.WorkResult{}, nil
 	}
-	report, err := adapter.owner.RecoverNonterminalAt(ctx, decisionNow, limit, budgetDeadline)
+	// Each item owns a separate transaction and may post several ledger rows.
+	// A busy restart must not spend one short worker budget on up to 100 such
+	// transactions. Yield after one durable item; the coordinator supplies a
+	// fresh budget for the next while its overall startup deadline still applies.
+	const batchLimit = 1
+	report, err := adapter.owner.RecoverNonterminalAt(ctx, decisionNow, batchLimit, budgetDeadline)
 	if err != nil {
 		return lifecycle.WorkResult{}, err
 	}
 	processed := report.ReleasedClaims + report.CommittedClaims + report.CompletedRequests
-	if report.ReleasedClaims < 0 || report.ReleasedClaims > limit ||
-		report.CommittedClaims < 0 || report.CommittedClaims > limit ||
-		report.CompletedRequests < 0 || report.CompletedRequests > limit ||
-		processed < 0 || processed > limit || report.More && processed == 0 {
+	if report.ReleasedClaims < 0 || report.ReleasedClaims > batchLimit ||
+		report.CommittedClaims < 0 || report.CommittedClaims > batchLimit ||
+		report.CompletedRequests < 0 || report.CompletedRequests > batchLimit ||
+		processed < 0 || processed > batchLimit || report.More && processed == 0 {
 		return lifecycle.WorkResult{}, lifecycle.ErrInvariant
 	}
 	adapter.finished = !report.More

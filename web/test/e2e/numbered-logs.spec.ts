@@ -422,6 +422,9 @@ for (const scenario of [
       await dialog
         .getByRole('button', { name: locale === 'zh' ? '下一页' : 'Next', exact: true })
         .click();
+      await expect(
+        dialog.locator('.log-attempts + .page-pagination [aria-current="page"]'),
+      ).toHaveText(String(step + 2));
     }
     await expect(dialog.locator('.log-attempt')).toHaveCount(3);
     expect(new URL(page.url()).searchParams.get('page')).toBe('3');

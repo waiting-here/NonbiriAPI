@@ -572,17 +572,7 @@ func TestSubmitHTTPStatusTracksVerifyingAndTerminalForBothRoles(t *testing.T) {
 		t.Fatalf("admin verifying submit HTTP %d: %s", response.Code, response.Body.String())
 	}
 	releaseAdmin()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		view, err := f.s.PlaytestChallenge(ctx, f.admin, adminPrepared.ID, "")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if view.State == "settled_pass" {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	f.waitPlaytest(t, adminPrepared.ID)
 	response = httptest.NewRecorder()
 	adminHandler(response, adminRequest(), limitedactivities.AdminPrincipal{UserID: f.admin})
 	if response.Code != http.StatusOK {

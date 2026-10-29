@@ -41,6 +41,9 @@ Each version entry describes its source and compatibility boundary; a release ta
   administrator and steward pages can render successful responses. Parse only
   the history fields used for display, keeping unused management metadata from
   blocking the page.
+- Recover unfinished requests one financial transaction per worker budget so
+  a busy restart can drain its backlog within the overall startup deadline.
+  Preserve cancellation causes when ledger savepoint cleanup also fails.
 - Retain the source needed to redact image diagnostics after a task completes,
   allowing obsolete credentials to be removed without hiding the entire error.
 - Label accepted model-list refresh tasks accurately in request logs and open

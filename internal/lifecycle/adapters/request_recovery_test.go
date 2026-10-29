@@ -68,7 +68,7 @@ func TestClaimRecoveryDrainsOnceAndRetriesIncompleteStartup(t *testing.T) {
 		t.Fatalf("retry error: %v", err)
 	}
 	owner.err = nil
-	owner.result = claim.RecoveryReport{CompletedRequests: 11}
+	owner.result = claim.RecoveryReport{CompletedRequests: 2}
 	if _, err := run(); !errors.Is(err, lifecycle.ErrInvariant) {
 		t.Fatalf("invalid report: %v", err)
 	}
@@ -131,13 +131,15 @@ func TestRequestRecoveryAdaptersMapFrozenBudget(t *testing.T) {
 	assertRecoveryCall(t, discoveryOwner.call, ctx, decisionNow, limit, deadline)
 
 	claimOwner := &claimRecoveryStub{result: claim.RecoveryReport{
-		ReleasedClaims: 2, CommittedClaims: 3, CompletedRequests: 5, More: true,
+		CommittedClaims: 1, More: true,
 	}}
 	claimResult, err := newClaimRecovery(claimOwner).RecoverBeforeListener(ctx, decisionNow, limit, deadline)
-	if err != nil || claimResult != (lifecycle.WorkResult{Processed: 10, More: true}) {
+	if err != nil || claimResult != (lifecycle.WorkResult{Processed: 1, More: true}) {
 		t.Fatalf("claim result=%+v err=%v", claimResult, err)
 	}
-	assertRecoveryCall(t, claimOwner.call, ctx, decisionNow, limit, deadline)
+	// A single claim/request may contain several ledger postings. Each gets
+	// a fresh coordinator budget instead of sharing it with up to 99 others.
+	assertRecoveryCall(t, claimOwner.call, ctx, decisionNow, 1, deadline)
 
 	secretOwner := &secretRecoveryStub{result: claim.MaintenanceReport{Marked: 11, Deleted: 13, More: false}}
 	secretResult, err := newOrphanSecretRecovery(secretOwner).RecoverBeforeListener(ctx, decisionNow, limit, deadline)
