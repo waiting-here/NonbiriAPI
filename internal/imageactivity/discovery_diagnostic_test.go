@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 func TestDiscoveryStatusIsVisibleOnlyToAdministratorsAndWithinRetention(t *testing.T) {
@@ -41,6 +43,14 @@ func TestDiscoveryStatusIsVisibleOnlyToAdministratorsAndWithinRetention(t *testi
 			data, _ := json.Marshal(current)
 			if strings.Contains(string(data), "private provider") || strings.Contains(string(data), "secret") {
 				t.Fatal("provider detail leaked")
+			}
+			var structured string
+			if err := f.database.QueryRow("SELECT d.details FROM request_error_diagnostics d JOIN request_error_bodies b ON b.id=d.error_id WHERE b.operation_id=?", id).Scan(&structured); err != nil {
+				t.Fatal(err)
+			}
+			facts := diagnostic.Decode(structured)
+			if facts == nil || facts.UpstreamStatus != int(status) || !facts.HeadersReceived || facts.Category != "upstream" || facts.ProtocolComplete {
+				t.Fatalf("independent HTTP failure facts: %+v", facts)
 			}
 			for _, user := range []int64{f.user, f.steward, f.trainee} {
 				if _, err := f.service.GetRefresh(f.ctx(user), user, id); err == nil {

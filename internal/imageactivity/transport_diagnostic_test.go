@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
@@ -83,5 +84,13 @@ func TestDiscoveryConnectionFailureRetainsSafeDiagnostic(t *testing.T) {
 	}
 	if status != nil || mime != "application/vnd.nonbiriapi.image-diagnostic+json" || body != `{"category":"image_transport_failed","reason":"connection_failed","original_body_saved":false}` {
 		t.Fatalf("transport diagnostic: status=%v mime=%s body=%s", status, mime, body)
+	}
+	var structured string
+	if err := f.database.QueryRow("SELECT d.details FROM request_error_diagnostics d JOIN request_error_bodies b ON b.id=d.error_id WHERE b.operation_id=?", refresh.Value.Operation.ID).Scan(&structured); err != nil {
+		t.Fatal(err)
+	}
+	facts := diagnostic.Decode(structured)
+	if facts == nil || facts.Category != "network" || facts.Code != "connection_refused" || facts.HeadersReceived || facts.UpstreamStatus != 0 || facts.ProtocolComplete {
+		t.Fatalf("structured transport facts: %+v", facts)
 	}
 }

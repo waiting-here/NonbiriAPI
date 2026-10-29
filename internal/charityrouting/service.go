@@ -368,14 +368,11 @@ func (s *Service) GetSteward(ctx context.Context, actorUserID, modelID int64) (S
 	if s == nil || s.db == nil || ctx == nil || actorUserID <= 0 || modelID <= 0 || nilDependency(s.roleAuth) {
 		return StewardCharityModel{}, ErrInvalidRequest
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, _, err := s.beginManagementTx(ctx, roleSteward, actorUserID, modelID, false, true)
 	if err != nil {
 		return StewardCharityModel{}, fmt.Errorf("charity routing: begin steward model read: %w", err)
 	}
 	defer tx.Rollback()
-	if _, err := s.managementScope(ctx, tx, roleSteward, actorUserID, modelID, false); err != nil {
-		return StewardCharityModel{}, err
-	}
 	now, err := s.nowUnix()
 	if err != nil {
 		return StewardCharityModel{}, err
@@ -411,15 +408,11 @@ func (s *Service) listModelsForSteward(ctx context.Context, actorUserID int64, q
 		!utf8.ValidString(query) || utf8.RuneCountInString(query) > 128 {
 		return nil, 0, ErrInvalidRequest
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, scope, err := s.beginManagementTx(ctx, roleSteward, actorUserID, 0, true, true)
 	if err != nil {
 		return nil, 0, fmt.Errorf("charity routing: begin steward list: %w", err)
 	}
 	defer tx.Rollback()
-	scope, err := s.managementScope(ctx, tx, roleSteward, actorUserID, 0, true)
-	if err != nil {
-		return nil, 0, err
-	}
 	now, err := s.nowUnix()
 	if err != nil {
 		return nil, 0, err
@@ -901,10 +894,18 @@ VALUES(?,?,'charity_model',?,'flatten_tool_calls',?,?,?)`, actorID, role, modelI
 }
 
 func (s *Service) beginRoleTx(ctx context.Context, role roleKind, actorUserID int64) (*sql.Tx, int64, error) {
+	return s.beginRoleTransaction(ctx, role, actorUserID, false)
+}
+
+func (s *Service) beginRoleTransaction(ctx context.Context, role roleKind, actorUserID int64, readOnly bool) (*sql.Tx, int64, error) {
 	if s == nil || s.db == nil || nilDependency(s.roleAuth) {
 		return nil, 0, ErrUnavailable
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	database := s.db
+	if readOnly && s.readDB != nil {
+		database = s.readDB
+	}
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: readOnly})
 	if err != nil {
 		return nil, 0, fmt.Errorf("charity routing: begin role transaction: %w", err)
 	}

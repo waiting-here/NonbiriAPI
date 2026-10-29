@@ -69,6 +69,22 @@ does not consume the writer, retains consistent counts and results through a
 concurrent commit, and rechecks current permissions on the next request. An
 uncontended lookup microbenchmark alone does not demonstrate reduced contention.
 
+Session validation uses a read snapshot when the current second and exact idle
+expiry have already been persisted. Renewal and stale-session cleanup close that
+snapshot, acquire the writer and recheck current authority before changing data.
+The session-reader regressions hold the writer while checking unchanged sessions,
+then revoke or change authority between the read and renewal phases. They measure
+writer acquisitions without relaxing idle expiry or caching authentication.
+Steward model details, cursor lists and price-template reads use the existing
+reader pool; mutation and expiry-materialization paths retain their writer.
+
+Runtime windows distinguish `session_read` from `session` and use fixed route
+templates for administrator/steward model lists, details, bindings, candidates
+and price templates. Object identifiers and query values are excluded. Compare
+pool waiting, transaction time and connection holding separately; their cumulative
+times overlap. A writer improvement alone does not establish that a separate
+reader bottleneck or browser/network delay has been resolved.
+
 For streaming accumulation, ordered failure folding and writer ownership:
 
 ```sh

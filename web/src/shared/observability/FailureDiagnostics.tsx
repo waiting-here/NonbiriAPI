@@ -66,24 +66,24 @@ export function FailureDetails({ failure }: { failure?: FailureDiagnostics | nul
       </p>
     );
   const facts = [
-    ['headers', flag(failure.headers_received)],
-    ['eof', flag(failure.body_eof)],
-    ['usage', flag(failure.usage_present)],
-    ['receivedBytes', count(failure.received_bytes)],
-    ['receivedEvents', count(failure.received_events)],
-    ['forwardedBytes', count(failure.forwarded_bytes)],
-    ['budget', count(failure.budget_ms)],
-    ['retryAfter', count(failure.retry_after_seconds)],
-    ['limitBytes', count(failure.limit_bytes)],
-    ['mediaType', failure.content_type ?? missing],
-    ['encoding', failure.content_encoding ?? missing],
-    ['limitKind', failure.limit_kind ?? missing],
+    ['common.failure.headers', flag(failure.headers_received)],
+    ['common.failure.eof', flag(failure.body_eof)],
+    ['common.failure.usage', flag(failure.usage_present)],
+    ['common.failure.receivedBytes', count(failure.received_bytes)],
+    ['common.failure.receivedEvents', count(failure.received_events)],
+    ['common.failure.forwardedBytes', count(failure.forwarded_bytes)],
+    ['common.failure.budget', count(failure.budget_ms)],
+    ['common.failure.retryAfter', count(failure.retry_after_seconds)],
+    ['common.failure.limitBytes', count(failure.limit_bytes)],
+    ['common.failure.mediaType', failure.content_type ?? missing],
+    ['common.failure.encoding', failure.content_encoding ?? missing],
+    ['common.failure.limitKind', failure.limit_kind ?? missing],
   ];
   const times = [
-    ['startedAt', failure.started_at_ms],
-    ['firstBodyAt', failure.first_body_at_ms],
-    ['failedAt', failure.failed_at_ms],
-    ['completedAt', failure.completed_at_ms],
+    ['common.failure.startedAt', failure.started_at_ms],
+    ['common.failure.firstBodyAt', failure.first_body_at_ms],
+    ['common.failure.failedAt', failure.failed_at_ms],
+    ['common.failure.completedAt', failure.completed_at_ms],
   ] as const;
   return (
     <section
@@ -94,15 +94,14 @@ export function FailureDetails({ failure }: { failure?: FailureDiagnostics | nul
         tone="warn"
         title={t(
           failure.code && REASON_CODES.has(failure.code)
-            ? 'common.failure.reason.' + failure.code
+            ? `common.failure.reason.${failure.code}`
             : failureCategoryKey(failure.category),
         )}
       >
         <p>{t('common.failure.atPhase', { phase: t(failurePhaseKey(failure.phase)) })}</p>
         <p>
           {t(
-            'common.failure.suggestion.' +
-              (SUGGESTION_CATEGORIES.has(failure.category ?? '') ? failure.category : 'unknown'),
+            `common.failure.suggestion.${SUGGESTION_CATEGORIES.has(failure.category ?? '') ? failure.category : 'unknown'}`,
           )}
         </p>
       </Note>
@@ -150,16 +149,16 @@ export function FailureDetails({ failure }: { failure?: FailureDiagnostics | nul
           </div>
           {facts.map(([key, value]) => (
             <div key={key}>
-              <dt>{t('common.failure.' + key)}</dt>
+              <dt>{t(key)}</dt>
               <dd
                 className={
                   [
-                    'receivedBytes',
-                    'receivedEvents',
-                    'forwardedBytes',
-                    'budget',
-                    'retryAfter',
-                    'limitBytes',
+                    'common.failure.receivedBytes',
+                    'common.failure.receivedEvents',
+                    'common.failure.forwardedBytes',
+                    'common.failure.budget',
+                    'common.failure.retryAfter',
+                    'common.failure.limitBytes',
                   ].includes(key)
                     ? 'nb-amount'
                     : undefined
@@ -174,7 +173,7 @@ export function FailureDetails({ failure }: { failure?: FailureDiagnostics | nul
             const iso = date && !Number.isNaN(date.getTime()) ? date.toISOString() : undefined;
             return (
               <div key={key}>
-                <dt>{t('common.failure.' + key)}</dt>
+                <dt>{t(key)}</dt>
                 <dd>
                   {iso ? (
                     <time dateTime={iso} title={iso}>
@@ -188,9 +187,14 @@ export function FailureDetails({ failure }: { failure?: FailureDiagnostics | nul
             );
           })}
         </dl>
-        {(['causes', 'secondary'] as const).map((key) => (
+        {(
+          [
+            ['causes', 'common.failure.causes'],
+            ['secondary', 'common.failure.secondary'],
+          ] as const
+        ).map(([key, label]) => (
           <div key={key}>
-            <h4>{t('common.failure.' + key)}</h4>
+            <h4>{t(label)}</h4>
             {failure[key].length ? (
               <ol>
                 {failure[key].map((cause, index) => (
