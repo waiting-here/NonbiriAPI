@@ -106,7 +106,7 @@ func (s *Service) priceTemplates(ctx context.Context, role roleKind, actorID int
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, _, err := s.beginRoleTx(ctx, role, actorID)
+	tx, _, err := s.beginRoleTransaction(ctx, role, actorID, true)
 	if err != nil {
 		return empty, err
 	}
@@ -147,7 +147,7 @@ func (s *Service) priceTemplate(ctx context.Context, role roleKind, actorID, id 
 	if ctx == nil || id <= 0 {
 		return empty, ErrInvalidRequest
 	}
-	tx, _, err := s.beginRoleTx(ctx, role, actorID)
+	tx, _, err := s.beginRoleTransaction(ctx, role, actorID, true)
 	if err != nil {
 		return empty, err
 	}

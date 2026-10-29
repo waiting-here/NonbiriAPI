@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -15,6 +16,8 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"github.com/waiting-here/NonbiriAPI/internal/upgrade/v1"
 )
+
+var expectedSourceSchemaVersions = []int{16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 33, 34, 35, 36, 37, 38, 39, 40, 41}
 
 func TestArgumentErrorsDoNotReadOrExposeEnvironment(t *testing.T) {
 	t.Setenv("NONBIRI_MASTER_KEY", "private-key-value")
@@ -37,8 +40,17 @@ func TestSchemaInfoNeedsNoDatabaseOrSecretEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	var descriptor db.StorageSchemaDescriptor
-	if err := json.Unmarshal(output.Bytes(), &descriptor); err != nil || descriptor.SchemaVersion != db.CurrentSchemaVersion || len(descriptor.OfflineConversions) != 19 || descriptor.StartupPolicy != "exact" || descriptor.MinimumSchemaVersion != db.CurrentSchemaVersion {
+	if err := json.Unmarshal(output.Bytes(), &descriptor); err != nil || descriptor.SchemaVersion != db.CurrentSchemaVersion || len(descriptor.OfflineConversions) != len(expectedSourceSchemaVersions) || descriptor.StartupPolicy != "exact" || descriptor.MinimumSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal(descriptor, err)
+	}
+	for index, source := range descriptor.OfflineConversions {
+		if source.SourceSchemaVersion != expectedSourceSchemaVersions[index] || source.TargetSchemaVersion != db.CurrentSchemaVersion || source.Tool != "nonbiri-upgrade-v1" || len(source.SourceCommit) != 40 || len(source.SourceManifestHash) != 64 {
+			t.Fatal("unexpected source descriptor", source)
+		}
+	}
+	last := descriptor.OfflineConversions[len(descriptor.OfflineConversions)-1]
+	if last.SourceManifestHash != db.Schema41ManifestHash || last.SourceCommit != "5c721cd00b1ebcc402f0b85ce02aa9014498aa97" {
+		t.Fatal("published source identity changed", last)
 	}
 	if strings.Contains(output.String(), "private-") {
 		t.Fatal("environment appeared in schema metadata")
@@ -72,7 +84,7 @@ func TestCurrentDatabaseCommandNeedsOnlyEncryptionEnvironment(t *testing.T) {
 			t.Fatal(err)
 		}
 		var result v1.Result
-		if err := json.Unmarshal(output.Bytes(), &result); err != nil || result.Status != "current" || result.Tool != "nonbiri-upgrade-v1" || result.TargetSchemaVersion != db.CurrentSchemaVersion || result.TargetManifestHash != db.PinnedGenerationTwoManifestHash || len(result.SupportedSourceSchemaVersions) != 19 {
+		if err := json.Unmarshal(output.Bytes(), &result); err != nil || result.Status != "current" || result.SourceSchemaVersion != db.CurrentSchemaVersion || result.Tool != "nonbiri-upgrade-v1" || result.TargetSchemaVersion != db.CurrentSchemaVersion || result.TargetManifestHash != db.PinnedGenerationTwoManifestHash || !slices.Equal(result.SupportedSourceSchemaVersions, expectedSourceSchemaVersions) {
 			t.Fatal(output.String(), err)
 		}
 		decoder := json.NewDecoder(&progress)

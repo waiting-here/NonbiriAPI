@@ -29,6 +29,7 @@ for (const [language, width, theme] of [
     ) as Fixture;
     const copy = (language === 'zh' ? zh : en).common.operations.logs;
     const failureCopy = (language === 'zh' ? zh : en).common.failure;
+    const diagnosticLabel = (language === 'zh' ? zh : en).logs.diag;
     const visualDir = process.env.NONBIRI_VISUAL_DIR;
     if (visualDir) mkdirSync(visualDir, { recursive: true });
     const contexts: BrowserContext[] = [];
@@ -133,7 +134,7 @@ for (const [language, width, theme] of [
           result.attempts.data[0].diag,
         );
         await expect(attempts.locator('.log-attempt-diagnostic')).not.toBeVisible();
-        await attempts.locator('summary').filter({ hasText: copy.diag }).click();
+        await attempts.locator('summary').filter({ hasText: diagnosticLabel }).click();
         await expect(attempts.locator('.log-attempt-diagnostic')).toBeVisible();
         const failure = attempts.getByRole('region', { name: failureCopy.title, exact: true });
         await expect(failure).toBeVisible();
@@ -171,7 +172,7 @@ for (const [language, width, theme] of [
       await expect(page.locator('.log-attempt-diagnostic')).toHaveText(
         'invalid upstream models response',
       );
-      await page.locator('summary').filter({ hasText: copy.diag }).click();
+      await page.locator('summary').filter({ hasText: diagnosticLabel }).click();
       await expect(page.locator('.log-attempt-diagnostic')).toBeVisible();
       await expect(
         page.locator('.nb-expandable-panel').getByText(copy.discoveryAccepted, { exact: true }),
