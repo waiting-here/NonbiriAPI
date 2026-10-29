@@ -2,7 +2,7 @@ import { apiFetch } from '@shared/query/http';
 import { array, boolean, decimal, integer, record, string } from '@shared/operations/wire';
 import type { DriverSettings } from './api';
 
-export type DriverProvider = 'chat_completions' | 'responses' | 'chatgpt';
+export type DriverProvider = 'chat_completions' | 'responses' | 'chatgpt' | 'codex';
 export type DriverScope = 'default' | 'auto_review' | 'admin_chat' | 'steward_chat';
 export interface ProfileSettings extends DriverSettings {
   driver_id: string;
@@ -263,7 +263,9 @@ export const discoverProfileModels = async (id: string, signal?: AbortSignal) =>
     ['models'],
     'models',
   );
-  return array(row.models, 'models').map((value) => string(value, 'model'));
+  return array(row.models, 'models').map((value) =>
+    typeof value === 'string' ? value : string(record(value, ['id'], 'model').id, 'model'),
+  );
 };
 export const getChatGPT = async (signal?: AbortSignal) =>
   status(await apiFetch(root + '/chatgpt', { signal }));
@@ -332,7 +334,7 @@ export function changeProvider(
     temperature: undefined,
     top_p: undefined,
     extra_parameters: {},
-    max_output_tokens: provider === 'chatgpt' ? 0 : 4096,
+    max_output_tokens: provider === 'chatgpt' || provider === 'codex' ? 0 : 4096,
     output_token_parameter: 'max_tokens',
   };
 }
@@ -346,16 +348,19 @@ export function profileUpdate(
     name: profile.name.trim(),
     settings: {
       provider: s.provider,
-      base_url: s.provider === 'chatgpt' ? '' : s.base_url,
+      base_url: s.provider === 'chatgpt' || s.provider === 'codex' ? '' : s.base_url,
       model: s.model,
       context_window: s.context_window,
       output_reserve_tokens: s.output_reserve_tokens,
-      max_output_tokens: s.provider === 'chatgpt' ? 0 : s.max_output_tokens,
+      max_output_tokens:
+        s.provider === 'chatgpt' || s.provider === 'codex' ? 0 : s.max_output_tokens,
       output_token_parameter: s.output_token_parameter,
       concurrency: s.concurrency,
       timeout_seconds: s.timeout_seconds,
       extra_parameters: extra,
-      ...(s.provider === 'chatgpt' ? {} : { temperature: s.temperature, top_p: s.top_p }),
+      ...(s.provider === 'chatgpt' || s.provider === 'codex'
+        ? {}
+        : { temperature: s.temperature, top_p: s.top_p }),
     },
   };
 }

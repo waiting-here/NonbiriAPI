@@ -108,11 +108,18 @@ export function BindingEditor({
                   : 'common.agent.drivers.inherit',
               )}
             </option>
-            {config.profiles.map((profile) => (
-              <option key={profile.id} value={profile.id}>
-                {profile.id === '0' ? t('common.agent.drivers.legacy') : profile.name}
-              </option>
-            ))}
+            {config.profiles
+              .filter(
+                (profile) =>
+                  profile.settings.provider !== 'codex' ||
+                  scope === 'admin_chat' ||
+                  (scope === 'steward_chat' && actor !== '0'),
+              )
+              .map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.id === '0' ? t('common.agent.drivers.legacy') : profile.name}
+                </option>
+              ))}
           </select>
         )}
       </Field>

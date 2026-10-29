@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/chatgptauth"
+	"github.com/waiting-here/NonbiriAPI/internal/codexauth"
 	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
@@ -17,6 +18,7 @@ const (
 	ProviderChat      = "chat_completions"
 	ProviderResponses = "responses"
 	ProviderChatGPT   = "chatgpt"
+	ProviderCodex     = "codex"
 )
 
 type DriverProfile struct {
@@ -92,8 +94,9 @@ func loadProfile(ctx context.Context, q settingsReader, id int64) (DriverProfile
 	return p, key, nil
 }
 func (r *Runtime) resolve(ctx context.Context, q settingsReader, a Attribution) (Settings, string, error) {
-	var id int64
-	err := q.QueryRowContext(ctx, `SELECT driver_id FROM agent_driver_bindings WHERE (scope='default' AND actor_id=0) OR (scope=? AND (actor_id=0 OR (scope='steward_chat' AND actor_id=?))) ORDER BY CASE WHEN scope=? AND actor_id>0 THEN 0 WHEN scope=? THEN 1 ELSE 2 END LIMIT 1`, a.Source, a.ActorID, a.Source, a.Source).Scan(&id)
+	var id, bindingActor int64
+	var bindingScope string
+	err := q.QueryRowContext(ctx, `SELECT driver_id,scope,actor_id FROM agent_driver_bindings WHERE (scope='default' AND actor_id=0) OR (scope=? AND (actor_id=0 OR (scope='steward_chat' AND actor_id=?))) ORDER BY CASE WHEN scope=? AND actor_id>0 THEN 0 WHEN scope=? THEN 1 ELSE 2 END LIMIT 1`, a.Source, a.ActorID, a.Source, a.Source).Scan(&id, &bindingScope, &bindingActor)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return Settings{}, "", err
 	}
@@ -106,6 +109,16 @@ func (r *Runtime) resolve(ctx context.Context, q settingsReader, a Attribution) 
 			return p.Settings, "", nil
 		}
 		p.Settings.HasKey, p.Settings.ConnectionRevision, err = r.chatgpt.Snapshot(ctx, q)
+	}
+	if p.Settings.Provider == ProviderCodex {
+		if !codexBinding(bindingScope, bindingActor) || a.Source == "auto_review" || a.Source == "steward_chat" && (bindingScope != "steward_chat" || bindingActor != a.ActorID) {
+			return Settings{}, "", ErrUnconfigured
+		}
+		if r.codex != nil {
+			p.Settings.HasKey, p.Settings.ConnectionRevision, err = r.codex.Snapshot(ctx, q)
+		} else {
+			p.Settings.HasKey = false
+		}
 	}
 	// The existing setting remains the process-wide scheduling limit.
 	global, _, e := loadSettings(ctx, q)
@@ -191,23 +204,38 @@ func (r *Runtime) Drivers(ctx context.Context) (DriverConfiguration, error) {
 			}
 		}
 	}
+	if r.codex != nil {
+		ready, _, e := r.codex.Snapshot(ctx, tx)
+		if e != nil {
+			return out, e
+		}
+		for i := range out.Profiles {
+			if out.Profiles[i].Settings.Provider == ProviderCodex {
+				out.Profiles[i].Settings.HasKey = ready
+			}
+		}
+	}
 	return out, nil
 }
 func (r *Runtime) validateProfile(s *Settings) error {
 	normalizeProvider(s)
 	s.Model = strings.TrimSpace(s.Model)
 	s.BaseURL = strings.TrimSpace(s.BaseURL)
-	if s.Provider != ProviderChat && s.Provider != ProviderResponses && s.Provider != ProviderChatGPT {
+	if s.Provider != ProviderChat && s.Provider != ProviderResponses && s.Provider != ProviderChatGPT && s.Provider != ProviderCodex {
 		return ErrInvalid
 	}
 	if s.ContextWindow < 1024 || s.ContextWindow > 10000000 || s.OutputReserveTokens < 1 || s.OutputReserveTokens >= s.ContextWindow || s.TimeoutSeconds < 1 || s.TimeoutSeconds > 1200 || len(s.Model) > 512 {
 		return ErrInvalid
 	}
-	if s.Provider == ProviderChatGPT {
-		if s.BaseURL != "" && s.BaseURL != chatgptauth.Resource {
+	if s.Provider == ProviderChatGPT || s.Provider == ProviderCodex {
+		fixed := chatgptauth.Resource
+		if s.Provider == ProviderCodex {
+			fixed = codexauth.Resource
+		}
+		if s.BaseURL != "" && s.BaseURL != fixed {
 			return ErrInvalid
 		}
-		s.BaseURL = chatgptauth.Resource
+		s.BaseURL = fixed
 		if s.MaxOutputTokens != 0 || s.Temperature != nil || s.TopP != nil {
 			return ErrInvalid
 		}
@@ -244,6 +272,10 @@ func (r *Runtime) validateProfile(s *Settings) error {
 		_, err := extraParameters(s.ExtraParameters)
 		return err
 	}
+	if s.Provider == ProviderCodex {
+		_, err := codexParameters(s.ExtraParameters)
+		return err
+	}
 	_, err := responsesParameters(s.ExtraParameters, s.Provider == ProviderChatGPT)
 	return err
 }
@@ -261,7 +293,7 @@ func (r *Runtime) PutDriver(ctx context.Context, id int64, in DriverUpdate) (Dri
 	s.HasKey = false
 	key := ""
 	if in.APIKey != nil && *in.APIKey != "" {
-		if s.Provider == ProviderChatGPT || len(*in.APIKey) > 65536 || strings.ContainsAny(*in.APIKey, "\r\n") {
+		if s.Provider == ProviderChatGPT || s.Provider == ProviderCodex || len(*in.APIKey) > 65536 || strings.ContainsAny(*in.APIKey, "\r\n") {
 			return DriverProfile{}, ErrInvalid
 		}
 		var err error
@@ -292,8 +324,17 @@ func (r *Runtime) PutDriver(ctx context.Context, id int64, in DriverUpdate) (Dri
 	} else if in.ExpectedRevision != 0 {
 		return DriverProfile{}, ErrConflict
 	}
-	if s.Provider == ProviderChatGPT {
+	if s.Provider == ProviderChatGPT || s.Provider == ProviderCodex {
 		key = ""
+	}
+	if s.Provider == ProviderCodex && id > 0 {
+		var invalid bool
+		if err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM agent_driver_bindings WHERE driver_id=? AND NOT(scope='admin_chat' OR (scope='steward_chat' AND actor_id>0)))", id).Scan(&invalid); err != nil {
+			return DriverProfile{}, err
+		}
+		if invalid {
+			return DriverProfile{}, ErrInvalid
+		}
 	}
 	raw, err := json.Marshal(s)
 	if err != nil {
@@ -389,8 +430,12 @@ func (r *Runtime) PutBinding(ctx context.Context, in BindingUpdate) (DriverBindi
 	if in.DriverID == nil {
 		_, err = tx.ExecContext(ctx, "DELETE FROM agent_driver_bindings WHERE scope=? AND actor_id=?", in.Scope, in.ActorID)
 	} else {
-		if _, _, err = loadProfile(ctx, tx, *in.DriverID); err != nil {
-			return out, err
+		profile, _, e := loadProfile(ctx, tx, *in.DriverID)
+		if e != nil {
+			return out, e
+		}
+		if profile.Settings.Provider == ProviderCodex && !codexBinding(in.Scope, in.ActorID) {
+			return out, ErrInvalid
 		}
 		out.DriverID = *in.DriverID
 		out.Revision = rev + 1

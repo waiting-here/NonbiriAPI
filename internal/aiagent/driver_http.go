@@ -6,6 +6,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/agentrequest"
 	"github.com/waiting-here/NonbiriAPI/internal/chatgptauth"
+	"github.com/waiting-here/NonbiriAPI/internal/codexauth"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
@@ -18,12 +19,24 @@ func RegisterDriverRoutes(registrar Registrar, service *Service, requests *agent
 	api := &httpAPI{s: service, requests: requests}
 	write := func(w http.ResponseWriter, value any, err error) {
 		switch {
+		case errors.Is(err, codexauth.ErrInvalid):
+			err = ErrInvalid
+		case errors.Is(err, codexauth.ErrConflict):
+			err = ErrConflict
+		case errors.Is(err, codexauth.ErrDisconnected):
+			httperr.WriteError(w, httperr.New(httperr.CodeServiceUnavailable, "Codex连接已失效，请重新连接。"))
+			return
 		case errors.Is(err, chatgptauth.ErrInvalid):
 			err = ErrInvalid
 		case errors.Is(err, chatgptauth.ErrConflict):
 			err = ErrConflict
 		case errors.Is(err, chatgptauth.ErrDisconnected):
 			httperr.WriteError(w, httperr.New(httperr.CodeServiceUnavailable, "ChatGPT连接已失效，请重新登录并导入。"))
+			return
+		}
+		var codexError *codexauth.OAuthError
+		if errors.As(err, &codexError) {
+			httperr.WriteError(w, httperr.New(httperr.CodeServiceUnavailable, "Codex登录暂时不可用，请确认账号允许设备码登录后重试。"))
 			return
 		}
 		var oauth *chatgptauth.OAuthError
@@ -39,10 +52,45 @@ func RegisterDriverRoutes(registrar Registrar, service *Service, requests *agent
 				write(w, nil, err)
 				return
 			}
+			w.Header().Set("Cache-Control", "no-store")
 			handler(w, r, actor)
 		})
 	}
 	routes := []route{
+		{"GET", "/codex", func(w http.ResponseWriter, r *http.Request, _ Actor) {
+			v, e := requests.CodexStatus(r.Context())
+			write(w, v, e)
+		}},
+		{"POST", "/codex/login", func(w http.ResponseWriter, r *http.Request, _ Actor) {
+			var in struct {
+				ExpectedRevision int64 `json:"expected_revision,string"`
+			}
+			if !readBody(w, r, &in) {
+				return
+			}
+			v, e := requests.BeginCodex(r.Context(), in.ExpectedRevision)
+			write(w, v, e)
+		}},
+		{"POST", "/codex/cancel", func(w http.ResponseWriter, r *http.Request, _ Actor) {
+			var in struct {
+				LoginID string `json:"login_id"`
+			}
+			if !readBody(w, r, &in) {
+				return
+			}
+			v, e := requests.CancelCodex(r.Context(), in.LoginID)
+			write(w, v, e)
+		}},
+		{"POST", "/codex/logout", func(w http.ResponseWriter, r *http.Request, _ Actor) {
+			var in struct {
+				ExpectedRevision int64 `json:"expected_revision,string"`
+			}
+			if !readBody(w, r, &in) {
+				return
+			}
+			v, e := requests.DisconnectCodex(r.Context(), in.ExpectedRevision)
+			write(w, v, e)
+		}},
 		{"GET", "/drivers", func(w http.ResponseWriter, r *http.Request, _ Actor) {
 			v, e := requests.Drivers(r.Context())
 			write(w, v, e)

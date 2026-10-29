@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/chatgptauth"
+	"github.com/waiting-here/NonbiriAPI/internal/codexauth"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 )
 
@@ -27,6 +28,19 @@ func (r *Runtime) resolveSettingsKey(ctx context.Context, a Attribution) (Settin
 	return r.resolve(ctx, tx, a)
 }
 func (r *Runtime) modelKey(ctx context.Context, s *Settings, encrypted string) (string, error) {
+	if s.Provider == ProviderCodex {
+		if r.codex == nil {
+			return "", codexauth.ErrDisconnected
+		}
+		key, account, revision, err := r.codex.AccessTokenSnapshot(ctx)
+		if err != nil {
+			return "", err
+		}
+		defer clear(key)
+		s.ConnectionRevision = revision
+		s.CodexAccountID = account
+		return r.secrets.SealAgentKey(key, "model")
+	}
 	if s.Provider != ProviderChatGPT {
 		return encrypted, nil
 	}
@@ -42,12 +56,16 @@ func (r *Runtime) modelKey(ctx context.Context, s *Settings, encrypted string) (
 	return r.secrets.SealAgentKey(key, "model")
 }
 func parseStoredResult(id int64, d Detail) (Result, error) {
-	if d.Provider != ProviderResponses && d.Provider != ProviderChatGPT {
+	if d.Provider != ProviderResponses && d.Provider != ProviderChatGPT && d.Provider != ProviderCodex {
 		return parseResult(id, []byte(d.ResponseBody))
 	}
 	var s Settings
 	if json.Unmarshal(d.DriverSettings, &s) != nil {
 		return Result{}, ErrProtocol
+	}
+	if d.Provider == ProviderCodex {
+		result, _, _, err := parseCodexResult(id, []byte(d.ResponseBody), s)
+		return result, err
 	}
 	result, _, _, err := parseResponsesResult(id, []byte(d.ResponseBody), s)
 	return result, err
@@ -85,12 +103,33 @@ func (r *Runtime) DiscoverDriverModels(ctx context.Context, id int64) ([]Model, 
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.TimeoutSeconds)*time.Second)
 	defer cancel()
-	ctx = egress.WithDispatchCheck(ctx, r.adminCheck)
+	if s.Provider == ProviderCodex {
+		child, release, e := r.codex.RequestContext(ctx, s.ConnectionRevision)
+		if e != nil {
+			return nil, e
+		}
+		defer release()
+		ctx = child
+	}
+	ctx = egress.WithDispatchCheck(ctx, func(check context.Context) error {
+		if err := r.adminCheck(check); err != nil {
+			return err
+		}
+		if s.Provider == ProviderCodex {
+			return r.codex.ValidateGeneration(check, s.ConnectionRevision)
+		}
+		return nil
+	})
 	request, err := http.NewRequestWithContext(ctx, "GET", strings.TrimRight(s.BaseURL, "/")+"/models", nil)
 	if err != nil {
 		return nil, ErrInvalid
 	}
 	request.Header.Set("Authorization", "Bearer "+string(plaintext))
+	if s.Provider == ProviderCodex {
+		request.URL.RawQuery = "client_version=0.0.0"
+		request.Header.Set("ChatGPT-Account-ID", s.CodexAccountID)
+		request.Header.Set("originator", "nonbiriapi")
+	}
 	response, err := client.Do(request)
 	if response != nil && response.Body != nil {
 		defer response.Body.Close()
@@ -110,7 +149,7 @@ func (r *Runtime) DiscoverDriverModels(ctx context.Context, id int64) ([]Model, 
 
 func decodeDriverModels(raw []byte, provider string) ([]Model, error) {
 	var models []Model
-	if provider == ProviderChatGPT {
+	if provider == ProviderChatGPT || provider == ProviderCodex {
 		var payload struct {
 			Models []struct {
 				Slug        string `json:"slug"`

@@ -51,9 +51,26 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 		}
 	}}
 	ctx = httptrace.WithClientTrace(ctx, trace)
-	ctx = egress.WithDispatchCheck(ctx, func(check context.Context) error { return r.authorize(check, in.Attribution) })
+	if s.Provider == ProviderCodex {
+		child, release, e := r.codex.RequestContext(ctx, s.ConnectionRevision)
+		if e != nil {
+			r.complete(id, in, state, "connection_changed", status, raw, complete, redacted, usage, false)
+			return
+		}
+		defer release()
+		ctx = child
+	}
+	ctx = egress.WithDispatchCheck(ctx, func(check context.Context) error {
+		if err := r.authorize(check, in.Attribution); err != nil {
+			return err
+		}
+		if s.Provider == ProviderCodex {
+			return r.codex.ValidateGeneration(check, s.ConnectionRevision)
+		}
+		return nil
+	})
 	path := "/chat/completions"
-	if s.Provider == ProviderResponses || s.Provider == ProviderChatGPT {
+	if s.Provider == ProviderResponses || s.Provider == ProviderChatGPT || s.Provider == ProviderCodex {
 		path = "/responses"
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.BaseURL, "/")+path, bytes.NewReader(body))
@@ -63,6 +80,11 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Authorization", "Bearer "+string(key))
+	if s.Provider == ProviderCodex {
+		request.Header.Set("ChatGPT-Account-ID", s.CodexAccountID)
+		request.Header.Set("originator", "nonbiriapi")
+		request.Header.Set("Accept", "text/event-stream")
+	}
 	response, err := client.Do(request)
 	if response != nil {
 		sent.Store(true)
@@ -82,9 +104,13 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 	raw, redacted = sanitizeSecret(raw, key)
 	parsed, parseErr := parseResult(id, raw)
 	protocolCode := "protocol"
-	if s.Provider == ProviderResponses || s.Provider == ProviderChatGPT {
+	if s.Provider == ProviderResponses || s.Provider == ProviderChatGPT || s.Provider == ProviderCodex {
 		var protocolComplete bool
-		parsed, protocolComplete, protocolCode, parseErr = parseResponsesResult(id, raw, s)
+		if s.Provider == ProviderCodex {
+			parsed, protocolComplete, protocolCode, parseErr = parseCodexResult(id, raw, s)
+		} else {
+			parsed, protocolComplete, protocolCode, parseErr = parseResponsesResult(id, raw, s)
+		}
 		complete = complete && protocolComplete
 	}
 	usage = parsed.Usage

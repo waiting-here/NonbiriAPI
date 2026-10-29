@@ -209,12 +209,16 @@ export function DriverProfileEditor({
                 const provider = event.target.value as DriverProvider;
                 setDraft({
                   ...draft,
-                  name: ['Chat Completions API', 'Responses API', 'ChatGPT'].includes(draft.name)
-                    ? provider === 'chatgpt'
-                      ? 'ChatGPT'
-                      : provider === 'responses'
-                        ? 'Responses API'
-                        : 'Chat Completions API'
+                  name: ['Chat Completions API', 'Responses API', 'ChatGPT', 'Codex'].includes(
+                    draft.name,
+                  )
+                    ? provider === 'codex'
+                      ? 'Codex'
+                      : provider === 'chatgpt'
+                        ? 'ChatGPT'
+                        : provider === 'responses'
+                          ? 'Responses API'
+                          : 'Chat Completions API'
                     : draft.name,
                   settings: changeProvider(draft.settings, provider),
                 });
@@ -227,10 +231,11 @@ export function DriverProfileEditor({
               <option value="chat_completions">Chat Completions API</option>
               <option value="responses">Responses API</option>
               <option value="chatgpt">ChatGPT</option>
+              <option value="codex">Codex</option>
             </select>
           )}
         </Field>
-        {draft.settings.provider !== 'chatgpt' ? (
+        {draft.settings.provider !== 'chatgpt' && draft.settings.provider !== 'codex' ? (
           <>
             <Field label={t('common.connections.entryURL')}>
               {(props) => (
@@ -281,7 +286,13 @@ export function DriverProfileEditor({
             {key === '' ? <Note tone="warn">{t('common.agent.secretRemoval')}</Note> : null}
           </>
         ) : (
-          <Note>{t('common.agent.drivers.chatgptSourceHelp')}</Note>
+          <Note>
+            {t(
+              draft.settings.provider === 'codex'
+                ? 'common.agent.codex.sourceHelp'
+                : 'common.agent.drivers.chatgptSourceHelp',
+            )}
+          </Note>
         )}
         <Field label={t('common.connections.model')} help={t('common.agent.drivers.modelHelp')}>
           {(props) => (
@@ -336,7 +347,7 @@ export function DriverProfileEditor({
                 )}
               </Field>
             </div>
-            {draft.settings.provider !== 'chatgpt' ? (
+            {draft.settings.provider !== 'chatgpt' && draft.settings.provider !== 'codex' ? (
               <>
                 <Field
                   label={t('common.agent.maxOutput')}

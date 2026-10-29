@@ -89,6 +89,10 @@ func (r *Runtime) Submit(ctx context.Context, in Input) (Request, error) {
 	if !settings.HasKey || settings.BaseURL == "" || settings.Model == "" {
 		return Request{}, ErrUnconfigured
 	}
+	if settings.Provider == ProviderCodex {
+		r.connectionMu.Lock()
+		defer r.connectionMu.Unlock()
+	}
 	key, err = r.modelKey(ctx, &settings, key)
 	if err != nil {
 		return Request{}, err
@@ -136,6 +140,15 @@ func (r *Runtime) Submit(ctx context.Context, in Input) (Request, error) {
 	id, err := result.LastInsertId()
 	if err != nil {
 		return Request{}, err
+	}
+	if settings.Provider == ProviderCodex {
+		snapshot, e := json.Marshal(settings)
+		if e != nil {
+			return Request{}, e
+		}
+		if _, e = tx.ExecContext(ctx, "INSERT INTO agent_request_drivers(request_id,driver_id,provider,settings_json) VALUES(?,?,?,?)", id, settings.DriverID, settings.Provider, string(snapshot)); e != nil {
+			return Request{}, e
+		}
 	}
 	out, err := scanRequest(tx.QueryRowContext(ctx, "SELECT "+requestColumns+" FROM agent_requests WHERE id=?", id))
 	if err != nil {
