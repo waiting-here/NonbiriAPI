@@ -280,7 +280,7 @@ test('administrator assigns Codex individually and retains readable changes afte
       state.admin_url +
         `/management-operations?mh_view=operations&mh_target_kind=agent_driver&mh_target_id=${profile.id}`,
     );
-    const search = page.getByLabel(history.fields.search, { exact: true });
+    const search = page.getByRole('searchbox', { name: history.fields.search, exact: true });
     await search.fill(originalName);
     await page.getByRole('button', { name: history.apply, exact: true }).click();
     await page
