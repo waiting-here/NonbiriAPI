@@ -21,6 +21,9 @@ Each version entry describes its source and compatibility boundary; a release ta
   changes and actual impact counts at the transaction boundary. Search current
   and previous recorded names, related identifiers and changed fields; retain
   bounded samples and explicit missing historical facts.
+- Configure separate site-wide light and heavy concurrency defaults, initially
+  15 and 5, in administrator settings. Preserve per-user overrides and apply
+  updated defaults to new admissions without restarting the service.
 
 ### Fixed and improved
 
