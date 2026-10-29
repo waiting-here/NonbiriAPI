@@ -380,7 +380,11 @@ func (r *Runtime) mfaAdminHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	actor, _ := ActorFromContext(req.Context())
-	tx, err := r.db.BeginTx(req.Context(), nil)
+	database := r.db
+	if !reset {
+		database = r.readDatabase()
+	}
+	tx, err := database.BeginTx(req.Context(), &sql.TxOptions{ReadOnly: !reset})
 	if err != nil {
 		writeMFAError(w, err)
 		return
@@ -393,11 +397,17 @@ func (r *Runtime) mfaAdminHTTP(w http.ResponseWriter, req *http.Request) {
 		_, err = r.authorizer.Authorize(req.Context(), tx, actor, authz.Requirement{Role: authz.RoleAdministrator, FreshElevation: reset})
 	}
 	if err != nil {
+		if !reset {
+			_ = tx.Rollback()
+		}
 		writeMFAError(w, err)
 		return
 	}
 	enrolled, err := managedMFATx(req.Context(), tx, target, reset)
 	if err != nil {
+		if !reset {
+			_ = tx.Rollback()
+		}
 		writeMFAError(w, err)
 		return
 	}
