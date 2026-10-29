@@ -34,6 +34,15 @@ func (s *Service) humanHistory(ctx context.Context, tx *sql.Tx, actor Actor, act
 }
 
 func (s *Service) planHistory(ctx context.Context, tx *sql.Tx, actor Actor, plan Plan, approve bool) (context.Context, error) {
+	ctx, err := s.planHistoryContext(ctx, tx, actor, plan, approve)
+	if err != nil || s.config.History == nil {
+		return ctx, err
+	}
+	return ctx, managementlog.StartCaptureTx(ctx, tx)
+}
+
+// Prepare the authority snapshot without writing during read-only plan preflight.
+func (s *Service) planHistoryContext(ctx context.Context, tx *sql.Tx, actor Actor, plan Plan, approve bool) (context.Context, error) {
 	if s.config.History == nil {
 		return ctx, nil
 	}
@@ -54,7 +63,7 @@ func (s *Service) planHistory(ctx context.Context, tx *sql.Tx, actor Actor, plan
 	// The HTTP envelope and the plan represent the same attempt.
 	managementlog.MarkReplay(ctx)
 	ctx = managementlog.WithOperation(managementlog.WithoutOperation(ctx), m)
-	return ctx, managementlog.StartCaptureTx(ctx, tx)
+	return ctx, nil
 }
 
 func (s *Service) reviewHistory(ctx context.Context, tx *sql.Tx, owner Actor, revision int64, job Job) (context.Context, error) {
