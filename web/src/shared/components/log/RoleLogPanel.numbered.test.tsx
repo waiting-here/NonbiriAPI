@@ -163,7 +163,11 @@ describe('numbered role log panel', () => {
       });
       expect(await screen.findByText('Task accepted', { selector: '.nb-badge' })).toBeVisible();
       await view.user.click(await screen.findByRole('button', { name: 'Details' }));
-      expect(await screen.findByText(diagnostic)).toBeVisible();
+      const drawer = await screen.findByRole('region', { name: /Log details/ });
+      const diagnosticText = await within(drawer).findByText(diagnostic);
+      expect(diagnosticText).not.toBeVisible();
+      await view.user.click(within(drawer).getByText('Diagnostic', { selector: 'strong' }));
+      expect(diagnosticText).toBeVisible();
       expect(
         screen.getByText('Service call attempts', { selector: 'strong' }).closest('details'),
       ).toHaveAttribute('open');

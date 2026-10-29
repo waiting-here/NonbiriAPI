@@ -1,4 +1,4 @@
-import { apiFetch } from '@shared/query/http';
+import { ApiError, apiFetch } from '@shared/query/http';
 import { queryPath } from '@shared/operations/api';
 import { array, decimal, integer, record, string } from '@shared/operations/wire';
 import type { PageSize } from '@shared/operations/pageNumbers';
@@ -272,6 +272,7 @@ function itemPage(value: unknown): ItemPage {
         'target',
         ['ordinal', 'action', 'target_kind', 'target_id', 'target_name', 'outcome', 'code'],
       );
+      const details = snapshotDetails(item.details);
       return {
         ordinal: decimal(item.ordinal, 'target ordinal'),
         action: string(item.action, 'action'),
@@ -280,30 +281,41 @@ function itemPage(value: unknown): ItemPage {
         target_name: string(item.target_name, 'target name'),
         outcome: string(item.outcome, 'outcome'),
         code: string(item.code, 'code'),
-        ...(item.details && typeof item.details === 'object'
-          ? { details: snapshotDetails(item.details) }
-          : {}),
-        changes: array(item.changes ?? [], 'changes').map((change) => {
-          const entry = record(
-            change,
-            ['field', 'operation', 'before', 'after', 'unit', 'truncated'],
-            'field change',
-            ['field', 'operation'],
-          );
-          return {
-            field: string(entry.field, 'field'),
-            operation: string(entry.operation, 'operation'),
-            ...(typeof entry.before === 'string' ? { before: entry.before } : {}),
-            ...(typeof entry.after === 'string' ? { after: entry.after } : {}),
-            ...(typeof entry.unit === 'string' ? { unit: entry.unit } : {}),
-            ...(entry.truncated === true ? { truncated: true } : {}),
-          };
-        }),
+        ...(details ? { details } : {}),
+        changes: snapshotEntries(item.changes, fieldChange),
       };
     }),
   };
 }
-function snapshotDetails(value: unknown): SnapshotDetails {
+function snapshotEntries<T>(value: unknown, project: (entry: unknown) => T): T[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    try {
+      return [project(entry)];
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'invalid_response') return [];
+      throw error;
+    }
+  });
+}
+function fieldChange(value: unknown): Change {
+  const entry = record(
+    value,
+    ['field', 'operation', 'before', 'after', 'unit', 'truncated'],
+    'field change',
+    ['field', 'operation'],
+  );
+  return {
+    field: string(entry.field, 'field'),
+    operation: string(entry.operation, 'operation'),
+    ...(typeof entry.before === 'string' ? { before: entry.before } : {}),
+    ...(typeof entry.after === 'string' ? { after: entry.after } : {}),
+    ...(typeof entry.unit === 'string' ? { unit: entry.unit } : {}),
+    ...(entry.truncated === true ? { truncated: true } : {}),
+  };
+}
+function snapshotDetails(value: unknown): SnapshotDetails | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const row = record(
     value,
     ['version', 'previous_name', 'state', 'truncated', 'related', 'impacts'],
@@ -317,7 +329,7 @@ function snapshotDetails(value: unknown): SnapshotDetails {
     ...(row.truncated === true ? { truncated: true } : {}),
     ...(Array.isArray(row.related)
       ? {
-          related: row.related.map((value) => {
+          related: snapshotEntries(row.related, (value) => {
             const object = record(
               value,
               ['kind', 'id', 'name', 'state', 'previous_name', 'changes'],
@@ -334,22 +346,7 @@ function snapshotDetails(value: unknown): SnapshotDetails {
                 : {}),
               ...(Array.isArray(object.changes)
                 ? {
-                    changes: object.changes.map((entry) => {
-                      const change = record(
-                        entry,
-                        ['field', 'operation', 'before', 'after', 'unit', 'truncated'],
-                        'related change',
-                        ['field', 'operation'],
-                      );
-                      return {
-                        field: string(change.field, 'field'),
-                        operation: string(change.operation, 'operation'),
-                        ...(typeof change.before === 'string' ? { before: change.before } : {}),
-                        ...(typeof change.after === 'string' ? { after: change.after } : {}),
-                        ...(typeof change.unit === 'string' ? { unit: change.unit } : {}),
-                        ...(change.truncated === true ? { truncated: true } : {}),
-                      };
-                    }),
+                    changes: snapshotEntries(object.changes, fieldChange),
                   }
                 : {}),
             };
@@ -358,7 +355,7 @@ function snapshotDetails(value: unknown): SnapshotDetails {
       : {}),
     ...(Array.isArray(row.impacts)
       ? {
-          impacts: row.impacts.map((value) => {
+          impacts: snapshotEntries(row.impacts, (value) => {
             const impact = record(
               value,
               ['kind', 'created', 'updated', 'deleted', 'sampled', 'omitted'],
