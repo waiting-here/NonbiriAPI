@@ -136,7 +136,7 @@ func newAdminUsersFixture(t *testing.T) *adminUsersFixture {
 	t.Cleanup(func() { _ = store.Close() })
 	fixture := &adminUsersFixture{t: t, store: store, auth: &testAdminAuth{}, invalidator: &testInvalidator{}, registrar: &testRegistrar{}}
 	service, err := NewService(ServiceConfig{
-		Database: store.DB(), CursorKeys: testCursorKeys{}, FinalAuth: fixture.auth,
+		Database: store.DB(), ReadDatabase: store.ReadDB(), CursorKeys: testCursorKeys{}, FinalAuth: fixture.auth,
 		Invalidator: fixture.invalidator, Now: func() time.Time { return time.Unix(adminUsersTestNow, 0) },
 	})
 	if err != nil {

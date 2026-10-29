@@ -26,7 +26,7 @@ func (s *Service) beginUserHistoryTx(ctx context.Context, role reviewerRole, act
 	if role != reviewerSteward {
 		return nil, false, ErrInvalidRequest
 	}
-	tx, err := s.beginOwnerTx(ctx, actorID)
+	tx, err := s.beginBrowseTx(ctx, recurringOwner, actorID)
 	if err != nil {
 		return nil, false, err
 	}

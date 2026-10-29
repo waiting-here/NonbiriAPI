@@ -49,7 +49,7 @@ func (s *Service) failurePolicyHTTP(w http.ResponseWriter, r *http.Request, user
 				return
 			}
 		}
-		tx, err := s.begin(r.Context(), userID)
+		tx, err := s.beginRead(r.Context(), userID)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -57,6 +57,10 @@ func (s *Service) failurePolicyHTTP(w http.ResponseWriter, r *http.Request, user
 		defer tx.Rollback()
 		value, err := s.donations.ReadFailurePolicyStewardInTransaction(r.Context(), tx, userID, donationID, keyID)
 		if err != nil {
+			writeError(w, err)
+			return
+		}
+		if err := tx.Commit(); err != nil {
 			writeError(w, err)
 			return
 		}

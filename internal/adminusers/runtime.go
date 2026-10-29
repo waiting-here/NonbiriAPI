@@ -290,7 +290,7 @@ func (service *Service) listUsers(ctx context.Context, adminID int64, role manag
 	if query.Cursor != "" && (after == 0 || after > math.MaxInt64) {
 		return Page[AdminUser]{}, ErrInvalidRequest
 	}
-	tx, err := service.beginManagedUserRead(ctx, adminID, role, query.Page != nil)
+	tx, err := service.beginManagedUserRead(ctx, adminID, role, true)
 	if err != nil {
 		return Page[AdminUser]{}, err
 	}
@@ -392,7 +392,7 @@ func (service *Service) getUser(ctx context.Context, adminID, userID int64, role
 	if !validNow(now) {
 		return AdminUser{}, ErrUnavailable
 	}
-	tx, err := service.beginManagedUserRead(ctx, adminID, role, false)
+	tx, err := service.beginManagedUserRead(ctx, adminID, role, true)
 	if err != nil {
 		return AdminUser{}, err
 	}
@@ -418,7 +418,7 @@ func (service *Service) getUser(ctx context.Context, adminID, userID int64, role
 }
 
 func (service *Service) SiteUsage(ctx context.Context, adminID int64) (UsageSummary, error) {
-	tx, err := service.beginAuthorized(ctx, adminID)
+	tx, err := service.beginManagement(ctx, adminID, roleAdmin, true)
 	if err != nil {
 		return UsageSummary{}, err
 	}
@@ -464,7 +464,7 @@ func (service *Service) UserUsage(ctx context.Context, adminID int64, query Page
 	if query.Cursor != "" && (after == 0 || after > math.MaxInt64) {
 		return Page[AdminUserUsage]{}, ErrInvalidRequest
 	}
-	tx, err := service.beginListRead(ctx, adminID, query.Page != nil)
+	tx, err := service.beginListRead(ctx, adminID)
 	if err != nil {
 		return Page[AdminUserUsage]{}, err
 	}
@@ -545,7 +545,7 @@ func (service *Service) Activity(ctx context.Context, adminID int64, query PageQ
 	if query.Cursor != "" && after > uint64(maxUnixSecond) {
 		return ActivityPage{}, ErrInvalidRequest
 	}
-	tx, err := service.beginListRead(ctx, adminID, query.Page != nil)
+	tx, err := service.beginListRead(ctx, adminID)
 	if err != nil {
 		return ActivityPage{}, err
 	}

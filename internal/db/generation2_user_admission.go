@@ -39,11 +39,11 @@ type UserAdmissionLimits struct {
 // A missing, permanently banned, or still-temporarily-banned identity is
 // indistinguishable from an unknown identity at this boundary.
 func (s *Store) GetUserAdmissionLimits(ctx context.Context, userID int64) (UserAdmissionLimits, error) {
-	if s == nil || s.db == nil || ctx == nil || userID <= 0 {
+	if s == nil || s.readDB == nil || ctx == nil || userID <= 0 {
 		return UserAdmissionLimits{}, ErrNotFound
 	}
 	var rpm, concurrency, lightRPM, lightConcurrency, globalRPM sql.NullInt64
-	err := s.db.QueryRowContext(ctx, `
+	err := s.ReadDB().QueryRowContext(ctx, `
 SELECT rpm_limit,
        COALESCE(concurrency_limit, (SELECT value FROM site_config WHERE key='default_concurrency_per_user'), ?),
        light_rpm_limit,

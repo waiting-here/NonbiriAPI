@@ -524,7 +524,7 @@ func canonicalUserInsert(ctx context.Context, tx *sql.Tx, discordID, username, a
 
 func (r *Runtime) findDiscordUser(ctx context.Context, discordID string) (int64, bool, error) {
 	var id int64
-	err := r.db.QueryRowContext(ctx, `SELECT id FROM users WHERE discord_id=? AND is_admin=0`, discordID).Scan(&id)
+	err := r.readDatabase().QueryRowContext(ctx, `SELECT id FROM users WHERE discord_id=? AND is_admin=0`, discordID).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, false, nil
 	}

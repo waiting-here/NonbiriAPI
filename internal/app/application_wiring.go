@@ -320,7 +320,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	}
 	outbound.SetReturnMarker(marker)
 	returnAlerts = returnmarker.NewRecorder(workerContext, marker, adminAlertRepository.RecordReturnDetected)
-	donationReview, err := initializeDonationReview(startupContext, store.DB(), vault)
+	donationReview, err := initializeDonationReview(startupContext, store.ReadDB(), vault)
 	if err != nil {
 		return nil, fmt.Errorf("initialize donation review identities: %w", err)
 	}

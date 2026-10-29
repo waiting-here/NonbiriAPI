@@ -46,7 +46,7 @@ func (s *Service) bind(ctx context.Context, userID int64, input bindingInput) (b
 		}
 		ids[index], seen[id] = id, true
 	}
-	tx, err := s.begin(ctx, userID)
+	tx, err := s.beginRead(ctx, userID)
 	if err != nil {
 		return bindingsResult{}, 0, err
 	}

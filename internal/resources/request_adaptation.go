@@ -26,7 +26,7 @@ func (r *Repository) GetEndpointAdaptation(ctx context.Context, userID, endpoint
 	if r == nil || r.adaptations == nil || ctx == nil || userID <= 0 || endpointID <= 0 {
 		return requestadaptation.ConfigurationProjection{}, ErrInvalidRequest
 	}
-	tx, err := beginTx(ctx, r.db)
+	tx, err := beginTx(ctx, r.readDB)
 	if err != nil {
 		return requestadaptation.ConfigurationProjection{}, err
 	}
@@ -144,7 +144,7 @@ func (r *Repository) GetModelAdaptation(ctx context.Context, userID, modelID int
 	if r == nil || r.adaptations == nil || ctx == nil || userID <= 0 || modelID <= 0 {
 		return requestadaptation.ConfigurationProjection{}, ErrInvalidRequest
 	}
-	tx, err := beginTx(ctx, r.db)
+	tx, err := beginTx(ctx, r.readDB)
 	if err != nil {
 		return requestadaptation.ConfigurationProjection{}, err
 	}

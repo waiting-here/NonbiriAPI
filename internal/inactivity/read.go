@@ -17,7 +17,7 @@ func (s *Service) UserStatus(ctx context.Context) (Status, error) {
 	if !ok || actor.Kind != authz.ActorUserSession {
 		return Status{}, ErrForbidden
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Status{}, err
 	}

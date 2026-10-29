@@ -22,7 +22,7 @@ func (r *Repository) GetCallerKey(ctx context.Context, userID int64) (CallerKeyS
 	var head, tail string
 	var created sql.NullInt64
 	var updated int64
-	err := r.db.QueryRowContext(ctx, `
+	err := r.readDB.QueryRowContext(ctx, `
 SELECT generation,key_hash,display_head,display_tail,key_created_at,updated_at
 FROM caller_keys WHERE user_id=?`, userID).Scan(&generation, &hash, &head, &tail, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {

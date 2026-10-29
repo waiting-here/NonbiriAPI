@@ -102,7 +102,7 @@ func (s *Service) authorizeAgentTx(ctx context.Context, tx *sql.Tx, actor agentp
 // AgentPreflight verifies live authority without consuming elevation or taking
 // a writer lock. Versions are checked later in operation order inside Apply.
 func (s *Service) AgentPreflight(ctx context.Context, actor agentplan.Actor, ops []AgentOperation, authorize agentplan.Authorize) ([]AgentTarget, error) {
-	tx, err := s.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}

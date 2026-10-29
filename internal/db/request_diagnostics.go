@@ -25,6 +25,7 @@ CREATE TABLE agent_request_diagnostics (
 );
 CREATE TABLE request_error_diagnostics (
  error_id INTEGER PRIMARY KEY REFERENCES request_error_bodies(id) ON DELETE CASCADE,
+ source_base_url TEXT CHECK(source_base_url IS NULL OR length(source_base_url) BETWEEN 1 AND 4096),
  details TEXT NOT NULL CHECK(json_valid(details) AND json_type(details)='object' AND length(CAST(details AS BLOB))<=16384)
 );
 `

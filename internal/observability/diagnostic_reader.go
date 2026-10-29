@@ -413,11 +413,17 @@ func diagnosticDNSRedactor(ctx context.Context, tx *sql.Tx, item DiagnosticItem)
  LIMIT 1`
 		args = []any{item.SubjectID, item.AttemptSeq, item.SubjectID, item.AttemptSeq}
 	case "image_task":
-		query = `SELECT r.base_url FROM image_activity_tasks t
- JOIN image_upstream_revisions r ON r.revision=t.upstream_revision WHERE t.id=?`
+		query = `SELECT COALESCE(d.source_base_url,r.base_url) FROM request_error_bodies e
+ LEFT JOIN request_error_diagnostics d ON d.error_id=e.id
+ JOIN image_activity_tasks t ON t.id=e.task_id
+ LEFT JOIN image_upstream_revisions r ON r.revision=t.upstream_revision WHERE e.id=? AND t.id=?`
+		args = []any{item.ID, item.SubjectID}
 	case "image_discovery":
-		query = `SELECT r.base_url FROM image_model_refreshes f
- JOIN image_upstream_revisions r ON r.revision=f.upstream_revision WHERE f.operation_id=?`
+		query = `SELECT COALESCE(d.source_base_url,r.base_url) FROM request_error_bodies e
+ LEFT JOIN request_error_diagnostics d ON d.error_id=e.id
+ JOIN image_model_refreshes f ON f.operation_id=e.operation_id
+ LEFT JOIN image_upstream_revisions r ON r.revision=f.upstream_revision WHERE e.id=? AND f.operation_id=?`
+		args = []any{item.ID, item.SubjectID}
 	default:
 		return nil, false, nil
 	}

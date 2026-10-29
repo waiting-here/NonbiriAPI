@@ -31,6 +31,12 @@ Each version entry describes its source and compatibility boundary; a release ta
   already stored. Recheck authority when renewal needs the writer, and move pure
   steward model and price-template queries to the existing reader pool. Keep
   separate bounded metrics for session reads and charity-management routes.
+- Use the existing reader pool for pure account, management, model, activity and
+  game queries, including idle worker checks. Preserve writer transactions for
+  claims, settlement, expiry updates and legal-hold access records; release read
+  snapshots before sending HTTP responses.
+- Retain the source needed to redact image diagnostics after a task completes,
+  allowing obsolete credentials to be removed without hiding the entire error.
 - Label accepted model-list refresh tasks accurately in request logs and open
   their service call records by default, including unconfirmed HTTP responses.
 - Preserve safe DNS, TLS, timeout and connection-failure reasons for OpenAI and

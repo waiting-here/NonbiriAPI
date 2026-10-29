@@ -98,7 +98,7 @@ func (r *Runtime) InvalidateUnverifiedMFASessions(ctx context.Context) error {
 		return authz.ErrUnauthorized
 	}
 	now := r.now().Unix()
-	rows, err := r.db.QueryContext(ctx, `SELECT DISTINCT s.user_id FROM sessions s
+	rows, err := r.readDatabase().QueryContext(ctx, `SELECT DISTINCT s.user_id FROM sessions s
  JOIN users u ON u.id=s.user_id
  LEFT JOIN site_config cfg ON cfg.key='mfa_required_level_'||COALESCE(u.level,u.auto_level)
  LEFT JOIN account_mfa_credentials c ON c.user_id=u.id

@@ -47,12 +47,14 @@ type AdminRouteRegistrar interface {
 
 type HTTPOptions struct {
 	Database            *sql.DB
+	ReadDatabase        *sql.DB
 	Service             *Service
 	GenerateOperationID func(string) (string, error)
 }
 
 type httpAPI struct {
 	database *sql.DB
+	reader   *sql.DB
 	service  *Service
 	generate func(string) (string, error)
 }
@@ -81,7 +83,11 @@ func RegisterRoutes(stewards StewardRouteRegistrar, admins AdminRouteRegistrar, 
 	if generate == nil {
 		generate = db.GenerateOpaqueID
 	}
-	api := &httpAPI{database: options.Database, service: options.Service, generate: generate}
+	reader := options.ReadDatabase
+	if reader == nil {
+		reader = options.Database
+	}
+	api := &httpAPI{database: options.Database, reader: reader, service: options.Service, generate: generate}
 	for _, route := range []struct {
 		method, pattern string
 		handler         AuthorizedHTTPHandler
@@ -132,23 +138,26 @@ func (api *httpAPI) read(writer http.ResponseWriter, request *http.Request, prin
 		writeHTTPError(writer, ErrInvalidMutation)
 		return
 	}
-	tx, err := api.database.BeginTx(request.Context(), nil)
+	tx, err := api.reader.BeginTx(request.Context(), &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		writeHTTPError(writer, err)
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
 	if err := api.authorize(request.Context(), tx, principal.Actor, role); err != nil {
+		_ = tx.Rollback()
 		writeHTTPError(writer, err)
 		return
 	}
 	state, err := loadState(request.Context(), tx)
 	if err != nil {
+		_ = tx.Rollback()
 		writeHTTPError(writer, err)
 		return
 	}
 	wire, err := stateResponse(state)
 	if err != nil {
+		_ = tx.Rollback()
 		writeHTTPError(writer, err)
 		return
 	}
@@ -335,7 +344,7 @@ func (api *httpAPI) mutate(
 		return
 	}
 	transition.Finalize(true)
-	if err := transition.ObserveAfterCommit(request.Context(), api.database); err != nil {
+	if err := transition.ObserveAfterCommit(request.Context(), api.reader); err != nil {
 		writeHTTPError(writer, err)
 		return
 	}
@@ -343,7 +352,7 @@ func (api *httpAPI) mutate(
 }
 
 func (api *httpAPI) observeCurrent(ctx context.Context) error {
-	state, err := LoadState(ctx, api.database)
+	state, err := LoadState(ctx, api.reader)
 	if err != nil {
 		return err
 	}
