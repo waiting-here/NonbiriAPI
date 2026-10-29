@@ -56,7 +56,7 @@ func (r *Repository) managedDiscoveryEvidence(ctx context.Context, role string, 
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, err := beginTx(ctx, r.db)
+	tx, err := beginTx(ctx, r.readDB)
 	if err != nil {
 		return DiscoveryEvidence{}, err
 	}

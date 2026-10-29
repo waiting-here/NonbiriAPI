@@ -77,6 +77,11 @@ Release that snapshot before sending an HTTP response. Background
 candidate and empty-queue checks can also use readers when the subsequent writer
 transaction rechecks every predicate before changing data.
 
+Inventory transaction entry points as well as SQL calls. Follow custom transaction
+helpers, generic wrappers and authorization callbacks back to their callers;
+a pure query may contain no direct SQL. Check each caller's side effects before
+changing a shared helper used by both lists and retained-object reads.
+
 Expiry materialization, legal-hold access auditing, claims and settlement remain
 writer operations. A GET route or a method named `Read` is not enough to prove
 that an operation is pure. Production constructors must receive the store's
