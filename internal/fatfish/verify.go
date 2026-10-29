@@ -19,7 +19,7 @@ import (
 )
 
 func (s *Service) processVerification(ctx context.Context, job *verifyJob) error {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return err
 	}

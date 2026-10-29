@@ -123,12 +123,12 @@ func newFishFixture(t *testing.T) *fishFixture {
 	t.Cleanup(func() { _ = store.Close() })
 	f := &fishFixture{db: store.DB()}
 	f.clock.Store(fixtureNow * 1000)
-	identity, err := continuity.New(f.db, vault)
+	identity, err := continuity.New(f.db, vault, store.ReadDB())
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = identity.Close() })
-	f.config = Config{DB: f.db, Users: testAuthority{}, Admins: testAuthority{}, Gate: testGate{}, Identity: identity, Keys: vault, Now: func() time.Time { return time.UnixMilli(f.clock.Load()) }}
+	f.config = Config{DB: f.db, ReadDB: store.ReadDB(), Users: testAuthority{}, Admins: testAuthority{}, Gate: testGate{}, Identity: identity, Keys: vault, Now: func() time.Time { return time.UnixMilli(f.clock.Load()) }}
 	f.s, err = New(f.config)
 	if err != nil {
 		t.Fatal(err)

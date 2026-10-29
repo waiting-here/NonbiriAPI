@@ -29,7 +29,7 @@ func (s *Service) History(ctx context.Context, user int64, cursor string) (Recei
 	if err != nil {
 		return out, err
 	}
-	tx, err := s.config.Database.BeginTx(ctx, nil)
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return out, err
 	}

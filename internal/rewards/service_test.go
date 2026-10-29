@@ -86,7 +86,7 @@ func setup(t *testing.T) *fixture {
 	t.Cleanup(func() { store.Close() })
 	f := &fixture{db: store.DB(), vault: vault}
 	f.at.Store(1800000000)
-	f.continuity, e = continuity.New(f.db, vault)
+	f.continuity, e = continuity.New(f.db, vault, store.ReadDB())
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -95,7 +95,7 @@ func setup(t *testing.T) *fixture {
 	f.user = f.add(t, false)
 	f.other = f.add(t, false)
 	a := authority{f.admin}
-	f.s, e = New(Config{Database: f.db, Users: a, Admins: a, Gate: a, Keys: vault, Now: func() time.Time { return time.Unix(f.at.Load(), 0) }})
+	f.s, e = New(Config{Database: f.db, ReadDatabase: store.ReadDB(), Users: a, Admins: a, Gate: a, Keys: vault, Now: func() time.Time { return time.Unix(f.at.Load(), 0) }})
 	if e != nil {
 		t.Fatal(e)
 	}

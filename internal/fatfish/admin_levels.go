@@ -168,7 +168,7 @@ func (s *Service) Level(ctx context.Context, actorID int64, id string) (LevelVie
 	if !db.ValidateOpaqueID(id, "ffl_") {
 		return LevelView{}, ErrInvalid
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return LevelView{}, err
 	}
@@ -197,7 +197,7 @@ func (s *Service) Levels(ctx context.Context, actorID int64, page int) (LevelPag
 	if !validCollectionPage(page) {
 		return LevelPage{}, ErrInvalid
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return LevelPage{}, err
 	}
@@ -233,7 +233,7 @@ func (s *Service) Levels(ctx context.Context, actorID int64, page int) (LevelPag
 }
 
 func (s *Service) ValidateLevel(ctx context.Context, actorID int64, raw []byte) (VersionView, error) {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return VersionView{}, err
 	}
@@ -362,7 +362,7 @@ func (s *Service) Version(ctx context.Context, actorID int64, id string) (Versio
 	if !db.ValidateOpaqueID(id, "ffv_") {
 		return VersionView{}, ErrInvalid
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return VersionView{}, err
 	}
@@ -381,7 +381,7 @@ func (s *Service) Versions(ctx context.Context, actorID int64, levelID string, p
 	if !db.ValidateOpaqueID(levelID, "ffl_") || !validCollectionPage(page) {
 		return VersionPage{}, ErrInvalid
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return VersionPage{}, err
 	}

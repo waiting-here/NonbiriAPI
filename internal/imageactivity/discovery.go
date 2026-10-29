@@ -117,7 +117,7 @@ func (s *Service) GetRefresh(ctx context.Context, admin int64, id string) (Refre
 	if !db.ValidateOpaqueID(id, "op_") {
 		return Refresh{}, ErrInvalid
 	}
-	tx, err := s.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Refresh{}, err
 	}
@@ -150,7 +150,7 @@ func (s *Service) GetRefresh(ctx context.Context, admin int64, id string) (Refre
 func (s *Service) stepRefresh(ctx context.Context, now int64) error {
 	var id, control, state string
 	var revision, deadline int64
-	err := s.config.Database.QueryRowContext(ctx, "SELECT operation_id,control_id,state,upstream_revision,deadline FROM image_model_refreshes WHERE state IN ('queued','running') ORDER BY created_at,operation_id LIMIT 1").Scan(&id, &control, &state, &revision, &deadline)
+	err := s.config.ReadDatabase.QueryRowContext(ctx, "SELECT operation_id,control_id,state,upstream_revision,deadline FROM image_model_refreshes WHERE state IN ('queued','running') ORDER BY created_at,operation_id LIMIT 1").Scan(&id, &control, &state, &revision, &deadline)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}

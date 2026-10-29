@@ -185,7 +185,7 @@ func (s *Service) PlaytestChallenge(ctx context.Context, actorID int64, id, capa
 	if err != nil {
 		return ChallengeView{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return ChallengeView{}, err
 	}
@@ -211,7 +211,7 @@ func (s *Service) Playtests(ctx context.Context, actorID int64, versionID string
 	if !db.ValidateOpaqueID(versionID, "ffv_") {
 		return nil, ErrInvalid
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}

@@ -98,12 +98,18 @@ func newFixture(t *testing.T, kind string, override ...duel.Rules) *fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { f.db.Close() })
+	readDatabase, err := sql.Open("sqlite", path+"?mode=ro&_pragma=query_only(1)&_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readDatabase.SetMaxOpenConns(2)
+	t.Cleanup(func() { readDatabase.Close() })
 	tx, err := f.db.BeginTx(f.ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	identity, err := continuity.New(f.db, deps{})
+	identity, err := continuity.New(f.db, deps{}, readDatabase)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +207,7 @@ func newFixture(t *testing.T, kind string, override ...duel.Rules) *fixture {
 		t.Fatal(err)
 	}
 	registry := maintenance.NewRegistry()
-	f.options = duel.Options{Database: f.db, Descriptor: descriptor, Rules: f.rules, Finance: finance.Duel, UserAuthorizer: deps{}, AdminAuthorizer: f.admin, AdminAudit: func(a duel.AdminAudit) {
+	f.options = duel.Options{Database: f.db, ReadDatabase: readDatabase, Descriptor: descriptor, Rules: f.rules, Finance: finance.Duel, UserAuthorizer: deps{}, AdminAuthorizer: f.admin, AdminAudit: func(a duel.AdminAudit) {
 		if f.audit != nil {
 			f.audit(a)
 		}

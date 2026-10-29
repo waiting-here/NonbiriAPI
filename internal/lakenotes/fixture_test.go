@@ -88,7 +88,7 @@ func newFixture(t *testing.T) *fixture {
 	f.now.Store(testNow * int64(time.Second))
 	now := func() time.Time { return time.Unix(0, f.now.Load()) }
 	a := authority{authz.New(authz.Options{Now: now})}
-	f.service, e = New(Config{Database: f.database, Users: a, Admins: a, Gate: admission{}, Keys: vault, Now: now, Random: f.random, MotionSeed: func() (uint32, error) { return 123, nil }})
+	f.service, e = New(Config{Database: f.database, ReadDatabase: store.ReadDB(), Users: a, Admins: a, Gate: admission{}, Keys: vault, Now: now, Random: f.random, MotionSeed: func() (uint32, error) { return 123, nil }})
 	if e != nil {
 		t.Fatal(e)
 	}

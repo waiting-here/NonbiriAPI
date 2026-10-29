@@ -107,7 +107,7 @@ func (s *Service) Controls(ctx context.Context, admin int64, limit int, cursor s
 	if err != nil {
 		return out, err
 	}
-	tx, err := s.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return out, err
 	}
@@ -222,7 +222,7 @@ func (s *Service) GetAdminModel(ctx context.Context, admin int64, id string) (Ad
 	if !db.ValidateOpaqueID(id, "imdl_") {
 		return AdminModel{}, ErrInvalid
 	}
-	tx, err := s.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return AdminModel{}, err
 	}

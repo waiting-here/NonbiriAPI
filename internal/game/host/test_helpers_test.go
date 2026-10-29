@@ -83,7 +83,7 @@ func newGameFixture(t *testing.T, _ any) *gameFixture {
 	for _, descriptor := range registry.Descriptors() {
 		factories[descriptor.ID] = func(Services) (*Module, error) { return inertModule(), nil }
 	}
-	fixture.service, err = New(Options{Database: fixture.database, Registry: registry, Factories: factories, UserAuthorizer: testUserAuthorizer{}, AdminAuthorizer: fixture.adminAuth, Now: func() time.Time { return time.Unix(fixture.clock.Load(), 0) }})
+	fixture.service, err = New(Options{Database: fixture.database, ReadDatabase: store.ReadDB(), Registry: registry, Factories: factories, UserAuthorizer: testUserAuthorizer{}, AdminAuthorizer: fixture.adminAuth, Now: func() time.Time { return time.Unix(fixture.clock.Load(), 0) }})
 	if err != nil {
 		t.Fatal(err)
 	}

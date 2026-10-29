@@ -27,7 +27,7 @@ func RegisterRoutes(user resources.UserRouteRegistrar, continuation resources.Co
 		return errors.New("rps: user registrars and service are required")
 	}
 	api := &httpAPI{service: service}
-	if err := randomhttp.RegisterContinuation(continuation, service.database, service.userAuthorizer, "rps", service.now, service.authorizeRandomness); err != nil {
+	if err := randomhttp.RegisterContinuation(continuation, service.readDatabase, service.userAuthorizer, "rps", service.now, service.authorizeRandomness); err != nil {
 		return err
 	}
 	userRoutes := []struct {

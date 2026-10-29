@@ -167,7 +167,7 @@ func TestAIMatchPerformance(t *testing.T) {
 
 func addAIUsers(t *testing.T, f *fixture, count int) []int64 {
 	users := []int64{f.users[0]}
-	identity, err := continuity.New(f.db, deps{})
+	identity, err := continuity.New(f.db, deps{}, f.options.ReadDatabase)
 	if err != nil {
 		t.Fatal(err)
 	}

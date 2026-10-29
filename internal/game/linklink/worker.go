@@ -44,7 +44,7 @@ func (service *Service) RecoverBeforeListen(ctx context.Context) error {
 func (service *Service) validatePersistedSessions(ctx context.Context) error {
 	cursor := ""
 	for {
-		rows, err := service.database.QueryContext(ctx, `SELECT `+sessionColumns+`
+		rows, err := service.readDatabase.QueryContext(ctx, `SELECT `+sessionColumns+`
 FROM game_linklink_sessions WHERE id>? ORDER BY id LIMIT ?`, cursor, workerBatchSize)
 		if err != nil {
 			return classifyDB(err)
@@ -111,7 +111,7 @@ func (service *Service) workerLoop(ctx context.Context, done chan struct{}) {
 }
 
 func (service *Service) runDue(ctx context.Context, now int64) (int, error) {
-	rows, err := service.database.QueryContext(ctx, `
+	rows, err := service.readDatabase.QueryContext(ctx, `
 SELECT id FROM game_linklink_sessions WHERE deadline<=? ORDER BY deadline,id LIMIT ?`, now, workerBatchSize)
 	if err != nil {
 		return 0, classifyDB(err)

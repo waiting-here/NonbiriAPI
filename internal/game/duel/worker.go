@@ -50,7 +50,7 @@ func (s *Service) workerPending(ctx context.Context) (bool, error) {
 		args = append(args, s.rules.ID(), s.rules.ID(), now-QueueSeconds, now)
 	}
 	var pending bool
-	err := s.database.QueryRowContext(ctx, query, args...).Scan(&pending)
+	err := s.readDatabase.QueryRowContext(ctx, query, args...).Scan(&pending)
 	return pending, err
 }
 func (s *Service) RecoverBeforeListenAt(ctx context.Context, _ int64, limit int, deadline time.Time) (WorkResult, error) {

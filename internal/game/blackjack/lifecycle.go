@@ -94,7 +94,7 @@ func (s *Service) Retain(ctx context.Context, now int64, limit int, deadline tim
 	if now < 0 || now > maxTime || limit < 1 || limit > 100 || deadline.IsZero() {
 		return out, ErrInvalid
 	}
-	rows, err := s.database.QueryContext(ctx, `SELECT id FROM game_blackjack_sessions WHERE terminal_at<=? ORDER BY terminal_at,id LIMIT ?`, now-retentionSeconds, limit+1)
+	rows, err := s.readDB.QueryContext(ctx, `SELECT id FROM game_blackjack_sessions WHERE terminal_at<=? ORDER BY terminal_at,id LIMIT ?`, now-retentionSeconds, limit+1)
 	if err != nil {
 		return out, err
 	}

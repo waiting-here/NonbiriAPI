@@ -33,7 +33,7 @@ func (service *Service) ReadGamesConfig(ctx context.Context) (game.WireConfigura
 	if service.closed.Load() {
 		return game.WireConfiguration{}, ErrClosed
 	}
-	tx, err := service.services.Database.BeginTx(ctx, nil)
+	tx, err := service.services.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return game.WireConfiguration{}, classifyDB(err)
 	}

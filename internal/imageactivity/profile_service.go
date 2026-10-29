@@ -42,7 +42,7 @@ func profileTx(ctx context.Context, tx *sql.Tx, control string) (ProfileState, e
 
 func (s *Service) GetProfile(ctx context.Context, admin int64) (ProfileState, error) {
 	var out ProfileState
-	tx, err := s.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return out, err
 	}

@@ -44,6 +44,7 @@ type KeyDeriver interface {
 
 type Config struct {
 	DB       *sql.DB
+	ReadDB   *sql.DB
 	Users    UserAuthorizer
 	Admins   AdminAuthorizer
 	Gate     AdmissionGate
@@ -55,6 +56,7 @@ type Config struct {
 
 type Service struct {
 	db          *sql.DB
+	readDB      *sql.DB
 	users       UserAuthorizer
 	admins      AdminAuthorizer
 	gate        AdmissionGate
@@ -75,12 +77,15 @@ func New(config Config) (*Service, error) {
 	if config.DB == nil || config.Users == nil || config.Admins == nil || config.Gate == nil || config.Identity == nil || config.Keys == nil {
 		return nil, ErrInvalid
 	}
+	if config.ReadDB == nil {
+		config.ReadDB = config.DB
+	}
 	if config.Now == nil {
 		config.Now = time.Now
 	}
 	if config.Random == nil {
 		config.Random = rand.Reader
 	}
-	return &Service{db: config.DB, users: config.Users, admins: config.Admins, gate: config.Gate, identity: config.Identity, keys: config.Keys, now: config.Now, random: config.Random,
+	return &Service{db: config.DB, readDB: config.ReadDB, users: config.Users, admins: config.Admins, gate: config.Gate, identity: config.Identity, keys: config.Keys, now: config.Now, random: config.Random,
 		jobs: make(map[string]*verifyJob), workerSlots: make(chan struct{}, 2), replay: engine.Replay}, nil
 }

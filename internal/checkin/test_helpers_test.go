@@ -144,7 +144,7 @@ func newCheckinFixture(t *testing.T) *checkinFixture {
 		t.Fatalf("open check-in database: %v", err)
 	}
 	fixture := &checkinFixture{t: t, store: store, database: store.DB(), order: &callRecorder{}}
-	fixture.continuity, err = continuity.New(store.DB(), vault)
+	fixture.continuity, err = continuity.New(store.DB(), vault, store.ReadDB())
 	if err != nil {
 		t.Fatal(err)
 	}

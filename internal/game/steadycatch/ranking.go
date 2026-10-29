@@ -31,7 +31,7 @@ func (s *Service) Leaderboard(ctx context.Context, user int64, window string) (B
 	default:
 		return Board{}, ErrInvalid
 	}
-	tx, nowMS, err := s.begin(ctx)
+	tx, nowMS, err := s.beginRead(ctx)
 	if err != nil {
 		return Board{}, err
 	}

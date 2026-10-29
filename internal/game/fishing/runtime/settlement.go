@@ -297,7 +297,7 @@ func pendingFromRecord(record batchRecord) *FishingSettlementPending {
 }
 
 func (service *Service) loadAuthority(ctx context.Context, userID int64, batchID string, replay bool) (*FishingBatchResult, *FishingSettlementPending, error) {
-	tx, err := service.database.BeginTx(ctx, nil)
+	tx, err := service.readDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, nil, classifyDB(err)
 	}
@@ -322,7 +322,7 @@ func (service *Service) loadAuthority(ctx context.Context, userID int64, batchID
 }
 
 func (service *Service) runDue(ctx context.Context, now int64, scheduleFailures bool) (int, error) {
-	rows, err := service.database.QueryContext(ctx, `SELECT id FROM game_fishing_batches WHERE state='reserved' AND retry_exhausted=0 AND next_attempt_at<=? ORDER BY next_attempt_at,id LIMIT ?`, now, workerBatchSize)
+	rows, err := service.readDatabase.QueryContext(ctx, `SELECT id FROM game_fishing_batches WHERE state='reserved' AND retry_exhausted=0 AND next_attempt_at<=? ORDER BY next_attempt_at,id LIMIT ?`, now, workerBatchSize)
 	if err != nil {
 		return 0, classifyDB(err)
 	}
@@ -422,7 +422,7 @@ func (service *Service) verifyDurableFishingProgress(ctx context.Context, batchI
 	var state string
 	var next sql.NullInt64
 	var exhausted int
-	err := service.database.QueryRowContext(ctx, `SELECT state,next_attempt_at,retry_exhausted FROM game_fishing_batches WHERE id=?`, batchID).Scan(&state, &next, &exhausted)
+	err := service.readDatabase.QueryRowContext(ctx, `SELECT state,next_attempt_at,retry_exhausted FROM game_fishing_batches WHERE id=?`, batchID).Scan(&state, &next, &exhausted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -489,7 +489,7 @@ func (service *Service) AcknowledgeFishing(ctx context.Context, userID int64, ba
 }
 
 func (service *Service) FishingState(ctx context.Context, userID int64) (FishingState, error) {
-	tx, err := service.database.BeginTx(ctx, nil)
+	tx, err := service.readDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return FishingState{}, classifyDB(err)
 	}

@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -82,7 +83,7 @@ func (service *Service) ValidatePersistedState(ctx context.Context) error {
 // validateFishingRecoveryState preserves RecoverBeforeListen's full persisted
 // ledger/capacity validation and Fishing's exact one-row reservation shape.
 func (service *Service) validateFishingRecoveryState(ctx context.Context) error {
-	tx, err := service.database.BeginTx(ctx, nil)
+	tx, err := service.readDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return classifyDB(err)
 	}
@@ -102,7 +103,7 @@ func (service *Service) validateFishingRecoveryState(ctx context.Context) error 
 }
 
 func (service *Service) recoverFishingDueBatch(ctx context.Context, decisionNow int64, limit int) (int, error) {
-	rows, err := service.database.QueryContext(ctx, `
+	rows, err := service.readDatabase.QueryContext(ctx, `
 SELECT id FROM game_fishing_batches
 WHERE state='reserved' AND retry_exhausted=0 AND next_attempt_at<=?
 ORDER BY next_attempt_at,id LIMIT ?`, decisionNow, limit)
@@ -141,7 +142,7 @@ ORDER BY next_attempt_at,id LIMIT ?`, decisionNow, limit)
 
 func (service *Service) fishingRecoveryPending(ctx context.Context, decisionNow int64) (bool, error) {
 	var pending int
-	if err := service.database.QueryRowContext(ctx, `SELECT EXISTS(
+	if err := service.readDatabase.QueryRowContext(ctx, `SELECT EXISTS(
 SELECT 1 FROM game_fishing_batches
 WHERE state='reserved' AND retry_exhausted=0 AND next_attempt_at<=?
 )`, decisionNow).Scan(&pending); err != nil {

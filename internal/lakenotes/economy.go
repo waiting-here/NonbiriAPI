@@ -56,7 +56,7 @@ func (s *Service) Quote(ctx context.Context, user int64, in QuoteInput) (Quote, 
 	if e != nil {
 		return Quote{}, e
 	}
-	tx, e := s.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, e := s.readDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if e != nil {
 		return Quote{}, e
 	}

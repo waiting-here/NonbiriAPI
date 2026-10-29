@@ -180,7 +180,7 @@ func (r *Repository) QuoteLoan(ctx context.Context, user int64, tier string) (Lo
 	if tier != "1" && tier != "2" && tier != "3" {
 		return LoanQuote{}, ErrInvalidRequest
 	}
-	tx, err := r.beginUserMutation(ctx, user)
+	tx, err := r.beginUserRead(ctx, user)
 	if err != nil {
 		return LoanQuote{}, err
 	}

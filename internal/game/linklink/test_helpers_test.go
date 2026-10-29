@@ -154,7 +154,7 @@ func newFixture(t *testing.T) *fixture {
 		t: t, store: store, database: store.DB(), vault: vault,
 		random: &scriptedSource{}, authorizer: &testAuthorizer{}, continuation: &testContinuation{},
 	}
-	value.identity, err = continuity.New(store.DB(), vault)
+	value.identity, err = continuity.New(store.DB(), vault, store.ReadDB())
 	if err != nil {
 		store.Close()
 		vault.Close()

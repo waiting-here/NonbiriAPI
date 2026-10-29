@@ -3,6 +3,7 @@ package lakenotes
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -222,7 +223,7 @@ func RegisterRoutes(users resources.UserRouteRegistrar, continuation resources.C
 		{baseRoute + "/profile", func(r *http.Request, id int64) (any, error) { return s.Profile(r.Context(), id) }},
 		{baseRoute + "/casts/{id}", func(r *http.Request, id int64) (any, error) { return s.Cast(r.Context(), id, r.PathValue("id")) }},
 		{baseRoute + "/rules", func(r *http.Request, id int64) (any, error) {
-			tx, e := s.database.BeginTx(r.Context(), nil)
+			tx, e := s.readDatabase.BeginTx(r.Context(), &sql.TxOptions{ReadOnly: true})
 			if e != nil {
 				return nil, e
 			}

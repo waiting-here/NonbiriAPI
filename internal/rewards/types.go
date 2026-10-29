@@ -35,13 +35,14 @@ type KeyDeriver interface {
 	DeriveGenerationTwoSubkey([]byte) ([]byte, error)
 }
 type Config struct {
-	Database *sql.DB
-	Users    UserAuthorizer
-	Admins   AdminAuthorizer
-	Gate     Gate
-	Keys     KeyDeriver
-	Activity limitedactivities.ActivityRecorder
-	Now      func() time.Time
+	Database     *sql.DB
+	ReadDatabase *sql.DB
+	Users        UserAuthorizer
+	Admins       AdminAuthorizer
+	Gate         Gate
+	Keys         KeyDeriver
+	Activity     limitedactivities.ActivityRecorder
+	Now          func() time.Time
 }
 type Condition struct {
 	Op       string      `json:"op"`

@@ -112,7 +112,7 @@ func (s *Service) CurrentPlaytest(ctx context.Context, actorID int64) (*CurrentP
 	if err != nil {
 		return nil, err
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}

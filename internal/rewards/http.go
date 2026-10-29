@@ -2,6 +2,7 @@ package rewards
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
@@ -31,17 +32,19 @@ func RegisterRoutes(users limitedactivities.UserRouteRegistrar, admins limitedac
 					respond(w, nil, ErrInvalid)
 					return
 				}
-				tx, e := s.config.Database.BeginTx(r.Context(), nil)
+				tx, e := s.config.ReadDatabase.BeginTx(r.Context(), &sql.TxOptions{ReadOnly: true})
 				if e != nil {
 					respond(w, nil, e)
 					return
 				}
 				defer tx.Rollback()
 				if e = s.config.Users.AuthorizeUserMutation(r.Context(), tx, p.UserID); e != nil {
+					_ = tx.Rollback()
 					respond(w, nil, e)
 					return
 				}
 				out, e := userAssets(r.Context(), tx, p.UserID)
+				_ = tx.Rollback()
 				respond(w, out, e)
 				return
 			}
@@ -94,16 +97,18 @@ func RegisterRoutes(users limitedactivities.UserRouteRegistrar, admins limitedac
 			respond(w, nil, ErrInvalid)
 			return
 		}
-		tx, e := s.config.Database.BeginTx(r.Context(), nil)
+		tx, e := s.config.ReadDatabase.BeginTx(r.Context(), &sql.TxOptions{ReadOnly: true})
 		if e != nil {
 			respond(w, nil, e)
 			return
 		}
 		defer tx.Rollback()
 		if e = s.config.Admins.AuthorizeAdmin(r.Context(), tx, p.UserID); e != nil {
+			_ = tx.Rollback()
 			respond(w, nil, e)
 			return
 		}
+		_ = tx.Rollback()
 		respond(w, Assets(), nil)
 	}); err != nil {
 		return err

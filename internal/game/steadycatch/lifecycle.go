@@ -95,7 +95,7 @@ func (s *Service) Module() *host.Module {
 	}
 }
 func (s *Service) validate(ctx context.Context) error {
-	rows, err := s.database.QueryContext(ctx, `SELECT engine_json,tick FROM game_catch_sessions WHERE status IN ('playing','paused')`)
+	rows, err := s.readDatabase.QueryContext(ctx, `SELECT engine_json,tick FROM game_catch_sessions WHERE status IN ('playing','paused')`)
 	if err != nil {
 		return err
 	}
@@ -154,7 +154,7 @@ func (s *Service) work(ctx context.Context, now int64, limit int, deadline time.
 		}
 		out.Processed++
 	}
-	err := s.database.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM game_catch_sessions WHERE status IN ('playing','paused') AND (expires_at<=? OR (? AND status='playing')))`, now, restart).Scan(&out.More)
+	err := s.readDatabase.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM game_catch_sessions WHERE status IN ('playing','paused') AND (expires_at<=? OR (? AND status='playing')))`, now, restart).Scan(&out.More)
 	return out, err
 }
 func (s *Service) startWorker(ctx context.Context) error {

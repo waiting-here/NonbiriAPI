@@ -19,7 +19,7 @@ func (s *Service) recover(ctx context.Context, now int64, limit int, deadline ti
 		return lifecycle.WorkResult{}, ErrInvalid
 	}
 	nowMS := now * 1000
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM fatfish_challenges WHERE
+	rows, err := s.readDB.QueryContext(ctx, `SELECT id FROM fatfish_challenges WHERE
  (state='prepared' AND prepare_until_ms<=?) OR
  (state='active' AND submit_until_ms<?) OR
  (state='verifying' AND (verified_result_json IS NOT NULL OR received_at_ms+600000<?))
@@ -123,7 +123,7 @@ func (s *Service) retain(ctx context.Context, now int64, limit int, deadline tim
 	if cutoff < 0 {
 		return lifecycle.WorkResult{}, nil
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM fatfish_challenges WHERE terminal_at_ms IS NOT NULL AND terminal_at_ms<? ORDER BY terminal_at_ms,id LIMIT ?`, cutoff, limit+1)
+	rows, err := s.readDB.QueryContext(ctx, `SELECT id FROM fatfish_challenges WHERE terminal_at_ms IS NOT NULL AND terminal_at_ms<? ORDER BY terminal_at_ms,id LIMIT ?`, cutoff, limit+1)
 	if err != nil {
 		return lifecycle.WorkResult{}, err
 	}
