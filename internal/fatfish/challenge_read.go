@@ -126,7 +126,7 @@ func (s *Service) Challenge(ctx context.Context, userID int64, id, capability st
 	if err != nil {
 		return ChallengeView{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return ChallengeView{}, err
 	}
@@ -153,7 +153,7 @@ func (s *Service) CurrentChallenge(ctx context.Context, userID int64, capability
 	if err != nil {
 		return nil, err
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}

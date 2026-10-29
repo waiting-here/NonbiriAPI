@@ -66,6 +66,12 @@ func newFixture(t *testing.T) *fixture {
 	}
 	f.db.SetMaxOpenConns(1)
 	t.Cleanup(func() { f.db.Close() })
+	readDatabase, err := sql.Open("sqlite", path+"?mode=ro&_pragma=query_only(1)&_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readDatabase.SetMaxOpenConns(2)
+	t.Cleanup(func() { readDatabase.Close() })
 	tx, err := f.db.Begin()
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +94,7 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := continuity.New(f.db, testAuth{})
+	c, err := continuity.New(f.db, testAuth{}, readDatabase)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +135,7 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.s, err = New(Options{Shared: host.Services{Database: f.db, UserAuthorizer: testAuth{}, Limiter: limiter, Now: func() time.Time { return time.UnixMilli(f.now.Load()) }}, Finance: ports.Solo, Continuation: testAuth{}})
+	f.s, err = New(Options{Shared: host.Services{Database: f.db, ReadDatabase: readDatabase, UserAuthorizer: testAuth{}, Limiter: limiter, Now: func() time.Time { return time.UnixMilli(f.now.Load()) }}, Finance: ports.Solo, Continuation: testAuth{}})
 	if err != nil {
 		t.Fatal(err)
 	}

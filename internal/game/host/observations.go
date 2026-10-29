@@ -22,7 +22,7 @@ func (service *Service) GamesSnapshot(ctx context.Context, userID int64, now tim
 	if service.closed.Load() {
 		return nil, ErrClosed
 	}
-	tx, err := service.services.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := service.services.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, classifyDB(err)
 	}
@@ -76,7 +76,7 @@ func (service *Service) HomeSummary(ctx context.Context, userID int64) (game.Hom
 	if service.closed.Load() {
 		return game.HomeSummary{}, ErrClosed
 	}
-	tx, err := service.services.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := service.services.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return game.HomeSummary{}, classifyDB(err)
 	}
@@ -133,7 +133,7 @@ func (service *Service) ActiveCounts(ctx context.Context) (game.ActiveCounts, er
 	if service.closed.Load() {
 		return result, ErrClosed
 	}
-	tx, err := service.services.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := service.services.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return result, classifyDB(err)
 	}

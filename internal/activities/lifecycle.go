@@ -17,7 +17,7 @@ func (r *Repository) ExportUser(ctx context.Context, userID int64) (UserExport, 
 	if r == nil || r.db == nil || ctx == nil || userID <= 0 {
 		return UserExport{}, ErrInvalidRequest
 	}
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := r.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return UserExport{}, classifyDatabaseError("begin activity export", err)
 	}

@@ -29,7 +29,7 @@ func (service *Service) expireRankFacts(ctx context.Context, queryNow int64, dea
 	for {
 		if !service.budgetNow().Before(deadline) {
 			var due int
-			if err := service.database.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM game_fishing_rank_facts WHERE aggregate_applied=1 AND expires_at<=?)`, queryNow).Scan(&due); err != nil {
+			if err := service.readDatabase.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM game_fishing_rank_facts WHERE aggregate_applied=1 AND expires_at<=?)`, queryNow).Scan(&due); err != nil {
 				return classifyDB(err)
 			}
 			if due == 1 {

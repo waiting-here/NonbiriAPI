@@ -215,7 +215,7 @@ func (s *Service) AdminPeriod(ctx context.Context, actorID int64, id string) (Pe
 	if !db.ValidateOpaqueID(id, "ffp_") {
 		return PeriodView{}, ErrInvalid
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return PeriodView{}, err
 	}
@@ -238,7 +238,7 @@ func (s *Service) AdminPeriods(ctx context.Context, actorID int64, page int) (Pe
 	if err != nil {
 		return PeriodPage{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return PeriodPage{}, err
 	}
@@ -275,7 +275,7 @@ func (s *Service) AdminNode(ctx context.Context, actorID int64, periodID, nodeID
 	if !db.ValidateOpaqueID(periodID, "ffp_") || !db.ValidateOpaqueID(nodeID, "ffn_") {
 		return NodeView{}, ErrInvalid
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return NodeView{}, err
 	}
@@ -595,7 +595,7 @@ func (s *Service) ValidatePeriod(ctx context.Context, actorID int64, id string) 
 	if !db.ValidateOpaqueID(id, "ffp_") {
 		return GraphValidation{}, ErrInvalid
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return GraphValidation{}, err
 	}

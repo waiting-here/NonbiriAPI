@@ -25,7 +25,7 @@ func (s *Service) RegisterRoutes(r host.Registrars) error {
 		return ErrInvariant
 	}
 	base := "/api/games/blackjack"
-	if err := randomhttp.RegisterContinuation(r.Continuation, s.database, s.authorizer, "blackjack", s.now, s.authorizeRandomness); err != nil {
+	if err := randomhttp.RegisterContinuation(r.Continuation, s.readDB, s.authorizer, "blackjack", s.now, s.authorizeRandomness); err != nil {
 		return err
 	}
 	if err := r.User.RegisterUserRoute("POST", base+"/queue", func(w http.ResponseWriter, r *http.Request, p resources.UserPrincipal) {

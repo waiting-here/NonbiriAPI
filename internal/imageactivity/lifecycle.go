@@ -186,7 +186,7 @@ func (s *Service) RecoverBeforeListener(ctx context.Context, now int64, limit in
 	}
 	for out.Processed < limit && time.Now().Before(end) {
 		var id string
-		err := s.config.Database.QueryRowContext(ctx, "SELECT operation_id FROM image_model_refreshes WHERE state='running' ORDER BY operation_id LIMIT 1").Scan(&id)
+		err := s.config.ReadDatabase.QueryRowContext(ctx, "SELECT operation_id FROM image_model_refreshes WHERE state='running' ORDER BY operation_id LIMIT 1").Scan(&id)
 		if errors.Is(err, sql.ErrNoRows) {
 			break
 		}
@@ -198,7 +198,7 @@ func (s *Service) RecoverBeforeListener(ctx context.Context, now int64, limit in
 		}
 		out.Processed++
 	}
-	err := s.config.Database.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM image_activity_tasks WHERE "+predicate+") OR EXISTS(SELECT 1 FROM image_model_refreshes WHERE state='running')", now).Scan(&out.More)
+	err := s.config.ReadDatabase.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM image_activity_tasks WHERE "+predicate+") OR EXISTS(SELECT 1 FROM image_model_refreshes WHERE state='running')", now).Scan(&out.More)
 	return out, err
 }
 func (s *Service) Retain(ctx context.Context, now int64, limit int, budget time.Duration) (lifecycle.WorkResult, error) {
@@ -212,7 +212,7 @@ func (s *Service) Retain(ctx context.Context, now int64, limit int, budget time.
 	// finite cleanup window. The separate protection control remains latched.
 	for out.Processed < limit && time.Now().Before(end) {
 		var id string
-		err := s.config.Database.QueryRowContext(ctx, "SELECT id FROM image_activity_tasks WHERE upstream_revision IS NOT NULL AND finance_state<>'reserved' AND cleanup_deadline<=? ORDER BY accepted_seq LIMIT 1", now).Scan(&id)
+		err := s.config.ReadDatabase.QueryRowContext(ctx, "SELECT id FROM image_activity_tasks WHERE upstream_revision IS NOT NULL AND finance_state<>'reserved' AND cleanup_deadline<=? ORDER BY accepted_seq LIMIT 1", now).Scan(&id)
 		if errors.Is(err, sql.ErrNoRows) {
 			break
 		}

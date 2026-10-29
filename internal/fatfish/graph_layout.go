@@ -76,7 +76,7 @@ func (s *Service) GraphLayout(ctx context.Context, actorID int64, id string) (Gr
 	if !db.ValidateOpaqueID(id, "ffp_") {
 		return GraphLayout{}, ErrInvalid
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return GraphLayout{}, err
 	}

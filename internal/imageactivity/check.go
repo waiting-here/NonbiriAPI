@@ -42,7 +42,7 @@ func (s *Service) CheckModel(ctx context.Context, admin int64, input CheckInput)
 		out.Issues = append(out.Issues, CheckIssue{ModelID: input.ModelID, FieldPath: path, Code: code, SafeMessage: message})
 		return out, nil
 	}
-	tx, err := s.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return out, err
 	}

@@ -96,7 +96,7 @@ func upstreamView(snapshot upstreamSnapshot) Upstream {
 	return Upstream{Revision: strconv.FormatInt(snapshot.stateRevision, 10), Configured: true, BaseURL: snapshot.baseURL, SecretSet: true, RPM: &rpm, Concurrency: &con, PerUserLimit: snapshot.userLimit, GlobalLimit: snapshot.globalLimit, QueueTimeoutSeconds: snapshot.queueSeconds, ExecutionTimeoutSeconds: snapshot.executionSeconds, MemoryBudgetMiB: snapshot.memoryMiB, ImageOrigins: snapshot.origins, Adapter: &a, Control: &c}
 }
 func (s *Service) GetUpstream(ctx context.Context, admin int64) (Upstream, error) {
-	tx, err := s.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Upstream{}, err
 	}

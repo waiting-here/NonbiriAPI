@@ -29,16 +29,17 @@ var (
 )
 
 type Config struct {
-	Database   *sql.DB
-	Users      resources.FinalTxAuthorizer
-	Admins     host.AdminAuthorizer
-	Gate       AdmissionGate
-	Keys       KeyDeriver
-	Activity   func(context.Context, *sql.Tx, int64, int64) error
-	Reward     func(context.Context, *sql.Tx, int64, string, int64) error
-	Now        func() time.Time
-	Random     rules.Random53
-	MotionSeed func() (uint32, error)
+	Database     *sql.DB
+	ReadDatabase *sql.DB
+	Users        resources.FinalTxAuthorizer
+	Admins       host.AdminAuthorizer
+	Gate         AdmissionGate
+	Keys         KeyDeriver
+	Activity     func(context.Context, *sql.Tx, int64, int64) error
+	Reward       func(context.Context, *sql.Tx, int64, string, int64) error
+	Now          func() time.Time
+	Random       rules.Random53
+	MotionSeed   func() (uint32, error)
 }
 type AdmissionGate interface {
 	AuthorizeUserActivity(context.Context, *sql.Tx, int64) error

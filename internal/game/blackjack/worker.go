@@ -17,7 +17,7 @@ func (s *Service) Available(mode, spec string) bool {
 	return mode == "table" && spec == "" && s != nil && !s.closed.Load() && s.recovered.Load()
 }
 func (s *Service) ValidatePersistedState(ctx context.Context) error {
-	tx, err := s.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func (s *Service) work(ctx context.Context, limit int) (host.WorkResult, error) 
 	// Empty tables need no clock write. A new entry arriving after this read
 	// is picked up on the next tick; progress still rechecks under the writer.
 	var pending bool
-	if err := s.database.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM game_blackjack_entries WHERE state='waiting') OR EXISTS(SELECT 1 FROM game_blackjack_sessions WHERE phase IN ('seating','decision'))`).Scan(&pending); err != nil {
+	if err := s.readDB.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM game_blackjack_entries WHERE state='waiting') OR EXISTS(SELECT 1 FROM game_blackjack_sessions WHERE phase IN ('seating','decision'))`).Scan(&pending); err != nil {
 		return host.WorkResult{}, err
 	}
 	if !pending {

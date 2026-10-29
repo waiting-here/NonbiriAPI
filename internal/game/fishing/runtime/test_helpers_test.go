@@ -146,7 +146,7 @@ func newGameFixture(t *testing.T, source *scriptedSource) *gameFixture {
 		t: t, store: store, database: store.DB(), random: source,
 		userAuth: &testUserAuthorizer{}, adminAuth: &testAdminAuthorizer{},
 	}
-	fixture.identity, err = continuity.New(store.DB(), vault)
+	fixture.identity, err = continuity.New(store.DB(), vault, store.ReadDB())
 	if err != nil {
 		t.Fatalf("new continuity service: %v", err)
 	}

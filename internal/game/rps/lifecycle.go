@@ -725,7 +725,7 @@ func (service *Service) ActiveCounts(ctx context.Context) (ActiveCounts, error) 
 		}
 	}
 	sessionCounts := map[string]int64{}
-	rows, err := service.database.QueryContext(ctx, `SELECT mode,phase,COUNT(*) FROM game_rps_sessions GROUP BY mode,phase`)
+	rows, err := service.readDatabase.QueryContext(ctx, `SELECT mode,phase,COUNT(*) FROM game_rps_sessions GROUP BY mode,phase`)
 	if err != nil {
 		return ActiveCounts{}, classifyDB(err)
 	}
@@ -750,7 +750,7 @@ func (service *Service) ActiveCounts(ctx context.Context) (ActiveCounts, error) 
 		return ActiveCounts{}, classifyDB(err)
 	}
 	queueCounts := map[string]int64{}
-	rows, err = service.database.QueryContext(ctx, `SELECT mode,COUNT(*) FROM game_rps_queue GROUP BY mode`)
+	rows, err = service.readDatabase.QueryContext(ctx, `SELECT mode,COUNT(*) FROM game_rps_queue GROUP BY mode`)
 	if err != nil {
 		return ActiveCounts{}, classifyDB(err)
 	}

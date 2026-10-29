@@ -253,7 +253,7 @@ func newFixture(t *testing.T) *fixture {
 	f.source = &sourceProxy{Repository: repo}
 	now := func() time.Time { return time.Unix(f.now.Load(), 0) }
 	auth := authority{authz.New(authz.Options{Now: now})}
-	f.service, err = New(Config{Database: f.database, Users: auth, Admins: auth, Gate: admission{}, Vault: vault, Egress: stack, Sources: f.source, Diagnostics: repo, Now: now, Admission: func(ctx context.Context, tx *sql.Tx, user int64, key string, at int64) (limitedactivities.Detail, error) {
+	f.service, err = New(Config{Database: f.database, ReadDatabase: store.ReadDB(), Users: auth, Admins: auth, Gate: admission{}, Vault: vault, Egress: stack, Sources: f.source, Diagnostics: repo, Now: now, Admission: func(ctx context.Context, tx *sql.Tx, user int64, key string, at int64) (limitedactivities.Detail, error) {
 		return f.limited.CheckAdmissionTx(ctx, tx, user, key, at)
 	}})
 	if err != nil {

@@ -87,7 +87,7 @@ func (s *Service) Leaderboard(ctx context.Context, userID int64, periodID, nodeI
 	if err != nil {
 		return Leaderboard{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Leaderboard{}, err
 	}
@@ -190,7 +190,7 @@ func (s *Service) History(ctx context.Context, userID int64, limit, page int) (H
 	if err != nil {
 		return HistoryPage{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return HistoryPage{}, err
 	}

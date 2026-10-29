@@ -101,6 +101,7 @@ type leaseBinding struct {
 type Service struct {
 	finance        finance.RPS
 	database       *sql.DB
+	readDatabase   *sql.DB
 	userAuthorizer resources.FinalTxAuthorizer
 	continuation   ContinuationAuthorizer
 	limiter        *game.StartLimiter
@@ -169,7 +170,7 @@ func New(options Options) (*Service, error) {
 		return nil, errors.New("rps: invalid worker interval")
 	}
 	return &Service{
-		database: options.Store.DB(), userAuthorizer: options.UserAuthorizer, continuation: options.Continuation, finance: options.Finance,
+		database: options.Store.DB(), readDatabase: options.Store.ReadDB(), userAuthorizer: options.UserAuthorizer, continuation: options.Continuation, finance: options.Finance,
 		limiter: options.Limiter, pools: options.Pools, accountEvents: options.AccountEvents,
 		activityEvents: options.ActivityEvents, publishErrors: options.PublishErrors, keys: keys,
 		random: options.Random, proofs: proofs, now: options.Now, generateID: options.GenerateID,

@@ -33,12 +33,13 @@ type ServiceConfig struct {
 }
 
 type Service struct {
-	database    *sql.DB
-	finalAuth   FinalTxAuthorizer
-	maintenance MaintenanceAuthorizer
-	now         func() time.Time
-	random      io.Reader
-	generateID  func(string) (string, error)
+	database     *sql.DB
+	readDatabase *sql.DB
+	finalAuth    FinalTxAuthorizer
+	maintenance  MaintenanceAuthorizer
+	now          func() time.Time
+	random       io.Reader
+	generateID   func(string) (string, error)
 }
 
 func NewService(config ServiceConfig) (*Service, error) {
@@ -55,7 +56,7 @@ func NewService(config ServiceConfig) (*Service, error) {
 		config.GenerateID = db.GenerateOpaqueID
 	}
 	return &Service{
-		database: config.Store.DB(), finalAuth: config.FinalAuth, maintenance: config.Maintenance,
+		database: config.Store.DB(), readDatabase: config.Store.ReadDB(), finalAuth: config.FinalAuth, maintenance: config.Maintenance,
 		now: config.Now, random: config.Random, generateID: config.GenerateID,
 	}, nil
 }
@@ -102,7 +103,7 @@ func (service *Service) StatusForAsset(ctx context.Context, userID int64, asset 
 	if err != nil {
 		return Status{}, err
 	}
-	tx, err := service.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := service.readDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Status{}, classifyDatabase("begin status", err)
 	}

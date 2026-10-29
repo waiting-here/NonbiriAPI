@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"strconv"
@@ -63,7 +64,7 @@ func scope(kind string, user int64, extra string) string {
 	return kind + ":" + strconv.FormatInt(user, 10) + ":" + extra
 }
 func (s *Service) adminRead(ctx context.Context, user int64) error {
-	tx, err := s.config.Database.BeginTx(ctx, nil)
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return err
 	}

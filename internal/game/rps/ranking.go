@@ -196,7 +196,7 @@ func (service *Service) Leaderboard(ctx context.Context, userID int64, mode, boa
 	if err != nil {
 		return Leaderboard{}, err
 	}
-	tx, err := service.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := service.readDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Leaderboard{}, classifyDB(err)
 	}

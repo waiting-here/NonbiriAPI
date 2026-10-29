@@ -83,7 +83,7 @@ func (r *Repository) ListLoans(ctx context.Context, user int64, page pagination.
 	if r == nil || ctx == nil || user <= 0 {
 		return empty, ErrInvalidRequest
 	}
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := r.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return empty, classifyDatabaseError("begin loan history", err)
 	}

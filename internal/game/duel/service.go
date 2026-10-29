@@ -45,6 +45,7 @@ type Publisher interface {
 type Options struct {
 	AI              AIAdapter
 	Database        *sql.DB
+	ReadDatabase    *sql.DB
 	Descriptor      game.ModuleDescriptor
 	Rules           Rules
 	Finance         finance.Duel
@@ -67,6 +68,7 @@ type Service struct {
 	aiCompiled                  sync.Map
 	aiWake                      chan struct{}
 	database                    *sql.DB
+	readDatabase                *sql.DB
 	descriptor                  game.ModuleDescriptor
 	rules                       Rules
 	finance                     finance.Duel
@@ -98,7 +100,10 @@ func New(o Options) (*Service, error) {
 	if o.Finance == nil || o.UserAuthorizer == nil || o.Continuation == nil || o.Limiter == nil || o.Pools == nil || o.Publisher == nil || o.Keys == nil {
 		return nil, ErrInvariant
 	}
-	s := &Service{database: o.Database, descriptor: o.Descriptor, rules: o.Rules, finance: o.Finance, authorizer: o.UserAuthorizer, continuation: o.Continuation, limiter: o.Limiter, pools: o.Pools, publisher: o.Publisher, now: o.Now, generateID: o.GenerateID, reportError: o.ReportError, actions: map[int64][]time.Time{}}
+	if o.ReadDatabase == nil {
+		o.ReadDatabase = o.Database
+	}
+	s := &Service{database: o.Database, readDatabase: o.ReadDatabase, descriptor: o.Descriptor, rules: o.Rules, finance: o.Finance, authorizer: o.UserAuthorizer, continuation: o.Continuation, limiter: o.Limiter, pools: o.Pools, publisher: o.Publisher, now: o.Now, generateID: o.GenerateID, reportError: o.ReportError, actions: map[int64][]time.Time{}}
 	s.adminAuthorizer, s.adminAudit, s.exporting = o.AdminAuthorizer, o.AdminAudit, map[int64]bool{}
 	s.aiAdapter = o.AI
 	s.aiQueuePrefix = "aiq_"
@@ -186,7 +191,7 @@ func (s *Service) beginRead(ctx context.Context) (*sql.Tx, int64, error) {
 	if s == nil || s.closed.Load() {
 		return nil, 0, ErrUnavailable
 	}
-	tx, err := s.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, 0, classify(err)
 	}

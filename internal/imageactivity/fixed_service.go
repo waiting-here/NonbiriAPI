@@ -100,7 +100,7 @@ func isFixedAdapter(snapshot upstreamSnapshot) bool {
 // Its immutable replacement cannot change any accepted task's configuration.
 func (s *Service) PutConnection(ctx context.Context, admin int64, key string, input ConnectionInput) (MutationResult[UpstreamReceipt], error) {
 	settings := UpstreamInput{ExpectedRevision: input.ExpectedRevision, BaseURL: input.BaseURL, Secret: input.Secret, RPM: 100, Concurrency: 2, PerUserLimit: 1, GlobalLimit: 100, QueueTimeoutSeconds: 1800, ExecutionTimeoutSeconds: 1800, MemoryBudgetMiB: 512, ImageOrigins: []string{}, Adapter: fixedAdapter(input.BaseURL), fixed: true}
-	tx, err := s.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return MutationResult[UpstreamReceipt]{}, err
 	}

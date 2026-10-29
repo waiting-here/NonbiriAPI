@@ -66,7 +66,7 @@ func (s *Service) submit(ctx context.Context, userID int64, id string, input Sub
 		return ChallengeView{}, err
 	}
 	// This first read avoids taking RAM queue capacity for a completed receipt.
-	readTx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	readTx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return ChallengeView{}, err
 	}

@@ -27,7 +27,7 @@ func (s *Service) RegisterRoutes(user resources.UserRouteRegistrar, continuation
 		return err
 	}
 	base := "/api/games/" + s.rules.ID()
-	if err := randomhttp.RegisterContinuation(continuation, s.database, s.authorizer, s.rules.ID(), s.now, s.authorizeRandomness); err != nil {
+	if err := randomhttp.RegisterContinuation(continuation, s.readDatabase, s.authorizer, s.rules.ID(), s.now, s.authorizeRandomness); err != nil {
 		return err
 	}
 	if err := user.RegisterUserRoute("POST", base+"/queue", func(w http.ResponseWriter, r *http.Request, p resources.UserPrincipal) {
@@ -96,9 +96,11 @@ func (s *Service) RegisterRoutes(user resources.UserRouteRegistrar, continuation
 					}
 					defer tx.Rollback()
 					if err := s.authorize(r.Context(), tx, identity); err != nil {
+						_ = tx.Rollback()
 						writeError(w, err)
 						return
 					}
+					_ = tx.Rollback()
 					value, err := s.PublicCatalog()
 					writeValue(w, value, err)
 					return

@@ -52,6 +52,9 @@ func New(config Config) (*Service, error) {
 	if config.Database == nil || missing(config.Users) || missing(config.Admins) || missing(config.Gate) || config.Admission == nil || missing(config.Vault) || config.Egress == nil || missing(config.Sources) || missing(config.Diagnostics) {
 		return nil, ErrInvalid
 	}
+	if config.ReadDatabase == nil {
+		config.ReadDatabase = config.Database
+	}
 	if config.Now == nil {
 		config.Now = time.Now
 	}

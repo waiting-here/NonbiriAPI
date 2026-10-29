@@ -111,7 +111,7 @@ DELETE FROM game_online_leases WHERE rowid IN (
 }
 
 func (service *Service) runLifecycleDueBatch(ctx context.Context, decisionNow int64, limit int) (int, error) {
-	rows, err := service.database.QueryContext(ctx, `
+	rows, err := service.readDatabase.QueryContext(ctx, `
 SELECT id FROM game_linklink_sessions
 WHERE deadline<=? ORDER BY deadline,id LIMIT ?`, decisionNow, limit)
 	if err != nil {
@@ -143,7 +143,7 @@ WHERE deadline<=? ORDER BY deadline,id LIMIT ?`, decisionNow, limit)
 
 func (service *Service) lifecycleRecoveryPending(ctx context.Context, decisionNow int64) (bool, error) {
 	var pending int
-	if err := service.database.QueryRowContext(ctx, `SELECT EXISTS(
+	if err := service.readDatabase.QueryRowContext(ctx, `SELECT EXISTS(
 SELECT 1 FROM game_online_leases
 WHERE substr(session_id,1,3)='ll_' AND (expires_at<=? OR health_epoch<>?)
 )`, decisionNow, service.healthEpoch).Scan(&pending); err != nil {
@@ -155,7 +155,7 @@ WHERE substr(session_id,1,3)='ll_' AND (expires_at<=? OR health_epoch<>?)
 	if pending == 1 {
 		return true, nil
 	}
-	if err := service.database.QueryRowContext(ctx, `SELECT EXISTS(
+	if err := service.readDatabase.QueryRowContext(ctx, `SELECT EXISTS(
 SELECT 1 FROM game_linklink_sessions WHERE deadline<=?
 )`, decisionNow).Scan(&pending); err != nil {
 		return false, classifyDB(err)

@@ -56,18 +56,21 @@ func handler(database *sql.DB, authorizer resources.FinalTxAuthorizer, game stri
 		}
 		defer tx.Rollback()
 		if err := authorizer.AuthorizeUserMutation(r.Context(), tx, p.UserID); err != nil {
+			_ = tx.Rollback()
 			writeError(w, err)
 			return
 		}
 		decisionNow := now().Unix()
 		if check != nil {
 			if err := check(r.Context(), tx, p, r.PathValue("id"), decisionNow); err != nil {
+				_ = tx.Rollback()
 				writeError(w, err)
 				return
 			}
 		}
 		proof, err := randomness.ReadForUser(r.Context(), tx, game, r.PathValue("id"), p.UserID, decisionNow)
 		if err != nil {
+			_ = tx.Rollback()
 			writeError(w, err)
 			return
 		}
@@ -75,6 +78,7 @@ func handler(database *sql.DB, authorizer resources.FinalTxAuthorizer, game stri
 			Proof *randomness.Proof `json:"proof"`
 		}{proof})
 		if err != nil || len(body) > randomness.MaxBytes+32 {
+			_ = tx.Rollback()
 			writeError(w, randomness.ErrLimit)
 			return
 		}

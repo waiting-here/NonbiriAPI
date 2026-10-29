@@ -60,6 +60,7 @@ type leaseBinding struct {
 type Service struct {
 	finance        finance.LinkLink
 	database       *sql.DB
+	readDatabase   *sql.DB
 	userAuthorizer resources.FinalTxAuthorizer
 	continuation   ContinuationAuthorizer
 	limiter        *game.StartLimiter
@@ -116,7 +117,7 @@ func New(options Options) (*Service, error) {
 		return nil, errors.New("linklink: invalid worker interval")
 	}
 	return &Service{
-		database: options.Store.DB(), userAuthorizer: options.UserAuthorizer, finance: options.Finance,
+		database: options.Store.DB(), readDatabase: options.Store.ReadDB(), userAuthorizer: options.UserAuthorizer, finance: options.Finance,
 		continuation: options.Continuation, limiter: options.Limiter,
 		random: options.Random, proofs: proofs, now: options.Now, generateID: options.GenerateID,
 		healthEpoch: options.HealthEpoch, workerInterval: options.WorkerInterval,

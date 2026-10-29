@@ -45,7 +45,7 @@ func (worker *SettlementWorker) RecoverBeforeListener(ctx context.Context) error
 		return ErrClosed
 	default:
 	}
-	tx, err := worker.service.repository.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := worker.service.repository.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return classifyDatabaseError("begin activity recovery validation", err)
 	}

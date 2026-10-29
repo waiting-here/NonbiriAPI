@@ -140,12 +140,27 @@ func commitTx(tx *sql.Tx, committed *bool) error {
 }
 
 func (r *Repository) beginUserMutation(ctx context.Context, userID int64) (*sql.Tx, error) {
+	return r.beginUserAuthorized(ctx, userID, nil)
+}
+
+func (r *Repository) beginUserRead(ctx context.Context, userID int64) (*sql.Tx, error) {
+	return r.beginUserAuthorized(ctx, userID, &sql.TxOptions{ReadOnly: true})
+}
+
+func (r *Repository) beginUserAuthorized(ctx context.Context, userID int64, options *sql.TxOptions) (*sql.Tx, error) {
 	if r == nil || userID <= 0 {
 		return nil, ErrInvalidRequest
 	}
-	tx, err := beginTx(ctx, r.db)
+	database := r.db
+	if options != nil && options.ReadOnly {
+		database = r.readDB
+	}
+	if ctx == nil || database == nil {
+		return nil, ErrUnavailable
+	}
+	tx, err := database.BeginTx(ctx, options)
 	if err != nil {
-		return nil, err
+		return nil, classifyDatabaseError("begin transaction", err)
 	}
 	if err := classifyAuthorizationError(r.userFinalAuth.AuthorizeUserMutation(ctx, tx, userID)); err != nil {
 		_ = tx.Rollback()
@@ -173,10 +188,14 @@ func (r *Repository) beginAdminAuthorized(ctx context.Context, adminID int64, op
 	if adminID <= 0 {
 		return nil, ErrUnauthorized
 	}
-	if ctx == nil || r.db == nil {
+	database := r.db
+	if options != nil && options.ReadOnly {
+		database = r.readDB
+	}
+	if ctx == nil || database == nil {
 		return nil, ErrUnavailable
 	}
-	tx, err := r.db.BeginTx(ctx, options)
+	tx, err := database.BeginTx(ctx, options)
 	if err != nil {
 		return nil, classifyDatabaseError("begin admin transaction", err)
 	}

@@ -247,7 +247,7 @@ func newRPSFixture(t *testing.T) *rpsFixture {
 	}
 	fixture := &rpsFixture{t: t, store: store, database: store.DB(), vault: vault,
 		continuation: &rpsTestContinuation{}, account: &rpsTestAccountEvents{}, activity: &rpsTestActivityEvents{}}
-	fixture.identity, err = continuity.New(store.DB(), vault)
+	fixture.identity, err = continuity.New(store.DB(), vault, store.ReadDB())
 	if err != nil {
 		_ = store.Close()
 		_ = vault.Close()

@@ -24,7 +24,7 @@ func RegisterUserRoutes(registrar resources.UserRouteRegistrar, service *Service
 		return errors.New("game runtime: user registrar and service are required")
 	}
 	api := &httpAPI{service: service}
-	if err := randomhttp.Register(registrar, service.database, service.userAuthorizer, "fishing", service.now); err != nil {
+	if err := randomhttp.Register(registrar, service.readDatabase, service.userAuthorizer, "fishing", service.now); err != nil {
 		return err
 	}
 	routes := []struct {

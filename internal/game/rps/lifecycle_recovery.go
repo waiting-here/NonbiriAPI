@@ -159,7 +159,7 @@ WHERE state='terminal_processing' AND (terminal_next_retry_at IS NULL OR termina
 
 func (service *Service) recoveryExists(ctx context.Context, query string, args ...any) (bool, error) {
 	var exists int
-	if err := service.database.QueryRowContext(ctx, query, args...).Scan(&exists); err != nil {
+	if err := service.readDatabase.QueryRowContext(ctx, query, args...).Scan(&exists); err != nil {
 		return false, classifyDB(err)
 	}
 	if exists != 0 && exists != 1 {
