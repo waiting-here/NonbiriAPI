@@ -351,6 +351,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		Performance:  performance,
 		Observations: audits.observations,
 		DB:           store.DB(),
+		ReadDB:       store.ReadDB(),
 		Secrets:      vault,
 		Accounting:   claim.NewLedgerAccounting(),
 		Charity:      charityService,
@@ -541,7 +542,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		return nil, fmt.Errorf("create limited activity runtimes: %w", err)
 	}
 	adminUserService, err := adminusers.NewService(adminusers.ServiceConfig{
-		Database: store.DB(), CursorKeys: vault, FinalAuth: roleAuthorizer, Invalidator: userInvalidations,
+		Database: store.DB(), ReadDatabase: store.ReadDB(), CursorKeys: vault, FinalAuth: roleAuthorizer, Invalidator: userInvalidations,
 		CancelUserDuelsTx: activityEngines.CancelUserTx,
 	})
 	if err != nil {
@@ -582,7 +583,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err := audits.attachAccess(resourceRepository); err != nil {
 		return nil, fmt.Errorf("attach auxiliary access observations: %w", err)
 	}
-	automationService, err = stewardautomation.New(stewardautomation.Config{Database: store.DB(), Authorizer: authorizer, Resources: resourceRepository, Donations: donationService, Charity: charityRoutingService, Now: gameNow})
+	automationService, err = stewardautomation.New(stewardautomation.Config{Database: store.DB(), ReadDatabase: store.ReadDB(), Authorizer: authorizer, Resources: resourceRepository, Donations: donationService, Charity: charityRoutingService, Now: gameNow})
 	if err != nil {
 		return nil, fmt.Errorf("create automation service: %w", err)
 	}

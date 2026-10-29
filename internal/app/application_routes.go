@@ -87,7 +87,7 @@ func (a *application) registerRoutes(store *db.Store, roleAuthorizer *roleFinalT
 	}
 	maintenanceRoutes := maintenanceRouteRegistrar{runtime: a.authRuntime}
 	if err := maintenance.RegisterRoutes(maintenanceRoutes, maintenanceRoutes, maintenance.HTTPOptions{
-		Database: store.DB(), Service: a.maintenance,
+		Database: store.DB(), ReadDatabase: store.ReadDB(), Service: a.maintenance,
 	}); err != nil {
 		return fmt.Errorf("register maintenance routes: %w", err)
 	}
