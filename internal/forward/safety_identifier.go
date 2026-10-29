@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base32"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"log/slog"
@@ -91,6 +92,32 @@ func makeSafetyMessage(userID int64, canonicalOrigin string) []byte {
 	message = append(message, actor[:]...)
 	clear(actor[:])
 	return message
+}
+
+// ContinuationID binds provider state without exposing a private source name,
+// model or credential identifier. The domain differs from caller pseudonyms.
+func (factory *SafetyIdentifierFactory) ContinuationID(userID, keyID, credentialVersion int64, baseURL, model, protocol string) (string, error) {
+	if factory == nil || userID <= 0 || keyID <= 0 || credentialVersion < 0 || len(baseURL) > 4096 || len(model) > 2048 || len(protocol) > 128 {
+		return "", errSafetyIdentifierInput
+	}
+	factory.mu.RLock()
+	defer factory.mu.RUnlock()
+	if factory.closed {
+		return "", errSafetyIdentifierClosed
+	}
+	mac := hmac.New(sha256.New, factory.key[:])
+	_, _ = mac.Write([]byte("nonbiriapi:provider-continuation:v1\x00"))
+	var number [8]byte
+	for _, n := range []int64{userID, keyID, credentialVersion} {
+		binary.BigEndian.PutUint64(number[:], uint64(n))
+		_, _ = mac.Write(number[:])
+	}
+	for _, s := range []string{baseURL, model, protocol} {
+		binary.BigEndian.PutUint64(number[:], uint64(len(s)))
+		_, _ = mac.Write(number[:])
+		_, _ = mac.Write([]byte(s))
+	}
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
 }
 
 func validSafetyOrigin(origin string) bool {

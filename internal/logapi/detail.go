@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 func (repository *Repository) GetUser(ctx context.Context, userID int64, requestID string, filter AttemptFilter) (UserLogDetail, error) {
@@ -52,6 +53,13 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 		return nil, err
 	}
 	redactor := requestDNSRedactor(sources[record.rowID])
+	delivery, err := readDelivery(ctx, reader, record.rowID)
+	if err != nil {
+		return nil, err
+	}
+	if delivery != nil {
+		redactFailure(delivery.Failure, redactor.Redact)
+	}
 	switch kind := RouteKind(record.routeKind); {
 	case kind.IsSelf() || kind == RouteDiscovery:
 		row := UserSelfLogRow{
@@ -69,7 +77,7 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 		redactUserLogAttempts(attempts.Data, sources[record.rowID])
 		metadata := attempts.Pagination
 		attempts.Pagination = nil
-		return UserSelfLogDetail{Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
+		return UserSelfLogDetail{Delivery: delivery, Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
 	case kind.IsCharity():
 		// Endpoint metadata is used only to redact existing display text. Charity
 		// detail never constructs an attempt DTO or exposes candidate counts.
@@ -84,7 +92,8 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 		}
 		row = redactUserLogRow(row, redactor).(UserCharityLogRow)
 		return UserCharityLogDetail{
-			Request: row, CallerSafeResult: CallerSafeResult{Class: ResultClass(record.callerResultClass.String)},
+			Delivery: delivery,
+			Request:  row, CallerSafeResult: CallerSafeResult{Class: ResultClass(record.callerResultClass.String)},
 		}, nil
 	default:
 		return nil, ErrInvariant
@@ -155,12 +164,16 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 	if err != nil {
 		return AdminLogDetail{}, err
 	}
+	delivery, err := readDelivery(ctx, tx, record.rowID)
+	if err != nil {
+		return AdminLogDetail{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return AdminLogDetail{}, translateReadError(ctx, err)
 	}
 	metadata := attempts.Pagination
 	attempts.Pagination = nil
-	return AdminLogDetail{Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
+	return AdminLogDetail{Delivery: delivery, Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
 }
 
 func (repository *Repository) GetSteward(
@@ -229,16 +242,26 @@ func (repository *Repository) GetSteward(
 	if err != nil {
 		return StewardLogDetail{}, err
 	}
+	delivery, err := readDelivery(ctx, tx, record.rowID)
+	if err != nil {
+		return StewardLogDetail{}, err
+	}
 	if redact {
 		sources, err := readLogPrivacySources(ctx, tx, []int64{record.rowID}, 0)
 		if err != nil {
 			return StewardLogDetail{}, err
 		}
+		if delivery != nil {
+			redactFailure(delivery.Failure, func(value string) string { return *redactUpstreamText(&value) })
+			redactFailure(delivery.Failure, requestDNSRedactor(sources[record.rowID]).Redact)
+		}
 		for i := range attempts.Data {
+			redactFailure(attempts.Data[i].ErrorDiagnostics, func(value string) string { return *redactUpstreamText(&value) })
 			attempts.Data[i].Diag = redactUpstreamText(attempts.Data[i].Diag)
 			attempts.Data[i].UpstreamCode = redactUpstreamText(attempts.Data[i].UpstreamCode)
 			redactor := attemptDNSRedactor(sources[record.rowID], attempts.Data[i].AttemptSeq, attempts.Data[i].EndpointBaseURL)
 			attempts.Data[i].Diag = redactDNSPointer(attempts.Data[i].Diag, redactor)
+			redactFailure(attempts.Data[i].ErrorDiagnostics, redactor.Redact)
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -246,10 +269,11 @@ func (repository *Repository) GetSteward(
 	}
 	metadata := attempts.Pagination
 	attempts.Pagination = nil
-	return StewardLogDetail{Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
+	return StewardLogDetail{Delivery: delivery, Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
 }
 
 type attemptRecord struct {
+	errorDiagnostics   string
 	sequence           int64
 	resultKind         string
 	endpointKeyID      sql.NullInt64
@@ -273,7 +297,8 @@ type attemptRecord struct {
 const attemptColumns = `a.attempt_seq,a.result_kind,a.endpoint_key_id_snapshot,a.canonical_base_url,
 a.connector_type,a.upstream_model_id,a.upstream_status,a.upstream_code,a.diag,
 a.input_tokens,a.cache_write_input_tokens,a.cache_read_input_tokens,a.output_tokens,
-a.usage_unknown,a.usage_total_mismatch,a.started_at,a.completed_at,a.usage_details`
+a.usage_unknown,a.usage_total_mismatch,a.started_at,a.completed_at,a.usage_details,
+COALESCE((SELECT d.details FROM request_attempt_diagnostics d WHERE d.claim_id=a.claim_id),'')`
 
 // Claim identity is the only link to the donation used by this attempt. Deleted
 // claims or resources leave both navigation IDs absent; snapshots cannot restore them.
@@ -290,6 +315,7 @@ func scanAttempt(scanner rowScanner, extra ...any) (attemptRecord, error) {
 		&record.connectorType, &record.upstreamModel, &record.statusCode, &record.upstreamCode, &record.diag,
 		&record.uncached, &record.cacheWrite, &record.cacheRead, &record.output,
 		&record.usageUnknown, &record.usageTotalMismatch, &record.startedAt, &record.completedAt, &record.usageDetails,
+		&record.errorDiagnostics,
 	}
 	targets = append(targets, extra...)
 	if err := scanner.Scan(targets...); err != nil {
@@ -378,7 +404,8 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 			return Page[UserSelfLogAttempt]{}, usageErr
 		}
 		page.Data = append(page.Data, UserSelfLogAttempt{
-			AttemptSeq: strconv.FormatInt(record.sequence, 10), ResultKind: ResultKind(record.resultKind),
+			ErrorDiagnostics: diagnostic.Decode(record.errorDiagnostics),
+			AttemptSeq:       strconv.FormatInt(record.sequence, 10), ResultKind: ResultKind(record.resultKind),
 			EndpointKeyID: attemptKeyID(record.endpointKeyID), EndpointBaseURL: record.baseURL,
 			EndpointNote: endpointNote, KeyNote: keyNote, ConnectorType: record.connectorType,
 			UpstreamModelID: record.upstreamModel, StatusCode: intPointer(record.statusCode),
@@ -454,7 +481,8 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 			return Page[AdminLogAttempt]{}, usageErr
 		}
 		page.Data = append(page.Data, AdminLogAttempt{
-			DonationID: nullableDecimal(donationID), DonationKeyID: nullableDecimal(donationKeyID),
+			ErrorDiagnostics: diagnostic.Decode(record.errorDiagnostics),
+			DonationID:       nullableDecimal(donationID), DonationKeyID: nullableDecimal(donationKeyID),
 			AttemptSeq: strconv.FormatInt(record.sequence, 10), ResultKind: ResultKind(record.resultKind),
 			EndpointKeyID: attemptKeyID(record.endpointKeyID), EndpointBaseURL: record.baseURL,
 			ConnectorType: record.connectorType, UpstreamModelID: record.upstreamModel,
@@ -536,7 +564,8 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 			return Page[StewardLogAttempt]{}, usageErr
 		}
 		page.Data = append(page.Data, StewardLogAttempt{
-			DonationID: nullableDecimal(donationID), DonationKeyID: nullableDecimal(donationKeyID),
+			ErrorDiagnostics: diagnostic.Decode(record.errorDiagnostics),
+			DonationID:       nullableDecimal(donationID), DonationKeyID: nullableDecimal(donationKeyID),
 			AttemptSeq: strconv.FormatInt(record.sequence, 10), ResultKind: ResultKind(record.resultKind),
 			EndpointKeyID: attemptKeyID(record.endpointKeyID), EndpointBaseURL: record.baseURL,
 			ConnectorType: record.connectorType, UpstreamModelID: record.upstreamModel,

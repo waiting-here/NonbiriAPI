@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
@@ -95,6 +96,9 @@ func (ref DiagnosticRef) valid() bool {
 // ErrorScope binds a private sink to one existing subject. It does not add raw
 // diagnostics to the public connector result or ordinary request context facts.
 func (r *Repository) ErrorScope(ctx context.Context, ref DiagnosticRef) context.Context {
+	if diagnostic.RecorderFrom(ctx) == nil {
+		ctx = diagnostic.WithRecorder(ctx)
+	}
 	if r == nil || !ref.valid() {
 		return ctx
 	}
@@ -191,8 +195,25 @@ func (r *Repository) recordError(ctx context.Context, ref DiagnosticRef, seq int
 	if event.Status() != 0 {
 		status = event.Status()
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO request_error_bodies(request_log_id,task_id,operation_id,attempt_seq,event_seq,http_status,content_type,body,bytes_saved,truncated,save_state,failure_reason,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, logID, taskID, operationID, ref.AttemptSeq, seq, status, event.ContentType(), body, size, event.Truncated(), state, event.FailureReason(), at, at+RetentionSeconds); err != nil {
+	inserted, err := tx.ExecContext(ctx, `INSERT INTO request_error_bodies(request_log_id,task_id,operation_id,attempt_seq,event_seq,http_status,content_type,body,bytes_saved,truncated,save_state,failure_reason,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, logID, taskID, operationID, ref.AttemptSeq, seq, status, event.ContentType(), body, size, event.Truncated(), state, event.FailureReason(), at, at+RetentionSeconds)
+	if err != nil {
 		return err
+	}
+	if diagnostic.RecorderFrom(ctx) != nil {
+		id, e := inserted.LastInsertId()
+		if e != nil {
+			return e
+		}
+		origin := "upstream_protocol"
+		if event.Status() >= 400 {
+			origin = "upstream_response"
+		}
+		facts := diagnostic.Encode(diagnostic.Finish(ctx, false, false, false, event.Status(), "The upstream response could not be completed", origin))
+		if facts != "" {
+			if _, err = tx.ExecContext(ctx, "INSERT INTO request_error_diagnostics(error_id,details) VALUES(?,?)", id, facts); err != nil {
+				return err
+			}
+		}
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE observability_state SET raw_body_bytes=raw_body_bytes+?,raw_capacity_omissions=raw_capacity_omissions+?,raw_unavailable=raw_unavailable+? WHERE id=1`, size, boolInt(state == "capacity_exhausted"), boolInt(state == "unavailable")); err != nil {
 		return err

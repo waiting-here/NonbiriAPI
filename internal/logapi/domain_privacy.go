@@ -162,6 +162,7 @@ func redactUserLogAttempts(attempts []UserSelfLogAttempt, sources []attemptPriva
 		value.UpstreamModelID = redactor.Redact(value.UpstreamModelID)
 		value.UpstreamCode = redactDNSPointer(value.UpstreamCode, redactor)
 		value.Diag = redactDNSPointer(value.Diag, redactor)
+		redactFailure(value.ErrorDiagnostics, redactor.Redact)
 	}
 }
 

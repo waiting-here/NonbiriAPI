@@ -7,6 +7,8 @@ import (
 	"errors"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 	"strconv"
 	"time"
@@ -67,9 +69,10 @@ type DiagnosticPage struct {
 	To         int64            `json:"to"`
 }
 type DiagnosticDetail struct {
-	Item   DiagnosticItem `json:"item"`
-	Body   ErrorBody      `json:"body"`
-	Source *Source        `json:"source"`
+	ErrorDiagnostics *diagnostic.Failure `json:"error_diagnostics,omitempty"`
+	Item             DiagnosticItem      `json:"item"`
+	Body             ErrorBody           `json:"body"`
+	Source           *Source             `json:"source"`
 }
 
 func NewDiagnosticReader(config DiagnosticReaderConfig) (*DiagnosticReader, error) {
@@ -316,6 +319,12 @@ func (r *DiagnosticReader) Detail(ctx context.Context, actor DiagnosticActor, id
 	if len(raw) > upstreamerror.MaxRawBodyBytes || int64(len(raw)) != out.Item.BytesSaved {
 		return out, ErrUnavailable
 	}
+	var failure string
+	if e := tx.QueryRowContext(ctx, "SELECT details FROM request_error_diagnostics WHERE error_id=?", rowID).Scan(&failure); e == nil {
+		out.ErrorDiagnostics = diagnostic.Decode(failure)
+	} else if !errors.Is(e, sql.ErrNoRows) {
+		return out, ErrUnavailable
+	}
 	out.Body.ErrorMetadata = out.Item.ErrorMetadata
 	out.Body.Encoding = "utf-8"
 	if utf8.Valid(raw) {
@@ -325,6 +334,13 @@ func (r *DiagnosticReader) Detail(ctx context.Context, actor DiagnosticActor, id
 		out.Body.Body = base64.StdEncoding.EncodeToString(raw)
 	}
 	if redact {
+		diagnostic.Redact(out.ErrorDiagnostics, func(value string) string {
+			body, e := RedactErrorIPv4(ErrorBody{Encoding: "utf-8", Body: value})
+			if e != nil {
+				return "[redacted]"
+			}
+			return textprivacy.NewDNSRedactor().Redact(body.Body)
+		})
 		out.Body, err = RedactErrorIPv4(out.Body)
 		if err != nil {
 			return DiagnosticDetail{}, err

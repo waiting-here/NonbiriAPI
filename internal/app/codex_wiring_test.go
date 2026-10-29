@@ -15,15 +15,11 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/codexauth"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
-	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 )
 
 func TestCodexApplicationRoutesAuthorityAndShutdown(t *testing.T) {
 	f := newActivityWireFixture(t)
-	if _, err := f.store.DB().Exec(db.CodexSessionSQL); err != nil {
-		t.Fatal(err)
-	}
 	app := f.app.Load()
 	if app.codex == nil {
 		t.Fatal("Codex manager was not retained by the application")
@@ -117,9 +113,6 @@ func (d *codexWiringDialer) DialContext(ctx context.Context, _, _ string) (net.C
 func TestCodexPartialApplicationCloseCancelsPendingLogin(t *testing.T) {
 	vault := processTestVault(t)
 	store := processTestStore(t, filepath.Join(t.TempDir(), "codex-close.sqlite"), vault)
-	if _, err := store.DB().Exec(db.CodexSessionSQL); err != nil {
-		t.Fatal(err)
-	}
 	dialer := &codexWiringDialer{started: make(chan struct{})}
 	stack, err := egress.NewStack(egress.StackOptions{Resolver: codexWiringResolver{}, Dialer: dialer})
 	if err != nil {

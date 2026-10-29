@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
@@ -22,26 +23,36 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 	defer admission.Release()
 	ctx, cancel := context.WithTimeout(parent, time.Duration(s.TimeoutSeconds)*time.Second)
 	defer cancel()
+	ctx = diagnostic.WithRecorder(ctx)
 	usage := Usage{Unknown: true}
 	raw := []byte{}
 	status := 0
 	complete := false
+	protocolCompleted := false
 	redacted := false
 	code := ""
 	state := "failed"
+	finish := func(finalState, finalCode string, sent bool) {
+		diagnostic.ProtocolComplete(ctx, protocolCompleted)
+		origin, message := requestFailureHint(finalCode)
+		facts := diagnostic.Finish(ctx, finalState == "succeeded", false, !usage.Unknown, status, message, origin)
+		r.complete(id, in, finalState, finalCode, status, raw, complete, redacted, usage, sent, diagnostic.Encode(facts))
+	}
 	key, err := r.secrets.OpenAgentKey(encrypted, "model")
 	if err != nil {
-		r.complete(id, in, state, "credential_unavailable", status, raw, complete, redacted, usage, false)
+		diagnostic.RecordError(ctx, "credential", err)
+		finish(state, "credential_unavailable", false)
 		return
 	}
 	defer clear(key)
 	if containsSecret(body, key) {
-		r.complete(id, in, state, "invalid_request", status, raw, complete, redacted, usage, false)
+		finish(state, "invalid_request", false)
 		return
 	}
 	client, err := r.stack.NewClient(s.BaseURL)
 	if err != nil {
-		r.complete(id, in, state, "endpoint_unavailable", status, raw, complete, redacted, usage, false)
+		diagnostic.RecordError(ctx, "policy", err)
+		finish(state, "endpoint_unavailable", false)
 		return
 	}
 	var sent atomic.Bool
@@ -54,7 +65,7 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 	if s.Provider == ProviderCodex {
 		child, release, e := r.codex.RequestContext(ctx, s.ConnectionRevision)
 		if e != nil {
-			r.complete(id, in, state, "connection_changed", status, raw, complete, redacted, usage, false)
+			finish(state, "connection_changed", false)
 			return
 		}
 		defer release()
@@ -75,7 +86,7 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.BaseURL, "/")+path, bytes.NewReader(body))
 	if err != nil {
-		r.complete(id, in, state, "invalid_request", status, raw, complete, redacted, usage, false)
+		finish(state, "invalid_request", false)
 		return
 	}
 	request.Header.Set("Content-Type", "application/json")
@@ -114,6 +125,10 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 		complete = complete && protocolComplete
 	}
 	usage = parsed.Usage
+	protocolCompleted = complete && parseErr == nil && status >= 200 && status < 300
+	if status >= 200 && status < 300 && parseErr != nil {
+		diagnostic.RecordError(ctx, "decode_response", parseErr)
+	}
 	switch {
 	case parent.Err() != nil:
 		if r.context.Err() != nil {
@@ -136,7 +151,37 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 			state = "succeeded"
 		}
 	}
-	r.complete(id, in, state, code, status, raw, complete, redacted, usage, sent.Load())
+	if ctx.Err() != nil {
+		diagnostic.RecordError(ctx, "execute", ctx.Err())
+	}
+	finish(state, code, sent.Load())
+}
+
+func requestFailureHint(code string) (origin, message string) {
+	switch code {
+	case "upstream_status", "upstream_error":
+		return "upstream_response", "The upstream returned an error"
+	case "transport":
+		return "network", "The model connection failed"
+	case "timeout":
+		return "timeout", "The request deadline was exceeded"
+	case "cancelled":
+		return "client_cancel", "The request was canceled"
+	case "protocol", "upstream_incomplete":
+		return "upstream_protocol", "The model response did not complete successfully"
+	case "connection_changed":
+		return "platform", "The model connection changed before dispatch"
+	case "credential_unavailable":
+		return "platform", "The configured credential could not be opened"
+	case "endpoint_unavailable":
+		return "platform", "The configured endpoint could not be used"
+	case "invalid_request":
+		return "platform", "The request could not be sent with the current settings"
+	case "interrupted":
+		return "recovery_unknown", "Execution was interrupted"
+	default:
+		return "platform", "No further failure information was recorded"
+	}
 }
 func parseResult(id int64, raw []byte) (Result, error) {
 	result := Result{RequestID: id, RawResponse: string(raw), Usage: Usage{Unknown: true}}

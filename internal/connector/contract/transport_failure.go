@@ -5,11 +5,13 @@ import (
 	"errors"
 	"net"
 
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 )
 
 // TransportFailed consumes the egress phase, never diagnostic text or status.
 func TransportFailed(result AttemptResult, err error, ctx context.Context) AttemptResult {
+	diagnostic.RecordError(ctx, "", err)
 	// The egress boundary captured these facts before a later caller cancel.
 	switch egress.ExecutionFailure(err) {
 	case egress.FailureTimeout:
@@ -48,6 +50,7 @@ func TransportFailed(result AttemptResult, err error, ctx context.Context) Attem
 
 // ReadFailed distinguishes interruption causes from an invalid upstream payload.
 func ReadFailed(result AttemptResult, err error, ctx context.Context) AttemptResult {
+	diagnostic.RecordError(ctx, "read_response", err)
 	if egress.ExecutionFailure(err) != "" {
 		return TransportFailed(result, err, ctx)
 	}

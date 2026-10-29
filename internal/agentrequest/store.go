@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 const requestColumns = "id,client_request_id,source,kind,actor_id,actor_role,actor_label,state,base_url,model,created_at,started_at,completed_at,consumed_at,status_code,error_code,response_complete,content_redacted,usage_json,COALESCE((SELECT driver_id FROM agent_request_drivers d WHERE d.request_id=agent_requests.id),0),COALESCE((SELECT provider FROM agent_request_drivers d WHERE d.request_id=agent_requests.id),'chat_completions')"
@@ -181,6 +183,12 @@ func (r *Runtime) Detail(ctx context.Context, id int64) (Detail, error) {
 		}
 	}
 	detail := Detail{QueuedInput: json.RawMessage(input), Request: out, RequestBody: string(request), ResponseBody: string(response)}
+	var failure string
+	if e := tx.QueryRowContext(ctx, "SELECT details FROM agent_request_diagnostics WHERE request_id=?", id).Scan(&failure); e == nil {
+		detail.ErrorDiagnostics = diagnostic.Decode(failure)
+	} else if !errors.Is(e, sql.ErrNoRows) {
+		return Detail{}, e
+	}
 	var snapshot string
 	if e := tx.QueryRowContext(ctx, "SELECT settings_json FROM agent_request_drivers WHERE request_id=?", id).Scan(&snapshot); e == nil {
 		detail.DriverSettings = json.RawMessage(snapshot)

@@ -310,6 +310,9 @@ func (c *Client) BaseURL() string { return c.baseURL }
 // body EOF, body Close, cancellation, or timeout. A response received before
 // an error retains its status and headers with its body already closed.
 func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error) {
+	if req != nil {
+		defer func() { recordEgressFailure(req.Context(), resultErr) }()
+	}
 	if req != nil && (c.route != nil || c.worker != nil) && !cloudflareProxyEnabled(req.Context()) {
 		var direct *Client
 		var err error
@@ -364,6 +367,7 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 	}
 
 	ctx, cancel := context.WithTimeout(req.Context(), c.timeout)
+	diagnostic.Phase(ctx, "queue")
 	permit, err := c.gate.Acquire(ctx, c.baseURL)
 	if err != nil {
 		cancel()
@@ -375,8 +379,9 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 		cancel()
 		return closeBodyOnError(err)
 	}
+	diagnostic.Phase(ctx, "dispatch")
 
-	outbound := req.Clone(ctx)
+	outbound := req.Clone(diagnosticTrace(ctx))
 	removeWorkerHeaders(outbound.Header)
 	if outbound.Method != http.MethodGet && outbound.Method != http.MethodHead && outbound.Method != http.MethodOptions && outbound.Method != http.MethodTrace {
 		// A second billable attempt must pass through the claim rail. Retain
@@ -423,6 +428,8 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 	// canonical origin and installed a DNS-pinning dialer; the checks above bind
 	// both URL and Host to that exact origin before the request is dispatched.
 	resp, err := c.httpClient.Do(outbound)
+	// Capture before route wrappers or context cleanup can replace the cause.
+	recordEgressFailure(ctx, err)
 	proxyFailed := c.worker != nil && resp != nil && (workerFailure(resp.Header) || !workerConfirmedResponse(resp.Header))
 	if secrets != nil && resp != nil {
 		credentialHeader := ""
@@ -453,6 +460,7 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 		return nil, executionFailure(FailurePlatform, errors.New("Cloudflare Worker request failed"))
 	}
 	headerfacts.CaptureResponse(ctx, resp)
+	observeResponse(ctx, req, resp)
 	if err != nil {
 		ctxErr := ctx.Err()
 		permit.Release()
@@ -506,6 +514,9 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 	resp.Body = managed
 	if secrets != nil {
 		resp.Body = newRouteResponseBody(managed, resp, secrets, limits)
+	}
+	if diagnostic.RecorderFrom(ctx) != nil {
+		resp.Body = diagnosticBody{ReadCloser: resp.Body, ctx: ctx}
 	}
 	return resp, nil
 }

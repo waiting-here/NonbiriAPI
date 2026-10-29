@@ -379,6 +379,9 @@ func validateReadOnlyDatabase(ctx context.Context, d *sql.DB, secrets secret.Gen
 	if err := validateAccountMFAEnvelopes(ctx, d, secrets); err != nil {
 		return startupSQLFailure(ctx, err, StartupCredentialReject)
 	}
+	if err := validateCodexEnvelope(ctx, d, secrets); err != nil {
+		return startupSQLFailure(ctx, err, StartupCredentialReject)
+	}
 	if err := validateSourceConfig(ctx, d); err != nil {
 		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}

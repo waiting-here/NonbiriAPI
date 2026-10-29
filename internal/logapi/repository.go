@@ -150,6 +150,12 @@ type listCursor struct {
 }
 
 func normalizeListFilter(filter ListFilter, role string) (ListFilter, error) {
+	if filter.ErrorCategory != "" && !validSafeCode(filter.ErrorCategory) || filter.ErrorPhase != "" && !validSafeCode(filter.ErrorPhase) {
+		return ListFilter{}, ErrInvalid
+	}
+	if role == "user" && (filter.ErrorCategory != "" || filter.ErrorPhase != "") {
+		return ListFilter{}, ErrInvalid
+	}
 	if filter.Phase != "" && filter.Phase != "handler" && filter.Phase != "pre_handler" {
 		return ListFilter{}, ErrInvalid
 	}
@@ -356,6 +362,12 @@ func filterOwner(role string, actorID int64, filter ListFilter) string {
 	writePart(optionalString(filter.UpstreamModel))
 	writePart(optionalString(filter.Model))
 	writePart(optionalString(filter.ErrorCode))
+	if filter.ErrorCategory != "" {
+		writePart("error_category=" + filter.ErrorCategory)
+	}
+	if filter.ErrorPhase != "" {
+		writePart("error_phase=" + filter.ErrorPhase)
+	}
 	writePart(optionalInt(filter.Status))
 	writePart(optionalBool(filter.UsageTotalMismatch))
 	writePart(optionalInt64(filter.From))

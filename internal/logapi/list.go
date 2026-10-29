@@ -60,6 +60,7 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 	query := `WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)`
 	args := []any{userID, now - requestLogRetentionSeconds}
 	query += phaseFilter(filter.Phase)
+	query, args = diagnosisFilter(query, args, filter)
 	if filter.Model != nil {
 		query += ` AND l.model=?`
 		args = append(args, *filter.Model)
@@ -195,6 +196,7 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 	args := make([]any, 0, 16)
 	args = append(args, now-requestLogRetentionSeconds)
 	query += phaseFilter(filter.Phase)
+	query, args = diagnosisFilter(query, args, filter)
 	if filter.UserID != nil {
 		query += ` AND l.origin_user_id=?`
 		args = append(args, *filter.UserID)
@@ -340,6 +342,7 @@ func (repository *Repository) ListSteward(
 	args := make([]any, 0, 16)
 	args = append(args, now-requestLogRetentionSeconds)
 	query += phaseFilter(filter.Phase)
+	query, args = diagnosisFilter(query, args, filter)
 	if filter.UserID != nil {
 		query += ` AND l.origin_user_id=?`
 		args = append(args, *filter.UserID)

@@ -66,6 +66,14 @@ func (s *Service) ReleaseUndispatched(ctx context.Context, handle Handle) (_ Att
 // or clean EOF does not establish success; streak disposition is independent.
 func (s *Service) CompleteAttempt(ctx context.Context, handle Handle, outcome AttemptOutcome) (Attempt, error) {
 	outcome = normalizeAttemptOutcome(outcome)
+	if outcome.ErrorDiagnostics == "" && !outcome.ProtocolSuccess {
+		status := 0
+		if outcome.Kind == ResultResponse {
+			status = outcome.UpstreamStatus
+		}
+		outcome.ErrorDiagnostics = diagnostic.Encode(diagnostic.Finish(ctx, false, outcome.ResponseStarted, outcome.Usage.Present,
+			status, outcome.Diagnostic, string(outcome.FailureOrigin)))
+	}
 	if s == nil || s.db == nil || ctx == nil || !validHandle(handle) || !validAttemptOutcome(outcome) {
 		return Attempt{}, ErrInvalidInput
 	}
@@ -493,6 +501,12 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		}
 		if err := persistAttemptServiceFactsTx(callbackCtx, callbackTx, record.claimID); err != nil {
 			return err
+		}
+		if facts := diagnostic.Decode(outcome.ErrorDiagnostics); facts != nil {
+			if _, err := callbackTx.ExecContext(callbackCtx, `INSERT INTO request_attempt_diagnostics(claim_id,request_log_id,attempt_seq,category,phase,details,completed_at) VALUES(?,?,?,?,?,?,?)`,
+				record.claimID, record.requestLogID, record.attemptSeq, facts.Category, facts.Phase, outcome.ErrorDiagnostics, at); err != nil {
+				return fmt.Errorf("claim: persist attempt diagnosis: %w", err)
+			}
 		}
 		if err := observability.RecordResponseHeadersTx(callbackCtx, callbackTx, record.requestID, record.attemptSeq); err != nil {
 			return err

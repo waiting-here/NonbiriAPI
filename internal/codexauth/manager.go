@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -36,6 +37,7 @@ type Status struct {
 	Login        *LoginStatus `json:"login,omitempty"`
 }
 type pendingLogin struct {
+	audited  bool
 	status   LoginStatus
 	revision int64
 	cancel   context.CancelFunc
@@ -129,6 +131,9 @@ func (m *Manager) Close() error {
 	m.closed = true
 	m.cancel()
 	if m.login != nil {
+		if m.login.status.State == "starting" || m.login.status.State == "pending" {
+			_ = m.auditLoginEnd(m.login, managementlog.Unknown, "login_interrupted")
+		}
 		m.login.cancel()
 	}
 	if m.refreshCancel != nil {

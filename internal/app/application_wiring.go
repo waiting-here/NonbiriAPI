@@ -42,6 +42,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/reports"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
@@ -209,6 +210,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	var assistantCodex *codexauth.Manager
 	performance := observability.NewPerformance()
 	store.SetConnectionObserver(performance)
+	store.SetManagementCapture(managementlog.CaptureEventID)
 	defer func() {
 		if built != nil {
 			return

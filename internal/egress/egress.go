@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/config"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 const (
@@ -34,6 +35,9 @@ const (
 // errors contain only controlled reason text and never echo the supplied URL,
 // which could contain credentials entered by mistake.
 var ErrInvalidBaseURL = errors.New("invalid base URL")
+
+var errBlockedAddress = errors.New("outbound hostname resolved to a blocked address")
+var errNoAddresses = errors.New("outbound hostname resolved to no addresses")
 
 // ValidationError reports a controlled reason for an invalid endpoint URL.
 type ValidationError struct {
@@ -628,6 +632,7 @@ func (p *EgressPolicy) dialContext(scheme, expectedHost, expectedPort string) fu
 				continue
 			}
 			attempted = true
+			diagnostic.Phase(ctx, "connect")
 			target := net.JoinHostPort(addr.String(), port)
 			conn, dialErr := p.dialer.DialContext(ctx, network, target)
 			if dialErr == nil {
@@ -653,6 +658,7 @@ func (p *EgressPolicy) validateTarget(ctx context.Context, network, scheme, expe
 		addresses = []netip.Addr{literal.Unmap()}
 	} else {
 		var err error
+		diagnostic.Phase(ctx, "dns")
 		addresses, err = p.resolver.LookupNetIP(ctx, "ip", expectedHost)
 		if err != nil {
 			if ctxErr := ctx.Err(); ctxErr != nil {
@@ -663,8 +669,9 @@ func (p *EgressPolicy) validateTarget(ctx context.Context, network, scheme, expe
 	}
 	addresses = normalizeAddresses(addresses)
 	if len(addresses) == 0 {
-		return nil, networkFailure(errors.New("outbound hostname resolved to no addresses"))
+		return nil, networkFailure(errNoAddresses)
 	}
+	diagnostic.Phase(ctx, "policy")
 
 	originAllowed := false
 	if _, ok := p.allowedOrigins[originKey(scheme, expectedHost, expectedPort)]; ok {
@@ -672,7 +679,7 @@ func (p *EgressPolicy) validateTarget(ctx context.Context, network, scheme, expe
 	}
 	for _, addr := range addresses {
 		if p.blocked(addr) && !originAllowed {
-			return nil, errors.New("outbound hostname resolved to a blocked address")
+			return nil, errBlockedAddress
 		}
 	}
 

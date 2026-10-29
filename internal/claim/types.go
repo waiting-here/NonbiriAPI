@@ -319,6 +319,8 @@ func (*Dispatch) LogValue() slog.Value {
 }
 
 type AttemptOutcome struct {
+	// ErrorDiagnostics is a safe structured observation snapshot, never a body.
+	ErrorDiagnostics  string
 	CallerFault       upstreamerror.CallerFault
 	Backoff           smartbackoff.Classification
 	StreakDisposition connectorcontract.StreakDisposition

@@ -211,6 +211,9 @@ func newPublicForwardRuntime(
 		_ = service.Close()
 		return fail(fmt.Errorf("create CallerKey middleware: %w", err))
 	}
+	if audits != nil {
+		callerKey.SetDeliveryRecorder(audits.observations.RecordDelivery)
+	}
 	closed := maintenance.GateMiddleware(maintenanceGate, http.NotFoundHandler())
 	handler := forward.BrowserCORS(callerKey.WrapWithUnavailable(maintenance.GateMiddleware(maintenanceGate, flowHandler), func(w http.ResponseWriter, r *http.Request) bool {
 		if r == nil || r.URL == nil {

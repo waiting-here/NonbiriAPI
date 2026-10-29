@@ -52,7 +52,10 @@ func newFixture(t *testing.T, handler http.HandlerFunc) *fixture {
 	if _, err = writer.Exec(db.AgentRequestsSQL); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = writer.Exec(db.AgentDriversSQL); err != nil {
+	if _, err = writer.Exec(db.CurrentAgentDriversSQL); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = writer.Exec(db.RequestDiagnosticsSQL); err != nil {
 		t.Fatal(err)
 	}
 	reader, err := sql.Open("sqlite", "file:"+path+"?mode=ro&_pragma=query_only(1)&_pragma=busy_timeout(5000)")

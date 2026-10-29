@@ -45,6 +45,11 @@ func (m *Manager) Begin(ctx context.Context, revision int64) (Status, error) {
 	pollctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), loginLifetime)
 	stop := context.AfterFunc(m.ctx, cancel)
 	p := &pendingLogin{revision: revision, cancel: func() { stop(); cancel() }, status: LoginStatus{ID: hex.EncodeToString(id[:]), State: "starting", ExpiresAt: m.config.Now().Add(loginLifetime).Unix()}}
+	if err = m.acceptLogin(ctx, p); err != nil {
+		p.cancel()
+		m.mu.Unlock()
+		return Status{}, err
+	}
 	m.login = p
 	m.workers.Add(1)
 	m.mu.Unlock()
@@ -57,6 +62,7 @@ func (m *Manager) Begin(ctx context.Context, revision int64) (Status, error) {
 			err = ErrConflict
 		}
 		if m.login == p && p.status.State == "starting" {
+			_ = m.auditLoginEnd(p, managementlog.Failed, safeError(err))
 			p.status = terminalLogin(p.status, "failed", safeError(err))
 			p.cancel()
 		}
@@ -112,6 +118,9 @@ func (m *Manager) completeLogin(ctx context.Context, p *pendingLogin, device dev
 				defer tx.Rollback()
 				e = m.config.AdminAuthorize(ctx, tx)
 				if e == nil {
+					e = m.captureLogin(ctx, tx, p)
+				}
+				if e == nil {
 					current, readErr := load(ctx, tx)
 					e = readErr
 					if e == nil && (current.revision != p.revision || current.encrypted != "") {
@@ -120,6 +129,9 @@ func (m *Manager) completeLogin(ctx context.Context, p *pendingLogin, device dev
 					if e == nil {
 						_, e = tx.ExecContext(ctx, "INSERT INTO agent_codex_session(id,revision,encrypted_credentials,account_id,account_label,expires_at,updated_at) VALUES(1,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,encrypted_credentials=excluded.encrypted_credentials,account_id=excluded.account_id,account_label=excluded.account_label,expires_at=excluded.expires_at,updated_at=excluded.updated_at", p.revision+1, encrypted, creds.AccountID, creds.Label, creds.ExpiresAt, m.config.Now().UnixMilli())
 					}
+				}
+				if e == nil {
+					e = m.finishLoginTx(ctx, tx, p, managementlog.Succeeded, "")
 				}
 				if e == nil {
 					e = tx.Commit()
@@ -132,6 +144,7 @@ func (m *Manager) completeLogin(ctx context.Context, p *pendingLogin, device dev
 	if err != nil {
 		state = "failed"
 		code = safeError(err)
+		_ = m.auditLoginEnd(p, managementlog.Failed, code)
 		if code == "expired" {
 			state = "expired"
 		}
@@ -148,6 +161,10 @@ func (m *Manager) Cancel(ctx context.Context, id string) (Status, error) {
 		return Status{}, ErrConflict
 	}
 	if m.login.status.State == "pending" || m.login.status.State == "starting" {
+		if err := m.auditLoginEnd(m.login, managementlog.NoChange, "login_cancelled"); err != nil {
+			m.mu.Unlock()
+			return Status{}, err
+		}
 		m.login.cancel()
 		m.login.status = terminalLogin(m.login.status, "cancelled", "")
 	}
@@ -180,6 +197,11 @@ func (m *Manager) Disconnect(ctx context.Context, revision int64) (Status, error
 	}
 	if err != nil {
 		return Status{}, err
+	}
+	if m.login != nil && (m.login.status.State == "pending" || m.login.status.State == "starting") {
+		if err = m.finishLoginTx(ctx, tx, m.login, managementlog.NoChange, "login_cancelled"); err != nil {
+			return Status{}, err
+		}
 	}
 	managementlog.SetTarget(ctx, "codex_connection", "1", "")
 	if err = managementlog.Commit(ctx, tx); err != nil {

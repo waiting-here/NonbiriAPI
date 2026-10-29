@@ -14,17 +14,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
 type responseData struct {
-	seq    int
-	body   []byte
-	status int
-	header http.Header
-	err    error
+	observed context.Context
+	seq      int
+	body     []byte
+	status   int
+	header   http.Header
+	err      error
 }
 
 func (responseData) String() string { return "[private image response]" }
@@ -42,12 +44,15 @@ func waitContext(ctx context.Context, d time.Duration) bool {
 	}
 }
 func (s *Service) perform(ctx context.Context, snapshot upstreamSnapshot, method, target string, payload []byte, profile egress.ImageProfile, ref observability.DiagnosticRef, authorize bool) responseData {
-	out := responseData{seq: ref.AttemptSeq}
+	ctx = s.config.Diagnostics.ErrorScope(ctx, ref)
+	out := responseData{seq: ref.AttemptSeq, observed: ctx}
 	clientBase := snapshot.baseURL
 	if !authorize {
 		parsed, err := url.Parse(target)
 		if err != nil {
 			out.err = ErrInvalid
+			diagnostic.RecordKnownError(ctx, "policy", "policy", "endpoint_invalid", "The image download address is invalid", err)
+			captureTransportFailure(ctx, err)
 			return out
 		}
 		clientBase = parsed.Scheme + "://" + parsed.Host
@@ -55,11 +60,13 @@ func (s *Service) perform(ctx context.Context, snapshot upstreamSnapshot, method
 	client, err := s.config.Egress.NewImageClient(clientBase, profile)
 	if err != nil {
 		out.err = err
+		captureTransportFailure(ctx, err)
 		return out
 	}
 	req, err := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(payload))
 	if err != nil {
 		out.err = err
+		captureTransportFailure(ctx, err)
 		return out
 	}
 	req.GetBody = nil
@@ -74,12 +81,13 @@ func (s *Service) perform(ctx context.Context, snapshot upstreamSnapshot, method
 		key, e := s.openSecret(snapshot)
 		if e != nil {
 			out.err = e
+			diagnostic.RecordKnownError(ctx, "credential", "platform", "credential_unavailable", "The configured credential could not be opened", e)
+			captureTransportFailure(ctx, e)
 			return out
 		}
 		req.Header.Set("Authorization", "Bearer "+string(key))
 		clear(key)
 	}
-	ctx = s.config.Diagnostics.ErrorScope(ctx, ref)
 	req = req.WithContext(ctx)
 	response, err := client.Do(req)
 	if err != nil {
@@ -103,6 +111,10 @@ func (s *Service) perform(ctx context.Context, snapshot upstreamSnapshot, method
 	}
 	out.body, out.err = readBounded(response.Body, limit)
 	if out.err != nil {
+		diagnostic.RecordError(ctx, "read_response", out.err)
+		if errors.Is(out.err, ErrCapacity) {
+			diagnostic.RecordLimit(ctx, "response_bytes", int64(limit), out.err)
+		}
 		s.captureImageOmission(ctx, ref, out, "unreadable_response")
 	}
 	return out
@@ -330,6 +342,7 @@ func (e *transportFailure) Unwrap() error { return e.cause }
 // Transport errors may contain private URLs, certificate names or peer bytes.
 // Persist only a fixed category; never serialize the original error string.
 func captureTransportFailure(ctx context.Context, err error) {
+	diagnostic.RecordError(ctx, "", err)
 	reason := "request_failed"
 	var dns *net.DNSError
 	var certificate *tls.CertificateVerificationError
@@ -363,10 +376,18 @@ func captureTransportFailure(ctx context.Context, err error) {
 // A rejected success-shaped response may contain generated images. Store a
 // clearly synthetic diagnosis, never any bytes or values from that response.
 func (s *Service) captureImageOmission(ctx context.Context, ref observability.DiagnosticRef, response responseData, reason string) {
+	if response.observed != nil {
+		ctx = response.observed
+	}
 	switch reason {
 	case "unreadable_response", "invalid_response", "invalid_images", "missing_task_receipt":
 	default:
 		return
+	}
+	if response.err != nil {
+		diagnostic.RecordError(ctx, "decode_response", response.err)
+	} else {
+		diagnostic.RecordKnownError(ctx, "decode_response", "protocol", reason, "The image response did not contain a valid complete result", ErrInvalid)
 	}
 	body, _ := json.Marshal(struct {
 		Category          string `json:"category"`

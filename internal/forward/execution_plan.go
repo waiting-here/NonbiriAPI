@@ -97,6 +97,11 @@ func (service *Service) snapshot(
 		return executionPlan{}, err
 	}
 	capable := make([]RouteCandidate, 0, len(plan.candidates))
+	continuation, continuationErr := continuationID(request)
+	if continuationErr != nil {
+		plan.clearPrepared()
+		return executionPlan{}, continuationErr
+	}
 	var rejection error
 	for _, candidate := range plan.candidates {
 		if !service.validCandidate(candidate, admission.charity) {
@@ -110,6 +115,21 @@ func (service *Service) snapshot(
 			continue
 		}
 		candidateRequest := candidate.prepared.source(request)
+		adaptedContinuation, err := continuationID(candidateRequest)
+		if err != nil || continuation != adaptedContinuation || continuation != "" && admission.flatten {
+			rejection = continuationRejection()
+			continue
+		}
+		binding, bindingErr := service.safety.ContinuationID(userID, candidate.EndpointKeyID, candidate.Authorization.CredentialVersionID, candidate.CanonicalBaseURL, candidate.UpstreamModelID, string(candidate.ConnectorType))
+		if bindingErr != nil {
+			plan.clearPrepared()
+			return executionPlan{}, bindingErr
+		}
+		if continuation != "" && continuation != binding {
+			rejection = continuationRejection()
+			continue
+		}
+		candidate.Policy.ContinuationID = binding
 		policy := candidate.Policy
 		policy.FlattenToolCalls = request.chat != nil && admission.flatten
 		if request.chat == nil {
