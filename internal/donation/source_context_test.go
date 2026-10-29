@@ -57,6 +57,12 @@ func sourceContextFixture(t *testing.T) (*donationTestEnv, agentplan.Actor, int6
 			t.Fatal(err)
 		}
 	}
+	// The fixture changes the schema. Load it on the reader before testing
+	// source projections under the normal page deadline.
+	var users int
+	if err := e.store.ReadDB().QueryRowContext(t.Context(), `SELECT COUNT(*) FROM users`).Scan(&users); err != nil {
+		t.Fatal(err)
+	}
 	return e, agentplan.Actor{ID: admin, Role: "admin"}, owner, d
 }
 
