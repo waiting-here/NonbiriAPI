@@ -12,8 +12,8 @@ const (
 	// MaxUserRPMLimit is the closed storage and runtime range for an explicit
 	// per-user request-per-minute override.
 	MaxUserRPMLimit = 4096
-	// DefaultUserConcurrencyLimit is the effective value when a user has no
-	// explicit in-flight request override.
+	// DefaultUserConcurrencyLimit and DefaultUserLightConcurrencyLimit are
+	// initial site defaults. Admission resolves the current site values.
 	DefaultUserConcurrencyLimit      = 5
 	DefaultUserLightConcurrencyLimit = 15
 	// MaxUserConcurrencyLimit is the closed storage and runtime range for an
@@ -44,10 +44,14 @@ func (s *Store) GetUserAdmissionLimits(ctx context.Context, userID int64) (UserA
 	}
 	var rpm, concurrency, lightRPM, lightConcurrency, globalRPM sql.NullInt64
 	err := s.db.QueryRowContext(ctx, `
-SELECT rpm_limit, concurrency_limit, light_rpm_limit, light_concurrency_limit, global_rpm_limit
+SELECT rpm_limit,
+       COALESCE(concurrency_limit, (SELECT value FROM site_config WHERE key='default_concurrency_per_user'), ?),
+       light_rpm_limit,
+       COALESCE(light_concurrency_limit, (SELECT value FROM site_config WHERE key='default_light_concurrency_per_user'), ?),
+       global_rpm_limit
 FROM users
 WHERE id=? AND is_admin=0
-  AND (is_banned=0 OR (banned_until IS NOT NULL AND banned_until<=?))`, userID, time.Now().Unix()).Scan(&rpm, &concurrency, &lightRPM, &lightConcurrency, &globalRPM)
+  AND (is_banned=0 OR (banned_until IS NOT NULL AND banned_until<=?))`, DefaultUserConcurrencyLimit, DefaultUserLightConcurrencyLimit, userID, time.Now().Unix()).Scan(&rpm, &concurrency, &lightRPM, &lightConcurrency, &globalRPM)
 	if errors.Is(err, sql.ErrNoRows) {
 		return UserAdmissionLimits{}, ErrNotFound
 	}
@@ -55,7 +59,7 @@ WHERE id=? AND is_admin=0
 		return UserAdmissionLimits{}, fmt.Errorf("read user admission limits: %w", err)
 	}
 
-	out := UserAdmissionLimits{ConcurrencyLimit: DefaultUserConcurrencyLimit, LightConcurrencyLimit: DefaultUserLightConcurrencyLimit}
+	out := UserAdmissionLimits{}
 	if rpm.Valid {
 		if rpm.Int64 < 1 || rpm.Int64 > MaxUserRPMLimit {
 			return UserAdmissionLimits{}, errors.New("read user admission limits: invalid rpm limit")
@@ -63,12 +67,10 @@ WHERE id=? AND is_admin=0
 		out.RPMLimit = int(rpm.Int64)
 		out.RPMLimitSet = true
 	}
-	if concurrency.Valid {
-		if concurrency.Int64 < 1 || concurrency.Int64 > MaxUserConcurrencyLimit {
-			return UserAdmissionLimits{}, errors.New("read user admission limits: invalid concurrency limit")
-		}
-		out.ConcurrencyLimit = int(concurrency.Int64)
+	if !concurrency.Valid || concurrency.Int64 < 1 || concurrency.Int64 > MaxUserConcurrencyLimit {
+		return UserAdmissionLimits{}, errors.New("read user admission limits: invalid concurrency limit")
 	}
+	out.ConcurrencyLimit = int(concurrency.Int64)
 	if lightRPM.Valid {
 		if lightRPM.Int64 < 1 || lightRPM.Int64 > MaxUserRPMLimit {
 			return UserAdmissionLimits{}, errors.New("read user admission limits: invalid light rpm limit")
@@ -81,11 +83,9 @@ WHERE id=? AND is_admin=0
 		}
 		out.GlobalRPMLimit, out.GlobalRPMLimitSet = int(globalRPM.Int64), true
 	}
-	if lightConcurrency.Valid {
-		if lightConcurrency.Int64 < 1 || lightConcurrency.Int64 > MaxUserConcurrencyLimit {
-			return UserAdmissionLimits{}, errors.New("read user admission limits: invalid light concurrency limit")
-		}
-		out.LightConcurrencyLimit = int(lightConcurrency.Int64)
+	if !lightConcurrency.Valid || lightConcurrency.Int64 < 1 || lightConcurrency.Int64 > MaxUserConcurrencyLimit {
+		return UserAdmissionLimits{}, errors.New("read user admission limits: invalid light concurrency limit")
 	}
+	out.LightConcurrencyLimit = int(lightConcurrency.Int64)
 	return out, nil
 }
