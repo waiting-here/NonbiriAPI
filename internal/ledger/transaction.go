@@ -28,7 +28,7 @@ func withSavepoint(ctx context.Context, tx *sql.Tx, fn func() error) error {
 		_, rollbackErr := tx.ExecContext(ctx, "ROLLBACK TO "+name)
 		_, releaseErr := tx.ExecContext(ctx, "RELEASE "+name)
 		if rollbackErr != nil || releaseErr != nil {
-			return fmt.Errorf("%w: savepoint rollback after %v", ErrInvariant, err)
+			return fmt.Errorf("%w: savepoint rollback after %w", ErrInvariant, err)
 		}
 		return err
 	}
