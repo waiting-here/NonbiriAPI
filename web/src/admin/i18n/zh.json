@@ -715,6 +715,8 @@
           "default_endpoint_key_limit": "默认端点密钥上限",
           "default_model_limit": "默认个人模型上限",
           "default_binding_limit": "默认模型绑定上限",
+          "default_concurrency_per_user": "单用户重型并发默认值",
+          "default_light_concurrency_per_user": "单用户轻型并发默认值",
           "default_rpm_per_user": "单用户每分钟重型公益请求上限",
           "default_light_rpm_per_user": "单用户每分钟轻型公益请求上限",
           "global_rpm_per_user": "单用户每分钟全局请求上限",

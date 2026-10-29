@@ -20,6 +20,13 @@ func historyFixture(t *testing.T) fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	details, _, found := strings.Cut(db.ManagementDetailsSQL, "CREATE TRIGGER ")
+	if !found {
+		t.Fatal("management detail schema boundary missing")
+	}
+	if _, err = f.db.Exec(details); err != nil {
+		t.Fatal(err)
+	}
 	f.s.config.History = managementlog.New(f.db, f.db)
 	return f
 }
