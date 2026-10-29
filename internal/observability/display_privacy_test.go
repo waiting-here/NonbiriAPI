@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 )
 
 func TestDiagnosticCopiesPreserveTextAndBinaryBytes(t *testing.T) {
@@ -74,8 +72,8 @@ func TestDiagnosticCopiesPreserveTextAndBinaryBytes(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if !bytes.Equal(decoded, []byte(textprivacy.IPv4(string(raw)))) {
-			t.Fatal("L5 payload did not preserve binary bytes around the address")
+		if !bytes.Equal(decoded, []byte("[redacted]")) {
+			t.Fatal("L5 payload without a proven source was disclosed")
 		}
 	}
 }

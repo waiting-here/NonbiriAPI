@@ -13,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
 const (
@@ -129,6 +131,7 @@ func newLogFixture(t *testing.T) *logFixture {
 		`CREATE TABLE credit_entries(operation_id TEXT NOT NULL,delta_mag BLOB NOT NULL,
  account_kind_snapshot TEXT NOT NULL,delta_sign INTEGER NOT NULL,line_no INTEGER NOT NULL)`,
 	}
+	statements = append(statements, db.RequestDiagnosticsSQL)
 	for _, statement := range statements {
 		if _, err := database.Exec(statement); err != nil {
 			_ = database.Close()
