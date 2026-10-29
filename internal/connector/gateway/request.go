@@ -407,12 +407,19 @@ func compilePrompt(raw []byte, model *gatewaypolicy.Model) ([]any, error) {
 			result = append(result, map[string]any{"role": "tool", "content": []any{entry}})
 			continue
 		}
-		if role != "user" && role != "assistant" || !only(message, "role", "content", "tool_calls") {
+		if role != "user" && role != "assistant" || !only(message, "role", "content", "tool_calls", "reasoning_content", "extra_content") || role == "user" && (message["reasoning_content"] != nil || message["extra_content"] != nil) {
 			return nil, errRequest
 		}
 		parts, err := compileContent(message["content"], role, model)
 		if err != nil {
 			return nil, err
+		}
+		if raw := message["reasoning_content"]; len(raw) > 0 && !isNull(raw) {
+			value, ok := text(raw)
+			if !ok {
+				return nil, errRequest
+			}
+			parts = append([]any{map[string]any{"type": "reasoning", "text": value}}, parts...)
 		}
 		if rawCalls, present := message["tool_calls"]; present {
 			var toolCalls []json.RawMessage
@@ -435,6 +442,10 @@ func compilePrompt(raw []byte, model *gatewaypolicy.Model) ([]any, error) {
 				calls[id] = name
 				parts = append(parts, map[string]any{"type": "tool-call", "toolCallId": id, "toolName": name, "input": json.RawMessage(args)})
 			}
+		}
+		parts, err = replayContinuation(message["extra_content"], parts)
+		if err != nil {
+			return nil, err
 		}
 		if len(parts) == 0 {
 			return nil, errRequest
@@ -463,6 +474,12 @@ func compileContent(raw []byte, role string, model *gatewaypolicy.Model) ([]any,
 			return nil, errRequest
 		}
 		switch kind {
+		case "refusal":
+			value, ok := text(part["refusal"])
+			if !ok || role != "assistant" || !only(part, "type", "refusal") {
+				return nil, errRequest
+			}
+			out = append(out, map[string]any{"type": "text", "text": value})
 		case "text":
 			value, ok := text(part["text"])
 			if !ok || !only(part, "type", "text", "cache_control") {

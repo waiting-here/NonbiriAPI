@@ -152,9 +152,9 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 41. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts exact registered schema 16–26 and 33–40 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 42. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts exact registered schema 16–26 and 33–41 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
 
-`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=41`, `minimum_schema_version=41`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
+`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=42`, `minimum_schema_version=42`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
 
 Current account export `schema_version=31` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v31.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
@@ -168,7 +168,7 @@ The existing `GET /api/time-zones` and `GET /admin/api/time-zones` return the em
 
 ## 2. OpenAI-compatible ingress
 
-The [direct inference contract](direct-inference.md) lists all 12 connector types,
+The [direct inference contract](direct-inference.md) lists all 13 connector types,
 16 model operations, native HTTP/SSE formats, bounded Chat/Responses conversion,
 System One, rerank and excluded persistent/realtime resources. The operation
 registry is closed; this is not an arbitrary upstream path proxy.
@@ -218,6 +218,8 @@ Conversion preserves representable tools, reasoning, refusal, finish reason and 
 `openai-compatible` appends `/chat/completions` to the configured versioned base. `anthropic-compatible` appends `/messages`, translates the strict supported subset, and sends only the required Anthropic key/version/content headers. The Anthropic subset supports system/developer and user/assistant text, HTTPS or bounded image data parts, OpenAI function tools and matched tool results, `temperature`, `top_p`, stop strings, tool choice, parallel-tool indication, and streaming usage. Lossy or unsupported fields make that candidate incompatible; they are never silently dropped. If neither token-limit field is supplied, Anthropic uses the nullable administrator default or the built-in 65,536 fallback. The fallback is not a cap on explicit values.
 
 For OpenAI-compatible SSE, an invalid first string completion ID is replaced with one stable generated ID for that upstream attempt. A valid ID is preserved; non-string IDs and malformed protocol frames still fail. Later chunks of a normalized attempt use the same generated ID, including tool-flattened output. Exact-credential reflection checks run on the original frame before ID normalization; reasoning, tools, usage and terminal validation retain their existing behavior.
+
+Native Chat retains its compatible valid-choice plus `[DONE]` completion rule; it does not newly require a nonempty finish reason on every candidate. This does not relax the terminal requirements of Responses, Anthropic, Gemini or Gateway. Forced-stream JSON aggregation decodes and rejoins valid audio data fragments, accumulates transcript text and retains the audio ID and expiry metadata within the existing response limits. It does not concatenate arbitrary metadata strings. Anthropic thinking and opaque continuation histories use the bounded [content-protocol extensions](content-protocols.md#anthropic-thinking-and-continuation); its optional empty-choices usage frame requires `stream_options.include_usage:true`.
 
 Usage is normalized into uncached input, cache-write input, cache-read input, and output. OpenAI-compatible streams may send cumulative snapshots: fixed input buckets and nondecreasing output replace the previous value without being added together. Missing/null snapshots preserve the last credible value. Tool flattening emits only the last usage frame after finish and before `[DONE]`. Invalid, negative, regressing, ambiguous, or internally inconsistent individual buckets mark usage unknown rather than fabricating numbers. A redundant upstream total that disagrees with valid individual buckets does not invalidate those buckets: billing uses the buckets and privileged request logs record `usage_total_mismatch`. The marker remains set if any attempt or cumulative snapshot observed a mismatch; a later consistent snapshot cannot erase it. Literal and semantic response guards block reflection of the exact credential, including across bounded JSON/SSE fragments; this is defense in depth, not general data-loss prevention.
 
@@ -292,7 +294,7 @@ Text also sends `ai-language-model-streaming:true|false`; model IDs and that str
 | Chat image input | HTTP(S) URLs and bounded PNG/JPEG/WebP/GIF data URLs; omitted/auto detail only; no server image download. Supported native file data is a string in v3 and a tagged `url`/`data` object in v4 |
 | Image generation | Common `prompt`, `n`, numeric `size`, integer `seed` (including zero) and supported `aspect_ratio`; output defaults to `b64_json`. Explicit URL output, `size:auto`, image streaming/partial images and unmapped provider fields such as `quality`/`style` reject before dispatch |
 | Embeddings | Text/string-array input, float or locally encoded float32 little-endian base64 output; no token-ID input or caller identity field. Only v4 accepts common `dimensions` and checks returned dimensions; v3 rejects it |
-| Rerank | Query, homogeneous text/object documents, `top_n` and local `return_documents` recovery from unique valid indexes; preserves order and finite scores. Unmapped vendor fields reject |
+| Rerank | Query, homogeneous text/object documents, one of `top_n`/`top_k` mapped to `topN`, and local `return_documents` recovery from unique valid indexes; preserves order and finite scores. Unmapped vendor fields reject |
 | Discovery | GET `/config`; language, image, embedding and reranking entries with the configured specification version. Unknown/absent model types are skipped; manual entries remain available |
 
 Gateway image output has no URL-hosting fallback. Embeddings use only valid `usage.tokens`; image output uses valid common input/output/total counts without inventing modality buckets. Standard Gateway rerank has no usage: metadata, cost and document counts do not become tokens or search units. Existing per-request pricing and conservative missing-usage settlement remain in force. Directory entries establish neither deployment availability nor support for every option. Gateway Decisions, audio, video and persistent-resource services are not added.
@@ -309,7 +311,11 @@ Accepted streaming Chat Completions send an SSE comment after 20 idle seconds, i
 
 Administrator setting `gateway_user_attribution_enabled` defaults to `false` (the API uses JSON booleans; storage uses `0|1`). Every subsequent Gateway v3/v4 text, image, embedding or rerank dispatch reads the current value; a dispatched body is immutable. When enabled, only the server supplies `providerOptions.gateway.user`, a keyed pseudonym scoped to the user and final canonical gateway origin. It permits correlation for **cost attribution**, not a claim that a safety identifier was applied. When disabled, the field is absent. Caller input cannot override it or supply gateway credentials, fallback models or provider-routing options. Debug adds optional boolean `gateway_user_attribution_sent`; no label value is exposed. Existing OpenAI/Anthropic identity behavior is unchanged.
 
-In Chat output, native reasoning text is returned separately as `reasoning_content` in the assistant message or stream delta; it is never merged into answer text. Bounded Responses conversion preserves this text in standard reasoning items rather than treating it as a summary. This output extension does not authorize unsupported reasoning fields in incoming messages. Streams are validated by bounded native events and a complete terminal sequence, including closure of reasoning and tool blocks, independently of the upstream's advertised content type. Text/rerank JSON is limited to 8 MiB, embeddings to 32 MiB, image JSON to 64 MiB and text streams to 32 MiB, or the smaller shared egress limit. Unknown semantic output, unsupported files/custom parts/reasoning files and nonempty citations cannot be discarded to report success. Gateway embedding usage accepts nonnegative signed-64-bit token counts; absent usage remains unknown.
+In Chat output, native reasoning text is returned separately as `reasoning_content` in the assistant message or stream delta; it is never merged into answer text. Assistant histories accept this field as native reasoning parts. Bounded Responses conversion emits actual text in reasoning items with empty summaries and accepts those generated items on replay, alongside generated output text and refusal parts. Reasoning or signed replies retain ordered text/reasoning/tool-call parts in `extra_content.gateway.content`; clients must return the extension together with the unchanged visible message. JSON emits it on the message, SSE once on the final delta, and Responses attaches it to the first generated output item. Complete histories are checked against visible content, reasoning and tool-call arguments before native-order replay.
+
+The closed per-part `providerMetadata` mapping is `google|googleVertex|vertex.thoughtSignature`, `anthropic.signature|redactedData`, and `openai|azure.itemId|reasoningEncryptedContent`. Replay changes the container to native `providerOptions` and retains those exact provider keys. Other provider options, credentials and routing controls are rejected in incoming continuation extensions. Each opaque string is bounded to 1 MiB and the extension to 4,096 parts within the complete request/response limits. Missing metadata cannot be reconstructed from readable reasoning; untagged text replay alone does not guarantee lossless continuation on a provider requiring signatures. Generated opaque source bindings and their routing constraints are described in [continuation histories](content-protocols.md#continuation-source-and-history-integrity).
+
+Streams require valid native finish and closed reasoning/text/tool blocks, independently of advertised content type. Nonsemantic `raw` events are ignored, and `[DONE]` is accepted only after valid native finish. Neither substitutes for completion. Text/rerank JSON is limited to 8 MiB, embeddings to 32 MiB, image JSON to 64 MiB and text streams to 32 MiB, or the smaller shared egress limit. Unknown semantic output, unsupported files/custom parts/reasoning files and nonempty citations cannot be discarded to report success; null/empty citations are accepted. Gateway embedding usage accepts nonnegative signed-64-bit token counts; absent usage remains unknown.
 
 Earlier v3 checks of Runable with SillyTavern 1.19.0 verified for non-streaming and streaming chat, a function-tool round trip and image input. Those checks returned language and embedding discovery entries; the older implementation skipped other model types. The tested Runable native `/embedding-model` endpoint returned HTTP 404; embedding translation and accounting have passed simulated HTTP tests, but successful Runable embedding execution has not been demonstrated. These historical checks do not verify the new v4, image or rerank paths, or establish availability on other Gateway deployments. Model catalog prices are separate from Runable credits; a zero catalog price does not establish a free request.
 
@@ -317,7 +323,7 @@ Catalog prices are upstream metadata and do not certify actual gateway credits o
 
 ### 2.5 `POST /v1/images/generations`
 
-Uses the same CallerKey, exact-path, CORS, admission, cancellation, retry and accounting boundaries as chat. Only `openai-compatible` upstreams support this operation; the connector appends `/images/generations` to the configured versioned base URL. The platform model must enable `images_generations`. Unsupported model types reject before request acceptance or key claims with `400 invalid_request` and “model does not support this request type”; this does not increase key failures.
+Uses the same CallerKey, exact-path, CORS, admission, cancellation, retry and accounting boundaries as chat. OpenAI family endpoints with the `images_generations` service authorized append `/images/generations` to the configured versioned base URL; Gateway uses its bounded image subset and `/image-model` path described above. The platform model must enable `images_generations`. Unsupported model types reject before request acceptance or key claims with `400 invalid_request` and “model does not support this request type”; this does not increase key failures.
 
 Requests require the platform `model` and a nonempty string `prompt`. `n` accepts 1–10 (default 1), `partial_images` 0–3, `output_compression` 0–100, and `stream` a boolean (default false); optional null values use defaults. String parameters such as `size`, `quality`, `background`, `output_format`, `moderation`, `response_format` and `style` are forwarded for the upstream model to validate. Other bounded JSON fields are retained; the server substitutes the bound model and its scoped caller pseudonym in `user` and any supplied `safety_identifier`. Chat role/transport/flattening/store policies and the charity text-length penalty do not apply.
 
@@ -329,9 +335,9 @@ Valid `usage.input_tokens` and `usage.output_tokens` map to uncached input and o
 
 ### 2.6 Translated Chat connectors and `POST /v1/decisions`
 
-`google-gemini` serves `/v1/chat/completions` through GenerateContent with API-key header authentication. `openai-responses` serves native Responses operations and the supported Chat conversion, using Bearer authentication and `store:false`. The new `openai-chat-completions` type serves native Chat and a bounded Responses conversion; `openai-compatible` sends both natively. Protocol choice happens before dispatch, without retrying another endpoint after failure. Their text, image, function-tool, reasoning continuation and streaming subsets are specified in [content protocols](content-protocols.md) and [direct inference](direct-inference.md#chat-and-responses-conversion). Unsupported fields reject the candidate before dispatch. Existing signature/reasoning continuation fields restrict Chat routing to their source protocol and survive both forced transport modes.
+`google-gemini` serves `/v1/chat/completions` through GenerateContent with API-key header authentication. For OpenAI family types (`openai-compatible`, `openai-chat-completions`, `openai-responses`, `openai-decisions`), the effective authorized `native_services` selection determines the wire. Matching native Chat/Responses services are preferred, followed by the supported bounded conversion. Compact/input-token counting, embeddings, images, Decisions and other direct services require their own selected authorization; legacy omission retains each type's old subset. Type names alone do not disable an explicitly authorized service. The platform model must separately enable the corresponding operation, and the upstream must support it. No upstream failure triggers protocol probing. Their text, image, function-tool, reasoning continuation and streaming subsets are specified in [content protocols](content-protocols.md) and [direct inference](direct-inference.md#chat-and-responses-conversion). Unsupported fields reject the candidate before dispatch. Continuation fields retain their protocol and permitted source and survive both forced transport modes.
 
-`openai-decisions` serves `POST /v1/decisions` with an independent native JSON request and response. Required fields are `model,input,questions`; 1–400 predicate/choice/score questions are supported, with 2–10 levels for scores. Question instructions accept a string or nonempty text/image/JSON content array. Shared JSON input is limited to user messages. Each `input_json.data` is an object or object array with at most 32 container levels, 10,000 values and 256 KiB of compact UTF-8 JSON; nested JSON types and numbers are preserved. Shared and question images count together toward the 128-image limit. Optional cache fields and safety identity follow the native contract; question content and JSON parts cannot carry cache breakpoints. `stream:false` is accepted and stripped locally; true/null and unknown fields are rejected. The response validates every positional answer against its question and exposes the platform model. Refusals are valid answers. Enable model type `decisions` and bind a Decisions connector; Chat/Gemini/Responses connectors do not convert this operation.
+`POST /v1/decisions` uses an authorized native Decisions service with an independent JSON request and response. Required fields are `model,input,questions`; 1–400 predicate/choice/score questions are supported, with 2–10 levels for scores. Question instructions accept a string or nonempty text/image/JSON content array. Shared JSON input is limited to user messages. Each `input_json.data` is an object or object array with at most 32 container levels, 10,000 values and 256 KiB of compact UTF-8 JSON; nested JSON types and numbers are preserved. Shared and question images count together toward the 128-image limit. Optional cache fields and safety identity follow the native contract; question content and JSON parts cannot carry cache breakpoints. `stream:false` is accepted and stripped locally; true/null and unknown fields are rejected. The response validates every positional answer against its question and exposes the platform model. Refusals are valid answers. Enable model type `decisions` and authorize that native service on the OpenAI family endpoint, credential and binding. Chat, Gemini and Responses wire protocols do not convert this operation.
 
 Decisions uses the existing CallerKey, ownership, admission, original-input client-rule auditing, shared egress, quotas, pricing, reservation, settlement and account lifecycle. One request is one logical call regardless of question count; no per-question billing unit is introduced. Chat length penalties, transport conversion and tool flattening do not apply. Debug dry mode returns the existing 422 captured result without traffic or accounting. Route kinds are `openai_decisions` and `charity_decisions`. See [the complete compatibility contract](content-protocols.md#decisions) for input variants, answer checks, usage and failure semantics.
 
@@ -399,6 +405,50 @@ Personal requests reserve no general credits and remain available with a negativ
 `balance` always means general credits; `game_balance` is the separate signed game-credit wallet. Both use exact decimal strings. New accounts start both at zero. API calls, donations and Thursday use general credits. Administrators can adjust either wallet, including below zero; cumulative donation credit remains nonnegative and is a separate lifetime statistic.
 
 `UserEnvelope` contains safe identity/profile, raw and effective resource limits, balances, resolved level/display name, language, suspension/ban state and independent game/charity public preferences. `automatic_restrictions` is an array of safe `{kind,reason_code,reason,started_at,ends_at}` summaries, without thresholds, counters or evidence. It contains no manual-level provenance, credential, session token, or internal ledger encoding.
+
+### Request failure observations
+
+Request detail separates `request.caller_result_class,caller_status,caller_error_code`
+(the final recorded result) from optional
+`delivery:{http_status?,bytes,failed,failure?}`, which describes actual writes to
+the immediate client connection. HTTP 200 may already have been sent before a
+later failure. An absent delivery fact remains unknown; a successful proxy write
+does not prove that the final client consumed the response.
+
+Failed attempts may include `error_diagnostics` with `category,phase,code,message`,
+bounded `causes` and `secondary` observations, timing and protocol facts.
+Optional `started_at_ms,failed_at_ms,completed_at_ms,first_body_at_ms` use Unix
+milliseconds; budget and elapsed values are durations. Observed upstream status,
+headers received, first-body time, received byte/event counts, forwarded bytes,
+body EOF, protocol completion and valid-usage presence are separate facts.
+Optional media/encoding, retry-after seconds, budget/limit values and phase
+timings are included only when recorded. The first captured cause is retained;
+later distinct failures do not replace it.
+
+These snapshots are limited to 16 KiB, with at most eight causes and 512 bytes
+per safe description. Correlation entries contain `source,name,value`; permitted
+names are `x-request-id,request-id,x-correlation-id,traceparent,cf-ray`, with at
+most eight entries and 256 bytes per value. They are observations from the named
+source, not credentials or proof of end-to-end completion. URL query/user-info,
+secrets, raw error strings, stack traces, SQL and local paths are not added.
+
+Administrator/steward request-log lists and their existing exports accept exact
+`error_category` and `error_phase` filters for retained attempt diagnostics.
+Full structured facts load with detail, not every list row. Owner details keep
+their existing safe projection; charity source identities remain private.
+Assistant request details and independent image/discovery diagnostics use the
+same optional `error_diagnostics` shape under their existing access rules.
+Missing older evidence is not inferred from current configuration.
+
+Model discovery HTTP 202 means the refresh task was accepted. Its detail opens
+the service-call evidence; absence of a confirmed HTTP response is stated
+explicitly. A received 200 still requires successful catalog parsing.
+
+Structured observations retain existing ownership, redaction, retention and
+cleanup rules. They do not grant access to restricted raw bodies/headers in
+§11 or add diagnostics to personal account export 31. That export retains only
+its existing safe request summaries. Diagnostics do not change retries,
+settlement, penalties or protocol completion.
 
 ### Temporary denied-sign-in reasons
 
@@ -1403,7 +1453,7 @@ The metadata GET accepts no query or body and returns `{user_id,generation,activ
 
 Both current actor/target authority and generation checks occur in the transaction. Authority is checked before replay; an identical authorized replay returns the original receipt and never revokes a key created afterward. Reuse the same path, body and key when the result is unknown. A fresh stale-generation request or conflicting idempotency content returns 409: reread metadata and review the current target before a new intent. Exhausted active generations return `422 resource_limit_exceeded`. Revocation records the existing non-secret management mutation receipt, without a new audit collection or schema.
 
-User limits use decimal strings or null: `endpoint_limit` is "0"–"10000"; `rpm_limit`, `light_rpm_limit` and `global_rpm_limit` are "1"–"4096"; `concurrency_limit` and `light_concurrency_limit` are "1"–"100000". Each has an `effective_` projection as a positive decimal string (endpoint limits may be zero). Existing RPM/concurrency fields select heavy requests; light charity RPM defaults to 30 and light concurrency to 15. Heavy concurrency defaults to 5. Global user RPM combines personal and charity calls across both classes and falls back to `global_rpm_per_user`. Embeddings, rerank, SystemOne and decisions are light by ingress operation. Each concurrency pool combines personal and charity calls. Administrators and strictly higher-level stewards with `users.limits` may edit the five inference limits within their configured bounds; mixed profile fields retain their existing permission requirements. Single and batch edits recheck the same target authority before replay or writes. These fields also appear in the account owner projection and export. In profile PATCH, omission preserves a value and null inherits its default. Invalid input returns 400 with the affected field and range. Manual level can be null or a JSON integer; stewards with `users.level` may assign only levels below their actual actor level, while only administrators may set level 6. The economy PATCH has `{mode:"economy",expected_revision,target,direction,amount,reason}`; targets are `balance|game_balance|donation_credit`, direction is `increase|decrease`, and amount is a positive credit string. Both wallets may become negative; stewards cannot use the donation-credit target.
+User limits use decimal strings or null: `endpoint_limit` is "0"–"10000"; `rpm_limit`, `light_rpm_limit` and `global_rpm_limit` are "1"–"4096"; `concurrency_limit` and `light_concurrency_limit` are "1"–"100000". Each has an `effective_` projection as a positive decimal string (endpoint limits may be zero). Existing RPM/concurrency fields select heavy requests; light charity RPM defaults to 30. Heavy and light concurrency inherit the current `default_concurrency_per_user` and `default_light_concurrency_per_user` site values, initially 5 and 15 and each configurable from 1 to 100000. Site changes affect new admissions without interrupting active requests. Clearing an override uses the current site value and checks that value against the acting steward's concurrency ceiling. Global user RPM combines personal and charity calls across both classes and falls back to `global_rpm_per_user`. Embeddings, rerank, SystemOne and decisions are light by ingress operation. Each concurrency pool combines personal and charity calls. Administrators and strictly higher-level stewards with `users.limits` may edit the five inference limits within their configured bounds; mixed profile fields retain their existing permission requirements. Single and batch edits recheck the same target authority before replay or writes. These fields also appear in the account owner projection and export. In profile PATCH, omission preserves a value and null inherits its default. Invalid input returns 400 with the affected field and range. Manual level can be null or a JSON integer; stewards with `users.level` may assign only levels below their actual actor level, while only administrators may set level 6. The economy PATCH has `{mode:"economy",expected_revision,target,direction,amount,reason}`; targets are `balance|game_balance|donation_credit`, direction is `increase|decrease`, and amount is a positive credit string. Both wallets may become negative; stewards cannot use the donation-credit target.
 
 The generic site-config patch rejects maintenance, announcement epoch, and all activity/game economic keys; those use their typed domain routes. User patch is a tagged operation for profile, limits/level, or economy and never returns credentials. Log exports retain their fixed privacy projections and spreadsheet-safe encoding.
 
@@ -1792,13 +1842,17 @@ no steward or CallerKey equivalent.
 | `POST /admin/api/ai/chatgpt/target` | Optional `{new_account:boolean}`; returns an encrypted-import target. |
 | `POST /admin/api/ai/chatgpt/import` | Local helper's encrypted envelope; returns safe connection status. |
 | `POST /admin/api/ai/chatgpt/logout` | `{expected_revision}`; returns `{remote_revocation_confirmed:boolean}`. |
+| `GET /admin/api/ai/codex` | Safe Codex connection and pending-login status. |
+| `POST /admin/api/ai/codex/login` | `{expected_revision}`; starts device-code login and returns status. |
+| `POST /admin/api/ai/codex/cancel` | `{login_id}`; cancels that pending login and returns status. |
+| `POST /admin/api/ai/codex/logout` | `{expected_revision}`; disconnects the local Codex connection and returns status. |
 
 Profile settings include `revision,driver_id,provider,base_url,has_key,model,
 context_window,output_reserve_tokens,max_output_tokens,output_token_parameter,
 temperature?,top_p?,extra_parameters,concurrency,timeout_seconds,
 connection_revision`. Read revisions, IDs, connection revision and key-presence
 flags are safe metadata, not credential text. Provider values are
-`chat_completions`, `responses` and `chatgpt`. Profile names are nonblank,
+`chat_completions`, `responses`, `chatgpt` and `codex`. Profile names are nonblank,
 at most 200 UTF-8 bytes; model names allow at most 512 bytes. New profile
 settings accept a context window of 1024–10000000, a positive local output
 reserve strictly below the window and timeout 1–1200 seconds. A zero reserve
@@ -1889,6 +1943,40 @@ The [embedded presets](ai-agent-presets.md) supply initial templates, shared mem
 
 The shared FIFO limit applies to each model HTTP call, including compaction. Waiting for tools or a human decision releases that slot; another model turn joins the queue again. Actual calls also consume the global RPM and outbound concurrency budgets, with no personal RPM or credit charge. Exhausted global RPM waits for the next available window without holding an HTTP slot or database transaction. Restart recovery marks interrupted in-flight calls explicitly and does not automatically resend them; unstarted queued work can resume. Committed operation receipts prevent duplicate business execution.
 
+#### Codex device-code connection
+
+Codex is an independent fixed-endpoint source with one encrypted connection per
+instance and no external CLI dependency. Only `admin_chat,actor_id:"0"` or
+`steward_chat` with a positive, explicitly selected actor may bind this provider.
+Global defaults, the all-steward default, automatic review, personal/charity
+model catalogs and public API routes cannot use it. Existing AI/tool permissions
+still apply to each operator.
+
+The four Codex routes above require an administrator session. Status contains
+`connected,revision,account_label,account_id,expires_at,updated_at,login?`.
+Revision is a decimal string; expiry is Unix seconds and update time is Unix
+milliseconds. Optional `login` contains `id,state,expires_at` and, when applicable,
+`verification_url,user_code,error_code`. There is one bounded pending login in
+memory; restart requires a new login. The administrator completes authorization
+on the displayed official page. Access/refresh tokens and raw authentication
+responses are never returned. Successfully connected credentials persist encrypted.
+
+Codex sends `stream:true,store:false`, supports text/function-tool/native
+reasoning history, and omits `max_output_tokens`, temperature and top-p.
+Its extras are narrower than the API/ChatGPT settings above:
+`reasoning.effort=none|minimal|low|medium|high|xhigh`,
+`reasoning.summary=auto|concise|detailed`, `text.verbosity=low|medium|high`,
+`parallel_tool_calls`, `prompt_cache_key` and
+`service_tier=auto|default|priority`. A valid completed terminal may use already
+completed matching output items when repeated output is absent; an item alone
+or EOF cannot establish success. No interrupted stream is automatically replayed.
+
+Refresh is serialized; normal renewal retains connection identity. Disconnect
+or replacement invalidates the former connection and cancels related work.
+The source shares outbound limits, request scheduling and administrator history.
+No fallback source or broader tool authority is implied. Real Business-account
+authorization and inference remain unverified; see the [connection guide](codex-agent.md).
+
 #### Model-request history, cleanup and archives
 
 These routes are administrator-only and separate from ordinary user request logs.
@@ -1936,8 +2024,10 @@ business changes and their history commit together; failures are recorded
 after rollback when storage is available. Authorized idempotent replay reads
 the original result without a duplicate history entry. Reads, previews,
 exports, model discovery, ordinary conversation messages/compaction/clear and
-authentication are excluded. Assistant settings and memory writes, approved
-plans, asset cleanup and genuine management writes remain recorded.
+routine authentication/refresh are excluded. Administrator Codex connection
+start/cancel/disconnect and its eventual login outcome are management actions;
+only safe connection facts are recorded. Assistant settings and memory writes,
+approved plans, asset cleanup and genuine management writes remain recorded.
 
 Let `{history}` be `/admin/api/management-operations`.
 
@@ -1961,7 +2051,9 @@ List filters are `time_from,time_to,source,actor_id,authorizer_id,domain,action,
 outcome,event_id,target_kind,target_id,group_key,search`, combined with AND.
 The time interval is `[time_from,time_to)`; omit either open boundary.
 Target ID requires target kind. `search` matches an exact event ID, actor
-name or numeric operation ID; it is not substring/full-text search.
+name, numeric operation ID, retained target/previous name, related object name
+or ID, or changed field name. It is not substring/full-text search; older
+records can match only facts actually retained.
 Other string filters are exact. Domains include `management-operations`,
 `endpoint-tags` and `endpoint-tag-rules`; their spelling is independent
 of the corresponding HTTP path. Actor/authorizer/target IDs and search allow
@@ -1977,10 +2069,27 @@ is an insertion cutoff, not an immutable copy.
 
 An operation contains `id,event_id,created_at,source,executor_kind,actor,
 authorizer,authorization_ref?,domain,action,correlation_kind?,correlation_id?,
-summary,outcome,code,targets,succeeded,skipped,failed,cleaning`. Details are
-paged separately as `{ordinal,action,target_kind,target_id,target_name,outcome,
-code,changes}`. Each change is only `{field,operation}`; operations are
-`updated,cleared,created,deleted,enabled,disabled`. History does not copy raw
+summary,outcome,code,targets,succeeded,skipped,failed,cleaning,target_name?`.
+Items are paged separately as `{ordinal,action,target_kind,target_id,target_name,
+outcome,code,changes,details}`. Changes contain `field,operation` and optional
+`before,after,unit,truncated`; before/after are allowlisted strings from the
+committed business values, not a copy of the incoming DTO. Existing operation
+codes include `updated,cleared,created,deleted,enabled,disabled`.
+
+New `details` contains `version:1` with optional `previous_name,state,related,
+impacts,truncated`. Related samples contain `kind,id,name,state`, optional
+`previous_name` and changes. Impacts contain `kind` and decimal-string
+`created,updated,deleted,sampled,omitted` counts. Counts describe actual row
+writes, not distinct objects or inferred downstream effects. Up to 32 related
+objects are sampled; omissions remain explicit. Each change collection is
+bounded to 64 fields and 16 KiB, each before/after value to 512 characters;
+details are bounded to 64 KiB.
+
+Names and changes come from the operation transaction and survive later
+rename/deletion. Same-value submissions are not reported as new values. Large
+text/secret changes retain only permitted change facts or length summaries.
+Older records without these snapshots leave them unavailable, with no current
+resource lookup presented as historical fact. History does not copy raw
 request/response bodies, memory text, keys, passwords, tokens or full DTOs.
 
 Groups contain `key,bucket,source,domain,action,actor,authorizer,outcome,
@@ -2040,7 +2149,9 @@ not proof that deletion has finished; read its cleanup status.
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v31.json`, with `schema_version:31` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside format 31.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v31.json`, with `schema_version:31` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside format 31.
+Structured failure/delivery snapshots and restricted raw diagnostics are also
+excluded; the export retains its existing safe request summaries.
 
 `user` includes the five nullable inference limits and their effective values
 from §7.1. The safe `charity` aggregate may include `usage_details` with optional

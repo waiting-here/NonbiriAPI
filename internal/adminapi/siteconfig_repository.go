@@ -57,6 +57,7 @@ type SiteConfigCommit struct {
 
 type SiteConfigRepository struct {
 	database        *sql.DB
+	readDB          *sql.DB
 	finalAuthorizer SiteConfigFinalAuthorizer
 	now             func() time.Time
 	committed       func(SiteConfigCommit)
@@ -70,7 +71,7 @@ func NewSiteConfigRepository(options SiteConfigRepositoryOptions) (*SiteConfigRe
 	if now == nil {
 		now = time.Now
 	}
-	return &SiteConfigRepository{database: options.Store.DB(), finalAuthorizer: options.FinalAuthorizer, now: now, committed: options.Committed}, nil
+	return &SiteConfigRepository{database: options.Store.DB(), readDB: options.Store.ReadDB(), finalAuthorizer: options.FinalAuthorizer, now: now, committed: options.Committed}, nil
 }
 
 type SiteConfigSnapshot struct {
@@ -355,7 +356,11 @@ func (repository *SiteConfigRepository) beginAuthorized(ctx context.Context, adm
 	if readOnly {
 		options.ReadOnly = true
 	}
-	tx, err := repository.database.BeginTx(ctx, options)
+	database := repository.database
+	if readOnly {
+		database = repository.readDB
+	}
+	tx, err := database.BeginTx(ctx, options)
 	if err != nil {
 		return nil, classifySiteConfigDatabase("begin authorized transaction", err)
 	}

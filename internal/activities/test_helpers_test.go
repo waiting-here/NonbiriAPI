@@ -55,7 +55,7 @@ func newActivityFixture(t *testing.T, now int64) *activityFixture {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	fixture := &activityFixture{t: t, store: store}
-	fixture.continuity, err = continuity.New(store.DB(), vault)
+	fixture.continuity, err = continuity.New(store.DB(), vault, store.ReadDB())
 	if err != nil {
 		t.Fatalf("continuity.New: %v", err)
 	}

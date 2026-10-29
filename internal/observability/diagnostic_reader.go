@@ -7,6 +7,8 @@ import (
 	"errors"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/textprivacy"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 	"strconv"
 	"time"
@@ -67,9 +69,10 @@ type DiagnosticPage struct {
 	To         int64            `json:"to"`
 }
 type DiagnosticDetail struct {
-	Item   DiagnosticItem `json:"item"`
-	Body   ErrorBody      `json:"body"`
-	Source *Source        `json:"source"`
+	ErrorDiagnostics *diagnostic.Failure `json:"error_diagnostics,omitempty"`
+	Item             DiagnosticItem      `json:"item"`
+	Body             ErrorBody           `json:"body"`
+	Source           *Source             `json:"source"`
 }
 
 func NewDiagnosticReader(config DiagnosticReaderConfig) (*DiagnosticReader, error) {
@@ -316,6 +319,12 @@ func (r *DiagnosticReader) Detail(ctx context.Context, actor DiagnosticActor, id
 	if len(raw) > upstreamerror.MaxRawBodyBytes || int64(len(raw)) != out.Item.BytesSaved {
 		return out, ErrUnavailable
 	}
+	var failure string
+	if e := tx.QueryRowContext(ctx, "SELECT details FROM request_error_diagnostics WHERE error_id=?", rowID).Scan(&failure); e == nil {
+		out.ErrorDiagnostics = diagnostic.Decode(failure)
+	} else if !errors.Is(e, sql.ErrNoRows) {
+		return out, ErrUnavailable
+	}
 	out.Body.ErrorMetadata = out.Item.ErrorMetadata
 	out.Body.Encoding = "utf-8"
 	if utf8.Valid(raw) {
@@ -325,9 +334,31 @@ func (r *DiagnosticReader) Detail(ctx context.Context, actor DiagnosticActor, id
 		out.Body.Body = base64.StdEncoding.EncodeToString(raw)
 	}
 	if redact {
-		out.Body, err = RedactErrorIPv4(out.Body)
-		if err != nil {
-			return DiagnosticDetail{}, err
+		dns, known, e := diagnosticDNSRedactor(ctx, tx, out.Item)
+		if e != nil {
+			return DiagnosticDetail{}, ErrUnavailable
+		}
+		diagnostic.Redact(out.ErrorDiagnostics, func(value string) string {
+			return dns.Redact(textprivacy.IPv4(value))
+		})
+		// Classification and cause text are authored locally. Only correlation
+		// values and the raw payload need concealment without a proven source.
+		if !known && out.ErrorDiagnostics != nil {
+			for i := range out.ErrorDiagnostics.Correlation {
+				out.ErrorDiagnostics.Correlation[i].Value = "[redacted]"
+			}
+		}
+		out.Body.IPv4Redacted = true
+		if len(raw) > 0 {
+			projected := "[redacted]"
+			if known {
+				projected = dns.Redact(textprivacy.IPv4(string(raw)))
+			}
+			if out.Body.Encoding == "base64" {
+				out.Body.Body = base64.StdEncoding.EncodeToString([]byte(projected))
+			} else {
+				out.Body.Body = projected
+			}
 		}
 	}
 	var source string
@@ -359,4 +390,57 @@ func validStorageFilter(value string) bool {
 		return true
 	}
 	return false
+}
+
+// Resolve the already authorized event's immutable source. An unfinished
+// request may use only the matching dispatched claim; later attempts and
+// current image configuration cannot replace the event's source.
+func diagnosticDNSRedactor(ctx context.Context, tx *sql.Tx, item DiagnosticItem) (*textprivacy.DNSRedactor, bool, error) {
+	var query string
+	args := []any{item.SubjectID}
+	switch item.Kind {
+	case "api_request", "model_discovery":
+		query = `SELECT a.canonical_base_url FROM request_logs l
+ JOIN request_attempts a ON a.request_log_id=l.id
+ WHERE l.logical_request_id=? AND a.attempt_seq=?
+ UNION ALL
+ SELECT COALESCE(t.canonical_base_url,s.canonical_base_url) FROM request_logs l
+ JOIN dispatch_claims c ON c.logical_request_id=l.logical_request_id AND c.state='dispatched'
+ LEFT JOIN dispatch_claim_targets t ON t.claim_id=c.id
+ LEFT JOIN endpoint_key_secrets s ON s.id=c.secret_ref_id
+ WHERE l.logical_request_id=? AND c.attempt_seq=?
+ AND NOT EXISTS(SELECT 1 FROM request_attempts a WHERE a.request_log_id=l.id AND a.attempt_seq=c.attempt_seq)
+ LIMIT 1`
+		args = []any{item.SubjectID, item.AttemptSeq, item.SubjectID, item.AttemptSeq}
+	case "image_task":
+		query = `SELECT COALESCE(d.source_base_url,r.base_url) FROM request_error_bodies e
+ LEFT JOIN request_error_diagnostics d ON d.error_id=e.id
+ JOIN image_activity_tasks t ON t.id=e.task_id
+ LEFT JOIN image_upstream_revisions r ON r.revision=t.upstream_revision WHERE e.id=? AND t.id=?`
+		args = []any{item.ID, item.SubjectID}
+	case "image_discovery":
+		query = `SELECT COALESCE(d.source_base_url,r.base_url) FROM request_error_bodies e
+ LEFT JOIN request_error_diagnostics d ON d.error_id=e.id
+ JOIN image_model_refreshes f ON f.operation_id=e.operation_id
+ LEFT JOIN image_upstream_revisions r ON r.revision=f.upstream_revision WHERE e.id=? AND f.operation_id=?`
+		args = []any{item.ID, item.SubjectID}
+	default:
+		return nil, false, nil
+	}
+	var base sql.NullString
+	err := tx.QueryRowContext(ctx, query, args...).Scan(&base)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, false, nil
+	}
+	if err != nil || !base.Valid || base.String == "" {
+		return nil, false, err
+	}
+	var mainstream bool
+	err = tx.QueryRowContext(ctx, `SELECT EXISTS(
+ SELECT 1 FROM mainstream_channels m JOIN mainstream_channel_entries e ON e.channel_id=m.id
+ WHERE m.state='active' AND m.enabled=1 AND e.enabled=1 AND e.canonical_base_url=?)`, base.String).Scan(&mainstream)
+	if err != nil || mainstream {
+		return nil, true, err
+	}
+	return textprivacy.NewDNSRedactor(base.String), true, nil
 }

@@ -22,7 +22,7 @@ WHERE (?3='' OR state=?3) AND (?4='' OR object_kind=?4) AND (state='active' OR r
 const legalHoldPageOrder = ` ORDER BY created_at DESC,id DESC LIMIT ?5 OFFSET ?6`
 
 func (c *Coordinator) legalHoldPageTx(ctx context.Context, adminID int64) (*sql.Tx, error) {
-	tx, err := c.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := c.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, fmt.Errorf("lifecycle: begin legal hold page: %w", err)
 	}

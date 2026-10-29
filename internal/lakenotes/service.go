@@ -27,6 +27,7 @@ import (
 
 type Service struct {
 	database     *sql.DB
+	readDatabase *sql.DB
 	users        resources.FinalTxAuthorizer
 	admins       host.AdminAuthorizer
 	gate         AdmissionGate
@@ -46,6 +47,9 @@ func New(c Config) (*Service, error) {
 	if c.Database == nil || c.Users == nil || c.Admins == nil || c.Gate == nil || c.Keys == nil {
 		return nil, ErrInvalid
 	}
+	if c.ReadDatabase == nil {
+		c.ReadDatabase = c.Database
+	}
 	if c.Now == nil {
 		c.Now = time.Now
 	}
@@ -55,7 +59,7 @@ func New(c Config) (*Service, error) {
 	if c.MotionSeed == nil {
 		c.MotionSeed = rules.SampleMotionSeed
 	}
-	return &Service{database: c.Database, users: c.Users, admins: c.Admins, gate: c.Gate, keys: c.Keys, activity: c.Activity, reward: c.Reward, now: c.Now, random: c.Random, seed: c.MotionSeed, budgetUsers: map[int64]int{}}, nil
+	return &Service{database: c.Database, readDatabase: c.ReadDatabase, users: c.Users, admins: c.Admins, gate: c.Gate, keys: c.Keys, activity: c.Activity, reward: c.Reward, now: c.Now, random: c.Random, seed: c.MotionSeed, budgetUsers: map[int64]int{}}, nil
 }
 func revision(s string, zero bool) (int64, error) {
 	n, e := strconv.ParseInt(s, 10, 64)

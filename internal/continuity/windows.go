@@ -56,7 +56,7 @@ func (service *Service) LoadWindow(ctx context.Context, userID int64, kind Windo
 	if service == nil || ctx == nil || !validWindow(kind, scope, nowMillis, limit) {
 		return Key{}, nil, ErrInvalid
 	}
-	tx, err := service.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := service.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Key{}, nil, err
 	}

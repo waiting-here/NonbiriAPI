@@ -62,10 +62,14 @@ type Metadata struct {
 	Summary          string  `json:"summary"`
 }
 
-// Change contains a field name and an operation, never its raw value.
+// Change contains only explicitly allowlisted, bounded business values.
 type Change struct {
-	Field     string `json:"field"`
-	Operation string `json:"operation"`
+	Field     string  `json:"field"`
+	Operation string  `json:"operation"`
+	Before    *string `json:"before,omitempty"`
+	After     *string `json:"after,omitempty"`
+	Unit      string  `json:"unit,omitempty"`
+	Truncated bool    `json:"truncated,omitempty"`
 }
 type Item struct {
 	Ordinal    int64    `json:"ordinal,string"`
@@ -76,6 +80,7 @@ type Item struct {
 	Outcome    Outcome  `json:"outcome"`
 	Code       string   `json:"code"`
 	Changes    []Change `json:"changes"`
+	Details    Details  `json:"details"`
 }
 type Result struct {
 	Outcome Outcome `json:"outcome"`
@@ -89,13 +94,14 @@ type Record struct {
 type Operation struct {
 	ID int64 `json:"id,string"`
 	Metadata
-	Outcome   Outcome `json:"outcome"`
-	Code      string  `json:"code"`
-	Targets   int64   `json:"targets,string"`
-	Succeeded int64   `json:"succeeded,string"`
-	Skipped   int64   `json:"skipped,string"`
-	Failed    int64   `json:"failed,string"`
-	Cleaning  bool    `json:"cleaning"`
+	Outcome    Outcome `json:"outcome"`
+	Code       string  `json:"code"`
+	Targets    int64   `json:"targets,string"`
+	Succeeded  int64   `json:"succeeded,string"`
+	Skipped    int64   `json:"skipped,string"`
+	Failed     int64   `json:"failed,string"`
+	Cleaning   bool    `json:"cleaning"`
+	TargetName string  `json:"target_name,omitempty"`
 }
 type contextKey struct{}
 type operationState struct {
@@ -267,6 +273,11 @@ func cloneItems(items []Item) []Item {
 	out := append([]Item(nil), items...)
 	for i := range out {
 		out[i].Changes = append([]Change(nil), out[i].Changes...)
+		out[i].Details.Related = append([]RelatedObject(nil), out[i].Details.Related...)
+		for j := range out[i].Details.Related {
+			out[i].Details.Related[j].Changes = append([]Change(nil), out[i].Details.Related[j].Changes...)
+		}
+		out[i].Details.Impacts = append([]Impact(nil), out[i].Details.Impacts...)
 	}
 	return out
 }

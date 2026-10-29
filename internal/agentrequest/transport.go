@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
@@ -22,26 +23,36 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 	defer admission.Release()
 	ctx, cancel := context.WithTimeout(parent, time.Duration(s.TimeoutSeconds)*time.Second)
 	defer cancel()
+	ctx = diagnostic.WithRecorder(ctx)
 	usage := Usage{Unknown: true}
 	raw := []byte{}
 	status := 0
 	complete := false
+	protocolCompleted := false
 	redacted := false
 	code := ""
 	state := "failed"
+	finish := func(finalState, finalCode string, sent bool) {
+		diagnostic.ProtocolComplete(ctx, protocolCompleted)
+		origin, message := requestFailureHint(finalCode)
+		facts := diagnostic.Finish(ctx, finalState == "succeeded", false, !usage.Unknown, status, message, origin)
+		r.complete(id, in, finalState, finalCode, status, raw, complete, redacted, usage, sent, diagnostic.Encode(facts))
+	}
 	key, err := r.secrets.OpenAgentKey(encrypted, "model")
 	if err != nil {
-		r.complete(id, in, state, "credential_unavailable", status, raw, complete, redacted, usage, false)
+		diagnostic.RecordKnownError(ctx, "credential", "platform", "credential_unavailable", "The configured credential could not be opened", err)
+		finish(state, "credential_unavailable", false)
 		return
 	}
 	defer clear(key)
 	if containsSecret(body, key) {
-		r.complete(id, in, state, "invalid_request", status, raw, complete, redacted, usage, false)
+		finish(state, "invalid_request", false)
 		return
 	}
 	client, err := r.stack.NewClient(s.BaseURL)
 	if err != nil {
-		r.complete(id, in, state, "endpoint_unavailable", status, raw, complete, redacted, usage, false)
+		diagnostic.RecordKnownError(ctx, "policy", "policy", "endpoint_invalid", "The configured endpoint could not pass outbound policy", err)
+		finish(state, "endpoint_unavailable", false)
 		return
 	}
 	var sent atomic.Bool
@@ -51,18 +62,40 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 		}
 	}}
 	ctx = httptrace.WithClientTrace(ctx, trace)
-	ctx = egress.WithDispatchCheck(ctx, func(check context.Context) error { return r.authorize(check, in.Attribution) })
+	if s.Provider == ProviderCodex {
+		child, release, e := r.codex.RequestContext(ctx, s.ConnectionRevision)
+		if e != nil {
+			finish(state, "connection_changed", false)
+			return
+		}
+		defer release()
+		ctx = child
+	}
+	ctx = egress.WithDispatchCheck(ctx, func(check context.Context) error {
+		if err := r.authorize(check, in.Attribution); err != nil {
+			return err
+		}
+		if s.Provider == ProviderCodex {
+			return r.codex.ValidateGeneration(check, s.ConnectionRevision)
+		}
+		return nil
+	})
 	path := "/chat/completions"
-	if s.Provider == ProviderResponses || s.Provider == ProviderChatGPT {
+	if s.Provider == ProviderResponses || s.Provider == ProviderChatGPT || s.Provider == ProviderCodex {
 		path = "/responses"
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.BaseURL, "/")+path, bytes.NewReader(body))
 	if err != nil {
-		r.complete(id, in, state, "invalid_request", status, raw, complete, redacted, usage, false)
+		finish(state, "invalid_request", false)
 		return
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Authorization", "Bearer "+string(key))
+	if s.Provider == ProviderCodex {
+		request.Header.Set("ChatGPT-Account-ID", s.CodexAccountID)
+		request.Header.Set("originator", "nonbiriapi")
+		request.Header.Set("Accept", "text/event-stream")
+	}
 	response, err := client.Do(request)
 	if response != nil {
 		sent.Store(true)
@@ -82,12 +115,20 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 	raw, redacted = sanitizeSecret(raw, key)
 	parsed, parseErr := parseResult(id, raw)
 	protocolCode := "protocol"
-	if s.Provider == ProviderResponses || s.Provider == ProviderChatGPT {
+	if s.Provider == ProviderResponses || s.Provider == ProviderChatGPT || s.Provider == ProviderCodex {
 		var protocolComplete bool
-		parsed, protocolComplete, protocolCode, parseErr = parseResponsesResult(id, raw, s)
+		if s.Provider == ProviderCodex {
+			parsed, protocolComplete, protocolCode, parseErr = parseCodexResult(id, raw, s)
+		} else {
+			parsed, protocolComplete, protocolCode, parseErr = parseResponsesResult(id, raw, s)
+		}
 		complete = complete && protocolComplete
 	}
 	usage = parsed.Usage
+	protocolCompleted = complete && parseErr == nil && status >= 200 && status < 300
+	if status >= 200 && status < 300 && parseErr != nil {
+		diagnostic.RecordError(ctx, "decode_response", parseErr)
+	}
 	switch {
 	case parent.Err() != nil:
 		if r.context.Err() != nil {
@@ -110,7 +151,37 @@ func (r *Runtime) execute(parent context.Context, id int64, in Input, s Settings
 			state = "succeeded"
 		}
 	}
-	r.complete(id, in, state, code, status, raw, complete, redacted, usage, sent.Load())
+	if ctx.Err() != nil {
+		diagnostic.RecordError(ctx, "execute", ctx.Err())
+	}
+	finish(state, code, sent.Load())
+}
+
+func requestFailureHint(code string) (origin, message string) {
+	switch code {
+	case "upstream_status", "upstream_error":
+		return "upstream_response", "The upstream returned an error"
+	case "transport":
+		return "network", "The model connection failed"
+	case "timeout":
+		return "timeout", "The request deadline was exceeded"
+	case "cancelled":
+		return "client_cancel", "The request was canceled"
+	case "protocol", "upstream_incomplete":
+		return "upstream_protocol", "The model response did not complete successfully"
+	case "connection_changed":
+		return "platform", "The model connection changed before dispatch"
+	case "credential_unavailable":
+		return "platform", "The configured credential could not be opened"
+	case "endpoint_unavailable":
+		return "platform", "The configured endpoint could not be used"
+	case "invalid_request":
+		return "platform", "The request could not be sent with the current settings"
+	case "interrupted":
+		return "recovery_unknown", "Execution was interrupted"
+	default:
+		return "platform", "No further failure information was recorded"
+	}
 }
 func parseResult(id int64, raw []byte) (Result, error) {
 	result := Result{RequestID: id, RawResponse: string(raw), Usage: Usage{Unknown: true}}
@@ -131,8 +202,8 @@ func parseResult(id int64, raw []byte) (Result, error) {
 			} `json:"completion_tokens_details"`
 		} `json:"usage"`
 	}
-	if json.Unmarshal(raw, &response) != nil {
-		return result, ErrProtocol
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return result, errors.Join(ErrProtocol, err)
 	}
 	if u := response.Usage; u != nil && u.Input != nil && u.Output != nil {
 		values := []int64{*u.Input, *u.Output, u.CacheWrite, u.InputDetails.Cached, u.OutputDetails.Reasoning}

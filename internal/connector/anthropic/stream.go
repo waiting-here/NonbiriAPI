@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connector/continuation"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -32,9 +33,11 @@ type streamChoice struct {
 }
 
 type streamDelta struct {
-	Role      string                `json:"role,omitempty"`
-	Content   *string               `json:"content,omitempty"`
-	ToolCalls []streamToolCallDelta `json:"tool_calls,omitempty"`
+	Role         string                `json:"role,omitempty"`
+	Content      *string               `json:"content,omitempty"`
+	ToolCalls    []streamToolCallDelta `json:"tool_calls,omitempty"`
+	Reasoning    *string               `json:"reasoning_content,omitempty"`
+	ExtraContent any                   `json:"extra_content,omitempty"`
 }
 
 type streamToolCallDelta struct {
@@ -54,6 +57,9 @@ type openContentBlock struct {
 	kind      string
 	toolIndex int
 	arguments bytes.Buffer
+	native    map[string]json.RawMessage
+	content   bytes.Buffer
+	signature bytes.Buffer
 }
 
 type cumulativeUsage struct {
@@ -101,7 +107,7 @@ func (b *callerStreamBudget) consume(size int, errorFrame bool) error {
 	return nil
 }
 
-func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, response *http.Response, publicModel string, started time.Time, wireGuard, semanticGuard *sensitiveGuard, errorContext upstreamerror.Context) connectorcontract.AttemptResult {
+func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, response *http.Response, publicModel string, started time.Time, wireGuard, semanticGuard *sensitiveGuard, errorContext upstreamerror.Context, includeUsage bool, continuationID string) connectorcontract.AttemptResult {
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	events, errs := egress.StreamSSE(streamCtx, response.Body, egress.SSEOptions{
@@ -127,6 +133,8 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 	stopReason := ""
 	usageState := cumulativeUsage{}
 	terminalSeen := false
+	var blocks []json.RawMessage
+	hasThinking := false
 
 	for {
 		event, ok, nextErr := nextSSEEvent(streamCtx, events, errs)
@@ -139,7 +147,11 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 				return result
 			}
 			if terminalSeen && (nextErr == nil || errors.Is(nextErr, io.EOF)) {
-				return a.finalizeStream(writer, controller, response.StatusCode, committed, wireGuard, messageID, publicModel, started, stopReason, usageState.final())
+				var extra any
+				if hasThinking {
+					extra = continuation.Bind(thinkingExtra(blocks), continuationID)
+				}
+				return a.finalizeStream(writer, controller, response.StatusCode, committed, wireGuard, messageID, publicModel, started, stopReason, usageState.final(), includeUsage, extra)
 			}
 			return connectorcontract.ReadFailed(a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream stream ended before completion"), nextErr, ctx)
 		}
@@ -176,7 +188,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 				return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream stream start was invalid")
 			}
 			message, err := strictObject(root["message"])
-			if err != nil || !onlyKeys(message, "id", "type", "role", "model", "content", "stop_reason", "stop_sequence", "stop_details", "container", "usage") {
+			if err != nil || !onlyKeys(message, "id", "type", "role", "model", "content", "stop_reason", "stop_sequence", "stop_details", "container", "usage", "diagnostics") || !emptyDiagnostics(message["diagnostics"]) {
 				return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream stream start was invalid")
 			}
 			var kind, role, upstreamModel string
@@ -235,14 +247,15 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 			}
 			switch blockType {
 			case "text":
-				if !onlyKeys(block, "type", "text") {
+				if !onlyKeys(block, "type", "text", "citations") || !emptyCitations(block["citations"]) {
 					return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream text block was invalid")
 				}
 				var initial string
 				if json.Unmarshal(block["text"], &initial) != nil {
 					return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream text block was invalid")
 				}
-				openBlock = &openContentBlock{index: index, kind: "text"}
+				openBlock = &openContentBlock{index: index, kind: "text", native: block}
+				openBlock.content.WriteString(initial)
 				if initial != "" {
 					var result connectorcontract.AttemptResult
 					committed, result = a.writeTextDelta(writer, controller, wireGuard, semanticGuard, messageID, publicModel, started, initial, committed, usageState.final())
@@ -266,7 +279,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 				if semanticGuard.Contains([]byte(id)) || semanticGuard.Contains([]byte(name)) {
 					return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream stream was rejected")
 				}
-				openBlock = &openContentBlock{index: index, kind: "tool_use", toolIndex: toolCount}
+				openBlock = &openContentBlock{index: index, kind: "tool_use", toolIndex: toolCount, native: block}
 				frame, err := marshalStreamFrame(streamEnvelope{
 					ID: messageID, Object: "chat.completion.chunk", Created: started.Unix(), Model: publicModel,
 					Choices: []streamChoice{{Index: 0, Delta: streamDelta{ToolCalls: []streamToolCallDelta{{Index: toolCount, ID: id, Type: "function", Function: streamToolFunctionDelta{Name: name, Arguments: ""}}}}}},
@@ -285,6 +298,24 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 					return sinkFailure(committed, usageState.final())
 				}
 				toolCount++
+			case "thinking", "redacted_thinking":
+				initial, err := thinkingBlock(block, false)
+				if err != nil {
+					return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream thinking block was invalid")
+				}
+				hasThinking = true
+				openBlock = &openContentBlock{index: index, kind: blockType, native: block}
+				openBlock.content.WriteString(initial)
+				var signature string
+				_ = json.Unmarshal(block["signature"], &signature)
+				openBlock.signature.WriteString(signature)
+				if initial != "" {
+					var result connectorcontract.AttemptResult
+					committed, result = a.writeContentDelta(writer, controller, wireGuard, semanticGuard, messageID, publicModel, started, initial, committed, usageState.final(), true)
+					if result.Failure != connectorcontract.FailureNone {
+						return result
+					}
+				}
 			default:
 				return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream content block type was unsupported")
 			}
@@ -311,6 +342,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 				if json.Unmarshal(delta["text"], &text) != nil {
 					return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream text delta was invalid")
 				}
+				openBlock.content.WriteString(text)
 				var result connectorcontract.AttemptResult
 				committed, result = a.writeTextDelta(writer, controller, wireGuard, semanticGuard, messageID, publicModel, started, text, committed, usageState.final())
 				if result.Failure != connectorcontract.FailureNone {
@@ -326,6 +358,23 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 					return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream tool arguments were invalid")
 				}
 				openBlock.arguments.WriteString(partial)
+			case openBlock.kind == "thinking" && deltaType == "thinking_delta" && onlyKeys(delta, "type", "thinking"):
+				var text string
+				if json.Unmarshal(delta["thinking"], &text) != nil {
+					return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream thinking delta was invalid")
+				}
+				openBlock.content.WriteString(text)
+				var result connectorcontract.AttemptResult
+				committed, result = a.writeContentDelta(writer, controller, wireGuard, semanticGuard, messageID, publicModel, started, text, committed, usageState.final(), true)
+				if result.Failure != connectorcontract.FailureNone {
+					return result
+				}
+			case openBlock.kind == "thinking" && deltaType == "signature_delta" && onlyKeys(delta, "type", "signature"):
+				var signature string
+				if json.Unmarshal(delta["signature"], &signature) != nil || openBlock.signature.Len()+len(signature) > 64<<10 {
+					return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream thinking signature was invalid")
+				}
+				openBlock.signature.WriteString(signature)
 			default:
 				return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream content delta type was invalid")
 			}
@@ -357,7 +406,22 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 				if result.Failure != connectorcontract.FailureNone {
 					return result
 				}
+				openBlock.native["input"] = append(json.RawMessage(nil), arguments...)
 			}
+			if openBlock.kind == "text" {
+				openBlock.native["text"], _ = json.Marshal(openBlock.content.String())
+			}
+			if openBlock.kind == "thinking" {
+				if openBlock.content.Len() > 0 || openBlock.native["thinking"] != nil {
+					openBlock.native["thinking"], _ = json.Marshal(openBlock.content.String())
+				}
+				openBlock.native["signature"], _ = json.Marshal(openBlock.signature.String())
+				if _, err := thinkingBlock(openBlock.native, true); err != nil {
+					return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream thinking signature was missing")
+				}
+			}
+			saved, _ := json.Marshal(openBlock.native)
+			blocks = append(blocks, saved)
 			clear(openBlock.arguments.Bytes())
 			openBlock = nil
 		case "message_delta":
@@ -399,6 +463,10 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 }
 
 func (a *Adapter) writeTextDelta(writer http.ResponseWriter, controller *http.ResponseController, wireGuard, semanticGuard *sensitiveGuard, messageID, publicModel string, started time.Time, text string, committed bool, usage connectorcontract.Usage) (bool, connectorcontract.AttemptResult) {
+	return a.writeContentDelta(writer, controller, wireGuard, semanticGuard, messageID, publicModel, started, text, committed, usage, false)
+}
+
+func (a *Adapter) writeContentDelta(writer http.ResponseWriter, controller *http.ResponseController, wireGuard, semanticGuard *sensitiveGuard, messageID, publicModel string, started time.Time, text string, committed bool, usage connectorcontract.Usage, reasoning bool) (bool, connectorcontract.AttemptResult) {
 	decoded := []byte(text)
 	reflected := semanticGuard.Contains(decoded)
 	clear(decoded)
@@ -408,9 +476,13 @@ func (a *Adapter) writeTextDelta(writer http.ResponseWriter, controller *http.Re
 	remaining := text
 	for {
 		chunk, rest := takeSafeStringChunk(remaining)
+		delta := streamDelta{Content: &chunk}
+		if reasoning {
+			delta = streamDelta{Reasoning: &chunk}
+		}
 		frame, err := marshalStreamFrame(streamEnvelope{
 			ID: messageID, Object: "chat.completion.chunk", Created: started.Unix(), Model: publicModel,
-			Choices: []streamChoice{{Index: 0, Delta: streamDelta{Content: &chunk}}},
+			Choices: []streamChoice{{Index: 0, Delta: delta}},
 		})
 		if err != nil || wireGuard.Contains(frame) {
 			clear(frame)
@@ -476,11 +548,11 @@ func takeSafeStringChunk(value string) (string, string) {
 	return value[:end], value[end:]
 }
 
-func (a *Adapter) finalizeStream(writer http.ResponseWriter, controller *http.ResponseController, upstreamStatus int, committed bool, wireGuard *sensitiveGuard, messageID, publicModel string, started time.Time, stopReason string, finalUsage connectorcontract.Usage) connectorcontract.AttemptResult {
+func (a *Adapter) finalizeStream(writer http.ResponseWriter, controller *http.ResponseController, upstreamStatus int, committed bool, wireGuard *sensitiveGuard, messageID, publicModel string, started time.Time, stopReason string, finalUsage connectorcontract.Usage, includeUsage bool, extra any) connectorcontract.AttemptResult {
 	finish := stopReason
 	frame, err := marshalStreamFrame(streamEnvelope{
 		ID: messageID, Object: "chat.completion.chunk", Created: started.Unix(), Model: publicModel,
-		Choices: []streamChoice{{Index: 0, Delta: streamDelta{}, FinishReason: &finish}},
+		Choices: []streamChoice{{Index: 0, Delta: streamDelta{ExtraContent: extra}, FinishReason: &finish}},
 	})
 	if err != nil || wireGuard.Contains(frame) {
 		clear(frame)
@@ -495,7 +567,7 @@ func (a *Adapter) finalizeStream(writer http.ResponseWriter, controller *http.Re
 		}
 		return connectorcontract.ConfirmedSuccess(sinkFailure(committed, finalUsage), upstreamStatus)
 	}
-	if finalUsage.Present {
+	if finalUsage.Present && includeUsage {
 		visible, ok := visibleUsage(finalUsage)
 		if ok {
 			frame, err = marshalStreamFrame(streamEnvelope{ID: messageID, Object: "chat.completion.chunk", Created: started.Unix(), Model: publicModel, Choices: []streamChoice{}, Usage: &visible})
@@ -658,7 +730,7 @@ func (s *cumulativeUsage) merge(raw []byte, initial, full bool) error {
 		return ErrInvalidResponse
 	}
 	object, err := strictObject(raw)
-	allowed := []string{"input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens", "output_tokens_details", "server_tool_use"}
+	allowed := []string{"input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens", "output_tokens_details", "server_tool_use", "speed"}
 	if full {
 		allowed = append(allowed, "cache_creation", "inference_geo", "service_tier")
 	}

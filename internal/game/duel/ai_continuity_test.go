@@ -48,7 +48,7 @@ func TestAIChallengeEligibilitySurvivesAccountRecreation(t *testing.T) {
 		tx.Rollback()
 		t.Fatal("reused account", err)
 	}
-	identity, err := continuity.New(f.db, deps{})
+	identity, err := continuity.New(f.db, deps{}, f.options.ReadDatabase)
 	if err != nil {
 		tx.Rollback()
 		t.Fatal(err)

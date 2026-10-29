@@ -38,9 +38,9 @@ const (
 )
 
 type projectionConfig struct {
-	endpointDefault, rpmDefault, lightRPMDefault, globalRPMDefault, concurrencyDefault int64
-	thresholds                                                                         [5]int64
-	display                                                                            [7]string
+	endpointDefault, rpmDefault, lightRPMDefault, globalRPMDefault, concurrencyDefault, lightConcurrencyDefault int64
+	thresholds                                                                                                  [5]int64
+	display                                                                                                     [7]string
 }
 
 type userRow struct {
@@ -79,13 +79,15 @@ func rollbackUnlessDone(tx *sql.Tx, done *bool) {
 }
 
 func readProjectionConfig(ctx context.Context, tx *sql.Tx) (projectionConfig, error) {
-	config := projectionConfig{concurrencyDefault: db.DefaultUserConcurrencyLimit}
+	config := projectionConfig{concurrencyDefault: db.DefaultUserConcurrencyLimit, lightConcurrencyDefault: db.DefaultUserLightConcurrencyLimit}
 	uints := []struct {
 		key      string
 		min, max int64
 		dst      *int64
 	}{
 		{"default_endpoint_limit", 0, 10000, &config.endpointDefault},
+		{"default_concurrency_per_user", 1, db.MaxUserConcurrencyLimit, &config.concurrencyDefault},
+		{"default_light_concurrency_per_user", 1, db.MaxUserConcurrencyLimit, &config.lightConcurrencyDefault},
 		{"default_rpm_per_user", 1, db.MaxUserRPMLimit, &config.rpmDefault},
 		{"default_light_rpm_per_user", 1, db.MaxUserRPMLimit, &config.lightRPMDefault},
 		{"global_rpm_per_user", 1, db.MaxUserRPMLimit, &config.globalRPMDefault},
@@ -100,6 +102,9 @@ func readProjectionConfig(ctx context.Context, tx *sql.Tx) (projectionConfig, er
 	for _, item := range uints {
 		var raw string
 		if err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key=?`, item.key).Scan(&raw); err != nil {
+			if errors.Is(err, sql.ErrNoRows) && (item.key == "default_concurrency_per_user" || item.key == "default_light_concurrency_per_user") {
+				continue
+			}
 			return projectionConfig{}, classifyDatabaseError("read projection configuration", err)
 		}
 		value, err := strconv.ParseInt(raw, 10, 64)
@@ -217,7 +222,7 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 		RPMLimit: nullableIntString(row.rpmLimit), EffectiveRPMLimit: effectiveLimit(row.rpmLimit, config.rpmDefault),
 		ConcurrencyLimit: nullableIntString(row.concurrencyLimit), EffectiveConcurrencyLimit: effectiveLimit(row.concurrencyLimit, config.concurrencyDefault),
 		LightRPMLimit: nullableIntString(row.lightRPMLimit), EffectiveLightRPMLimit: effectiveLimit(row.lightRPMLimit, config.lightRPMDefault),
-		LightConcurrencyLimit: nullableIntString(row.lightConcurrencyLimit), EffectiveLightConcurrencyLimit: effectiveLimit(row.lightConcurrencyLimit, db.DefaultUserLightConcurrencyLimit),
+		LightConcurrencyLimit: nullableIntString(row.lightConcurrencyLimit), EffectiveLightConcurrencyLimit: effectiveLimit(row.lightConcurrencyLimit, config.lightConcurrencyDefault),
 		GlobalRPMLimit: nullableIntString(row.globalRPMLimit), EffectiveGlobalRPMLimit: effectiveLimit(row.globalRPMLimit, config.globalRPMDefault),
 		Lang: row.lang, Balance: formatMilliPoints(wallet.Balance.Big()), GameBalance: formatMilliPoints(gameWallet.Balance.Big()), DonationCredit: formatMilliPoints(donation.Big()),
 		Level:             level,
@@ -285,7 +290,7 @@ func (service *Service) listUsers(ctx context.Context, adminID int64, role manag
 	if query.Cursor != "" && (after == 0 || after > math.MaxInt64) {
 		return Page[AdminUser]{}, ErrInvalidRequest
 	}
-	tx, err := service.beginManagedUserRead(ctx, adminID, role, query.Page != nil)
+	tx, err := service.beginManagedUserRead(ctx, adminID, role, true)
 	if err != nil {
 		return Page[AdminUser]{}, err
 	}
@@ -387,7 +392,7 @@ func (service *Service) getUser(ctx context.Context, adminID, userID int64, role
 	if !validNow(now) {
 		return AdminUser{}, ErrUnavailable
 	}
-	tx, err := service.beginManagedUserRead(ctx, adminID, role, false)
+	tx, err := service.beginManagedUserRead(ctx, adminID, role, true)
 	if err != nil {
 		return AdminUser{}, err
 	}
@@ -413,7 +418,7 @@ func (service *Service) getUser(ctx context.Context, adminID, userID int64, role
 }
 
 func (service *Service) SiteUsage(ctx context.Context, adminID int64) (UsageSummary, error) {
-	tx, err := service.beginAuthorized(ctx, adminID)
+	tx, err := service.beginManagement(ctx, adminID, roleAdmin, true)
 	if err != nil {
 		return UsageSummary{}, err
 	}
@@ -459,7 +464,7 @@ func (service *Service) UserUsage(ctx context.Context, adminID int64, query Page
 	if query.Cursor != "" && (after == 0 || after > math.MaxInt64) {
 		return Page[AdminUserUsage]{}, ErrInvalidRequest
 	}
-	tx, err := service.beginListRead(ctx, adminID, query.Page != nil)
+	tx, err := service.beginListRead(ctx, adminID)
 	if err != nil {
 		return Page[AdminUserUsage]{}, err
 	}
@@ -540,7 +545,7 @@ func (service *Service) Activity(ctx context.Context, adminID int64, query PageQ
 	if query.Cursor != "" && after > uint64(maxUnixSecond) {
 		return ActivityPage{}, ErrInvalidRequest
 	}
-	tx, err := service.beginListRead(ctx, adminID, query.Page != nil)
+	tx, err := service.beginListRead(ctx, adminID)
 	if err != nil {
 		return ActivityPage{}, err
 	}

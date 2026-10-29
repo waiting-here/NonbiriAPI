@@ -78,6 +78,7 @@ func (repository *Repository) exportManagement(ctx context.Context, reader logRe
 		Phase:  filter.Phase,
 		UserID: filter.UserID, DiscordID: filter.DiscordID, EndpointKeyID: filter.EndpointKeyID, EndpointBaseURL: filter.EndpointBaseURL,
 		UpstreamModel: filter.UpstreamModel, CharityModel: filter.CharityModel, ErrorCode: filter.ErrorCode,
+		ErrorCategory: filter.ErrorCategory, ErrorPhase: filter.ErrorPhase,
 		Status: filter.Status, UsageTotalMismatch: filter.UsageTotalMismatch,
 		From: filter.From, To: filter.To, Limit: maximumLimit,
 	}, "admin")
@@ -93,6 +94,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
 	args = append(args, now-requestLogRetentionSeconds)
 	query += phaseFilter(normalized.Phase)
+	query, args = diagnosisFilter(query, args, normalized)
 	if normalized.UserID != nil {
 		query += ` AND l.origin_user_id=?`
 		args = append(args, *normalized.UserID)

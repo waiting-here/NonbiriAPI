@@ -19,7 +19,7 @@ import (
 )
 
 func (s *Service) processVerification(ctx context.Context, job *verifyJob) error {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return err
 	}
@@ -239,6 +239,9 @@ func (s *Service) settleVerified(ctx context.Context, id string) error {
 		return ErrInvariant
 	}
 	if c.playtest {
+		if err = managementlog.StartRelatedCaptureTx(ctx, tx, "fatfish_playtest", id); err != nil {
+			return err
+		}
 		state := "settled_fail"
 		if result.Passed {
 			state = "settled_pass"
@@ -267,7 +270,7 @@ func (s *Service) settleVerified(ctx context.Context, id string) error {
 		if err != nil {
 			return err
 		}
-		if err = managementlog.AppendRelatedTx(ctx, tx, "fatfish_playtest", id, managementlog.Item{Action: "verify", TargetKind: "playtest", TargetID: id, Outcome: managementlog.Succeeded, Code: state}, true); err != nil {
+		if err = managementlog.AppendRelatedTx(ctx, tx, "fatfish_playtest", id, managementlog.Item{Action: "verify", TargetKind: "playtest", TargetID: playtestID, Outcome: managementlog.Succeeded, Code: state}, true); err != nil {
 			return err
 		}
 		return tx.Commit()

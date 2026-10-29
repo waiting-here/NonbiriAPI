@@ -30,6 +30,7 @@ vi.mock('./driversApi', async (original) => ({
   importChatGPT: mocks.import,
   logoutChatGPT: mocks.logout,
 }));
+vi.mock('./CodexConnection', () => ({ CodexConnection: () => null }));
 vi.mock('./api', async (original) => ({
   ...(await original<typeof import('./api')>()),
   getMemoryOwners: mocks.owners,

@@ -17,6 +17,9 @@ func TestPersonalExportExcludesAgentAdministratorAssets(t *testing.T) {
 		`INSERT INTO ai_agent_personal_memory_history(owner_id,before_content,after_content,revision,actor_id,actor_label,created_at) VALUES(7,'','administrator-asset-sentinel',1,7,'administrator-asset-sentinel',1)`,
 		`INSERT INTO management_operations(event_id,created_at,bucket,group_key,source,executor_kind,actor_id,actor_name,domain,action,outcome,summary) VALUES('administrator-asset-sentinel',1,0,'administrator-asset-sentinel','web','human','7','administrator-asset-sentinel','configuration','update','succeeded','administrator-asset-sentinel')`,
 		`INSERT INTO agent_requests(client_request_id,source,kind,actor_id,actor_role,actor_label,input_json,state,created_at) VALUES('administrator-asset-sentinel','steward_chat','model',7,'level5','administrator-asset-sentinel','{}','pending',1)`,
+		`INSERT INTO agent_codex_session(id,revision,account_label,updated_at) VALUES(1,1,'administrator-asset-sentinel',1)`,
+		`INSERT INTO agent_request_diagnostics(request_id,details) SELECT id,'{"message":"administrator-asset-sentinel"}' FROM agent_requests WHERE client_request_id='administrator-asset-sentinel'`,
+		`INSERT INTO management_operation_terms(term,operation_id,ordinal) SELECT 'administrator-asset-sentinel',id,1 FROM management_operations WHERE event_id='administrator-asset-sentinel'`,
 	} {
 		if _, err := f.store.DB().Exec(statement); err != nil {
 			t.Fatal(err)

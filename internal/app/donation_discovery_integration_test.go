@@ -1,12 +1,16 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -79,6 +83,32 @@ func testManagedDonationDiscoveryRegisteredSessionRoutes(t *testing.T, share, ap
 		}
 	}
 	exec(`UPDATE users SET level=6 WHERE id=?`, f.userID)
+	for _, authority := range []struct {
+		role string
+		kind authz.ActorKind
+		id   int64
+	}{
+		{"admin", authz.ActorAdminSession, f.adminID},
+		{"level6", authz.ActorUserSession, f.userID},
+	} {
+		t.Run(authority.role+" discovery reader", func(t *testing.T) {
+			actor := authz.Actor{Kind: authority.kind, UserID: authority.id}
+			if err := f.store.ReadDB().QueryRow(`SELECT token_hash,cred_gen FROM sessions WHERE user_id=?`, actor.UserID).Scan(&actor.SessionTokenHash, &actor.SessionGeneration); err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			writer, err := f.store.DB().Conn(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer writer.Close()
+			// Exercise the real donation authority while the sole writer is held.
+			if _, err := f.app.resourceRepo.ManagedDiscoveryEvidence(auth.WithSessionActor(ctx, actor), authority.role, authority.id, mustAppFixtureID(t, d.ID), mustAppFixtureID(t, key)); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
 	selected := testApplicationRequest(t, f.app.handler, "POST", auditUserHost, "/api/steward/donation-keys/models/refresh/selection", `{"donation_id":null,"cursor":null}`, f.cookies, headers(auditUserHost, "S"))
 	if selected.Code != 200 || !strings.Contains(selected.Body.String(), `"key_id":"`+key+`"`) {
 		t.Fatalf("select: %d %s", selected.Code, selected.Body)

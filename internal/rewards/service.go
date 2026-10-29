@@ -28,6 +28,9 @@ func New(c Config) (*Service, error) {
 	if c.Database == nil || c.Users == nil || c.Admins == nil || c.Gate == nil || c.Keys == nil {
 		return nil, ErrInvalid
 	}
+	if c.ReadDatabase == nil {
+		c.ReadDatabase = c.Database
+	}
 	if c.Now == nil {
 		c.Now = time.Now
 	}
@@ -105,7 +108,7 @@ func (s *Service) Preview(ctx context.Context, actor int64, in Input) (Preview, 
 	if err != nil {
 		return out, err
 	}
-	tx, err := s.config.Database.BeginTx(ctx, nil)
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return out, err
 	}
@@ -298,7 +301,7 @@ func (s *Service) List(ctx context.Context, actor int64, cursor string) (Campaig
 	if err != nil {
 		return out, err
 	}
-	tx, err := s.config.Database.BeginTx(ctx, nil)
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return out, err
 	}

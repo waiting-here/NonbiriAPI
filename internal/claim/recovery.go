@@ -301,7 +301,7 @@ OR EXISTS(SELECT 1 FROM logical_requests WHERE state IN ('accepted','running'))`
 
 func (s *Service) hasClaimRecoveryWork(ctx context.Context) (bool, error) {
 	var pending int
-	err := s.db.QueryRowContext(ctx, claimRecoveryPendingSQL).Scan(&pending)
+	err := s.readDB.QueryRowContext(ctx, claimRecoveryPendingSQL).Scan(&pending)
 	if err != nil {
 		return false, fmt.Errorf("claim: inspect recovery backlog: %w", err)
 	}

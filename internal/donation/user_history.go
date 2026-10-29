@@ -26,7 +26,7 @@ func (s *Service) beginUserHistoryTx(ctx context.Context, role reviewerRole, act
 	if role != reviewerSteward {
 		return nil, false, ErrInvalidRequest
 	}
-	tx, err := s.beginOwnerTx(ctx, actorID)
+	tx, err := s.beginBrowseTx(ctx, recurringOwner, actorID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -90,22 +90,24 @@ func userDonationHistoryTx(ctx context.Context, tx *sql.Tx, targetID int64, ids 
 	if err != nil {
 		return nil, err
 	}
+	projected, err := readDonationPageSummariesTx(ctx, tx, ids, now)
+	if err != nil {
+		return nil, err
+	}
 	items := make([]UserDonationHistory, 0, len(ids))
 	for _, id := range ids {
-		header, err := logicalHeaderTx(ctx, tx, id, now)
-		if err != nil {
-			return nil, err
+		item, ok := projected[strconv.FormatInt(id, 10)]
+		if !ok {
+			return nil, ErrInvariant
 		}
-		header.UseSummary = summaries[id]
+		header, summary := item.header, item.summary
+		summary.UseSummary = summaries[id]
 		if !full {
 			header = traineeReviewProjection(header)
-		}
-		summary, err := donationSummaryTx(ctx, tx, header, now)
-		if err != nil {
-			return nil, err
+			summary.DiscordPublicThanks = header.DiscordPublicThanks
 		}
 		items = append(items, UserDonationHistory{AdminDonationSummary: AdminDonationSummary{
-			DonationSummary: summary, Owner: header.Owner, Reviewer: header.Reviewer, Handling: header.Handling,
+			DonationSummary: summary, Sources: item.sources, Owner: header.Owner, Reviewer: header.Reviewer, Handling: header.Handling,
 		}, OwnerHiddenAt: hidden[id]})
 	}
 	return items, nil

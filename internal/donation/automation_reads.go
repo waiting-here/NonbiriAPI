@@ -36,7 +36,7 @@ func automationDonation(ctx context.Context, tx *sql.Tx, id, now int64) (Automat
 }
 func (s *Service) AutomationDonations(ctx context.Context, userID int64, q string, page pagination.Request) (AutomationPage[AutomationDonation], error) {
 	out := AutomationPage[AutomationDonation]{Data: []AutomationDonation{}}
-	tx, _, _, err := s.beginReviewTx(ctx, reviewerSteward, userID, true)
+	tx, err := s.beginDonationPageTx(ctx, reviewerSteward, userID)
 	if err != nil {
 		return out, err
 	}

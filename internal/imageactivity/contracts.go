@@ -55,17 +55,18 @@ type ActivityRecorder interface {
 	RecordLimitedActivityTx(context.Context, *sql.Tx, int64, int64) error
 }
 type Config struct {
-	Database    *sql.DB
-	Users       limitedactivities.UserAuthorizer
-	Admins      limitedactivities.AdminAuthorizer
-	Gate        limitedactivities.AdmissionGate
-	Admission   func(context.Context, *sql.Tx, int64, string, int64) (limitedactivities.Detail, error)
-	Vault       Vault
-	Egress      *egress.Stack
-	Sources     SourceWriter
-	Diagnostics DiagnosticScope
-	Activity    ActivityRecorder
-	Now         func() time.Time
+	Database     *sql.DB
+	ReadDatabase *sql.DB
+	Users        limitedactivities.UserAuthorizer
+	Admins       limitedactivities.AdminAuthorizer
+	Gate         limitedactivities.AdmissionGate
+	Admission    func(context.Context, *sql.Tx, int64, string, int64) (limitedactivities.Detail, error)
+	Vault        Vault
+	Egress       *egress.Stack
+	Sources      SourceWriter
+	Diagnostics  DiagnosticScope
+	Activity     ActivityRecorder
+	Now          func() time.Time
 	// ReportError receives operational failures; callers must not log raw private error text.
 	ReportError func(error)
 }

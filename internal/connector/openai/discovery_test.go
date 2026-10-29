@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"testing"
@@ -261,7 +262,7 @@ func TestModelDiscoveryMapsContextAndTransportFailures(t *testing.T) {
 			},
 			wantFailure: connectorcontract.DiscoveryFailureTransport,
 			wantCalls:   1,
-			wantDiag:    "upstream request failed",
+			wantDiag:    "model discovery request failed; no further cause was available",
 		},
 		{
 			name: "response and error",
@@ -272,7 +273,16 @@ func TestModelDiscoveryMapsContextAndTransportFailures(t *testing.T) {
 			wantStatus:   http.StatusBadGateway,
 			wantReceived: true,
 			wantCalls:    1,
-			wantDiag:     "upstream request failed",
+			wantDiag:     "model discovery request failed; no further cause was available",
+		},
+		{
+			name: "wrapped DNS failure",
+			do: func(*http.Request) (*http.Response, error) {
+				return nil, fmt.Errorf("private transport: %w", &net.DNSError{Name: "private.example", Err: "private resolver detail"})
+			},
+			wantFailure: connectorcontract.DiscoveryFailureTransport,
+			wantCalls:   1,
+			wantDiag:    "model discovery DNS lookup failed",
 		},
 		{
 			name: "rate-limit response and error",
@@ -283,7 +293,7 @@ func TestModelDiscoveryMapsContextAndTransportFailures(t *testing.T) {
 			wantStatus:   http.StatusTooManyRequests,
 			wantReceived: true,
 			wantCalls:    1,
-			wantDiag:     "upstream request failed",
+			wantDiag:     "model discovery request failed; no further cause was available",
 		},
 	}
 

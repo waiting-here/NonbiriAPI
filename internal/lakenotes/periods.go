@@ -70,7 +70,7 @@ func (s *Service) Periods(ctx context.Context, page, size int) (PeriodPage, erro
 	if page < 1 || page > 100000 || size < 1 || size > 100 {
 		return out, ErrInvalid
 	}
-	tx, e := s.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, e := s.readDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if e != nil {
 		return out, e
 	}

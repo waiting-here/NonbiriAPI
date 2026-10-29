@@ -200,6 +200,61 @@ for (const actor of ['admin', 'five', 'six'] as const) {
   });
 }
 
+for (const actor of ['admin', 'five', 'six'] as const) {
+  test(`${actor} reads user donation history and details from the real response`, async ({
+    browser,
+  }) => {
+    const state = fixture();
+    const context = await session(browser, state, actor);
+    const origin = actor === 'admin' ? state.admin_url : state.user_url;
+    const target = state.donation_context.owner.id;
+    const api = `${actor === 'admin' ? '/admin/api' : '/api/steward'}/users/${target}/donations`;
+    const page = await context.newPage();
+    try {
+      await page.goto(
+        origin + (actor === 'admin' ? '/users?user=' : '/steward?tab=users&user=') + target,
+      );
+      const [response] = await Promise.all([
+        page.waitForResponse(
+          (value) => value.request().method() === 'GET' && new URL(value.url()).pathname === api,
+        ),
+        page.getByRole('tab', { name: copy.management.permissions.history, exact: true }).click(),
+      ]);
+      expect(response.status()).toBe(200);
+      const history = (await response.json()) as {
+        data: { id: string; sources: Source[]; owner: unknown }[];
+      };
+      const table = page.getByRole('table', { name: copy.common.donationHistory.title });
+      for (const sample of state.donation_context.donations) {
+        const item = history.data.find((value) => value.id === sample.donation_id);
+        expect(item).toBeDefined();
+        assertSource(item!.sources[0], sample);
+        if (actor === 'five') expect(item!.owner).toBeNull();
+        const row = table.getByRole('row').filter({ hasText: sample.description });
+        await expect(row).toBeVisible();
+        const [received] = await Promise.all([
+          page.waitForResponse(
+            (value) => new URL(value.url()).pathname === `${api}/${sample.donation_id}`,
+          ),
+          row.getByRole('button', { name: copy.management.users.view, exact: true }).click(),
+        ]);
+        expect(received.status()).toBe(200);
+        const detail = (await received.json()) as { sources: Source[] };
+        assertSource(detail.sources[0], sample);
+        await expect(
+          page.getByRole('heading', { name: copy.common.donationHistory.detail, exact: true }),
+        ).toBeVisible();
+        await page
+          .getByRole('button', { name: copy.common.donationHistory.back, exact: true })
+          .click();
+        await expect(row).toBeVisible();
+      }
+    } finally {
+      await context.close();
+    }
+  });
+}
+
 test('owner donation APIs keep management source metadata private', async ({ browser }) => {
   const state = fixture();
   const context = await session(browser, state, 'owner');

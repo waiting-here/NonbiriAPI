@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+
+	"github.com/waiting-here/NonbiriAPI/internal/connector/continuation"
 )
 
 type responseChatCall struct {
@@ -19,6 +21,7 @@ type responseChatState struct {
 	text, refusal                               string
 	reasoning                                   string
 	gatewayReasoning                            bool
+	extra                                       json.RawMessage
 	calls                                       []responseChatCall
 	finish                                      string
 	usage                                       Usage
@@ -30,7 +33,7 @@ type responseChatState struct {
 	reasoningStarted                            bool
 }
 
-func (s *responseChatState) clear() { clear(s.usageRaw); *s = responseChatState{} }
+func (s *responseChatState) clear() { clear(s.usageRaw); clear(s.extra); *s = responseChatState{} }
 
 func (s *responseChatState) consume(raw []byte, stream bool) error {
 	if !validateEmbeddingJSON(raw) {
@@ -82,11 +85,18 @@ func (s *responseChatState) consume(raw []byte, stream bool) error {
 	}
 	allowed := []string{"role", "content", "refusal", "tool_calls", "annotations"}
 	if s.gatewayReasoning {
-		allowed = append(allowed, "reasoning_content")
+		allowed = append(allowed, "reasoning_content", "extra_content")
 	}
 	message, ok := decisionObject(choice[key], allowed...)
 	if !ok {
 		return errInvalidUpstreamResponse
+	}
+	if value := message["extra_content"]; value != nil {
+		outer, valid := systemOneMap(value)
+		if !valid || !continuation.ValidExtra(outer, "gateway") || outer["gateway"] == nil {
+			return errInvalidUpstreamResponse
+		}
+		s.extra = bytes.Clone(value)
 	}
 	if role := message["role"]; role != nil && !bytes.Equal(role, []byte(`"assistant"`)) || !stream && message["role"] == nil {
 		return errInvalidUpstreamResponse
@@ -209,7 +219,11 @@ func (s *responseChatState) status() string {
 func (s *responseChatState) messageID() string   { return "msg_" + s.id }
 func (s *responseChatState) reasoningID() string { return "rs_" + s.id }
 func (s *responseChatState) reasoningItem() map[string]any {
-	return map[string]any{"id": s.reasoningID(), "type": "reasoning", "summary": []any{}, "content": []any{map[string]string{"type": "reasoning_text", "text": s.reasoning}}, "status": s.status()}
+	item := map[string]any{"id": s.reasoningID(), "type": "reasoning", "summary": []any{}, "content": []any{map[string]string{"type": "reasoning_text", "text": s.reasoning}}, "status": s.status()}
+	if s.extra != nil && len(s.outputKinds()) > 0 && s.outputKinds()[0] == "reasoning" {
+		item["extra_content"] = s.extra
+	}
+	return item
 }
 
 // Streaming output indices follow first publication. JSON has no delta order,
@@ -223,6 +237,9 @@ func (s *responseChatState) outputKinds() []string {
 		order = append(order, "reasoning")
 	}
 	if s.text != "" || s.refusal != "" || s.messageStarted {
+		order = append(order, "message")
+	}
+	if len(order) == 0 && s.extra != nil && len(s.calls) == 0 {
 		order = append(order, "message")
 	}
 	return order
@@ -258,11 +275,19 @@ func (s *responseChatState) content() []any {
 	return out
 }
 func (s *responseChatState) message() map[string]any {
-	return map[string]any{"id": s.messageID(), "type": "message", "role": "assistant", "status": s.status(), "content": s.content()}
+	item := map[string]any{"id": s.messageID(), "type": "message", "role": "assistant", "status": s.status(), "content": s.content()}
+	if s.extra != nil && len(s.outputKinds()) > 0 && s.outputKinds()[0] == "message" {
+		item["extra_content"] = s.extra
+	}
+	return item
 }
 func (s *responseChatState) function(i int) map[string]any {
 	call := s.calls[i]
-	return map[string]any{"id": "fc_" + s.id + "_" + strconv.Itoa(i), "type": "function_call", "status": s.status(), "call_id": call.id, "name": call.name, "arguments": call.arguments}
+	item := map[string]any{"id": "fc_" + s.id + "_" + strconv.Itoa(i), "type": "function_call", "status": s.status(), "call_id": call.id, "name": call.name, "arguments": call.arguments}
+	if i == 0 && s.extra != nil && len(s.outputKinds()) == 0 {
+		item["extra_content"] = s.extra
+	}
+	return item
 }
 func (s *responseChatState) response(completed bool) map[string]any {
 	output := []any{}

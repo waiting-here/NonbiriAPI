@@ -26,6 +26,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/chatgptauth"
 	"github.com/waiting-here/NonbiriAPI/internal/checkin"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/codexauth"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -41,6 +42,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/reports"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
@@ -205,14 +207,16 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	var claimService *claim.Service
 	var assistant *aiagent.Service
 	var assistantRequests *agentrequest.Runtime
+	var assistantCodex *codexauth.Manager
 	performance := observability.NewPerformance()
 	store.SetConnectionObserver(performance)
+	store.SetManagementCapture(managementlog.CaptureEventID)
 	defer func() {
 		if built != nil {
 			return
 		}
 		partial := &application{
-			agent: assistant, agentRequests: assistantRequests,
+			agent: assistant, agentRequests: assistantRequests, codex: assistantCodex,
 			activityRuntime: activityEngines, accountEvents: accountConnections,
 			debug: debugHub, reports: reportRepository, lifecycle: lifecycleCoordinator,
 			games: gameRuntimes, forward: forwardRuntime, audits: audits,
@@ -316,7 +320,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	}
 	outbound.SetReturnMarker(marker)
 	returnAlerts = returnmarker.NewRecorder(workerContext, marker, adminAlertRepository.RecordReturnDetected)
-	donationReview, err := initializeDonationReview(startupContext, store.DB(), vault)
+	donationReview, err := initializeDonationReview(startupContext, store.ReadDB(), vault)
 	if err != nil {
 		return nil, fmt.Errorf("initialize donation review identities: %w", err)
 	}
@@ -347,6 +351,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		Performance:  performance,
 		Observations: audits.observations,
 		DB:           store.DB(),
+		ReadDB:       store.ReadDB(),
 		Secrets:      vault,
 		Accounting:   claim.NewLedgerAccounting(),
 		Charity:      charityService,
@@ -537,7 +542,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		return nil, fmt.Errorf("create limited activity runtimes: %w", err)
 	}
 	adminUserService, err := adminusers.NewService(adminusers.ServiceConfig{
-		Database: store.DB(), CursorKeys: vault, FinalAuth: roleAuthorizer, Invalidator: userInvalidations,
+		Database: store.DB(), ReadDatabase: store.ReadDB(), CursorKeys: vault, FinalAuth: roleAuthorizer, Invalidator: userInvalidations,
 		CancelUserDuelsTx: activityEngines.CancelUserTx,
 	})
 	if err != nil {
@@ -578,7 +583,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err := audits.attachAccess(resourceRepository); err != nil {
 		return nil, fmt.Errorf("attach auxiliary access observations: %w", err)
 	}
-	automationService, err = stewardautomation.New(stewardautomation.Config{Database: store.DB(), Authorizer: authorizer, Resources: resourceRepository, Donations: donationService, Charity: charityRoutingService, Now: gameNow})
+	automationService, err = stewardautomation.New(stewardautomation.Config{Database: store.DB(), ReadDatabase: store.ReadDB(), Authorizer: authorizer, Resources: resourceRepository, Donations: donationService, Charity: charityRoutingService, Now: gameNow})
 	if err != nil {
 		return nil, fmt.Errorf("create automation service: %w", err)
 	}
@@ -616,8 +621,14 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create assistant ChatGPT connection: %w", err)
 	}
+	assistantCodex, err = codexauth.New(codexauth.Config{
+		DB: store.DB(), ReadDB: store.ReadDB(), Stack: outbound, Secrets: vault, AdminAuthorize: assistantAdminAuthorize,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create assistant Codex connection: %w", err)
+	}
 	assistantRequests, err = agentrequest.New(agentrequest.Config{
-		DB: store.DB(), ReadDB: store.ReadDB(), Stack: outbound, Flow: forwardRuntime.flow, Secrets: vault, ChatGPT: assistantChatGPT,
+		DB: store.DB(), ReadDB: store.ReadDB(), Stack: outbound, Flow: forwardRuntime.flow, Secrets: vault, ChatGPT: assistantChatGPT, Codex: assistantCodex,
 		Authorize: func(ctx context.Context, attr agentrequest.Attribution) error {
 			if assistant == nil {
 				return aiagent.ErrUnavailable
@@ -646,7 +657,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		return nil, fmt.Errorf("register assistant driver routes: %w", err)
 	}
 	app := &application{
-		agent: assistant, agentRequests: assistantRequests,
+		agent: assistant, agentRequests: assistantRequests, codex: assistantCodex,
 		managementHistory: managementHistory,
 		workerCancel:      workerCancel,
 		audits:            audits,

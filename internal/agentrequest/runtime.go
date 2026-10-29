@@ -9,12 +9,14 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/chatgptauth"
+	"github.com/waiting-here/NonbiriAPI/internal/codexauth"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 type Runtime struct {
+	codex           *codexauth.Manager
 	chatgpt         *chatgptauth.Manager
 	connectionMu    sync.Mutex
 	activeProviders map[int64]string
@@ -46,7 +48,7 @@ func New(c Config) (*Runtime, error) {
 		c.Now = time.Now
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Runtime{chatgpt: c.ChatGPT, activeProviders: map[int64]string{}, adminAuthorize: c.AdminAuthorize, db: c.DB, readDB: c.ReadDB, stack: c.Stack, flow: c.Flow, secrets: c.Secrets, now: c.Now, authorize: c.Authorize, onEvent: c.OnEvent, context: ctx, cancel: cancel, changed: make(chan struct{}), active: map[int64]context.CancelFunc{}, failures: map[int64]error{}}, nil
+	return &Runtime{codex: c.Codex, chatgpt: c.ChatGPT, activeProviders: map[int64]string{}, adminAuthorize: c.AdminAuthorize, db: c.DB, readDB: c.ReadDB, stack: c.Stack, flow: c.Flow, secrets: c.Secrets, now: c.Now, authorize: c.Authorize, onEvent: c.OnEvent, context: ctx, cancel: cancel, changed: make(chan struct{}), active: map[int64]context.CancelFunc{}, failures: map[int64]error{}}, nil
 }
 func (r *Runtime) signal() {
 	r.mu.Lock()
@@ -193,7 +195,7 @@ func (r *Runtime) dispatchNext(id int64, encoded string) {
 		r.failPending(id, "unconfigured")
 		return
 	}
-	if settings.Provider == ProviderChatGPT {
+	if settings.Provider == ProviderChatGPT || settings.Provider == ProviderCodex {
 		// Disconnect and dispatch share this boundary so a token obtained just
 		// before logout cannot start an untracked request afterwards.
 		r.connectionMu.Lock()
@@ -204,6 +206,12 @@ func (r *Runtime) dispatchNext(id int64, encoded string) {
 		admission.Release()
 		cancel()
 		r.failPending(id, "credential_unavailable")
+		return
+	}
+	if err = r.checkQueuedCodex(ctx, id, settings); err != nil {
+		admission.Release()
+		cancel()
+		r.failPending(id, "connection_changed")
 		return
 	}
 	body, err := requestBody(in, settings)
@@ -263,7 +271,7 @@ func (r *Runtime) dispatchNext(id int64, encoded string) {
 		return
 	}
 	snapshot, _ := json.Marshal(settings)
-	if _, err = tx.ExecContext(ctx, "INSERT INTO agent_request_drivers(request_id,driver_id,provider,settings_json) VALUES(?,?,?,?)", id, settings.DriverID, settings.Provider, string(snapshot)); err != nil {
+	if _, err = tx.ExecContext(ctx, "INSERT INTO agent_request_drivers(request_id,driver_id,provider,settings_json) VALUES(?,?,?,?) ON CONFLICT(request_id) DO UPDATE SET driver_id=excluded.driver_id,provider=excluded.provider,settings_json=excluded.settings_json", id, settings.DriverID, settings.Provider, string(snapshot)); err != nil {
 		r.recordDispatchFailure(ctx, id, err)
 		admission.Release()
 		cancel()

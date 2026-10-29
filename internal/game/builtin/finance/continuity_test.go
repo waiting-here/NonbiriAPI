@@ -18,7 +18,7 @@ func (financeContinuityDeriver) DeriveGenerationTwoSubkey(info []byte) ([]byte, 
 
 func bindFinanceUser(t *testing.T, database *sql.DB, tx *sql.Tx, userID int64) {
 	t.Helper()
-	service, err := continuity.New(database, financeContinuityDeriver{})
+	service, err := continuity.New(database, financeContinuityDeriver{}, database)
 	if err != nil {
 		t.Fatal(err)
 	}

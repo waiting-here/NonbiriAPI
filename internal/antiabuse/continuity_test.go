@@ -18,7 +18,7 @@ func TestViolationWindowSurvivesDeletionAndDoesNotExtendOriginalExpiry(t *testin
 		t.Fatal(err)
 	}
 	defer vault.Close()
-	identities, err := continuity.New(f.store.DB(), vault)
+	identities, err := continuity.New(f.store.DB(), vault, f.store.ReadDB())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -580,6 +580,13 @@ func (u *imageFixtureUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			writeImageFixtureJSON(w, map[string]any{"data": []any{}})
 		case "failed":
 			http.Error(w, "synthetic discovery failure", http.StatusBadGateway)
+		case "disconnect":
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err == nil {
+				_ = conn.Close()
+			}
+		case "invalid":
+			writeImageFixtureJSON(w, map[string]any{"data": "invalid model list"})
 		default:
 			writeImageFixtureJSON(w, map[string]any{"data": imageFixtureCatalog()})
 		}

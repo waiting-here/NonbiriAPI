@@ -4,6 +4,7 @@ import {
   getDriver,
   getReviews,
   getRequests,
+  getRequest,
   getPlans,
   getArchivePlans,
   putSettings,
@@ -242,4 +243,56 @@ describe('Agent HTTP projections', () => {
     expect(value.items[0]?.usage.input_tokens).toBe('9007199254740993');
     expect(value.items[0]?.actor_label).toBe('Synthetic operator');
   });
+});
+
+it('keeps safe failure details local to the AI request detail and tolerates damaged causes', async () => {
+  const detail = {
+    id: '7',
+    client_request_id: 'sample-client',
+    actor_id: '5',
+    actor_role: 'level5',
+    actor_label: 'Synthetic operator',
+    source: 'steward_chat',
+    kind: 'model',
+    state: 'failed',
+    base_url: 'https://service.example',
+    model: 'sample-model',
+    created_at: 1700000000000,
+    status_code: 200,
+    error_code: 'read_failed',
+    content_redacted: false,
+    response_complete: false,
+    usage: {
+      input_tokens: '0',
+      cached_input_tokens: '0',
+      cache_write_input_tokens: '0',
+      output_tokens: '0',
+      reasoning_tokens: '0',
+      unknown: true,
+    },
+    queued_input: null,
+    request_body: '',
+    response_body: '',
+    error_diagnostics: {
+      category: 'network',
+      phase: 'read_response',
+      code: 'connection_reset',
+      causes: [null, { type: '*net.OpError' }],
+      upstream_status: 200,
+      protocol_complete: false,
+    },
+  };
+  respond(detail);
+  const decoded = await getRequest('7');
+  expect(decoded.error_diagnostics).toMatchObject({
+    upstream_status: 200,
+    protocol_complete: false,
+    incomplete: true,
+    causes: [{ type: '*net.OpError' }],
+  });
+  respond({ items: [detail], total: '1', page: 1, page_size: 20 });
+  const page = await getRequests({ source: '', kind: '', state: '', actor_id: '' }, '1', 20);
+  expect(page.items[0]).not.toHaveProperty('error_diagnostics');
+  respond({ ...detail, error_diagnostics: 'damaged' });
+  expect((await getRequest('7')).error_diagnostics).toBeNull();
 });

@@ -4,6 +4,75 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.3.2 — 2026-10-29
+
+### Added
+
+- Add a separate Go-native Codex device-code connection for administrator chat
+  and individually assigned stewards. Keep credentials encrypted, serialize
+  refresh and cancel related work on disconnect. No external CLI, automatic
+  review, public model routing or inherited steward access is added. Real
+  Business-account authorization and inference remain unverified.
+- Record safe request-failure causes, phases, bounded correlation identifiers
+  and observed stream progress. Separate actual client HTTP delivery from final
+  outcome and confirmed upstream status across forwarding, assistant and image
+  requests, retaining existing diagnostic permissions and privacy projections.
+- Preserve management object names, allowlisted before/after values, related
+  changes and actual impact counts at the transaction boundary. Search current
+  and previous recorded names, related identifiers and changed fields; retain
+  bounded samples and explicit missing historical facts.
+- Configure separate site-wide light and heavy concurrency defaults, initially
+  15 and 5, in administrator settings. Preserve per-user overrides and apply
+  updated defaults to new admissions without restarting the service.
+
+### Fixed and improved
+
+- Require Go 1.26.10 for builds, including the standard-library fix for
+  GO-2026-6809.
+- Avoid taking the writer for same-second session checks whose exact expiry is
+  already stored. Recheck authority when renewal needs the writer, and move pure
+  steward model and price-template queries to the existing reader pool. Keep
+  separate bounded metrics for session reads and charity-management routes.
+- Use the existing reader pool for pure account, management, model, activity and
+  game queries, including idle worker checks. Preserve writer transactions for
+  claims, settlement, expiry updates and legal-hold access records; release read
+  snapshots before sending HTTP responses.
+- Return populated source lists in user donation history and details so
+  administrator and steward pages can render successful responses. Parse only
+  the history fields used for display, keeping unused management metadata from
+  blocking the page.
+- Retain the source needed to redact image diagnostics after a task completes,
+  allowing obsolete credentials to be removed without hiding the entire error.
+- Label accepted model-list refresh tasks accurately in request logs and open
+  their service call records by default, including unconfirmed HTTP responses.
+- Preserve safe DNS, TLS, timeout and connection-failure reasons for OpenAI and
+  Anthropic model discovery without exposing raw transport errors or credentials.
+
+- Accept sparse Responses terminal events only after a valid terminal and
+  consistent completed items; preserve generated text/refusal and reasoning
+  histories on replay and valid usage on failed responses.
+- Preserve Anthropic thinking/redacted blocks, Gemini signed part order and
+  Gateway reasoning/tool metadata through bounded continuation extensions. Bind
+  opaque histories to their permitted physical source. Recognize unsupported
+  Gemini continuation without another call or discarding valid usage.
+- Reassemble independently encoded Chat audio fragments and transcripts during
+  forced transport conversion. Preserve immutable continuation snapshots or
+  reject an oversized snapshot explicitly.
+- Accept supported optional Anthropic metadata, omitted Gemini tool arguments,
+  Gateway raw/tail events, rerank usage variants and top-k aliases, Whisper JSON
+  fallback, input-token requests without input, and empty legacy prompt items.
+  Keep native Chat completion tolerance and respect optional usage chunks.
+- Align the public protocol matrix with explicit native service authorization.
+
+### Compatibility
+
+- Storage advances from schema 41 to 42; account export remains format 31. The
+  explicit standalone upgrader accepts exact registered schema 16–26 and 33–41
+  sources. Startup never upgrades an existing database. Existing management
+  records receive no invented historical names or values.
+- The version is identified by an exact source commit without a tag or GitHub
+  Release. This entry does not assert deployment or live-provider verification.
+
 ## 1.3.1 — 2026-10-28
 
 ### Added

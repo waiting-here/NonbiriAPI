@@ -81,7 +81,7 @@ func (resolver *timeContextResolver) read(ctx context.Context, userID int64, aut
 	if resolver == nil || resolver.store == nil || resolver.authority == nil || authorize == nil || userID <= 0 {
 		return timeapi.TimeContext{}, authz.ErrUnauthorized
 	}
-	tx, err := resolver.store.DB().BeginTx(ctx, nil)
+	tx, err := resolver.store.ReadDB().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return timeapi.TimeContext{}, err
 	}

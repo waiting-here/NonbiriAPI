@@ -47,6 +47,7 @@ type Options struct {
 }
 type Service struct {
 	database     *sql.DB
+	readDatabase *sql.DB
 	authorizer   resources.FinalTxAuthorizer
 	finance      finance.Solo
 	continuation Continuation
@@ -93,12 +94,23 @@ func New(o Options) (*Service, error) {
 	if o.Shared.Database == nil || o.Shared.UserAuthorizer == nil || o.Shared.Limiter == nil || o.Finance == nil || o.Continuation == nil {
 		return nil, ErrInvalid
 	}
+	if o.Shared.ReadDatabase == nil {
+		o.Shared.ReadDatabase = o.Shared.Database
+	}
 	if o.Shared.Now == nil {
 		o.Shared.Now = time.Now
 	}
-	return &Service{seed: randomSeed, database: o.Shared.Database, authorizer: o.Shared.UserAuthorizer, limiter: o.Shared.Limiter, finance: o.Finance, continuation: o.Continuation, now: o.Shared.Now, report: o.ReportError}, nil
+	return &Service{seed: randomSeed, database: o.Shared.Database, readDatabase: o.Shared.ReadDatabase, authorizer: o.Shared.UserAuthorizer, limiter: o.Shared.Limiter, finance: o.Finance, continuation: o.Continuation, now: o.Shared.Now, report: o.ReportError}, nil
 }
 func (s *Service) begin(ctx context.Context) (*sql.Tx, int64, error) {
+	return s.beginWith(ctx, s.database, nil)
+}
+
+func (s *Service) beginRead(ctx context.Context) (*sql.Tx, int64, error) {
+	return s.beginWith(ctx, s.readDatabase, &sql.TxOptions{ReadOnly: true})
+}
+
+func (s *Service) beginWith(ctx context.Context, database *sql.DB, options *sql.TxOptions) (*sql.Tx, int64, error) {
 	if s.closed.Load() {
 		return nil, 0, ErrUnavailable
 	}
@@ -106,7 +118,7 @@ func (s *Service) begin(ctx context.Context) (*sql.Tx, int64, error) {
 	if now < 0 || now > 253402300799000-sessionSeconds*1000 {
 		return nil, 0, ErrUnavailable
 	}
-	tx, err := s.database.BeginTx(ctx, nil)
+	tx, err := database.BeginTx(ctx, options)
 	return tx, now, err
 }
 func (s *Service) load(ctx context.Context, tx *sql.Tx, id string, user int64) (record, error) {

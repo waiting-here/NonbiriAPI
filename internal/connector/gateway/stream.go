@@ -23,9 +23,10 @@ type streamTool struct {
 	index           int
 	args            bytes.Buffer
 	ended, complete bool
+	partIndex       int
 }
 
-func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *http.Response, request *openai.ChatRequest, guard responseGuard, errorContext upstreamerror.Context) contract.AttemptResult {
+func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *http.Response, request *openai.ChatRequest, guard responseGuard, errorContext upstreamerror.Context, continuationIDs ...string) contract.AttemptResult {
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	events, errs := egress.StreamSSE(streamCtx, response.Body, egress.SSEOptions{MaxBytes: min(maxStreamBytes, a.backend.MaxResponseBytes()), MaxLineBytes: maxLineBytes, MaxEventBytes: maxEventBytes, ReadBuffer: 64 << 10, EventBuffer: 4})
@@ -38,6 +39,9 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 	finish := ""
 	texts := map[string]bool{}
 	tools := map[string]*streamTool{}
+	parts := []map[string]any{}
+	textIndices := map[string]int{}
+	textContent := map[string]*strings.Builder{}
 	defer func() {
 		for _, tool := range tools {
 			clear(tool.args.Bytes())
@@ -155,13 +159,22 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 			event = value
 		}
 		currentEvent = event.Data
-		if terminal || event.Event != "" && event.Event != "message" || len(event.Data) == 0 {
+		if event.Event != "" && event.Event != "message" || len(event.Data) == 0 {
 			return failure("upstream stream event order was invalid", upstreamerror.Detail{})
+		}
+		if terminal && strings.TrimSpace(event.Data) == "[DONE]" {
+			continue
 		}
 		part, err := parseObject([]byte(event.Data))
 		kind, ok := text(part["type"])
 		if err != nil || !ok {
 			return failure("upstream stream event was invalid", upstreamerror.Detail{})
+		}
+		if kind == "raw" {
+			continue
+		}
+		if terminal {
+			return failure("upstream stream event order was invalid", upstreamerror.Detail{})
 		}
 		var delta map[string]any
 		switch kind {
@@ -188,6 +201,13 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 				return failure("duplicate upstream text block", upstreamerror.Detail{})
 			}
 			texts[id] = false
+			textIndices[id] = len(parts)
+			textContent[id] = &strings.Builder{}
+			preserved := map[string]any{"type": strings.TrimSuffix(kind, "-start"), "text": ""}
+			if mergeContinuationMetadata(preserved, part["providerMetadata"]) != nil {
+				return failure("upstream continuation metadata was invalid", upstreamerror.Detail{})
+			}
+			parts = append(parts, preserved)
 		case "text-delta", "reasoning-delta":
 			id, ok := text(part["id"])
 			value, valid := text(part["delta"])
@@ -201,6 +221,10 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 				field = "reasoning_content"
 			}
 			delta = map[string]any{field: value}
+			textContent[id].WriteString(value)
+			if mergeContinuationMetadata(parts[textIndices[id]], part["providerMetadata"]) != nil {
+				return failure("upstream continuation metadata was invalid", upstreamerror.Detail{})
+			}
 		case "text-end", "reasoning-end":
 			id, ok := text(part["id"])
 			id = strings.TrimSuffix(kind, "-end") + ":" + id
@@ -209,6 +233,10 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 				return failure("invalid upstream text end", upstreamerror.Detail{})
 			}
 			texts[id] = true
+			parts[textIndices[id]]["text"] = textContent[id].String()
+			if mergeContinuationMetadata(parts[textIndices[id]], part["providerMetadata"]) != nil {
+				return failure("upstream continuation metadata was invalid", upstreamerror.Detail{})
+			}
 		case "tool-input-start":
 			if raw, present := part["inputEncoding"]; present {
 				encoding, ok := text(raw)
@@ -224,7 +252,11 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 			if raw, ok := part["providerExecuted"]; ok && string(raw) != "false" {
 				return failure("upstream executed tools cannot be replayed", upstreamerror.Detail{})
 			}
-			tool := &streamTool{name: name, index: len(tools)}
+			tool := &streamTool{name: name, index: len(tools), partIndex: len(parts)}
+			parts = append(parts, map[string]any{"type": "tool-call", "toolCallId": id, "toolName": name, "input": ""})
+			if mergeContinuationMetadata(parts[tool.partIndex], part["providerMetadata"]) != nil {
+				return failure("upstream continuation metadata was invalid", upstreamerror.Detail{})
+			}
 			tools[id] = tool
 			delta = toolDelta(tool, id, name, "")
 		case "tool-input-delta":
@@ -253,7 +285,8 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 				if len(tools) >= 128 {
 					return failure("too many upstream tools", upstreamerror.Detail{})
 				}
-				tool = &streamTool{name: call.Function.Name, index: len(tools), ended: true, complete: true}
+				tool = &streamTool{name: call.Function.Name, index: len(tools), ended: true, complete: true, partIndex: len(parts)}
+				parts = append(parts, map[string]any{"type": "tool-call", "toolCallId": call.ID, "toolName": call.Function.Name, "input": call.Function.Arguments})
 				tools[call.ID] = tool
 				delta = toolDelta(tool, call.ID, call.Function.Name, call.Function.Arguments)
 			} else {
@@ -266,6 +299,10 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 					return failure("upstream tool arguments did not match", upstreamerror.Detail{})
 				}
 				tool.complete = true
+			}
+			parts[tool.partIndex]["input"] = call.Function.Arguments
+			if mergeContinuationMetadata(parts[tool.partIndex], part["providerMetadata"]) != nil {
+				return failure("upstream continuation metadata was invalid", upstreamerror.Detail{})
 			}
 		case "finish":
 			// Usage describes consumed work even when the finish is unsuccessful.
@@ -319,7 +356,15 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 	if !terminal {
 		return failure("upstream stream ended without a finish", upstreamerror.Detail{})
 	}
-	if err := emit(map[string]any{}, finish, false); err != nil {
+	finalDelta := map[string]any{}
+	continuationID := ""
+	if len(continuationIDs) > 0 {
+		continuationID = continuationIDs[0]
+	}
+	if extra := gatewayExtra(parts, continuationID); extra != nil {
+		finalDelta["extra_content"] = extra
+	}
+	if err := emit(finalDelta, finish, false); err != nil {
 		return contract.ConfirmedSuccess(sinkFailure(committed, usage), response.StatusCode)
 	}
 	options, _ := request.RawField("stream_options")

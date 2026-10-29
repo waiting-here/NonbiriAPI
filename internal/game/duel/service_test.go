@@ -97,13 +97,21 @@ func newFixture(t *testing.T, kind string, override ...duel.Rules) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	f.db.SetMaxOpenConns(1)
+	f.db.SetMaxIdleConns(1)
 	t.Cleanup(func() { f.db.Close() })
+	readDatabase, err := sql.Open("sqlite", path+"?mode=ro&_pragma=query_only(1)&_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readDatabase.SetMaxOpenConns(2)
+	t.Cleanup(func() { readDatabase.Close() })
 	tx, err := f.db.BeginTx(f.ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	identity, err := continuity.New(f.db, deps{})
+	identity, err := continuity.New(f.db, deps{}, readDatabase)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,6 +199,7 @@ func newFixture(t *testing.T, kind string, override ...duel.Rules) *fixture {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
+	warmReaders(t, readDatabase)
 	limiter, err := game.NewStartLimiter(game.StartLimiterConfig{Now: func() time.Time { return time.Unix(f.clock.Load(), 0) }})
 	if err != nil {
 		t.Fatal(err)
@@ -201,7 +210,7 @@ func newFixture(t *testing.T, kind string, override ...duel.Rules) *fixture {
 		t.Fatal(err)
 	}
 	registry := maintenance.NewRegistry()
-	f.options = duel.Options{Database: f.db, Descriptor: descriptor, Rules: f.rules, Finance: finance.Duel, UserAuthorizer: deps{}, AdminAuthorizer: f.admin, AdminAudit: func(a duel.AdminAudit) {
+	f.options = duel.Options{Database: f.db, ReadDatabase: readDatabase, Descriptor: descriptor, Rules: f.rules, Finance: finance.Duel, UserAuthorizer: deps{}, AdminAuthorizer: f.admin, AdminAudit: func(a duel.AdminAudit) {
 		if f.audit != nil {
 			f.audit(a)
 		}
@@ -426,4 +435,26 @@ func TestLikesFinalPresentationDoesNotDelayTerminalLedger(t *testing.T) {
 		state = *f.read(0).Current
 	}
 	t.Fatal("match never completed")
+}
+
+// Load the schema on both connections before timing concurrent reads.
+func warmReaders(t *testing.T, database *sql.DB) {
+	t.Helper()
+	var readers []*sql.Conn
+	defer func() {
+		for _, reader := range readers {
+			_ = reader.Close()
+		}
+	}()
+	for range 2 {
+		reader, err := database.Conn(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		readers = append(readers, reader)
+		var users int
+		if err = reader.QueryRowContext(t.Context(), "SELECT count(*) FROM users").Scan(&users); err != nil {
+			t.Fatal(err)
+		}
+	}
 }

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
@@ -26,6 +28,11 @@ type CallerKeyMiddleware struct {
 	lifecycle  *lifecyclegate.Gate
 	rejections requestattempt.Recorder
 	returned   func(*http.Request, int64, string)
+	delivery   func(context.Context, string, diagnostic.Delivery) error
+}
+
+func (middleware *CallerKeyMiddleware) SetDeliveryRecorder(record func(context.Context, string, diagnostic.Delivery) error) {
+	middleware.delivery = record
 }
 
 // SetReturnObserver installs a startup-only, nonblocking provenance observer.
@@ -148,11 +155,21 @@ func (middleware *CallerKeyMiddleware) wrap(next http.Handler, checkRoute func(s
 				writeFailure(writer, platformFailure(httperr.CodeServiceUnavailable, "service unavailable"))
 				return
 			}
+			ctx = diagnostic.WithRecorder(ctx)
 			request = request.WithContext(ctx)
 			if recordPath == "/v1/models" {
 				requestattempt.Classify(ctx, "discovery")
 			}
 			writer.Header().Set("X-Request-ID", id)
+			if middleware.delivery != nil {
+				var delivery *diagnostic.DeliveryWriter
+				writer, delivery = diagnostic.ObserveWriter(writer, ctx)
+				defer func() {
+					writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+					defer cancel()
+					_ = middleware.delivery(writeCtx, id, delivery.Snapshot())
+				}()
+			}
 			writer = requestattempt.Wrap(writer, ctx, middleware.rejections)
 		}
 		leaseContext, release, err := middleware.lifecycle.Admit(

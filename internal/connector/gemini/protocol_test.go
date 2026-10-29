@@ -74,6 +74,16 @@ func TestGeminiJSONProjectionPreservesSignaturesAndUsage(t *testing.T) {
 	var result map[string]json.RawMessage
 	_ = json.Unmarshal(body, &result)
 	delete(result, "id")
+	var choices []map[string]json.RawMessage
+	_ = json.Unmarshal(result["choices"], &choices)
+	var message map[string]json.RawMessage
+	_ = json.Unmarshal(choices[0]["message"], &message)
+	if !strings.Contains(string(message["extra_content"]), `"parts"`) {
+		t.Fatal("ordered continuation parts missing")
+	}
+	delete(message, "extra_content")
+	choices[0]["message"], _ = json.Marshal(message)
+	result["choices"], _ = json.Marshal(choices)
 	normalized, _ := json.Marshal(result)
 	equalJSON(t, normalized, `{"object":"chat.completion","created":123,"model":"public","choices":[{"index":0,"message":{"role":"assistant","content":null,"reasoning_content":"checking","tool_calls":[{"id":"a","type":"function","function":{"name":"weather","arguments":"{\"city\":\"A\"}"},"extra_content":{"google":{"thought_signature":"YWJj"}}},{"id":"b","type":"function","function":{"name":"weather","arguments":"{\"city\":\"B\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":20,"completion_tokens":8,"total_tokens":28,"prompt_tokens_details":{"cached_tokens":4,"cache_write_tokens":0}}}`)
 }
@@ -97,7 +107,7 @@ func TestGeminiStreamSemanticEndAndUsageSnapshot(t *testing.T) {
 	for _, chunk := range chunks {
 		output += string(chunk)
 	}
-	if !strings.Contains(output, `"content":"Hel"`) || !strings.Contains(output, `"thought_signature":"YWJj"`) || !strings.Contains(output, `"finish_reason":"stop"`) || !strings.Contains(output, `"completion_tokens":7`) || d.Usage().UncachedInputTokens != 8 {
+	if !strings.Contains(output, `"content":"Hel"`) || !strings.Contains(output, `"thoughtSignature":"YWJj"`) || !strings.Contains(output, `"finish_reason":"stop"`) || !strings.Contains(output, `"completion_tokens":7`) || d.Usage().UncachedInputTokens != 8 {
 		t.Fatal(output, d.Usage())
 	}
 	if _, err := d.Event("", []byte(frames[2])); err == nil {
@@ -108,7 +118,7 @@ func TestGeminiStreamSemanticEndAndUsageSnapshot(t *testing.T) {
 		frames       []string
 		eventFailure bool
 	}{
-		{"empty", nil, false}, {"text without terminal", frames[:1], false}, {"unknown terminal", []string{`{"candidates":[{"finishReason":"CONTINUATION"}]}`}, true}, {"second candidate", []string{`{"candidates":[{},{}]}`}, true}, {"late text", append(append([]string{}, frames...), frames[0]), true}, {"two text signatures", []string{`{"candidates":[{"content":{"parts":[{"text":"a","thoughtSignature":"YWJj"},{"text":"b","thoughtSignature":"ZGVm"}]},"finishReason":"STOP"}]}`}, true},
+		{"empty", nil, false}, {"text without terminal", frames[:1], false}, {"unknown terminal", []string{`{"candidates":[{"finishReason":"CONTINUATION"}]}`}, true}, {"second candidate", []string{`{"candidates":[{},{}]}`}, true}, {"late text", append(append([]string{}, frames...), frames[0]), true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := NewDecoder("m", time.Unix(1, 0), false)

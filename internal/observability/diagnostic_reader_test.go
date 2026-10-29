@@ -179,7 +179,11 @@ func TestIndependentDiagnosticsFinalAuthorityAndBoundedPagination(t *testing.T) 
 			t.Fatal("foreign diagnostic category")
 		}
 		detail, err := f.reader.Detail(diagContext(actor), diagActor(actor), page.Data[0].ID)
-		if err != nil || detail.Body.Body != "private diagnostic" {
+		want := "private diagnostic"
+		if actor.UserID == f.trainee.UserID {
+			want = "[redacted]"
+		}
+		if err != nil || detail.Body.Body != want {
 			t.Fatalf("detail %+v %v", detail, err)
 		}
 	}

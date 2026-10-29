@@ -99,6 +99,9 @@ func equalDiscoveryHash(raw []byte, expected [32]byte) bool {
 }
 
 func (r *Repository) finishDiscoveryRunTx(ctx context.Context, tx *sql.Tx, run discoveryRunState, outcome DiscoveryClaimResult, now int64) error {
+	if err := managementlog.StartRelatedCaptureTx(ctx, tx, "model_discovery", run.operationID); err != nil {
+		return err
+	}
 	state, safeClass := "failed", string(outcome.FailureClass)
 	if outcome.Succeeded {
 		state, safeClass = "succeeded", "none"

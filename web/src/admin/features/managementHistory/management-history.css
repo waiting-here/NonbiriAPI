@@ -32,3 +32,36 @@
 .management-history__target-kind {
   display: block;
 }
+.management-history__object-name {
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.management-history__snapshot {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.management-history__changes {
+  margin: 0;
+  display: grid;
+  gap: var(--nb-space-3);
+}
+.management-history__changes dt {
+  font-weight: var(--nb-font-weight-semibold);
+}
+.management-history__changes dd {
+  margin: var(--nb-space-1) 0 0;
+}
+.management-history__impact-list {
+  padding-inline-start: var(--nb-space-5);
+  display: grid;
+  gap: var(--nb-space-3);
+}
+.management-history__impact-list li > * {
+  display: block;
+}
+.management-history__impact-list li > span {
+  font-variant-numeric: tabular-nums;
+}

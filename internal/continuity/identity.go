@@ -33,14 +33,15 @@ type SubkeyDeriver interface {
 
 type Service struct {
 	database *sql.DB
+	readDB   *sql.DB
 	mu       sync.RWMutex
 	secret   [sha256.Size]byte
 	closed   bool
 	windows  []WindowPreserver
 }
 
-func New(database *sql.DB, deriver SubkeyDeriver) (*Service, error) {
-	if database == nil || deriver == nil {
+func New(database *sql.DB, deriver SubkeyDeriver, readDatabase *sql.DB) (*Service, error) {
+	if database == nil || deriver == nil || readDatabase == nil {
 		return nil, ErrInvalid
 	}
 	material, err := deriver.DeriveGenerationTwoSubkey([]byte("discord-continuity-v1"))
@@ -48,7 +49,7 @@ func New(database *sql.DB, deriver SubkeyDeriver) (*Service, error) {
 	if err != nil || len(material) != sha256.Size {
 		return nil, ErrInvariant
 	}
-	service := &Service{database: database}
+	service := &Service{database: database, readDB: readDatabase}
 	copy(service.secret[:], material)
 	return service, nil
 }
@@ -118,7 +119,7 @@ func (service *Service) UserKey(ctx context.Context, userID int64) (Key, error) 
 	if service == nil || ctx == nil {
 		return Key{}, ErrInvalid
 	}
-	tx, err := service.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := service.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Key{}, err
 	}
@@ -143,7 +144,7 @@ func (service *Service) Close() error {
 
 // ValidateBindings audits every current provider binding without creating rows.
 func (service *Service) ValidateBindings(ctx context.Context) error {
-	rows, err := service.database.QueryContext(ctx, `SELECT u.discord_id,c.identity_key FROM users u LEFT JOIN user_continuity_identities c ON c.user_id=u.id WHERE u.is_admin=0 ORDER BY u.id`)
+	rows, err := service.readDB.QueryContext(ctx, `SELECT u.discord_id,c.identity_key FROM users u LEFT JOIN user_continuity_identities c ON c.user_id=u.id WHERE u.is_admin=0 ORDER BY u.id`)
 	if err != nil {
 		return err
 	}

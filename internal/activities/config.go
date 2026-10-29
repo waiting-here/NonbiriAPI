@@ -145,7 +145,7 @@ func (r *Repository) GetActivitiesConfig(ctx context.Context) (ActivitiesConfig,
 	if r == nil || ctx == nil {
 		return ActivitiesConfig{}, ErrUnavailable
 	}
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := r.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return ActivitiesConfig{}, classifyDatabaseError("begin configuration read", err)
 	}

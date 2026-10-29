@@ -112,7 +112,7 @@ func New(options Options) (*Runtime, error) {
 			}
 			service, err := duel.New(duel.Options{
 				AI:       aiAdapter,
-				Database: shared.Database, Descriptor: descriptor, Rules: rules, Finance: financial.Duel,
+				Database: shared.Database, ReadDatabase: shared.ReadDatabase, Descriptor: descriptor, Rules: rules, Finance: financial.Duel,
 				UserAuthorizer: shared.UserAuthorizer, AdminAuthorizer: shared.AdminAuthorizer,
 				AdminAudit: options.DuelAdminAudit, Continuation: options.Continuation,
 				Limiter: shared.Limiter, Pools: options.Pools, Publisher: options.ActivityEvents,
@@ -135,7 +135,7 @@ func New(options Options) (*Runtime, error) {
 	}
 	factories := map[string]host.Factory{
 		game.LakeNotesID: func(shared host.Services) (*host.Module, error) {
-			service, err := lakenotes.New(lakenotes.Config{Database: shared.Database, Users: shared.UserAuthorizer, Admins: shared.AdminAuthorizer, Gate: lakeAdmission{options.Continuation, shared.Now}, Keys: options.Vault, Now: shared.Now, Reward: lakeCollectionReward, Random: options.LakeRandom, MotionSeed: options.LakeMotionSeed,
+			service, err := lakenotes.New(lakenotes.Config{Database: shared.Database, ReadDatabase: shared.ReadDatabase, Users: shared.UserAuthorizer, Admins: shared.AdminAuthorizer, Gate: lakeAdmission{options.Continuation, shared.Now}, Keys: options.Vault, Now: shared.Now, Reward: lakeCollectionReward, Random: options.LakeRandom, MotionSeed: options.LakeMotionSeed,
 				Activity: func(ctx context.Context, tx *sql.Tx, user, at int64) error {
 					return inactivity.RecordActiveTx(ctx, tx, inactivity.ActiveEvent{UserID: user, At: at, Kind: "game", Fresh: true})
 				},
@@ -230,7 +230,7 @@ func New(options Options) (*Runtime, error) {
 			return service.Module(), options.BindAccountSource(service)
 		},
 	}
-	runtime.Service, err = host.New(host.Options{Database: options.Store.DB(), Registry: registry, Factories: factories, UserAuthorizer: options.UserAuthorizer, AdminAuthorizer: options.AdminAuthorizer, Now: options.Now})
+	runtime.Service, err = host.New(host.Options{Database: options.Store.DB(), ReadDatabase: options.Store.ReadDB(), Registry: registry, Factories: factories, UserAuthorizer: options.UserAuthorizer, AdminAuthorizer: options.AdminAuthorizer, Now: options.Now})
 	if err != nil {
 		return nil, err
 	}

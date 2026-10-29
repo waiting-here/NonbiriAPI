@@ -91,7 +91,7 @@ func (s *Service) Step(ctx context.Context) error {
 		return err
 	}
 	// Active polls run before admissions; no lock is held while waiting for SQL.
-	rows, err := s.config.Database.QueryContext(ctx, "SELECT "+taskColumns+" FROM image_activity_tasks WHERE upstream_revision IS NOT NULL AND state<>'queued' AND (state IN ('dispatching','running') OR (state='unknown_refunded' AND cleanup_deadline>?)) ORDER BY COALESCE(next_poll_at,execution_deadline),accepted_seq LIMIT 100", now)
+	rows, err := s.config.ReadDatabase.QueryContext(ctx, "SELECT "+taskColumns+" FROM image_activity_tasks WHERE upstream_revision IS NOT NULL AND state<>'queued' AND (state IN ('dispatching','running') OR (state='unknown_refunded' AND cleanup_deadline>?)) ORDER BY COALESCE(next_poll_at,execution_deadline),accepted_seq LIMIT 100", now)
 	if err != nil {
 		return err
 	}
@@ -158,7 +158,7 @@ func (s *Service) expireQueued(ctx context.Context, now int64) error {
 	return nil
 }
 func (s *Service) readSnapshot(ctx context.Context, revision int64) (upstreamSnapshot, error) {
-	tx, err := s.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return upstreamSnapshot{}, err
 	}
@@ -171,7 +171,7 @@ func (s *Service) readSnapshot(ctx context.Context, revision int64) (upstreamSna
 }
 func (s *Service) memoryBudget(ctx context.Context, fallback int) (int64, error) {
 	var mib int
-	err := s.config.Database.QueryRowContext(ctx, "SELECT r.memory_budget_mib FROM image_activity_state s JOIN image_upstream_revisions r ON r.revision=s.upstream_revision WHERE s.id=1").Scan(&mib)
+	err := s.config.ReadDatabase.QueryRowContext(ctx, "SELECT r.memory_budget_mib FROM image_activity_state s JOIN image_upstream_revisions r ON r.revision=s.upstream_revision WHERE s.id=1").Scan(&mib)
 	if errors.Is(err, sql.ErrNoRows) {
 		mib = fallback
 		err = nil
@@ -185,7 +185,7 @@ func pausedTx(ctx context.Context, tx *sql.Tx) (bool, error) {
 }
 func (s *Service) dispatchHead(ctx context.Context, now int64) error {
 	// Read the FIFO head, reserve RAM, then repeat every predicate in the writer.
-	row, err := scanTask(s.config.Database.QueryRowContext(ctx, "SELECT "+taskColumns+" FROM image_activity_tasks WHERE state='queued' ORDER BY accepted_seq LIMIT 1"))
+	row, err := scanTask(s.config.ReadDatabase.QueryRowContext(ctx, "SELECT "+taskColumns+" FROM image_activity_tasks WHERE state='queued' ORDER BY accepted_seq LIMIT 1"))
 	if errors.Is(err, ErrNotFound) {
 		return nil
 	}
@@ -308,7 +308,7 @@ func (s *Service) dispatchHead(ctx context.Context, now int64) error {
 	return nil
 }
 func (s *Service) readTask(ctx context.Context, id string) (taskRow, error) {
-	return scanTask(s.config.Database.QueryRowContext(ctx, "SELECT "+taskColumns+" FROM image_activity_tasks WHERE id=?", id))
+	return scanTask(s.config.ReadDatabase.QueryRowContext(ctx, "SELECT "+taskColumns+" FROM image_activity_tasks WHERE id=?", id))
 }
 func (s *Service) runTask(id string, submit bool) {
 	published := false

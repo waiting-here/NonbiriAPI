@@ -102,7 +102,7 @@ func newActivityRuntime(ctx context.Context, store *db.Store, vault *secret.Vaul
 	admission := limitedAdmissionGate{gate, now}
 	var err error
 	a.images, err = imageactivity.New(imageactivity.Config{
-		Database: store.DB(), Users: users, Admins: roles, Gate: admission,
+		Database: store.DB(), ReadDatabase: store.ReadDB(), Users: users, Admins: roles, Gate: admission,
 		Admission: func(ctx context.Context, tx *sql.Tx, user int64, key string, at int64) (limitedactivities.Detail, error) {
 			if a.limited == nil {
 				return limitedactivities.Detail{}, limitedactivities.ErrClosed
@@ -116,7 +116,7 @@ func newActivityRuntime(ctx context.Context, store *db.Store, vault *secret.Vaul
 		return nil, err
 	}
 	a.fish, err = fatfish.New(fatfish.Config{
-		DB: store.DB(), Users: users, Admins: roles, Gate: admission,
+		DB: store.DB(), ReadDB: store.ReadDB(), Users: users, Admins: roles, Gate: admission,
 		Identity: sessions.IdentityContinuity(), Keys: vault, Now: now,
 	})
 	if err != nil {
@@ -124,7 +124,7 @@ func newActivityRuntime(ctx context.Context, store *db.Store, vault *secret.Vaul
 		return nil, err
 	}
 	a.gacha, err = gacha.New(gacha.Config{
-		Database: store.DB(), Users: users, Admins: roles, Gate: admission,
+		Database: store.DB(), ReadDatabase: store.ReadDB(), Users: users, Admins: roles, Gate: admission,
 		Keys: vault, Activity: activeActivityRecorder{}, Now: now,
 	})
 	if err == nil {
@@ -134,12 +134,12 @@ func newActivityRuntime(ctx context.Context, store *db.Store, vault *secret.Vaul
 		_ = a.Close()
 		return nil, err
 	}
-	a.rewards, err = rewards.New(rewards.Config{Database: store.DB(), Users: users, Admins: roles, Gate: admission, Keys: vault, Activity: activeActivityRecorder{}, Now: now})
+	a.rewards, err = rewards.New(rewards.Config{Database: store.DB(), ReadDatabase: store.ReadDB(), Users: users, Admins: roles, Gate: admission, Keys: vault, Activity: activeActivityRecorder{}, Now: now})
 	if err != nil {
 		_ = a.Close()
 		return nil, err
 	}
-	a.appearance, err = appearance.New(appearance.Config{Database: store.DB(), Users: users, Gate: admission, Now: now, Moments: a.gacha.MomentOptionsTx,
+	a.appearance, err = appearance.New(appearance.Config{Database: store.DB(), ReadDatabase: store.ReadDB(), Users: users, Gate: admission, Now: now, Moments: a.gacha.MomentOptionsTx,
 		Visible: func(ctx context.Context, tx *sql.Tx, keys []string) (map[string]bool, error) {
 			ids := make([]string, 0, len(keys))
 			for _, key := range keys {
@@ -171,12 +171,12 @@ func newActivityRuntime(ctx context.Context, store *db.Store, vault *secret.Vaul
 		return nil, err
 	}
 	a.limited, err = limitedactivities.New(limitedactivities.Config{
-		Database: store.DB(), Users: users, Admins: roles, Gate: admission, Keys: vault,
+		Database: store.DB(), ReadDatabase: store.ReadDB(), Users: users, Admins: roles, Gate: admission, Keys: vault,
 		Registry: limitedactivities.NewRegistry(a.images, a.fish.ActivityRuntime()), Activity: activeActivityRecorder{}, Now: now,
 	})
 	if err == nil {
 		a.inactivity, err = inactivity.New(inactivity.Config{
-			Database: store.DB(), FinalAuth: roles, CancelUserTx: a.CancelUserTx,
+			Database: store.DB(), ReadDatabase: store.ReadDB(), FinalAuth: roles, CancelUserTx: a.CancelUserTx,
 			Invalidator: invalidator, Now: now,
 		})
 	}

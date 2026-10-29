@@ -194,6 +194,7 @@ func (service *Service) runAttempts(
 			backoffTrial = info.IsBackoffTrial()
 		}
 		policy := dispatch.Policy()
+		policy.ContinuationID = candidate.Policy.ContinuationID
 		policy.GatewayModel = candidate.Policy.GatewayModel
 		policy.SafetyIdentifier = safety
 		clearAdaptation := prepared.applyPolicy(&policy)
@@ -227,10 +228,15 @@ func (service *Service) runAttempts(
 			run.completeUndeliveredSynthetic(parent, service, handle, "credential unavailable")
 			break
 		}
+		attemptContext := egress.WithCloudflareProxy(executionContext, plan.cloudflareProxyEnabled)
+		attemptContext = diagnostic.WithRecorder(attemptContext)
 		sink := writer
 		if suppressor != nil {
 			sink = suppressor.UpstreamWriter()
 		}
+		// Observe actual delivery, outside aggregation buffers and durable
+		// accounting checkpoints, so HTTP acceptance is not counted as a write.
+		sink, _ = diagnostic.ObserveWriter(sink, attemptContext)
 		callerSink := sink
 		var converted *transportResponse
 		if request.chat != nil && attemptRequest.Stream != request.Stream {
@@ -261,7 +267,6 @@ func (service *Service) runAttempts(
 			run.completeUndeliveredSynthetic(parent, service, handle, "connector unavailable")
 			break
 		}
-		attemptContext := egress.WithCloudflareProxy(executionContext, plan.cloudflareProxyEnabled)
 		attemptContext = returnmarker.WithSource(attemptContext, returnmarker.Source{
 			RequestID: accepted.ID, EndpointID: candidate.EndpointID,
 			EndpointKeyID: handle.EndpointKeyID(), DonationKeyID: handle.DonationKeyID(),
@@ -286,7 +291,7 @@ func (service *Service) runAttempts(
 		attemptRequest.Clear()
 		if converted != nil {
 			if validAttemptResult(result) {
-				result = converted.complete(executionContext, callerSink, callerIncludesUsage(request.chat), result)
+				result = converted.complete(attemptContext, callerSink, callerIncludesUsage(request.chat), result)
 			}
 			converted.clear()
 		}
@@ -303,6 +308,8 @@ func (service *Service) runAttempts(
 		run.result, run.hasResult = result, true
 		settleContext, cancel := context.WithTimeout(context.WithoutCancel(attemptContext), service.settlement)
 		outcome := attemptOutcome(result)
+		diagnostic.ProtocolComplete(attemptContext, outcome.ProtocolSuccess)
+		outcome.ErrorDiagnostics = diagnostic.Encode(diagnostic.Finish(attemptContext, result.Success, result.Committed, result.Usage.Present, result.UpstreamStatus, result.Diagnostic, string(result.FailureOrigin)))
 		acceptedByCharityUpstream := plan.charity && result.UpstreamStatus == http.StatusOK
 		if plan.charity && responseStart != nil && responseStart.retryAfterObserved && !outcome.ProtocolSuccess {
 			outcome.StreakDisposition = connectorcontract.StreakNeutral

@@ -20,8 +20,8 @@ func normalizePageLimit(page *pagination.Request, cursor string, limit int) int 
 	return page.Size
 }
 
-func (s *Service) beginListRead(ctx context.Context, adminID int64, numbered bool) (*sql.Tx, error) {
-	return s.beginManagement(ctx, adminID, roleAdmin, numbered)
+func (s *Service) beginListRead(ctx context.Context, adminID int64) (*sql.Tx, error) {
+	return s.beginManagement(ctx, adminID, roleAdmin, true)
 }
 
 func listPageQuery(ctx context.Context, tx *sql.Tx, selection, order string, args []any, requested *pagination.Request, limit int) (string, []any, *pagination.Metadata, error) {

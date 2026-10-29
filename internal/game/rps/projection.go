@@ -300,7 +300,7 @@ func (service *Service) projectHome(ctx context.Context, userID int64) (HomeStat
 	if err != nil {
 		return HomeState{}, err
 	}
-	tx, err := service.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := service.readDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return HomeState{}, classifyDB(err)
 	}
@@ -336,7 +336,7 @@ func (service *Service) CurrentIdentityEpoch(ctx context.Context, accountID int6
 		return nil, ErrInvalidRequest
 	}
 	var raw []byte
-	err := service.database.QueryRowContext(ctx, `SELECT s.identity_epoch FROM game_rps_user_slots us
+	err := service.readDatabase.QueryRowContext(ctx, `SELECT s.identity_epoch FROM game_rps_user_slots us
 JOIN game_rps_sessions s ON s.id=us.session_id WHERE us.user_id=? AND us.session_id IS NOT NULL`, accountID).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil

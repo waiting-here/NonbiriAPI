@@ -38,6 +38,7 @@ type Config struct {
 
 type Repository struct {
 	db                 *sql.DB
+	readDB             *sql.DB
 	cursors            cursorCodec
 	resourceValidation ResourceValidationAuthority
 	now                func() time.Time
@@ -64,7 +65,7 @@ func NewRepository(config Config) (*Repository, error) {
 		config.IssueID = func() (string, error) { return db.GenerateOpaqueID("iss_") }
 	}
 	return &Repository{
-		db: config.Store.DB(), cursors: cursorCodec{keys: config.CursorKeys},
+		db: config.Store.DB(), readDB: config.Store.ReadDB(), cursors: cursorCodec{keys: config.CursorKeys},
 		resourceValidation: config.ResourceValidation, now: config.Now, newID: config.IssueID,
 	}, nil
 }

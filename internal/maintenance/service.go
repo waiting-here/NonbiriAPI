@@ -507,8 +507,17 @@ WHERE m.id=1`).Scan(&enabled, &revision, &changedAt, &currentEvent, &configValue
 }
 
 func LoadState(ctx context.Context, database *sql.DB) (State, error) {
-	if database == nil {
+	if ctx == nil || database == nil {
 		return State{}, ErrInvariant
 	}
-	return loadState(ctx, database)
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return State{}, err
+	}
+	defer tx.Rollback()
+	state, err := loadState(ctx, tx)
+	if err != nil {
+		return State{}, err
+	}
+	return state, tx.Commit()
 }

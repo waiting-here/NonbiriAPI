@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/headerfacts"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
@@ -95,6 +96,9 @@ func (ref DiagnosticRef) valid() bool {
 // ErrorScope binds a private sink to one existing subject. It does not add raw
 // diagnostics to the public connector result or ordinary request context facts.
 func (r *Repository) ErrorScope(ctx context.Context, ref DiagnosticRef) context.Context {
+	if diagnostic.RecorderFrom(ctx) == nil {
+		ctx = diagnostic.WithRecorder(ctx)
+	}
 	if r == nil || !ref.valid() {
 		return ctx
 	}
@@ -191,13 +195,52 @@ func (r *Repository) recordError(ctx context.Context, ref DiagnosticRef, seq int
 	if event.Status() != 0 {
 		status = event.Status()
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO request_error_bodies(request_log_id,task_id,operation_id,attempt_seq,event_seq,http_status,content_type,body,bytes_saved,truncated,save_state,failure_reason,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, logID, taskID, operationID, ref.AttemptSeq, seq, status, event.ContentType(), body, size, event.Truncated(), state, event.FailureReason(), at, at+RetentionSeconds); err != nil {
+	inserted, err := tx.ExecContext(ctx, `INSERT INTO request_error_bodies(request_log_id,task_id,operation_id,attempt_seq,event_seq,http_status,content_type,body,bytes_saved,truncated,save_state,failure_reason,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, logID, taskID, operationID, ref.AttemptSeq, seq, status, event.ContentType(), body, size, event.Truncated(), state, event.FailureReason(), at, at+RetentionSeconds)
+	if err != nil {
 		return err
+	}
+	if diagnostic.RecorderFrom(ctx) != nil {
+		id, e := inserted.LastInsertId()
+		if e != nil {
+			return e
+		}
+		origin := "upstream_protocol"
+		if event.Status() >= 400 {
+			origin = "upstream_response"
+		}
+		facts := diagnostic.Encode(diagnostic.Finish(ctx, false, false, false, event.Status(), "The upstream response could not be completed", origin))
+		if facts != "" {
+			base, e := imageDiagnosticSourceTx(ctx, tx, ref)
+			if e != nil {
+				return e
+			}
+			if _, err = tx.ExecContext(ctx, "INSERT INTO request_error_diagnostics(error_id,source_base_url,details) VALUES(?,?,?)", id, base, facts); err != nil {
+				return err
+			}
+		}
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE observability_state SET raw_body_bytes=raw_body_bytes+?,raw_capacity_omissions=raw_capacity_omissions+?,raw_unavailable=raw_unavailable+? WHERE id=1`, size, boolInt(state == "capacity_exhausted"), boolInt(state == "unavailable")); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+// Keep only the source needed for later privacy projection. Finished image
+// tasks release their upstream revision so its credentials can be retired.
+func imageDiagnosticSourceTx(ctx context.Context, tx *sql.Tx, ref DiagnosticRef) (sql.NullString, error) {
+	var base sql.NullString
+	var err error
+	if ref.TaskID != "" {
+		err = tx.QueryRowContext(ctx, `SELECT r.base_url FROM image_activity_tasks t
+ JOIN image_upstream_revisions r ON r.revision=t.upstream_revision WHERE t.id=?`, ref.TaskID).Scan(&base)
+	} else if ref.OperationID != "" {
+		err = tx.QueryRowContext(ctx, `SELECT r.base_url FROM image_model_refreshes f
+ JOIN image_upstream_revisions r ON r.revision=f.upstream_revision WHERE f.operation_id=?`, ref.OperationID).Scan(&base)
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return sql.NullString{}, nil
+	}
+	return base, err
 }
 
 func boolInt(value bool) int {

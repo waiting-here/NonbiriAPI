@@ -32,7 +32,7 @@ func (s *Service) selectFailureReset(ctx context.Context, role reviewerRole, use
 	var empty FailureResetSelection
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, scope, err := s.beginScopedTx(ctx, role, userID, true)
+	tx, scope, err := s.beginScopedTx(ctx, role, userID, selection.View != "donation_keys")
 	if err != nil {
 		return empty, err
 	}

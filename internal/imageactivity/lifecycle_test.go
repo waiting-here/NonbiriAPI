@@ -110,7 +110,8 @@ func TestBanAndDeleteDuringExecutionDoNotPublishImages(t *testing.T) {
 			select {
 			case <-f.upstream.started:
 			case <-time.After(3 * time.Second):
-				t.Fatal("not dispatched")
+				row, err := f.service.readTask(t.Context(), active.ID)
+				t.Fatalf("not dispatched: state=%s finance=%s job=%v read_error=%v readers=%+v", row.state, row.finance, f.service.hasJob(active.ID), err, f.service.config.ReadDatabase.Stats())
 			}
 			var finish interface{ Commit() bool }
 			f.tx(t, func(tx *sql.Tx) {

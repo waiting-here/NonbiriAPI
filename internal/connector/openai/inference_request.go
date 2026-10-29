@@ -181,6 +181,12 @@ func decodeInferenceRequest(reader io.Reader, operation contract.Operation, limi
 			return nil, err
 		}
 	case contract.OperationResponses, contract.OperationResponsesCompact, contract.OperationResponsesInputTokens:
+		if operation == contract.OperationResponsesInputTokens && (len(object["input"]) == 0 || isJSONNull(object["input"])) {
+			if r.Stream {
+				return nil, invalidField("stream", "this operation does not support streaming")
+			}
+			break
+		}
 		if len(object["input"]) == 0 || isJSONNull(object["input"]) {
 			return nil, invalidField("input", "inline input is required")
 		}
@@ -196,6 +202,10 @@ func decodeInferenceRequest(reader io.Reader, operation contract.Operation, limi
 		}
 	case contract.OperationCompletions:
 		promptCount := embeddingInputCount(object["prompt"])
+		var prompts []string
+		if json.Unmarshal(object["prompt"], &prompts) == nil && len(prompts) > 0 && len(prompts) <= 2048 {
+			promptCount = len(prompts)
+		}
 		if len(object["prompt"]) == 0 || isJSONNull(object["prompt"]) || bytes.Equal(object["prompt"], []byte(`""`)) {
 			promptCount = 1
 		}

@@ -27,7 +27,7 @@ func (service *Service) ListUser(ctx context.Context, userID int64, query PageQu
 	if _, err := repository.ExpireDue(ctx, maxPageLimit); err != nil {
 		return empty, err
 	}
-	tx, err := beginTx(ctx, repository.db)
+	tx, err := beginTx(ctx, repository.readDB)
 	if err != nil {
 		return empty, err
 	}
@@ -127,7 +127,7 @@ func (service *Service) GetUser(ctx context.Context, userID int64, id string) (A
 	if _, err := repository.ExpireDue(ctx, maxPageLimit); err != nil {
 		return AnnouncementDetail{}, err
 	}
-	tx, err := beginTx(ctx, repository.db)
+	tx, err := beginTx(ctx, repository.readDB)
 	if err != nil {
 		return AnnouncementDetail{}, err
 	}

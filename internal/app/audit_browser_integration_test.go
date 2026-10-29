@@ -217,16 +217,22 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 			writeImageFixtureJSON(w, map[string]bool{"ok": true})
 			return
 		}
-		if r.Method == http.MethodPost && r.URL.Path == "/gemini-discovery" && management != nil {
+		if r.Method == http.MethodPost && (r.URL.Path == "/gemini-discovery" || r.URL.Path == "/openai-discovery") && management != nil {
 			var input struct {
 				Mode string `json:"mode"`
 			}
-			if json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&input) != nil || (input.Mode != "success" && input.Mode != "region") {
+			gemini := r.URL.Path == "/gemini-discovery"
+			if json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&input) != nil ||
+				!(input.Mode == "success" || gemini && input.Mode == "region" || !gemini && (input.Mode == "disconnect" || input.Mode == "invalid")) {
 				http.Error(w, "invalid mode", 400)
 				return
 			}
 			f.upstreamState.mu.Lock()
-			f.upstreamState.geminiDiscoveryMode = input.Mode
+			if gemini {
+				f.upstreamState.geminiDiscoveryMode = input.Mode
+			} else {
+				f.upstreamState.discoveryMode = input.Mode
+			}
 			f.upstreamState.mu.Unlock()
 			writeImageFixtureJSON(w, map[string]bool{"ok": true})
 			return

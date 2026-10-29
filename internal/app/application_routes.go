@@ -87,7 +87,7 @@ func (a *application) registerRoutes(store *db.Store, roleAuthorizer *roleFinalT
 	}
 	maintenanceRoutes := maintenanceRouteRegistrar{runtime: a.authRuntime}
 	if err := maintenance.RegisterRoutes(maintenanceRoutes, maintenanceRoutes, maintenance.HTTPOptions{
-		Database: store.DB(), Service: a.maintenance,
+		Database: store.DB(), ReadDatabase: store.ReadDB(), Service: a.maintenance,
 	}); err != nil {
 		return fmt.Errorf("register maintenance routes: %w", err)
 	}
@@ -97,7 +97,7 @@ func (a *application) registerRoutes(store *db.Store, roleAuthorizer *roleFinalT
 	if err := logapi.RegisterUserRoutes(a.authRuntime, a.logs); err != nil {
 		return fmt.Errorf("register user log routes: %w", err)
 	}
-	if err := creditapi.RegisterUserRoutes(a.authRuntime, store.DB()); err != nil {
+	if err := creditapi.RegisterUserRoutes(a.authRuntime, store.ReadDB()); err != nil {
 		return fmt.Errorf("register credit history route: %w", err)
 	}
 	if err := logapi.RegisterStewardRoutes(a.authRuntime, a.logs, roleAuthorizer); err != nil {

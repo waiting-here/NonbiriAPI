@@ -121,7 +121,7 @@ func (s *Service) ReviewCapabilities(ctx context.Context, admin int64, modelID s
 	if err != nil {
 		return out, err
 	}
-	tx, err := s.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return out, err
 	}

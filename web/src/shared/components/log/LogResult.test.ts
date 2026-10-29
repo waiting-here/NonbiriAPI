@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { logResult, logResultCopyKey } from './LogResult';
 import type { RoleLogRow } from './data';
 const failure = {
+  route_kind: 'openai_chat_completions',
   caller_result_class: 'failed',
   caller_status: 503,
   caller_error_code: 'upstream',
@@ -9,6 +10,27 @@ const failure = {
   rejection_reason: null,
 } satisfies Parameters<typeof logResult>[0];
 describe('caller-safe log result presentation', () => {
+  it('distinguishes accepted discovery tasks from successful model calls', () => {
+    const accepted = { ...failure, caller_result_class: 'success' as const, caller_status: 202 };
+    expect(logResult({ ...accepted, route_kind: 'model_discovery' })).toMatchObject({
+      key: 'discoveryAccepted',
+      tone: 'info',
+      hint: 'discoveryAcceptedHint',
+    });
+    expect(logResult(accepted).key).toBe('success');
+    expect(logResult({ ...accepted, route_kind: 'model_discovery', caller_status: 200 }).key).toBe(
+      'success',
+    );
+    expect(logResult({ ...failure, route_kind: 'model_discovery' }).key).toBe('upstream');
+    expect(
+      logResult({ ...accepted, route_kind: 'model_discovery', caller_result_class: 'cancelled' })
+        .key,
+    ).toBe('cancelled');
+    for (const role of ['user', 'admin', 'steward'] as const)
+      expect(logResultCopyKey(role, 'discoveryAccepted')).toBe(
+        'common.operations.logs.discoveryAccepted',
+      );
+  });
   it.each([
     [401, 'keyRejected'],
     [403, 'keyRejected'],

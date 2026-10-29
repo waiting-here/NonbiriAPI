@@ -5,6 +5,7 @@ import { Button, DataTable, Panel, PanelBody, PanelHead } from '@shared/componen
 import { LoadingState } from '@shared/components/States';
 import { agentRoot } from './api';
 import { AgentError } from './AgentParts';
+import { CodexConnection } from './CodexConnection';
 import { ChatGPTConnection } from './ChatGPTConnection';
 import { DriverBindings } from './DriverBindings';
 import { DriverProfileEditor } from './DriverProfileEditor';
@@ -29,6 +30,7 @@ export function DriverPanel({ account, active }: { account: string; active: bool
   return (
     <div className="nb-stack">
       <ChatGPTConnection account={account} active={active} />
+      <CodexConnection account={account} active={active} />
       <Panel aria-label={t('common.agent.drivers.sources')}>
         <PanelHead
           title={t('common.agent.drivers.sources')}
@@ -63,11 +65,13 @@ export function DriverPanel({ account, active }: { account: string; active: bool
                       header: t('common.agent.drivers.provider'),
                       cell: 'meta',
                       render: (profile) =>
-                        profile.settings.provider === 'chatgpt'
-                          ? 'ChatGPT'
-                          : profile.settings.provider === 'responses'
-                            ? 'Responses API'
-                            : 'Chat Completions API',
+                        profile.settings.provider === 'codex'
+                          ? 'Codex'
+                          : profile.settings.provider === 'chatgpt'
+                            ? 'ChatGPT'
+                            : profile.settings.provider === 'responses'
+                              ? 'Responses API'
+                              : 'Chat Completions API',
                     },
                     {
                       key: 'model',

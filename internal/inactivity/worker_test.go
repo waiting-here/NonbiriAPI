@@ -164,6 +164,26 @@ func TestConcurrentWorkersAndActivityDoNotDuplicateCharges(t *testing.T) {
 	e := fixture(t)
 	id := e.user(t, "race", 1, 10000, 2000)
 	e.policy(t, testPolicy())
+	// Load both readers' schemas before starting the worker budget. The test
+	// covers concurrent accounting and activity updates after connection setup.
+	readers := make([]*sql.Conn, 0, 2)
+	for i := 0; i < 2; i++ {
+		conn, err := e.store.ReadDB().Conn(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		readers = append(readers, conn)
+		var revision int64
+		if err := conn.QueryRowContext(t.Context(), `SELECT revision FROM inactivity_policy WHERE id=1`).Scan(&revision); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, conn := range readers {
+		if err := conn.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
 	var wg sync.WaitGroup
 	errs := make(chan error, 3)
 	for i := 0; i < 2; i++ {

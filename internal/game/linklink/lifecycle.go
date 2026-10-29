@@ -329,7 +329,7 @@ func (service *Service) ActiveCounts(ctx context.Context) ([]ActiveCount, error)
 		}
 	}
 	counts := map[string]int64{"6x8": 0, "8x8": 0, "10x10": 0}
-	rows, err := service.database.QueryContext(ctx, `SELECT spec,COUNT(*) FROM game_linklink_sessions GROUP BY spec`)
+	rows, err := service.readDatabase.QueryContext(ctx, `SELECT spec,COUNT(*) FROM game_linklink_sessions GROUP BY spec`)
 	if err != nil {
 		return nil, classifyDB(err)
 	}

@@ -154,7 +154,7 @@ func newFixture(t *testing.T) *fixture {
 	f.runtime.ready.Store(true)
 	now := func() time.Time { return time.Unix(f.now.Load(), 0) }
 	a := authority{authz.New(authz.Options{Now: now})}
-	f.service, err = New(Config{Database: f.database, Users: a, Admins: a, Gate: admission{}, Keys: vault, Registry: NewRegistry(f.runtime), Activity: f.recorder, Now: now})
+	f.service, err = New(Config{Database: f.database, ReadDatabase: store.ReadDB(), Users: a, Admins: a, Gate: admission{}, Keys: vault, Registry: NewRegistry(f.runtime), Activity: f.recorder, Now: now})
 	if err != nil {
 		t.Fatal(err)
 	}

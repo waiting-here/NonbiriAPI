@@ -66,6 +66,12 @@ func newFixture(t *testing.T) *fixture {
 	}
 	f.db.SetMaxOpenConns(1)
 	t.Cleanup(func() { f.db.Close() })
+	readDatabase, err := sql.Open("sqlite", path+"?mode=ro&_pragma=query_only(1)&_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readDatabase.SetMaxOpenConns(2)
+	t.Cleanup(func() { readDatabase.Close() })
 	tx, err := f.db.Begin()
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +94,7 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := continuity.New(f.db, testAuth{})
+	c, err := continuity.New(f.db, testAuth{}, readDatabase)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,13 +129,14 @@ func newFixture(t *testing.T) *fixture {
 	if err = tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
+	warmReaders(t, readDatabase)
 	limiter, _ := game.NewStartLimiter(game.StartLimiterConfig{Now: func() time.Time { return time.UnixMilli(f.now.Load()) }})
 	t.Cleanup(func() { limiter.Close() })
 	ports, err := builtinfinance.ForModule(game.SteadyCatchID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.s, err = New(Options{Shared: host.Services{Database: f.db, UserAuthorizer: testAuth{}, Limiter: limiter, Now: func() time.Time { return time.UnixMilli(f.now.Load()) }}, Finance: ports.Solo, Continuation: testAuth{}})
+	f.s, err = New(Options{Shared: host.Services{Database: f.db, ReadDatabase: readDatabase, UserAuthorizer: testAuth{}, Limiter: limiter, Now: func() time.Time { return time.UnixMilli(f.now.Load()) }}, Finance: ports.Solo, Continuation: testAuth{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,5 +397,27 @@ func TestTerminalConcurrentRetryAndExpiry(t *testing.T) {
 	r, err = f.s.retain(f.ctx, f.now.Load()/1000, 10, time.Now().Add(time.Second))
 	if err != nil || r.Processed != 2 {
 		t.Fatal(r, err)
+	}
+}
+
+// Load the schema on both connections before timing concurrent reads.
+func warmReaders(t *testing.T, database *sql.DB) {
+	t.Helper()
+	var readers []*sql.Conn
+	defer func() {
+		for _, reader := range readers {
+			_ = reader.Close()
+		}
+	}()
+	for range 2 {
+		reader, err := database.Conn(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		readers = append(readers, reader)
+		var users int
+		if err = reader.QueryRowContext(t.Context(), "SELECT count(*) FROM users").Scan(&users); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

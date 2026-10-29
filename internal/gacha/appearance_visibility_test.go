@@ -18,7 +18,7 @@ import (
 func newAppearanceService(t *testing.T, f *fixture, visibilityRead func()) *appearance.Service {
 	t.Helper()
 	service, err := appearance.New(appearance.Config{
-		Database: f.db, Users: testAuthority{f.admin}, Gate: f.gate, Moments: f.s.MomentOptionsTx, Now: func() time.Time { return time.Unix(f.at.Load(), 0) },
+		Database: f.db, ReadDatabase: f.s.config.ReadDatabase, Users: testAuthority{f.admin}, Gate: f.gate, Moments: f.s.MomentOptionsTx, Now: func() time.Time { return time.Unix(f.at.Load(), 0) },
 		Unlock: func(ctx context.Context, tx *sql.Tx, user int64, key string) (bool, error) {
 			var owned bool
 			err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM gacha_owned WHERE user_id=? AND card_id=?)", user, strings.TrimPrefix(key, "card:")).Scan(&owned)

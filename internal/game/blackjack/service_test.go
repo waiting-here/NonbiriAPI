@@ -65,13 +65,14 @@ func (dependencies) RecordPoolTransfers(context.Context, *sql.Tx, int64, ...acti
 func (dependencies) Publish(context.Context, activities.PublishFacts) error { return nil }
 
 type fixture struct {
-	t       *testing.T
-	ctx     context.Context
-	db      *sql.DB
-	s       *blackjack.Service
-	clock   atomic.Int64
-	users   []blackjack.Identity
-	limiter *game.StartLimiter
+	t            *testing.T
+	ctx          context.Context
+	db           *sql.DB
+	readDatabase *sql.DB
+	s            *blackjack.Service
+	clock        atomic.Int64
+	users        []blackjack.Identity
+	limiter      *game.StartLimiter
 }
 
 func (f *fixture) id(prefix string) string {
@@ -100,6 +101,13 @@ func newFixture(t *testing.T, count int) *fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { f.db.Close() })
+	readDatabase, err := sql.Open("sqlite", file+"?mode=ro&_pragma=query_only(1)&_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readDatabase.SetMaxOpenConns(2)
+	f.readDatabase = readDatabase
+	t.Cleanup(func() { readDatabase.Close() })
 	f.exec(`UPDATE site_config SET value='1' WHERE key IN ('games_enabled','game_blackjack_enabled')`)
 	f.exec(`UPDATE maintenance_state SET enabled=0 WHERE id=1`)
 	tx, err := f.db.Begin()
@@ -107,7 +115,7 @@ func newFixture(t *testing.T, count int) *fixture {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	identity, err := continuity.New(f.db, dependencies{})
+	identity, err := continuity.New(f.db, dependencies{}, readDatabase)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +182,7 @@ func (f *fixture) service() *blackjack.Service {
 	}
 	registry := maintenance.NewRegistry()
 	d := dependencies{registry: registry}
-	s, err := blackjack.New(blackjack.Options{Database: f.db, Finance: capabilities.Blackjack, UserAuthorizer: d, AdminAuthorizer: d, Continuation: d, Limiter: f.limiter, Pools: d, Publisher: d, Keys: d, Now: func() time.Time { return time.Unix(f.clock.Load(), 0) }, Random: rand.New(rand.NewSource(4))})
+	s, err := blackjack.New(blackjack.Options{Database: f.db, ReadDatabase: f.readDatabase, Finance: capabilities.Blackjack, UserAuthorizer: d, AdminAuthorizer: d, Continuation: d, Limiter: f.limiter, Pools: d, Publisher: d, Keys: d, Now: func() time.Time { return time.Unix(f.clock.Load(), 0) }, Random: rand.New(rand.NewSource(4))})
 	if err != nil {
 		f.t.Fatal(err)
 	}

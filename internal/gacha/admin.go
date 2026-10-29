@@ -112,7 +112,7 @@ func (s *Service) AdminConfig(ctx context.Context, actor int64) (Configuration, 
 	if err != nil {
 		return Configuration{}, err
 	}
-	tx, err := s.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Configuration{}, err
 	}

@@ -76,7 +76,7 @@ func (service *Service) Leaderboard(ctx context.Context, userID int64, spec, win
 	if window == "30d" {
 		days = 30
 	}
-	tx, err := service.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := service.readDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Leaderboard{}, classifyDB(err)
 	}

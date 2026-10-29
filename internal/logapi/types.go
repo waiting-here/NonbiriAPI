@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"net/http"
 
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
@@ -112,23 +113,25 @@ type UserCharityLogRow struct {
 func (UserCharityLogRow) userLogRow() {}
 
 type UserSelfLogAttempt struct {
-	AttemptSeq      string     `json:"attempt_seq"`
-	ResultKind      ResultKind `json:"result_kind"`
-	EndpointKeyID   *string    `json:"endpoint_key_id"`
-	EndpointBaseURL string     `json:"endpoint_base_url"`
-	EndpointNote    string     `json:"endpoint_note"`
-	KeyNote         string     `json:"key_note"`
-	ConnectorType   string     `json:"connector_type"`
-	UpstreamModelID string     `json:"upstream_model_id"`
-	StatusCode      *int       `json:"status_code"`
-	UpstreamCode    *string    `json:"upstream_code"`
-	Diag            *string    `json:"diag"`
-	Usage           LogUsage   `json:"usage"`
-	StartedAt       int64      `json:"started_at"`
-	CompletedAt     int64      `json:"completed_at"`
+	ErrorDiagnostics *diagnostic.Failure `json:"error_diagnostics,omitempty"`
+	AttemptSeq       string              `json:"attempt_seq"`
+	ResultKind       ResultKind          `json:"result_kind"`
+	EndpointKeyID    *string             `json:"endpoint_key_id"`
+	EndpointBaseURL  string              `json:"endpoint_base_url"`
+	EndpointNote     string              `json:"endpoint_note"`
+	KeyNote          string              `json:"key_note"`
+	ConnectorType    string              `json:"connector_type"`
+	UpstreamModelID  string              `json:"upstream_model_id"`
+	StatusCode       *int                `json:"status_code"`
+	UpstreamCode     *string             `json:"upstream_code"`
+	Diag             *string             `json:"diag"`
+	Usage            LogUsage            `json:"usage"`
+	StartedAt        int64               `json:"started_at"`
+	CompletedAt      int64               `json:"completed_at"`
 }
 
 type UserSelfLogDetail struct {
+	Delivery          *diagnostic.Delivery     `json:"delivery,omitempty"`
 	Request           UserSelfLogRow           `json:"request"`
 	Attempts          Page[UserSelfLogAttempt] `json:"attempts"`
 	AttemptPagination *pagination.Metadata     `json:"attempt_pagination,omitempty"`
@@ -139,8 +142,9 @@ type CallerSafeResult struct {
 }
 
 type UserCharityLogDetail struct {
-	Request          UserCharityLogRow `json:"request"`
-	CallerSafeResult CallerSafeResult  `json:"caller_safe_result"`
+	Delivery         *diagnostic.Delivery `json:"delivery,omitempty"`
+	Request          UserCharityLogRow    `json:"request"`
+	CallerSafeResult CallerSafeResult     `json:"caller_safe_result"`
 }
 
 type UserLogDetail interface {
@@ -170,24 +174,26 @@ type AdminLogRow struct {
 }
 
 type AdminLogAttempt struct {
-	DonationID         *string    `json:"donation_id,omitempty"`
-	DonationKeyID      *string    `json:"donation_key_id,omitempty"`
-	AttemptSeq         string     `json:"attempt_seq"`
-	ResultKind         ResultKind `json:"result_kind"`
-	EndpointKeyID      *string    `json:"endpoint_key_id"`
-	EndpointBaseURL    string     `json:"endpoint_base_url"`
-	ConnectorType      string     `json:"connector_type"`
-	UpstreamModelID    string     `json:"upstream_model_id"`
-	StatusCode         *int       `json:"status_code"`
-	UpstreamCode       *string    `json:"upstream_code"`
-	Diag               *string    `json:"diag"`
-	Usage              LogUsage   `json:"usage"`
-	UsageTotalMismatch bool       `json:"usage_total_mismatch"`
-	StartedAt          int64      `json:"started_at"`
-	CompletedAt        int64      `json:"completed_at"`
+	ErrorDiagnostics   *diagnostic.Failure `json:"error_diagnostics,omitempty"`
+	DonationID         *string             `json:"donation_id,omitempty"`
+	DonationKeyID      *string             `json:"donation_key_id,omitempty"`
+	AttemptSeq         string              `json:"attempt_seq"`
+	ResultKind         ResultKind          `json:"result_kind"`
+	EndpointKeyID      *string             `json:"endpoint_key_id"`
+	EndpointBaseURL    string              `json:"endpoint_base_url"`
+	ConnectorType      string              `json:"connector_type"`
+	UpstreamModelID    string              `json:"upstream_model_id"`
+	StatusCode         *int                `json:"status_code"`
+	UpstreamCode       *string             `json:"upstream_code"`
+	Diag               *string             `json:"diag"`
+	Usage              LogUsage            `json:"usage"`
+	UsageTotalMismatch bool                `json:"usage_total_mismatch"`
+	StartedAt          int64               `json:"started_at"`
+	CompletedAt        int64               `json:"completed_at"`
 }
 
 type AdminLogDetail struct {
+	Delivery          *diagnostic.Delivery  `json:"delivery,omitempty"`
 	Request           AdminLogRow           `json:"request"`
 	Attempts          Page[AdminLogAttempt] `json:"attempts"`
 	AttemptPagination *pagination.Metadata  `json:"attempt_pagination,omitempty"`
@@ -220,30 +226,34 @@ type CallerIdentity struct {
 }
 
 type StewardLogAttempt struct {
-	DonationID         *string    `json:"donation_id,omitempty"`
-	DonationKeyID      *string    `json:"donation_key_id,omitempty"`
-	AttemptSeq         string     `json:"attempt_seq"`
-	ResultKind         ResultKind `json:"result_kind"`
-	EndpointKeyID      *string    `json:"endpoint_key_id"`
-	EndpointBaseURL    string     `json:"endpoint_base_url"`
-	ConnectorType      string     `json:"connector_type"`
-	UpstreamModelID    string     `json:"upstream_model_id"`
-	StatusCode         *int       `json:"status_code"`
-	UpstreamCode       *string    `json:"upstream_code"`
-	Diag               *string    `json:"diag"`
-	Usage              LogUsage   `json:"usage"`
-	UsageTotalMismatch bool       `json:"usage_total_mismatch"`
-	StartedAt          int64      `json:"started_at"`
-	CompletedAt        int64      `json:"completed_at"`
+	ErrorDiagnostics   *diagnostic.Failure `json:"error_diagnostics,omitempty"`
+	DonationID         *string             `json:"donation_id,omitempty"`
+	DonationKeyID      *string             `json:"donation_key_id,omitempty"`
+	AttemptSeq         string              `json:"attempt_seq"`
+	ResultKind         ResultKind          `json:"result_kind"`
+	EndpointKeyID      *string             `json:"endpoint_key_id"`
+	EndpointBaseURL    string              `json:"endpoint_base_url"`
+	ConnectorType      string              `json:"connector_type"`
+	UpstreamModelID    string              `json:"upstream_model_id"`
+	StatusCode         *int                `json:"status_code"`
+	UpstreamCode       *string             `json:"upstream_code"`
+	Diag               *string             `json:"diag"`
+	Usage              LogUsage            `json:"usage"`
+	UsageTotalMismatch bool                `json:"usage_total_mismatch"`
+	StartedAt          int64               `json:"started_at"`
+	CompletedAt        int64               `json:"completed_at"`
 }
 
 type StewardLogDetail struct {
+	Delivery          *diagnostic.Delivery    `json:"delivery,omitempty"`
 	Request           StewardLogRow           `json:"request"`
 	Attempts          Page[StewardLogAttempt] `json:"attempts"`
 	AttemptPagination *pagination.Metadata    `json:"attempt_pagination,omitempty"`
 }
 
 type ListFilter struct {
+	ErrorCategory      string
+	ErrorPhase         string
 	CharityModel       *string
 	Phase              string
 	UserID             *int64

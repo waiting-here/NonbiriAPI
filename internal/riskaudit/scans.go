@@ -603,7 +603,7 @@ func scanRetry(err error) bool {
 func (r *Repository) claimScan(ctx context.Context) (string, func(), error) {
 	r.scanSelection.Lock()
 	defer r.scanSelection.Unlock()
-	rows, err := r.db.QueryContext(ctx, `SELECT id FROM risk_client_scans WHERE state IN ('queued','running') AND expires_at>? ORDER BY updated_at,created_at,id LIMIT ?`, r.now().Unix(), MaxRunningScans)
+	rows, err := r.readDB.QueryContext(ctx, `SELECT id FROM risk_client_scans WHERE state IN ('queued','running') AND expires_at>? ORDER BY updated_at,created_at,id LIMIT ?`, r.now().Unix(), MaxRunningScans)
 	if err != nil {
 		return "", nil, err
 	}
@@ -700,6 +700,9 @@ func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, resul
 		} else if err != nil {
 			return false, err
 		}
+	}
+	if err = managementlog.StartRelatedCaptureTx(ctx, tx, "risk_scan", scan.ID); err != nil {
+		return false, err
 	}
 	if !allowed {
 		_, err = tx.ExecContext(ctx, `UPDATE risk_client_scans SET state='cancelled',reason='permission_changed',checkpoint_json=`+scanCheckpointWithoutIdentitySQL+`,updated_at=? WHERE id=?`, now, scan.ID)

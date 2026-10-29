@@ -166,7 +166,7 @@ func NewRuntime(c RuntimeConfig) (*Runtime, error) {
 		_ = r.Close()
 		return nil, errors.New("account MFA encryption unavailable")
 	}
-	r.continuity, err = continuity.New(c.Store.DB(), c.CredentialKeyDeriver)
+	r.continuity, err = continuity.New(c.Store.DB(), c.CredentialKeyDeriver, c.Store.ReadDB())
 	if err != nil {
 		_ = r.Close()
 		return nil, err
@@ -617,18 +617,18 @@ func (r *Runtime) AuthorizeUserMutation(ctx context.Context, tx *sql.Tx, userID 
 }
 
 func (r *Runtime) allowOAuthStart(w http.ResponseWriter, req *http.Request) bool {
-	values := make(map[string]string, 3)
-	for _, key := range []string{"oauth_start_rate_limit", "oauth_start_rate_window_seconds", "oauth_start_rate_penalty_seconds"} {
-		var value string
-		if err := r.db.QueryRowContext(req.Context(), `SELECT value FROM site_config WHERE key=?`, key).Scan(&value); err != nil {
-			writeStableError(w, httperr.CodeServiceUnavailable, "authentication service unavailable")
-			return false
-		}
-		values[key] = value
+	var rateLimit, rateWindow, ratePenalty string
+	err := r.readDatabase().QueryRowContext(req.Context(), `SELECT
+ (SELECT value FROM site_config WHERE key='oauth_start_rate_limit'),
+ (SELECT value FROM site_config WHERE key='oauth_start_rate_window_seconds'),
+ (SELECT value FROM site_config WHERE key='oauth_start_rate_penalty_seconds')`).Scan(&rateLimit, &rateWindow, &ratePenalty)
+	if err != nil {
+		writeStableError(w, httperr.CodeServiceUnavailable, "authentication service unavailable")
+		return false
 	}
-	limit, err1 := strconv.Atoi(values["oauth_start_rate_limit"])
-	window, err2 := strconv.Atoi(values["oauth_start_rate_window_seconds"])
-	penalty, err3 := strconv.Atoi(values["oauth_start_rate_penalty_seconds"])
+	limit, err1 := strconv.Atoi(rateLimit)
+	window, err2 := strconv.Atoi(rateWindow)
+	penalty, err3 := strconv.Atoi(ratePenalty)
 	if err1 != nil || err2 != nil || err3 != nil || limit < 0 || limit > 1000 || window < 1 || window > 3600 || penalty < 0 || penalty > 3600 {
 		writeStableError(w, httperr.CodeServiceUnavailable, "authentication service unavailable")
 		return false

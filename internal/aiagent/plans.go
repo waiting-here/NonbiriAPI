@@ -249,7 +249,7 @@ func (s *Service) Decide(ctx context.Context, actor Actor, id int64, approve boo
 		}
 	}
 	if err == nil && job.ActorID == actor.ID && plan.State == "pending" {
-		ctx, err = s.planHistory(ctx, tx, actor, plan, approve)
+		ctx, err = s.planHistoryContext(ctx, tx, actor, plan, approve)
 	}
 	_ = tx.Rollback()
 	if err != nil {

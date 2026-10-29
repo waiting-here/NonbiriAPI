@@ -188,8 +188,16 @@ func TestSourceAtomicClassificationAndOutcomeWindow(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	rate, err := r.RecentSuccess(ctx, modelID, now)
+	readTx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
+		t.Fatal(err)
+	}
+	defer readTx.Rollback()
+	rate, err := RecentSuccessTx(ctx, readTx, modelID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := readTx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
 	if rate.Success != 1 || rate.Failure != 1 || rate.Cancelled != 1 || rate.SampleCount != 2 || rate.Rate == nil || *rate.Rate != 0.5 || !rate.InsufficientSample {

@@ -8,10 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
-func (r *Runtime) complete(id int64, in Input, state, code string, status int, raw []byte, complete, redacted bool, usage Usage, count bool) (resultErr error) {
+func (r *Runtime) complete(id int64, in Input, state, code string, status int, raw []byte, complete, redacted bool, usage Usage, count bool, diagnostics ...string) (resultErr error) {
 	if raw == nil {
 		raw = []byte{}
 	}
@@ -41,6 +42,11 @@ func (r *Runtime) complete(id int64, in Input, state, code string, status int, r
 	}
 	if n != 1 {
 		return ErrConflict
+	}
+	if len(diagnostics) > 0 && diagnostic.Decode(diagnostics[0]) != nil {
+		if _, err = tx.ExecContext(ctx, "INSERT INTO agent_request_diagnostics(request_id,details) VALUES(?,?)", id, diagnostics[0]); err != nil {
+			return err
+		}
 	}
 	if _, err = tx.ExecContext(ctx, "DELETE FROM agent_request_response_chunks WHERE request_id=?", id); err != nil {
 		return err

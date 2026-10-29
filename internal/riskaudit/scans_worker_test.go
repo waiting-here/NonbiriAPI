@@ -2,10 +2,35 @@ package riskaudit
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
 )
+
+// Load each reader's schema before testing short worker deadlines. Hold every
+// connection until all have been prepared so the pool cannot reuse just one.
+func prepareScanReaders(t *testing.T, f *auditFixture) {
+	t.Helper()
+	reader := f.store.ReadDB()
+	connections := make([]*sql.Conn, 0, reader.Stats().MaxOpenConnections)
+	defer func() {
+		for _, conn := range connections {
+			_ = conn.Close()
+		}
+	}()
+	for range cap(connections) {
+		conn, err := reader.Conn(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		connections = append(connections, conn)
+		var count int
+		if err := conn.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM risk_client_scans").Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 func TestScanBatchDeadlinePreservesCheckpointAndFailureBudget(t *testing.T) {
 	f := newAuditFixture(t)
@@ -23,6 +48,7 @@ END`)
 	if err != nil {
 		t.Fatal(err)
 	}
+	prepareScanReaders(t, f)
 	for range 3 {
 		progress, err := f.repository.ProcessScanBatch(context.Background())
 		var workError *scanWorkError
@@ -41,6 +67,7 @@ END`)
 	if _, err := f.store.DB().Exec(`DROP TRIGGER slow_scan_checkpoint`); err != nil {
 		t.Fatal(err)
 	}
+	prepareScanReaders(t, f)
 	finishScan(t, f.repository)
 	var state string
 	if err := f.store.DB().QueryRow(`SELECT state FROM risk_client_scans WHERE id=?`, scan.ID).Scan(&state); err != nil || state != "completed" {
@@ -59,6 +86,7 @@ func TestScanDeterministicFailureStillStopsAtLimit(t *testing.T) {
 	if _, err := f.store.DB().Exec(`CREATE TRIGGER reject_scan_checkpoint BEFORE UPDATE ON risk_client_scans WHEN NEW.scanned>OLD.scanned BEGIN SELECT RAISE(ABORT,'invalid scan checkpoint'); END`); err != nil {
 		t.Fatal(err)
 	}
+	prepareScanReaders(t, f)
 	for range 3 {
 		if progress, err := f.repository.ProcessScanBatch(context.Background()); progress || err == nil || scanRetry(err) {
 			t.Fatalf("deterministic failure: progress=%v err=%v", progress, err)
@@ -97,6 +125,7 @@ func TestScanWorkersWakeAfterCommitAndStop(t *testing.T) {
 	if len(f.repository.scanWake[0]) != 1 || len(f.repository.scanWake[1]) != 1 {
 		t.Fatal("creation did not notify both workers")
 	}
+	prepareScanReaders(t, f)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { f.repository.RunScans(ctx); close(done) }()
@@ -128,12 +157,15 @@ func TestIdleScanWorkerAvoidsPollingAndWakesForCommittedWork(t *testing.T) {
 	f := newAuditFixture(t)
 	scanRuleFixture(t, f)
 	f.source(f.user(1), "self", "192.0.2.1", "direct_peer", "Example/1", "model", "success", 0)
-	conn, err := f.store.DB().Conn(context.Background())
+	readDB := f.store.ReadDB()
+	readDB.SetMaxOpenConns(1)
+	prepareScanReaders(t, f)
+	conn, err := readDB.Conn(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	waits := f.store.DB().Stats().WaitCount
+	waits := readDB.Stats().WaitCount
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { f.repository.runScanWorker(ctx, false, f.repository.scanWake[1]); close(done) }()
@@ -146,7 +178,7 @@ func TestIdleScanWorkerAvoidsPollingAndWakesForCommittedWork(t *testing.T) {
 		}
 	})
 	deadline := time.Now().Add(time.Second)
-	for f.store.DB().Stats().WaitCount == waits {
+	for readDB.Stats().WaitCount == waits {
 		if time.Now().After(deadline) {
 			t.Fatal("worker did not start its initial queue read")
 		}
@@ -157,14 +189,14 @@ func TestIdleScanWorkerAvoidsPollingAndWakesForCommittedWork(t *testing.T) {
 	}
 	// The worker already owns the returned connection for its empty queue read.
 	// Acquiring it again places this test after that read has finished.
-	conn, err = f.store.DB().Conn(context.Background())
+	conn, err = readDB.Conn(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	waits = f.store.DB().Stats().WaitCount
+	waits = readDB.Stats().WaitCount
 	time.Sleep(1200 * time.Millisecond)
-	if f.store.DB().Stats().WaitCount != waits {
+	if readDB.Stats().WaitCount != waits {
 		t.Fatal("idle worker polled again after one second")
 	}
 	if err := conn.Close(); err != nil {

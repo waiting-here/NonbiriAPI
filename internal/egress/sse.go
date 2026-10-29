@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"unicode/utf8"
+
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 const (
@@ -146,6 +148,8 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, options SSEOptions) (<-c
 		}()
 
 		parseErr := ParseSSE(ctx, body, events, normalized)
+		diagnostic.RecordError(ctx, "parse_sse", parseErr)
+		observeReadLimit(ctx, parseErr)
 		close(done)
 		closeBody()
 		if parseErr != nil && !errors.Is(parseErr, context.Canceled) && !errors.Is(parseErr, context.DeadlineExceeded) {
@@ -278,6 +282,7 @@ func (b *sseEventBuilder) dispatch(ctx context.Context, out chan<- SSEEvent) err
 	b.retry = 0
 	select {
 	case out <- event:
+		diagnostic.RecordEvent(ctx)
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

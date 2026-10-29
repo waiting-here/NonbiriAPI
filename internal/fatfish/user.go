@@ -142,7 +142,7 @@ func (s *Service) ListPeriods(ctx context.Context, userID int64, page int) (Peri
 	if err != nil {
 		return PeriodPage{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return PeriodPage{}, err
 	}
@@ -180,7 +180,7 @@ func (s *Service) Period(ctx context.Context, userID int64, id string) (PeriodVi
 	if err != nil {
 		return PeriodView{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return PeriodView{}, err
 	}
@@ -329,7 +329,7 @@ func (s *Service) Node(ctx context.Context, userID int64, periodID, nodeID strin
 	if err != nil {
 		return NodeView{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return NodeView{}, err
 	}

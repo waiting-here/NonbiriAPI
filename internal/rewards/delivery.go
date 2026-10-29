@@ -29,7 +29,7 @@ func (s *Service) History(ctx context.Context, user int64, cursor string) (Recei
 	if err != nil {
 		return out, err
 	}
-	tx, err := s.config.Database.BeginTx(ctx, nil)
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return out, err
 	}
@@ -114,6 +114,9 @@ func (s *Service) processOne(ctx context.Context) (_ bool, resultErr error) {
 	}
 	c, err := readConfiguration(ctx, tx, campaign)
 	if err != nil {
+		return false, err
+	}
+	if err = managementlog.StartRelatedCaptureTx(ctx, tx, "reward_campaign", campaign); err != nil {
 		return false, err
 	}
 	var alive bool

@@ -62,7 +62,7 @@ func (service *Service) validatePersistedState(ctx context.Context) error {
 	}
 	cursor := ""
 	for {
-		rows, err := service.database.QueryContext(ctx, `SELECT id FROM game_rps_sessions WHERE id>? ORDER BY id LIMIT ?`, cursor, workerBatchSize)
+		rows, err := service.readDatabase.QueryContext(ctx, `SELECT id FROM game_rps_sessions WHERE id>? ORDER BY id LIMIT ?`, cursor, workerBatchSize)
 		if err != nil {
 			return classifyDB(err)
 		}
@@ -84,7 +84,7 @@ func (service *Service) validatePersistedState(ctx context.Context) error {
 			return classifyDB(err)
 		}
 		for _, id := range ids {
-			tx, err := service.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+			tx, err := service.readDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 			if err != nil {
 				return classifyDB(err)
 			}
@@ -103,7 +103,7 @@ func (service *Service) validatePersistedState(ctx context.Context) error {
 		}
 	}
 	var invalid int
-	if err := service.database.QueryRowContext(ctx, `SELECT EXISTS(
+	if err := service.readDatabase.QueryRowContext(ctx, `SELECT EXISTS(
 SELECT 1 FROM game_rps_rank_facts WHERE aggregate_applied<>1)`).Scan(&invalid); err != nil {
 		return classifyDB(err)
 	}
@@ -117,7 +117,7 @@ SELECT 1 FROM game_rps_rank_facts WHERE aggregate_applied<>1)`).Scan(&invalid); 
 func (service *Service) validateQueues(ctx context.Context) error {
 	cursor := ""
 	for {
-		rows, err := service.database.QueryContext(ctx, `SELECT `+queueColumns+` FROM game_rps_queue WHERE id>? ORDER BY id LIMIT ?`, cursor, workerBatchSize)
+		rows, err := service.readDatabase.QueryContext(ctx, `SELECT `+queueColumns+` FROM game_rps_queue WHERE id>? ORDER BY id LIMIT ?`, cursor, workerBatchSize)
 		if err != nil {
 			return classifyDB(err)
 		}
@@ -179,7 +179,7 @@ func (service *Service) recoverHealthEpoch(ctx context.Context, now int64) error
 }
 
 func (service *Service) recoverHealthEpochBatch(ctx context.Context, now int64, limit int) (int, error) {
-	rows, err := service.database.QueryContext(ctx, `SELECT id FROM game_rps_sessions WHERE health_epoch<>? ORDER BY id LIMIT ?`, service.healthEpoch, limit)
+	rows, err := service.readDatabase.QueryContext(ctx, `SELECT id FROM game_rps_sessions WHERE health_epoch<>? ORDER BY id LIMIT ?`, service.healthEpoch, limit)
 	if err != nil {
 		return 0, classifyDB(err)
 	}
@@ -268,7 +268,7 @@ func (service *Service) sweepQueuesBatch(ctx context.Context, now int64, limit i
 }
 
 func (service *Service) recoveryQueueIDs(ctx context.Context, now int64, limit int) ([]string, error) {
-	tx, err := service.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := service.readDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, classifyDB(err)
 	}
@@ -286,7 +286,7 @@ func (service *Service) recoveryQueueIDs(ctx context.Context, now int64, limit i
 	for _, mode := range []string{game.RPSModeQuick, game.RPSModeStandard, game.RPSModeDeathmatch} {
 		disabled[mode] = maintenance || !snapshot.GamesEnabled || !snapshot.RPS.Enabled || !snapshot.RPS.Modes[mode].Enabled
 	}
-	rows, err := service.database.QueryContext(ctx, `SELECT q.id FROM game_rps_queue q JOIN users u ON u.id=q.user_id
+	rows, err := service.readDatabase.QueryContext(ctx, `SELECT q.id FROM game_rps_queue q JOIN users u ON u.id=q.user_id
 WHERE q.deadline<=? OR u.is_admin<>0 OR (u.is_banned<>0 AND (u.banned_until IS NULL OR u.banned_until>?))
 OR (q.mode='quick' AND ?) OR (q.mode='standard' AND ?) OR (q.mode='deathmatch' AND ?)
 ORDER BY q.deadline,q.created_at,q.id LIMIT ?`, now, now, disabled[game.RPSModeQuick], disabled[game.RPSModeStandard], disabled[game.RPSModeDeathmatch], limit)
@@ -340,7 +340,7 @@ func (service *Service) runDeadlineSessions(ctx context.Context, now int64) (int
 }
 
 func (service *Service) runDeadlineSessionsBatch(ctx context.Context, now int64, limit int) (int, error) {
-	rows, err := service.database.QueryContext(ctx, `SELECT id FROM game_rps_sessions
+	rows, err := service.readDatabase.QueryContext(ctx, `SELECT id FROM game_rps_sessions
 WHERE state='started' AND phase_deadline<=? ORDER BY phase_deadline,id LIMIT ?`, now, limit)
 	if err != nil {
 		return 0, classifyDB(err)
@@ -416,7 +416,7 @@ func (service *Service) runTerminalRetries(ctx context.Context, now int64) (int,
 }
 
 func (service *Service) runTerminalRetriesBatch(ctx context.Context, now int64, limit int) (int, error) {
-	rows, err := service.database.QueryContext(ctx, `SELECT id FROM game_rps_sessions
+	rows, err := service.readDatabase.QueryContext(ctx, `SELECT id FROM game_rps_sessions
 WHERE state='terminal_processing' AND (terminal_next_retry_at IS NULL OR terminal_next_retry_at<=?)
 ORDER BY COALESCE(terminal_next_retry_at,0),id LIMIT ?`, now, limit)
 	if err != nil {
@@ -488,7 +488,7 @@ func (service *Service) runTerminalOne(ctx context.Context, sessionID string, no
 }
 
 func (service *Service) shortenDisconnected(ctx context.Context, now int64) (int, error) {
-	rows, err := service.database.QueryContext(ctx, `SELECT DISTINCT g.id FROM game_rps_sessions g
+	rows, err := service.readDatabase.QueryContext(ctx, `SELECT DISTINCT g.id FROM game_rps_sessions g
 JOIN game_rps_seats seat ON seat.session_id=g.id
 WHERE g.state='started' AND g.phase_deadline>? AND seat.user_id IS NOT NULL AND seat.deletion_state='active'
 AND EXISTS(SELECT 1 FROM game_online_leases old WHERE old.session_id=g.id AND old.user_id=seat.user_id AND old.health_epoch=?)
@@ -674,5 +674,5 @@ func (service *Service) expireRankFactsBatch(ctx context.Context, now int64) (in
 
 // VerifyPersistedState audits persisted records without runtime setup.
 func VerifyPersistedState(ctx context.Context, database *sql.DB) error {
-	return (&Service{database: database}).validatePersistedState(ctx)
+	return (&Service{database: database, readDatabase: database}).validatePersistedState(ctx)
 }

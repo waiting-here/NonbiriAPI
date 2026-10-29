@@ -286,6 +286,8 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 	case "user":
 		allowed["model"] = true
 	case "admin", "steward":
+		allowed["error_category"] = true
+		allowed["error_phase"] = true
 		allowed["user_id"] = true
 		allowed["discord_id"] = true
 		allowed["usage_total_mismatch"] = true
@@ -350,6 +352,10 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 			filter.Model = &value
 		case "error_code":
 			filter.ErrorCode = &value
+		case "error_category":
+			filter.ErrorCategory = value
+		case "error_phase":
+			filter.ErrorPhase = value
 		case "status":
 			status, err := strconv.Atoi(value)
 			if err != nil || status < 100 || status > 599 || strconv.Itoa(status) != value {

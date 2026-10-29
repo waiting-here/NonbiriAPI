@@ -318,6 +318,9 @@ func performanceMethod(method string) string {
 }
 
 func performanceRoute(path string) string {
+	if route := charityManagementRoute(path); route != "" {
+		return route
+	}
 	if requestkind.OperationForPath(path).Valid() {
 		return path
 	}
@@ -351,4 +354,37 @@ func performanceRoute(path string) string {
 		}
 	}
 	return "page.other"
+}
+
+// Only fixed route templates enter metrics; object identifiers never do.
+func charityManagementRoute(path string) string {
+	for _, base := range []string{"/api/steward", "/admin/api"} {
+		for _, resource := range []string{"/charity-models", "/charity-price-templates"} {
+			root := base + resource
+			if path == root {
+				return root
+			}
+			rest, ok := strings.CutPrefix(path, root+"/")
+			if !ok {
+				continue
+			}
+			id, tail, nested := strings.Cut(rest, "/")
+			if id == "" {
+				continue
+			}
+			if !nested {
+				return root + "/{id}"
+			}
+			if resource == "/charity-models" {
+				switch tail {
+				case "bindings", "binding-candidates", "bindings/batch", "bindings/batch-receipt", "bindings/order":
+					return root + "/{id}/" + tail
+				}
+				if binding, ok := strings.CutPrefix(tail, "bindings/"); ok && binding != "" && !strings.Contains(binding, "/") {
+					return root + "/{id}/bindings/{id}"
+				}
+			}
+		}
+	}
+	return ""
 }

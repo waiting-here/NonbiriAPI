@@ -1,70 +1,102 @@
 import { apiFetch } from '@shared/query/http';
 import { queryPath } from './api';
 import {
-  normalizeManagedDonationsPage,
-  type AdminDonationPageItem,
+  normalizeDonationPageHandling,
   type DonationPageResult,
   type DonationPageRole,
   type ManagedDonationPageFilters,
 } from './donationPages';
-import { array, decimalID, invalidResponse, nullableUnixSecond, record } from './wire';
+import {
+  decimal,
+  decimalID,
+  invalidResponse,
+  nullableUnixSecond,
+  oneOf,
+  record,
+  string,
+  unixSecond,
+} from './wire';
+import { normalizeNumberedPage } from './numberedPage';
+import { normalizeUseSummary, type UseSummary } from './donationUses';
+import type { DonationHandling, DonationStatus } from './charity';
 import type { PageSize } from './pageNumbers';
 
-export type UserDonationHistoryItem = AdminDonationPageItem & { owner_hidden_at: number | null };
+export interface UserDonationHistoryItem {
+  id: string;
+  status: DonationStatus;
+  description: string;
+  review_result: { reason: string } | null;
+  created_at: number;
+  updated_at: number;
+  key_count: string;
+  source_count: string;
+  handling: DonationHandling;
+  use_summary?: UseSummary;
+  owner_hidden_at: number | null;
+}
 export type UserDonationHistoryFilters = Pick<ManagedDonationPageFilters, 'q' | 'review_status'>;
 
 const FIELDS = [
   'id',
   'status',
-  'revision',
   'description',
   'review_result',
   'created_at',
   'updated_at',
   'key_count',
-  'state_counts',
   'source_count',
-  'sources',
   'handling',
-  'owner',
-  'reviewer',
-  'discord_public_thanks',
   'use_summary',
   'owner_hidden_at',
 ] as const;
 
 export function normalizeUserDonationHistoryPage(
   value: unknown,
-  role: DonationPageRole,
-  filters: UserDonationHistoryFilters,
   page: string,
   pageSize: PageSize,
 ): DonationPageResult<UserDonationHistoryItem> {
-  const root = record(value, ['data', 'next_cursor', 'pagination'], 'user donation history');
-  const hidden: (number | null)[] = [];
-  const data = array(root.data, 'user donation history rows', 100).map((value) => {
-    const row = record(
-      value,
-      FIELDS,
-      'user donation history row',
-      FIELDS.filter((field) => field !== 'use_summary'),
-    );
-    hidden.push(nullableUnixSecond(row.owner_hidden_at, 'owner hidden time'));
-    const { owner_hidden_at: ignored, ...summary } = row;
-    void ignored;
-    return summary;
-  });
-  const normalized = normalizeManagedDonationsPage(
-    { ...root, data },
-    role,
-    filters,
+  return normalizeNumberedPage(
+    value,
+    'user donation history',
+    (value): UserDonationHistoryItem => {
+      const row = record(
+        value,
+        FIELDS,
+        'user donation history row',
+        FIELDS.filter((field) => field !== 'use_summary'),
+      );
+      const status = oneOf(
+        row.status,
+        ['pending', 'approved', 'rejected', 'deleted', 'expired'] as const,
+        'history donation status',
+      );
+      return {
+        id: decimalID(row.id, 'history donation id'),
+        status,
+        description: string(row.description, 'history description', { multiline: true }),
+        review_result:
+          row.review_result === null
+            ? null
+            : {
+                reason: string(
+                  record(row.review_result, ['reason'], 'history review').reason,
+                  'history review reason',
+                  { multiline: true },
+                ),
+              },
+        created_at: unixSecond(row.created_at, 'history creation time'),
+        updated_at: unixSecond(row.updated_at, 'history update time'),
+        key_count: decimal(row.key_count, 'history key count'),
+        source_count: decimal(row.source_count, 'history source count'),
+        handling: normalizeDonationPageHandling(row.handling, 'history handling', status),
+        ...(row.use_summary == null ? {} : { use_summary: normalizeUseSummary(row.use_summary) }),
+        owner_hidden_at: nullableUnixSecond(row.owner_hidden_at, 'owner hidden time'),
+      };
+    },
     page,
     pageSize,
+    (row) => row.id,
   );
-  return {
-    ...normalized,
-    data: normalized.data.map((row, index) => ({ ...row, owner_hidden_at: hidden[index]! })),
-  };
 }
 
 function path(role: DonationPageRole, userID: string): string {
@@ -89,7 +121,7 @@ export async function getUserDonationHistoryPage(
     }),
     { signal },
   );
-  return normalizeUserDonationHistoryPage(payload, role, filters, page, pageSize);
+  return normalizeUserDonationHistoryPage(payload, page, pageSize);
 }
 
 export async function getUserDonationHistoryDetail(
@@ -108,8 +140,6 @@ export async function getUserDonationHistoryDetail(
       next_cursor: null,
       pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
     },
-    role,
-    {},
     '1',
     20,
   ).data[0]!;

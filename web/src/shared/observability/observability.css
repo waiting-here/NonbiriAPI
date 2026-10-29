@@ -88,3 +88,35 @@
     align-self: stretch;
   }
 }
+
+.failure-diagnostics {
+  display: grid;
+  gap: var(--nb-space-3);
+}
+.failure-diagnostics > :is(p, dl),
+.failure-diagnostics .nb-note p {
+  margin: 0;
+}
+.failure-diagnostics .nb-note p + p {
+  margin-top: var(--nb-space-2);
+}
+.failure-diagnostics dl > div {
+  gap: var(--nb-space-3);
+  padding-block: var(--nb-space-1);
+}
+.failure-diagnostics :is(dt, dd, li, time) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.failure-diagnostics dt {
+  color: var(--nb-color-text-muted);
+}
+.failure-diagnostics :is(h4, ol) {
+  margin-block: var(--nb-space-3);
+}
+@media (width < 40rem) {
+  .failure-diagnostics dl > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--nb-space-1);
+  }
+}

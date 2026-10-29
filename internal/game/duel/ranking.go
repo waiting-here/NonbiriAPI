@@ -36,10 +36,12 @@ func (s *Service) registerRankingRoute(registrar resources.UserRouteRegistrar) e
 		}
 		defer tx.Rollback()
 		if err := s.authorize(r.Context(), tx, Identity{UserID: p.UserID}); err != nil {
+			_ = tx.Rollback()
 			writeError(w, err)
 			return
 		}
 		board, err := rating.ReadTx(r.Context(), tx, s.rules.ID(), p.UserID, window, now)
+		_ = tx.Rollback()
 		writeValue(w, board, err)
 	})
 }

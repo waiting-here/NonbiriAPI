@@ -51,7 +51,7 @@ func fixture(t *testing.T) *testEnv {
 	}
 	t.Cleanup(func() { _ = store.Close(); _ = vault.Close() })
 	i := &invalidations{}
-	s, err := New(Config{Database: store.DB(), FinalAuth: unavailableAuth{}, CancelUserTx: func(context.Context, *sql.Tx, int64, string, int64) (func(bool), error) { return func(bool) {}, nil }, Invalidator: i, Now: func() time.Time { return time.Unix(testNow, 0) }})
+	s, err := New(Config{Database: store.DB(), ReadDatabase: store.ReadDB(), FinalAuth: unavailableAuth{}, CancelUserTx: func(context.Context, *sql.Tx, int64, string, int64) (func(bool), error) { return func(bool) {}, nil }, Invalidator: i, Now: func() time.Time { return time.Unix(testNow, 0) }})
 	if err != nil {
 		t.Fatal(err)
 	}

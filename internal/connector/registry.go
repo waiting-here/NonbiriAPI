@@ -325,8 +325,8 @@ func anthropicDescriptor() Descriptor {
 		},
 		Discoverer: anthropic.ModelDiscoverer{},
 		Supports:   anthropic.SupportsRequest,
-		CheckTarget: func(_ connectorcontract.Target, request *openai.ChatRequest, _ connectorcontract.AttemptPolicy) error {
-			return anthropic.ValidateRequest(request)
+		CheckTarget: func(target connectorcontract.Target, request *openai.ChatRequest, policy connectorcontract.AttemptPolicy) error {
+			return anthropic.ValidateTarget(target, request, policy)
 		},
 	}
 }

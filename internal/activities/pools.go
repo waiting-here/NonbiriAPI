@@ -149,7 +149,7 @@ func (r *Repository) ListPools(ctx context.Context, query PoolListQuery) (Page[P
 	if query.Page != nil || query.AdminID != 0 {
 		tx, err = r.beginAdminRead(ctx, query.AdminID)
 	} else {
-		tx, err = r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		tx, err = r.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	}
 	if err != nil {
 		return Page[Pool]{}, classifyDatabaseError("begin pool list", err)

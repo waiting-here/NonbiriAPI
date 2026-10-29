@@ -231,6 +231,7 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
+	warmReaders(t, store.ReadDB())
 	f := &fixture{database: store.DB(), vault: vault, upstream: newUpstream(t), actors: map[int64]authz.Actor{}}
 	f.now.Store(testNow)
 	if _, err = f.database.Exec("UPDATE maintenance_state SET enabled=0 WHERE id=1"); err != nil {
@@ -253,7 +254,7 @@ func newFixture(t *testing.T) *fixture {
 	f.source = &sourceProxy{Repository: repo}
 	now := func() time.Time { return time.Unix(f.now.Load(), 0) }
 	auth := authority{authz.New(authz.Options{Now: now})}
-	f.service, err = New(Config{Database: f.database, Users: auth, Admins: auth, Gate: admission{}, Vault: vault, Egress: stack, Sources: f.source, Diagnostics: repo, Now: now, Admission: func(ctx context.Context, tx *sql.Tx, user int64, key string, at int64) (limitedactivities.Detail, error) {
+	f.service, err = New(Config{Database: f.database, ReadDatabase: store.ReadDB(), Users: auth, Admins: auth, Gate: admission{}, Vault: vault, Egress: stack, Sources: f.source, Diagnostics: repo, Now: now, Admission: func(ctx context.Context, tx *sql.Tx, user int64, key string, at int64) (limitedactivities.Detail, error) {
 		return f.limited.CheckAdmissionTx(ctx, tx, user, key, at)
 	}})
 	if err != nil {
@@ -414,4 +415,26 @@ func (f *fixture) checkLedger(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+}
+
+// Load the schema on both connections before timing concurrent reads.
+func warmReaders(t *testing.T, database *sql.DB) {
+	t.Helper()
+	var readers []*sql.Conn
+	defer func() {
+		for _, reader := range readers {
+			_ = reader.Close()
+		}
+	}()
+	for range 2 {
+		reader, err := database.Conn(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		readers = append(readers, reader)
+		var users int
+		if err = reader.QueryRowContext(t.Context(), "SELECT count(*) FROM users").Scan(&users); err != nil {
+			t.Fatal(err)
+		}
+	}
 }

@@ -75,6 +75,44 @@ beforeEach(() => {
 });
 
 describe('site settings discovery and saving', () => {
+  it.each(['en', 'zh'] as const)('edits both user concurrency defaults in %s', async (locale) => {
+    const heavy = pair('Default heavy concurrency per user', '单用户重型并发默认值');
+    const light = pair('Default light concurrency per user', '单用户轻型并发默认值');
+    bundle.values = { default_concurrency_per_user: 5, default_light_concurrency_per_user: 15 };
+    bundle.catalog = [
+      { key: 'default_concurrency_per_user', title: heavy, value: 5 },
+      { key: 'default_light_concurrency_per_user', title: light, value: 15 },
+    ].map(({ key, title, value }) => ({
+      ...entry(key, 'limits', title),
+      raw_default: value,
+      effective_fallback: value,
+      maximum: 100000,
+      unit: pair('requests', '请求'),
+    }));
+    const view = await renderWithProviders(<SettingsPage />, {
+      station: 'admin',
+      role: 'admin',
+      locale,
+    });
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture' } });
+    const heavyInput = await screen.findByLabelText(heavy[locale]);
+    const lightInput = screen.getByLabelText(light[locale]);
+    expect(heavyInput).toHaveValue(5);
+    expect(lightInput).toHaveValue(15);
+    await view.user.clear(heavyInput);
+    await view.user.type(heavyInput, '7');
+    await view.user.clear(lightInput);
+    await view.user.type(lightInput, '21');
+    await view.user.click(
+      screen.getByRole('button', { name: locale === 'en' ? 'Save all changes' : '保存所有修改' }),
+    );
+    await waitFor(() => expect(api.patchSiteSettings).toHaveBeenCalledTimes(1));
+    expect(api.patchSiteSettings.mock.calls[0][0]).toEqual({
+      expected_revision: '1',
+      values: { default_concurrency_per_user: 7, default_light_concurrency_per_user: 21 },
+    });
+  });
+
   it('discovers and saves the light charity default from the backend catalog', async () => {
     bundle.values = { default_light_rpm_per_user: 30 };
     bundle.catalog = [

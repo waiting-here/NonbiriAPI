@@ -40,6 +40,7 @@ import {
   type Subject,
 } from './api';
 import './management-history.css';
+import { SnapshotChanges } from './SnapshotChanges';
 
 const sources = ['web', 'caller_key', 'mainstream_rule', 'ai_auto', 'ai_manual'];
 const outcomes = ['succeeded', 'partial', 'failed', 'rejected', 'no_change', 'accepted', 'unknown'];
@@ -131,17 +132,25 @@ function Executor({
   authorizer: Subject;
 }) {
   const { t } = useTranslation();
+  const role = (subject: Subject) =>
+    t(`admin.managementHistory.roles.${subject.role}`, { defaultValue: subject.role });
   if (source === 'ai_manual')
     return (
       <span>
         {t('admin.managementHistory.aiAuthorized', {
           name: authorizer.name || authorizer.id || '—',
         })}
+        {authorizer.role ? <small className="nb-muted"> · {role(authorizer)}</small> : null}
       </span>
     );
   if (source === 'ai_auto' || source === 'mainstream_rule')
     return <span>{t(`admin.managementHistory.sources.${source}`)}</span>;
-  return <span>{actor.name || actor.id || t('admin.managementHistory.unidentified')}</span>;
+  return (
+    <span>
+      {actor.name || actor.id || t('admin.managementHistory.unidentified')}
+      {actor.role ? <small className="nb-muted"> · {role(actor)}</small> : null}
+    </span>
+  );
 }
 function CountDetails({
   value,
@@ -164,10 +173,12 @@ function ActionTitle({
   domain,
   action,
   summary,
+  target_name,
 }: {
   domain: string;
   action: string;
   summary?: string;
+  target_name?: string;
 }) {
   const { t, i18n } = useTranslation();
   const verb = action.split('.').at(-1) ?? action;
@@ -177,7 +188,16 @@ function ActionTitle({
     i18n.resolvedLanguage === 'zh' && summary
       ? summary
       : t('admin.managementHistory.actionTitle', { domain: domainLabel, action: verbLabel });
-  return <span title={domain + ' · ' + action}>{title}</span>;
+  return (
+    <span className="nb-stack nb-stack--sm" title={domain + ' · ' + action}>
+      {title}
+      {target_name ? (
+        <strong className="management-history__object-name" title={target_name}>
+          {target_name}
+        </strong>
+      ) : null}
+    </span>
+  );
 }
 
 function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter) => void }) {
@@ -435,7 +455,7 @@ export function ManagementHistory({ account }: { account: string }) {
     },
   ];
   return (
-    <div className="page ops-stack management-history">
+    <div className="page nb-stack management-history">
       <PageHeader
         eyebrow={t('admin.navigation.operations')}
         title={t('admin.managementHistory.title')}
@@ -715,9 +735,7 @@ function OperationDetail({
                     key: 'changes',
                     header: t('admin.managementHistory.changedFields'),
                     cell: 'meta',
-                    render: (item) => (
-                      <span>{item.changes.map((change) => change.field).join(', ') || '—'}</span>
-                    ),
+                    render: (item) => <SnapshotChanges item={item} />,
                   },
                 ]}
               />

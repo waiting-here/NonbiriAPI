@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector/chatwire"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/continuation"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
@@ -412,7 +413,7 @@ func reasoningExtension(raw []byte) ([]any, string, error) {
 		return nil, "", chatwire.ErrProtocol
 	}
 	outer, err := chatwire.Object(raw)
-	if err != nil || !chatwire.Keys(outer, "openai") {
+	if err != nil || !continuation.ValidExtra(outer, "openai") {
 		return nil, "", chatwire.ErrProtocol
 	}
 	inner, err := chatwire.Object(outer["openai"])

@@ -266,7 +266,7 @@ func (s *Service) Retain(ctx context.Context, now int64, limit int, deadline tim
 	if now < 0 || now > maxDecisionTime || limit < 1 || limit > 100 || deadline.IsZero() {
 		return WorkResult{}, ErrInvalidRequest
 	}
-	rows, err := s.database.QueryContext(ctx, `SELECT id FROM game_duel_sessions WHERE game_key=? AND state='terminal' AND delete_at<=? ORDER BY delete_at,id LIMIT ?`, s.rules.ID(), now, limit+1)
+	rows, err := s.readDatabase.QueryContext(ctx, `SELECT id FROM game_duel_sessions WHERE game_key=? AND state='terminal' AND delete_at<=? ORDER BY delete_at,id LIMIT ?`, s.rules.ID(), now, limit+1)
 	if err != nil {
 		return WorkResult{}, err
 	}

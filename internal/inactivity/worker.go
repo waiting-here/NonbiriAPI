@@ -68,10 +68,10 @@ func (s *Service) Process(ctx context.Context, at int64, limit int, deadline tim
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	var revision int64
-	if err := s.db.QueryRowContext(ctx, `SELECT revision FROM inactivity_policy WHERE id=1`).Scan(&revision); err != nil {
+	if err := s.readDB.QueryRowContext(ctx, `SELECT revision FROM inactivity_policy WHERE id=1`).Scan(&revision); err != nil {
 		return result, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT user_id FROM (SELECT user_id FROM (SELECT user_id FROM user_activity_state WHERE schedule_revision<? ORDER BY schedule_revision,user_id LIMIT ?) UNION SELECT user_id FROM (SELECT user_id FROM user_activity_state WHERE next_due_at<=? ORDER BY next_due_at,user_id LIMIT ?)) ORDER BY user_id LIMIT ?`, revision, limit+1, at, limit+1, limit+1)
+	rows, err := s.readDB.QueryContext(ctx, `SELECT user_id FROM (SELECT user_id FROM (SELECT user_id FROM user_activity_state WHERE schedule_revision<? ORDER BY schedule_revision,user_id LIMIT ?) UNION SELECT user_id FROM (SELECT user_id FROM user_activity_state WHERE next_due_at<=? ORDER BY next_due_at,user_id LIMIT ?)) ORDER BY user_id LIMIT ?`, revision, limit+1, at, limit+1, limit+1)
 	if err != nil {
 		return result, err
 	}

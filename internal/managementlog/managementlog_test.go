@@ -30,6 +30,7 @@ func fixture(t *testing.T) *Service {
 		"INSERT INTO users VALUES(1,'Administrator',1,0,6,6),(2,'Steward',0,0,5,5)",
 		"CREATE TABLE business(value INTEGER)",
 		db.ManagementOperationsSQL,
+		strings.Split(db.ManagementDetailsSQL, "\nCREATE TRIGGER")[0],
 	} {
 		if _, err = database.Exec(ddl); err != nil {
 			t.Fatal(err)
@@ -142,6 +143,10 @@ func TestLargeBatchCleanupResumesAndProtectsCutoff(t *testing.T) {
 	}
 	if _, e = s.Items(ctx, 1, first, 1, 25); !errors.Is(e, ErrCleaning) {
 		t.Fatal(e)
+	}
+	var orphanTerms int
+	if e = s.DB.QueryRow(`SELECT COUNT(*) FROM management_operation_terms t WHERE NOT EXISTS(SELECT 1 FROM management_operation_items i WHERE i.operation_id=t.operation_id AND i.ordinal=t.ordinal)`).Scan(&orphanTerms); e != nil || orphanTerms != 0 {
+		t.Fatal(orphanTerms, e)
 	}
 	s = New(s.DB, s.ReadDB)
 	for i := 0; i < 10; i++ {

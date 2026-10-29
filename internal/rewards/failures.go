@@ -27,7 +27,7 @@ func (s *Service) Failures(ctx context.Context, actor int64, campaign, cursor st
 	if err != nil {
 		return out, err
 	}
-	tx, err := s.config.Database.BeginTx(ctx, nil)
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return out, err
 	}

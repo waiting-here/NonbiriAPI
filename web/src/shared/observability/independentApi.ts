@@ -1,3 +1,4 @@
+import { normalizeFailure, type FailureDiagnostics } from './failure';
 import { apiFetch } from '@shared/query/http';
 import { responseFields } from '@shared/query/responseFields';
 import { type DiagnosticRole, type ErrorBody, type ErrorMetadata, type SourceFacts } from './api';
@@ -26,6 +27,7 @@ export interface IndependentPage {
   to: number;
 }
 export interface IndependentDetail {
+  error_diagnostics?: FailureDiagnostics | null;
   item: IndependentItem;
   body: ErrorBody;
   source: SourceFacts | null;
@@ -232,7 +234,12 @@ export function decodeIndependentDetail(value: unknown): IndependentDetail {
     body: raw.body,
     ...(raw.ipv4_redacted === true ? { ipv4_redacted: true } : {}),
   };
-  return { item: entry, body, source: source(v.source) };
+  return {
+    item: entry,
+    body,
+    source: source(v.source),
+    error_diagnostics: normalizeFailure(v.error_diagnostics),
+  };
 }
 function root(role: DiagnosticRole) {
   if (role !== 'admin' && role !== 'steward') invalid();

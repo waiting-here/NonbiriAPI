@@ -306,7 +306,7 @@ func (s *Service) validateArchives(ctx context.Context, tx *sql.Tx) error {
 
 // VerifyPersistedState audits live and archived records without runtime setup.
 func VerifyPersistedState(ctx context.Context, database *sql.DB, descriptor game.ModuleDescriptor, rules Rules) error {
-	service := &Service{database: database, descriptor: descriptor, rules: rules}
+	service := &Service{database: database, readDatabase: database, descriptor: descriptor, rules: rules}
 	if err := service.initializeReader(); err != nil {
 		return err
 	}

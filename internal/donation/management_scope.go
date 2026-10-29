@@ -38,7 +38,11 @@ func (s *Service) beginScopedTx(ctx context.Context, role reviewerRole, actorID 
 	if s == nil || s.db == nil || ctx == nil || nilDependency(s.roleAuth) {
 		return nil, charityscope.Scope{}, ErrUnavailable
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: readOnly})
+	database := s.db
+	if readOnly {
+		database = s.readDB
+	}
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: readOnly})
 	if err != nil {
 		return nil, charityscope.Scope{}, err
 	}

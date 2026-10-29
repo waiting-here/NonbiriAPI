@@ -6,12 +6,83 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
+
+func TestUserDonationHistoryHTTPPreservesSourcesForEveryReader(t *testing.T) {
+	e, admin, owner, donation := sourceContextFixture(t)
+	if _, err := e.store.DB().Exec(`UPDATE users SET level=6 WHERE id=?`, owner); err != nil {
+		t.Fatal(err)
+	}
+	five, six := int64(5), int64(6)
+	otherSteward := e.seedUser(t, "history-other-steward", &six, false)
+	trainee := e.seedUser(t, "history-source-trainee", &five, false)
+	api := &httpAPI{service: e.service}
+	for _, reader := range []struct {
+		name string
+		role reviewerRole
+		id   int64
+		full bool
+	}{
+		{"admin", reviewerAdmin, admin.ID, true},
+		{"self", reviewerSteward, owner, true},
+		{"other_steward", reviewerSteward, otherSteward, true},
+		{"trainee", reviewerSteward, trainee, false},
+	} {
+		t.Run(reader.name, func(t *testing.T) {
+			for _, detail := range []bool{false, true} {
+				request := httptest.NewRequest(http.MethodGet, "/?page=1&page_size=20", nil)
+				request.SetPathValue("userId", fmt.Sprint(owner))
+				if detail {
+					request.URL.RawQuery = ""
+					request.SetPathValue("id", donation.ID)
+				}
+				response := httptest.NewRecorder()
+				api.userHistoryHandler(reader.role, detail)(response, request, UserPrincipal{UserID: reader.id})
+				if response.Code != http.StatusOK {
+					t.Fatalf("detail=%v: status=%d body=%s", detail, response.Code, response.Body.String())
+				}
+				var rows []json.RawMessage
+				if detail {
+					rows = append(rows, response.Body.Bytes())
+				} else {
+					var page struct {
+						Data []json.RawMessage `json:"data"`
+					}
+					if err := json.Unmarshal(response.Body.Bytes(), &page); err != nil {
+						t.Fatal(err)
+					}
+					rows = page.Data
+				}
+				if len(rows) != 1 {
+					t.Fatalf("detail=%v: rows=%d", detail, len(rows))
+				}
+				var row struct {
+					ID      string            `json:"id"`
+					Sources []AdminSafeSource `json:"sources"`
+					Owner   *DonationOwner    `json:"owner"`
+				}
+				if err := json.Unmarshal(rows[0], &row); err != nil {
+					t.Fatal(err)
+				}
+				if row.ID != donation.ID || (row.Owner != nil) != reader.full {
+					t.Fatalf("unexpected history projection: %+v", row)
+				}
+				checkSourceContexts(t, row.Sources)
+				for _, forbidden := range []string{`"encrypted_secret"`, `"endpoint_key_id"`, `"display_head"`, `"can_manage"`} {
+					if strings.Contains(string(rows[0]), forbidden) {
+						t.Fatal("private history data exposed", forbidden)
+					}
+				}
+			}
+		})
+	}
+}
 
 func TestUserDonationHistoryIncludesHiddenAndTerminalWithSafeProjection(t *testing.T) {
 	e := newDonationTestEnv(t)

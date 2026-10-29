@@ -192,10 +192,10 @@ material.
 ## 6. Prepare a Generation 2 database path
 
 For a fresh start, the configured database and its exact `-wal` and `-shm` paths
-must all be absent. Fresh storage uses schema 41. The service opens only the
+must all be absent. Fresh storage uses schema 42. The service opens only the
 exact current schema and rejects older, newer, unknown or incomplete storage
 before migration, repair or recovery writes. Exact registered schema 16–26 and
-33–40 sources require the matching [standalone upgrader](database-upgrades.md#one-time-conversion).
+33–41 sources require the matching [standalone upgrader](database-upgrades.md#one-time-conversion).
 Preserve a complete matching recovery set, stop the old service and deliberately
 invoke the tool before starting the target. The service, startup scripts and
 deployment helpers must not apply upgrades implicitly. Empty placeholder files
@@ -274,7 +274,7 @@ minimum acceptance bar.
 
 ## Embedding smoke check
 
-For embeddings, select an OpenAI-compatible upstream and use its documented versioned base; the connector appends `/embeddings` without inserting `/v1`. Alternatively, explicitly select `ai-sdk-gateway-v3` or `ai-sdk-gateway-v4` with its complete native base and a working `/embedding-model` endpoint. Both accept text input and float/base64 output; common `dimensions` is supported only in v4 and the returned dimension must match. Enable `embeddings` in the platform model's `model_types`, bind a model that the upstream supports, then call `POST /v1/embeddings` with a short text and with a batch. Check the platform model name, vector indexes, configured encoding and reported usage. Personal and charity models share this entry point. Verify charity input pricing, one-call batch accounting and existing limits before opening a donated resource. The Anthropic-compatible connector does not provide embeddings or rerank. The [API contract](api-contract.md#24-native-ai-sdk-gateway-v3-compatibility) lists all four Gateway service mappings and their strict fields, plus the historical Runable embedding limitation. Model discovery does not prove that a deployment supports these services, and no automatic version switching occurs.
+For embeddings, select an OpenAI-compatible upstream and use its documented versioned base; the connector appends `/embeddings` without inserting `/v1`. Alternatively, explicitly select `ai-sdk-gateway-v3` or `ai-sdk-gateway-v4` with its complete native base and a working `/embedding-model` endpoint. Both accept text input and float/base64 output; common `dimensions` is supported only in v4 and the returned dimension must match. Enable `embeddings` in the platform model's `model_types`, bind a model that the upstream supports, then call `POST /v1/embeddings` with a short text and with a batch. Check the platform model name, vector indexes, configured encoding and reported usage. Personal and charity models share this entry point. Verify charity input pricing, one-call batch accounting and existing limits before opening a donated resource. The Anthropic-compatible connector does not provide embeddings or rerank. The [API contract](api-contract.md#24-native-ai-sdk-gateway-v3v4-compatibility) lists all four Gateway service mappings and their strict fields, plus the historical Runable embedding limitation. Model discovery does not prove that a deployment supports these services, and no automatic version switching occurs.
 
 
 ## Image-generation smoke check

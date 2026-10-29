@@ -42,7 +42,7 @@ func (api *httpAPI) getPenalties(w http.ResponseWriter, r *http.Request, p Admin
 		writeError(w, ErrInvalidRequest)
 		return
 	}
-	tx, err := api.service.beginManagedUserRead(r.Context(), p.UserID, api.role, false)
+	tx, err := api.service.beginManagedUserRead(r.Context(), p.UserID, api.role, true)
 	if err != nil {
 		writeError(w, err)
 		return

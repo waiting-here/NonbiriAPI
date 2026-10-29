@@ -3,6 +3,7 @@ package forward
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 var errTransportResponse = errors.New("upstream response cannot be converted")
@@ -50,6 +52,11 @@ func (w *transportResponse) clear() { clear(w.body.Bytes()); w.body.Reset() }
 func (w *transportResponse) complete(ctx context.Context, sink http.ResponseWriter, includeUsage bool, result contract.AttemptResult) contract.AttemptResult {
 	result.Committed = false
 	if w.err != nil {
+		limit := openai.DefaultMaxJSONResponseBytes
+		if w.upstreamStream {
+			limit = openai.DefaultMaxStreamBytes
+		}
+		diagnostic.RecordLimit(ctx, "converted_response_bytes", limit, w.err)
 		return conversionFailure(result)
 	}
 	if !result.Success {
@@ -68,6 +75,7 @@ func (w *transportResponse) complete(ctx context.Context, sink http.ResponseWrit
 		frames, err = completionToStream(w.body.Bytes(), includeUsage)
 	}
 	if err != nil {
+		diagnostic.RecordError(ctx, "convert_response", err)
 		return conversionFailure(result)
 	}
 	defer func() {
@@ -90,6 +98,7 @@ func (w *transportResponse) complete(ctx context.Context, sink http.ResponseWrit
 		deadline = limit
 	}
 	if err := controller.SetWriteDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		diagnostic.RecordError(ctx, "write_client", err)
 		if ctx.Err() != nil {
 			return transportContextFailure(ctx, result)
 		}
@@ -103,6 +112,7 @@ func (w *transportResponse) complete(ctx context.Context, sink http.ResponseWrit
 		n, err := sink.Write(frame)
 		result.Committed = result.Committed || n > 0
 		if err != nil || n != len(frame) {
+			diagnostic.RecordWrite(ctx, 0, err)
 			if ctx.Err() != nil {
 				return transportContextFailure(ctx, result)
 			}
@@ -111,6 +121,7 @@ func (w *transportResponse) complete(ctx context.Context, sink http.ResponseWrit
 	}
 	if !w.upstreamStream {
 		if err := controller.Flush(); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			diagnostic.RecordError(ctx, "write_client", err)
 			if ctx.Err() != nil {
 				return transportContextFailure(ctx, result)
 			}
@@ -134,6 +145,7 @@ func conversionFailure(result contract.AttemptResult) contract.AttemptResult {
 // Caller delivery can time out after the upstream has already succeeded. Keep
 // that confirmed protocol result and usage independently of the caller error.
 func transportContextFailure(ctx context.Context, result contract.AttemptResult) contract.AttemptResult {
+	diagnostic.RecordError(ctx, "convert_response", ctx.Err())
 	result.Success, result.SinkFailed = false, false
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		result.Failure, result.ClientStatus = contract.FailureUpstream, http.StatusGatewayTimeout
@@ -317,6 +329,35 @@ func fragmentCompletionFields(fields map[string]any, emit func(map[string]any) e
 				typed = typed[end:]
 			}
 		case map[string]any:
+			if key == "extra_content" {
+				providers := make([]string, 0, len(typed))
+				for provider := range typed {
+					providers = append(providers, provider)
+				}
+				sort.Strings(providers)
+				for _, provider := range providers {
+					part := map[string]any{provider: typed[provider]}
+					switch provider {
+					case "anthropic", "google", "gateway", "nonbiri":
+						// These are immutable snapshots, not incremental arrays.
+						// Splitting them would replace earlier native history.
+						if err := wrap(part); err != nil {
+							return err
+						}
+					default:
+						if err := fragmentCompletionFields(part, func(part map[string]any) error { return wrap(part) }); err != nil {
+							return err
+						}
+					}
+				}
+				continue
+			}
+			if key == "audio" {
+				if err := fragmentAudio(typed, func(part map[string]any) error { return wrap(part) }); err != nil {
+					return err
+				}
+				continue
+			}
 			if err := fragmentCompletionFields(typed, func(part map[string]any) error { return wrap(part) }); err != nil {
 				return err
 			}
@@ -353,6 +394,61 @@ func fragmentCompletionFields(fields map[string]any, emit func(map[string]any) e
 	return nil
 }
 
+func fragmentAudio(audio map[string]any, emit func(map[string]any) error) error {
+	keys := make([]string, 0, len(audio))
+	for key := range audio {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		value := audio[key]
+		if err := emit(map[string]any{key: value}); err == nil {
+			continue
+		}
+		switch key {
+		case "data":
+			text, ok := value.(string)
+			if !ok {
+				return errTransportResponse
+			}
+			raw, err := base64.StdEncoding.DecodeString(text)
+			if err != nil {
+				return errTransportResponse
+			}
+			defer clear(raw)
+			for len(raw) > 0 {
+				end := min(len(raw), openai.DefaultMaxSSELineBytes/8*3)
+				for end > 0 {
+					if end < len(raw) {
+						end -= end % 3
+					}
+					if end == 0 {
+						return errTransportResponse
+					}
+					if err := emit(map[string]any{"data": base64.StdEncoding.EncodeToString(raw[:end])}); err == nil {
+						break
+					}
+					end /= 2
+				}
+				if end == 0 {
+					return errTransportResponse
+				}
+				raw = raw[end:]
+			}
+		case "transcript":
+			if _, ok := value.(string); !ok {
+				return errTransportResponse
+			}
+			if err := fragmentCompletionFields(map[string]any{"content": value}, func(part map[string]any) error { return emit(map[string]any{"transcript": part["content"]}) }); err != nil {
+				return err
+			}
+		default:
+			return errTransportResponse
+		}
+	}
+	return nil
+}
+
 type indexedDeltas map[int64]map[string]any
 
 // mergeDelta follows Chat Completions delta semantics. Text and function
@@ -360,6 +456,45 @@ type indexedDeltas map[int64]map[string]any
 func mergeDelta(dst, src map[string]any) error {
 	for key, value := range src {
 		if value == nil {
+			continue
+		}
+		if key == "extra_content" {
+			extra, ok := value.(map[string]any)
+			if !ok {
+				return errTransportResponse
+			}
+			object, ok := dst[key].(map[string]any)
+			if !ok {
+				object = make(map[string]any)
+				dst[key] = object
+			}
+			for provider, snapshot := range extra {
+				switch provider {
+				case "anthropic", "google", "gateway", "nonbiri":
+					// These providers emit a single immutable terminal snapshot.
+					object[provider] = snapshot
+				default:
+					// Responses reasoning is emitted once per completed item.
+					if err := mergeDelta(object, map[string]any{provider: snapshot}); err != nil {
+						return err
+					}
+				}
+			}
+			continue
+		}
+		if key == "audio" {
+			audio, ok := value.(map[string]any)
+			if !ok {
+				return errTransportResponse
+			}
+			object, ok := dst[key].(map[string]any)
+			if !ok {
+				object = make(map[string]any)
+				dst[key] = object
+			}
+			if err := mergeAudio(object, audio); err != nil {
+				return err
+			}
 			continue
 		}
 		switch typed := value.(type) {
@@ -419,6 +554,57 @@ func mergeDelta(dst, src map[string]any) error {
 	return nil
 }
 
+type audioBytes []byte
+
+func mergeAudio(dst, src map[string]any) error {
+	for key, value := range src {
+		if value == nil {
+			continue
+		}
+		switch key {
+		case "data":
+			part, ok := value.(string)
+			if !ok {
+				return errTransportResponse
+			}
+			decoded, err := base64.StdEncoding.DecodeString(part)
+			if err != nil {
+				return errTransportResponse
+			}
+			prior, _ := dst[key].(audioBytes)
+			if int64(len(prior)+len(decoded)) > openai.DefaultMaxJSONResponseBytes {
+				clear(decoded)
+				return errTransportResponse
+			}
+			dst[key] = append(prior, decoded...)
+			clear(decoded)
+		case "transcript":
+			part, ok := value.(string)
+			if !ok {
+				return errTransportResponse
+			}
+			builder, ok := dst[key].(*strings.Builder)
+			if !ok {
+				builder = &strings.Builder{}
+				dst[key] = builder
+			}
+			builder.WriteString(part)
+		case "id":
+			id, ok := value.(string)
+			if !ok {
+				return errTransportResponse
+			}
+			if prior, ok := dst[key].(string); ok && prior != id {
+				return errTransportResponse
+			}
+			dst[key] = id
+		default:
+			dst[key] = value
+		}
+	}
+	return nil
+}
+
 func wireIndex(value any) (int64, error) {
 	n, ok := value.(json.Number)
 	if !ok {
@@ -433,6 +619,10 @@ func wireIndex(value any) (int64, error) {
 
 func materializeWire(value any) any {
 	switch typed := value.(type) {
+	case audioBytes:
+		encoded := base64.StdEncoding.EncodeToString(typed)
+		clear(typed)
+		return encoded
 	case *strings.Builder:
 		return typed.String()
 	case indexedDeltas:

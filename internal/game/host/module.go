@@ -75,6 +75,7 @@ func (module *Module) complete() bool {
 // they must neither commit them nor retain them beyond the synchronous call.
 type Services struct {
 	Database        *sql.DB
+	ReadDatabase    *sql.DB
 	UserAuthorizer  resources.FinalTxAuthorizer
 	AdminAuthorizer AdminAuthorizer
 	Limiter         *game.StartLimiter
@@ -83,6 +84,7 @@ type Services struct {
 type Factory func(Services) (*Module, error)
 type Options struct {
 	Database        *sql.DB
+	ReadDatabase    *sql.DB
 	Registry        *game.Registry
 	Factories       map[string]Factory
 	UserAuthorizer  resources.FinalTxAuthorizer
@@ -107,6 +109,9 @@ func New(options Options) (*Service, error) {
 	if options.Database == nil || !options.Registry.Sealed() || options.UserAuthorizer == nil || options.AdminAuthorizer == nil {
 		return nil, ErrInvalidRequest
 	}
+	if options.ReadDatabase == nil {
+		options.ReadDatabase = options.Database
+	}
 	if options.Now == nil {
 		options.Now = time.Now
 	}
@@ -130,7 +135,7 @@ func New(options Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	service := &Service{services: Services{Database: options.Database, UserAuthorizer: options.UserAuthorizer, AdminAuthorizer: options.AdminAuthorizer, Limiter: limiter, Now: options.Now}, registry: options.Registry, modules: make(map[string]*Module), recovered: make(map[string]bool)}
+	service := &Service{services: Services{Database: options.Database, ReadDatabase: options.ReadDatabase, UserAuthorizer: options.UserAuthorizer, AdminAuthorizer: options.AdminAuthorizer, Limiter: limiter, Now: options.Now}, registry: options.Registry, modules: make(map[string]*Module), recovered: make(map[string]bool)}
 	for _, descriptor := range options.Registry.Descriptors() {
 		module, err := options.Factories[descriptor.ID](service.services)
 		if err != nil || !module.complete() {

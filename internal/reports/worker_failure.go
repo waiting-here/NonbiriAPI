@@ -48,6 +48,11 @@ FROM report_cases WHERE id=?`, caseID).Scan(&status, &progress, &previousAttempt
 	if previousAttempt == math.MaxInt64 {
 		return ErrInvariant
 	}
+	if operationKind == "report_approved_processing" {
+		if err = managementlog.StartRelatedCaptureTx(batchCtx, tx, "report_case", caseID); err != nil {
+			return err
+		}
+	}
 	attempt := previousAttempt + 1
 	nextRetry, err := retryAt(now, attempt, class)
 	if err != nil {

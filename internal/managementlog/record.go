@@ -75,6 +75,18 @@ func validateRecord(value Record) error {
 			default:
 				return ErrInvalid
 			}
+			for _, text := range []*string{change.Before, change.After} {
+				if text != nil && (!textOK(*text, 2048) || utf8.RuneCountInString(*text) > 512) {
+					return ErrInvalid
+				}
+			}
+			if !tokenOK(change.Unit, 32) {
+				return ErrInvalid
+			}
+		}
+		encoded, err := json.Marshal(item.Details)
+		if err != nil || len(encoded) > 65536 {
+			return ErrInvalid
 		}
 	}
 	return nil
@@ -119,6 +131,23 @@ func RecordTx(ctx context.Context, tx *sql.Tx, value Record) (int64, error) {
 	if len(value.Items) == 0 {
 		value.Items = []Item{{Action: value.Action, TargetKind: value.Domain, Outcome: value.Outcome, Code: value.Code, Changes: []Change{}}}
 	}
+	var err error
+	var captured bool
+	value.Items, captured, err = enrichCaptureTx(ctx, tx, value.EventID, value.Items)
+	if err != nil {
+		return 0, err
+	}
+	allUnchanged := len(value.Items) > 0
+	for i := range value.Items {
+		var dropped bool
+		value.Items[i].Changes, dropped = normalizeChanges(value.Items[i].Changes)
+		value.Items[i].Details.Truncated = value.Items[i].Details.Truncated || dropped
+		value.Items[i].Details.Version = 1
+		allUnchanged = allUnchanged && value.Items[i].Outcome == NoChange
+	}
+	if allUnchanged && value.Outcome == Succeeded {
+		value.Outcome = NoChange
+	}
 	if err := validateRecord(value); err != nil {
 		return 0, err
 	}
@@ -138,13 +167,23 @@ func RecordTx(ctx context.Context, tx *sql.Tx, value Record) (int64, error) {
 	var id int64
 	if n == 0 {
 		err = tx.QueryRowContext(ctx, "SELECT id FROM management_operations WHERE event_id=?", value.EventID).Scan(&id)
+		if err == nil && captured {
+			parent, readErr := scanOperation(tx.QueryRowContext(ctx, "SELECT "+operationColumns+" FROM management_operations WHERE id=?", id))
+			if readErr != nil {
+				return 0, readErr
+			}
+			err = appendOperationTx(ctx, tx, parent, value.Items, value.Outcome != Accepted)
+		}
 		return id, err
 	}
 	id, err = result.LastInsertId()
 	if err != nil {
 		return 0, err
 	}
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO management_operation_items(operation_id,ordinal,action,target_kind,target_id,target_name,outcome,code,changes) VALUES(?,?,?,?,?,?,?,?,?)`)
+	if _, err = tx.ExecContext(ctx, "UPDATE management_operations SET target_name=? WHERE id=?", value.Items[0].TargetName, id); err != nil {
+		return 0, err
+	}
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO management_operation_items(operation_id,ordinal,action,target_kind,target_id,target_name,outcome,code,changes,details) VALUES(?,?,?,?,?,?,?,?,?,?)`)
 	if err != nil {
 		return 0, err
 	}
@@ -157,7 +196,11 @@ func RecordTx(ctx context.Context, tx *sql.Tx, value Record) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		if _, err = stmt.ExecContext(ctx, id, i+1, item.Action, item.TargetKind, item.TargetID, item.TargetName, item.Outcome, item.Code, string(changes)); err != nil {
+		details, _ := json.Marshal(item.Details)
+		if _, err = stmt.ExecContext(ctx, id, i+1, item.Action, item.TargetKind, item.TargetID, item.TargetName, item.Outcome, item.Code, string(changes), string(details)); err != nil {
+			return 0, err
+		}
+		if err = insertTermsTx(ctx, tx, id, int64(i+1), item); err != nil {
 			return 0, err
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"sync/atomic"
+	"time"
 )
 
 // ConnectionObserver receives fixed driver lifecycle classes, never SQL or
@@ -16,7 +17,24 @@ type ConnectionObserver interface {
 type connectionObservation struct{ observer ConnectionObserver }
 type connectionObserverSlot struct {
 	current atomic.Pointer[connectionObservation]
+	capture atomic.Pointer[managementCapture]
 }
+
+type managementCapture struct{ eventID func(context.Context) string }
+
+// SetManagementCapture binds trusted request metadata to writer transactions.
+// The callback supplies an event identifier only, never SQL or request values.
+func (s *Store) SetManagementCapture(eventID func(context.Context) string) {
+	if s.connectionObserver == nil {
+		return
+	}
+	var value *managementCapture
+	if eventID != nil {
+		value = &managementCapture{eventID: eventID}
+	}
+	s.connectionObserver.capture.Store(value)
+}
+
 type connectionObserverKey struct{}
 
 // SetConnectionObserver attaches an observer to existing and future writer
@@ -118,12 +136,23 @@ func (c *observedConnection) BeginTx(ctx context.Context, options driver.TxOptio
 	}
 	c.transaction = finish
 	c.inTransaction = true
-	return &observedTransaction{Tx: tx, conn: c}, nil
+	observed := &observedTransaction{Tx: tx, conn: c}
+	if capture := c.slot.capture.Load(); capture != nil {
+		observed.captureEnabled = true
+		if id := capture.eventID(ctx); id != "" {
+			_, err = c.sqliteConnection.ExecContext(ctx, `INSERT INTO management_capture_context(id,event_id) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET event_id=excluded.event_id`, []driver.NamedValue{{Ordinal: 1, Value: id}})
+			if err != nil {
+				return nil, observed.end(errors.Join(err, tx.Rollback()))
+			}
+		}
+	}
+	return observed, nil
 }
 
 type observedTransaction struct {
 	driver.Tx
-	conn *observedConnection
+	conn           *observedConnection
+	captureEnabled bool
 }
 
 func (t *observedTransaction) end(err error) error {
@@ -133,8 +162,45 @@ func (t *observedTransaction) end(err error) error {
 	t.conn.inTransaction = false
 	return err
 }
-func (t *observedTransaction) Commit() error   { return t.end(t.Tx.Commit()) }
+func (t *observedTransaction) Commit() error {
+	if t.captureEnabled {
+		if err := t.finishManagementCapture(); err != nil {
+			return t.end(errors.Join(err, t.Tx.Rollback()))
+		}
+	}
+	return t.end(t.Tx.Commit())
+}
 func (t *observedTransaction) Rollback() error { return t.end(t.Tx.Rollback()) }
+
+func (t *observedTransaction) finishManagementCapture() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	rows, err := t.conn.sqliteConnection.QueryContext(ctx, `SELECT EXISTS(SELECT 1 FROM management_capture_rows) OR EXISTS(SELECT 1 FROM management_capture_totals),EXISTS(SELECT 1 FROM management_capture_context)`, nil)
+	if err != nil {
+		return err
+	}
+	values := make([]driver.Value, 2)
+	err = rows.Next(values)
+	closeErr := rows.Close()
+	if err != nil || closeErr != nil {
+		return errors.Join(err, closeErr)
+	}
+	pending, ok := values[0].(int64)
+	if !ok {
+		return errors.New("invalid management capture state")
+	}
+	if pending != 0 {
+		return errors.New("management operation snapshots were not recorded")
+	}
+	active, ok := values[1].(int64)
+	if !ok {
+		return errors.New("invalid management capture context")
+	}
+	if active != 0 {
+		_, err = t.conn.sqliteConnection.ExecContext(ctx, `DELETE FROM management_capture_context`, nil)
+	}
+	return err
+}
 
 func (c *observedConnection) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	finish := c.phase(ctx, "exec")

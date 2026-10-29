@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/checkin"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/codexauth"
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
@@ -65,6 +66,7 @@ type application struct {
 	adminUsers        *adminusers.Service
 	agent             *aiagent.Service
 	agentRequests     *agentrequest.Runtime
+	codex             *codexauth.Manager
 	managementHistory *managementlog.Service
 	managementDone    <-chan struct{}
 	lifecycle         *lifecycle.Coordinator

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/chatgptauth"
+	"github.com/waiting-here/NonbiriAPI/internal/codexauth"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -28,6 +30,7 @@ var (
 )
 
 type Settings struct {
+	CodexAccountID       string          `json:"-"`
 	ConnectionRevision   int64           `json:"connection_revision,string"`
 	DriverID             int64           `json:"driver_id,string"`
 	Provider             string          `json:"provider"`
@@ -101,8 +104,9 @@ type Request struct {
 	Usage            Usage  `json:"usage"`
 }
 type Detail struct {
-	DriverSettings json.RawMessage `json:"driver_settings"`
-	QueuedInput    json.RawMessage `json:"queued_input"`
+	ErrorDiagnostics *diagnostic.Failure `json:"error_diagnostics,omitempty"`
+	DriverSettings   json.RawMessage     `json:"driver_settings"`
+	QueuedInput      json.RawMessage     `json:"queued_input"`
 	Request
 	RequestBody        string `json:"request_body"`
 	ResponseBody       string `json:"response_body"`
@@ -170,6 +174,7 @@ type UsageReport struct {
 	AsOf        int64          `json:"as_of"`
 }
 type Config struct {
+	Codex          *codexauth.Manager
 	ChatGPT        *chatgptauth.Manager
 	AdminAuthorize func(context.Context, *sql.Tx) error
 	DB             *sql.DB

@@ -299,6 +299,38 @@ async function discoveryDiagnostics(page: Page, admin: boolean, redacted = false
   await expect(entry.locator('pre')).toHaveText(
     redacted ? f.text_body.replaceAll('203.0.113.19', '[redacted]') : f.text_body,
   );
+  const failure = entry.getByRole('region', { name: common.common.failure.title, exact: true });
+  await expect(failure).toBeVisible();
+  await failure.locator('summary').filter({ hasText: common.common.failure.technical }).click();
+  await expect(
+    failure.getByRole('heading', { name: common.common.failure.causes, exact: true }),
+  ).toBeVisible();
+  if (process.env.NONBIRI_VISUAL_DIR) {
+    const viewport = page.viewportSize();
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset.theme = value;
+      }, theme);
+      for (const width of [1440, 390]) {
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+        await failure.scrollIntoViewIfNeeded();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        await page.screenshot({
+          path: resolve(
+            process.env.NONBIRI_VISUAL_DIR,
+            `independent-diagnostics-${admin ? 'admin' : redacted ? 'level5' : 'level6'}-${theme}-${width}.png`,
+          ),
+          animations: 'disabled',
+        });
+      }
+    }
+    if (viewport) await page.setViewportSize(viewport);
+    await page.evaluate(() => {
+      document.documentElement.dataset.theme = 'light';
+    });
+  }
   const source = entry.getByRole('region', { name: 'Request source' });
   await expect(source).toContainText(f.source_ip);
   await safeSink(page);
@@ -374,11 +406,16 @@ async function riskEvidence(page: Page, sustained = true) {
   await group.getByRole('tab', { name: 'Client matches', exact: true }).click();
   await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
   await expect(page.getByText('Completed', { exact: true })).toBeVisible();
-  await expect(page.getByText('4 items', { exact: true })).toBeVisible();
+  const pagination = page.getByRole('navigation', { name: 'Pagination', exact: true });
+  await expect(pagination).toHaveText(/^\d+ items$/);
+  const resultCount = await pagination.innerText();
+  expect(Number.parseInt(resultCount, 10)).toBeGreaterThanOrEqual(f.request_ids.length);
+  for (const id of f.request_ids) await expect(page.getByText(id, { exact: true })).toBeVisible();
   const savedURL = page.url();
   expect(new URL(savedURL).searchParams.get('audit_scan')).toMatch(/^scn_/);
   await page.reload();
-  await expect(page.getByText('4 items', { exact: true })).toBeVisible();
+  await expect(pagination).toHaveText(resultCount);
+  for (const id of f.request_ids) await expect(page.getByText(id, { exact: true })).toBeVisible();
   expect(page.url()).toBe(savedURL);
   const sources = page.locator('summary').filter({ hasText: 'Source information' });
   await sources.first().click();
@@ -473,13 +510,8 @@ test.describe('administrator policy changes and subsequent steward review', () =
         sketch_paper: 'Sketch paper',
         sketch_brush: 'Paint brushes',
       };
-      const net: Record<Asset, string> = {
-        general: '2800000000',
-        game: '4000',
-        sketch_paper: '400000',
-        sketch_brush: '80000',
-      };
       for (const asset of Object.keys(names) as Asset[]) {
+        const net = f.summaries[asset].inventory.net;
         await page.getByLabel('Asset').selectOption(asset);
         await page.getByRole('button', { name: 'Apply', exact: true }).click();
         await expect(page.getByRole('heading', { name: names[asset], exact: true })).toBeVisible();
@@ -492,8 +524,8 @@ test.describe('administrator policy changes and subsequent steward review', () =
         const summary = (await response.json()) as Summary;
         expect(summary.metadata.projected_seq).toBe(summary.metadata.ledger_seq);
         expect(summary.reconciliation.status).toBe('matched');
-        expect(summary.reconciliation.inventory_net).toBe(net[asset]);
-        expect(summary.reconciliation.ledger_net).toBe(net[asset]);
+        expect(summary.reconciliation.inventory_net).toBe(net);
+        expect(summary.reconciliation.ledger_net).toBe(net);
         expect(summary.inventory).toEqual(f.summaries[asset].inventory);
         const stock = page
           .getByRole('heading', { name: 'Current stock', exact: true })
@@ -503,7 +535,7 @@ test.describe('administrator policy changes and subsequent steward review', () =
             .locator('dt')
             .filter({ hasText: /^Net stock$/ })
             .locator('..'),
-        ).toContainText(amount(net[asset]));
+        ).toContainText(amount(net));
         await page.locator('summary').filter({ hasText: 'Reconciliation details' }).click();
         await expect(
           page.getByText(

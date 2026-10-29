@@ -155,7 +155,7 @@ func TestAttemptStreamUsesSinglePreOutboundTimestamp(t *testing.T) {
 	if !result.Success {
 		t.Fatalf("result=%+v body=%s", result, recorder.Body.String())
 	}
-	if strings.Count(recorder.Body.String(), `"created":202`) != 3 || strings.Contains(recorder.Body.String(), `"created":1202`) {
+	if strings.Count(recorder.Body.String(), `"created":202`) != 2 || strings.Contains(recorder.Body.String(), `"created":1202`) {
 		t.Fatalf("stream timestamps drifted: %s", recorder.Body.String())
 	}
 }

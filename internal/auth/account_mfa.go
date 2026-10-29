@@ -98,7 +98,7 @@ func (r *Runtime) InvalidateUnverifiedMFASessions(ctx context.Context) error {
 		return authz.ErrUnauthorized
 	}
 	now := r.now().Unix()
-	rows, err := r.db.QueryContext(ctx, `SELECT DISTINCT s.user_id FROM sessions s
+	rows, err := r.readDatabase().QueryContext(ctx, `SELECT DISTINCT s.user_id FROM sessions s
  JOIN users u ON u.id=s.user_id
  LEFT JOIN site_config cfg ON cfg.key='mfa_required_level_'||COALESCE(u.level,u.auto_level)
  LEFT JOIN account_mfa_credentials c ON c.user_id=u.id
@@ -380,7 +380,11 @@ func (r *Runtime) mfaAdminHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	actor, _ := ActorFromContext(req.Context())
-	tx, err := r.db.BeginTx(req.Context(), nil)
+	database := r.db
+	if !reset {
+		database = r.readDatabase()
+	}
+	tx, err := database.BeginTx(req.Context(), &sql.TxOptions{ReadOnly: !reset})
 	if err != nil {
 		writeMFAError(w, err)
 		return
@@ -393,11 +397,17 @@ func (r *Runtime) mfaAdminHTTP(w http.ResponseWriter, req *http.Request) {
 		_, err = r.authorizer.Authorize(req.Context(), tx, actor, authz.Requirement{Role: authz.RoleAdministrator, FreshElevation: reset})
 	}
 	if err != nil {
+		if !reset {
+			_ = tx.Rollback()
+		}
 		writeMFAError(w, err)
 		return
 	}
 	enrolled, err := managedMFATx(req.Context(), tx, target, reset)
 	if err != nil {
+		if !reset {
+			_ = tx.Rollback()
+		}
 		writeMFAError(w, err)
 		return
 	}

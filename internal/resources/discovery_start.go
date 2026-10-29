@@ -196,7 +196,7 @@ func beginSourceDiscovery[T any](ctx context.Context, r *Repository, mutation Co
 			return MutationResult[T]{}, ctx.Err()
 		}
 
-		readTx, err := beginTx(ctx, r.db)
+		readTx, err := beginTx(ctx, r.readDB)
 		if err != nil {
 			return MutationResult[T]{}, err
 		}

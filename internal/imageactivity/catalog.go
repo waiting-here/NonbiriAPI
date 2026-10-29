@@ -59,7 +59,7 @@ func (s *Service) ListCatalog(ctx context.Context, admin int64, query CatalogQue
 		return out, err
 	}
 	out.Page, out.PageSize = query.Page, query.PageSize
-	tx, err := s.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return out, err
 	}

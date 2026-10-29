@@ -40,7 +40,7 @@ func (s *Service) ListBlacklist(ctx context.Context, adminID int64, q string, pa
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, err := s.beginListRead(ctx, adminID, true)
+	tx, err := s.beginListRead(ctx, adminID)
 	if err != nil {
 		return empty, err
 	}

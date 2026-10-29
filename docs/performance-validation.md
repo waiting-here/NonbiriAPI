@@ -69,6 +69,53 @@ does not consume the writer, retains consistent counts and results through a
 concurrent commit, and rechecks current permissions on the next request. An
 uncontended lookup microbenchmark alone does not demonstrate reduced contention.
 
+Choose the connection from the complete operation, including authorization and
+helpers. `ReadOnly: true` on the writer pool still consumes its only connection;
+`QueryRow` may execute a write with `RETURNING`. Pure projections use the existing
+query-only reader pool, with permissions and related rows in one snapshot.
+Release that snapshot before sending an HTTP response. Background
+candidate and empty-queue checks can also use readers when the subsequent writer
+transaction rechecks every predicate before changing data.
+
+Inventory transaction entry points as well as SQL calls. Follow custom transaction
+helpers, generic wrappers and authorization callbacks back to their callers;
+a pure query may contain no direct SQL. Check each caller's side effects before
+changing a shared helper used by both lists and retained-object reads.
+
+Expiry materialization, legal-hold access auditing, claims and settlement remain
+writer operations. A GET route or a method named `Read` is not enough to prove
+that an operation is pure. Production constructors must receive the store's
+reader explicitly when they accept separate database handles. Tests that pass
+one handle for both pools do not validate this wiring. The shared
+`dbtest.WithoutWriter` regression helper holds the writer, checks that a read
+does not queue for it and verifies that the reader is released. Pair these cases
+with current-permission, snapshot and read-before-write regressions as applicable.
+
+Include offline verification wrappers that construct partial services without
+calling the normal constructor. They must pass their isolated read-only database
+to every reader used by the verification path.
+
+For tests of operation deadlines and contention, initialize each reader with a
+real schema query before the timed work; `Ping` alone does not load the schema.
+Keep those setup costs separate from operation latency, and measure cold starts
+separately. Do not extend production deadlines to cover test instrumentation.
+
+Session validation uses a read snapshot when the current second and exact idle
+expiry have already been persisted. Renewal and stale-session cleanup close that
+snapshot, acquire the writer and recheck current authority before changing data.
+The session-reader regressions hold the writer while checking unchanged sessions,
+then revoke or change authority between the read and renewal phases. They measure
+writer acquisitions without relaxing idle expiry or caching authentication.
+Steward model details, cursor lists and price-template reads use the existing
+reader pool; mutation and expiry-materialization paths retain their writer.
+
+Runtime windows distinguish `session_read` from `session` and use fixed route
+templates for administrator/steward model lists, details, bindings, candidates
+and price templates. Object identifiers and query values are excluded. Compare
+pool waiting, transaction time and connection holding separately; their cumulative
+times overlap. A writer improvement alone does not establish that a separate
+reader bottleneck or browser/network delay has been resolved.
+
 For streaming accumulation, ordered failure folding and writer ownership:
 
 ```sh

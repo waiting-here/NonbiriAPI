@@ -42,14 +42,15 @@ type State struct {
 	UpdatedAt *int64   `json:"updated_at"`
 }
 type Config struct {
-	Artwork  *artwork.Catalog
-	Database *sql.DB
-	Users    limitedactivities.UserAuthorizer
-	Gate     limitedactivities.AdmissionGate
-	Unlock   func(context.Context, *sql.Tx, int64, string) (bool, error)
-	Visible  func(context.Context, *sql.Tx, []string) (map[string]bool, error)
-	Moments  func(context.Context, *sql.Tx, int64) ([]string, error)
-	Now      func() time.Time
+	Artwork      *artwork.Catalog
+	Database     *sql.DB
+	ReadDatabase *sql.DB
+	Users        limitedactivities.UserAuthorizer
+	Gate         limitedactivities.AdmissionGate
+	Unlock       func(context.Context, *sql.Tx, int64, string) (bool, error)
+	Visible      func(context.Context, *sql.Tx, []string) (map[string]bool, error)
+	Moments      func(context.Context, *sql.Tx, int64) ([]string, error)
+	Now          func() time.Time
 }
 type Service struct{ config Config }
 
@@ -59,6 +60,9 @@ func New(c Config) (*Service, error) {
 	}
 	if c.Artwork == nil {
 		c.Artwork = artwork.Default()
+	}
+	if c.ReadDatabase == nil {
+		c.ReadDatabase = c.Database
 	}
 	if c.Now == nil {
 		c.Now = time.Now
@@ -165,7 +169,7 @@ func (s *Service) stateTx(ctx context.Context, tx *sql.Tx, user int64) (State, e
 }
 
 func (s *Service) State(ctx context.Context, user int64) (State, error) {
-	tx, err := s.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return State{}, err
 	}

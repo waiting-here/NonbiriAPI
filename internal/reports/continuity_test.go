@@ -58,7 +58,7 @@ func TestReportAccountWindowMergesLegacyOnceAndSurvivesRegistration(t *testing.T
 		t.Fatal(err)
 	}
 	actor = e.seedActor(t, false, 1)
-	identities, err := continuity.New(e.store.DB(), e.vault)
+	identities, err := continuity.New(e.store.DB(), e.vault, e.store.ReadDB())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector/chatwire"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/continuation"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 )
@@ -33,6 +34,7 @@ type decoder struct {
 	items                                                         []*itemState
 	toolCount                                                     int
 	usage                                                         contract.Usage
+	continuationID                                                string
 }
 
 func NewDecoder(model string, now time.Time, includeUsage bool) chatwire.Decoder {
@@ -44,11 +46,30 @@ func (d *decoder) Clear() {
 	}
 	*d = decoder{}
 }
-func (d *decoder) Usage() contract.Usage { return d.usage }
+func (d *decoder) Usage() contract.Usage       { return d.usage }
+func (d *decoder) SetContinuationID(id string) { d.continuationID = id }
+func (d *decoder) ObserveFailure(raw []byte) {
+	root, err := chatwire.Object(raw)
+	if err != nil {
+		return
+	}
+	if nested, ok := root["response"]; ok {
+		root, err = chatwire.Object(nested)
+		if err != nil {
+			return
+		}
+	}
+	if value, ok := root["usage"]; ok && !chatwire.Null(value) {
+		d.usage = openai.ParseResponseUsage(value)
+	}
+}
 func (d *decoder) JSON(raw []byte) ([]byte, contract.Usage, error) {
 	message, finish, usage, err := projectResponse(raw)
 	if err != nil {
 		return nil, usage, err
+	}
+	if extra, ok := message["extra_content"].(map[string]any); ok {
+		message["extra_content"] = continuation.Bind(extra, d.continuationID)
 	}
 	out, err := chatwire.Completion(d.id, d.model, d.created, message, finish, usage)
 	d.usage = usage
@@ -82,23 +103,24 @@ func projectResponse(raw []byte) (map[string]any, string, contract.Usage, error)
 	if err != nil {
 		return nil, "", contract.Usage{}, err
 	}
+	usage := openai.ParseResponseUsage(root["usage"])
 	if !chatwire.Null(root["error"]) {
-		return nil, "", contract.Usage{}, chatwire.ErrProtocol
+		return nil, "", usage, chatwire.ErrProtocol
 	}
 	var items []json.RawMessage
 	if json.Unmarshal(root["output"], &items) != nil || chatwire.Null(root["output"]) || len(items) > 256 {
-		return nil, "", contract.Usage{}, chatwire.ErrProtocol
+		return nil, "", usage, chatwire.ErrProtocol
 	}
 	message, err := projectItems(items)
 	if err != nil {
-		return nil, "", contract.Usage{}, err
+		return nil, "", usage, err
 	}
 	_, tools := message["tool_calls"]
 	finish, err := finishReason(root, tools)
 	if err != nil {
-		return nil, "", contract.Usage{}, err
+		return nil, "", usage, err
 	}
-	return message, finish, openai.ParseResponseUsage(root["usage"]), nil
+	return message, finish, usage, nil
 }
 func projectItems(items []json.RawMessage) (map[string]any, error) {
 	var text, refusal, summary strings.Builder
@@ -255,6 +277,12 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 		return nil, chatwire.ErrProtocol
 	}
 	d.sequence = sequence
+	if value, present := root["response_id"]; present {
+		id, ok := chatwire.String(value)
+		if !ok || !d.started || id != d.responseID {
+			return nil, chatwire.ErrProtocol
+		}
+	}
 	var delta map[string]any
 	switch kind {
 	case "response.created", "response.in_progress":
@@ -279,24 +307,29 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 		}
 		response, err := chatwire.Object(root["response"])
 		id, _ := chatwire.String(response["id"])
-		status, _ := chatwire.String(response["status"])
-		if err != nil || id != d.responseID || kind != "response."+status {
+		if err != nil || id != d.responseID {
 			return nil, chatwire.ErrProtocol
 		}
-		var output []json.RawMessage
-		if json.Unmarshal(response["output"], &output) != nil || len(output) != len(d.items) {
-			return nil, chatwire.ErrProtocol
-		}
+		output := make([]json.RawMessage, len(d.items))
 		for i, item := range d.items {
-			if !item.done || !sameJSON(item.final, output[i]) {
+			if !item.done {
 				return nil, chatwire.ErrProtocol
 			}
+			output[i] = item.final
 		}
-		_, finish, usage, err := projectResponse(root["response"])
+		completed, err := openai.CompleteResponseTerminal(root["response"], kind, d.responseID, output)
+		if err != nil {
+			return nil, chatwire.ErrProtocol
+		}
+		defer clear(completed)
+		_, finish, usage, err := projectResponse(completed)
 		if err != nil {
 			return nil, err
 		}
 		d.finish = finish
+		if finish == "stop" && d.toolCount > 0 {
+			d.finish = "tool_calls"
+		}
 		d.usage = usage
 		d.terminal = true
 		return nil, nil
@@ -367,6 +400,19 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 			return nil, chatwire.ErrProtocol
 		}
 		index, ok := chatwire.Integer(root["output_index"])
+		if root["output_index"] == nil && kind == "response.output_item.done" {
+			final, err := chatwire.Object(root["item"])
+			id, valid := chatwire.String(final["id"])
+			if err != nil || !valid {
+				return nil, chatwire.ErrProtocol
+			}
+			for i, candidate := range d.items {
+				if candidate.id == id {
+					index, ok = int64(i), true
+					break
+				}
+			}
+		}
 		if !ok || index >= int64(len(d.items)) {
 			return nil, chatwire.ErrProtocol
 		}
@@ -416,7 +462,7 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 			item.done = true
 			item.final = append([]byte(nil), root["item"]...)
 			if item.kind == "reasoning" {
-				delta = map[string]any{"extra_content": map[string]any{"openai": map[string]any{"reasoning": []any{final}}}}
+				delta = map[string]any{"extra_content": continuation.Bind(map[string]any{"openai": map[string]any{"reasoning": []any{final}}}, d.continuationID)}
 			}
 		case "response.function_call_arguments.delta", "response.function_call_arguments.done":
 			if item.kind != "function_call" || item.argsDone {
