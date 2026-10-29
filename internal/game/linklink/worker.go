@@ -207,5 +207,5 @@ DELETE FROM game_online_leases WHERE rowid IN (
 
 // VerifyPersistedState audits persisted records without runtime setup.
 func VerifyPersistedState(ctx context.Context, database *sql.DB) error {
-	return (&Service{database: database}).validatePersistedSessions(ctx)
+	return (&Service{database: database, readDatabase: database}).validatePersistedSessions(ctx)
 }

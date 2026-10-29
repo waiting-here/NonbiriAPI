@@ -674,5 +674,5 @@ func (service *Service) expireRankFactsBatch(ctx context.Context, now int64) (in
 
 // VerifyPersistedState audits persisted records without runtime setup.
 func VerifyPersistedState(ctx context.Context, database *sql.DB) error {
-	return (&Service{database: database}).validatePersistedState(ctx)
+	return (&Service{database: database, readDatabase: database}).validatePersistedState(ctx)
 }

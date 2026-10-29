@@ -294,5 +294,5 @@ func (s *Service) PrepareDeleteTx(ctx context.Context, tx *sql.Tx, user, now int
 
 // VerifyPersistedState audits payment and session relationships read-only.
 func VerifyPersistedState(ctx context.Context, database *sql.DB) error {
-	return (&Service{database: database}).ValidatePersistedState(ctx)
+	return (&Service{database: database, readDB: database}).ValidatePersistedState(ctx)
 }
