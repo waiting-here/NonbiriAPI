@@ -214,12 +214,12 @@ export function normalizeDelivery(value: unknown): DeliveryDiagnostics | null | 
 
 export function failureCategoryKey(category?: string): string {
   return FAILURE_CATEGORIES.some((item) => item === category)
-    ? 'common.failure.category.' + category
+    ? `common.failure.category.${category}`
     : 'common.failure.category.unknown';
 }
 export function failurePhaseKey(phase?: string): string {
   return FAILURE_PHASES.some((item) => item === phase)
-    ? 'common.failure.phase.' + phase
+    ? `common.failure.phase.${phase}`
     : phase
       ? 'common.failure.unknownPhase'
       : 'common.failure.notRecorded';
