@@ -82,7 +82,7 @@ func (r *Runtime) createSessionTx(ctx context.Context, tx *sql.Tx, userID int64,
 	return token, expires, replaced > 0, nil
 }
 
-func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.ActorKind, elevationToken string) (principal sessionPrincipal, resultErr error) {
+func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.ActorKind, elevationToken string) (sessionPrincipal, error) {
 	if rawToken == "" || len(rawToken) > 4096 {
 		return sessionPrincipal{}, errSessionUnauthorized
 	}
@@ -91,9 +91,24 @@ func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.
 	if now < 0 || now > maxUnixSecond {
 		return sessionPrincipal{}, fmt.Errorf("authenticate session: invalid time")
 	}
-	tx, finish, err := observability.BeginMeasuredTx(ctx, r.db, nil, "session")
+	principal, needsWrite, err := r.authenticateSession(ctx, hash, kind, elevationToken, now, false)
+	if err != nil || !needsWrite {
+		return principal, err
+	}
+	principal, _, err = r.authenticateSession(ctx, hash, kind, elevationToken, now, true)
+	return principal, err
+}
+
+// Each phase checks current authority in its own snapshot. A reader result is
+// never reused for renewal or cleanup after waiting for the writer.
+func (r *Runtime) authenticateSession(ctx context.Context, hash string, kind authz.ActorKind, elevationToken string, now int64, write bool) (principal sessionPrincipal, needsWrite bool, resultErr error) {
+	database, operation := r.readDatabase(), "session_read"
+	if write {
+		database, operation = r.db, "session"
+	}
+	tx, finish, err := observability.BeginMeasuredTx(ctx, database, &sql.TxOptions{ReadOnly: !write}, operation)
 	if err != nil {
-		return sessionPrincipal{}, fmt.Errorf("authenticate session: begin: %w", err)
+		return sessionPrincipal{}, false, fmt.Errorf("authenticate session: begin: %w", err)
 	}
 	defer func() { finish(resultErr) }()
 	done := false
@@ -111,16 +126,19 @@ func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.
 	var lastSeen int64
 	err = tx.QueryRowContext(ctx, `SELECT s.user_id,s.cred_gen,s.expires_at,s.absolute_expires_at,s.last_seen_at,u.username,u.is_admin,u.is_banned,u.banned_until FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?`, hash).Scan(&p.actor.UserID, &p.actor.SessionGeneration, &expires, &absolute, &lastSeen, &p.username, &storedKind, &banned, &bannedUntil)
 	if errors.Is(err, sql.ErrNoRows) {
-		return sessionPrincipal{}, errSessionUnauthorized
+		return sessionPrincipal{}, false, errSessionUnauthorized
 	}
 	if err != nil {
-		return sessionPrincipal{}, fmt.Errorf("authenticate session: read: %w", err)
+		return sessionPrincipal{}, false, fmt.Errorf("authenticate session: read: %w", err)
 	}
 	expectedAdmin := kind == authz.ActorAdminSession
 	if (storedKind == 1) != expectedAdmin {
-		return sessionPrincipal{}, errSessionForbidden
+		return sessionPrincipal{}, false, errSessionForbidden
 	}
 	if expires <= now || absolute <= now {
+		if !write {
+			return sessionPrincipal{}, true, nil
+		}
 		result, deleteErr := tx.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash=? AND user_id=?`, hash, p.actor.UserID)
 		if deleteErr == nil {
 			deleted, rowsErr := result.RowsAffected()
@@ -134,24 +152,30 @@ func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.
 				}
 			}
 		}
-		return sessionPrincipal{}, errSessionUnauthorized
+		return sessionPrincipal{}, false, errSessionUnauthorized
 	}
 	if expectedAdmin && p.actor.SessionGeneration != r.adminCredentialGeneration {
+		if !write {
+			return sessionPrincipal{}, true, nil
+		}
 		_, _ = tx.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash=?`, hash)
 		if err := tx.Commit(); err == nil {
 			done = true
 		}
-		return sessionPrincipal{}, errSessionUnauthorized
+		return sessionPrincipal{}, false, errSessionUnauthorized
 	}
 	if expectedAdmin && p.username != r.adminUsername {
+		if !write {
+			return sessionPrincipal{}, true, nil
+		}
 		_, _ = tx.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash=?`, hash)
 		if err := tx.Commit(); err == nil {
 			done = true
 		}
-		return sessionPrincipal{}, errSessionUnauthorized
+		return sessionPrincipal{}, false, errSessionUnauthorized
 	}
 	if !expectedAdmin && banned == 1 && (!bannedUntil.Valid || bannedUntil.Int64 > now) {
-		return sessionPrincipal{}, errSessionForbidden
+		return sessionPrincipal{}, false, errSessionForbidden
 	}
 	newExpiry := now + int64(r.idleTTL/time.Second)
 	if newExpiry > absolute {
@@ -159,17 +183,20 @@ func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.
 	}
 	// Several requests in one second have the same persisted timestamps.
 	if lastSeen != now || expires != newExpiry {
+		if !write {
+			return sessionPrincipal{}, true, nil
+		}
 		result, err := tx.ExecContext(ctx, `UPDATE sessions SET last_seen_at=?,expires_at=? WHERE token_hash=? AND user_id=? AND cred_gen=? AND expires_at=? AND absolute_expires_at=?`, now, newExpiry, hash, p.actor.UserID, p.actor.SessionGeneration, expires, absolute)
 		if err != nil {
-			return sessionPrincipal{}, fmt.Errorf("authenticate session: touch: %w", err)
+			return sessionPrincipal{}, false, fmt.Errorf("authenticate session: touch: %w", err)
 		}
 		n, err := result.RowsAffected()
 		if err != nil || n != 1 {
-			return sessionPrincipal{}, errSessionUnauthorized
+			return sessionPrincipal{}, false, errSessionUnauthorized
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return sessionPrincipal{}, fmt.Errorf("authenticate session: commit: %w", err)
+		return sessionPrincipal{}, false, fmt.Errorf("authenticate session: commit: %w", err)
 	}
 	done = true
 	finish(nil)
@@ -177,7 +204,7 @@ func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.
 	p.actor.SessionTokenHash = hash
 	p.actor.ElevationToken = elevationToken
 	p.expiresAt = newExpiry
-	return p, nil
+	return p, false, nil
 }
 
 func (r *Runtime) deleteSession(ctx context.Context, rawToken string) (bool, error) {
