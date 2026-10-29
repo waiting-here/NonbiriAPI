@@ -104,6 +104,52 @@ test('administrator artwork control persists and updates both public configurati
   }
 });
 
+test('administrator edits separate light and heavy concurrency defaults', async ({
+  browser,
+}, info) => {
+  const state = fixture();
+  const manager = await session(browser, 'admin');
+  type Snapshot = { revision: string; values: Record<string, number> };
+  const read = () => api<Snapshot>(manager, state.admin_url, '/admin/api/site-config');
+  const keys = ['default_light_concurrency_per_user', 'default_concurrency_per_user'] as const;
+  const original = await read();
+  try {
+    expect(keys.map((key) => original.values[key])).toEqual([15, 5]);
+    const page = await manager.newPage();
+    await page.goto(state.admin_url + '/settings?group=limits');
+    const light = page.getByRole('spinbutton', {
+      name: 'Default light concurrency per user',
+      exact: true,
+    });
+    const heavy = page.getByRole('spinbutton', {
+      name: 'Default heavy concurrency per user',
+      exact: true,
+    });
+    await expect(light).toHaveValue(String(original.values[keys[0]]));
+    await expect(heavy).toHaveValue(String(original.values[keys[1]]));
+    await light.fill('19');
+    await heavy.fill('7');
+    const saved = responseFor(page, 'PATCH', '/admin/api/site-config');
+    await page.getByRole('button', { name: admin.admin.settings.saveAll, exact: true }).click();
+    expect((await saved).status()).toBe(200);
+    const current = await read();
+    expect(keys.map((key) => current.values[key])).toEqual([19, 7]);
+    await page.reload();
+    await expect(light).toHaveValue('19');
+    await expect(heavy).toHaveValue('7');
+    await capture(page, info, 'concurrency-defaults', light);
+  } finally {
+    const current = await read();
+    if (keys.some((key) => current.values[key] !== original.values[key])) {
+      await api(manager, state.admin_url, '/admin/api/site-config', 'PATCH', {
+        expected_revision: current.revision,
+        values: Object.fromEntries(keys.map((key) => [key, original.values[key]])),
+      });
+    }
+    await manager.close();
+  }
+});
+
 function fixture(): Fixture {
   return JSON.parse(readFileSync(process.env.NONBIRI_AUDIT_BROWSER_STATE!, 'utf8')) as Fixture;
 }
