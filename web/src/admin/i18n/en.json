@@ -715,6 +715,8 @@
           "default_endpoint_key_limit": "Default endpoint-key limit",
           "default_model_limit": "Default personal-model limit",
           "default_binding_limit": "Default binding limit",
+          "default_concurrency_per_user": "Default heavy concurrency per user",
+          "default_light_concurrency_per_user": "Default light concurrency per user",
           "default_rpm_per_user": "Heavy charity requests per minute per user",
           "default_light_rpm_per_user": "Light charity requests per minute per user",
           "global_rpm_per_user": "Global requests per minute per user",

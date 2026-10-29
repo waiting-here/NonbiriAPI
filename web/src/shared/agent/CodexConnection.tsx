@@ -9,7 +9,9 @@ import { AgentError, AgentTime } from './AgentParts';
 import { beginCodex, cancelCodex, disconnectCodex, getCodex } from './codexApi';
 
 type Intent =
-  { action: 'begin' | 'disconnect'; revision: string } | { action: 'cancel'; id: string };
+  | { action: 'begin'; revision: string }
+  | { action: 'disconnect'; revision: string }
+  | { action: 'cancel'; id: string };
 
 export function CodexConnection({ account, active }: { account: string; active: boolean }) {
   const { t } = useTranslation();
@@ -49,7 +51,7 @@ export function CodexConnection({ account, active }: { account: string; active: 
             ? Boolean(value.login || value.connected)
             : intent.action === 'disconnect'
               ? !value.connected && value.revision !== intent.revision
-              : value.login?.id !== intent.id ||
+              : !value.login || value.login.id !== intent.id ||
                 !['pending', 'starting'].includes(value.login.state),
       };
     },

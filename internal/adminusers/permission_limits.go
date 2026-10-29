@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
-	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
 func authorizeProfilePermissions(ctx context.Context, tx *sql.Tx, actorID int64, input ProfileMutation) error {
@@ -41,7 +40,7 @@ func authorizeProfilePermissions(ctx context.Context, tx *sql.Tx, actorID int64,
 		{input.LightRPMLimitSet, input.LightRPMLimit, cfg.lightRPMDefault, "users.rpm_limit_max"},
 		{input.GlobalRPMLimitSet, input.GlobalRPMLimit, cfg.globalRPMDefault, "users.rpm_limit_max"},
 		{input.ConcurrencySet, input.Concurrency, cfg.concurrencyDefault, "users.concurrency_limit_max"},
-		{input.LightConcurrencySet, input.LightConcurrency, db.DefaultUserLightConcurrencyLimit, "users.concurrency_limit_max"},
+		{input.LightConcurrencySet, input.LightConcurrency, cfg.lightConcurrencyDefault, "users.concurrency_limit_max"},
 	} {
 		if !item.set {
 			continue

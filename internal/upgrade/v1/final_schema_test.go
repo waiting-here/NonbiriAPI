@@ -308,7 +308,7 @@ func TestFinalSchemaConversionAcceptsExactStableSources(t *testing.T) {
 
 func TestOfflineDescriptorContainsOnlyExactSupportedSources(t *testing.T) {
 	descriptor := SchemaDescriptor()
-	expected := []int{16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 33, 34, 35, 36, 37, 38, 39, 40}
+	expected := []int{16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 33, 34, 35, 36, 37, 38, 39, 40, 41}
 	if descriptor.SchemaVersion != db.CurrentSchemaVersion || descriptor.MinimumSchemaVersion != db.CurrentSchemaVersion || descriptor.StartupPolicy != "exact" || descriptor.UpgradeTool != "nonbiri-upgrade-v1" || len(descriptor.SourceSchemaVersions) != 0 || len(descriptor.SourceManifestHashes) != 0 || len(descriptor.OfflineConversions) != len(expected) {
 		t.Fatal(descriptor)
 	}
