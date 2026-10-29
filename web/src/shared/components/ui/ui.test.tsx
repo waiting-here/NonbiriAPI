@@ -387,6 +387,36 @@ describe('shared UI patterns', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['form', 'div'] as const)('renders shared search and reset actions as %s', async (as) => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    const onReset = vi.fn();
+    render(
+      <FilterBar
+        as={as}
+        search={<Field label="Name">{(props) => <input {...props} />}</Field>}
+        secondary={
+          <Field label="State">
+            {(props) => (
+              <select {...props}>
+                <option>All</option>
+              </select>
+            )}
+          </Field>
+        }
+        activeCount={0}
+        onSubmit={onSubmit}
+        onReset={onReset}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'common.search' }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: 'common.resetFilter' }));
+    expect(onReset).toHaveBeenCalledTimes(1);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('common.moreFilters')).toBeInTheDocument();
+  });
+
   it.each([false, true])(
     'keeps search help, errors and submission with an action wrapper: %s',
     async (wrapped) => {

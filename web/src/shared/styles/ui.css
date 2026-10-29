@@ -381,6 +381,88 @@
   color: var(--nb-color-text-muted);
   font-size: var(--nb-font-size-sm);
 }
+
+/*
+ * Shared form grid (`Fields`). Fields wrap by width tier and grow up to a cap, so a form
+ * fills wide pages with several columns and falls back to one column in narrow containers.
+ */
+.nb-fields {
+  display: grid;
+  gap: var(--nb-space-3);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.nb-fields__legend {
+  padding: 0;
+  margin-bottom: var(--nb-space-2);
+  font-weight: 700;
+  font-size: var(--nb-font-size-md);
+}
+.nb-fields__hint {
+  margin: 0;
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.nb-fields__grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--nb-space-4) var(--nb-space-5);
+  min-width: 0;
+}
+.nb-fields__grid > * {
+  flex: 1 1 16rem;
+  min-width: 0;
+  max-inline-size: 28rem;
+}
+.nb-fields__grid > .nb-field--short {
+  flex-basis: 10rem;
+  max-inline-size: 16rem;
+}
+.nb-fields__grid > .nb-field--long {
+  flex-basis: 28rem;
+  max-inline-size: 44rem;
+}
+.nb-fields__grid > :is(.nb-field--span, p, .nb-note, .nb-fields, .nb-fold, .nb-form-actions) {
+  flex-basis: 100%;
+  max-inline-size: none;
+}
+/* Fields outside a grid keep a readable control width. */
+.nb-field:not(.nb-field--span, .nb-field--filter) {
+  max-inline-size: 44rem;
+}
+
+.nb-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nb-space-3);
+  padding-top: var(--nb-space-2);
+}
+.nb-form-actions--end {
+  justify-content: flex-end;
+}
+.nb-form-actions__note {
+  flex: 1 1 16rem;
+  min-width: 0;
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.nb-form-actions__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nb-space-2);
+}
+@media (width < 40rem) {
+  .nb-form-actions__buttons {
+    flex: 1 1 100%;
+  }
+  .nb-form-actions__buttons > :is(.nb-btn, button) {
+    flex: 1 1 auto;
+  }
+}
 .nb-grid {
   display: grid;
   gap: var(--nb-space-4);
@@ -719,6 +801,7 @@
 }
 .nb-filter__search {
   flex: 1 1 16rem;
+  max-inline-size: 48rem;
   display: flex;
   gap: var(--nb-space-2);
   /* Keep buttons at control height when the search input has a visible label. */
@@ -744,7 +827,8 @@
 }
 .nb-filter__fields {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  /* auto-fill keeps a lone select at one track instead of the whole row. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
   gap: var(--nb-space-1) var(--nb-space-2);
   flex: 1 0 100%;
   min-width: 0;

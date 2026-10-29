@@ -1,6 +1,7 @@
 export * from './Panel';
 export * from './Fold';
 export * from './Field';
+export * from './Fields';
 export * from './Affix';
 export * from './Toggle';
 export * from './Segmented';

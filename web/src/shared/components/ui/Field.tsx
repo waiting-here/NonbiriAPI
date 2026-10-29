@@ -7,13 +7,17 @@ export function Field({
   help,
   error,
   span,
+  size,
   children,
 }: {
   label: ReactNode;
   optional?: ReactNode;
   help?: ReactNode;
   error?: ReactNode;
+  /** Full row of the form grid. */
   span?: boolean;
+  /** Width tier inside `Fields`: short (numbers, IDs, states), medium (default), long (URLs, text). */
+  size?: 'short' | 'medium' | 'long';
   children: (props: {
     id: string;
     'aria-describedby'?: string;
@@ -46,7 +50,7 @@ export function Field({
   );
   return (
     <div
-      className={`nb-field${span ? ' nb-field--span' : ''}${filterLayout ? ' nb-field--filter' : ''}`}
+      className={`nb-field${span ? ' nb-field--span' : ''}${size ? ` nb-field--${size}` : ''}${filterLayout ? ' nb-field--filter' : ''}`}
     >
       <label className="nb-field__label" htmlFor={id}>
         {label}
