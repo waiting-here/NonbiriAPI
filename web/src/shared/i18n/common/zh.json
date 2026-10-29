@@ -2778,7 +2778,25 @@
       "personalMemoryOwner": "站内 ID {{id}} 的专属记忆",
       "sharedMemoryReadOnly": "共用记忆由管理员维护。你可以在专属记忆中保存自己的习惯与偏好。",
       "insertInterlocutor": "插入当前对话者",
-      "insertPersonalMemory": "插入专属记忆"
+      "insertPersonalMemory": "插入专属记忆",
+      "codex": {
+        "title": "Codex连接",
+        "help": "连接ChatGPT账号，供管理员及逐人授权的协管对话使用。",
+        "connected": "已连接",
+        "disconnected": "未连接",
+        "connect": "连接Codex",
+        "disconnect": "断开Codex",
+        "instruction": "打开官方页面，输入下方代码并授权连接。",
+        "openOfficial": "打开OpenAI登录页",
+        "code": "一次性代码",
+        "expires": "有效期至：",
+        "keepPrivate": "请勿分享代码，只批准你在本站发起的连接。",
+        "disconnectHelp": "断开会停止Codex请求并清除本站凭据。切换账号时，断开后重新连接即可；账号的其它登录不会被撤销。",
+        "denied": "授权已拒绝。准备好后可重新连接。",
+        "expired": "代码已过期，请重新连接获取新代码。",
+        "failed": "连接未完成。请确认账号或工作区已开启设备码登录后重试。",
+        "sourceHelp": "使用上方的Codex连接。仅可分配给管理员对话或指定协管，不用于自动审批或共用默认来源。"
+      }
     },
     "resourceHealth": {
       "title": "服务健康",

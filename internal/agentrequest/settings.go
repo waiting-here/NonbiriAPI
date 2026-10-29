@@ -161,6 +161,9 @@ func extraParameters(raw json.RawMessage) (map[string]json.RawMessage, error) {
 	return extra, nil
 }
 func requestBody(in Input, s Settings) ([]byte, error) {
+	if s.Provider == ProviderCodex {
+		return codexBody(in, s)
+	}
 	if s.Provider == ProviderResponses || s.Provider == ProviderChatGPT {
 		return responsesBody(in, s)
 	}

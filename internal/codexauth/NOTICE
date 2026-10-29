@@ -1,0 +1,12 @@
+OpenAI Codex
+Copyright 2025 OpenAI
+
+The device-code and token-exchange protocol in this package was adapted into Go
+from openai/codex at c92700d2993707ee16eb63b35a1cdd7fcc563f69:
+codex-rs/login/src/device_code_auth.rs
+codex-rs/login/src/oauth/client.rs
+codex-rs/login/src/auth/manager.rs
+
+The upstream files are licensed under Apache License 2.0; see LICENSE.
+This adaptation uses NonbiriAPI's credential storage, authorization and egress.
+No upstream agent runtime or third-party terminal UI code is included.

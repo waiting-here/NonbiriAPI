@@ -2778,7 +2778,25 @@
       "personalMemoryOwner": "Personal memory for site ID {{id}}",
       "sharedMemoryReadOnly": "Shared memories are maintained by administrators. Save your own habits and preferences in personal memory.",
       "insertInterlocutor": "Insert current interlocutor",
-      "insertPersonalMemory": "Insert personal memory"
+      "insertPersonalMemory": "Insert personal memory",
+      "codex": {
+        "title": "Codex connection",
+        "help": "Connect a ChatGPT account for administrator chats and individually authorized stewards.",
+        "connected": "Connected",
+        "disconnected": "Not connected",
+        "connect": "Connect Codex",
+        "disconnect": "Disconnect Codex",
+        "instruction": "Open the official page and enter this code to approve the connection.",
+        "openOfficial": "Open OpenAI sign-in",
+        "code": "One-time code",
+        "expires": "Expires:",
+        "keepPrivate": "Keep this code private. Only approve the connection you started here.",
+        "disconnectHelp": "Disconnecting stops Codex requests and clears credentials on this instance. To switch accounts, disconnect and connect again. Other account sessions remain active.",
+        "denied": "Authorization was declined. Start again when you are ready.",
+        "expired": "This code expired. Start again for a new code.",
+        "failed": "The connection could not be completed. Check that your account or workspace allows device code login, then try again.",
+        "sourceHelp": "Uses the Codex connection above. Assign it to administrator chat or specific stewards; automatic reviews and shared defaults cannot use it."
+      }
     },
     "resourceHealth": {
       "title": "Service health",
