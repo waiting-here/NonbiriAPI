@@ -97,7 +97,7 @@ func (a *application) registerRoutes(store *db.Store, roleAuthorizer *roleFinalT
 	if err := logapi.RegisterUserRoutes(a.authRuntime, a.logs); err != nil {
 		return fmt.Errorf("register user log routes: %w", err)
 	}
-	if err := creditapi.RegisterUserRoutes(a.authRuntime, store.DB()); err != nil {
+	if err := creditapi.RegisterUserRoutes(a.authRuntime, store.ReadDB()); err != nil {
 		return fmt.Errorf("register credit history route: %w", err)
 	}
 	if err := logapi.RegisterStewardRoutes(a.authRuntime, a.logs, roleAuthorizer); err != nil {
