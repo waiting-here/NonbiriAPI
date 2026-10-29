@@ -620,3 +620,59 @@ it.each(['admin', 'steward'] as const)(
     );
   },
 );
+
+it.each(['en', 'zh'] as const)(
+  'shows thinking and continuation rejection fields to the owner in %s',
+  async (locale) => {
+    for (const detail of [
+      {
+        field: 'thinking.budget_tokens',
+        reason: 'manual thinking requires an integer budget of at least 1024',
+        chinese: '手动思考预算须为不小于 1024 的整数',
+      },
+      {
+        field: 'extra_content.gateway',
+        reason: 'continuation parts must match the assistant message',
+        chinese: '续接内容块必须与助手消息一致',
+      },
+    ]) {
+      const row = {
+        id: requestID,
+        route_kind: 'openai_chat_completions',
+        phase: 'pre_handler',
+        rejection_stage: 'preflight',
+        rejection_reason: 'invalid_request',
+        request_method: 'POST',
+        request_path: '/v1/chat/completions',
+        caller_result_class: 'failed',
+        caller_status: 400,
+        caller_error_code: 'invalid_request',
+        started_at: 1,
+        completed_at: 2,
+        model: 'model',
+        attempt_count: '0',
+        usage: { ...usage, output_tokens: '0', total_tokens: '0' },
+        rejection_detail: {
+          field: detail.field,
+          reason: detail.reason,
+          suggestion: 'Correct the field type or value according to the stated requirement.',
+        },
+      };
+      installFixtures('user', row);
+      const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="user" />, {
+        station: 'user',
+        role: 'user',
+        locale,
+      });
+      await view.user.click(
+        await screen.findByRole('button', { name: locale === 'en' ? 'Details' : '详情' }),
+      );
+      expect(
+        await screen.findByText(
+          detail.field + ': ' + (locale === 'en' ? detail.reason : detail.chinese),
+        ),
+      ).toBeInTheDocument();
+      view.unmount();
+    }
+  },
+);

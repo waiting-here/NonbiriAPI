@@ -14,6 +14,12 @@ type RejectionDetail struct {
 }
 
 var rejectionFieldsAllowed = map[string]bool{
+	"thinking":                true,
+	"thinking.type":           true,
+	"thinking.display":        true,
+	"thinking.budget_tokens":  true,
+	"extra_content.anthropic": true,
+	"extra_content.gateway":   true,
 	"tools":                   true,
 	"tool_calls":              true,
 	"tool_call_id":            true,
@@ -86,6 +92,20 @@ var rejectionFieldsAllowed = map[string]bool{
 }
 
 var rejectionReasonsAllowed = map[string]bool{
+	"tool thinking requires the original signed content blocks":                                                 true,
+	"expected a supported thinking configuration":                                                               true,
+	"expected summarized, omitted, or updates":                                                                  true,
+	"this model uses adaptive thinking and does not support a manual budget":                                    true,
+	"manual thinking requires auto or none tool choice":                                                         true,
+	"manual thinking requires an integer budget of at least 1024":                                               true,
+	"the thinking budget must be below max_tokens without supported interleaved thinking":                       true,
+	"this thinking mode does not accept a manual budget":                                                        true,
+	"this model requires manual thinking with a budget":                                                         true,
+	"this model does not support forced tool use":                                                               true,
+	"unsupported thinking mode":                                                                                 true,
+	"expected supported continuation parts and metadata":                                                        true,
+	"continuation parts must match the assistant message":                                                       true,
+	"provider continuation requires the original permitted model connection":                                    true,
 	"no usable model resource is available for this request":                                                    true,
 	"shared model resources are temporarily at capacity":                                                        true,
 	"expected valid and consistent output-token limits":                                                         true,

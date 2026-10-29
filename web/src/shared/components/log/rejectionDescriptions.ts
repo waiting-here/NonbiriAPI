@@ -1,4 +1,31 @@
 export const rejectionDescriptionKeys: Record<string, string> = {
+  'tool thinking requires the original signed content blocks':
+    'logs.rejectionDescriptions.tool thinking requires the original signed content blocks',
+  'expected a supported thinking configuration':
+    'logs.rejectionDescriptions.expected a supported thinking configuration',
+  'expected summarized, omitted, or updates':
+    'logs.rejectionDescriptions.expected summarized, omitted, or updates',
+  'this model uses adaptive thinking and does not support a manual budget':
+    'logs.rejectionDescriptions.this model uses adaptive thinking and does not support a manual budget',
+  'manual thinking requires auto or none tool choice':
+    'logs.rejectionDescriptions.manual thinking requires auto or none tool choice',
+  'manual thinking requires an integer budget of at least 1024':
+    'logs.rejectionDescriptions.manual thinking requires an integer budget of at least 1024',
+  'the thinking budget must be below max_tokens without supported interleaved thinking':
+    'logs.rejectionDescriptions.the thinking budget must be below max_tokens without supported interleaved thinking',
+  'this thinking mode does not accept a manual budget':
+    'logs.rejectionDescriptions.this thinking mode does not accept a manual budget',
+  'this model requires manual thinking with a budget':
+    'logs.rejectionDescriptions.this model requires manual thinking with a budget',
+  'this model does not support forced tool use':
+    'logs.rejectionDescriptions.this model does not support forced tool use',
+  'unsupported thinking mode': 'logs.rejectionDescriptions.unsupported thinking mode',
+  'expected supported continuation parts and metadata':
+    'logs.rejectionDescriptions.expected supported continuation parts and metadata',
+  'continuation parts must match the assistant message':
+    'logs.rejectionDescriptions.continuation parts must match the assistant message',
+  'provider continuation requires the original permitted model connection':
+    'logs.rejectionDescriptions.provider continuation requires the original permitted model connection',
   'query parameters are not supported':
     'logs.rejectionDescriptions.query parameters are not supported',
   'expected application/json with optional UTF-8 charset':
