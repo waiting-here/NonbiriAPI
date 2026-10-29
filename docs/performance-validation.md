@@ -86,6 +86,15 @@ one handle for both pools do not validate this wiring. The shared
 does not queue for it and verifies that the reader is released. Pair these cases
 with current-permission, snapshot and read-before-write regressions as applicable.
 
+Include offline verification wrappers that construct partial services without
+calling the normal constructor. They must pass their isolated read-only database
+to every reader used by the verification path.
+
+For tests of operation deadlines and contention, initialize each reader with a
+real schema query before the timed work; `Ping` alone does not load the schema.
+Keep those setup costs separate from operation latency, and measure cold starts
+separately. Do not extend production deadlines to cover test instrumentation.
+
 Session validation uses a read snapshot when the current second and exact idle
 expiry have already been persisted. Renewal and stale-session cleanup close that
 snapshot, acquire the writer and recheck current authority before changing data.
