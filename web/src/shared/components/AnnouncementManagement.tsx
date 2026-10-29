@@ -13,6 +13,7 @@ import {
   ErrorState,
   LoadingState,
   PageHeader,
+  SectionHead,
   StatusBadge,
 } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -57,11 +58,14 @@ export function AnnouncementManagement({
   account,
   sessionError,
   onAuthorityLoss,
+  embedded = false,
 }: {
   role: ManagementRole;
   account: string | undefined;
   sessionError?: unknown;
   onAuthorityLoss?: () => void;
+  /** Render a section heading when another page already owns the h1. */
+  embedded?: boolean;
 }) {
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
@@ -189,24 +193,33 @@ export function AnnouncementManagement({
   };
   if (isUnauthorized(authorityError) || isForbidden(authorityError))
     return <ErrorState error={authorityError} />;
+  const createAction = (
+    <Button
+      variant="primary"
+      type="button"
+      disabled={!accountID || Boolean(sessionError)}
+      onClick={() => setCreating((value) => !value)}
+    >
+      {creating
+        ? t('management.announcements.closeCreator')
+        : t('management.announcements.createDraft')}
+    </Button>
+  );
   return (
     <div className="page ops-page">
-      <PageHeader
-        title={t('management.announcements.title')}
-        description={t('management.announcements.description')}
-        actions={
-          <Button
-            variant="primary"
-            type="button"
-            disabled={!accountID || Boolean(sessionError)}
-            onClick={() => setCreating((value) => !value)}
-          >
-            {creating
-              ? t('management.announcements.closeCreator')
-              : t('management.announcements.createDraft')}
-          </Button>
-        }
-      />
+      {embedded ? (
+        <SectionHead
+          title={t('management.announcements.title')}
+          description={t('management.announcements.description')}
+          actions={createAction}
+        />
+      ) : (
+        <PageHeader
+          title={t('management.announcements.title')}
+          description={t('management.announcements.description')}
+          actions={createAction}
+        />
+      )}
       {creating ? (
         <Card>
           <h2>{t('management.announcements.newDraft')}</h2>

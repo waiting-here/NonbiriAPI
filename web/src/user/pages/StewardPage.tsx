@@ -220,7 +220,7 @@ function StewardPageContent() {
           </>
         ) : null}
         {sectionAllowed && section === 'risk' ? (
-          <RiskAuditPanel role="steward" scopeKey={authority.data.id} enabled={allowed} />
+          <RiskAuditPanel role="steward" scopeKey={authority.data.id} enabled={allowed} embedded />
         ) : null}
         {sectionAllowed && section === 'charity' ? (
           <CharityManagement
@@ -277,6 +277,7 @@ function StewardPageContent() {
               role="steward"
               account={authority.data.id}
               onAuthorityLoss={authorityLoss}
+              embedded
             />
           )
         ) : null}

@@ -11,7 +11,7 @@ import { createTimeDraft, timeDraftValue } from '@shared/time';
 import { formatCount } from '@shared/utils/formatNumber';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { sourceFlagLabel, sourceQualityLabel } from '@shared/observability/sourceLabels';
-import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Card, ErrorState, LoadingState, PageHeader, SectionHead } from '@shared/components/States';
 import { Tabs, Fold, Note, DataTable } from '@shared/components/ui';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
@@ -1691,7 +1691,15 @@ function useAuditAuthority(role: RiskRole, scopeKey: string) {
   }, [client, role, scopeKey]);
   return error;
 }
-function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
+function RiskBody({
+  role,
+  scopeKey,
+  embedded,
+}: {
+  role: RiskRole;
+  scopeKey: string;
+  embedded: boolean;
+}) {
   const authorityError = useAuditAuthority(role, scopeKey);
   const { t } = useTranslation(),
     c = riskCopy(t);
@@ -1810,22 +1818,35 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
   if (authorityError) return <ErrorState error={authorityError} />;
   return (
     <div className="page ops-page audit-page">
-      <PageHeader
-        title={c.title}
-        description={c.description}
-        back={
-          ipUser ? (
-            <Link
-              to={queryPath(role === 'admin' ? '/users' : '/steward', {
-                tab: role === 'steward' ? 'users' : undefined,
-                user: ipUser,
-              })}
-            >
-              {t('common.audit.backToProfile')}
-            </Link>
-          ) : undefined
-        }
-      />
+      {embedded ? (
+        <>
+          {ipUser ? (
+            <div className="nb-page-header__back">
+              <Link to={queryPath('/steward', { tab: 'users', user: ipUser })}>
+                {t('common.audit.backToProfile')}
+              </Link>
+            </div>
+          ) : null}
+          <SectionHead title={c.title} description={c.description} />
+        </>
+      ) : (
+        <PageHeader
+          title={c.title}
+          description={c.description}
+          back={
+            ipUser ? (
+              <Link
+                to={queryPath(role === 'admin' ? '/users' : '/steward', {
+                  tab: role === 'steward' ? 'users' : undefined,
+                  user: ipUser,
+                })}
+              >
+                {t('common.audit.backToProfile')}
+              </Link>
+            ) : undefined
+          }
+        />
+      )}
       <Card>
         <Note>{t('common.audit.presentation.note')}</Note>
         <Fold plain title={t('common.audit.presentation.basis')}>
@@ -1987,11 +2008,16 @@ export function RiskAuditPanel({
   role,
   scopeKey,
   enabled = true,
+  embedded = false,
 }: {
   role: RiskRole;
   scopeKey: string;
   enabled?: boolean;
+  /** Render a section heading when the panel sits inside another page's header. */
+  embedded?: boolean;
 }) {
   if (!enabled || !scopeKey) return <LoadingState />;
-  return <RiskBody key={role + '/' + scopeKey} role={role} scopeKey={scopeKey} />;
+  return (
+    <RiskBody key={role + '/' + scopeKey} role={role} scopeKey={scopeKey} embedded={embedded} />
+  );
 }
