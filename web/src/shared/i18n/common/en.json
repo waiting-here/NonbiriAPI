@@ -1629,6 +1629,7 @@
       "title": "Model types",
       "help": "Select every API this model supports.",
       "required": "Select at least one model type.",
+      "more": "More APIs",
       "chat_completions": "Chat completions",
       "embeddings": "Embeddings",
       "images_generations": "Image generation",

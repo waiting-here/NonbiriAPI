@@ -1629,6 +1629,7 @@
       "title": "模型类型",
       "help": "选择此模型支持的接口，可多选。",
       "required": "请至少选择一种模型类型。",
+      "more": "更多接口",
       "chat_completions": "聊天补全",
       "embeddings": "向量化",
       "images_generations": "图像生成",
