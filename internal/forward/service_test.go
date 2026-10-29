@@ -490,24 +490,41 @@ func TestInvalidConnectorSuccessCannotProveProtocolCompletion(t *testing.T) {
 	}
 }
 
-func TestSafetyFailureStopsBeforeClaimAndReleasesAcceptedRequest(t *testing.T) {
-	fixture := newServiceFixture(t, nil)
-	if err := fixture.safety.Close(); err != nil {
-		t.Fatal(err)
-	}
-	request := decodeChatForTest(t, `{"model":"provider/model","messages":[]}`)
-	recorder := httptest.NewRecorder()
-
-	fixture.service.Chat(context.Background(), recorder, 1, request, []byte(`{}`), "application/json", "en")
-
-	if recorder.Code != http.StatusInternalServerError || !strings.Contains(recorder.Body.String(), httperr.CodeInternal) {
-		t.Fatalf("safety failure response=%d %q", recorder.Code, recorder.Body.String())
-	}
-	requireEvents(t, fixture.claims.events, "accept", "request_terminal")
-	if len(fixture.claims.claims) != 0 || fixture.openAI.calls != 0 ||
-		fixture.claims.requestResults[0].Disposition != claim.AccountingRelease {
-		t.Fatalf("safety failure crossed dispatch boundary: claims=%d connector=%d terminal=%+v",
-			len(fixture.claims.claims), fixture.openAI.calls, fixture.claims.requestResults)
+func TestSafetyFailureDoesNotDispatchOrRetainReservation(t *testing.T) {
+	for _, afterAcceptance := range []bool{false, true} {
+		t.Run(fmt.Sprintf("after_acceptance=%t", afterAcceptance), func(t *testing.T) {
+			fixture := newServiceFixture(t, nil)
+			closeSafety := func(context.Context) {
+				if err := fixture.safety.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if afterAcceptance {
+				fixture.claims.acceptHook = closeSafety
+			} else {
+				closeSafety(context.Background())
+			}
+			request := decodeChatForTest(t, `{"model":"provider/model","messages":[]}`)
+			recorder := httptest.NewRecorder()
+			fixture.service.Chat(context.Background(), recorder, 1, request, []byte(`{}`), "application/json", "en")
+			if recorder.Code != http.StatusInternalServerError || !strings.Contains(recorder.Body.String(), httperr.CodeInternal) {
+				t.Fatalf("safety failure response=%d %q", recorder.Code, recorder.Body.String())
+			}
+			if afterAcceptance {
+				requireEvents(t, fixture.claims.events, "accept", "request_terminal")
+				if fixture.claims.requestResults[0].Disposition != claim.AccountingRelease {
+					t.Fatal("accepted request retained its reservation")
+				}
+			} else {
+				requireEvents(t, fixture.claims.events)
+				if len(fixture.claims.requestResults) != 0 {
+					t.Fatal("preflight failure terminalized an unaccepted request")
+				}
+			}
+			if len(fixture.claims.claims) != 0 || fixture.openAI.calls != 0 {
+				t.Fatal("safety failure crossed dispatch boundary")
+			}
+		})
 	}
 }
 

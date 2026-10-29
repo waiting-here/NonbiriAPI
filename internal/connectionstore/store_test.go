@@ -11,6 +11,7 @@ import (
 	_ "modernc.org/sqlite"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -26,7 +27,7 @@ func connectionFixture(t *testing.T) (*sql.DB, *sql.Tx) {
 	}
 	database.SetMaxOpenConns(1)
 	t.Cleanup(func() { database.Close() })
-	if _, err := database.Exec(string(body) + db.ServiceKeyScopeSQL + db.ManagementOperationsSQL); err != nil {
+	if _, err := database.Exec(string(body) + db.ServiceKeyScopeSQL + db.ManagementOperationsSQL + strings.Split(db.ManagementDetailsSQL, "\nCREATE TRIGGER")[0]); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := database.Exec("PRAGMA foreign_keys=ON"); err != nil {

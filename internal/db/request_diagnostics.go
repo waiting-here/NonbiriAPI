@@ -6,11 +6,11 @@ const RequestDiagnosticsSQL = `
 CREATE TABLE request_attempt_diagnostics (
  claim_id TEXT PRIMARY KEY REFERENCES request_attempts(claim_id) ON DELETE CASCADE,
  request_log_id INTEGER NOT NULL REFERENCES request_logs(id) ON DELETE CASCADE,
- attempt_seq INTEGER NOT NULL CHECK(attempt_seq BETWEEN 1 AND 100),
+ attempt_seq INTEGER NOT NULL CHECK(typeof(attempt_seq)='integer' AND attempt_seq BETWEEN 1 AND 100),
  category TEXT NOT NULL CHECK(length(category) BETWEEN 1 AND 64),
  phase TEXT NOT NULL CHECK(length(phase) BETWEEN 1 AND 64),
  details TEXT NOT NULL CHECK(json_valid(details) AND json_type(details)='object' AND length(CAST(details AS BLOB))<=16384),
- completed_at INTEGER NOT NULL CHECK(completed_at BETWEEN 0 AND 253402300799),
+ completed_at INTEGER NOT NULL CHECK(typeof(completed_at)='integer' AND completed_at BETWEEN 0 AND 253402300799),
  UNIQUE(request_log_id,attempt_seq)
 );
 CREATE INDEX idx_request_diagnostics_category ON request_attempt_diagnostics(category,request_log_id);
