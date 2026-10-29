@@ -423,7 +423,7 @@ func (coordinator *Coordinator) ListLegalHolds(ctx context.Context, filter Legal
 		afterCreated = int64(decoded.Atoms[0].Uint)
 		afterID = decoded.Atoms[1].Text
 	}
-	tx, err := coordinator.database.BeginTx(ctx, nil)
+	tx, err := coordinator.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return LegalHoldPage{}, fmt.Errorf("lifecycle: begin legal hold list: %w", err)
 	}

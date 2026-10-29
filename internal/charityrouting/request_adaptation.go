@@ -34,7 +34,7 @@ func (s *Service) ReserveForOutput(ctx context.Context, modelID, currentReserve,
 	}
 	var mode, contextPricing string
 	var unit int64
-	if err := s.db.QueryRowContext(ctx, `SELECT pricing_mode,output_user_price,context_pricing FROM charity_models WHERE id=? AND enabled=1`, modelID).Scan(&mode, &unit, &contextPricing); errors.Is(err, sql.ErrNoRows) {
+	if err := s.readDB.QueryRowContext(ctx, `SELECT pricing_mode,output_user_price,context_pricing FROM charity_models WHERE id=? AND enabled=1`, modelID).Scan(&mode, &unit, &contextPricing); errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNotFound
 	} else if err != nil {
 		return 0, ErrUnavailable

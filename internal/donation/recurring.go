@@ -51,9 +51,9 @@ func (s *Service) recurring(ctx context.Context, role reviewerRole, userID, dona
 	var tx *sql.Tx
 	var err error
 	if role == recurringOwner {
-		tx, err = s.beginOwnerTx(ctx, userID)
+		tx, err = s.beginBrowseTx(ctx, recurringOwner, userID)
 	} else {
-		tx, _, err = s.beginScopedTx(ctx, role, userID, true)
+		tx, _, err = s.beginScopedTx(ctx, role, userID, false)
 	}
 	if err != nil {
 		return RecurringLimits{}, err

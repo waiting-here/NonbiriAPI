@@ -35,7 +35,7 @@ func (s *Service) History(ctx context.Context, user int64, cursor string) (Histo
 		}
 		id = parts[1]
 	}
-	tx, err := s.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.config.ReadDatabase.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return out, err
 	}

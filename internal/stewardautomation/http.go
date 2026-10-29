@@ -45,7 +45,7 @@ func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, authz.ErrUnauthorized)
 		return
 	}
-	tx, err := s.begin(r.Context(), identity.UserID)
+	tx, err := s.beginRead(r.Context(), identity.UserID)
 	if err != nil {
 		writeError(w, err)
 		return

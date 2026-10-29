@@ -209,7 +209,7 @@ func (service *Service) listManagedAccounts(ctx context.Context, actorID int64, 
 	if err != nil {
 		return empty, err
 	}
-	tx, err := service.beginManagedUserRead(ctx, actorID, role, query.Page != nil)
+	tx, err := service.beginManagedUserRead(ctx, actorID, role, true)
 	if err != nil {
 		return empty, err
 	}

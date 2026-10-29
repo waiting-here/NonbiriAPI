@@ -48,6 +48,7 @@ type Config struct {
 
 type Repository struct {
 	db        *sql.DB
+	readDB    *sql.DB
 	cursors   cursorCodec
 	finalAuth AdminFinalTxAuthorizer
 	now       func() time.Time
@@ -70,7 +71,7 @@ func NewRepository(config Config) (*Repository, error) {
 		config.AnnouncementID = func() (string, error) { return db.GenerateOpaqueID("ann_") }
 	}
 	return &Repository{
-		db: config.Store.DB(), cursors: cursorCodec{keys: config.CursorKeys}, finalAuth: config.FinalAuth,
+		db: config.Store.DB(), readDB: config.Store.ReadDB(), cursors: cursorCodec{keys: config.CursorKeys}, finalAuth: config.FinalAuth,
 		now: config.Now, newID: config.AnnouncementID,
 	}, nil
 }

@@ -84,7 +84,7 @@ func verifyDomains(ctx context.Context, database *sql.DB, vault *secret.Vault) e
 	if err := tx.Rollback(); err != nil {
 		return err
 	}
-	identities, err := continuity.New(database, vault)
+	identities, err := continuity.New(database, vault, database)
 	if err != nil {
 		return err
 	}

@@ -28,7 +28,7 @@ func fixture(t *testing.T) (*sql.DB, *continuity.Service) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := continuity.New(store.DB(), vault)
+	service, err := continuity.New(store.DB(), vault, store.ReadDB())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,5 +182,37 @@ func TestOfflineAuditRejectsConflictingBindings(t *testing.T) {
 	}
 	if _, err := service.UserKey(context.Background(), first); !errors.Is(err, continuity.ErrInvariant) {
 		t.Fatal("normal identity operation ignored conflict", err)
+	}
+}
+
+func TestReaderPoolIdentityAndWindows(t *testing.T) {
+	database, service := fixture(t)
+	user := insertUser(t, database, "reader-continuity")
+	tx := transaction(t, database)
+	if _, err := service.BindUserTx(t.Context(), tx, user); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	held, err := database.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	before := database.Stats().WaitCount
+	if _, err := service.UserKey(ctx, user); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.ValidateBindings(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := service.LoadWindow(ctx, user, continuity.UserRPM, "reader", 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if database.Stats().WaitCount != before {
+		t.Fatal("continuity read queued for writer")
 	}
 }

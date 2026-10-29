@@ -152,10 +152,24 @@ func beginTx(ctx context.Context, database *sql.DB) (*sql.Tx, error) {
 }
 
 func (r *Repository) beginAuthorizedTx(ctx context.Context, userID int64) (*sql.Tx, error) {
+	if r == nil {
+		return nil, ErrInvalidRequest
+	}
+	return r.beginAuthorizedOn(ctx, r.db, userID)
+}
+
+func (r *Repository) beginAuthorizedReadTx(ctx context.Context, userID int64) (*sql.Tx, error) {
+	if r == nil {
+		return nil, ErrInvalidRequest
+	}
+	return r.beginAuthorizedOn(ctx, r.readDB, userID)
+}
+
+func (r *Repository) beginAuthorizedOn(ctx context.Context, database *sql.DB, userID int64) (*sql.Tx, error) {
 	if r == nil || userID <= 0 || isNilInterface(r.finalAuth) {
 		return nil, ErrInvalidRequest
 	}
-	tx, err := beginTx(ctx, r.db)
+	tx, err := beginTx(ctx, database)
 	if err != nil {
 		return nil, err
 	}
@@ -167,6 +181,20 @@ func (r *Repository) beginAuthorizedTx(ctx context.Context, userID int64) (*sql.
 }
 
 func (r *Repository) beginAuthorizedAdminTx(ctx context.Context, adminID int64) (*sql.Tx, int64, error) {
+	if r == nil {
+		return nil, 0, ErrInvalidRequest
+	}
+	return r.beginAuthorizedAdminOn(ctx, r.db, adminID)
+}
+
+func (r *Repository) beginAuthorizedAdminReadTx(ctx context.Context, adminID int64) (*sql.Tx, int64, error) {
+	if r == nil {
+		return nil, 0, ErrInvalidRequest
+	}
+	return r.beginAuthorizedAdminOn(ctx, r.readDB, adminID)
+}
+
+func (r *Repository) beginAuthorizedAdminOn(ctx context.Context, database *sql.DB, adminID int64) (*sql.Tx, int64, error) {
 	if r == nil || adminID <= 0 || isNilInterface(r.adminFinalAuth) {
 		return nil, 0, ErrInvalidRequest
 	}
@@ -174,7 +202,7 @@ func (r *Repository) beginAuthorizedAdminTx(ctx context.Context, adminID int64) 
 	if err != nil {
 		return nil, 0, err
 	}
-	tx, err := beginTx(ctx, r.db)
+	tx, err := beginTx(ctx, database)
 	if err != nil {
 		return nil, 0, err
 	}

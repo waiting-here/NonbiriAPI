@@ -117,7 +117,7 @@ func newFixture(t *testing.T) *fixture {
 		}
 	}
 	a := testAuthority{f.admin}
-	f.s, err = New(Config{Database: f.db, Users: a, Admins: a, Gate: f.gate, Keys: vault, Activity: f.recorder, Now: func() time.Time { return time.Unix(f.at.Load(), 0) }})
+	f.s, err = New(Config{Database: f.db, ReadDatabase: store.ReadDB(), Users: a, Admins: a, Gate: f.gate, Keys: vault, Activity: f.recorder, Now: func() time.Time { return time.Unix(f.at.Load(), 0) }})
 	if err != nil {
 		t.Fatal(err)
 	}

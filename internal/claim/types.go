@@ -582,6 +582,7 @@ type Dependencies struct {
 	Performance  *observability.Performance
 	Observations *observability.Repository
 	DB           *sql.DB
+	ReadDB       *sql.DB
 	Secrets      secret.GenerationTwoContextCodec
 	Accounting   Accounting
 	Charity      Charity

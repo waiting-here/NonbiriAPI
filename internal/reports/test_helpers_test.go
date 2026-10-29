@@ -245,7 +245,7 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, discord, fmt.Sprintf("report-user-%d", s
 		t.Fatalf("seed report actor id: %v", err)
 	}
 	if !admin {
-		identities, err := continuity.New(environment.store.DB(), environment.vault)
+		identities, err := continuity.New(environment.store.DB(), environment.vault, environment.store.ReadDB())
 		if err != nil {
 			t.Fatal(err)
 		}

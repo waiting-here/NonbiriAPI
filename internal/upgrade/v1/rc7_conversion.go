@@ -24,7 +24,7 @@ const SourceManifestHash = "484bf7ee92aec1dfb9c8750e9bb1a73b2b4b5d1e9761e1f86c5d
 var conversionSQL string
 
 func convert(ctx context.Context, database *sql.DB, tx *sql.Tx, vault *secret.Vault, legacyGateway string) error {
-	identities, err := continuity.New(database, vault)
+	identities, err := continuity.New(database, vault, database)
 	if err != nil {
 		return err
 	}

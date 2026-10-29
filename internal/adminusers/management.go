@@ -45,7 +45,11 @@ func (s *Service) beginManagementAccess(ctx context.Context, actorID int64, role
 	if s == nil || s.database == nil || ctx == nil || actorID <= 0 {
 		return nil, false, ErrUnauthorized
 	}
-	tx, err := s.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: readOnly})
+	database := s.database
+	if readOnly {
+		database = s.readDB
+	}
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: readOnly})
 	if err != nil {
 		return nil, false, classifyDatabaseError("begin management transaction", err)
 	}

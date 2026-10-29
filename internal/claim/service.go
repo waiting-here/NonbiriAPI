@@ -29,6 +29,7 @@ type Service struct {
 	performance  *observability.Performance
 	observations *observability.Repository
 	db           *sql.DB
+	readDB       *sql.DB
 	secrets      secret.GenerationTwoContextCodec
 	accounting   Accounting
 	charity      Charity
@@ -39,6 +40,9 @@ type Service struct {
 func New(dependencies Dependencies) (*Service, error) {
 	if dependencies.DB == nil || nilInterface(dependencies.Secrets) {
 		return nil, ErrDependencyUnavailable
+	}
+	if dependencies.ReadDB == nil {
+		dependencies.ReadDB = dependencies.DB
 	}
 	if dependencies.Now == nil {
 		dependencies.Now = time.Now
@@ -53,6 +57,7 @@ func New(dependencies Dependencies) (*Service, error) {
 		performance:  dependencies.Performance,
 		observations: dependencies.Observations,
 		db:           dependencies.DB,
+		readDB:       dependencies.ReadDB,
 		secrets:      dependencies.Secrets,
 		accounting:   dependencies.Accounting,
 		charity:      dependencies.Charity,

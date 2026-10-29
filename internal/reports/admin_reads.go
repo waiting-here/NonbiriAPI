@@ -161,7 +161,7 @@ func (repository *Repository) Badge(ctx context.Context, actor authz.Actor) (Bad
 		return BadgeResponse{}, err
 	}
 	defer repository.release()
-	tx, committed, err := repository.beginAdminRead(ctx, actor)
+	tx, committed, err := repository.beginCasePageRead(ctx, actor)
 	if err != nil {
 		return BadgeResponse{}, err
 	}
@@ -282,7 +282,7 @@ func (repository *Repository) listCases(
 			return Page[CaseSummary]{}, ErrInvalidRequest
 		}
 	}
-	tx, committed, err := repository.beginCasePageRead(ctx, actor, requested != nil)
+	tx, committed, err := repository.beginCasePageRead(ctx, actor)
 	if err != nil {
 		return Page[CaseSummary]{}, err
 	}

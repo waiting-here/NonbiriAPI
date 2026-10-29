@@ -16,6 +16,7 @@ import (
 
 type Repository struct {
 	db          *sql.DB
+	readDB      *sql.DB
 	connectors  *connector.Registry
 	baseURLs    BaseURLValidator
 	authorizer  *authz.Authorizer
@@ -108,7 +109,7 @@ func New(config Config) (*Repository, error) {
 		return nil, errors.New("reports: purpose-bound subkeys must be distinct")
 	}
 	repository := &Repository{
-		db: config.Store.DB(), connectors: config.Connectors, baseURLs: config.BaseURLs, authorizer: config.Authorizer,
+		db: config.Store.DB(), readDB: config.Store.ReadDB(), connectors: config.Connectors, baseURLs: config.BaseURLs, authorizer: config.Authorizer,
 		deleteKey: config.DeleteKey, issues: config.IssueProjection, keys: keys, cursors: cursors, now: config.Now,
 		delay: config.Delay, generateID: config.GenerateID,
 		publicSlots: make(chan struct{}, publicConcurrency), interval: config.WorkerInterval,

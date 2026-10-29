@@ -208,7 +208,7 @@ func newPersonalFixture(t *testing.T) *personalFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.service, err = New(Config{Database: f.store.DB(), Authorizer: authority.auth, Resources: f.repo, Donations: donations, Charity: charity, Now: now})
+	f.service, err = New(Config{Database: f.store.DB(), ReadDatabase: f.store.ReadDB(), Authorizer: authority.auth, Resources: f.repo, Donations: donations, Charity: charity, Now: now})
 	if err != nil {
 		t.Fatal(err)
 	}

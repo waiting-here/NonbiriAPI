@@ -28,7 +28,7 @@ type indexingCase struct {
 }
 
 func (repository *Repository) processIndexingCases(ctx context.Context, now int64, limit int) (int, bool, error) {
-	ids, more, err := dueCaseIDs(ctx, repository.db, `SELECT id FROM report_cases
+	ids, more, err := dueCaseIDs(ctx, repository.readDB, `SELECT id FROM report_cases
 WHERE ((status='pending_indexing' AND deadline>?1) OR
        (status='expired' AND progress_state='in_progress' AND created_at+7776000>?1))
   AND (next_retry_at IS NULL OR next_retry_at<=?1)

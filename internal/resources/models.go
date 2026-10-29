@@ -103,7 +103,7 @@ func (r *Repository) ListModels(ctx context.Context, userID int64, limit int, cu
 			return Page[Model]{}, ErrInvalidRequest
 		}
 	}
-	rows, err := r.db.QueryContext(ctx, modelSelect+`
+	rows, err := r.readDB.QueryContext(ctx, modelSelect+`
 WHERE m.user_id=? AND (?=0 OR m.updated_at<? OR (m.updated_at=? AND m.id<?))
 ORDER BY m.updated_at DESC,m.id DESC LIMIT ?`, userID, afterID, afterUpdated, afterUpdated, afterID, limit+1)
 	if err != nil {
@@ -145,7 +145,7 @@ func (r *Repository) GetModel(ctx context.Context, userID, modelID int64) (Model
 	if r == nil || userID <= 0 || modelID <= 0 {
 		return Model{}, ErrNotFound
 	}
-	model, err := scanModel(r.db.QueryRowContext(ctx, modelSelect+` WHERE m.user_id=? AND m.id=?`, userID, modelID))
+	model, err := scanModel(r.readDB.QueryRowContext(ctx, modelSelect+` WHERE m.user_id=? AND m.id=?`, userID, modelID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Model{}, ErrNotFound
 	}
@@ -451,7 +451,7 @@ func (r *Repository) ListBindings(ctx context.Context, userID, modelID int64) (B
 	if r == nil || userID <= 0 || modelID <= 0 {
 		return BindingsResponse{}, ErrNotFound
 	}
-	tx, err := beginTx(ctx, r.db)
+	tx, err := beginTx(ctx, r.readDB)
 	if err != nil {
 		return BindingsResponse{}, err
 	}
@@ -888,7 +888,7 @@ func (r *Repository) BindingCandidates(ctx context.Context, userID, modelID int6
 			return Page[BindingCandidate]{}, ErrInvalidRequest
 		}
 	}
-	rows, err := r.db.QueryContext(ctx, candidatePageSelect+`
+	rows, err := r.readDB.QueryContext(ctx, candidatePageSelect+`
   AND (?=0 OR e.id>? OR (e.id=? AND (k.id>? OR (k.id=? AND p.rowid>?))))
 ORDER BY e.id,k.id,p.rowid LIMIT ?`,
 		userID, query.EndpointID, query.EndpointID, query.KeyID, query.KeyID,
@@ -968,11 +968,11 @@ func (r *Repository) validateCandidateParents(ctx context.Context, userID, endpo
 			query += ` AND e.id=?`
 			args = append(args, endpointID)
 		}
-		if err := r.db.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
+		if err := r.readDB.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
 			return fmt.Errorf("resources: verify candidate key: %w", err)
 		}
 	} else {
-		if err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM endpoints WHERE user_id=? AND id=?`, userID, endpointID).Scan(&count); err != nil {
+		if err := r.readDB.QueryRowContext(ctx, `SELECT count(*) FROM endpoints WHERE user_id=? AND id=?`, userID, endpointID).Scan(&count); err != nil {
 			return fmt.Errorf("resources: verify candidate endpoint: %w", err)
 		}
 	}

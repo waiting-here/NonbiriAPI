@@ -26,7 +26,7 @@ func (service *Service) List(ctx context.Context, userID int64, query ListQuery)
 	if err != nil {
 		return empty, err
 	}
-	tx, err := repository.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := repository.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return empty, err
 	}

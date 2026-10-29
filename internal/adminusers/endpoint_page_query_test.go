@@ -36,7 +36,7 @@ func endpointQueryPlan(t *testing.T, tx *sql.Tx, query string, args []any) strin
 func TestEndpointPagesAggregateOnlySelectedGroups(t *testing.T) {
 	f := newAdminUsersFixture(t)
 	seedAdminPageScale(t, f, 37)
-	tx, err := f.service.beginListRead(context.Background(), f.adminID, true)
+	tx, err := f.service.beginListRead(context.Background(), f.adminID)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -19,13 +19,13 @@ import (
 func (s *Service) authorizeAutomation(ctx context.Context, userID int64, personal bool) error {
 	var err error
 	if personal {
-		tx, beginErr := s.beginPersonal(ctx, userID)
+		tx, beginErr := s.beginPersonalOn(ctx, s.readDB, userID, true)
 		err = beginErr
 		if tx != nil {
 			tx.Rollback()
 		}
 	} else {
-		tx, beginErr := s.begin(ctx, userID)
+		tx, beginErr := s.beginRead(ctx, userID)
 		err = beginErr
 		if tx != nil {
 			tx.Rollback()

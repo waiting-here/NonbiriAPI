@@ -50,7 +50,7 @@ func (s *Service) listBlacklistFiltered(ctx context.Context, actorID int64, role
 	if err != nil {
 		return empty, err
 	}
-	tx, err := s.beginManagement(ctx, actorID, role, query.Page != nil)
+	tx, err := s.beginManagement(ctx, actorID, role, true)
 	if err != nil {
 		return empty, err
 	}
