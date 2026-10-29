@@ -199,20 +199,19 @@ func validDiscordIdentity(identity DiscordIdentity) bool {
 }
 
 func (r *Runtime) registrationConfig(ctx context.Context) (map[string]string, error) {
-	values := make(map[string]string, 2)
-	for _, key := range []string{"discord_guild_id", "discord_role_id"} {
-		var value string
-		if err := r.db.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key=?`, key).Scan(&value); err != nil || !validateBoundedText(value, 128, false) {
-			return nil, ErrProviderUnavailable
-		}
-		values[key] = value
+	var guild, role string
+	err := r.readDatabase().QueryRowContext(ctx, `SELECT
+ (SELECT value FROM site_config WHERE key='discord_guild_id'),
+ (SELECT value FROM site_config WHERE key='discord_role_id')`).Scan(&guild, &role)
+	if err != nil || !validateBoundedText(guild, 128, false) || !validateBoundedText(role, 128, false) {
+		return nil, ErrProviderUnavailable
 	}
-	return values, nil
+	return map[string]string{"discord_guild_id": guild, "discord_role_id": role}, nil
 }
 
 func (r *Runtime) registrationOpen(ctx context.Context) (bool, error) {
 	var value string
-	if err := r.db.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key='registration_open'`).Scan(&value); err != nil {
+	if err := r.readDatabase().QueryRowContext(ctx, `SELECT value FROM site_config WHERE key='registration_open'`).Scan(&value); err != nil {
 		return false, ErrProviderUnavailable
 	}
 	switch value {
@@ -227,7 +226,7 @@ func (r *Runtime) registrationOpen(ctx context.Context) (bool, error) {
 
 func (r *Runtime) registrationGuild(ctx context.Context) (string, error) {
 	var guild string
-	if err := r.db.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key='discord_guild_id'`).Scan(&guild); err != nil || !validateBoundedText(guild, 128, false) {
+	if err := r.readDatabase().QueryRowContext(ctx, `SELECT value FROM site_config WHERE key='discord_guild_id'`).Scan(&guild); err != nil || !validateBoundedText(guild, 128, false) {
 		return "", ErrProviderUnavailable
 	}
 	return guild, nil
@@ -359,7 +358,7 @@ func (r *Runtime) completeUserElevation(w http.ResponseWriter, req *http.Request
 		return
 	}
 	var discordID string
-	err = r.db.QueryRowContext(req.Context(), `SELECT discord_id FROM users WHERE id=? AND is_admin=0`, principal.actor.UserID).Scan(&discordID)
+	err = r.readDatabase().QueryRowContext(req.Context(), `SELECT discord_id FROM users WHERE id=? AND is_admin=0`, principal.actor.UserID).Scan(&discordID)
 	if err != nil || !hmacStringEqual(discordID, login.Identity.ID) {
 		writeStableError(w, httperr.CodeForbidden, "identity does not match the session")
 		return
