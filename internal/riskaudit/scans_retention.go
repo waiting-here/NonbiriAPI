@@ -52,10 +52,13 @@ func cleanupScansTx(ctx context.Context, tx *sql.Tx, now int64, limit int) (Clea
 			return result, err
 		}
 		if !children {
-			if err = managementlog.AppendRelatedTx(ctx, tx, "risk_scan", id, managementlog.Item{Action: "scan", TargetKind: "risk_scan", TargetID: id, Outcome: managementlog.Failed, Code: "expired_or_permission_changed"}, true); err != nil {
+			if err = managementlog.StartRelatedCaptureTx(ctx, tx, "risk_scan", id); err != nil {
 				return result, err
 			}
 			if _, err = tx.ExecContext(ctx, `DELETE FROM risk_client_scans WHERE id=?`, id); err != nil {
+				return result, err
+			}
+			if err = managementlog.AppendRelatedTx(ctx, tx, "risk_scan", id, managementlog.Item{Action: "scan", TargetKind: "risk_scan", TargetID: id, Outcome: managementlog.Failed, Code: "expired_or_permission_changed"}, true); err != nil {
 				return result, err
 			}
 			result.Deleted++

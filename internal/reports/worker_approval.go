@@ -149,6 +149,9 @@ func (repository *Repository) processApprovalCase(ctx context.Context, caseID st
 	deletedIncrement := int64(0)
 	releasedIncrement := int64(0)
 	for _, target := range targets {
+		if err := managementlog.StartRelatedCaptureTx(ctx, tx, "report_case", caseID); err != nil {
+			return false, false, err
+		}
 		physicalMissing := !target.endpointKeyID.Valid
 		if target.endpointKeyID.Valid {
 			if target.endpointKeyID.Int64 <= 0 || !target.ownerUserID.Valid || target.ownerUserID.Int64 <= 0 {
@@ -216,6 +219,9 @@ WHERE id=? AND case_id=? AND state='protected'`, row.targetVersion, now, target.
 		lastCursor = target.sequence
 	}
 	processedIncrement := int64(len(targets))
+	if err := managementlog.StartRelatedCaptureTx(ctx, tx, "report_case", caseID); err != nil {
+		return false, false, err
+	}
 	if more {
 		result, err := tx.ExecContext(ctx, `UPDATE report_cases SET
 cursor_source=?,cursor_id=?,processed_target_count=processed_target_count+?,deleted_target_count=deleted_target_count+?,
@@ -277,6 +283,10 @@ WHERE object_kind='report_case' AND object_ref=? AND state='active')`, caseID).S
 	}
 	if !more {
 		if err := managementlog.AppendRelatedTx(ctx, tx, "report_case", caseID, managementlog.Item{Action: "complete", TargetKind: "report_case", TargetID: caseID, Outcome: managementlog.Succeeded, Code: "completed"}, true); err != nil {
+			return false, false, err
+		}
+	} else {
+		if err := managementlog.AppendRelatedTx(ctx, tx, "report_case", caseID, managementlog.Item{Action: "process", TargetKind: "report_case", TargetID: caseID, Outcome: managementlog.Accepted, Code: "running"}, false); err != nil {
 			return false, false, err
 		}
 	}

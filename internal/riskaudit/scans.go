@@ -701,6 +701,9 @@ func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, resul
 			return false, err
 		}
 	}
+	if err = managementlog.StartRelatedCaptureTx(ctx, tx, "risk_scan", scan.ID); err != nil {
+		return false, err
+	}
 	if !allowed {
 		_, err = tx.ExecContext(ctx, `UPDATE risk_client_scans SET state='cancelled',reason='permission_changed',checkpoint_json=`+scanCheckpointWithoutIdentitySQL+`,updated_at=? WHERE id=?`, now, scan.ID)
 		if err != nil {

@@ -30,6 +30,7 @@ interface Counts {
   failed: string;
 }
 export interface Operation extends Counts {
+  target_name?: string;
   id: string;
   event_id: string;
   created_at: number;
@@ -65,7 +66,38 @@ export interface Item {
   target_name: string;
   outcome: string;
   code: string;
-  changes: { field: string; operation: string }[];
+  changes: Change[];
+  details?: SnapshotDetails;
+}
+export interface Change {
+  field: string;
+  operation: string;
+  before?: string;
+  after?: string;
+  unit?: string;
+  truncated?: boolean;
+}
+export interface SnapshotDetails {
+  version?: number;
+  previous_name?: string;
+  state?: string;
+  truncated?: boolean;
+  related?: {
+    kind: string;
+    id: string;
+    name: string;
+    previous_name?: string;
+    state: string;
+    changes?: Change[];
+  }[];
+  impacts?: {
+    kind: string;
+    created: string;
+    updated: string;
+    deleted: string;
+    sampled: string;
+    omitted: string;
+  }[];
 }
 interface Pagination {
   total: string;
@@ -138,6 +170,7 @@ function operation(value: unknown): Operation {
       'authorization_ref',
       'correlation_kind',
       'correlation_id',
+      'target_name',
     ],
     'management operation',
     [
@@ -157,6 +190,7 @@ function operation(value: unknown): Operation {
   );
   return {
     ...counts(value),
+    ...(typeof row.target_name === 'string' ? { target_name: row.target_name } : {}),
     id: decimal(row.id, 'operation ID'),
     event_id: string(row.event_id, 'event ID'),
     created_at: integer(row.created_at, 'operation time'),
@@ -233,8 +267,10 @@ function itemPage(value: unknown): ItemPage {
           'outcome',
           'code',
           'changes',
+          'details',
         ],
         'target',
+        ['ordinal', 'action', 'target_kind', 'target_id', 'target_name', 'outcome', 'code'],
       );
       return {
         ordinal: decimal(item.ordinal, 'target ordinal'),
@@ -244,15 +280,102 @@ function itemPage(value: unknown): ItemPage {
         target_name: string(item.target_name, 'target name'),
         outcome: string(item.outcome, 'outcome'),
         code: string(item.code, 'code'),
+        ...(item.details && typeof item.details === 'object'
+          ? { details: snapshotDetails(item.details) }
+          : {}),
         changes: array(item.changes ?? [], 'changes').map((change) => {
-          const entry = record(change, ['field', 'operation'], 'field change');
+          const entry = record(
+            change,
+            ['field', 'operation', 'before', 'after', 'unit', 'truncated'],
+            'field change',
+            ['field', 'operation'],
+          );
           return {
             field: string(entry.field, 'field'),
             operation: string(entry.operation, 'operation'),
+            ...(typeof entry.before === 'string' ? { before: entry.before } : {}),
+            ...(typeof entry.after === 'string' ? { after: entry.after } : {}),
+            ...(typeof entry.unit === 'string' ? { unit: entry.unit } : {}),
+            ...(entry.truncated === true ? { truncated: true } : {}),
           };
         }),
       };
     }),
+  };
+}
+function snapshotDetails(value: unknown): SnapshotDetails {
+  const row = record(
+    value,
+    ['version', 'previous_name', 'state', 'truncated', 'related', 'impacts'],
+    'snapshot',
+    [],
+  );
+  return {
+    ...(typeof row.version === 'number' ? { version: row.version } : {}),
+    ...(typeof row.previous_name === 'string' ? { previous_name: row.previous_name } : {}),
+    ...(typeof row.state === 'string' ? { state: row.state } : {}),
+    ...(row.truncated === true ? { truncated: true } : {}),
+    ...(Array.isArray(row.related)
+      ? {
+          related: row.related.map((value) => {
+            const object = record(
+              value,
+              ['kind', 'id', 'name', 'state', 'previous_name', 'changes'],
+              'related object',
+              ['kind', 'id', 'name', 'state'],
+            );
+            return {
+              kind: string(object.kind, 'kind'),
+              id: string(object.id, 'ID'),
+              name: string(object.name, 'name'),
+              state: string(object.state, 'state'),
+              ...(typeof object.previous_name === 'string'
+                ? { previous_name: object.previous_name }
+                : {}),
+              ...(Array.isArray(object.changes)
+                ? {
+                    changes: object.changes.map((entry) => {
+                      const change = record(
+                        entry,
+                        ['field', 'operation', 'before', 'after', 'unit', 'truncated'],
+                        'related change',
+                        ['field', 'operation'],
+                      );
+                      return {
+                        field: string(change.field, 'field'),
+                        operation: string(change.operation, 'operation'),
+                        ...(typeof change.before === 'string' ? { before: change.before } : {}),
+                        ...(typeof change.after === 'string' ? { after: change.after } : {}),
+                        ...(typeof change.unit === 'string' ? { unit: change.unit } : {}),
+                        ...(change.truncated === true ? { truncated: true } : {}),
+                      };
+                    }),
+                  }
+                : {}),
+            };
+          }),
+        }
+      : {}),
+    ...(Array.isArray(row.impacts)
+      ? {
+          impacts: row.impacts.map((value) => {
+            const impact = record(
+              value,
+              ['kind', 'created', 'updated', 'deleted', 'sampled', 'omitted'],
+              'impact',
+              ['kind', 'created', 'updated', 'deleted'],
+            );
+            return {
+              kind: string(impact.kind, 'kind'),
+              created: decimal(impact.created, 'created'),
+              updated: decimal(impact.updated, 'updated'),
+              deleted: decimal(impact.deleted, 'deleted'),
+              sampled: typeof impact.sampled === 'string' ? impact.sampled : '0',
+              omitted: typeof impact.omitted === 'string' ? impact.omitted : '0',
+            };
+          }),
+        }
+      : {}),
   };
 }
 function cleanupJob(value: unknown): CleanupJob {
