@@ -9,6 +9,7 @@ import {
   type PointerEvent,
   type Ref,
 } from 'react';
+import { Toggle } from '@shared/components/ui';
 import {
   containsPolygon,
   polygonsInteriorOverlap,
@@ -560,22 +561,12 @@ export function LevelCanvas({
           <button type="button" disabled={!canRedo} onClick={onRedo}>
             {text('redo')}
           </button>
-          <label>
-            <input
-              type="checkbox"
-              checked={grid}
-              onChange={(event) => onGridChange?.(event.target.checked)}
-            />
-            {text('snap_to_8_pixel_grid')}
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={labels}
-              onChange={(event) => setLabels(event.target.checked)}
-            />
-            {text('show_labels')}
-          </label>
+          <Toggle
+            label={text('snap_to_8_pixel_grid')}
+            checked={grid}
+            onChange={(checked) => onGridChange?.(checked)}
+          />
+          <Toggle label={text('show_labels')} checked={labels} onChange={setLabels} />
         </div>
         <div className="fatfish-actions fatfish-zoom">
           <button
@@ -603,14 +594,9 @@ export function LevelCanvas({
       {!polygon && <p className="muted fatfish-geometry-mode">{text('select_shape')}</p>}
       <p className="fatfish-mobile-only muted">{text('mobile_geometry_help')}</p>
       {mode === 'vertices' && (
-        <label className="fatfish-geometry-mode">
-          <input
-            type="checkbox"
-            checked={moveHole}
-            onChange={(event) => setMoveHole(event.target.checked)}
-          />
-          {text('move_selected_hole')}
-        </label>
+        <div className="fatfish-geometry-mode">
+          <Toggle label={text('move_selected_hole')} checked={moveHole} onChange={setMoveHole} />
+        </div>
       )}
       {(mode === 'outer' || mode === 'hole') && (
         <div className="fatfish-actions fatfish-geometry-mode">
@@ -638,7 +624,10 @@ export function LevelCanvas({
           </div>
         )}
         <div className="fatfish-player__viewport fatfish-editor-viewport" ref={viewport}>
-          <div className="fatfish-level-stage" style={{ width: `calc(min(100%, 70dvh * 736 / 816) * ${zoom})` }}>
+          <div
+            className="fatfish-level-stage"
+            style={{ width: `calc(min(100%, 70dvh * 736 / 816) * ${zoom})` }}
+          >
             <span className="fatfish-workbench-label">{text('workbench')}</span>
             <FatFishCanvas
               level={shown}

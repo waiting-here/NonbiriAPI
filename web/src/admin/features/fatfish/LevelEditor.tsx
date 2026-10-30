@@ -1,4 +1,5 @@
 import { MoreMenu } from '@shared/components/ui/MoreMenu';
+import { Field, Fields } from '@shared/components/ui';
 import { NumberField } from './NumberField';
 import { HeadingInput } from './HeadingInput';
 import {
@@ -642,7 +643,7 @@ function LevelDraftEditor({
   const levelSettings = (
     <section id="fatfish-level-settings" className="fatfish-inspector">
       <h3>{text('level_settings')}</h3>
-      <div className="fatfish-fields">
+      <Fields>
         <NumberField
           label={text('duration_seconds')}
           min={10}
@@ -671,7 +672,7 @@ function LevelDraftEditor({
             }}
           />
         ))}
-      </div>
+      </Fields>
     </section>
   );
 
@@ -699,30 +700,36 @@ function LevelDraftEditor({
             <p>{text('conversion_keeps_the_layout_speed_and_other_settings')}</p>
           </div>
         )}
-        <div className="fatfish-fields" inert={editingLocked}>
-          <label>
-            {text('title')}
-            <input
-              ref={titleInput}
-              value={title}
-              maxLength={128}
-              onChange={(event) => {
-                setTitle(event.target.value);
-                setNotice('');
-              }}
-            />
-          </label>
-          <label>
-            {text('description')}
-            <textarea
-              value={description}
-              maxLength={4096}
-              onChange={(event) => {
-                setDescription(event.target.value);
-                setNotice('');
-              }}
-            />
-          </label>
+        <div inert={editingLocked}>
+          <Fields>
+            <Field label={text('title')}>
+              {(props) => (
+                <input
+                  {...props}
+                  ref={titleInput}
+                  value={title}
+                  maxLength={128}
+                  onChange={(event) => {
+                    setTitle(event.target.value);
+                    setNotice('');
+                  }}
+                />
+              )}
+            </Field>
+            <Field size="long" label={text('description')}>
+              {(props) => (
+                <textarea
+                  {...props}
+                  value={description}
+                  maxLength={4096}
+                  onChange={(event) => {
+                    setDescription(event.target.value);
+                    setNotice('');
+                  }}
+                />
+              )}
+            </Field>
+          </Fields>
         </div>
         <input
           ref={fileInput}

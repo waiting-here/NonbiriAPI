@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Card, ErrorState } from '@shared/components/States';
+import { Field, Fields, FormActions, Toggle } from '@shared/components/ui';
 import { usePictureBookText } from '@shared/picturebook/copy';
 import { useImageOperation } from '@shared/picturebook/useImageOperation';
 import { saveUpstream, type Upstream, type UpstreamInput } from './adminApi';
@@ -74,49 +75,51 @@ export const UpstreamForm = forwardRef<
       </p>
       <form
         ref={form}
-        className="picturebook-form"
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
         }}
       >
         <fieldset disabled={save.locked || saved || disabled}>
-          <label>
-            {t('服务地址', 'Service base URL')}
-            <input
-              type="url"
-              required
-              maxLength={4096}
-              value={baseURL}
-              placeholder="https://images.example.com/v1"
-              onChange={(event) => setBaseURL(event.target.value)}
-            />
-          </label>
-          {value.secret_set ? (
-            <label className="picturebook-checkbox">
-              <input
-                type="checkbox"
+          <Fields>
+            <Field size="long" label={t('服务地址', 'Service base URL')}>
+              {(props) => (
+                <input
+                  {...props}
+                  type="url"
+                  required
+                  maxLength={4096}
+                  value={baseURL}
+                  placeholder="https://images.example.com/v1"
+                  onChange={(event) => setBaseURL(event.target.value)}
+                />
+              )}
+            </Field>
+            {value.secret_set ? (
+              <Toggle
+                label={t('替换已保存的密钥', 'Replace stored key')}
                 checked={replace}
-                onChange={(event) => setReplace(event.target.checked)}
+                onChange={setReplace}
               />
-              {t('替换已保存的密钥', 'Replace stored key')}
-            </label>
-          ) : null}
-          {replace ? (
-            <label>
-              {t('活动专用密钥', 'Activity key')}
-              <input
-                type="password"
-                autoComplete="new-password"
-                required
-                maxLength={65536}
-                value={secret}
-                onChange={(event) => setSecret(event.target.value)}
-              />
-            </label>
-          ) : (
-            <p>{t('保留已保存的密钥。', 'The existing key will be retained.')}</p>
-          )}
+            ) : null}
+            {replace ? (
+              <Field size="long" label={t('活动专用密钥', 'Activity key')}>
+                {(props) => (
+                  <input
+                    {...props}
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    maxLength={65536}
+                    value={secret}
+                    onChange={(event) => setSecret(event.target.value)}
+                  />
+                )}
+              </Field>
+            ) : (
+              <p>{t('保留已保存的密钥。', 'The existing key will be retained.')}</p>
+            )}
+          </Fields>
         </fieldset>
         {disabled ? (
           <p role="status">
@@ -143,7 +146,7 @@ export const UpstreamForm = forwardRef<
           </p>
         ) : null}
         {save.error ? <ErrorState error={save.error} /> : null}
-        <div className="picturebook-actions">
+        <FormActions>
           <button
             className="nb-btn nb-btn--primary"
             type="submit"
@@ -171,7 +174,7 @@ export const UpstreamForm = forwardRef<
               {t('放弃服务草稿', 'Discard service draft')}
             </button>
           ) : null}
-        </div>
+        </FormActions>
       </form>
     </Card>
   );

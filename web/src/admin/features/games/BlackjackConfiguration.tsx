@@ -1,4 +1,4 @@
-import { Affix, Field, Fold } from '@shared/components/ui';
+import { Affix, Field, Fields, Fold, FormActions } from '@shared/components/ui';
 import type { BlackjackConfig } from '@shared/games/blackjack';
 import { useGameAdminText } from './copy';
 import { percentBP } from './config';
@@ -82,9 +82,10 @@ export function BlackjackConfiguration({
       </Fold>
       <fieldset className="nb-fieldset" disabled={disabled}>
         <legend>{t('投入金额', 'Stake amounts')}</legend>
-        <div className="nb-grid nb-grid--2">
+        <Fields>
           {(['min_stake', 'max_stake', 'stake_step', 'default_stake'] as const).map((field) => (
             <Field
+              size="short"
               key={field}
               label={
                 {
@@ -109,16 +110,17 @@ export function BlackjackConfiguration({
               )}
             </Field>
           ))}
-        </div>
+        </Fields>
       </fieldset>
       <fieldset className="nb-fieldset" disabled={disabled}>
         <legend>{t('费用去向', 'Fee allocation')}</legend>
         <p className="nb-fieldset__hint">
           {t('三项合计须小于 100%。', 'Total fees must be below 100%.')}
         </p>
-        <div className="nb-grid nb-grid--3">
+        <Fields>
           {(['platform', 'welfare', 'thursday'] as const).map((field) => (
             <Field
+              size="short"
               key={field}
               label={
                 {
@@ -148,7 +150,7 @@ export function BlackjackConfiguration({
               )}
             </Field>
           ))}
-        </div>
+        </Fields>
       </fieldset>
       <fieldset className="nb-fieldset" disabled={disabled}>
         <legend>{t('快捷投入金额（0–8个）', 'Quick stake amounts (0–8)')}</legend>
@@ -158,10 +160,10 @@ export function BlackjackConfiguration({
             'Buttons select an amount; players still choose Join queue. Amounts are sorted on save. Update any invalid amounts when changing limits or the step.',
           )}
         </p>
-        <div className="nb-grid nb-grid--2">
+        <Fields>
           {value.quick_stakes.map((amount, index) => (
             <div key={index}>
-              <Field label={`${t('快捷金额', 'Quick amount')} ${index + 1}`}>
+              <Field size="short" label={`${t('快捷金额', 'Quick amount')} ${index + 1}`}>
                 {(props) => (
                   <Affix
                     {...props}
@@ -181,30 +183,34 @@ export function BlackjackConfiguration({
                   />
                 )}
               </Field>
-              <button
-                type="button"
-                className="nb-btn nb-btn--secondary"
-                aria-label={`${t('移除快捷金额', 'Remove quick amount')} ${index + 1}`}
-                onClick={() =>
-                  onChange({
-                    ...value,
-                    quick_stakes: value.quick_stakes.filter((_, i) => i !== index),
-                  })
-                }
-              >
-                {t('移除', 'Remove')}
-              </button>
+              <FormActions>
+                <button
+                  type="button"
+                  className="nb-btn nb-btn--secondary"
+                  aria-label={`${t('移除快捷金额', 'Remove quick amount')} ${index + 1}`}
+                  onClick={() =>
+                    onChange({
+                      ...value,
+                      quick_stakes: value.quick_stakes.filter((_, i) => i !== index),
+                    })
+                  }
+                >
+                  {t('移除', 'Remove')}
+                </button>
+              </FormActions>
             </div>
           ))}
-        </div>
-        <button
-          type="button"
-          className="nb-btn nb-btn--secondary"
-          disabled={disabled || value.quick_stakes.length >= 8}
-          onClick={() => onChange({ ...value, quick_stakes: [...value.quick_stakes, ''] })}
-        >
-          {t('添加快捷金额', 'Add quick amount')}
-        </button>
+        </Fields>
+        <FormActions>
+          <button
+            type="button"
+            className="nb-btn nb-btn--secondary"
+            disabled={disabled || value.quick_stakes.length >= 8}
+            onClick={() => onChange({ ...value, quick_stakes: [...value.quick_stakes, ''] })}
+          >
+            {t('添加快捷金额', 'Add quick amount')}
+          </button>
+        </FormActions>
       </fieldset>
       <p className="table-note">
         {t(

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Field } from '@shared/components/ui';
 
 export function NumberField({
   label,
@@ -29,23 +30,25 @@ export function NumberField({
       onChange(next);
   };
   return (
-    <label>
-      {label}
-      <input
-        type="number"
-        value={draft ?? value}
-        min={min}
-        max={max}
-        step={step}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={finish}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.preventDefault();
-            event.currentTarget.blur();
-          } else if (event.key === 'Escape') setDraft(null);
-        }}
-      />
-    </label>
+    <Field size="short" label={label}>
+      {(props) => (
+        <input
+          {...props}
+          type="number"
+          value={draft ?? value}
+          min={min}
+          max={max}
+          step={step}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={finish}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              event.currentTarget.blur();
+            } else if (event.key === 'Escape') setDraft(null);
+          }}
+        />
+      )}
+    </Field>
   );
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Field, Note, Toggle } from '@shared/components/ui';
+import { Field, Fields, FormActions, Note, Toggle } from '@shared/components/ui';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { useAIText, type AIBot } from '@shared/aiPlayers';
@@ -123,95 +123,97 @@ export function GwentAIAdmin() {
           <h3>
             {edit.policy.definition.faction.toUpperCase()} · {t('挑战设置', 'Challenge settings')}
           </h3>
-          <Field label={t('名称', 'Name')}>
-            {(props) => (
-              <input
-                {...props}
-                value={edit.bot.name}
-                maxLength={64}
-                required
-                disabled={busy}
-                onChange={(e) => update({ name: e.target.value })}
-              />
-            )}
-          </Field>
-          <Field label={t('说明', 'Description')}>
-            {(props) => (
-              <textarea
-                {...props}
-                value={edit.bot.description}
-                maxLength={512}
-                disabled={busy}
-                onChange={(e) => update({ description: e.target.value })}
-              />
-            )}
-          </Field>
-          <Field label={t('原版卡组预设', 'Original deck preset')}>
-            {(props) => (
-              <select
-                {...props}
-                disabled={busy}
-                value={edit.policy.definition.preset}
-                onChange={(e) =>
-                  setEdit({
-                    ...edit,
-                    policy: {
-                      ...edit.policy,
-                      definition: { ...edit.policy.definition, preset: e.target.value },
-                    },
-                  })
-                }
-              >
-                {presets
-                  .filter((p) => p.deck.faction === edit.policy.definition.faction)
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-              </select>
-            )}
-          </Field>
-          <p>
-            {
-              presets.find(
-                (p) =>
-                  p.deck.faction === edit.policy.definition.faction &&
-                  p.id === edit.policy.definition.preset,
-              )?.description
-            }
-          </p>
-          <Field label={t('门票 · 积分', 'Ticket · credits')}>
-            {(props) => (
-              <input
-                {...props}
-                inputMode="decimal"
-                value={edit.bot.ticket}
-                required
-                disabled={busy}
-                onChange={(e) => update({ ticket: e.target.value })}
-              />
-            )}
-          </Field>
-          <Field label={t('首通奖励 · 游戏积分', 'First clear · game credits')}>
-            {(props) => (
-              <input
-                {...props}
-                inputMode="decimal"
-                value={edit.bot.first_reward}
-                required
-                disabled={busy}
-                onChange={(e) => update({ first_reward: e.target.value })}
-              />
-            )}
-          </Field>
-          <Toggle
-            label={t('开放此挑战', 'Enable this challenge')}
-            checked={edit.bot.enabled}
-            disabled={busy}
-            onChange={(enabled) => update({ enabled })}
-          />
-          <div className="nb-actions">
+          <Fields>
+            <Field label={t('名称', 'Name')}>
+              {(props) => (
+                <input
+                  {...props}
+                  value={edit.bot.name}
+                  maxLength={64}
+                  required
+                  disabled={busy}
+                  onChange={(e) => update({ name: e.target.value })}
+                />
+              )}
+            </Field>
+            <Field size="long" label={t('说明', 'Description')}>
+              {(props) => (
+                <textarea
+                  {...props}
+                  value={edit.bot.description}
+                  maxLength={512}
+                  disabled={busy}
+                  onChange={(e) => update({ description: e.target.value })}
+                />
+              )}
+            </Field>
+            <Field label={t('原版卡组预设', 'Original deck preset')}>
+              {(props) => (
+                <select
+                  {...props}
+                  disabled={busy}
+                  value={edit.policy.definition.preset}
+                  onChange={(e) =>
+                    setEdit({
+                      ...edit,
+                      policy: {
+                        ...edit.policy,
+                        definition: { ...edit.policy.definition, preset: e.target.value },
+                      },
+                    })
+                  }
+                >
+                  {presets
+                    .filter((p) => p.deck.faction === edit.policy.definition.faction)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                </select>
+              )}
+            </Field>
+            <p>
+              {
+                presets.find(
+                  (p) =>
+                    p.deck.faction === edit.policy.definition.faction &&
+                    p.id === edit.policy.definition.preset,
+                )?.description
+              }
+            </p>
+            <Field size="short" label={t('门票 · 积分', 'Ticket · credits')}>
+              {(props) => (
+                <input
+                  {...props}
+                  inputMode="decimal"
+                  value={edit.bot.ticket}
+                  required
+                  disabled={busy}
+                  onChange={(e) => update({ ticket: e.target.value })}
+                />
+              )}
+            </Field>
+            <Field size="short" label={t('首通奖励 · 游戏积分', 'First clear · game credits')}>
+              {(props) => (
+                <input
+                  {...props}
+                  inputMode="decimal"
+                  value={edit.bot.first_reward}
+                  required
+                  disabled={busy}
+                  onChange={(e) => update({ first_reward: e.target.value })}
+                />
+              )}
+            </Field>
+            <Toggle
+              label={t('开放此挑战', 'Enable this challenge')}
+              checked={edit.bot.enabled}
+              disabled={busy}
+              onChange={(enabled) => update({ enabled })}
+            />
+          </Fields>
+          <FormActions>
             <button type="submit" className="nb-btn nb-btn--primary" disabled={busy}>
               {t('保存', 'Save')}
             </button>
@@ -223,7 +225,7 @@ export function GwentAIAdmin() {
             >
               {t('取消', 'Cancel')}
             </button>
-          </div>
+          </FormActions>
         </form>
       ) : (
         <div className="ai-bot-list">
