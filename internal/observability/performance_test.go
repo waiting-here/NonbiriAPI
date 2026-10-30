@@ -206,3 +206,18 @@ func TestCharityManagementPerformanceUsesBoundedRouteTemplates(t *testing.T) {
 		}
 	}
 }
+
+func TestPerformanceSeparatesEventStreamsAndLeaderboards(t *testing.T) {
+	for path, want := range map[string]string{
+		"/api/events":                     "/api/events",
+		"/api/games/fishing/leaderboard":  "game.fishing.leaderboard",
+		"/api/games/fishing/state":        "game.fishing.state",
+		"/api/games/fishing/private-name": "game.fishing",
+		"/api/games/private/leaderboard":  "game.other",
+		"/api/events/private":             "/api/other",
+	} {
+		if got := performanceRoute(path); got != want {
+			t.Fatalf("%s: got %s want %s", path, got, want)
+		}
+	}
+}

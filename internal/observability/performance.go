@@ -332,7 +332,7 @@ func performanceRoute(path string) string {
 		return "health"
 	case "/api/session", "/api/me", "/api/usage", "/api/config", "/api/homepage",
 		"/api/home/game-summary", "/api/games", "/api/checkin", "/api/checkin/game",
-		"/api/charity/models", "/api/models", "/api/caller-key", "/api/announcements":
+		"/api/charity/models", "/api/models", "/api/caller-key", "/api/announcements", "/api/events":
 		return path
 	case "/v1/messages", "/v1/models":
 		return path
@@ -341,6 +341,9 @@ func performanceRoute(path string) string {
 		game, _, _ := strings.Cut(strings.TrimPrefix(path, "/api/games/"), "/")
 		switch game {
 		case "blackjack", "bidding", "likes", "linklink", "rps", "fishing", "lake-notes", "gacha", "steady-catch", "gwent":
+			if path == "/api/games/"+game+"/leaderboard" {
+				return "game." + game + ".leaderboard"
+			}
 			if strings.HasSuffix(path, "/state") {
 				return "game." + game + ".state"
 			}

@@ -5,7 +5,26 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestIdleTerminalBatchCleanupDoesNotAcquireWriter(t *testing.T) {
+	f := newGameFixture(t, nil)
+	held, err := f.database.Conn(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	before := f.database.Stats().WaitCount
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	if n, err := f.service.cleanupTerminalBatches(ctx, fixtureNow); err != nil || n != 0 {
+		t.Fatalf("idle cleanup: %d, %v", n, err)
+	}
+	if f.database.Stats().WaitCount != before || f.service.readDatabase.Stats().InUse != 0 {
+		t.Fatal("idle cleanup waited for a writer or retained a reader")
+	}
+}
 
 func TestTerminalBatchCleanupUsesTimeIndexAndBatches(t *testing.T) {
 	f := newGameFixture(t, nil)

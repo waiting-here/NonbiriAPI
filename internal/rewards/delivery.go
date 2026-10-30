@@ -76,6 +76,15 @@ func (s *Service) ProcessBatch(ctx context.Context, limit int) (int, error) {
 	if limit < 1 || limit > 100 {
 		return 0, ErrInvalid
 	}
+	// An idle delivery worker must not queue behind foreground writes. The
+	// recipient and current campaign are still rechecked by processOne.
+	var pending bool
+	if err := s.config.ReadDatabase.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM reward_claims r JOIN reward_campaigns c ON c.id=r.campaign_id WHERE r.status='pending' AND c.kind='broadcast')`).Scan(&pending); err != nil {
+		return 0, err
+	}
+	if !pending {
+		return 0, nil
+	}
 	done := 0
 	for done < limit {
 		if err := ctx.Err(); err != nil {
