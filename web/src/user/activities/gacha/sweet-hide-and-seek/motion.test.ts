@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { createMotionMesh, vertexStride } from './motion';
 import { eyeTextures, decodeMask, faceCrops } from './eyelid';
 
 it('covers the amber iris pixels omitted from the input guide masks', () => {
@@ -58,5 +59,36 @@ it.each(['s-chatgpt', 's-claude'] as const)(
       for (const state of eye.ribbons)
         for (const [top, bottom] of state) expect(bottom).toBeGreaterThan(top);
     }
+  },
+);
+
+it.each(['s-chatgpt', 's-claude'] as const)(
+  '%s expanded mesh retains every original vertex and weight while extending edge motion',
+  (id) => {
+    const original = createMotionMesh(id);
+    const expanded = createMotionMesh(id, {
+      canvas: [1552, 1808],
+      originalRegion: { x: 264, y: 272, width: 1024, height: 1536 },
+    });
+    const byPosition = new Map<string, number>();
+    for (let i = 0; i < expanded.vertices.length; i += vertexStride)
+      byPosition.set(expanded.vertices[i] + ',' + expanded.vertices[i + 1], i);
+    for (let i = 0; i < original.vertices.length; i += vertexStride) {
+      const offset = byPosition.get(original.vertices[i] + ',' + original.vertices[i + 1])!;
+      expect(Array.from(expanded.vertices.slice(offset, offset + vertexStride))).toEqual(
+        Array.from(original.vertices.slice(i, i + vertexStride)),
+      );
+    }
+    const originalEdge = byPosition.get('1024,800')!;
+    const addedEdge = byPosition.get('1288,800')!;
+    expect(Array.from(expanded.vertices.slice(addedEdge + 2, addedEdge + vertexStride))).toEqual(
+      Array.from(expanded.vertices.slice(originalEdge + 2, originalEdge + vertexStride)),
+    );
+    expect(byPosition.has('-264,-272')).toBe(true);
+    expect(byPosition.has('1288,1536')).toBe(true);
+    expect(expanded.indices.every((index) => index < expanded.vertices.length / vertexStride)).toBe(
+      true,
+    );
+    expect(expanded.vertices.length / vertexStride).toBeLessThan(65536);
   },
 );

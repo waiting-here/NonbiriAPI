@@ -3,11 +3,12 @@ import { createSweetScene } from './scene';
 
 let imageMode: 'load' | 'pending' | 'fail-half';
 let images: MockImage[];
+let imageSize: [number, number];
 class MockImage {
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;
-  naturalWidth = 2560;
-  naturalHeight = 3840;
+  naturalWidth = imageSize[0];
+  naturalHeight = imageSize[1];
   url = '';
   requested = '';
   constructor() {
@@ -34,6 +35,7 @@ let lose: ReturnType<typeof vi.fn>;
 const cleanups: (() => void)[] = [];
 beforeEach(() => {
   imageMode = 'load';
+  imageSize = [2560, 3840];
   images = [];
   uploads = [];
   vi.stubGlobal('Image', MockImage);
@@ -209,4 +211,71 @@ it('clears the animation and stops its owner when the WebGL context is lost', as
   expect(canvas.dataset.ready).toBe('false');
   expect(canvas.style.visibility).toBe('hidden');
   expect(gl.deleteTexture).toHaveBeenCalledTimes(4);
+});
+
+it('samples expanded eye states at translated canonical coordinates without moving the rig', async () => {
+  imageSize = [3840, 4480];
+  const frame = {
+    mode: 'expanded-layer' as const,
+    canvas: [1536, 1792] as [number, number],
+    originalRegion: { x: 256, y: 256, width: 1024, height: 1536 },
+    hero: 'moment/s-chatgpt/hero.webp',
+    half: 'moment/s-chatgpt/half.webp',
+    closed: 'moment/s-chatgpt/closed.webp',
+  };
+  const scene = await createSweetScene(document.createElement('canvas'), 's-chatgpt', {
+    characterOnly: true,
+    highResolution: true,
+    momentFrame: frame,
+  });
+  cleanups.push(scene.dispose);
+  expect(images.map((image) => image.requested)).toEqual(
+    ['hero', 'half', 'closed'].map(
+      (name) => '/assets/gacha/hires/moment/s-chatgpt/' + name + '.webp',
+    ),
+  );
+  expect(uploads[1]).toEqual({ width: 900, height: 1800 });
+  expect(context.drawImage).toHaveBeenNthCalledWith(
+    1,
+    images[1],
+    1390,
+    1115,
+    900,
+    900,
+    0,
+    0,
+    900,
+    900,
+  );
+  expect(context.drawImage).toHaveBeenNthCalledWith(
+    2,
+    images[2],
+    1390,
+    1115,
+    900,
+    900,
+    0,
+    900,
+    900,
+    900,
+  );
+  expect(gl.uniform4f).toHaveBeenCalledWith(expect.anything(), 300, 190, 360, 360);
+  expect(gl.uniform2f).toHaveBeenCalledWith(expect.anything(), 256, 256);
+  expect(gl.uniform2f).toHaveBeenCalledWith(expect.anything(), 1536, 1792);
+});
+
+it('rejects incomplete expanded eye registration before requesting assets', async () => {
+  await expect(
+    createSweetScene(document.createElement('canvas'), 's-chatgpt', {
+      characterOnly: true,
+      momentFrame: {
+        mode: 'expanded-layer',
+        canvas: [1536, 1792],
+        originalRegion: { x: 256, y: 256, width: 1024, height: 1536 },
+        hero: 'moment/s-chatgpt/hero.webp',
+      },
+    }),
+  ).rejects.toThrow('eye-registration-unavailable');
+  expect(images).toHaveLength(0);
+  expect(HTMLCanvasElement.prototype.getContext).not.toHaveBeenCalled();
 });

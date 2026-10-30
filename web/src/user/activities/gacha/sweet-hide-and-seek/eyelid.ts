@@ -101,7 +101,7 @@ vec4 eye(vec2 p,vec4 original,vec4 basis,vec2 span,vec4 openHalfRange,vec2 close
   vec2 fromOpen=eyePoint(basis.xy,axis,tangents.x,mix(opened.x,opened.y,vertical));
   vec2 fromHalf=eyePoint(basis.xy,axis,tangents.y,mix(halfway.x,halfway.y,vertical));
   vec2 fromClosed=eyePoint(basis.xy,axis,tangents.z,mix(closed.x,closed.y,vertical));
-  vec4 lash=blink<.5?mix(texture2D(hero,fromOpen/size),eyeArt(fromHalf,0.),segment):mix(eyeArt(fromHalf,0.),eyeArt(fromClosed,1.),segment);
+  vec4 lash=blink<.5?mix(texture2D(hero,sourceUV(fromOpen)),eyeArt(fromHalf,0.),segment):mix(eyeArt(fromHalf,0.),eyeArt(fromClosed,1.),segment);
   vec4 resting=eyeArt(p,1.);
   // Remove the stationary final lash from the skin fill while the moving lash
   // approaches it. Skin samples are local to this eye, below the protected brow.

@@ -1,3 +1,4 @@
+import { momentReferenceSize } from '../moment-frame';
 import { makeCharacterRenderer as makeClaude } from './elopement-character.js';
 import {
   makeCharacterRenderer as makeGLM,
@@ -261,7 +262,15 @@ export async function createScene(id, polished = false, options = {}) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
-    ctx.scale(canvas.width / stageWidth, canvas.height / stageHeight);
+    const frame = options.characterOnly ? options.momentFrame : undefined;
+    const reference = momentReferenceSize(canvas.width, canvas.height, frame);
+    if (frame) {
+      ctx.translate(
+        (frame.originalRegion.x * canvas.width) / frame.canvas[0],
+        (frame.originalRegion.y * canvas.height) / frame.canvas[1],
+      );
+    }
+    ctx.scale(reference.width / stageWidth, reference.height / stageHeight);
     ctx.translate(-cropX, -(card ? 1024 * window[1] : 0));
     const backdrop = appearance
       ? !claude && layer === 'background'

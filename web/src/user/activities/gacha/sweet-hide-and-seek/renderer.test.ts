@@ -171,3 +171,27 @@ it('propagates loading failure without marking the outer static illustration rea
   expect(canvas.dataset.ready).toBeUndefined();
   expect(callback).toBeUndefined();
 });
+
+it.each([true, false])(
+  'uses expanded dimensions only for character-only=%s',
+  async (characterOnly) => {
+    vi.stubGlobal('devicePixelRatio', 3);
+    const canvas = document.createElement('canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ width: 2000 } as DOMRect);
+    await renderSweetHideAndSeek(canvas, 's-chatgpt', {
+      frozenTime: 0,
+      highResolution: true,
+      characterOnly,
+      momentFrame: {
+        mode: 'expanded-layer',
+        canvas: [1536, 1792],
+        originalRegion: { x: 256, y: 256, width: 1024, height: 1536 },
+        hero: 'moment/s-chatgpt/hero.webp',
+        half: 'moment/s-chatgpt/half.webp',
+        closed: 'moment/s-chatgpt/closed.webp',
+      },
+    });
+    expect(canvas.width).toBe(characterOnly ? 3840 : 2560);
+    expect(canvas.height).toBe(characterOnly ? 4480 : 3840);
+  },
+);
