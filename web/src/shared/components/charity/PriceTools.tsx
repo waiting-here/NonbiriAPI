@@ -54,18 +54,20 @@ function SearchForm({
   draft,
   setDraft,
   onSubmit,
+  onReset,
   placeholder,
 }: {
   draft: string;
   setDraft: (value: string) => void;
   onSubmit: () => void;
+  onReset: () => void;
   placeholder: string;
 }) {
   const { t } = useTranslation();
   return (
     <FilterBar
       activeCount={0}
-      secondaryLabel={t('common.workflow.filters')}
+      onReset={onReset}
       onSubmit={onSubmit}
       search={
         <>
@@ -80,9 +82,6 @@ function SearchForm({
               />
             )}
           </Field>
-          <Button type="submit" disabled={!validManagementSearch(draft)}>
-            {t('common.search')}
-          </Button>
         </>
       }
     />
@@ -124,6 +123,10 @@ function ModelPriceReference({ role, onApply, onCapabilityLoss }: PriceToolsProp
       <SearchForm
         draft={draft}
         setDraft={setDraft}
+        onReset={() => {
+          setDraft('');
+          setQ('');
+        }}
         placeholder={t('common.workflow.modelSearch')}
         onSubmit={() => {
           if (validManagementSearch(draft)) setQ(draft.trim());
@@ -230,6 +233,10 @@ function PriceTemplates({ role, onApply, onCapabilityLoss }: PriceToolsProps) {
       <SearchForm
         draft={draft}
         setDraft={setDraft}
+        onReset={() => {
+          setDraft('');
+          setQ('');
+        }}
         placeholder={t('common.workflow.templateSearch')}
         onSubmit={() => {
           if (validManagementSearch(draft)) setQ(draft.trim());

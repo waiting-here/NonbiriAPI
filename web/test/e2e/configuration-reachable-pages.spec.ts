@@ -902,7 +902,7 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   const editor = page.locator('.card').filter({
     has: page.getByRole('heading', { name: '[公益]provider/charity-model' }),
   });
-  const flatten = editor.getByRole('checkbox', {
+  const flatten = editor.getByRole('switch', {
     name: 'Experimental: flatten tool calls (chat only)',
   });
   await flatten.focus();

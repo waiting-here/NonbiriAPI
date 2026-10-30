@@ -1,3 +1,4 @@
+import { Field, FilterBar } from '@shared/components/ui';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -285,25 +286,31 @@ export function AdminCharityGroupsPanel() {
   const groups = donations.data ? groupAdminCharityDonations(donations.data.data) : [];
   return (
     <Card>
-      <div className="ops-toolbar">
-        <label>
-          <span>{t('admin.charity.statusFilter')}</span>
-          <select
-            value={status}
-            onChange={(event) => {
-              pager.reset();
-              setStatus(event.target.value as '' | AdminCharityStatus);
-            }}
-          >
-            <option value="">{t('admin.charity.allStatuses')}</option>
-            {ADMIN_CHARITY_STATUSES.map((value) => (
-              <option key={value} value={value}>
-                {t(STATUS_LABEL_KEYS[value])}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <FilterBar
+        activeCount={status ? 1 : 0}
+        onSubmit={() => {}}
+        search={
+          <Field label={t('admin.charity.statusFilter')} size="short">
+            {(field) => (
+              <select
+                {...field}
+                value={status}
+                onChange={(event) => {
+                  pager.reset();
+                  setStatus(event.target.value as '' | AdminCharityStatus);
+                }}
+              >
+                <option value="">{t('admin.charity.allStatuses')}</option>
+                {ADMIN_CHARITY_STATUSES.map((value) => (
+                  <option key={value} value={value}>
+                    {t(STATUS_LABEL_KEYS[value])}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+        }
+      />
       {donations.isPending ? (
         <LoadingState />
       ) : donations.error ? (

@@ -1564,21 +1564,23 @@ for (const scenario of [
       await page.goto(setup.origin + base + 'charity_section=donations&donation_id=1');
       const key = page.locator('.donation-key-editor');
       await expect(key).toHaveCount(1);
-      for (const width of [1440, 1920, 2560, 3440, 768, 390, 320]) {
+      for (const width of [1440, 1920, 2560, 3440, 1280, 1024, 768, 390, 320]) {
         await page.setViewportSize({ width, height: 1000 });
         await expect
           .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
           .toBe(true);
-        expect(
-          await key
-            .locator('.ops-field-grid')
-            .first()
-            .evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length),
-        ).toBe(width > 960 ? 3 : width > 640 ? 2 : 1);
+        const panes = page.locator('.charity-donations__panes.nb-md');
+        if (width <= 1280 && (await panes.count())) {
+          const list = await panes.locator('.charity-donations__list').boundingBox();
+          const detail = await panes.locator(':scope > .ops-detail-target').boundingBox();
+          expect(list).not.toBeNull();
+          expect(detail).not.toBeNull();
+          expect(detail!.y).toBeGreaterThanOrEqual(list!.y + list!.height);
+        }
         if (width >= 1440) {
           const dimensions = await key.evaluate((el) => ({
             editor: el.getBoundingClientRect().width,
-            groups: [...el.querySelectorAll('.ops-field-grid')].map(
+            groups: [...el.querySelectorAll('.nb-fields')].map(
               (group) => group.getBoundingClientRect().width,
             ),
           }));
@@ -1643,16 +1645,11 @@ for (const scenario of [
         .selectOption('per_token');
       for (const width of [1440, 1920, 2560, 3440, 768, 390, 320]) {
         await page.setViewportSize({ width, height: 1000 });
-        await expect(editor.locator('.charity-price-row')).toHaveCount(4);
+        await expect(editor.locator('.charity-price-grid .nb-fields')).toHaveCount(2);
+        await expect(editor.locator('.charity-price-grid .nb-fields input')).toHaveCount(8);
         await expect
           .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
           .toBe(true);
-        expect(
-          await editor
-            .locator('.charity-price-row')
-            .first()
-            .evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length),
-        ).toBe(width > 640 ? 2 : 1);
         if (width >= 1440) {
           const dimensions = await editor.evaluate((el) => ({
             editor: el.getBoundingClientRect().width,

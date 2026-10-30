@@ -379,7 +379,10 @@ export function MultiTargetBindingWorkflow({
         <>
           <FilterBar
             activeCount={q ? 1 : 0}
-            secondaryLabel={t('common.filter')}
+            onReset={() => {
+              setDraft('');
+              setQ('');
+            }}
             onSubmit={() => {
               if (validManagementSearch(draft)) setQ(draft.trim());
             }}
@@ -396,9 +399,6 @@ export function MultiTargetBindingWorkflow({
                     />
                   )}
                 </Field>
-                <Button type="submit" disabled={!validManagementSearch(draft)}>
-                  {t('common.search')}
-                </Button>
               </>
             }
           />

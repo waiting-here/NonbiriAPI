@@ -2291,7 +2291,7 @@ describe('experimental policy and charity controls', () => {
       const editForm = editHeading.closest('.card');
       if (!(editForm instanceof HTMLElement)) throw new Error('Missing charity model editor');
       await rendered.user.click(
-        within(editForm).getByRole('checkbox', {
+        within(editForm).getByRole('switch', {
           name: flattenLabel,
         }),
       );
@@ -2311,7 +2311,7 @@ describe('experimental policy and charity controls', () => {
       await rendered.user.type(within(createForm).getByLabelText('Provider'), 'new-provider');
       await rendered.user.type(within(createForm).getByLabelText('Model'), 'new-model');
       await rendered.user.click(
-        within(createForm).getByRole('checkbox', {
+        within(createForm).getByRole('switch', {
           name: flattenLabel,
         }),
       );
@@ -2399,7 +2399,7 @@ describe('experimental policy and charity controls', () => {
     const editForm = editHeading.closest('.card');
     if (!(editForm instanceof HTMLElement)) throw new Error('Missing charity model editor');
     await rendered.user.click(
-      within(editForm).getByRole('checkbox', {
+      within(editForm).getByRole('switch', {
         name: '[Experimental] Turn tool calls into plain text (chat only)',
       }),
     );
@@ -2408,7 +2408,7 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() => {
       expect(screen.getByText(/Charity management access is no longer available/i)).toBeVisible();
       expect(
-        screen.queryByRole('checkbox', {
+        screen.queryByRole('switch', {
           name: '[Experimental] Turn tool calls into plain text (chat only)',
         }),
       ).toBeNull();
@@ -2950,7 +2950,7 @@ describe('experimental policy and charity controls', () => {
     await screen.findByText(/does not have confirmed steward access/i);
     expect(rendered.queryClient.getQueriesData({ queryKey: modelPageKey })).toEqual([]);
     expect(
-      screen.queryByRole('checkbox', {
+      screen.queryByRole('switch', {
         name: '[Experimental] Turn tool calls into plain text (chat only)',
       }),
     ).toBeNull();

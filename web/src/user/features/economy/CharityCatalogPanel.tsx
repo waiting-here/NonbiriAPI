@@ -160,73 +160,78 @@ function CatalogFilters({
                 />
               )}
             </Field>
-            <button type="submit" className="nb-btn nb-btn--secondary">
-              {t('common.search')}
-            </button>
           </>
         }
-        secondaryLabel={t('user.charity.presentation.filters')}
+        onReset={onClear}
         activeCount={chips.length}
         chips={chips}
         onClearAll={onClear}
-        clearAllLabel={t('user.charity.presentation.clearFilters')}
+        clearAllLabel={t('common.resetFilter')}
         onSubmit={() => onQuerySubmit(queryDraft)}
         secondary={
           <>
-            <label>
-              <span>{t('user.charity.catalog.typeFilter')}</span>
-              <select
-                value={filter.modelType === 'all' ? 'all' : modelTypeGroup(filter.modelType)}
-                onChange={(event) =>
-                  onModelTypeChange(event.target.value as CatalogModelTypeFilter)
-                }
-              >
-                <option value="all">{t('user.charity.catalog.typeAll')}</option>
-                {MODEL_TYPE_CHOICES.map((modelType) => (
-                  <option key={modelType} value={modelType}>
-                    {t(MODEL_TYPE_GROUP_LABEL_KEYS[modelType])}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>{t('user.charity.catalog.accessFilter')}</span>
-              <select
-                value={filter.allowedForMe}
-                onChange={(event) => onAccessChange(event.target.value as CatalogAccessFilter)}
-              >
-                <option value="all">{t('user.charity.catalog.accessAll')}</option>
-                <option value="true">{t('user.charity.catalog.accessAllowed')}</option>
-                <option value="false">{t('user.charity.catalog.accessDenied')}</option>
-              </select>
-            </label>
-            <label>
-              <span>{t('user.charity.catalog.availabilityFilter')}</span>
-              <select
-                value={filter.currentlyAvailable}
-                onChange={(event) =>
-                  onAvailabilityChange(event.target.value as CatalogAvailabilityFilter)
-                }
-              >
-                <option value="all">{t('user.charity.catalog.availabilityAll')}</option>
-                <option value="true">{t('user.charity.catalog.availabilityAllowed')}</option>
-                <option value="false">{t('user.charity.catalog.availabilityDenied')}</option>
-              </select>
-            </label>
-            <label>
-              <span>{t('user.charity.catalog.levelFilter')}</span>
-              <select
-                value={filter.allowedLevel}
-                onChange={(event) => onLevelChange(event.target.value as CatalogLevelFilter)}
-              >
-                <option value="all">{t('user.charity.catalog.levelAll')}</option>
-                {[1, 2, 3, 4, 5, 6].map((level) => (
-                  <option key={level} value={level}>
-                    {t('user.charity.catalog.level', { level })}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <Field label={t('user.charity.catalog.typeFilter')}>
+              {(field) => (
+                <select
+                  {...field}
+                  value={filter.modelType === 'all' ? 'all' : modelTypeGroup(filter.modelType)}
+                  onChange={(event) =>
+                    onModelTypeChange(event.target.value as CatalogModelTypeFilter)
+                  }
+                >
+                  <option value="all">{t('user.charity.catalog.typeAll')}</option>
+                  {MODEL_TYPE_CHOICES.map((modelType) => (
+                    <option key={modelType} value={modelType}>
+                      {t(MODEL_TYPE_GROUP_LABEL_KEYS[modelType])}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+            <Field label={t('user.charity.catalog.accessFilter')} size="short">
+              {(field) => (
+                <select
+                  {...field}
+                  value={filter.allowedForMe}
+                  onChange={(event) => onAccessChange(event.target.value as CatalogAccessFilter)}
+                >
+                  <option value="all">{t('user.charity.catalog.accessAll')}</option>
+                  <option value="true">{t('user.charity.catalog.accessAllowed')}</option>
+                  <option value="false">{t('user.charity.catalog.accessDenied')}</option>
+                </select>
+              )}
+            </Field>
+            <Field label={t('user.charity.catalog.availabilityFilter')} size="short">
+              {(field) => (
+                <select
+                  {...field}
+                  value={filter.currentlyAvailable}
+                  onChange={(event) =>
+                    onAvailabilityChange(event.target.value as CatalogAvailabilityFilter)
+                  }
+                >
+                  <option value="all">{t('user.charity.catalog.availabilityAll')}</option>
+                  <option value="true">{t('user.charity.catalog.availabilityAllowed')}</option>
+                  <option value="false">{t('user.charity.catalog.availabilityDenied')}</option>
+                </select>
+              )}
+            </Field>
+            <Field label={t('user.charity.catalog.levelFilter')} size="short">
+              {(field) => (
+                <select
+                  {...field}
+                  value={filter.allowedLevel}
+                  onChange={(event) => onLevelChange(event.target.value as CatalogLevelFilter)}
+                >
+                  <option value="all">{t('user.charity.catalog.levelAll')}</option>
+                  {[1, 2, 3, 4, 5, 6].map((level) => (
+                    <option key={level} value={level}>
+                      {t('user.charity.catalog.level', { level })}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
           </>
         }
       />

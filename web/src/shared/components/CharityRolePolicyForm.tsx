@@ -1,4 +1,5 @@
 import { Button } from '@shared/components/ui/Button';
+import { FormActions } from '@shared/components/ui/Fields';
 import { ModelTypesSummary } from './ModelTypesField';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -75,7 +76,7 @@ export function CharityRolePolicyForm({
         }}
         disabled={save.isPending || unknown}
       />
-      <div className="ops-actions">
+      <FormActions>
         <Button
           type="button"
           variant="primary"
@@ -108,7 +109,7 @@ export function CharityRolePolicyForm({
         >
           {t('common.operations.charity.reloadModel')}
         </Button>
-      </div>
+      </FormActions>
       {save.error ? <ErrorState error={save.error} /> : null}
       {save.isSuccess ? <p role="status">{t('common.rolePolicy.saved')}</p> : null}
       {save.refreshError ? (

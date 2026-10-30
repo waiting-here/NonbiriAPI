@@ -100,12 +100,7 @@
   line-height: 1;
 }
 
-.loan-promo__amount {
-  display: grid;
-  gap: 0.6rem;
-}
-
-.loan-promo__amount select {
+.loan-promo__offer .nb-field select {
   width: 100%;
   min-width: 0;
   font-size: 1.5rem;
@@ -113,8 +108,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-.loan-promo__offer .loan-actions {
-  margin-top: 1.25rem;
+.loan-promo__offer .nb-form-actions {
+  margin-top: var(--nb-space-5);
   margin-bottom: 0;
 }
 

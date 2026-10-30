@@ -35,7 +35,7 @@ test('user browses current charity snapshots with search, pagination and committ
     const response = await loaded;
     expect(response.ok()).toBe(true);
     expect(response.headers()['cache-control']).toContain('no-store');
-    await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
+    await page.getByRole('button', { name: 'Reset', exact: true }).first().click();
     const search = page.getByRole('searchbox', {
       name: 'Search model name or public description',
     });
@@ -398,9 +398,7 @@ test('administrator filters donations and manages manual candidates', async ({ b
     const page = await admin.newPage();
     await page.goto(state.admin_url + '/charity');
     await page.getByLabel(copy.donationHandling.search).fill(donation.description);
-    await page
-      .getByRole('button', { name: copy.donationHandling.applySearch, exact: true })
-      .click();
+    await page.getByRole('button', { name: copy.search, exact: true }).click();
     const filterDisclosure = page.locator('.charity-donations .nb-filter__more summary');
     if (await filterDisclosure.isVisible()) await filterDisclosure.click();
     await page.getByLabel(copy.donationHandling.filter).selectOption('pending');
@@ -448,9 +446,7 @@ browser-manual-delete`);
       ]),
     );
     await candidates.getByLabel(copy.manualCandidates.search).fill('browser-manual-delete');
-    await candidates
-      .getByRole('button', { name: copy.manualCandidates.searchAction, exact: true })
-      .click();
+    await candidates.getByRole('button', { name: copy.search, exact: true }).click();
     await expect(candidates.locator('li')).toHaveCount(1);
     const removing = page.waitForResponse(
       (response) =>

@@ -373,7 +373,7 @@ test('catalog filters use a counted complete sample and restore URL-backed state
   });
   const search = page.getByRole('searchbox', { name: 'Search model name or public description' });
   const pageSize = page.getByRole('combobox', { name: 'Items per page', exact: true });
-  const clear = page.getByRole('button', { name: 'Clear filters', exact: true });
+  const clear = page.getByRole('button', { name: 'Reset', exact: true }).first();
   const defaults = async () => {
     await assertFiltersVisible(page);
     await level.selectOption('all');

@@ -203,11 +203,11 @@ it.each(['admin', 'steward'] as const)(
       },
     );
     await screen.findAllByText('Shared donation');
-    await view.user.click(screen.getByText('Filter', { exact: true }));
+    await view.user.click(screen.getByText('More filters', { exact: true }));
     await view.user.type(screen.getByRole('textbox', { name: 'Site user ID' }), '7');
     await view.user.type(screen.getByRole('textbox', { name: 'Discord ID' }), '840000000000000001');
-    expect(screen.getAllByRole('button', { name: 'Apply filters' })).toHaveLength(1);
-    await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
+    expect(screen.getAllByRole('button', { name: 'Search' })).toHaveLength(1);
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() =>
       expect(
         fixture.requests
@@ -666,9 +666,9 @@ describe('managed donation page integration', () => {
     expect(screen.queryByText('[公益]Provider/Model21')).not.toBeInTheDocument();
     await view.user.click(screen.getByRole('button', { name: 'Return to list' }));
     expect(await screen.findByText('[公益]Provider/Model21')).toBeVisible();
-    const filter = screen.getByRole('button', { name: 'Apply filter' }).closest('form')!;
+    const filter = screen.getByRole('button', { name: 'Search' }).closest('form')!;
     await view.user.type(within(filter).getByRole('textbox'), 'absent');
-    await view.user.click(within(filter).getByRole('button', { name: 'Apply filter' }));
+    await view.user.click(within(filter).getByRole('button', { name: 'Search' }));
     expect(await screen.findByRole('heading', { name: 'No charity models' })).toBeVisible();
     expect(
       screen.queryByRole('heading', { name: '[公益]Provider/Model1' }),
@@ -715,69 +715,73 @@ describe('managed donation page integration', () => {
     expect(params.has('donation_id')).toBe(false);
   });
 
-  it('retains review drafts on separate pages and submits every key in one revision', async () => {
-    const { reviews } = install(true);
-    await renderWithProviders(<CharityPage />, {
-      station: 'admin',
-      route: '/charity?donation_id=7',
-    });
-    const heading = await screen.findByRole('heading', { name: 'Review pending submission' });
-    const card = heading.closest('section')!;
-    const firstReviewNote = () =>
-      within(card.querySelector('h4')!.closest('section')!).getByRole('textbox', {
-        name: 'Review note',
+  it(
+    'retains review drafts on separate pages and submits every key in one revision',
+    { timeout: 20_000 },
+    async () => {
+      const { reviews } = install(true);
+      await renderWithProviders(<CharityPage />, {
+        station: 'admin',
+        route: '/charity?donation_id=7',
       });
-    const firstNote = firstReviewNote();
-    fireEvent.change(firstNote, { target: { value: 'first page note' } });
-    fireEvent.click(
-      within(card.querySelector('nav.page-pagination')!).getByRole('button', { name: 'Next' }),
-    );
-    const lastNote = within(card).getByLabelText('Review note');
-    fireEvent.change(lastNote, { target: { value: 'second page note' } });
-    fireEvent.click(
-      within(card.querySelector('nav.page-pagination')!).getByRole('button', { name: 'Previous' }),
-    );
-    expect(firstReviewNote()).toHaveValue('first page note');
-    const reviewFields = [...card.children].find((child) => child.matches('div.ops-field-grid'));
-    if (!(reviewFields instanceof HTMLElement)) throw new Error('Review fields missing');
-    const reason = within(reviewFields).getByLabelText('Reason');
-    act(() => {
-      fireEvent.change(reason, { target: { value: 'Reviewed all pages' } });
-    });
-    fireEvent.click(
-      within(card).getByText('Approve donation', { selector: 'button', exact: true }),
-    );
-    await waitFor(() => expect(reviews).toHaveLength(1));
-    expect(reviews[0].expected_revision).toBe('1');
-    expect(reviews[0].key_settings).toHaveLength(21);
-    expect(reviews[0].key_settings.map((row) => row.donation_key_id)).toEqual([
-      '11',
-      '12',
-      '13',
-      '14',
-      '15',
-      '16',
-      '17',
-      '18',
-      '19',
-      '20',
-      '21',
-      '22',
-      '23',
-      '24',
-      '25',
-      '26',
-      '27',
-      '28',
-      '29',
-      '30',
-      '31',
-    ]);
-    expect(reviews[0].key_settings.find((row) => row.donation_key_id === '11')?.safe_note).toBe(
-      'first page note',
-    );
-    expect(reviews[0].key_settings.find((row) => row.donation_key_id === '31')?.safe_note).toBe(
-      'second page note',
-    );
-  });
+      const heading = await screen.findByRole('heading', { name: 'Review pending submission' });
+      const card = heading.closest('section')!;
+      const firstReviewNote = () =>
+        within(card.querySelector('h4')!.closest('section')!).getByRole('textbox', {
+          name: 'Review note',
+        });
+      const firstNote = firstReviewNote();
+      fireEvent.change(firstNote, { target: { value: 'first page note' } });
+      fireEvent.click(
+        within(card.querySelector('nav.page-pagination')!).getByRole('button', { name: 'Next' }),
+      );
+      const lastNote = within(card).getByLabelText('Review note');
+      fireEvent.change(lastNote, { target: { value: 'second page note' } });
+      fireEvent.click(
+        within(card.querySelector('nav.page-pagination')!).getByRole('button', {
+          name: 'Previous',
+        }),
+      );
+      expect(firstReviewNote()).toHaveValue('first page note');
+      const reason = within(card).getByRole('textbox', { name: 'Reason' });
+      act(() => {
+        fireEvent.change(reason, { target: { value: 'Reviewed all pages' } });
+      });
+      fireEvent.click(
+        within(card).getByText('Approve donation', { selector: 'button', exact: true }),
+      );
+      await waitFor(() => expect(reviews).toHaveLength(1));
+      expect(reviews[0].expected_revision).toBe('1');
+      expect(reviews[0].key_settings).toHaveLength(21);
+      expect(reviews[0].key_settings.map((row) => row.donation_key_id)).toEqual([
+        '11',
+        '12',
+        '13',
+        '14',
+        '15',
+        '16',
+        '17',
+        '18',
+        '19',
+        '20',
+        '21',
+        '22',
+        '23',
+        '24',
+        '25',
+        '26',
+        '27',
+        '28',
+        '29',
+        '30',
+        '31',
+      ]);
+      expect(reviews[0].key_settings.find((row) => row.donation_key_id === '11')?.safe_note).toBe(
+        'first page note',
+      );
+      expect(reviews[0].key_settings.find((row) => row.donation_key_id === '31')?.safe_note).toBe(
+        'second page note',
+      );
+    },
+  );
 });

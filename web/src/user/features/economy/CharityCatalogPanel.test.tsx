@@ -266,7 +266,7 @@ describe('charity catalog panel', () => {
 
     await rendered.user.selectOptions(screen.getByLabelText('Allowed for level'), 'all');
     expect(screen.getByLabelText('Currently available')).toHaveValue('all');
-    await rendered.user.click(screen.getByRole('button', { name: 'Clear filters' }));
+    await rendered.user.click(screen.getAllByRole('button', { name: 'Reset' })[0]!);
     expect(screen.getByLabelText('Allowed for level')).toHaveValue('all');
     expect(screen.getByLabelText('Your access')).toHaveValue('all');
     expect(screen.getByLabelText('Currently available')).toHaveValue('all');

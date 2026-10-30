@@ -9,7 +9,15 @@ import { useEndpointCreateOptions } from '../core/queries';
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Field, Fold, Note, OutcomeNote, PanelFoot, Segmented } from '@shared/components/ui';
+import {
+  Field,
+  FilterBar,
+  FormActions,
+  Fold,
+  Note,
+  OutcomeNote,
+  Segmented,
+} from '@shared/components/ui';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import { DonationConnectorLabel } from './DonationConnectorLabel';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -121,6 +129,7 @@ function MutationNotice({ error, successKey }: { error: unknown; successKey?: st
 export function CharityCapabilityPanel({ capability }: { capability: CharityCapability }) {
   const { t } = useTranslation();
   const [modelQuery, setModelQuery] = useState('');
+  const [modelQueryDraft, setModelQueryDraft] = useState('');
   const [pricingMode, setPricingMode] = useState('');
   const available = capability.state === 'available';
   const models = capability.models.filter(
@@ -141,35 +150,51 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
         />
       </div>
       <p>{t(`user.charity.capabilityBody.${capability.state}`)}</p>
-      {available && (capability.models.length > 1 || modelQuery || pricingMode) ? (
-        <div className="economy-model-filters">
-          <label>
-            <span>{t('user.charity.searchModels')}</span>
-            <input
-              type="search"
-              placeholder={t('user.charity.modelSearchPlaceholder')}
-              value={modelQuery}
-              maxLength={133}
-              onChange={(event) => setModelQuery(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>{t('user.charity.pricingFilter')}</span>
-            <select
-              aria-label={t('user.charity.pricingFilter')}
-              value={pricingMode}
-              onChange={(event) => setPricingMode(event.target.value)}
-            >
-              <option value="">{t('user.charity.allPricing')}</option>
-              <option value="per_request">{t('user.charity.requestPrice')}</option>
-              <option value="per_token">{t('user.charity.tokenPricing')}</option>
-              <option value="per_search_unit">{t('common.modalityPricing.perSearchUnit')}</option>
-            </select>
-          </label>
-          <span className="muted">
-            {t('common.choices.count', { count: models.length, total: capability.models.length })}
-          </span>
-        </div>
+      {available &&
+      (capability.models.length > 1 || modelQuery || modelQueryDraft || pricingMode) ? (
+        <FilterBar
+          activeCount={[modelQuery, pricingMode].filter(Boolean).length}
+          onSubmit={() => setModelQuery(modelQueryDraft)}
+          onReset={() => {
+            setModelQueryDraft('');
+            setModelQuery('');
+            setPricingMode('');
+          }}
+          search={
+            <Field label={t('user.charity.searchModels')}>
+              {(field) => (
+                <input
+                  {...field}
+                  type="search"
+                  placeholder={t('user.charity.modelSearchPlaceholder')}
+                  value={modelQueryDraft}
+                  maxLength={133}
+                  onChange={(event) => setModelQueryDraft(event.target.value)}
+                />
+              )}
+            </Field>
+          }
+          secondaryAlwaysVisible
+          secondary={
+            <Field label={t('user.charity.pricingFilter')}>
+              {(field) => (
+                <select
+                  {...field}
+                  aria-label={t('user.charity.pricingFilter')}
+                  value={pricingMode}
+                  onChange={(event) => setPricingMode(event.target.value)}
+                >
+                  <option value="">{t('user.charity.allPricing')}</option>
+                  <option value="per_request">{t('user.charity.requestPrice')}</option>
+                  <option value="per_token">{t('user.charity.tokenPricing')}</option>
+                  <option value="per_search_unit">
+                    {t('common.modalityPricing.perSearchUnit')}
+                  </option>
+                </select>
+              )}
+            </Field>
+          }
+        />
       ) : null}
       {available && models.length === 0 ? <p>{t('common.noResultsBody')}</p> : null}
       {available ? (
@@ -512,30 +537,34 @@ export function DonationComposer({
             <span className="donate-step__number" aria-hidden="true">
               2
             </span>
-            <label>
-              <span>{t('user.charity.donationDescription')}</span>
-              <textarea
-                aria-label={t('user.charity.donationDescription')}
-                value={description}
-                disabled={locked}
-                onChange={(event) => setDescription(event.target.value)}
-                required
-                aria-invalid={Boolean(validation) && !validDonationDescription(description)}
-                aria-describedby={
-                  validation && !validDonationDescription(description)
-                    ? formID + '-description-error'
-                    : formID + '-description-help'
-                }
-              />
-              <small id={formID + '-description-help'}>
-                {t('user.charity.presentation.descriptionHelp')}
-              </small>
-              {validation && !validDonationDescription(description) ? (
-                <p id={formID + '-description-error'} className="field-error" role="alert">
-                  {validation}
-                </p>
-              ) : null}
-            </label>
+            <Field label={t('user.charity.donationDescription')} size="long">
+              {(field) => (
+                <>
+                  <textarea
+                    {...field}
+                    aria-label={t('user.charity.donationDescription')}
+                    value={description}
+                    disabled={locked}
+                    onChange={(event) => setDescription(event.target.value)}
+                    required
+                    aria-invalid={Boolean(validation) && !validDonationDescription(description)}
+                    aria-describedby={
+                      validation && !validDonationDescription(description)
+                        ? formID + '-description-error'
+                        : formID + '-description-help'
+                    }
+                  />
+                  <small id={formID + '-description-help'}>
+                    {t('user.charity.presentation.descriptionHelp')}
+                  </small>
+                  {validation && !validDonationDescription(description) ? (
+                    <p id={formID + '-description-error'} className="field-error" role="alert">
+                      {validation}
+                    </p>
+                  ) : null}
+                </>
+              )}
+            </Field>
           </section>
           <section className="donate-step" aria-labelledby={formID + '-thanks'}>
             <span className="donate-step__number" aria-hidden="true">
@@ -573,16 +602,18 @@ export function DonationComposer({
           </ul>
         </Fold>
         <Note>{t('user.charity.sharedKeyLimitsNotice')}</Note>
-        <label className="checkbox-label economy-authorization">
-          <input
-            type="checkbox"
-            checked={authorized}
-            form={formID}
-            disabled={locked}
-            onChange={(event) => setAuthorized(event.target.checked)}
-          />
-          <span>{t('user.charity.ownershipAuthorization')}</span>
-        </label>
+        <Field label={t('user.charity.ownershipAuthorization')} span>
+          {(field) => (
+            <input
+              {...field}
+              type="checkbox"
+              checked={authorized}
+              form={formID}
+              disabled={locked}
+              onChange={(event) => setAuthorized(event.target.checked)}
+            />
+          )}
+        </Field>
         {validation && validDonationDescription(description) ? (
           <p className="field-error" role="alert">
             {validation}
@@ -609,10 +640,9 @@ export function DonationComposer({
         ) : mutation.refreshError ? (
           <ErrorState error={mutation.refreshError} onRetry={() => void mutation.check()} />
         ) : null}
-        <PanelFoot>
-          <span>
-            {t('user.charity.presentation.selectedCount', { count: selectedChoices.length })}
-          </span>
+        <FormActions
+          note={t('user.charity.presentation.selectedCount', { count: selectedChoices.length })}
+        >
           <button
             className="nb-btn nb-btn--primary"
             type="submit"
@@ -621,7 +651,7 @@ export function DonationComposer({
           >
             {mutation.isPending ? t('common.working') : t('user.charity.submit')}
           </button>
-        </PanelFoot>
+        </FormActions>
       </div>
     </Card>
   );
@@ -1092,22 +1122,23 @@ export function DonationCard({
         <>
           <DonationThanks value={donation.discordPublicThanks} />
           <form onSubmit={save} className="economy-description-editor" noValidate>
-            <label>
-              <span>{t('user.charity.donationDescription')}</span>
-              <textarea
-                value={description}
-                required
-                aria-invalid={Boolean(validation) && !validDonationDescription(description)}
-                onChange={(event) => setDescription(event.target.value)}
-              />
-              {validation && !validDonationDescription(description) ? (
-                <p className="field-error" role="alert">
-                  {validation}
-                </p>
-              ) : null}
-            </label>
+            <Field
+              label={t('user.charity.donationDescription')}
+              size="long"
+              error={validation && !validDonationDescription(description) ? validation : undefined}
+            >
+              {(field) => (
+                <textarea
+                  {...field}
+                  value={description}
+                  required
+                  aria-invalid={Boolean(validation) && !validDonationDescription(description)}
+                  onChange={(event) => setDescription(event.target.value)}
+                />
+              )}
+            </Field>
             <p className="muted">{t('user.charity.pendingDescriptionOnly')}</p>
-            <div className="form-actions">
+            <FormActions>
               <button
                 type="button"
                 className="nb-btn nb-btn--ghost"
@@ -1119,7 +1150,7 @@ export function DonationCard({
               <button type="submit" className="nb-btn nb-btn--primary" disabled={busy}>
                 {busy ? t('common.working') : t('common.save')}
               </button>
-            </div>
+            </FormActions>
           </form>
         </>
       ) : (
@@ -1303,19 +1334,31 @@ export function DonationKeyOverview({
             {t('user.charity.donationOverviewCount', { visible: visibleKeys, total: totalKeys })}
           </p>
         </div>
-        <label>
-          <span>{t('user.charity.donationOverviewFilter')}</span>
-          <select
-            value={filter}
-            onChange={(event) => setFilter(event.target.value as DonationOverviewFilter)}
-            aria-label={t('user.charity.donationOverviewFilter')}
-          >
-            <option value="all">{t('user.charity.donationOverviewFilters.all')}</option>
-            <option value="available">{t('user.charity.donationOverviewFilters.available')}</option>
-            <option value="blocked">{t('user.charity.donationOverviewFilters.blocked')}</option>
-            <option value="ended">{t('user.charity.donationOverviewFilters.ended')}</option>
-          </select>
-        </label>
+        <FilterBar
+          activeCount={filter === 'all' ? 0 : 1}
+          onSubmit={() => {}}
+          search={
+            <Field label={t('user.charity.donationOverviewFilter')} size="short">
+              {(field) => (
+                <select
+                  {...field}
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value as DonationOverviewFilter)}
+                  aria-label={t('user.charity.donationOverviewFilter')}
+                >
+                  <option value="all">{t('user.charity.donationOverviewFilters.all')}</option>
+                  <option value="available">
+                    {t('user.charity.donationOverviewFilters.available')}
+                  </option>
+                  <option value="blocked">
+                    {t('user.charity.donationOverviewFilters.blocked')}
+                  </option>
+                  <option value="ended">{t('user.charity.donationOverviewFilters.ended')}</option>
+                </select>
+              )}
+            </Field>
+          }
+        />
       </div>
       {groups.length === 0 ? (
         <EmptyState
