@@ -72,6 +72,7 @@ type imageBrowserFixture struct {
 	mu            sync.Mutex
 	upstream      *httptest.Server
 	worker        *httptest.Server
+	codexUpstream *codexBrowserUpstream
 	upstreamState *imageFixtureUpstream
 	adminCookie   *http.Cookie
 	users         []imageBrowserUser
@@ -91,6 +92,9 @@ func (f *imageBrowserFixture) open() error {
 		options.AllowedOrigins = append(options.AllowedOrigins, f.worker.URL)
 		options.Resolver = endpointPolicyBrowserResolver{}
 		options.Dialer = modelWorkerDialer{direct: f.upstream.Listener.Addr().String()}
+	}
+	if f.codexUpstream != nil {
+		f.codexUpstream.configure(&options)
 	}
 	stack, err := egress.NewStack(options)
 	if err != nil {

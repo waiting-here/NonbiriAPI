@@ -2379,7 +2379,7 @@
         "unusualPercent": "The reported percentage is outside the usual range; its value is preserved.",
         "refresh": "Refresh usage",
         "refreshing": "Loading…",
-        "stale": "Showing the last valid data; current usage may have changed.",
+        "stale": "Showing the last valid data; current results may have changed.",
         "plan": "Plan",
         "workspace": "Workspace",
         "lastQuery": "Last checked",

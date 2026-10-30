@@ -48,6 +48,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Make navigation groups collapsible, use responsive field grids, and apply
   select/switch filters immediately while keeping text search explicit. Preserve
   filters across card tabs and retain local dates during credit-history queries.
+- Place Heartfelt moments beside wide-screen content and register expanded
+  character and scenery layers for consistent static and animated positioning.
+  Preserve the original card artwork and its content classification.
 - Read idle fishing cleanup and reward-delivery checks before acquiring the
   writer, add covering indexes for leaderboard and recent-success queries, and
   distinguish assistant event streams in bounded route telemetry.

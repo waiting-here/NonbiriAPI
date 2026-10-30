@@ -74,6 +74,9 @@ func TestAuditBrowserFixture(t *testing.T) {
 	if os.Getenv("NONBIRI_ENDPOINT_POLICIES_BROWSER") == "1" {
 		configureEndpointPoliciesBrowser(t, f)
 	}
+	if os.Getenv("NONBIRI_MANAGEMENT_BROWSER") == "1" && f.worker == nil {
+		f.codexUpstream = newCodexBrowserUpstream(t, f.upstream.Listener.Addr().String())
+	}
 	if err := f.open(); err != nil {
 		t.Fatal(err)
 	}
@@ -207,6 +210,9 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 	control := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+controlToken {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if f.codexUpstream != nil && f.codexUpstream.control(w, r, f) {
 			return
 		}
 		if r.Method == http.MethodPost && r.URL.Path == "/mfa/expire" && mfaUser.ID != "" {
