@@ -549,7 +549,6 @@ for (const locale of ['en', 'zh'] as const) {
     await shot('adaptation');
     await page.goto(`${USER_ORIGIN}/endpoints?quickstart=1`);
     const entryPanel = servicePanel(page, locale);
-    await entryPanel.locator('summary').filter({ hasText: workflow.serviceName }).click();
     await entryPanel.getByLabel(workflow.serviceName, { exact: true }).fill('Browser connection');
     await entryPanel.getByLabel(serviceUI.serviceAddress, { exact: true }).fill(endpoint.base_url);
     await shot('step-1');

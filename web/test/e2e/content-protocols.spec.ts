@@ -197,7 +197,6 @@ for (const width of [1440, 390]) {
         await expect(choice.locator('option[value="openai-chat-completions"]')).toHaveCount(0);
         if (kind === 'google-gemini') await screenshot(page, `protocol-user-${width}-${theme}`);
         await wizard.getByLabel(serviceUI.serviceAddress, { exact: true }).fill(baseURL);
-        await wizard.locator('summary').filter({ hasText: workflow.serviceName }).click();
         await wizard.getByLabel(workflow.serviceName, { exact: true }).fill(label);
         await expect(
           wizard.getByRole('radio', { name: c.existingCredential, exact: true }),
