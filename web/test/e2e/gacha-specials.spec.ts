@@ -6,7 +6,6 @@ import { USER_ORIGIN } from './ports';
 import { gachaSnapshot } from '../fixtures/gacha';
 import type { Card } from '../../src/user/activities/gacha/types';
 import { loanActivity } from '../fixtures/loans';
-import { isRare } from '../../src/user/activities/gacha/catalog';
 import type { MomentRegistration } from '../../src/user/activities/gacha/moment-frame';
 import { specialCards } from '../../src/user/activities/gacha/special-scenes';
 
@@ -18,7 +17,14 @@ const { cards: compositions } = JSON.parse(
   readFileSync(resolve('public/assets/gacha/composition.json'), 'utf8'),
 ) as { cards: Record<string, { moment_layers?: MomentRegistration }> };
 // Exercise each renderer and top-padding layout once; artwork review covers every adopted image.
-const expandedExamples = new Set(['c-gemini', 'g-claude', 'g-gemini', 's-chatgpt', 's-claude']);
+const expandedExamples = new Set([
+  'c-gemini',
+  'g-claude',
+  'g-gemini',
+  'l-chatgpt',
+  's-chatgpt',
+  's-claude',
+]);
 const targets = [
   ...new Set([
     ...Object.keys(specialCards),
@@ -35,6 +41,7 @@ for (const theme of ['light', 'dark'])
   for (const width of [1440, 1920, 390])
     for (const id of targets) {
       const card = cards.find((card) => card.id === id)!;
+      const animated = card.rarity === 'SSR' || card.rarity === 'SP';
       const appearance = specialCards[id] ?? 'heart-moment';
       const scenes = specialCards[id]
         ? (['collection', 'appearance', 'moment'] as const)
@@ -108,7 +115,7 @@ for (const theme of ['light', 'dark'])
             mutations++;
             return route.fulfill({ json: { snapshot: state } });
           });
-          await page.goto(USER_ORIGIN + '/activities/gacha');
+          await page.goto(USER_ORIGIN + (scene === 'moment' ? '/activities' : '/activities/gacha'));
           if (scene === 'collection') {
             await page.getByRole('tab', { name: /^我的图鉴/ }).click();
             const card = cards.find((value) => value.id === id)!;
@@ -244,7 +251,6 @@ for (const theme of ['light', 'dark'])
           }
           if (scene === 'moment') {
             // The gacha page has game layout; desktop reserve must also be checked on a normal page.
-            await page.goto(USER_ORIGIN + '/activities');
             await expect(page.locator('.loan-card')).toBeVisible();
             await expect(page.locator('.nb-user-shell')).not.toHaveAttribute('data-layout', 'game');
             const layers = compositions[id]?.moment_layers;
@@ -286,7 +292,7 @@ for (const theme of ['light', 'dark'])
                 ),
               });
             const surface = page.locator('.nb-moment-character canvas');
-            if (isRare(card.rarity)) {
+            if (animated) {
               await expect(surface).toHaveAttribute('data-ready', 'false');
               await page.emulateMedia({ reducedMotion: 'no-preference' });
               await expect(surface).toHaveAttribute('data-ready', 'true', { timeout: 15_000 });
@@ -312,13 +318,13 @@ for (const theme of ['light', 'dark'])
               });
             await page.keyboard.press('Escape');
             await page.emulateMedia({ reducedMotion: 'reduce' });
-            if (isRare(card.rarity)) await expect(surface).toHaveAttribute('data-ready', 'false');
+            if (animated) await expect(surface).toHaveAttribute('data-ready', 'false');
             await expect(hero).toBeVisible();
             expect(
               await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
             ).toBe(true);
           }
-          await expect.poll(() => mutations).toBe(1);
+          await expect.poll(() => mutations).toBe(scene === 'moment' ? 0 : 1);
           expect(errors).toEqual([]);
         });
       }
