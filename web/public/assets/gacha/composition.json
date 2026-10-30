@@ -451,7 +451,24 @@
         1536
       ],
       "backgroundFit": "center-cover",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            2304,
+            1544
+          ],
+          "originalRegion": {
+            "x": 768,
+            "y": 8,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 5760,
+          "hero": "moment/e-glm/hero.webp"
+        }
+      }
     },
     "e-deepseek": {
       "background": "backgrounds/e.webp",
@@ -535,7 +552,24 @@
         1536
       ],
       "backgroundFit": "center-cover",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1664,
+            1536
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 4160,
+          "hero": "moment/f-glm/hero.webp"
+        }
+      }
     },
     "f-deepseek": {
       "background": "backgrounds/f.webp",
@@ -626,7 +660,24 @@
     "g-deepseek": {
       "source": "registered-motion-layers",
       "background": "motion/g-deepseek/background.webp",
-      "character": "motion/g-deepseek/hero.webp"
+      "character": "motion/g-deepseek/hero.webp",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1792,
+            1544
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 8,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 4480,
+          "hero": "moment/g-deepseek/hero.webp"
+        }
+      }
     },
     "g-gemini": {
       "source": "registered-motion-layers",

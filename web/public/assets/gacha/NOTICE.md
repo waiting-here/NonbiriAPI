@@ -53,18 +53,18 @@ The adopted derivatives in `moment/c-gemini/`, `moment/q-glm/`, `moment/n-gemini
 `moment/g-glm/`, `moment/b-glm/`, `moment/f-gemini/`, `moment/e-gemini/`,
 `moment/b-deepseek/`, `moment/d-gemini/`, `moment/f-chatgpt/`,
 `moment/e-claude/`, `moment/d-glm/`, `moment/s-chatgpt/`, `moment/c-glm/`
-and `moment/b-chatgpt/`,
+`moment/b-chatgpt/`, `moment/e-glm/`, `moment/g-deepseek/` and `moment/f-glm/`,
 with matching `hires/moment/` paths, retain the established
 characters and original card and appearance inputs. Their separate
 `composition.json` registrations describe the expanded canvas and the unchanged
-original region. Standard character frames are 1536–2048 pixels wide, with an
+original region. Standard character frames are 1536–2304 pixels wide, with an
 8-pixel transparent left extension for f-gemini. Heights range from 1536 to
 1792 pixels. Their large derivatives
 use 2.5× Lanczos resampling and do not add native detail.
 
 The additional margins for c-gemini, g-claude, l-chatgpt, g-gemini, g-glm,
 b-glm, f-gemini, e-gemini, b-deepseek, d-gemini, f-chatgpt, e-claude, d-glm,
-s-chatgpt, c-glm and b-chatgpt were
+s-chatgpt, c-glm, b-chatgpt, e-glm, g-deepseek and f-glm were
 generated from their retained project sources
 using [BRIA Fibo-2.0-edit-turbo](https://huggingface.co/briaai/Fibo-2.0-edit-turbo/tree/177f2d4a06b6587144ef5c2b8452a4f1fe2ab4b7),
 with foreground alpha prepared using
