@@ -10,6 +10,7 @@ export type ResourceFilters = Partial<
     | 'state'
     | 'enabled'
     | 'donated'
+    | 'credential_available'
     | 'suspension_state'
     | 'provider'
     | 'route_strategy'
@@ -20,7 +21,7 @@ export type ResourceFilters = Partial<
 
 export const resourceFilterFields = {
   endpoints: ['q', 'connector_type', 'source', 'state'],
-  keys: ['q', 'enabled', 'donated', 'suspension_state'],
+  keys: ['q', 'enabled', 'donated', 'suspension_state', 'credential_available'],
   models: ['q', 'provider', 'route_strategy', 'connection_state'],
 } as const;
 
@@ -29,6 +30,7 @@ const choices: Partial<Record<keyof ResourceFilters, readonly string[]>> = {
   state: ['available', 'endpoint_disabled', 'no_keys', 'no_usable_key'],
   enabled: ['true', 'false'],
   donated: ['true', 'false'],
+  credential_available: ['true', 'false'],
   suspension_state: ['none', 'security_processing'],
   route_strategy: ['ordered', 'random', 'cache_balanced'],
   connection_state: ['available', 'unavailable', 'unconfigured'],

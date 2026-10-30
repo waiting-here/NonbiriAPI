@@ -127,7 +127,8 @@ func (r *Repository) SearchEndpointKeysPage(ctx context.Context, userID, endpoin
 func (r *Repository) FilterEndpointKeysPage(ctx context.Context, userID, endpointID int64, filters EndpointKeyPageFilters, page pagination.Request) (Page[EndpointKey], error) {
 	if endpointID <= 0 || !validateFreeText(filters.Query, 0, 128) ||
 		!optionalChoice(filters.Enabled, "true", "false") || !optionalChoice(filters.Donated, "true", "false") ||
-		!optionalChoice(filters.SuspensionState, "none", "security_processing") {
+		!optionalChoice(filters.SuspensionState, "none", "security_processing") ||
+		!optionalChoice(filters.CredentialAvailable, "true", "false") {
 		return Page[EndpointKey]{}, ErrInvalidRequest
 	}
 	return userPageRead(ctx, r, userID, page, func(ctx context.Context, tx *sql.Tx) (Page[EndpointKey], error) {

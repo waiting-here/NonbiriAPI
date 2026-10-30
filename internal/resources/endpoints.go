@@ -843,12 +843,14 @@ func scanEndpointKey(scanner interface{ Scan(...any) error }) (EndpointKey, erro
 	return row.dto()
 }
 
+const endpointKeyCredentialAvailableSQL = `EXISTS(SELECT 1 FROM credentials cr JOIN credential_versions cv ON cv.credential_id=cr.id AND cv.id=k.credential_version_id JOIN endpoint_key_secrets s ON s.id=cv.secret_ref_id WHERE cr.id=k.credential_id AND cr.deleted_at IS NULL AND cr.enabled=1 AND cv.enabled=1 AND s.orphaned_at IS NULL)`
+
 const endpointKeySelect = `
 SELECT k.id,k.endpoint_id,k.display_head,k.display_tail,k.note,k.enabled,k.force_store_false,
        EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id),
        k.revision,k.created_at,k.updated_at,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),
        k.credential_id,k.credential_version,k.grant_revision,k.native_service_mask,ks.source_id,
- EXISTS(SELECT 1 FROM credentials cr JOIN credential_versions cv ON cv.credential_id=cr.id AND cv.id=k.credential_version_id JOIN endpoint_key_secrets s ON s.id=cv.secret_ref_id WHERE cr.id=k.credential_id AND cr.deleted_at IS NULL AND cr.enabled=1 AND cv.enabled=1 AND s.orphaned_at IS NULL),
+ ` + endpointKeyCredentialAvailableSQL + `,
  COALESCE((SELECT note FROM credentials WHERE id=k.credential_id),'')
 FROM endpoint_key_current_credentials k JOIN endpoints e ON e.id=k.endpoint_id
 LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id

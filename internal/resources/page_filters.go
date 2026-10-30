@@ -12,7 +12,7 @@ type EndpointPageFilters struct {
 }
 
 type EndpointKeyPageFilters struct {
-	Query, Enabled, Donated, SuspensionState string
+	Query, Enabled, Donated, SuspensionState, CredentialAvailable string
 }
 
 type ModelPageFilters struct {
@@ -106,6 +106,10 @@ OR instr(lower(k.display_tail),lower(?))>0)`
 	if f.SuspensionState != "" {
 		query += ` AND EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)=?`
 		args = append(args, f.SuspensionState == "security_processing")
+	}
+	if f.CredentialAvailable != "" {
+		query += ` AND ` + endpointKeyCredentialAvailableSQL + `=?`
+		args = append(args, f.CredentialAvailable == "true")
 	}
 	return query, args
 }

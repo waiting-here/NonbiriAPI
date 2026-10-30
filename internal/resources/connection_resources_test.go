@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"testing"
 
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 type connectionTestFixture struct {
@@ -103,6 +103,21 @@ func TestConnectionSharedCredentialRotationAndDeletedMaterial(t *testing.T) {
 	got, err := f.env.repository.GetEndpointKey(ctx, f.user, resourceTestID(t, first.ID), resourceTestID(t, key.ID))
 	if err != nil || got.CredentialAvailable || !got.Enabled {
 		t.Fatalf("deleted credential metadata: %+v %v", got, err)
+	}
+	// Retained service metadata remains editable, but must never be offered as
+	// a new donation candidate after deleting its credential.
+	eid := resourceTestID(t, first.ID)
+	retained, err := f.env.repository.ListEndpointKeysPage(ctx, f.user, eid, pagination.Default())
+	if err != nil || len(retained.Data) != 1 || retained.Data[0].Browse.DonationEligibility != "unavailable" {
+		t.Fatalf("deleted credential donation eligibility: %+v %v", retained, err)
+	}
+	available, err := f.env.repository.FilterEndpointKeysPage(ctx, f.user, eid, EndpointKeyPageFilters{CredentialAvailable: "true"}, pagination.Request{Page: 9, Size: 20})
+	if err != nil || len(available.Data) != 0 || available.Pagination.TotalItems != "0" || available.Pagination.Page != "1" {
+		t.Fatalf("deleted credential leaked into paged candidates: %+v %v", available, err)
+	}
+	unavailable, err := f.env.repository.FilterEndpointKeysPage(ctx, f.user, eid, EndpointKeyPageFilters{CredentialAvailable: "false"}, pagination.Default())
+	if err != nil || len(unavailable.Data) != 1 || unavailable.Data[0].ID != key.ID {
+		t.Fatalf("unavailable credential filter: %+v %v", unavailable, err)
 	}
 	gotSource, err = f.env.repository.GetDiscoverySource(ctx, f.user, sourceID)
 	if err != nil || gotSource.CredentialAvailable {

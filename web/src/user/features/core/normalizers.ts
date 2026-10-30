@@ -925,7 +925,8 @@ function normalizeEndpointKeyBrowse(
   if (
     eligibility !== 'eligible' &&
     eligibility !== 'already_donated' &&
-    eligibility !== 'security_processing'
+    eligibility !== 'security_processing' &&
+    eligibility !== 'unavailable'
   ) {
     invalid('endpoint key donation eligibility');
   }

@@ -133,9 +133,23 @@ describe('core query identity and cache projections', () => {
 
   it('retains the known account projection during an MFA challenge', async () => {
     const client = new QueryClient();
-    const previous = JSON.parse(readFileSync(resolve(process.cwd(), '..', 'internal/auth/testdata/user_envelope.json'), 'utf8'));
+    const previous = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), '..', 'internal/auth/testdata/user_envelope.json'),
+        'utf8',
+      ),
+    );
     client.setQueryData(coreKeys.session, previous);
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: 'mfa_required', message: 'Verify authenticator.' } }), { status: 403, headers: { 'content-type': 'application/json' } })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ error: { code: 'mfa_required', message: 'Verify authenticator.' } }),
+            { status: 403, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
     expect(await fetchCoreSession(client)).toEqual(previous);
     expect(client.getQueryData(coreKeys.session)).toEqual(previous);
   });
@@ -224,6 +238,7 @@ describe('core query identity and cache projections', () => {
       userKeys.bindings('31'),
       userKeys.charityModels,
       userKeys.donations,
+      ['user', 'economy', 'endpoint-choices', '1', 'keys', '11'],
     ] as const;
     for (const key of affectedKeys) client.setQueryData(key, { marker: 'stale' });
     client.setQueryData(coreKeys.model('2', '31'), { marker: 'other-account' });

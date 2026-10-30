@@ -128,7 +128,7 @@ export interface EndpointBrowse {
 }
 
 export interface EndpointKeyBrowse {
-  donation_eligibility: 'eligible' | 'already_donated' | 'security_processing';
+  donation_eligibility: 'eligible' | 'already_donated' | 'security_processing' | 'unavailable';
   model_count: string;
   binding_count: string;
   available_binding_count: string;

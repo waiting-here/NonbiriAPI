@@ -2015,7 +2015,8 @@
         "eligibility": {
           "eligible": "符合捐赠条件",
           "already_donated": "已包含在其他捐赠中",
-          "security_processing": "安全处理中"
+          "security_processing": "安全处理中",
+          "unavailable": "密钥已删除或凭据不可用"
         },
         "keyLimits": "并发 {{concurrency}} · RPM {{rpm}}"
       },

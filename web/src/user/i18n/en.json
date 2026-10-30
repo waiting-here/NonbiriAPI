@@ -2015,7 +2015,8 @@
         "eligibility": {
           "eligible": "Eligible for donation",
           "already_donated": "Already included in another donation",
-          "security_processing": "Security processing is still in progress"
+          "security_processing": "Security processing is still in progress",
+          "unavailable": "The credential is deleted or unavailable"
         },
         "keyLimits": "Concurrency {{concurrency}} · RPM {{rpm}}"
       },

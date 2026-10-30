@@ -123,7 +123,8 @@ function keyChoice(endpoint: EndpointSummary, key: CoreEndpointKey): EndpointKey
   if (
     eligibility !== 'eligible' &&
     eligibility !== 'already_donated' &&
-    eligibility !== 'security_processing'
+    eligibility !== 'security_processing' &&
+    eligibility !== 'unavailable'
   ) {
     invalidResponse('The server returned an endpoint key without donation eligibility.');
   }
@@ -142,7 +143,8 @@ function validateKeyPage(
     if (
       eligibility !== 'eligible' &&
       eligibility !== 'already_donated' &&
-      eligibility !== 'security_processing'
+      eligibility !== 'security_processing' &&
+      eligibility !== 'unavailable'
     ) {
       invalidResponse('The server returned an endpoint key without donation eligibility.');
     }
@@ -512,7 +514,10 @@ export function DonationResourcePicker({
         throw new StationSessionChangedError();
       }
       return stationRead(queryClient, accountId, () =>
-        listEndpointKeysPage(rawActiveEndpointId, keyWindow, signal, keySearch),
+        listEndpointKeysPage(rawActiveEndpointId, keyWindow, signal, {
+          q: keySearch,
+          credential_available: 'true',
+        }),
       ).then((page) => validateKeyPage(page, rawActiveEndpointId));
     },
     enabled:

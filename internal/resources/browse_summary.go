@@ -191,6 +191,9 @@ ELSE 'eligible' END`, keyID, keyID).Scan(&eligibility)
 	if err != nil {
 		return nil, err
 	}
+	if !key.CredentialAvailable {
+		eligibility = "unavailable"
+	}
 	return &EndpointKeyBrowse{
 		DonationEligibility: eligibility,
 		ModelCount:          strconv.FormatInt(modelCount, 10), BindingCount: strconv.FormatInt(bindingCount, 10),

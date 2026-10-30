@@ -225,7 +225,8 @@ export interface EndpointKeySummary {
   updatedAt: number;
 }
 
-export type EndpointKeyEligibility = 'eligible' | 'already_donated' | 'security_processing';
+export type EndpointKeyEligibility =
+  'eligible' | 'already_donated' | 'security_processing' | 'unavailable';
 
 export interface EndpointKeyChoice {
   snapshotStale?: boolean;

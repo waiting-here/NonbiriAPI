@@ -281,11 +281,11 @@ func (api *httpAPI) listEndpointKeys(writer http.ResponseWriter, request *http.R
 	if !ok || !requireNoBody(writer, request) {
 		return
 	}
-	if serveNumberedPage(writer, request, []string{"q", "enabled", "donated", "suspension_state"}, func(ctx context.Context, values url.Values, page pagination.Request) (Page[EndpointKey], error) {
-		if !nonemptyPageFilters(values, "enabled", "donated", "suspension_state") {
+	if serveNumberedPage(writer, request, []string{"q", "enabled", "donated", "suspension_state", "credential_available"}, func(ctx context.Context, values url.Values, page pagination.Request) (Page[EndpointKey], error) {
+		if !nonemptyPageFilters(values, "enabled", "donated", "suspension_state", "credential_available") {
 			return Page[EndpointKey]{}, ErrInvalidRequest
 		}
-		return api.repository.FilterEndpointKeysPage(ctx, principal.UserID, endpointID, EndpointKeyPageFilters{Query: values.Get("q"), Enabled: values.Get("enabled"), Donated: values.Get("donated"), SuspensionState: values.Get("suspension_state")}, page)
+		return api.repository.FilterEndpointKeysPage(ctx, principal.UserID, endpointID, EndpointKeyPageFilters{Query: values.Get("q"), Enabled: values.Get("enabled"), Donated: values.Get("donated"), SuspensionState: values.Get("suspension_state"), CredentialAvailable: values.Get("credential_available")}, page)
 	}) {
 		return
 	}

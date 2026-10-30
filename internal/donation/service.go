@@ -1339,6 +1339,7 @@ k.secret_fingerprint,e.mainstream_channel_id,e.mainstream_channel_revision,
 e.mainstream_channel_name,e.mainstream_channel_category,
 EXISTS(SELECT 1 FROM effective_endpoint_tags t WHERE t.base_url=e.base_url AND t.tag='mainstream')
 FROM endpoint_key_current_credentials k JOIN endpoints e ON e.id=k.endpoint_id
+JOIN credentials cr ON cr.id=k.credential_id AND cr.deleted_at IS NULL
 WHERE e.user_id=? AND k.id IN (`+placeholders+`)
 AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)
 AND NOT EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.endpoint_key_id=k.id)
