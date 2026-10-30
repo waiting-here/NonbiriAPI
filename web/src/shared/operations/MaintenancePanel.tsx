@@ -1,3 +1,6 @@
+import { FormActions } from '@shared/components/ui/Fields';
+import { Fold } from '@shared/components/ui/Fold';
+import { Field } from '@shared/components/ui/Field';
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -37,11 +40,14 @@ export function MaintenancePanel({
   });
   const [reason, setReason] = useState('');
   const [confirmation, setConfirmation] = useState<MaintenanceAction | null>(null);
-  const transition = useRetainedOperation<{
-    action: MaintenanceAction;
-    expectedRevision: string;
-    reason: string;
-  }, MaintenanceState>(
+  const transition = useRetainedOperation<
+    {
+      action: MaintenanceAction;
+      expectedRevision: string;
+      reason: string;
+    },
+    MaintenanceState
+  >(
     async (input, key, context) => {
       const result = await (input.action === 'enable'
         ? enableMaintenance(role, input.expectedRevision, input.reason, key)
@@ -56,9 +62,10 @@ export function MaintenancePanel({
     async (input, error, context) => {
       if (!error) return;
       const refreshed = await state.refetch();
-      const reached = input.action === 'enable'
-        ? refreshed.data?.enabled === true
-        : refreshed.data?.enabled === false;
+      const reached =
+        input.action === 'enable'
+          ? refreshed.data?.enabled === true
+          : refreshed.data?.enabled === false;
       if (reached) {
         context.commit(() => {
           setConfirmation(null);
@@ -75,48 +82,134 @@ export function MaintenancePanel({
     if (error && (isUnauthorized(error) || isForbidden(error))) onAuthorityLoss?.();
   }, [onAuthorityLoss, state.error, transition.error]);
 
-  if (state.isPending && !state.data) return <Card className="ops-danger"><LoadingState /></Card>;
-  if (state.error && !state.data) return <Card className="ops-danger"><ErrorState error={state.error} onRetry={() => void state.refetch()} /></Card>;
+  if (state.isPending && !state.data)
+    return (
+      <Card className="ops-danger">
+        <LoadingState />
+      </Card>
+    );
+  if (state.error && !state.data)
+    return (
+      <Card className="ops-danger">
+        <ErrorState error={state.error} onRetry={() => void state.refetch()} />
+      </Card>
+    );
 
   const authority = state.data;
   const mayAct = Boolean(authority && (role === 'admin' || !authority.enabled));
   const action: MaintenanceAction = authority?.enabled ? 'disable' : 'enable';
   const reasonOK = validReason(reason);
-  const title = role === 'steward'
-    ? t('common.operations.maintenance.stewardTitle')
-    : t('common.operations.maintenance.adminTitle');
-  const actionLabel = action === 'enable'
-    ? t('common.operations.maintenance.enableAction')
-    : t('common.operations.maintenance.disableAction');
-  const description = action === 'enable'
-    ? t('common.operations.maintenance.enableDescription')
-    : t('common.operations.maintenance.disableDescription');
+  const title =
+    role === 'steward'
+      ? t('common.operations.maintenance.stewardTitle')
+      : t('common.operations.maintenance.adminTitle');
+  const actionLabel =
+    action === 'enable'
+      ? t('common.operations.maintenance.enableAction')
+      : t('common.operations.maintenance.disableAction');
+  const description =
+    action === 'enable'
+      ? t('common.operations.maintenance.enableDescription')
+      : t('common.operations.maintenance.disableDescription');
 
   return (
     <Card className="ops-danger">
       <div className="ops-toolbar">
-        <div><h2>{title}</h2><p>{description}</p></div>
-        {authority ? <StatusBadge active={!authority.enabled} danger={authority.enabled} label={authority.enabled ? t('common.operations.maintenance.enabledStatus') : t('common.operations.maintenance.disabledStatus')} /> : null}
+        <div>
+          <h2>{title}</h2>
+          <p>{description}</p>
+        </div>
+        {authority ? (
+          <StatusBadge
+            active={!authority.enabled}
+            danger={authority.enabled}
+            label={
+              authority.enabled
+                ? t('common.operations.maintenance.enabledStatus')
+                : t('common.operations.maintenance.disabledStatus')
+            }
+          />
+        ) : null}
       </div>
-      {authority ? <details><summary>{t('common.operations.management.details')}</summary><p className="muted">{t('common.operations.maintenance.authorityRevision', { revision: authority.revision })}</p></details> : null}
-      {role === 'steward' && authority?.enabled ? <p>{t('common.operations.maintenance.stewardCannotDisable')}</p> : null}
-      {state.error && state.data ? <ErrorState error={state.error} onRetry={() => void state.refetch()} /> : null}
+      {authority ? (
+        <Fold title={t('common.operations.management.details')}>
+          <p className="muted">
+            {t('common.operations.maintenance.authorityRevision', { revision: authority.revision })}
+          </p>
+        </Fold>
+      ) : null}
+      {role === 'steward' && authority?.enabled ? (
+        <p>{t('common.operations.maintenance.stewardCannotDisable')}</p>
+      ) : null}
+      {state.error && state.data ? (
+        <ErrorState error={state.error} onRetry={() => void state.refetch()} />
+      ) : null}
       {transition.error ? <ErrorState error={transition.error} /> : null}
-      {mayAct ? <>
-        <label className="ops-form-field"><span>{t('common.operations.maintenance.reasonLabel')}</span><textarea rows={4} value={reason} onChange={(event) => { if (transition.isSuccess) transition.reset(); setReason(event.target.value); }} /><small>{t('common.operations.maintenance.reasonHelp')}</small></label>
-        {!reasonOK && reason.length > 0 ? <p className="field-error" role="alert">{t('common.operations.maintenance.reasonInvalid')}</p> : null}
-        <button className="nb-btn nb-btn--danger" type="button" disabled={!reasonOK || transition.isPending} onClick={() => { transition.reset(); setConfirmation(action); }}>{actionLabel}</button>
-      </> : null}
+      {mayAct ? (
+        <>
+          <Field
+            label={t('common.operations.maintenance.reasonLabel')}
+            size="long"
+            help={t('common.operations.maintenance.reasonHelp')}
+          >
+            {(field) => (
+              <textarea
+                {...field}
+                rows={4}
+                value={reason}
+                onChange={(event) => {
+                  if (transition.isSuccess) transition.reset();
+                  setReason(event.target.value);
+                }}
+              />
+            )}
+          </Field>
+          {!reasonOK && reason.length > 0 ? (
+            <p className="field-error" role="alert">
+              {t('common.operations.maintenance.reasonInvalid')}
+            </p>
+          ) : null}
+          <FormActions>
+            <button
+              className="nb-btn nb-btn--danger"
+              type="button"
+              disabled={!reasonOK || transition.isPending}
+              onClick={() => {
+                transition.reset();
+                setConfirmation(action);
+              }}
+            >
+              {actionLabel}
+            </button>
+          </FormActions>
+        </>
+      ) : null}
       <ConfirmDialog
         open={confirmation !== null}
-        title={confirmation === 'enable' ? t('common.operations.maintenance.enableConfirmTitle') : t('common.operations.maintenance.disableConfirmTitle')}
+        title={
+          confirmation === 'enable'
+            ? t('common.operations.maintenance.enableConfirmTitle')
+            : t('common.operations.maintenance.disableConfirmTitle')
+        }
         description={description}
-        confirmLabel={confirmation === 'enable' ? t('common.operations.maintenance.enableAction') : t('common.operations.maintenance.disableAction')}
+        confirmLabel={
+          confirmation === 'enable'
+            ? t('common.operations.maintenance.enableAction')
+            : t('common.operations.maintenance.disableAction')
+        }
         busy={transition.isPending}
         danger
-        onCancel={() => { if (!transition.isPending) setConfirmation(null); }}
+        onCancel={() => {
+          if (!transition.isPending) setConfirmation(null);
+        }}
         onConfirm={() => {
-          if (!authority || !confirmation || !reasonOK || (confirmation === 'disable' && role !== 'admin')) return;
+          if (
+            !authority ||
+            !confirmation ||
+            !reasonOK ||
+            (confirmation === 'disable' && role !== 'admin')
+          )
+            return;
           transition.mutate({ action: confirmation, expectedRevision: authority.revision, reason });
         }}
       />

@@ -1,3 +1,5 @@
+import { FilterBar } from '@shared/components/ui/FilterBar';
+import { Fields, FormActions } from '@shared/components/ui/Fields';
 import { InferenceLimitFields, InferenceLimitSummary } from './userInferenceLimits';
 import { UserLimitBatch } from './UserLimitBatch';
 import { StewardPermissionEditor } from './StewardPermissionEditor';
@@ -470,8 +472,8 @@ function UserAuthority({
   const banControls = canBan ? (
     <Card>
       <h2>{t('management.users.banSectionTitle')}</h2>
-      <div className="ops-field-grid">
-        <Field label={t('management.users.banReason')}>
+      <Fields>
+        <Field label={t('management.users.banReason')} size="long">
           {(field) => (
             <input
               {...field}
@@ -481,7 +483,7 @@ function UserAuthority({
             />
           )}
         </Field>
-        <Field label={t('management.users.banDurationDays')}>
+        <Field label={t('management.users.banDurationDays')} size="short">
           {(field) => (
             <input
               {...field}
@@ -493,8 +495,8 @@ function UserAuthority({
             />
           )}
         </Field>
-      </div>
-      <div className="ops-actions">
+      </Fields>
+      <FormActions>
         {user.is_banned ? (
           <Button variant="danger-outline" type="button" onClick={() => setConfirm('unban')}>
             {t('management.users.unban')}
@@ -513,7 +515,7 @@ function UserAuthority({
             {t('management.users.ban')}
           </Button>
         )}
-      </div>
+      </FormActions>
       {ban.error || unban.error ? <ErrorState error={ban.error ?? unban.error} /> : null}
     </Card>
   ) : null;
@@ -681,41 +683,39 @@ function UserAuthority({
                 <p>{t('management.users.inferenceLimitHelp')}</p>
               </Fold>
               {editable ? (
-                <>
-                  <div className="ops-field-grid">
-                    <Field label={t('management.users.endpointLimit')}>
-                      {(field) => (
-                        <input
-                          {...field}
-                          inputMode="numeric"
-                          value={draft.endpointLimit}
-                          onChange={(event) =>
-                            setDraft({ ...draft, endpointLimit: event.target.value })
-                          }
-                        />
-                      )}
-                    </Field>
-                    <Field label={t('management.users.levelControl')}>
-                      {(field) => (
-                        <select
-                          {...field}
-                          value={draft.level}
-                          onChange={(event) => setDraft({ ...draft, level: event.target.value })}
-                        >
-                          <option value="">{t('management.users.levelManualNone')}</option>
-                          {(role === 'admin'
-                            ? [1, 2, 3, 4, 5, 6]
-                            : [1, 2, 3, 4, 5].filter((level) => level < actorLevel)
-                          ).map((level) => (
-                            <option key={level} value={level}>
-                              {level}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </Field>
-                  </div>
-                  <Field label={t('management.users.language')}>
+                <Fields>
+                  <Field label={t('management.users.endpointLimit')} size="short">
+                    {(field) => (
+                      <input
+                        {...field}
+                        inputMode="numeric"
+                        value={draft.endpointLimit}
+                        onChange={(event) =>
+                          setDraft({ ...draft, endpointLimit: event.target.value })
+                        }
+                      />
+                    )}
+                  </Field>
+                  <Field label={t('management.users.levelControl')} size="short">
+                    {(field) => (
+                      <select
+                        {...field}
+                        value={draft.level}
+                        onChange={(event) => setDraft({ ...draft, level: event.target.value })}
+                      >
+                        <option value="">{t('management.users.levelManualNone')}</option>
+                        {(role === 'admin'
+                          ? [1, 2, 3, 4, 5, 6]
+                          : [1, 2, 3, 4, 5].filter((level) => level < actorLevel)
+                        ).map((level) => (
+                          <option key={level} value={level}>
+                            {level}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
+                  <Field label={t('management.users.language')} size="short">
                     {(field) => (
                       <select
                         {...field}
@@ -760,14 +760,14 @@ function UserAuthority({
                       )}
                     </Field>
                   ) : null}
-                </>
+                </Fields>
               ) : null}
               {invalidLimits ? (
                 <p className="field-error" role="alert">
                   {t('management.users.limitInvalid')}
                 </p>
               ) : null}
-              <div className="nb-actions user-save-actions">
+              <FormActions>
                 <Button
                   variant="primary"
                   type="button"
@@ -776,7 +776,7 @@ function UserAuthority({
                 >
                   {t('management.users.saveProfile')}
                 </Button>
-              </div>
+              </FormActions>
               {[
                 { label: 'management.users.profileResult', operation: profile },
                 { label: 'management.users.levelResult', operation: manualLevel },
@@ -837,7 +837,7 @@ function UserAuthority({
             <Card>
               <h2>{t('management.users.economyTitle')}</h2>
               <p>{t('management.users.economyPositiveHint')}</p>
-              <div className="ops-field-grid">
+              <Fields>
                 <Segmented
                   label={t('management.users.economyTarget')}
                   value={draft.economyTarget}
@@ -858,63 +858,76 @@ function UserAuthority({
                   ]}
                   onChange={(economyDirection) => setDraft({ ...draft, economyDirection })}
                 />
-                <label>
-                  <span>{t('management.users.economyPositiveAmount')}</span>
-                  <Affix
-                    aria-label={t('management.users.economyPositiveAmount')}
-                    unit={t('management.users.creditsBalance')}
-                    inputMode="decimal"
-                    value={draft.economyAmount}
-                    disabled={economyLocked}
-                    placeholder="1.5"
-                    onChange={(event) => setDraft({ ...draft, economyAmount: event.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>{t('management.users.economyReason')}</span>
-                  <input
-                    aria-label={t('management.users.economyReason')}
-                    required
-                    maxLength={1024}
-                    value={draft.economyReason}
-                    disabled={economyLocked}
-                    onChange={(event) => setDraft({ ...draft, economyReason: event.target.value })}
-                  />
-                  <small className="user-field-hint">{t('management.users.reasonRequired')}</small>
-                </label>
-              </div>
-              <Button
-                variant="primary"
-                type="button"
-                disabled={
-                  patch.isPending ||
-                  !draft.economyAmount ||
-                  draft.economyAmount.startsWith('-') ||
-                  !draft.economyReason.trim()
-                }
-                onClick={() =>
-                  setEconomyConfirm(
-                    economyUnknown && patch.variables
-                      ? patch.variables
-                      : {
-                          revision: user.revision,
-                          body: {
-                            mode: 'economy',
-                            target: draft.economyTarget,
-                            direction: draft.economyDirection,
-                            amount: draft.economyAmount,
-                            reason: draft.economyReason.trim(),
+                <Field label={t('management.users.economyPositiveAmount')} size="medium">
+                  {(field) => (
+                    <Affix
+                      {...field}
+                      aria-label={t('management.users.economyPositiveAmount')}
+                      unit={t('management.users.creditsBalance')}
+                      inputMode="decimal"
+                      value={draft.economyAmount}
+                      disabled={economyLocked}
+                      placeholder="1.5"
+                      onChange={(event) =>
+                        setDraft({ ...draft, economyAmount: event.target.value })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field
+                  label={t('management.users.economyReason')}
+                  size="long"
+                  help={t('management.users.reasonRequired')}
+                >
+                  {(field) => (
+                    <input
+                      {...field}
+                      aria-label={t('management.users.economyReason')}
+                      required
+                      maxLength={1024}
+                      value={draft.economyReason}
+                      disabled={economyLocked}
+                      onChange={(event) =>
+                        setDraft({ ...draft, economyReason: event.target.value })
+                      }
+                    />
+                  )}
+                </Field>
+              </Fields>
+              <FormActions>
+                <Button
+                  variant="primary"
+                  type="button"
+                  disabled={
+                    patch.isPending ||
+                    !draft.economyAmount ||
+                    draft.economyAmount.startsWith('-') ||
+                    !draft.economyReason.trim()
+                  }
+                  onClick={() =>
+                    setEconomyConfirm(
+                      economyUnknown && patch.variables
+                        ? patch.variables
+                        : {
+                            revision: user.revision,
+                            body: {
+                              mode: 'economy',
+                              target: draft.economyTarget,
+                              direction: draft.economyDirection,
+                              amount: draft.economyAmount,
+                              reason: draft.economyReason.trim(),
+                            },
                           },
-                        },
-                  )
-                }
-              >
-                {t(
-                  economyUnknown
-                    ? 'management.users.economyRetry'
-                    : 'management.users.economySubmit',
-                )}
-              </Button>
+                    )
+                  }
+                >
+                  {t(
+                    economyUnknown
+                      ? 'management.users.economyRetry'
+                      : 'management.users.economySubmit',
+                  )}
+                </Button>
+              </FormActions>
               {!economyConfirm ? economyFeedback : null}
             </Card>
           </section>
@@ -1381,10 +1394,18 @@ export function UserManagement({
       <div className={`nb-md${selection ? ' has-selection' : ''}`}>
         <div className="nb-md__list ops-stack" ref={listRef} tabIndex={-1}>
           <Card>
-            <form
-              className="ops-toolbar"
-              onSubmit={(event) => {
-                event.preventDefault();
+            <FilterBar
+              activeCount={
+                [userID, discordID, banned, level, accountState !== 'all'].filter(Boolean).length
+              }
+              onReset={() => {
+                if (batchBusy) return;
+                setQueryDraft('');
+                setUserIDDraft('');
+                setDiscordIDDraft('');
+                commitListState('', '', '', '', 'all', '');
+              }}
+              onSubmit={() => {
                 commitListState(
                   queryDraft.trim(),
                   banned,
@@ -1394,115 +1415,117 @@ export function UserManagement({
                   discordIDDraft,
                 );
               }}
-            >
-              <label>
-                <span>{t('common.search')}</span>
-                <input
-                  aria-label={t('management.users.searchAria')}
-                  placeholder={t('management.users.searchPlaceholder')}
-                  value={queryDraft}
-                  onChange={(event) => setQueryDraft(event.target.value)}
-                />
-              </label>
-              <Fold title={t('management.users.exactFilters')}>
-                <div className="ops-field-grid">
-                  <label>
-                    <span>{t('management.users.userId')}</span>
+              search={
+                <Field label={t('common.search')} size="medium">
+                  {(field) => (
                     <input
-                      aria-label={t('management.users.userId')}
-                      aria-invalid={invalidUserIDDraft}
-                      inputMode="numeric"
-                      maxLength={64}
-                      value={userIDDraft}
-                      onChange={(event) => setUserIDDraft(event.target.value)}
+                      {...field}
+                      aria-label={t('management.users.searchAria')}
+                      placeholder={t('management.users.searchPlaceholder')}
+                      value={queryDraft}
+                      onChange={(event) => setQueryDraft(event.target.value)}
                     />
-                  </label>
-                  <label>
-                    <span>{t('management.users.discordId')}</span>
-                    <input
-                      aria-label={t('management.users.discordId')}
-                      aria-invalid={invalidDiscordIDDraft}
-                      inputMode="numeric"
-                      maxLength={20}
-                      value={discordIDDraft}
-                      onChange={(event) => setDiscordIDDraft(event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    <span>{accountLabels.allAccounts}</span>
-                    <select
-                      disabled={batchBusy}
-                      value={accountState}
-                      onChange={(event) =>
-                        commitListState(
-                          query,
-                          banned,
-                          level,
-                          userIDDraft,
-                          event.target.value as AccountState,
-                        )
-                      }
-                    >
-                      <option value="all">{accountLabels.allAccounts}</option>
-                      <option value="active">{accountLabels.activeAccounts}</option>
-                      <option value="deleted">{accountLabels.deletedAccounts}</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>{t('management.users.filterStatus')}</span>
-                    <select
-                      disabled={batchBusy}
-                      value={banned}
-                      onChange={(event) =>
-                        commitListState(
-                          query,
-                          event.target.value as typeof banned,
-                          level,
-                          userIDDraft,
-                        )
-                      }
-                    >
-                      <option value="">{t('common.all')}</option>
-                      <option value="false">{t('management.users.active')}</option>
-                      <option value="true">{t('management.users.banned')}</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>{t('management.users.level')}</span>
-                    <select
-                      disabled={batchBusy}
-                      value={level}
-                      onChange={(event) =>
-                        commitListState(query, banned, event.target.value, userIDDraft)
-                      }
-                    >
-                      <option value="">{t('common.all')}</option>
-                      {[1, 2, 3, 4, 5, 6].map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              </Fold>
-              {invalidUserIDDraft ? (
-                <p className="field-error" role="alert">
-                  {t('management.users.userIdInvalid')}
-                </p>
-              ) : null}
-              {invalidDiscordIDDraft ? (
-                <p className="field-error" role="alert">
-                  {accountLabels.discordInvalid}
-                </p>
-              ) : null}
-              <Button
-                type="submit"
-                disabled={batchBusy || invalidUserIDDraft || invalidDiscordIDDraft}
-              >
-                {t('common.applyFilter')}
-              </Button>
-            </form>
+                  )}
+                </Field>
+              }
+              secondary={
+                <>
+                  <Field label={t('management.users.userId')} size="short">
+                    {(field) => (
+                      <input
+                        {...field}
+                        aria-label={t('management.users.userId')}
+                        aria-invalid={invalidUserIDDraft}
+                        inputMode="numeric"
+                        maxLength={64}
+                        value={userIDDraft}
+                        onChange={(event) => setUserIDDraft(event.target.value)}
+                      />
+                    )}
+                  </Field>
+                  <Field label={t('management.users.discordId')} size="short">
+                    {(field) => (
+                      <input
+                        {...field}
+                        aria-label={t('management.users.discordId')}
+                        aria-invalid={invalidDiscordIDDraft}
+                        inputMode="numeric"
+                        maxLength={20}
+                        value={discordIDDraft}
+                        onChange={(event) => setDiscordIDDraft(event.target.value)}
+                      />
+                    )}
+                  </Field>
+                  <Field label={accountLabels.allAccounts} size="short">
+                    {(field) => (
+                      <select
+                        {...field}
+                        disabled={batchBusy}
+                        value={accountState}
+                        onChange={(event) =>
+                          commitListState(
+                            query,
+                            banned,
+                            level,
+                            userID,
+                            event.target.value as AccountState,
+                          )
+                        }
+                      >
+                        <option value="all">{accountLabels.allAccounts}</option>
+                        <option value="active">{accountLabels.activeAccounts}</option>
+                        <option value="deleted">{accountLabels.deletedAccounts}</option>
+                      </select>
+                    )}
+                  </Field>
+                  <Field label={t('management.users.filterStatus')} size="short">
+                    {(field) => (
+                      <select
+                        {...field}
+                        disabled={batchBusy}
+                        value={banned}
+                        onChange={(event) =>
+                          commitListState(query, event.target.value as typeof banned, level, userID)
+                        }
+                      >
+                        <option value="">{t('common.all')}</option>
+                        <option value="false">{t('management.users.active')}</option>
+                        <option value="true">{t('management.users.banned')}</option>
+                      </select>
+                    )}
+                  </Field>
+                  <Field label={t('management.users.level')} size="short">
+                    {(field) => (
+                      <select
+                        {...field}
+                        disabled={batchBusy}
+                        value={level}
+                        onChange={(event) =>
+                          commitListState(query, banned, event.target.value, userID)
+                        }
+                      >
+                        <option value="">{t('common.all')}</option>
+                        {[1, 2, 3, 4, 5, 6].map((value) => (
+                          <option key={value} value={value}>
+                            {value}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
+                </>
+              }
+            />
+            {invalidUserIDDraft ? (
+              <p className="field-error" role="alert">
+                {t('management.users.userIdInvalid')}
+              </p>
+            ) : null}
+            {invalidDiscordIDDraft ? (
+              <p className="field-error" role="alert">
+                {accountLabels.discordInvalid}
+              </p>
+            ) : null}
           </Card>
           <Card>
             <h2>{t('management.users.listTitle')}</h2>

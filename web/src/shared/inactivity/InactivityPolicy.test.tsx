@@ -177,7 +177,7 @@ describe('inactivity policy', () => {
     mount(<InactivityPolicyPage />);
     const input = await screen.findByLabelText('Execution time (optional)');
     expect(input).toHaveValue('');
-    expect(screen.getByText('Site timezone: UTC+08:00')).toBeVisible();
+    expect(screen.getByText(/Site timezone: UTC\+08:00/)).toBeVisible();
     fireEvent.change(input, { target: { value: '12:00' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save policy' }));
     await screen.findByText('Policy saved.');

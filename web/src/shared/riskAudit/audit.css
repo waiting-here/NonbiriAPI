@@ -1,40 +1,19 @@
-.audit-page form > label,
-.audit-details > label {
-  display: grid;
-  gap: var(--nb-space-2);
-  min-width: 0;
+.audit-condition {
+  padding: var(--nb-space-4);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-sm);
 }
-.audit-page form > :is(.btn, .nb-btn) {
-  justify-self: start;
+.audit-condition > .nb-fields__legend {
+  padding-inline: var(--nb-space-1);
 }
-.audit-tabs {
-  gap: 0.5rem;
-}
-.audit-condition,
 .audit-patterns {
-  padding: 1rem;
+  display: grid;
+  gap: var(--nb-space-3);
+  padding: var(--nb-space-4);
   border: 1px solid var(--nb-color-border);
   border-radius: var(--nb-radius-sm);
   min-width: 0;
-}
-.audit-condition legend {
-  padding-inline: 0.35rem;
-  font-weight: 600;
-}
-.audit-condition > :is(.btn, .nb-btn) {
-  align-self: end;
-  justify-self: start;
-}
-.audit-ip-values {
-  grid-column: 1 / -1;
-}
-.audit-patterns {
-  display: grid;
-  gap: 0.75rem;
   background: var(--nb-color-surface-alt);
-}
-.audit-details > label {
-  margin-top: 1rem;
 }
 .audit-muted,
 .audit-page small {
@@ -42,25 +21,20 @@
 }
 .audit-scan-progress {
   width: 100%;
-  height: 0.65rem;
+  height: var(--nb-space-3);
   accent-color: var(--nb-color-accent);
 }
 .audit-page summary {
   cursor: pointer;
-  font-weight: 600;
+  font-weight: var(--nb-font-weight-semibold);
 }
 .audit-page .ops-kv > div {
   display: contents;
 }
-.audit-page td :is(.btn, .nb-btn) {
+.audit-page td .nb-btn {
   white-space: nowrap;
 }
-.audit-page label:has(input[type='checkbox']) {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.audit-page :is(.btn, .nb-btn) {
+.audit-page .nb-btn {
   max-width: 100%;
   white-space: normal;
 }
@@ -68,26 +42,10 @@
   min-width: 48rem;
 }
 @media (width <= 40rem) {
-  .audit-tabs :is(.btn, .nb-btn) {
-    flex: 1 1 40%;
-  }
   .audit-page .ops-kv {
     grid-template-columns: minmax(0, 1fr);
   }
 }
-
-.audit-page fieldset.audit-condition {
-  border: 1px solid var(--nb-color-border);
-  padding: 1rem;
-}
-
-.audit-signal-filter {
-  display: grid;
-  gap: var(--nb-space-2);
-  width: 100%;
-  max-width: 20rem;
-}
-
 .audit-ip-address {
   overflow-wrap: anywhere;
 }

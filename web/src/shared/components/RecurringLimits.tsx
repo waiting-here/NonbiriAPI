@@ -1,3 +1,6 @@
+import { FormActions } from '@shared/components/ui/Fields';
+import { Fields } from '@shared/components/ui/Fields';
+import { Field } from '@shared/components/ui/Field';
 import { Button } from '@shared/components/ui/Button';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -468,7 +471,6 @@ function RuleCard({
 }: RuleCardProps) {
   const { t } = useTranslation();
   const zoneListId = useId();
-  const zoneInputId = `${zoneListId}-input`;
   const ruleLabel = copy.rule(index + 1);
   const summaryState = view?.state;
   const summary = ruleSummary(copy, ruleLabel, draft, view);
@@ -587,110 +589,122 @@ function RuleCard({
             </div>
           ) : null}
           {editable ? (
-            <div className="recurring-limits__fields">
-              <label>
-                <span>{copy.metric}</span>
-                <select
-                  value={draft.metric}
-                  disabled={disabled}
-                  onChange={(event) =>
-                    onChange({ metric: event.target.value as RecurringLimitMetric })
-                  }
-                >
-                  {metricOptions.map((value) => (
-                    <option key={value} value={value}>
-                      {copy.metricValue[value]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>{copy.mode}</span>
-                <select
-                  value={draft.mode}
-                  disabled={disabled}
-                  onChange={(event) => {
-                    const mode = event.target.value as RecurringLimitMode;
-                    onChange(
-                      mode === 'sliding'
-                        ? { mode, alignment: null, anchor_local: null, week_starts_on: null }
-                        : {
-                            mode,
-                            alignment: 'first_success',
-                            anchor_local: null,
-                            week_starts_on: null,
-                          },
-                    );
-                  }}
-                >
-                  {modeOptions.map((value) => (
-                    <option key={value} value={value}>
-                      {copy.modeValue[value]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>{copy.interval}</span>
-                <select
-                  value={draft.interval}
-                  disabled={disabled}
-                  onChange={(event) => {
-                    const interval = event.target.value as RecurringLimitInterval;
-                    const alignment =
-                      draft.mode === 'sliding'
-                        ? null
-                        : isHourlyInterval(interval)
-                          ? 'first_success'
-                          : (draft.alignment ?? 'first_success');
-                    onChange({
-                      interval,
-                      alignment,
-                      anchor_local: alignment === 'exact_time' ? draft.anchor_local : null,
-                      week_starts_on:
-                        alignment === 'calendar' && interval === 'week'
-                          ? (draft.week_starts_on ?? 1)
-                          : null,
-                    });
-                  }}
-                >
-                  {intervalOptions.map((value) => (
-                    <option key={value} value={value}>
-                      {copy.intervalValue[value]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {draft.mode === 'reset' ? (
-                <label>
-                  <span>{copy.alignment}</span>
+            <Fields>
+              <Field label={copy.metric} size="short">
+                {(field) => (
                   <select
-                    value={draft.alignment ?? 'first_success'}
+                    {...field}
+                    value={draft.metric}
                     disabled={disabled}
-                    onChange={(event) => {
-                      const alignment = event.target.value as RecurringLimitAlignment;
-                      onChange({
-                        alignment,
-                        anchor_local:
-                          alignment === 'exact_time' ? (draft.anchor_local ?? '') : null,
-                        week_starts_on:
-                          alignment === 'calendar' && draft.interval === 'week' ? 1 : null,
-                      });
-                    }}
+                    onChange={(event) =>
+                      onChange({ metric: event.target.value as RecurringLimitMetric })
+                    }
                   >
-                    {alignmentOptions.map((value) => (
+                    {metricOptions.map((value) => (
                       <option key={value} value={value}>
-                        {copy.alignmentValue[value]}
+                        {copy.metricValue[value]}
                       </option>
                     ))}
                   </select>
-                </label>
+                )}
+              </Field>
+              <Field label={copy.mode} size="short">
+                {(field) => (
+                  <select
+                    {...field}
+                    value={draft.mode}
+                    disabled={disabled}
+                    onChange={(event) => {
+                      const mode = event.target.value as RecurringLimitMode;
+                      onChange(
+                        mode === 'sliding'
+                          ? { mode, alignment: null, anchor_local: null, week_starts_on: null }
+                          : {
+                              mode,
+                              alignment: 'first_success',
+                              anchor_local: null,
+                              week_starts_on: null,
+                            },
+                      );
+                    }}
+                  >
+                    {modeOptions.map((value) => (
+                      <option key={value} value={value}>
+                        {copy.modeValue[value]}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              <Field label={copy.interval} size="short">
+                {(field) => (
+                  <select
+                    {...field}
+                    value={draft.interval}
+                    disabled={disabled}
+                    onChange={(event) => {
+                      const interval = event.target.value as RecurringLimitInterval;
+                      const alignment =
+                        draft.mode === 'sliding'
+                          ? null
+                          : isHourlyInterval(interval)
+                            ? 'first_success'
+                            : (draft.alignment ?? 'first_success');
+                      onChange({
+                        interval,
+                        alignment,
+                        anchor_local: alignment === 'exact_time' ? draft.anchor_local : null,
+                        week_starts_on:
+                          alignment === 'calendar' && interval === 'week'
+                            ? (draft.week_starts_on ?? 1)
+                            : null,
+                      });
+                    }}
+                  >
+                    {intervalOptions.map((value) => (
+                      <option key={value} value={value}>
+                        {copy.intervalValue[value]}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              {draft.mode === 'reset' ? (
+                <Field label={copy.alignment} size="short">
+                  {(field) => (
+                    <select
+                      {...field}
+                      value={draft.alignment ?? 'first_success'}
+                      disabled={disabled}
+                      onChange={(event) => {
+                        const alignment = event.target.value as RecurringLimitAlignment;
+                        onChange({
+                          alignment,
+                          anchor_local:
+                            alignment === 'exact_time' ? (draft.anchor_local ?? '') : null,
+                          week_starts_on:
+                            alignment === 'calendar' && draft.interval === 'week' ? 1 : null,
+                        });
+                      }}
+                    >
+                      {alignmentOptions.map((value) => (
+                        <option key={value} value={value}>
+                          {copy.alignmentValue[value]}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
               ) : null}
               {exact ? (
-                <div>
-                  <label>
-                    <span>{t('recurringLimits.exact.anchor')}</span>
+                <Field
+                  label={t('recurringLimits.exact.anchor')}
+                  size="medium"
+                  help={t('recurringLimits.exact.help', { zone: draft.time_zone })}
+                >
+                  {(field) => (
                     <input
+                      {...field}
                       type="datetime-local"
                       step="1"
                       value={draft.anchor_local ?? ''}
@@ -704,62 +718,67 @@ function RuleCard({
                         })
                       }
                     />
-                  </label>
-                  <small>{t('recurringLimits.exact.help', { zone: draft.time_zone })}</small>
-                </div>
+                  )}
+                </Field>
               ) : null}
               {calendarWeek ? (
-                <label>
-                  <span>{copy.weekStartsOn}</span>
-                  <select
-                    value={String(draft.week_starts_on ?? 1)}
-                    disabled={disabled}
-                    onChange={(event) => onChange({ week_starts_on: Number(event.target.value) })}
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7].map((value) => (
-                      <option key={value} value={value}>
-                        {copy.weekValue(value)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <Field label={copy.weekStartsOn} size="short">
+                  {(field) => (
+                    <select
+                      {...field}
+                      value={String(draft.week_starts_on ?? 1)}
+                      disabled={disabled}
+                      onChange={(event) => onChange({ week_starts_on: Number(event.target.value) })}
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7].map((value) => (
+                        <option key={value} value={value}>
+                          {copy.weekValue(value)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
               ) : null}
-              <div className="recurring-limits__zone-field">
-                <label htmlFor={zoneInputId}>{copy.timeZone}</label>
-                <input
-                  id={zoneInputId}
-                  aria-describedby={`${zoneInputId}-hint`}
-                  value={draft.time_zone}
-                  list={zoneListId}
-                  maxLength={64}
-                  autoComplete="off"
-                  placeholder={copy.selectZone}
-                  disabled={disabled}
-                  onChange={(event) => onChange({ time_zone: event.target.value })}
-                />
-                <datalist id={zoneListId}>
-                  {zones.map((zone) => (
-                    <option key={zone} value={zone} />
-                  ))}
-                </datalist>
-                <small id={`${zoneInputId}-hint`}>
-                  {zoneHint(draft.time_zone, serverNow, locale, copy)}
-                </small>
-              </div>
-              <label>
-                <span>{copy.limit}</span>
-                <input
-                  type="text"
-                  inputMode={draft.metric === 'credits' ? 'decimal' : 'numeric'}
-                  value={draft.limit}
-                  maxLength={128}
-                  required
-                  placeholder={copy.limitPlaceholder}
-                  disabled={disabled}
-                  onChange={(event) => onChange({ limit: event.target.value })}
-                />
-              </label>
-            </div>
+              <Field
+                label={copy.timeZone}
+                help={zoneHint(draft.time_zone, serverNow, locale, copy)}
+              >
+                {(field) => (
+                  <>
+                    <input
+                      {...field}
+                      value={draft.time_zone}
+                      list={zoneListId}
+                      maxLength={64}
+                      autoComplete="off"
+                      placeholder={copy.selectZone}
+                      disabled={disabled}
+                      onChange={(event) => onChange({ time_zone: event.target.value })}
+                    />
+                    <datalist id={zoneListId}>
+                      {zones.map((zone) => (
+                        <option key={zone} value={zone} />
+                      ))}
+                    </datalist>
+                  </>
+                )}
+              </Field>
+              <Field label={copy.limit} size="medium">
+                {(field) => (
+                  <input
+                    {...field}
+                    type="text"
+                    inputMode={draft.metric === 'credits' ? 'decimal' : 'numeric'}
+                    value={draft.limit}
+                    maxLength={128}
+                    required
+                    placeholder={copy.limitPlaceholder}
+                    disabled={disabled}
+                    onChange={(event) => onChange({ limit: event.target.value })}
+                  />
+                )}
+              </Field>
+            </Fields>
           ) : null}
         </div>
       ) : null}
@@ -1582,7 +1601,7 @@ export function RecurringLimits({
               {copy.saveSuccess}
             </p>
           ) : null}
-          <div className="recurring-limits__save-row">
+          <FormActions>
             <Button
               type="submit"
               variant="primary"
@@ -1611,7 +1630,7 @@ export function RecurringLimits({
             {!dirty && !save.isPending ? (
               <span className="recurring-limits__hint">{copy.noChanges}</span>
             ) : null}
-          </div>
+          </FormActions>
         </form>
       ) : null}
     </section>

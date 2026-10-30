@@ -1,3 +1,5 @@
+import { Fields } from '@shared/components/ui/Fields';
+import { Field } from '@shared/components/ui/Field';
 import { useTranslation } from 'react-i18next';
 
 export function KeyLimitFields({
@@ -17,32 +19,36 @@ export function KeyLimitFields({
   return (
     <fieldset className="nb-key-limits" disabled={disabled}>
       <legend>{t('common.keyLimits.title')}</legend>
-      <div className="nb-key-limits__fields">
-        <label>
-          <span>{t('common.keyLimits.concurrency')}</span>
-          <input
-            type="number"
-            min="0"
-            max="2147483647"
-            step="1"
-            required
-            value={concurrency}
-            onChange={(event) => onConcurrency(event.target.value)}
-          />
-        </label>
-        <label>
-          <span>{t('common.keyLimits.rpm')}</span>
-          <input
-            type="number"
-            min="0"
-            max="2147483647"
-            step="1"
-            required
-            value={rpm}
-            onChange={(event) => onRPM(event.target.value)}
-          />
-        </label>
-      </div>
+      <Fields>
+        <Field label={t('common.keyLimits.concurrency')} size="short">
+          {(field) => (
+            <input
+              {...field}
+              type="number"
+              min="0"
+              max="2147483647"
+              step="1"
+              required
+              value={concurrency}
+              onChange={(event) => onConcurrency(event.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('common.keyLimits.rpm')} size="short">
+          {(field) => (
+            <input
+              {...field}
+              type="number"
+              min="0"
+              max="2147483647"
+              step="1"
+              required
+              value={rpm}
+              onChange={(event) => onRPM(event.target.value)}
+            />
+          )}
+        </Field>
+      </Fields>
       <p className="nb-key-limits__hint">{t('common.keyLimits.hint')}</p>
     </fieldset>
   );

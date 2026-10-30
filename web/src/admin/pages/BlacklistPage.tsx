@@ -1,3 +1,5 @@
+import { Fields, FormActions } from '@shared/components/ui/Fields';
+import { Field } from '@shared/components/ui/Field';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -15,7 +17,8 @@ import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import { DataTable, Fold, MoreMenu } from '@shared/components/ui';
+import { FilterBar } from '@shared/components/ui/FilterBar';
+import { DataTable, MoreMenu } from '@shared/components/ui';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import './blacklist.css';
 import { ReasonText } from '@shared/components/ReasonText';
@@ -79,7 +82,6 @@ export function BlacklistManagement({
     invalid: t('common.blacklist.invalid'),
     invalidID: t('common.blacklist.invalidID'),
     search: t('common.blacklist.search'),
-    applySearch: t('common.blacklist.applySearch'),
     empty: t('common.blacklist.empty'),
     emptyBody: t('common.blacklist.emptyBody'),
     account: t('common.blacklist.account'),
@@ -149,7 +151,6 @@ export function BlacklistManagement({
   const [search, setSearch] = useState(q);
   const [actorDraft, setActorDraft] = useState(actorUserID);
   const [discordDraft, setDiscordDraft] = useState(filterDiscordID);
-  const [kindDraft, setKindDraft] = useState(actorKind);
   const [selected, setSelected] = useState('');
   const [eventsPage, setEventsPage] = useState(1);
   const events = useQuery({
@@ -214,8 +215,7 @@ export function BlacklistManagement({
     }
     setConfirmation({ id, reason: why, add: true });
   };
-  const applySearch = (event: FormEvent) => {
-    event.preventDefault();
+  const applySearch = () => {
     setValidation('');
     if (
       (discordDraft.trim() && !validDiscordID(discordDraft.trim())) ||
@@ -234,7 +234,7 @@ export function BlacklistManagement({
       else next.delete('discord_id');
       if (actorDraft.trim()) next.set('actor_user_id', actorDraft.trim());
       else next.delete('actor_user_id');
-      if (kindDraft) next.set('actor_kind', kindDraft);
+      if (actorKind) next.set('actor_kind', actorKind);
       else next.delete('actor_kind');
       next.set('page', '1');
       return next;
@@ -290,39 +290,45 @@ export function BlacklistManagement({
         <p className="blacklist-consequence">{label.description}</p>
         <form
           onSubmit={submit}
-          className="ops-toolbar"
+          className="nb-stack"
           onChange={() => {
             setNotice('');
             setValidation('');
           }}
         >
-          <label className="ops-form-field">
-            <span>Discord ID</span>
-            <input
-              value={discordID}
-              onChange={(event) => setDiscordID(event.target.value)}
-              inputMode="numeric"
-              autoComplete="off"
-              maxLength={20}
-              required
-              disabled={busy}
-            />
-          </label>
-          <label className="ops-form-field">
-            <span>{label.reason}</span>
-            <textarea
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              maxLength={8000}
-              required
-              disabled={busy}
-            />
-          </label>
-          <div className="ops-actions">
+          <Fields>
+            <Field label="Discord ID" size="short">
+              {(field) => (
+                <input
+                  {...field}
+                  value={discordID}
+                  onChange={(event) => setDiscordID(event.target.value)}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={20}
+                  required
+                  disabled={busy}
+                />
+              )}
+            </Field>
+            <Field label={label.reason} size="long">
+              {(field) => (
+                <textarea
+                  {...field}
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  maxLength={8000}
+                  required
+                  disabled={busy}
+                />
+              )}
+            </Field>
+          </Fields>
+          <FormActions>
             <button type="submit" className="nb-btn nb-btn--danger" disabled={busy}>
               {label.add}
             </button>
-          </div>
+          </FormActions>
         </form>
         {panelOpen ? feedback : null}
         <ConfirmDialog
@@ -356,53 +362,86 @@ export function BlacklistManagement({
       </ExpandablePanel>
       {!panelOpen ? feedback : null}
       <Card>
-        <form onSubmit={applySearch} className="ops-field-grid">
-          <label className="ops-form-field">
-            <span>{label.search}</span>
-            <input
-              value={search}
-              placeholder={t('common.blacklist.searchPlaceholder')}
-              onChange={(event) => setSearch(event.target.value)}
-              maxLength={512}
-            />
-          </label>
-          <Fold title={t('management.users.exactFilters')}>
-            <div className="ops-field-grid">
-              <label className="ops-form-field">
-                <span>{label.exactDiscord}</span>
+        <FilterBar
+          onSubmit={applySearch}
+          activeCount={[actorKind, actorUserID, filterDiscordID].filter(Boolean).length}
+          onReset={() => {
+            setSearch('');
+            setActorDraft('');
+            setDiscordDraft('');
+            setValidation('');
+            setParams((previous) => {
+              const next = new URLSearchParams(previous);
+              for (const key of ['q', 'actor_kind', 'actor_user_id', 'discord_id'])
+                next.delete(key);
+              next.set('page', '1');
+              return next;
+            });
+          }}
+          search={
+            <Field label={label.search} size="medium">
+              {(field) => (
                 <input
-                  value={discordDraft}
-                  onChange={(event) => setDiscordDraft(event.target.value)}
-                  inputMode="numeric"
-                  maxLength={20}
+                  {...field}
+                  value={search}
+                  placeholder={t('common.blacklist.searchPlaceholder')}
+                  onChange={(event) => setSearch(event.target.value)}
+                  maxLength={512}
                 />
-              </label>
-              <label className="ops-form-field">
-                <span>{label.actorKind}</span>
-                <select value={kindDraft} onChange={(event) => setKindDraft(event.target.value)}>
-                  <option value="">{t('common.blacklist.all')}</option>
-                  <option value="admin">{actorLabels.admin}</option>
-                  <option value="steward5">{actorLabels.steward5}</option>
-                  <option value="steward6">{actorLabels.steward6}</option>
-                  <option value="automatic">{actorLabels.automatic}</option>
-                  <option value="unknown">{actorLabels.unknown}</option>
-                </select>
-              </label>
-              <label className="ops-form-field">
-                <span>{label.actorUserID}</span>
-                <input
-                  value={actorDraft}
-                  onChange={(event) => setActorDraft(event.target.value)}
-                  inputMode="numeric"
-                  maxLength={19}
-                />
-              </label>
-            </div>
-          </Fold>
-          <button className="nb-btn nb-btn--secondary" disabled={busy} type="submit">
-            {t('common.applyFilter')}
-          </button>
-        </form>
+              )}
+            </Field>
+          }
+          secondary={
+            <>
+              <Field label={label.exactDiscord} size="short">
+                {(field) => (
+                  <input
+                    {...field}
+                    value={discordDraft}
+                    onChange={(event) => setDiscordDraft(event.target.value)}
+                    inputMode="numeric"
+                    maxLength={20}
+                  />
+                )}
+              </Field>
+              <Field label={label.actorKind} size="short">
+                {(field) => (
+                  <select
+                    {...field}
+                    value={actorKind}
+                    onChange={(event) =>
+                      setParams((previous) => {
+                        const next = new URLSearchParams(previous);
+                        if (event.target.value) next.set('actor_kind', event.target.value);
+                        else next.delete('actor_kind');
+                        next.set('page', '1');
+                        return next;
+                      })
+                    }
+                  >
+                    <option value="">{t('common.blacklist.all')}</option>
+                    <option value="admin">{actorLabels.admin}</option>
+                    <option value="steward5">{actorLabels.steward5}</option>
+                    <option value="steward6">{actorLabels.steward6}</option>
+                    <option value="automatic">{actorLabels.automatic}</option>
+                    <option value="unknown">{actorLabels.unknown}</option>
+                  </select>
+                )}
+              </Field>
+              <Field label={label.actorUserID} size="short">
+                {(field) => (
+                  <input
+                    {...field}
+                    value={actorDraft}
+                    onChange={(event) => setActorDraft(event.target.value)}
+                    inputMode="numeric"
+                    maxLength={19}
+                  />
+                )}
+              </Field>
+            </>
+          }
+        />
         {sessionError ? (
           <ErrorState error={sessionError} onRetry={refreshSession} />
         ) : result.error ? (
@@ -523,14 +562,18 @@ export function BlacklistManagement({
       </Card>
       {selected ? (
         <Card>
-          <div className="ops-actions">
-            <h2>
-              {label.events}: {selected}
-            </h2>
-            <button type="button" className="nb-btn nb-btn--ghost" onClick={() => setSelected('')}>
-              {t('common.blacklist.close')}
-            </button>
-          </div>
+          <SectionHead
+            title={`${label.events}: ${selected}`}
+            actions={
+              <button
+                type="button"
+                className="nb-btn nb-btn--ghost"
+                onClick={() => setSelected('')}
+              >
+                {t('common.blacklist.close')}
+              </button>
+            }
+          />
           {events.isPending ? (
             <LoadingState />
           ) : events.error ? (

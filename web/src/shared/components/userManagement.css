@@ -15,15 +15,6 @@
   overflow-y: auto;
   padding-bottom: 1rem;
 }
-.user-management .ops-toolbar {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-}
-.user-management .ops-toolbar > label:first-child,
-.user-management .ops-toolbar > .nb-fold {
-  grid-column: 1 / -1;
-}
 .user-management .nb-md__list .card {
   padding: var(--nb-space-4);
 }
@@ -106,9 +97,6 @@
   padding: var(--nb-space-1) var(--nb-space-2);
   font-size: var(--nb-font-size-sm);
 }
-.user-authority .ops-field-grid {
-  gap: var(--nb-space-4);
-}
 .user-authority .nb-seg {
   align-self: start;
   flex-wrap: wrap;
@@ -119,19 +107,12 @@
 .user-authority .user-identity {
   margin-bottom: 0;
 }
-.user-authority .user-save-actions {
-  margin-top: var(--nb-space-5);
-}
 .user-save-result {
   margin-top: var(--nb-space-4);
 }
 .user-save-result h3 {
   margin: 0 0 var(--nb-space-2);
   font-size: var(--nb-font-size-sm);
-}
-.user-field-hint {
-  color: var(--nb-color-text-muted);
-  font-size: var(--nb-font-size-xs);
 }
 .user-danger {
   border-color: var(--nb-color-danger);
@@ -177,9 +158,6 @@
   }
 }
 @media (width < 40rem) {
-  .user-authority .ops-field-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .user-danger-row {
     align-items: start;
   }

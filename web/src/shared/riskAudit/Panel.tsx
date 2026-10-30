@@ -1,4 +1,8 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { FilterBar } from '@shared/components/ui/FilterBar';
+import { FormActions } from '@shared/components/ui/Fields';
+import { Fields } from '@shared/components/ui/Fields';
+import { Field } from '@shared/components/ui/Field';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router';
@@ -309,18 +313,27 @@ function UserModelFilter({
 }) {
   const [model, setModel] = useState(selectedModel);
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        onApply(model);
+    <FilterBar
+      activeCount={selectedModel ? 1 : 0}
+      onSubmit={() => onApply(model)}
+      onReset={() => {
+        setModel('');
+        onApply('');
       }}
-    >
-      <label>
-        {c.model}
-        <input maxLength={512} value={model} onChange={(event) => setModel(event.target.value)} />
-      </label>
-      <button className="nb-btn nb-btn--secondary">{c.apply}</button>
-    </form>
+      search={
+        <Field label={c.model} size="medium">
+          {(field) => (
+            <input
+              {...field}
+              maxLength={512}
+              placeholder={c.modelPlaceholder}
+              value={model}
+              onChange={(event) => setModel(event.target.value)}
+            />
+          )}
+        </Field>
+      }
+    />
   );
 }
 function UserDetail({ userID, back, ...scope }: Scope & { userID: string; back: () => void }) {
@@ -468,26 +481,30 @@ function Users({ inspect, ...scope }: Scope & { inspect: (id: string) => void })
     <div className="ops-stack">
       <Card>
         <p>{c.configHelp}</p>
-        <label className="audit-signal-filter">
-          {c.signal}
-          <select
-            value={signalFilter}
-            onChange={(e) =>
-              setParams((previous) => {
-                const next = new URLSearchParams(previous);
-                if (e.target.value) next.set('audit_signal', e.target.value);
-                else next.delete('audit_signal');
-                next.delete('audit_users_scan');
-                next.set('audit_users_page', '1');
-                return next;
-              })
-            }
-          >
-            <option value="">{c.all}</option>
-            <option value="rpm">{c.rpm}</option>
-            <option value="concurrency">{c.concurrency}</option>
-          </select>
-        </label>
+        <Fields>
+          <Field label={c.signal} size="short">
+            {(field) => (
+              <select
+                {...field}
+                value={signalFilter}
+                onChange={(e) =>
+                  setParams((previous) => {
+                    const next = new URLSearchParams(previous);
+                    if (e.target.value) next.set('audit_signal', e.target.value);
+                    else next.delete('audit_signal');
+                    next.delete('audit_users_scan');
+                    next.set('audit_users_page', '1');
+                    return next;
+                  })
+                }
+              >
+                <option value="">{c.all}</option>
+                <option value="rpm">{c.rpm}</option>
+                <option value="concurrency">{c.concurrency}</option>
+              </select>
+            )}
+          </Field>
+        </Fields>
       </Card>
       <TaskScans<Summary>
         role={scope.role}
@@ -840,7 +857,7 @@ function RuleEditor({
       {!rule && (
         <div className="audit-patterns">
           <strong>{c.ruleTemplate}</strong>
-          <div className="ops-actions">
+          <FormActions>
             {(
               [
                 ['Tavo', 'user_agent', 'prefix', 'Tavo/'],
@@ -891,53 +908,64 @@ function RuleEditor({
             >
               {c.siteTemplate}
             </button>
-          </div>
+          </FormActions>
           <small>{c.templateHelp}</small>
         </div>
       )}
-      <label>
-        {c.name}
-        <input
-          required
-          maxLength={120}
-          value={value.name}
-          onChange={(e) => setValue((v) => ({ ...v, name: e.target.value }))}
-        />
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={value.enabled}
-          onChange={(e) => setValue((v) => ({ ...v, enabled: e.target.checked }))}
-        />
-        {c.enabled}
-      </label>
-      <fieldset className="audit-condition">
-        <legend>{c.autoBan}</legend>
-        <label>
-          {c.autoBanDuration}
-          <select value={banMode} onChange={(e) => setBanMode(e.target.value as typeof banMode)}>
-            <option value="none">{c.noAutoBan}</option>
-            <option value="hours">{c.autoBanHours}</option>
-            <option value="days">{c.autoBanDays}</option>
-            <option value="seconds">{c.autoBanSeconds}</option>
-            <option value="permanent">{c.autoBanPermanent}</option>
-          </select>
-        </label>
-        {banMode !== 'none' && (
-          <label>
+      <Fields>
+        <Field label={c.name} size="medium">
+          {(field) => (
             <input
-              type="checkbox"
-              checked={banEnabled}
-              onChange={(e) => setBanEnabled(e.target.checked)}
+              {...field}
+              required
+              maxLength={120}
+              value={value.name}
+              onChange={(e) => setValue((v) => ({ ...v, name: e.target.value }))}
             />
-            {c.autoBanEnabled}
-          </label>
+          )}
+        </Field>
+        <Field label={c.enabled} size="short">
+          {(field) => (
+            <input
+              {...field}
+              type="checkbox"
+              checked={value.enabled}
+              onChange={(e) => setValue((v) => ({ ...v, enabled: e.target.checked }))}
+            />
+          )}
+        </Field>
+      </Fields>
+      <Fields legend={c.autoBan}>
+        <Field label={c.autoBanDuration} size="short">
+          {(field) => (
+            <select
+              {...field}
+              value={banMode}
+              onChange={(e) => setBanMode(e.target.value as typeof banMode)}
+            >
+              <option value="none">{c.noAutoBan}</option>
+              <option value="hours">{c.autoBanHours}</option>
+              <option value="days">{c.autoBanDays}</option>
+              <option value="seconds">{c.autoBanSeconds}</option>
+              <option value="permanent">{c.autoBanPermanent}</option>
+            </select>
+          )}
+        </Field>
+        {banMode !== 'none' && (
+          <Field label={c.autoBanEnabled} size="short">
+            {(field) => (
+              <input
+                {...field}
+                type="checkbox"
+                checked={banEnabled}
+                onChange={(e) => setBanEnabled(e.target.checked)}
+              />
+            )}
+          </Field>
         )}
         {banMode !== 'none' && banMode !== 'permanent' && (
-          <label>
-            {c.autoBanDuration} (
-            {
+          <Field
+            label={`${c.autoBanDuration} (${
               c[
                 banMode === 'days'
                   ? 'autoBanDays'
@@ -945,105 +973,113 @@ function RuleEditor({
                     ? 'autoBanHours'
                     : 'autoBanSeconds'
               ]
-            }
-            )
-            <input
-              type="number"
-              min="1"
-              max={Math.floor(315360000 / multiplier)}
-              step="1"
-              required
-              value={durationInput}
-              onChange={(e) => setDurationInput(e.target.value)}
-            />
-          </label>
+            })`}
+            size="short"
+          >
+            {(field) => (
+              <input
+                {...field}
+                type="number"
+                min="1"
+                max={Math.floor(315360000 / multiplier)}
+                step="1"
+                required
+                value={durationInput}
+                onChange={(e) => setDurationInput(e.target.value)}
+              />
+            )}
+          </Field>
         )}
         {!validDuration && <p role="alert">{c.autoBanInvalid}</p>}
-        <small>{c.autoBanHelp}</small>
-      </fieldset>
+        <p className="audit-muted">{c.autoBanHelp}</p>
+      </Fields>
       {value.conditions.map((item, i) => (
-        <fieldset className="ops-field-grid audit-condition" key={i}>
-          <legend>
-            {c.and} {i + 1}
-          </legend>
-          <label>
-            {c.field}
-            <select
-              value={item.field}
-              onChange={(e) => {
-                const field = e.target.value as Condition['field'];
-                condition(i, {
-                  field,
-                  ...(field === 'effective_ip' || item.operator === 'ip_in'
-                    ? {
-                        operator: field === 'effective_ip' ? 'ip_in' : 'equals',
-                        value: '',
-                        values: undefined,
-                        case_sensitive: false,
-                      }
-                    : {}),
-                });
-              }}
-            >
-              {sourceFields.map((f) => (
-                <option key={f} value={f}>
-                  {fieldLabel(f, c)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {c.operator}
-            <select
-              value={item.operator}
-              onChange={(e) =>
-                condition(i, {
-                  operator: e.target.value as Condition['operator'],
-                  values: undefined,
-                  ...(e.target.value === 'ip_in' ? { case_sensitive: false } : {}),
-                })
-              }
-            >
-              {(['equals', 'contains', 'prefix'] as const).map((o) => (
-                <option key={o} value={o}>
-                  {c[o]}
-                </option>
-              ))}
-              {item.field === 'effective_ip' && <option value="ip_in">{c.ip_in}</option>}
-            </select>
-          </label>
+        <Fields key={i} className="audit-condition" legend={`${c.and} ${i + 1}`}>
+          <Field label={c.field} size="short">
+            {(field) => (
+              <select
+                {...field}
+                value={item.field}
+                onChange={(e) => {
+                  const field = e.target.value as Condition['field'];
+                  condition(i, {
+                    field,
+                    ...(field === 'effective_ip' || item.operator === 'ip_in'
+                      ? {
+                          operator: field === 'effective_ip' ? 'ip_in' : 'equals',
+                          value: '',
+                          values: undefined,
+                          case_sensitive: false,
+                        }
+                      : {}),
+                  });
+                }}
+              >
+                {sourceFields.map((f) => (
+                  <option key={f} value={f}>
+                    {fieldLabel(f, c)}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+          <Field label={c.operator} size="short">
+            {(field) => (
+              <select
+                {...field}
+                value={item.operator}
+                onChange={(e) =>
+                  condition(i, {
+                    operator: e.target.value as Condition['operator'],
+                    values: undefined,
+                    ...(e.target.value === 'ip_in' ? { case_sensitive: false } : {}),
+                  })
+                }
+              >
+                {(['equals', 'contains', 'prefix'] as const).map((o) => (
+                  <option key={o} value={o}>
+                    {c[o]}
+                  </option>
+                ))}
+                {item.field === 'effective_ip' && <option value="ip_in">{c.ip_in}</option>}
+              </select>
+            )}
+          </Field>
           {item.operator === 'ip_in' ? (
-            <label className="audit-ip-values">
-              {c.ipValues}
-              <textarea
-                required
-                rows={4}
-                aria-label={c.ipValues}
-                aria-describedby={`rule-ip-help-${i}`}
-                value={item.value}
-                onChange={(e) => condition(i, { value: e.target.value })}
-              />
-              <small id={`rule-ip-help-${i}`}>{c.ipValuesHelp}</small>
-            </label>
-          ) : (
-            <>
-              <label>
-                {c.value}
-                <input
+            <Field label={c.ipValues} size="long" help={c.ipValuesHelp}>
+              {(field) => (
+                <textarea
+                  {...field}
                   required
-                  maxLength={256}
+                  rows={4}
                   value={item.value}
                   onChange={(e) => condition(i, { value: e.target.value })}
                 />
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={item.case_sensitive}
-                  onChange={(e) => condition(i, { case_sensitive: e.target.checked })}
-                />
-                {c.sensitive}
-              </label>
+              )}
+            </Field>
+          ) : (
+            <>
+              <Field label={c.value} size="medium">
+                {(field) => (
+                  <input
+                    {...field}
+                    required
+                    maxLength={256}
+                    value={item.value}
+                    onChange={(e) => condition(i, { value: e.target.value })}
+                  />
+                )}
+              </Field>
+              <Field label={c.sensitive} size="short">
+                {(field) => (
+                  <input
+                    {...field}
+                    type="checkbox"
+                    checked={item.case_sensitive}
+                    onChange={(e) => condition(i, { case_sensitive: e.target.checked })}
+                  />
+                )}
+              </Field>
             </>
           )}
           <button
@@ -1056,7 +1092,7 @@ function RuleEditor({
           >
             {c.remove}
           </button>
-        </fieldset>
+        </Fields>
       ))}
       <button
         className="nb-btn nb-btn--secondary"
@@ -1068,46 +1104,53 @@ function RuleEditor({
       >
         {c.add}
       </button>
-      <details className="audit-details">
-        <summary>{c.advanced}</summary>
-        <label>
-          {c.status}
-          <select
-            value={value.status}
-            onChange={(e) =>
-              setValue((v) => ({ ...v, status: e.target.value as RuleInput['status'] }))
-            }
-          >
-            <option value="suspected">{c.suspected}</option>
-            <option value="confirmed">{c.confirmed}</option>
-          </select>
-        </label>
-        <label>
-          {c.evidence}
-          <textarea
-            maxLength={4096}
-            value={value.evidence_note}
-            onChange={(e) => setValue((v) => ({ ...v, evidence_note: e.target.value }))}
-          />
-        </label>
-        <label>
-          {c.link}
-          <input
-            type="url"
-            maxLength={2048}
-            value={value.evidence_url}
-            onChange={(e) => setValue((v) => ({ ...v, evidence_url: e.target.value }))}
-          />
-        </label>
-      </details>
-      <div className="ops-actions">
+      <Fold title={c.advanced}>
+        <Fields>
+          <Field label={c.status} size="short">
+            {(field) => (
+              <select
+                {...field}
+                value={value.status}
+                onChange={(e) =>
+                  setValue((v) => ({ ...v, status: e.target.value as RuleInput['status'] }))
+                }
+              >
+                <option value="suspected">{c.suspected}</option>
+                <option value="confirmed">{c.confirmed}</option>
+              </select>
+            )}
+          </Field>
+          <Field label={c.evidence} size="long">
+            {(field) => (
+              <textarea
+                {...field}
+                maxLength={4096}
+                value={value.evidence_note}
+                onChange={(e) => setValue((v) => ({ ...v, evidence_note: e.target.value }))}
+              />
+            )}
+          </Field>
+          <Field label={c.link} size="long">
+            {(field) => (
+              <input
+                {...field}
+                type="url"
+                maxLength={2048}
+                value={value.evidence_url}
+                onChange={(e) => setValue((v) => ({ ...v, evidence_url: e.target.value }))}
+              />
+            )}
+          </Field>
+        </Fields>
+      </Fold>
+      <FormActions>
         <button className="nb-btn nb-btn--primary" disabled={busy || !validDuration}>
           {c.save}
         </button>
         <button className="nb-btn nb-btn--secondary" type="button" disabled={busy} onClick={cancel}>
           {c.cancel}
         </button>
-      </div>
+      </FormActions>
       <ConfirmDialog
         open={confirmation !== null}
         title={t('common.riskAudit.confirmAutoBan')}
@@ -1350,23 +1393,25 @@ function ConfigForm({
         save(draft);
       }}
     >
-      <div className="ops-field-grid">
-        {fields.map(([field, label, min, max]) => (
-          <label key={field}>
-            {label}
-            <input
-              type="number"
-              required
-              min={min}
-              max={max}
-              step={1}
-              disabled={readonly || busy}
-              value={draft[field]}
-              onChange={(e) => setDraft((v) => ({ ...v, [field]: Number(e.target.value) }))}
-            />
-          </label>
+      <Fields>
+        {fields.map(([name, label, min, max]) => (
+          <Field key={name} label={label} size="short">
+            {(field) => (
+              <input
+                {...field}
+                type="number"
+                required
+                min={min}
+                max={max}
+                step={1}
+                disabled={readonly || busy}
+                value={draft[name]}
+                onChange={(e) => setDraft((v) => ({ ...v, [name]: Number(e.target.value) }))}
+              />
+            )}
+          </Field>
         ))}
-      </div>
+      </Fields>
       <details>
         <summary>{t('common.operations.management.details')}</summary>
         <p>
@@ -1376,9 +1421,11 @@ function ConfigForm({
       {readonly ? (
         <p>{c.adminOnly}</p>
       ) : (
-        <button className="nb-btn nb-btn--primary" disabled={busy}>
-          {c.save}
-        </button>
+        <FormActions>
+          <button className="nb-btn nb-btn--primary" disabled={busy}>
+            {c.save}
+          </button>
+        </FormActions>
       )}
     </form>
   );
@@ -1443,7 +1490,7 @@ function Access({ role, scopeKey, c, filters }: Scope) {
     }),
     [params],
   );
-  const selectedKey = JSON.stringify(selected);
+  const selectedKey = JSON.stringify([selected.user_id, selected.key_generation]);
   const [draftState, setDraftState] = useState({ key: selectedKey, value: selected });
   const draft = draftState.key === selectedKey ? draftState.value : selected;
   const setDraft = (update: (value: typeof selected) => typeof selected) =>
@@ -1497,83 +1544,109 @@ function Access({ role, scopeKey, c, filters }: Scope) {
     queryFn: ({ signal }) => riskAPI(role).accessSummary(f, signal),
     ...queryOptions,
   });
+  const applyAccess = (value: typeof selected) => {
+    if (
+      (value.user_id && !/^[1-9][0-9]*$/.test(value.user_id)) ||
+      (value.key_generation && !/^[0-9]+$/.test(value.key_generation))
+    )
+      return;
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      const keys = {
+        user_id: 'audit_access_user',
+        key_generation: 'audit_access_key',
+        path_kind: 'audit_access_path',
+        status_class: 'audit_access_status',
+      };
+      for (const key of Object.keys(keys) as (keyof typeof selected)[]) {
+        if (value[key]) next.set(keys[key], value[key]);
+        else next.delete(keys[key]);
+      }
+      for (const key of ['from', 'to', 'watermark', 'total']) next.delete('audit_access_' + key);
+      next.set('audit_access_page', '1');
+      return next;
+    });
+  };
   return (
     <div className="ops-stack">
       <p>{c.accessHelp}</p>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          setParams((previous) => {
-            const next = new URLSearchParams(previous);
-            for (const [key, value] of Object.entries(draft)) {
-              const queryKey = {
-                user_id: 'audit_access_user',
-                key_generation: 'audit_access_key',
-                path_kind: 'audit_access_path',
-                status_class: 'audit_access_status',
-              }[key as keyof typeof draft];
-              if (value) next.set(queryKey, value);
-              else next.delete(queryKey);
-            }
-            for (const key of ['from', 'to', 'watermark', 'total'])
-              next.delete('audit_access_' + key);
-            next.set('audit_access_page', '1');
-            return next;
-          });
+      <FilterBar
+        activeCount={Object.values(selected).filter(Boolean).length}
+        onSubmit={() =>
+          applyAccess({
+            ...draft,
+            path_kind: selected.path_kind,
+            status_class: selected.status_class,
+          })
+        }
+        onReset={() => {
+          const empty = { user_id: '', key_generation: '', path_kind: '', status_class: '' };
+          setDraft(() => empty);
+          applyAccess(empty);
         }}
-      >
-        <div className="ops-field-grid">
-          <label>
-            {c.user}
-            <input
-              pattern="[1-9][0-9]*"
-              value={draft.user_id}
-              onChange={(e) =>
-                setDraft((v) => ({ ...v, user_id: e.target.value, key_generation: '' }))
-              }
-            />
-          </label>
-          <label>
-            {c.key}
-            <input
-              maxLength={32}
-              pattern="[0-9]+"
-              disabled={!draft.user_id}
-              value={draft.key_generation}
-              onChange={(e) => setDraft((v) => ({ ...v, key_generation: e.target.value }))}
-            />
-          </label>
-          <label>
-            {c.path}
-            <select
-              value={draft.path_kind}
-              onChange={(e) => setDraft((v) => ({ ...v, path_kind: e.target.value }))}
-            >
-              <option value="">{c.all}</option>
-              {accessPaths.map((v) => (
-                <option key={v} value={v}>
-                  {pathLabel(v)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {c.http}
-            <select
-              value={draft.status_class}
-              onChange={(e) => setDraft((v) => ({ ...v, status_class: e.target.value }))}
-            >
-              <option value="">{c.all}</option>
-              {[1, 2, 3, 4, 5].map((v) => (
-                <option key={v} value={v}>
-                  {v}xx
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <button className="nb-btn nb-btn--secondary">{c.apply}</button>
-      </form>
+        search={
+          <>
+            <Field label={c.user} size="medium">
+              {(field) => (
+                <input
+                  {...field}
+                  pattern="[1-9][0-9]*"
+                  placeholder={c.accessUserPlaceholder}
+                  value={draft.user_id}
+                  onChange={(e) =>
+                    setDraft((v) => ({ ...v, user_id: e.target.value, key_generation: '' }))
+                  }
+                />
+              )}
+            </Field>
+            <Field label={c.key} size="medium">
+              {(field) => (
+                <input
+                  {...field}
+                  maxLength={32}
+                  pattern="[0-9]+"
+                  placeholder={c.accessKeyPlaceholder}
+                  disabled={!draft.user_id}
+                  value={draft.key_generation}
+                  onChange={(e) => setDraft((v) => ({ ...v, key_generation: e.target.value }))}
+                />
+              )}
+            </Field>
+            <Field label={c.path} size="short">
+              {(field) => (
+                <select
+                  {...field}
+                  value={selected.path_kind}
+                  onChange={(e) => applyAccess({ ...selected, path_kind: e.target.value })}
+                >
+                  <option value="">{c.all}</option>
+                  {accessPaths.map((v) => (
+                    <option key={v} value={v}>
+                      {pathLabel(v)}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+            <Field label={c.http} size="short">
+              {(field) => (
+                <select
+                  {...field}
+                  value={selected.status_class}
+                  onChange={(e) => applyAccess({ ...selected, status_class: e.target.value })}
+                >
+                  <option value="">{c.all}</option>
+                  {[1, 2, 3, 4, 5].map((v) => (
+                    <option key={v} value={v}>
+                      {v}xx
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+          </>
+        }
+      />
       {summary.error ? (
         <ErrorState error={summary.error} onRetry={() => void summary.refetch()} />
       ) : summary.data ? (
@@ -1790,13 +1863,12 @@ function RiskBody({
     () => ({ role, scopeKey, c, filters, customRange }),
     [role, scopeKey, c, filters, customRange],
   );
-  function apply(e: FormEvent) {
-    e.preventDefault();
+  function handleApply(nextRange: string, nextKind: string, now: number) {
     setRangeError(false);
-    if (range !== 'custom') {
+    if (nextRange !== 'custom') {
       setFilters({
-        lookback_hours: range === 'default' ? undefined : Number(range),
-        kind: draft.kind,
+        lookback_hours: nextRange === 'default' ? undefined : Number(nextRange),
+        kind: nextKind,
         limit: 100,
       });
       void client.invalidateQueries({ queryKey: ['risk', role, scopeKey] });
@@ -1809,9 +1881,9 @@ function RiskBody({
       typeof to === 'number' &&
       to > from &&
       to - from <= 30 * 86400 &&
-      to <= Date.now() / 1000
+      to <= now / 1000
     ) {
-      setFilters({ from, to, kind: draft.kind, limit: 100 });
+      setFilters({ from, to, kind: nextKind, limit: 100 });
       void client.invalidateQueries({ queryKey: ['risk', role, scopeKey] });
     } else setRangeError(true);
   }
@@ -1877,104 +1949,83 @@ function RiskBody({
           }}
         />
         {tab !== 'rules' && tab !== 'config' ? (
-          <Fold
-            plain
-            title={t('common.operations.logs.presentation.more')}
-            summary={
-              range === 'default'
-                ? c.defaultRange
-                : range === 'custom'
-                  ? c.custom
-                  : range === '1'
-                    ? c.lastHour
-                    : range === '24'
-                      ? c.lastDay
-                      : c.lastWeek
-            }
-          >
-            <form className="ops-stack" onSubmit={apply}>
-              {range === 'custom' && <TimeContextNotice station={role} />}
-              <div className="ops-field-grid">
-                <label>
-                  {c.range}
-                  <select
-                    value={range}
-                    onChange={(e) => {
-                      setRange(e.target.value);
-                      setRangeError(false);
-                    }}
-                  >
-                    <option value="default">{c.defaultRange}</option>
-                    <option value="1">{c.lastHour}</option>
-                    <option value="24">{c.lastDay}</option>
-                    <option value="168">{c.lastWeek}</option>
-                    <option value="custom">{c.custom}</option>
-                  </select>
-                </label>
-                {range === 'custom' && (
-                  <>
-                    <label>
-                      {c.from}
+          <>
+            <FilterBar
+              activeCount={Number(customRange) + Number(filters.kind !== 'total')}
+              onSubmit={() => handleApply(range, draft.kind, Date.now())}
+              onReset={() => {
+                setRange('default');
+                setDraft((v) => ({ ...v, kind: 'total' }));
+                handleApply('default', 'total', Date.now());
+              }}
+              search={
+                <>
+                  <Field label={c.range} size="short">
+                    {(field) => (
+                      <select
+                        {...field}
+                        value={range}
+                        onChange={(e) => {
+                          setRange(e.target.value);
+                          setRangeError(false);
+                          handleApply(e.target.value, draft.kind, Date.now());
+                        }}
+                      >
+                        <option value="default">{c.defaultRange}</option>
+                        <option value="1">{c.lastHour}</option>
+                        <option value="24">{c.lastDay}</option>
+                        <option value="168">{c.lastWeek}</option>
+                        <option value="custom">{c.custom}</option>
+                      </select>
+                    )}
+                  </Field>
+                  {range === 'custom' && (
+                    <>
                       <TimeInput
+                        label={c.from}
                         station={role}
                         showZoneHint={false}
                         required
                         draft={draft.from}
                         onChange={(update) => setDraft((v) => ({ ...v, from: update(v.from) }))}
                       />
-                    </label>
-                    <label>
-                      {c.to}
                       <TimeInput
+                        label={c.to}
                         station={role}
                         showZoneHint={false}
                         required
                         draft={draft.to}
                         onChange={(update) => setDraft((v) => ({ ...v, to: update(v.to) }))}
                       />
-                    </label>
-                  </>
-                )}
-                {tab !== 'access' && (
-                  <label>
-                    {c.kind}
-                    <select
-                      value={draft.kind}
-                      onChange={(e) => setDraft((v) => ({ ...v, kind: e.target.value }))}
-                    >
-                      {(['total', 'self', 'charity', 'unclassified'] as const).map((v) => (
-                        <option key={v} value={v}>
-                          {c[v]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-              </div>
-              <div className="ops-actions">
-                <button
-                  className="nb-btn nb-btn--primary"
-                  disabled={
-                    range === 'custom' &&
-                    (timeDraftValue(draft.from) == null || timeDraftValue(draft.to) == null)
-                  }
-                >
-                  {c.apply}
-                </button>
-                <button
-                  className="nb-btn nb-btn--secondary"
-                  type="button"
-                  onClick={() =>
-                    void client.invalidateQueries({ queryKey: ['risk', role, scopeKey] })
-                  }
-                >
-                  {c.refresh}
-                </button>
-              </div>
-              {rangeError && <p role="alert">{c.invalidRange}</p>}
-              <small className="audit-muted">{c.rangeHelp}</small>
-            </form>
-          </Fold>
+                    </>
+                  )}
+                  {tab !== 'access' && (
+                    <Field label={c.kind} size="short">
+                      {(field) => (
+                        <select
+                          {...field}
+                          value={draft.kind}
+                          onChange={(e) => {
+                            setDraft((v) => ({ ...v, kind: e.target.value }));
+                            handleApply(range, e.target.value, Date.now());
+                          }}
+                        >
+                          {(['total', 'self', 'charity', 'unclassified'] as const).map((v) => (
+                            <option key={v} value={v}>
+                              {c[v]}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </Field>
+                  )}
+                </>
+              }
+            />
+            {range === 'custom' && <TimeContextNotice station={role} />}
+            {rangeError && <p role="alert">{c.invalidRange}</p>}
+            <small className="audit-muted">{c.rangeHelp}</small>
+          </>
         ) : null}
       </Card>
       <div>
