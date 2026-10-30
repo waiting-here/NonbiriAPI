@@ -430,7 +430,7 @@
   max-inline-size: none;
 }
 /* Fields outside a grid keep a readable control width. */
-.nb-field:not(.nb-field--span, .nb-field--filter) {
+.nb-field:where(:not(.nb-field--span, .nb-field--filter)) {
   max-inline-size: 44rem;
 }
 
@@ -888,6 +888,10 @@
     grid-row: span 3;
     grid-template-rows: subgrid;
   }
+}
+/* A short field alone in the search row keeps its short width instead of filling the bar. */
+.nb-filter__search:has(> .nb-field--short:first-child) {
+  grid-template-columns: minmax(0, 16rem);
 }
 /* Several fields in the search row wrap like a form row instead of sharing one line. */
 .nb-filter__search:has(> .nb-field--filter ~ .nb-field--filter) {

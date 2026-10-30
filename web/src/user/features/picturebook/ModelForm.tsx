@@ -217,7 +217,7 @@ export function ModelForm({
     <Card>
       <h2>{t('创作图片', 'Create images')}</h2>
       <FormFields>
-        <Field label={t('图像模型', 'Image model')}>
+        <Field size="long" label={t('图像模型', 'Image model')}>
           {(props) => (
             <select
               {...props}
