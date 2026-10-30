@@ -132,9 +132,7 @@ test('audit quick ranges, healthy capture and rule patterns work without reloadi
   await expect(
     page.getByRole('heading', { name: 'Scan user summaries', exact: true }),
   ).toBeVisible();
-  await page.locator('.audit-page .nb-fold summary').filter({ hasText: 'More filters' }).click();
   await page.getByLabel(/^Time range/).selectOption('168');
-  await page.getByRole('button', { name: 'Apply filters', exact: true }).click();
   await page.getByRole('tab', { name: 'Access events', exact: true }).click();
   await expect(page.getByText('No capture gaps recorded', { exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);

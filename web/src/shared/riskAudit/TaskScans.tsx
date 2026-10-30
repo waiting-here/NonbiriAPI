@@ -1,3 +1,5 @@
+import { FormActions } from '@shared/components/ui/Fields';
+import { Field } from '@shared/components/ui/Field';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -153,7 +155,7 @@ export function TaskScans<T>({
               : t('common.auditScans.scanSharedIps')}
         </h2>
         <p>{t('common.auditScans.theFiltersAboveStartANewScan')}</p>
-        <div className="ops-actions">
+        <FormActions>
           <button
             type="button"
             className="nb-btn nb-btn--primary"
@@ -186,7 +188,7 @@ export function TaskScans<T>({
           >
             {t('common.auditScans.refresh')}
           </button>
-        </div>
+        </FormActions>
         {start.error && (
           <ErrorState error={start.error} onRetry={() => start.mutate(start.variables ?? input)} />
         )}
@@ -201,23 +203,25 @@ export function TaskScans<T>({
         ) : null}
         {recent.error && <ErrorState error={recent.error} onRetry={() => void recent.refetch()} />}
         {!!visible.length && (
-          <label>
-            {t('common.auditScans.recentScans')}
-            <select
-              value={id}
-              onChange={(event) => {
-                const selected = visible.find((item) => item.id === event.target.value);
-                if (selected) select(selected);
-              }}
-            >
-              <option value="">{t('common.auditScans.chooseAScan')}</option>
-              {visible.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {statuses[item.state]} · {frozenLabel(item)} · {item.matched}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Field label={t('common.auditScans.recentScans')} size="medium">
+            {(field) => (
+              <select
+                {...field}
+                value={id}
+                onChange={(event) => {
+                  const selected = visible.find((item) => item.id === event.target.value);
+                  if (selected) select(selected);
+                }}
+              >
+                <option value="">{t('common.auditScans.chooseAScan')}</option>
+                {visible.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {statuses[item.state]} · {frozenLabel(item)} · {item.matched}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
         )}
       </Card>
       {id &&

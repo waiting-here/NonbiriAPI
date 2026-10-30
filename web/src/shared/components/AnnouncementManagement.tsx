@@ -1,3 +1,6 @@
+import { Field } from '@shared/components/ui/Field';
+import { Fields, FormActions } from '@shared/components/ui/Fields';
+import { FilterBar } from '@shared/components/ui/FilterBar';
 import { Button } from '@shared/components/ui/Button';
 import { managementRoot, type ManagementRole } from '@shared/operations/managedUsers';
 import { useEffect, useState } from 'react';
@@ -224,57 +227,73 @@ export function AnnouncementManagement({
         <Card>
           <h2>{t('management.announcements.newDraft')}</h2>
           <p>{t('management.announcements.draftHint')}</p>
-          <div className="ops-field-grid">
-            <label>
-              <span>{t('management.announcements.chineseTitle')}</span>
-              <input
-                value={draft.title_zh}
-                maxLength={160}
-                onChange={(event) => setDraft({ ...draft, title_zh: event.target.value })}
-              />
-            </label>
-            <label>
-              <span>{t('management.announcements.englishTitle')}</span>
-              <input
-                value={draft.title_en}
-                maxLength={160}
-                onChange={(event) => setDraft({ ...draft, title_en: event.target.value })}
-              />
-            </label>
-          </div>
-          <div className="ops-field-grid">
-            <label>
-              <span>{t('management.announcements.chineseMarkdown', { bytes: zhBodyBytes })}</span>
-              <textarea
-                value={draft.body_zh}
-                onChange={(event) => setDraft({ ...draft, body_zh: event.target.value })}
-              />
-            </label>
-            <label>
-              <span>{t('management.announcements.englishMarkdown', { bytes: enBodyBytes })}</span>
-              <textarea
-                value={draft.body_en}
-                onChange={(event) => setDraft({ ...draft, body_en: event.target.value })}
-              />
-            </label>
-          </div>
+          <Fields>
+            <Field label={t('management.announcements.chineseTitle')} size="medium">
+              {(field) => (
+                <input
+                  {...field}
+                  value={draft.title_zh}
+                  maxLength={160}
+                  onChange={(event) => setDraft({ ...draft, title_zh: event.target.value })}
+                />
+              )}
+            </Field>
+            <Field label={t('management.announcements.englishTitle')} size="medium">
+              {(field) => (
+                <input
+                  {...field}
+                  value={draft.title_en}
+                  maxLength={160}
+                  onChange={(event) => setDraft({ ...draft, title_en: event.target.value })}
+                />
+              )}
+            </Field>
+          </Fields>
+          <Fields>
+            <Field
+              label={t('management.announcements.chineseMarkdown', { bytes: zhBodyBytes })}
+              size="long"
+            >
+              {(field) => (
+                <textarea
+                  {...field}
+                  value={draft.body_zh}
+                  onChange={(event) => setDraft({ ...draft, body_zh: event.target.value })}
+                />
+              )}
+            </Field>
+            <Field
+              label={t('management.announcements.englishMarkdown', { bytes: enBodyBytes })}
+              size="long"
+            >
+              {(field) => (
+                <textarea
+                  {...field}
+                  value={draft.body_en}
+                  onChange={(event) => setDraft({ ...draft, body_en: event.target.value })}
+                />
+              )}
+            </Field>
+          </Fields>
           {!draftValid ? (
             <p className="field-error" role="alert">
               {t('management.announcements.validation')}
             </p>
           ) : null}
-          <div className="ops-field-grid">
-            <label>
-              <span>{t('management.announcements.severityLabel')}</span>
-              <select
-                value={draft.severity}
-                onChange={(event) => setDraft({ ...draft, severity: event.target.value })}
-              >
-                <option value="info">{severityLabels.info}</option>
-                <option value="warning">{severityLabels.warning}</option>
-                <option value="important">{severityLabels.important}</option>
-              </select>
-            </label>
+          <Fields>
+            <Field label={t('management.announcements.severityLabel')} size="short">
+              {(field) => (
+                <select
+                  {...field}
+                  value={draft.severity}
+                  onChange={(event) => setDraft({ ...draft, severity: event.target.value })}
+                >
+                  <option value="info">{severityLabels.info}</option>
+                  <option value="warning">{severityLabels.warning}</option>
+                  <option value="important">{severityLabels.important}</option>
+                </select>
+              )}
+            </Field>
             <TimeInput
               station={role === 'admin' ? 'admin' : 'steward'}
               label={t('management.announcements.expiryOptional')}
@@ -286,66 +305,96 @@ export function AnnouncementManagement({
                 }))
               }
             />
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={draft.pinned}
-                onChange={(event) => setDraft({ ...draft, pinned: event.target.checked })}
-              />
-              <span>{t('management.announcements.pinned')}</span>
-            </label>
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={draft.dismissible}
-                onChange={(event) => setDraft({ ...draft, dismissible: event.target.checked })}
-              />
-              <span>{t('management.announcements.dismissible')}</span>
-            </label>
-          </div>
+            <Field label={t('management.announcements.pinned')} size="short">
+              {(field) => (
+                <input
+                  {...field}
+                  type="checkbox"
+                  checked={draft.pinned}
+                  onChange={(event) => setDraft({ ...draft, pinned: event.target.checked })}
+                />
+              )}
+            </Field>
+            <Field label={t('management.announcements.dismissible')} size="short">
+              {(field) => (
+                <input
+                  {...field}
+                  type="checkbox"
+                  checked={draft.dismissible}
+                  onChange={(event) => setDraft({ ...draft, dismissible: event.target.checked })}
+                />
+              )}
+            </Field>
+          </Fields>
           {create.error ? <ErrorState error={create.error} /> : null}
-          <Button
-            variant="primary"
-            type="button"
-            disabled={create.isPending || !draftValid || !accountID || Boolean(sessionError)}
-            onClick={submitCreate}
-          >
-            {t('management.announcements.createPrivateDraft')}
-          </Button>
+          <FormActions>
+            <Button
+              variant="primary"
+              type="button"
+              disabled={create.isPending || !draftValid || !accountID || Boolean(sessionError)}
+              onClick={submitCreate}
+            >
+              {t('management.announcements.createPrivateDraft')}
+            </Button>
+          </FormActions>
         </Card>
       ) : null}
       <Card>
-        <div className="ops-toolbar">
-          <label>
-            <span>{t('management.announcements.stateLabel')}</span>
-            <select
-              value={state}
-              onChange={(event) => {
-                setFilter('state', event.target.value);
-              }}
-            >
-              <option value="">{t('management.announcements.all')}</option>
-              <option value="draft">{stateLabels.draft}</option>
-              <option value="published">{stateLabels.published}</option>
-              <option value="withdrawn">{stateLabels.withdrawn}</option>
-              <option value="expired">{stateLabels.expired}</option>
-            </select>
-          </label>
-          <label>
-            <span>{t('management.announcements.severityLabel')}</span>
-            <select
-              value={severity}
-              onChange={(event) => {
-                setFilter('severity', event.target.value);
-              }}
-            >
-              <option value="">{t('management.announcements.all')}</option>
-              <option value="info">{severityLabels.info}</option>
-              <option value="warning">{severityLabels.warning}</option>
-              <option value="important">{severityLabels.important}</option>
-            </select>
-          </label>
-        </div>
+        <FilterBar
+          activeCount={[state, severity].filter(Boolean).length}
+          onSubmit={() => {}}
+          search={
+            <>
+              <Field label={t('management.announcements.stateLabel')} size="short">
+                {(field) => (
+                  <select
+                    {...field}
+                    value={state}
+                    onChange={(event) => {
+                      setFilter('state', event.target.value);
+                    }}
+                  >
+                    <option value="">{t('management.announcements.all')}</option>
+                    <option value="draft">{stateLabels.draft}</option>
+                    <option value="published">{stateLabels.published}</option>
+                    <option value="withdrawn">{stateLabels.withdrawn}</option>
+                    <option value="expired">{stateLabels.expired}</option>
+                  </select>
+                )}
+              </Field>
+              <Field label={t('management.announcements.severityLabel')} size="short">
+                {(field) => (
+                  <select
+                    {...field}
+                    value={severity}
+                    onChange={(event) => {
+                      setFilter('severity', event.target.value);
+                    }}
+                  >
+                    <option value="">{t('management.announcements.all')}</option>
+                    <option value="info">{severityLabels.info}</option>
+                    <option value="warning">{severityLabels.warning}</option>
+                    <option value="important">{severityLabels.important}</option>
+                  </select>
+                )}
+              </Field>
+              <Button
+                type="button"
+                onClick={() =>
+                  setParams((previous) => {
+                    const next = new URLSearchParams(previous);
+                    next.delete('state');
+                    next.delete('severity');
+                    next.set('page', '1');
+                    return next;
+                  })
+                }
+              >
+                {t('common.resetFilter')}
+              </Button>
+            </>
+          }
+        />
         {sessionError ? (
           <ErrorState error={sessionError} />
         ) : list.isPending ? (

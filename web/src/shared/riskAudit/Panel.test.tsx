@@ -137,7 +137,6 @@ it('shows a single Discord IP window with retained original accounts and bounded
   expect(screen.getByText(/IP or account details are truncated here/)).toBeVisible();
   expect(api.user).not.toHaveBeenCalled();
   await view.user.selectOptions(screen.getByLabelText('Time range'), '168');
-  await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
   expect(screen.getByTestId('audit-location')).not.toHaveTextContent('audit_user_ips_scan');
   expect(
     screen.queryByRole('heading', { name: 'Discord ID: 123456789012345678' }),
@@ -160,7 +159,6 @@ it('retries a missed scan response using the original filters and request token'
   );
   const original = structuredClone(api.createTask.mock.calls[0][0]);
   await view.user.selectOptions(screen.getByLabelText('Time range'), '168');
-  await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
   await view.user.click(await screen.findByRole('button', { name: 'Retry' }));
   await waitFor(() => expect(api.createTask).toHaveBeenCalledTimes(2));
   expect(api.createTask.mock.calls[1][0]).toEqual(original);
@@ -400,7 +398,7 @@ describe('Risk audit access and evidence presentation', () => {
     });
     await screen.findByText(/User ID: 9007199254740993/);
     api.taskResults.mockRejectedValueOnce(new ApiError('forbidden', 'Session revoked.', 403));
-    await view.user.click(screen.getAllByRole('button', { name: 'Refresh' })[1]);
+    await view.user.click(screen.getByRole('button', { name: 'Refresh' }));
     await waitFor(() => {
       expect(screen.queryByText(/User ID: 9007199254740993/)).not.toBeInTheDocument();
       expect(
@@ -462,7 +460,6 @@ it('uses server-relative quick ranges even when the browser clock is ahead', asy
   await screen.findByText(/User ID: 9007199254740993/);
   view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'operator' } });
   await view.user.selectOptions(screen.getByLabelText('Time range'), '168');
-  await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
   await view.user.click(screen.getByRole('button', { name: 'Start new scan' }));
   await waitFor(() =>
     expect(api.createTask.mock.lastCall?.[0]).toMatchObject({ lookback_hours: 168 }),
@@ -700,9 +697,7 @@ it('restores the user model draft with the query on Back and Forward', async () 
   expect(model).toHaveValue('A');
   await view.user.clear(model);
   await view.user.type(model, 'B');
-  await view.user.click(
-    within(model.closest('form')!).getByRole('button', { name: 'Apply filters' }),
-  );
+  await view.user.click(within(model.closest('form')!).getByRole('button', { name: 'Search' }));
   expect(await screen.findByRole('heading', { name: /Same-model comparison: B/ })).toBeVisible();
   expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('B');
   await view.user.click(screen.getByRole('button', { name: 'Browser back' }));
