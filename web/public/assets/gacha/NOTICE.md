@@ -52,8 +52,11 @@ The adopted derivatives in `moment/c-gemini/`, `moment/q-glm/`, `moment/n-gemini
 `moment/o-claude/`, `moment/g-claude/`, `moment/l-chatgpt/`, `moment/g-gemini/`,
 `moment/g-glm/`, `moment/b-glm/`, `moment/f-gemini/`, `moment/e-gemini/`,
 `moment/b-deepseek/`, `moment/d-gemini/`, `moment/f-chatgpt/`,
-`moment/e-claude/`, `moment/d-glm/`, `moment/s-chatgpt/`, `moment/c-glm/`
-`moment/b-chatgpt/`, `moment/e-glm/`, `moment/g-deepseek/` and `moment/f-glm/`,
+`moment/e-claude/`, `moment/d-glm/`, `moment/s-chatgpt/`, `moment/c-glm/`,
+`moment/b-chatgpt/`, `moment/e-glm/`, `moment/g-deepseek/`, `moment/f-glm/`,
+`moment/h-gemini/`, `moment/a-gemini/`, `moment/b-gemini/`, `moment/a-glm/`,
+`moment/e-chatgpt/`, `moment/h-glm/`, `moment/a-chatgpt/`, `moment/c-chatgpt/`
+and `moment/b-claude/`,
 with matching `hires/moment/` paths, retain the established
 characters and original card and appearance inputs. Their separate
 `composition.json` registrations describe the expanded canvas and the unchanged
@@ -64,7 +67,8 @@ use 2.5× Lanczos resampling and do not add native detail.
 
 The additional margins for c-gemini, g-claude, l-chatgpt, g-gemini, g-glm,
 b-glm, f-gemini, e-gemini, b-deepseek, d-gemini, f-chatgpt, e-claude, d-glm,
-s-chatgpt, c-glm, b-chatgpt, e-glm, g-deepseek and f-glm were
+s-chatgpt, c-glm, b-chatgpt, e-glm, g-deepseek, f-glm, h-gemini,
+a-gemini, b-gemini, a-glm, e-chatgpt, h-glm, a-chatgpt, c-chatgpt and b-claude were
 generated from their retained project sources
 using [BRIA Fibo-2.0-edit-turbo](https://huggingface.co/briaai/Fibo-2.0-edit-turbo/tree/177f2d4a06b6587144ef5c2b8452a4f1fe2ab4b7),
 with foreground alpha prepared using

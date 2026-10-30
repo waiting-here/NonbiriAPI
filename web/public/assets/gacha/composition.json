@@ -95,7 +95,24 @@
         1536
       ],
       "backgroundFit": "center-cover",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1536,
+            1536
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3840,
+          "hero": "moment/a-chatgpt/hero.webp"
+        }
+      }
     },
     "a-claude": {
       "background": "backgrounds/a.webp",
@@ -115,7 +132,24 @@
         1536
       ],
       "backgroundFit": "center-cover",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1536,
+            1536
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3840,
+          "hero": "moment/a-glm/hero.webp"
+        }
+      }
     },
     "a-deepseek": {
       "background": "backgrounds/a.webp",
@@ -135,7 +169,24 @@
         1536
       ],
       "backgroundFit": "center-cover",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1536,
+            1672
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 136,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3840,
+          "hero": "moment/a-gemini/hero.webp"
+        }
+      }
     },
     "b-chatgpt": {
       "background": "backgrounds/b.webp",
@@ -172,7 +223,24 @@
         1536
       ],
       "backgroundFit": "center-cover",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1536,
+            1544
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 8,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3840,
+          "hero": "moment/b-claude/hero.webp"
+        }
+      }
     },
     "b-glm": {
       "background": "backgrounds/b.webp",
@@ -236,7 +304,24 @@
         1536
       ],
       "backgroundFit": "center-cover",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1536,
+            1544
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 8,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3840,
+          "hero": "moment/b-gemini/hero.webp"
+        }
+      }
     },
     "c-chatgpt": {
       "background": "backgrounds/c.webp",
@@ -246,7 +331,24 @@
         1536
       ],
       "backgroundFit": "center-cover",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1536,
+            1792
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 256,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3840,
+          "hero": "moment/c-chatgpt/hero.webp"
+        }
+      }
     },
     "c-claude": {
       "background": "backgrounds/c.webp",
@@ -414,7 +516,24 @@
         1536
       ],
       "backgroundFit": "center-cover",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1536,
+            1544
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 8,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3840,
+          "hero": "moment/e-chatgpt/hero.webp"
+        }
+      }
     },
     "e-claude": {
       "background": "backgrounds/e.webp",
@@ -729,7 +848,24 @@
         1536
       ],
       "backgroundFit": "center-cover",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1536,
+            1536
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3840,
+          "hero": "moment/h-glm/hero.webp"
+        }
+      }
     },
     "h-deepseek": {
       "background": "backgrounds/h.webp",
@@ -749,7 +885,24 @@
         1536
       ],
       "backgroundFit": "center-cover",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1544,
+            1544
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 8,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3860,
+          "hero": "moment/h-gemini/hero.webp"
+        }
+      }
     },
     "i-chatgpt": {
       "source": "registered-motion-layers",
