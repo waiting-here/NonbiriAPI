@@ -11,8 +11,15 @@ import userEn from '../../../i18n/en.json';
 
 const mocks = vi.hoisted(() => ({ execute: vi.fn(), status: vi.fn(), read: vi.fn() }));
 const options = {
-  base_connector_types: ['openai-compatible'],
+  base_connector_types: ['openai-compatible', 'typesafe-systemone'],
   native_service_options: [
+    {
+      connector_type: 'typesafe-systemone',
+      configuration_type: 'typesafe-systemone',
+      native_services: ['systemone'],
+      default_native_services: ['systemone'],
+      rerank_formats: [],
+    },
     {
       connector_type: 'openai-compatible',
       configuration_type: 'openai-compatible',
@@ -163,6 +170,76 @@ async function fillCustom(connection?: Connection) {
   return view;
 }
 describe('service setup as one task', () => {
+  async function systemOneForm() {
+    const view = await fillCustom();
+    await view.user.click(
+      screen.getByText(userEn.user.services.advancedSetup, { selector: 'strong' }),
+    );
+    await view.user.selectOptions(
+      screen.getByRole('combobox', { name: common.common.connections.protocol }),
+      'typesafe-systemone',
+    );
+    await view.user.click(
+      screen.getByText(common.common.connections.discoveryOptional, { selector: 'strong' }),
+    );
+    return view;
+  }
+  it('creates System One keys with the OpenAI catalog default and no extra source save', async () => {
+    const view = await systemOneForm();
+    expect(
+      screen.getByRole('checkbox', { name: userEn.user.workflows.discoverModels }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole('combobox', { name: common.common.connections.listFormat }),
+    ).toHaveValue('openai');
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAnotherKey }));
+    await view.user.type(
+      screen.getByLabelText(userEn.user.services.additionalKey.replace('{{number}}', '2')),
+      'synthetic-second-systemone-key',
+    );
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
+    await screen.findByText(userEn.user.workflows.serviceReady);
+    const grants = mocks.execute.mock.calls.filter(([intent]) => intent.kind === 'key');
+    expect(grants).toHaveLength(2);
+    for (const [intent] of grants) {
+      expect(intent.input.native_services).toEqual(['systemone']);
+      expect(intent.input).not.toHaveProperty('discovery_source_id');
+    }
+    expect(mocks.execute.mock.calls.some(([intent]) => intent.kind === 'discovery_source')).toBe(
+      false,
+    );
+  });
+  it('preserves explicitly disabled discovery on a new System One key', async () => {
+    const view = await systemOneForm();
+    await view.user.click(
+      screen.getByRole('checkbox', { name: userEn.user.workflows.discoverModels }),
+    );
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
+    await screen.findByText(userEn.user.workflows.serviceReady);
+    expect(
+      mocks.execute.mock.calls.find(([intent]) => intent.kind === 'key')![0].input
+        .discovery_source_id,
+    ).toBeNull();
+  });
+  it('keeps an explicitly chosen System One catalog protocol', async () => {
+    const view = await systemOneForm();
+    await view.user.selectOptions(
+      screen.getByRole('combobox', { name: common.common.connections.listFormat }),
+      'anthropic',
+    );
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
+    await screen.findByText(userEn.user.workflows.serviceReady);
+    expect(
+      mocks.execute.mock.calls.find(([intent]) => intent.kind === 'discovery_source')![0].input,
+    ).toMatchObject({
+      list_format: 'anthropic',
+      base_url: 'https://service.example/v1',
+    });
+    expect(
+      mocks.execute.mock.calls.find(([intent]) => intent.kind === 'key')![0].input
+        .discovery_source_id,
+    ).toBe('41');
+  });
   it('creates a custom service, credential and grant with one main submission', async () => {
     const view = await fillCustom();
     expect(screen.getByLabelText(userEn.user.workflows.serviceName)).toHaveValue('service.example');

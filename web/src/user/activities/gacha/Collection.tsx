@@ -34,6 +34,7 @@ export function Collection({
   const artwork = useArtworkPolicy();
   const progress = collectionProgress(state, artwork.allowed);
   const [view, setView] = useState<'cards' | 'themes' | 'moments'>('cards');
+  const [searchDraft, setSearchDraft] = useState('');
   const [search, setSearch] = useState(''),
     [character, setCharacter] = useState(''),
     [rarity, setRarity] = useState(''),
@@ -91,16 +92,22 @@ export function Collection({
                 {(props) => (
                   <input
                     {...props}
-                    value={search}
+                    value={searchDraft}
                     placeholder={t('搜索主题或角色', 'Search a theme or character')}
-                    onChange={(e) => setSearch(e.target.value)}
+                    onChange={(e) => setSearchDraft(e.target.value)}
                   />
                 )}
               </Field>
             }
-            secondaryLabel={t('筛选', 'Filters')}
             activeCount={[character, rarity, owned].filter(Boolean).length}
-            onSubmit={() => {}}
+            onSubmit={() => setSearch(searchDraft.trim())}
+            onReset={() => {
+              setSearch('');
+              setSearchDraft('');
+              setCharacter('');
+              setRarity('');
+              setOwned('');
+            }}
             secondary={
               <>
                 <Field label={t('角色', 'Character')}>

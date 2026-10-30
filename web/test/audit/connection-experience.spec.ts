@@ -334,6 +334,114 @@ test('connection search exposes entry context and separate System One setup', as
   }
 });
 
+test('new System One key discovers OpenAI models before any extra save', async ({
+  browser,
+}, info) => {
+  const owner = await session(browser, 'owner');
+  const tag = 'System One default ' + randomUUID().slice(0, 8);
+  let group: Identity | undefined;
+  try {
+    group = await connection(owner, tag);
+    await credential(owner, group, tag, 'synthetic-image-credential');
+    const base = await baseURL(owner);
+    const page = await owner.newPage();
+    await page.goto(fixture().user_url + '/endpoints?connection_id=' + group.id);
+    await page.getByRole('button', { name: c.addEntry, exact: true }).click();
+    const form = page.getByRole('region', { name: c.addEntry, exact: true });
+    await form.getByLabel(services.serviceAddress, { exact: true }).fill(base);
+    await form.getByLabel(userEn.user.workflows.serviceName, { exact: true }).fill(tag);
+    await openFold(form, services.advancedSetup);
+    await form
+      .getByRole('combobox', { name: c.protocol, exact: true })
+      .selectOption('typesafe-systemone');
+    await openFold(form, c.discoveryOptional);
+    await expect(
+      form.getByRole('checkbox', { name: userEn.user.workflows.discoverModels, exact: true }),
+    ).toBeChecked();
+    await expect(form.getByRole('combobox', { name: c.listFormat, exact: true })).toHaveValue(
+      'openai',
+    );
+    await form
+      .getByRole('table', { name: c.chooseCredential, exact: true })
+      .getByRole('row')
+      .filter({ hasText: tag })
+      .getByRole('button', { name: c.select, exact: true })
+      .click();
+    const extraSaves: string[] = [];
+    page.on('request', (request) => {
+      const path = new URL(request.url()).pathname;
+      if (request.method() === 'PATCH' && /\/(keys|discovery-sources)\//.test(path))
+        extraSaves.push(path);
+      if (request.method() === 'POST' && path.endsWith('/discovery-sources')) extraSaves.push(path);
+    });
+    await submitService(form);
+    const entries = await userAPI<Numbered<Entry>>(
+      owner,
+      '/api/connections/' + group.id + '/entries?page=1&page_size=20',
+    );
+    const target = entries.data.find((row) => row.note === tag)!;
+    expect(target.native_services).toEqual(['systemone']);
+    const keys = await userAPI<Numbered<Key>>(
+      owner,
+      '/api/endpoints/' + target.id + '/keys?page=1&page_size=20',
+    );
+    expect(keys.data).toHaveLength(1);
+    const key = keys.data[0]!;
+    expect(key.discovery_source_id).not.toBeNull();
+    const sourcePath = '/api/discovery-sources/' + key.discovery_source_id;
+    const source = await userAPI<Source & { list_format: string }>(owner, sourcePath);
+    expect(source.list_format).toBe('openai');
+    const modelsPath = '/api/endpoints/' + target.id + '/keys/' + key.id + '/models';
+    await expect
+      .poll(
+        async () =>
+          (await userAPI<{ evidence: { state: string } }>(owner, modelsPath)).evidence.state,
+      )
+      .toBe('succeeded');
+    const catalog = await userAPI<{ automatic_entries: { upstream_model_id: string }[] }>(
+      owner,
+      modelsPath,
+    );
+    expect(catalog.automatic_entries.length).toBeGreaterThan(0);
+    expect(extraSaves).toEqual([]);
+    await expect(
+      form.getByRole('button', { name: services.fetchModels, exact: true }),
+    ).toBeEnabled();
+    for (const width of [1440, 390])
+      for (const theme of ['light', 'dark'] as const)
+        await screenshot(
+          page,
+          info,
+          'system-one-default-models',
+          width,
+          theme,
+          form.locator('.service-key-models'),
+          {
+            protocol: 'typesafe-systemone',
+            list_format: source.list_format,
+            discovered: catalog.automatic_entries.length,
+            extra_saves: extraSaves.length,
+          },
+        );
+    await noSecrets(page, ['synthetic-image-credential']);
+  } finally {
+    try {
+      if (group) {
+        const current = await userAPI<Identity>(owner, '/api/connections/' + group.id);
+        await userAPI(
+          owner,
+          '/api/connections/' + group.id,
+          'DELETE',
+          { expected_revision: current.revision },
+          204,
+        );
+      }
+    } finally {
+      await owner.close();
+    }
+  }
+});
+
 async function entry(
   context: BrowserContext,
   group: Identity,

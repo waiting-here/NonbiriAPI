@@ -235,7 +235,7 @@ for (const scenario of cases) {
       const from = page.locator('input[type="datetime-local"]').first();
       await from.fill(inputLocal.slice(0, 16));
       const apply = page.getByRole('button', {
-        name: scenario.locale === 'en' ? 'Apply filters' : '筛选',
+        name: scenario.locale === 'en' ? 'Search' : '搜索',
         exact: true,
       });
       await expect(apply).toBeDisabled();

@@ -75,6 +75,22 @@ beforeEach(() => {
 });
 
 describe('site settings discovery and saving', () => {
+  it('applies search only on submission and resets it without discarding setting edits', async () => {
+    const view = await renderWithProviders(<SettingsPage />, { station: 'admin', role: 'admin' });
+    const field = await screen.findByLabelText('Response wait');
+    await view.user.clear(field);
+    await view.user.type(field, '150');
+    const search = screen.getByRole('searchbox');
+    await view.user.type(search, 'no matching setting');
+    expect(screen.getByLabelText('Response wait')).toHaveValue(150);
+    await view.user.keyboard('{Enter}');
+    expect(screen.queryByLabelText('Response wait')).not.toBeInTheDocument();
+    await view.user.click(screen.getByRole('button', { name: 'Reset' }));
+    expect(search).toHaveValue('');
+    expect(screen.getByLabelText('Response wait')).toHaveValue(150);
+    expect(api.patchSiteSettings).not.toHaveBeenCalled();
+  });
+
   it.each(['en', 'zh'] as const)('edits both user concurrency defaults in %s', async (locale) => {
     const heavy = pair('Default heavy concurrency per user', '单用户重型并发默认值');
     const light = pair('Default light concurrency per user', '单用户轻型并发默认值');
@@ -176,6 +192,7 @@ describe('site settings discovery and saving', () => {
     expect(search).toHaveAttribute('autocomplete', 'off');
     expect(search.closest('form')).toBe(screen.getByRole('search'));
     await view.user.type(search, 'unmatched prior search');
+    await view.user.keyboard('{Enter}');
     await view.user.click(screen.getByRole('button', { name: 'Legal text' }));
     expect(search).toHaveValue('');
     expect(screen.getByLabelText('Terms in Chinese')).toHaveValue('Reviewable terms');
@@ -197,11 +214,13 @@ describe('site settings discovery and saving', () => {
       expect(await screen.findByLabelText(label)).toHaveValue(130);
       const search = screen.getByRole('searchbox');
       await view.user.type(search, label);
+      await view.user.keyboard('{Enter}');
       const field = screen.getByLabelText(label);
       expect(field).toHaveValue(130);
       await view.user.clear(field);
       await view.user.type(field, '150');
       await view.user.clear(search);
+      await view.user.keyboard('{Enter}');
       expect(screen.getByLabelText(label)).toHaveValue(150);
       await view.user.click(
         screen.getByRole('button', { name: locale === 'en' ? 'Save all changes' : '保存所有修改' }),
@@ -213,6 +232,7 @@ describe('site settings discovery and saving', () => {
         values: { response_wait_seconds: 150 },
       });
       await view.user.type(search, label);
+      await view.user.keyboard('{Enter}');
       await view.user.clear(screen.getByLabelText(label));
       expect(screen.queryByText(locale === 'en' ? 'Settings saved.' : '设置已保存。')).toBeNull();
       expect(screen.getByRole('alert')).toBeInTheDocument();
@@ -224,6 +244,7 @@ describe('site settings discovery and saving', () => {
     const view = await renderWithProviders(<SettingsPage />, { station: 'admin', role: 'admin' });
     view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture' } });
     await view.user.type(await screen.findByRole('searchbox'), 'Response wait');
+    await view.user.keyboard('{Enter}');
     const field = screen.getByLabelText('Response wait');
     await view.user.clear(field);
     await view.user.type(field, '151');
@@ -249,8 +270,10 @@ describe('site settings discovery and saving', () => {
     await view.user.clear(screen.getByLabelText('Access wait'));
     await view.user.type(screen.getByLabelText('Access wait'), '140');
     await view.user.type(screen.getByRole('searchbox'), 'response_wait');
+    await view.user.keyboard('{Enter}');
     expect(screen.getByLabelText('Response wait')).toHaveValue(150);
     await view.user.clear(screen.getByRole('searchbox'));
+    await view.user.keyboard('{Enter}');
     expect(screen.getByLabelText('Access wait')).toHaveValue(140);
     await view.user.click(screen.getByRole('button', { name: 'Save all changes' }));
     expect(api.patchSiteSettings).not.toHaveBeenCalled();
@@ -282,8 +305,10 @@ describe('site settings discovery and saving', () => {
     expect(screen.getByLabelText('Gateway draft')).not.toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Model capabilities (Gateway)' }));
     await view.user.type(screen.getByRole('searchbox'), 'Response wait');
+    await view.user.keyboard('{Enter}');
     expect(screen.getByLabelText('Gateway draft')).not.toBeVisible();
     await view.user.clear(screen.getByRole('searchbox'));
+    await view.user.keyboard('{Enter}');
     expect(screen.getByRole('textbox', { name: 'Gateway draft' })).toHaveValue('saved locally');
     expect(api.patchSiteSettings).not.toHaveBeenCalled();
   });

@@ -77,6 +77,7 @@ test('administrator saves report timing and approves matching credential deletio
     const page = await context.newPage();
     await page.goto(state.admin_url + '/settings');
     await page.getByRole('searchbox').fill('report_pending_ttl_seconds');
+    await page.getByRole('searchbox').press('Enter');
     const ttl = page.getByLabel('Pending report TTL', { exact: true });
     await ttl.fill('7200');
     const ttlField = page.locator('.nb-setting').filter({ has: ttl });
@@ -92,6 +93,7 @@ test('administrator saves report timing and approves matching credential deletio
       .toBe(7200);
     await page.reload();
     await page.getByRole('searchbox').fill('report_pending_ttl_seconds');
+    await page.getByRole('searchbox').press('Enter');
     await expect(ttl).toHaveValue('7200');
 
     const endpoint = await create(owner, state.user_url, '/api/endpoints', {

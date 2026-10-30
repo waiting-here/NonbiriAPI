@@ -19,6 +19,8 @@ export function FilterBar({
   onReset,
   submitLabel,
   submitDisabled,
+  resetDisabled,
+  role,
 }: {
   search: ReactNode;
   as?: 'form' | 'div';
@@ -40,8 +42,11 @@ export function FilterBar({
   onReset?: () => void;
   /** Label of the built-in Search button. */
   submitLabel?: string;
-  /** Disables the built-in Search and Reset buttons while a request or input check runs. */
+  /** Disables Search while a request or input check runs. */
   submitDisabled?: boolean;
+  /** Disables Reset during an in-flight request, independently of invalid input. */
+  resetDisabled?: boolean;
+  role?: 'search';
 }) {
   const { t } = useTranslation();
   const storageKey = persistKey ? `nb.fold.${persistKey}` : null;
@@ -55,7 +60,7 @@ export function FilterBar({
   return (
     <FilterFieldLayoutContext value>
       <Tag
-        role={Tag === 'div' ? 'search' : undefined}
+        role={role ?? (Tag === 'div' ? 'search' : undefined)}
         onKeyDown={(event) => {
           if (
             Tag === 'div' &&
@@ -89,7 +94,7 @@ export function FilterBar({
                 <Button
                   type="button"
                   variant="secondary"
-                  disabled={submitDisabled}
+                  disabled={resetDisabled}
                   onClick={onReset}
                 >
                   {t('common.resetFilter')}
