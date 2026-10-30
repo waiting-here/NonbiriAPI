@@ -2,16 +2,6 @@
   display: grid;
   gap: var(--nb-space-5);
 }
-.economy-audit .audit-filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 0.8rem;
-}
-.economy-audit .audit-filters label {
-  display: grid;
-  gap: 0.35rem;
-}
 .economy-audit .audit-actions {
   display: flex;
   flex-wrap: wrap;
@@ -92,17 +82,6 @@
   color: var(--nb-color-warning);
   font-weight: 650;
 }
-@media (width <= 40rem) {
-  .economy-audit .audit-filters label {
-    width: 100%;
-  }
-  .economy-audit .audit-filters input,
-  .economy-audit .audit-filters select {
-    min-width: 0;
-    width: 100%;
-  }
-}
-
 .economy-audit .nb-table {
   min-width: 0;
 }

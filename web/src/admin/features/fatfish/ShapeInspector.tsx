@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Field, Fields, Toggle } from '@shared/components/ui';
 import { polygonError } from './polygonEdit';
 import type { Level, Point, Shape, Switch, Gate, Direction } from '@shared/fatfish/engine/types';
 import { toolNames } from '@shared/fatfish/art';
@@ -36,8 +37,7 @@ function PointFields({
   change(value: Point): void;
 }) {
   return (
-    <div className="fatfish-coordinate">
-      <span>{label}</span>
+    <Fields legend={label}>
       <NumberField
         step={1 / 64}
         label="X"
@@ -50,7 +50,7 @@ function PointFields({
         value={px(value.y)}
         onChange={(y) => change({ ...value, y: unit(y) })}
       />
-    </div>
+    </Fields>
   );
 }
 
@@ -193,191 +193,197 @@ export function ShapeInspector({
           </details>
         </div>
       ) : null}
-      {fish ? (
-        <>
-          <PointFields
-            label={text('starting_position')}
-            value={fish}
-            change={(point) =>
-              mutateFish((entry) => {
-                entry.x = point.x;
-                entry.y = point.y;
-              })
-            }
-          />
-          <HeadingInput
-            label={text('heading')}
-            value={fish.heading}
-            onChange={(value) =>
-              mutateFish((entry) => {
-                entry.heading = value;
-              })
-            }
-          />
-        </>
-      ) : null}
-      {item && selected.kind === 'tools' ? (
-        <>
-          <label>
-            {text('tool_type')}
-            <select
-              value={item.resource_key}
-              onChange={(event) =>
-                mutate((shape) => {
-                  shape.resource_key = event.target.value;
-                })
-              }
-            >
-              {Object.keys(toolNames).map((key) => (
-                <option key={key} value={key}>
-                  {text(toolCopy[key])}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={!!item.placed}
-              onChange={(event) =>
-                mutate((shape) => {
-                  shape.placed = event.target.checked;
+      <Fields>
+        {fish ? (
+          <>
+            <PointFields
+              label={text('starting_position')}
+              value={fish}
+              change={(point) =>
+                mutateFish((entry) => {
+                  entry.x = point.x;
+                  entry.y = point.y;
                 })
               }
             />
-            {text('active_at_start_field_or_workbench')}
-          </label>
-          <PointFields
-            label={text('placed_center')}
-            value={{ x: item.x ?? 0, y: item.y ?? 0 }}
-            change={(point) =>
-              mutate((shape) => {
-                shape.x = point.x;
-                shape.y = point.y;
-              })
-            }
-          />
-        </>
-      ) : null}
-      {item && selected.kind === 'bowls' ? (
-        <>
-          <NumberField
-            label={text('required_fish')}
-            value={item.required ?? 0}
-            min={0}
-            max={40}
-            onChange={(value) =>
-              mutate((shape) => {
-                shape.required = value;
-              })
-            }
-          />
-          <NumberField
-            label={text('capacity')}
-            value={item.capacity ?? 1}
-            min={1}
-            max={40}
-            onChange={(value) =>
-              mutate((shape) => {
-                shape.capacity = value;
-              })
-            }
-          />
-        </>
-      ) : null}
-      {item && selected.kind === 'switches' ? (
-        <label>
-          {text('switch_mode')}
-          <select
-            value={item.mode}
-            onChange={(event) =>
-              mutate((shape) => {
-                shape.mode = event.target.value as Switch['mode'];
-              })
-            }
-          >
-            <option value="latch">{text('latch')}</option>
-            <option value="hold">{text('hold')}</option>
-          </select>
-        </label>
-      ) : null}
-      {item && selected.kind === 'gates' ? (
-        <>
-          <label>
-            <input
-              type="checkbox"
-              checked={!!item.initially_open}
-              onChange={(event) =>
-                mutate((shape) => {
-                  shape.initially_open = event.target.checked;
+            <HeadingInput
+              label={text('heading')}
+              value={fish.heading}
+              onChange={(value) =>
+                mutateFish((entry) => {
+                  entry.heading = value;
                 })
               }
             />
-            {text('initially_open')}
-          </label>
-          <label>
-            {text('control_rule')}
-            <select
-              value={item.mode}
-              onChange={(event) =>
-                mutate((shape) => {
-                  shape.mode = event.target.value as Gate['mode'];
-                })
-              }
-            >
-              <option value="any">{text('any_switch')}</option>
-              <option value="all">{text('all_switches')}</option>
-            </select>
-          </label>
-          <fieldset>
-            <legend>{text('linked_switches')}</legend>
-            {level.switches.map((entry) => (
-              <label key={entry.id}>
-                <input
-                  type="checkbox"
-                  checked={item.switch_ids?.includes(entry.id) ?? false}
+          </>
+        ) : null}
+        {item && selected.kind === 'tools' ? (
+          <>
+            <Field label={text('tool_type')}>
+              {(props) => (
+                <select
+                  {...props}
+                  value={item.resource_key}
                   onChange={(event) =>
                     mutate((shape) => {
-                      const ids = shape.switch_ids ?? [];
-                      shape.switch_ids = event.target.checked
-                        ? [...ids, entry.id]
-                        : ids.filter((id) => id !== entry.id);
+                      shape.resource_key = event.target.value;
                     })
                   }
-                />
-                #{entry.id}
-              </label>
-            ))}
-          </fieldset>
-        </>
-      ) : null}
-      {item && selected.kind === 'directions' ? (
-        <>
-          <label>
-            {text('direction_mode')}
-            <select
-              value={item.mode}
-              onChange={(event) =>
+                >
+                  {Object.keys(toolNames).map((key) => (
+                    <option key={key} value={key}>
+                      {text(toolCopy[key])}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+            <Toggle
+              label={text('active_at_start_field_or_workbench')}
+              checked={!!item.placed}
+              onChange={(placed) =>
                 mutate((shape) => {
-                  shape.mode = event.target.value as Direction['mode'];
+                  shape.placed = placed;
                 })
               }
-            >
-              <option value="entry">{text('redirect_on_entry')}</option>
-              <option value="oneway">{text('one_way')}</option>
-            </select>
-          </label>
-          <HeadingInput
-            label={text('heading')}
-            value={item.heading ?? 0}
-            onChange={(value) =>
-              mutate((shape) => {
-                shape.heading = value;
-              })
-            }
-          />
-        </>
-      ) : null}
+            />
+            <PointFields
+              label={text('placed_center')}
+              value={{ x: item.x ?? 0, y: item.y ?? 0 }}
+              change={(point) =>
+                mutate((shape) => {
+                  shape.x = point.x;
+                  shape.y = point.y;
+                })
+              }
+            />
+          </>
+        ) : null}
+        {item && selected.kind === 'bowls' ? (
+          <>
+            <NumberField
+              label={text('required_fish')}
+              value={item.required ?? 0}
+              min={0}
+              max={40}
+              onChange={(value) =>
+                mutate((shape) => {
+                  shape.required = value;
+                })
+              }
+            />
+            <NumberField
+              label={text('capacity')}
+              value={item.capacity ?? 1}
+              min={1}
+              max={40}
+              onChange={(value) =>
+                mutate((shape) => {
+                  shape.capacity = value;
+                })
+              }
+            />
+          </>
+        ) : null}
+        {item && selected.kind === 'switches' ? (
+          <Field size="short" label={text('switch_mode')}>
+            {(props) => (
+              <select
+                {...props}
+                value={item.mode}
+                onChange={(event) =>
+                  mutate((shape) => {
+                    shape.mode = event.target.value as Switch['mode'];
+                  })
+                }
+              >
+                <option value="latch">{text('latch')}</option>
+                <option value="hold">{text('hold')}</option>
+              </select>
+            )}
+          </Field>
+        ) : null}
+        {item && selected.kind === 'gates' ? (
+          <>
+            <Toggle
+              label={text('initially_open')}
+              checked={!!item.initially_open}
+              onChange={(open) =>
+                mutate((shape) => {
+                  shape.initially_open = open;
+                })
+              }
+            />
+            <Field size="short" label={text('control_rule')}>
+              {(props) => (
+                <select
+                  {...props}
+                  value={item.mode}
+                  onChange={(event) =>
+                    mutate((shape) => {
+                      shape.mode = event.target.value as Gate['mode'];
+                    })
+                  }
+                >
+                  <option value="any">{text('any_switch')}</option>
+                  <option value="all">{text('all_switches')}</option>
+                </select>
+              )}
+            </Field>
+            <fieldset>
+              <legend>{text('linked_switches')}</legend>
+              {level.switches.map((entry) => (
+                <Field size="short" key={entry.id} label={`#${entry.id}`}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="checkbox"
+                      checked={item.switch_ids?.includes(entry.id) ?? false}
+                      onChange={(event) =>
+                        mutate((shape) => {
+                          const ids = shape.switch_ids ?? [];
+                          shape.switch_ids = event.target.checked
+                            ? [...ids, entry.id]
+                            : ids.filter((id) => id !== entry.id);
+                        })
+                      }
+                    />
+                  )}
+                </Field>
+              ))}
+            </fieldset>
+          </>
+        ) : null}
+        {item && selected.kind === 'directions' ? (
+          <>
+            <Field size="short" label={text('direction_mode')}>
+              {(props) => (
+                <select
+                  {...props}
+                  value={item.mode}
+                  onChange={(event) =>
+                    mutate((shape) => {
+                      shape.mode = event.target.value as Direction['mode'];
+                    })
+                  }
+                >
+                  <option value="entry">{text('redirect_on_entry')}</option>
+                  <option value="oneway">{text('one_way')}</option>
+                </select>
+              )}
+            </Field>
+            <HeadingInput
+              label={text('heading')}
+              value={item.heading ?? 0}
+              onChange={(value) =>
+                mutate((shape) => {
+                  shape.heading = value;
+                })
+              }
+            />
+          </>
+        ) : null}
+      </Fields>
       {item ? (
         <details>
           <summary>{text('advanced_contours_and_holes')}</summary>

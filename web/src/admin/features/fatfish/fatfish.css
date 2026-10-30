@@ -98,52 +98,22 @@
 }
 .fatfish-admin .fatfish-tabs button[aria-current='page']:not(:disabled),
 .fatfish-admin .fatfish-primary:not(:disabled),
-.fatfish-admin .fatfish-period-editor > .fatfish-actions > button:first-of-type:not(:disabled) {
+.fatfish-admin .nb-btn--primary:not(:disabled) {
   border-color: var(--nb-color-accent);
   background: var(--nb-color-accent);
   color: var(--nb-color-accent-contrast);
 }
 .fatfish-admin .fatfish-tabs button[aria-current='page']:hover:not(:disabled),
 .fatfish-admin .fatfish-primary:hover:not(:disabled),
-.fatfish-admin
-  .fatfish-period-editor
-  > .fatfish-actions
-  > button:first-of-type:hover:not(:disabled) {
+.fatfish-admin .nb-btn--primary:hover:not(:disabled) {
   background: var(--nb-color-accent-hover);
 }
-.fatfish-admin .fatfish-fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
-  gap: 0.75rem;
-  margin: 0.75rem 0;
+.fatfish-admin .nb-fields {
+  margin-block: var(--nb-space-3);
 }
-.fatfish-admin .fatfish-fields label,
-.fatfish-admin .fatfish-inspector label,
-.fatfish-admin .fatfish-version-picker label,
-.fatfish-admin .fatfish-condition label {
-  display: grid;
-  gap: 0.3rem;
+.fatfish-admin .fatfish-condition-children {
+  grid-column: 1 / -1;
   min-width: 0;
-}
-.fatfish-admin .fatfish-fields label:has(> input[type='checkbox']),
-.fatfish-admin .fatfish-actions label:has(> input[type='checkbox']) {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.45rem;
-}
-.fatfish-admin .fatfish-fields input,
-.fatfish-admin .fatfish-fields textarea,
-.fatfish-admin .fatfish-inspector input,
-.fatfish-admin .fatfish-inspector select,
-.fatfish-admin .fatfish-version-picker select,
-.fatfish-admin .fatfish-condition select,
-.fatfish-admin .fatfish-condition input {
-  max-width: 100%;
-  min-width: 0;
-  color: var(--nb-color-text);
-  background: var(--nb-color-surface);
-  border-color: var(--nb-color-border-strong);
 }
 .fatfish-admin :is(input:not([type='checkbox']):not([type='file']), select, textarea) {
   min-height: 2.75rem;
@@ -152,9 +122,6 @@
   min-width: 1.1rem;
   min-height: 1.1rem;
   accent-color: var(--nb-color-accent);
-}
-.fatfish-admin .fatfish-fields textarea {
-  min-height: 5rem;
 }
 .fatfish-admin .fatfish-file {
   display: inline-grid;
@@ -188,20 +155,6 @@
   cursor: pointer;
   color: var(--nb-color-text-muted);
   margin-bottom: 0.45rem;
-}
-.fatfish-admin .fatfish-toolbar > .fatfish-fields {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-}
-.fatfish-admin .fatfish-examples > .fatfish-actions > .fatfish-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
-  margin: 0;
-  min-width: 0;
-  padding: 0.5rem;
-  border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-sm);
-  background: var(--nb-color-surface-alt);
 }
 .fatfish-admin .fatfish-editor-body {
   display: grid;
@@ -268,16 +221,12 @@
   margin: 0.75rem 0;
   border: 1px solid var(--nb-color-border);
 }
-.fatfish-admin .fatfish-coordinate,
 .fatfish-admin .fatfish-vertex {
   display: flex;
   align-items: end;
   flex-wrap: wrap;
   gap: 0.4rem;
   margin: 0.25rem 0;
-}
-.fatfish-admin .fatfish-coordinate input {
-  width: 5rem;
 }
 .fatfish-admin .fatfish-error {
   display: block;
@@ -347,10 +296,6 @@
   .fatfish-admin .fatfish-directory li button {
     width: 100%;
     max-width: none;
-  }
-  .fatfish-admin .fatfish-fields,
-  .fatfish-admin .fatfish-toolbar > .fatfish-fields {
-    grid-template-columns: minmax(0, 1fr);
   }
   .fatfish-admin .fatfish-examples > .fatfish-actions {
     grid-template-columns: minmax(0, 1fr);

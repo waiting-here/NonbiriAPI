@@ -23,6 +23,9 @@ import {
   Affix,
   DataTable,
   Field,
+  Fields,
+  FilterBar,
+  FormActions,
   Note,
   Panel,
   PanelBody,
@@ -85,68 +88,75 @@ function LoanConfiguration({
         }
       />
       <PanelBody>
-        <fieldset className="nb-grid nb-grid--3" disabled={disabled}>
+        <fieldset disabled={disabled}>
           <legend>{text('借款额度', 'Loan amounts')}</legend>
-          {config.loan_tiers.map((value, index) => (
+          <Fields>
+            {config.loan_tiers.map((value, index) => (
+              <Field
+                size="short"
+                key={index}
+                label={t('common.operations.management.loanTier', { tier: index + 1 })}
+              >
+                {(props) => (
+                  <Affix
+                    {...props}
+                    unit={t('admin.activities.units.credits')}
+                    inputMode="numeric"
+                    maxLength={13}
+                    value={value}
+                    onChange={(event) => {
+                      const loan_tiers: [string, string, string] = [...config.loan_tiers];
+                      loan_tiers[index] = event.target.value;
+                      onChange({ ...config, loan_tiers });
+                    }}
+                  />
+                )}
+              </Field>
+            ))}
+          </Fields>
+        </fieldset>
+        <fieldset disabled={disabled}>
+          <legend>{text('到账与还款', 'Disbursement and repayment')}</legend>
+          <Fields>
             <Field
-              key={index}
-              label={t('common.operations.management.loanTier', { tier: index + 1 })}
+              size="short"
+              label={text('到账比例', 'Disbursement ratio')}
+              help={text(
+                '大于 0、小于 1，最多三位小数。',
+                'Between 0 and 1, with up to three decimal places.',
+              )}
             >
               {(props) => (
                 <Affix
                   {...props}
-                  unit={t('admin.activities.units.credits')}
-                  inputMode="numeric"
-                  maxLength={13}
-                  value={value}
-                  onChange={(event) => {
-                    const loan_tiers: [string, string, string] = [...config.loan_tiers];
-                    loan_tiers[index] = event.target.value;
-                    onChange({ ...config, loan_tiers });
-                  }}
+                  unit={text('× 额度', '× amount')}
+                  inputMode="decimal"
+                  maxLength={17}
+                  value={config.loan_a}
+                  onChange={(event) => onChange({ ...config, loan_a: event.target.value })}
                 />
               )}
             </Field>
-          ))}
-        </fieldset>
-        <fieldset className="nb-grid nb-grid--2" disabled={disabled}>
-          <legend>{text('到账与还款', 'Disbursement and repayment')}</legend>
-          <Field
-            label={text('到账比例', 'Disbursement ratio')}
-            help={text(
-              '大于 0、小于 1，最多三位小数。',
-              'Between 0 and 1, with up to three decimal places.',
-            )}
-          >
-            {(props) => (
-              <Affix
-                {...props}
-                unit={text('× 额度', '× amount')}
-                inputMode="decimal"
-                maxLength={17}
-                value={config.loan_a}
-                onChange={(event) => onChange({ ...config, loan_a: event.target.value })}
-              />
-            )}
-          </Field>
-          <Field
-            label={text('还款比例', 'Repayment ratio')}
-            help={text(
-              '大于 1，最多三位小数。',
-              'Greater than 1, with up to three decimal places.',
-            )}
-          >
-            {(props) => (
-              <Affix
-                {...props}
-                unit={text('× 额度', '× amount')}
-                inputMode="decimal"
-                maxLength={17}
-                value={config.loan_b}
-                onChange={(event) => onChange({ ...config, loan_b: event.target.value })}
-              />
-            )}
-          </Field>
+            <Field
+              size="short"
+              label={text('还款比例', 'Repayment ratio')}
+              help={text(
+                '大于 1，最多三位小数。',
+                'Greater than 1, with up to three decimal places.',
+              )}
+            >
+              {(props) => (
+                <Affix
+                  {...props}
+                  unit={text('× 额度', '× amount')}
+                  inputMode="decimal"
+                  maxLength={17}
+                  value={config.loan_b}
+                  onChange={(event) => onChange({ ...config, loan_b: event.target.value })}
+                />
+              )}
+            </Field>
+          </Fields>
         </fieldset>
         {valid ? (
           <Note>
@@ -528,8 +538,9 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
               }
             />
             <PanelBody>
-              <div className="nb-grid nb-grid--2">
+              <Fields>
                 <Field
+                  size="short"
                   label={t('admin.activities.config.welfareThreshold')}
                   help={text(
                     '游戏积分（含进行中对局的预扣）低于这个数才能领。',
@@ -551,7 +562,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                     />
                   )}
                 </Field>
-                <Field label={t('admin.activities.config.welfareCap')}>
+                <Field size="short" label={t('admin.activities.config.welfareCap')}>
                   {(props) => (
                     <Affix
                       {...props}
@@ -567,7 +578,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                     />
                   )}
                 </Field>
-              </div>
+              </Fields>
             </PanelBody>
           </Panel>
           <LoanConfiguration
@@ -683,105 +694,106 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                   {formatBeijingTime(schedule.opens_at)} — {formatBeijingTime(schedule.closes_at)}
                 </span>
               </Note>
-              <fieldset
-                className="nb-grid nb-grid--2"
-                disabled={!periodAuthorityReady || periodLocked || savePeriod.isPending}
-              >
-                <Field label={t('admin.activities.period.entry')}>
-                  {(props) => (
-                    <Affix
-                      {...props}
-                      unit={t('admin.activities.units.credits')}
-                      value={periodDraft.entry}
-                      onChange={(event) => editPeriod({ entry: event.target.value })}
-                    />
-                  )}
-                </Field>
-                <Field label={t('admin.activities.period.perUserLimit')}>
-                  {(props) => (
-                    <Affix
-                      {...props}
-                      unit={text('次', 'times')}
-                      type="number"
-                      min="1"
-                      max="1000"
-                      value={periodDraft.per_user_limit}
-                      onChange={(event) => editPeriod({ per_user_limit: event.target.value })}
-                    />
-                  )}
-                </Field>
-                <Field label={t('admin.activities.period.platformBp')}>
-                  {(props) => (
-                    <Affix
-                      {...props}
-                      unit="%"
-                      type="number"
-                      min="0"
-                      max="99.99"
-                      step="0.01"
-                      value={
-                        Number.isNaN(Number(periodDraft.platform))
-                          ? ''
-                          : Number(periodDraft.platform) / 100
-                      }
-                      onChange={(event) =>
-                        editPeriod({ platform: String(percentBP(event.target.value)) })
-                      }
-                    />
-                  )}
-                </Field>
-                <Field label={t('admin.activities.period.welfareBp')}>
-                  {(props) => (
-                    <Affix
-                      {...props}
-                      unit="%"
-                      type="number"
-                      min="0"
-                      max="99.99"
-                      step="0.01"
-                      value={
-                        Number.isNaN(Number(periodDraft.welfare))
-                          ? ''
-                          : Number(periodDraft.welfare) / 100
-                      }
-                      onChange={(event) =>
-                        editPeriod({ welfare: String(percentBP(event.target.value)) })
-                      }
-                    />
-                  )}
-                </Field>
-                <Field label={t('admin.activities.period.nextPoolBp')}>
-                  {(props) => (
-                    <Affix
-                      {...props}
-                      unit="%"
-                      type="number"
-                      min="0"
-                      max="99.99"
-                      step="0.01"
-                      value={
-                        Number.isNaN(Number(periodDraft.next_pool))
-                          ? ''
-                          : Number(periodDraft.next_pool) / 100
-                      }
-                      onChange={(event) =>
-                        editPeriod({ next_pool: String(percentBP(event.target.value)) })
-                      }
-                    />
-                  )}
-                </Field>
+              <fieldset disabled={!periodAuthorityReady || periodLocked || savePeriod.isPending}>
+                <Fields>
+                  <Field size="short" label={t('admin.activities.period.entry')}>
+                    {(props) => (
+                      <Affix
+                        {...props}
+                        unit={t('admin.activities.units.credits')}
+                        value={periodDraft.entry}
+                        onChange={(event) => editPeriod({ entry: event.target.value })}
+                      />
+                    )}
+                  </Field>
+                  <Field size="short" label={t('admin.activities.period.perUserLimit')}>
+                    {(props) => (
+                      <Affix
+                        {...props}
+                        unit={text('次', 'times')}
+                        type="number"
+                        min="1"
+                        max="1000"
+                        value={periodDraft.per_user_limit}
+                        onChange={(event) => editPeriod({ per_user_limit: event.target.value })}
+                      />
+                    )}
+                  </Field>
+                  <Field size="short" label={t('admin.activities.period.platformBp')}>
+                    {(props) => (
+                      <Affix
+                        {...props}
+                        unit="%"
+                        type="number"
+                        min="0"
+                        max="99.99"
+                        step="0.01"
+                        value={
+                          Number.isNaN(Number(periodDraft.platform))
+                            ? ''
+                            : Number(periodDraft.platform) / 100
+                        }
+                        onChange={(event) =>
+                          editPeriod({ platform: String(percentBP(event.target.value)) })
+                        }
+                      />
+                    )}
+                  </Field>
+                  <Field size="short" label={t('admin.activities.period.welfareBp')}>
+                    {(props) => (
+                      <Affix
+                        {...props}
+                        unit="%"
+                        type="number"
+                        min="0"
+                        max="99.99"
+                        step="0.01"
+                        value={
+                          Number.isNaN(Number(periodDraft.welfare))
+                            ? ''
+                            : Number(periodDraft.welfare) / 100
+                        }
+                        onChange={(event) =>
+                          editPeriod({ welfare: String(percentBP(event.target.value)) })
+                        }
+                      />
+                    )}
+                  </Field>
+                  <Field size="short" label={t('admin.activities.period.nextPoolBp')}>
+                    {(props) => (
+                      <Affix
+                        {...props}
+                        unit="%"
+                        type="number"
+                        min="0"
+                        max="99.99"
+                        step="0.01"
+                        value={
+                          Number.isNaN(Number(periodDraft.next_pool))
+                            ? ''
+                            : Number(periodDraft.next_pool) / 100
+                        }
+                        onChange={(event) =>
+                          editPeriod({ next_pool: String(percentBP(event.target.value)) })
+                        }
+                      />
+                    )}
+                  </Field>
+                </Fields>
               </fieldset>
               <p className="muted">{t('common.operations.management.feeHelp')}</p>
-              <label className="ops-form-field">
-                <span>{t('admin.activities.period.literature')}</span>
-                <textarea
-                  disabled={!periodAuthorityReady || periodLocked || savePeriod.isPending}
-                  aria-invalid={Boolean(literatureError)}
-                  aria-describedby={literatureError ? 'thursday-literature-error' : undefined}
-                  value={periodDraft.literature}
-                  onChange={(event) => editPeriod({ literature: event.target.value })}
-                />
-              </label>
+              <Field size="long" label={t('admin.activities.period.literature')}>
+                {(props) => (
+                  <textarea
+                    {...props}
+                    disabled={!periodAuthorityReady || periodLocked || savePeriod.isPending}
+                    aria-invalid={Boolean(literatureError)}
+                    aria-describedby={literatureError ? 'thursday-literature-error' : undefined}
+                    value={periodDraft.literature}
+                    onChange={(event) => editPeriod({ literature: event.target.value })}
+                  />
+                )}
+              </Field>
               {literatureError ? (
                 <p id="thursday-literature-error" role="alert" className="inline-notice">
                   {literatureError}
@@ -796,34 +808,36 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                   )}
                 </p>
               )}
-              <button
-                className="nb-btn nb-btn--primary"
-                type="button"
-                disabled={
-                  !scopeReady ||
-                  !periodAuthorityReady ||
-                  periodLocked ||
-                  savePeriod.isPending ||
-                  Boolean(literatureError) ||
-                  !validPositiveAmount(periodDraft.entry)
-                }
-                aria-describedby={
-                  !validPositiveAmount(periodDraft.entry) ? 'period-entry-hint' : undefined
-                }
-                onClick={submitPeriod}
-              >
-                {text('保存并排期', 'Save and schedule')}
-              </button>
-              {periodOverride ? (
+              <FormActions>
                 <button
+                  className="nb-btn nb-btn--primary"
                   type="button"
-                  className="nb-btn nb-btn--secondary"
-                  disabled={!scopeReady || savePeriod.isPending}
-                  onClick={() => setPeriodOverride(null)}
+                  disabled={
+                    !scopeReady ||
+                    !periodAuthorityReady ||
+                    periodLocked ||
+                    savePeriod.isPending ||
+                    Boolean(literatureError) ||
+                    !validPositiveAmount(periodDraft.entry)
+                  }
+                  aria-describedby={
+                    !validPositiveAmount(periodDraft.entry) ? 'period-entry-hint' : undefined
+                  }
+                  onClick={submitPeriod}
                 >
-                  {t('common.cancel')}
+                  {text('保存并排期', 'Save and schedule')}
                 </button>
-              ) : null}
+                {periodOverride ? (
+                  <button
+                    type="button"
+                    className="nb-btn nb-btn--secondary"
+                    disabled={!scopeReady || savePeriod.isPending}
+                    onClick={() => setPeriodOverride(null)}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                ) : null}
+              </FormActions>
             </>
           )}
         </PanelBody>
@@ -848,36 +862,46 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
       <Panel>
         <PanelHead title={t('admin.activities.pools.title')} />
         <PanelBody>
-          <div className="ops-toolbar">
-            <label>
-              <span>{t('admin.activities.pools.filterType')}</span>
-              <select
-                value={poolType}
-                disabled={!scopeReady}
-                onChange={(event) =>
-                  commitPoolFilters(event.target.value as '' | Pool['pool_type'], poolState)
-                }
-              >
-                <option value="">{t('admin.activities.pools.allTypes')}</option>
-                <option value="welfare">{poolTypeLabels.welfare}</option>
-                <option value="thursday">{poolTypeLabels.thursday}</option>
-              </select>
-            </label>
-            <label>
-              <span>{t('admin.activities.pools.filterState')}</span>
-              <select
-                value={poolState}
-                disabled={!scopeReady}
-                onChange={(event) =>
-                  commitPoolFilters(poolType, event.target.value as '' | Pool['state'])
-                }
-              >
-                <option value="">{t('admin.activities.pools.allStates')}</option>
-                <option value="open">{poolStateLabels.open}</option>
-                <option value="closed">{poolStateLabels.closed}</option>
-              </select>
-            </label>
-          </div>
+          <FilterBar
+            activeCount={Number(Boolean(poolType)) + Number(Boolean(poolState))}
+            onSubmit={() => {}}
+            search={
+              <>
+                <Field size="short" label={t('admin.activities.pools.filterType')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={poolType}
+                      disabled={!scopeReady}
+                      onChange={(event) =>
+                        commitPoolFilters(event.target.value as '' | Pool['pool_type'], poolState)
+                      }
+                    >
+                      <option value="">{t('admin.activities.pools.allTypes')}</option>
+                      <option value="welfare">{poolTypeLabels.welfare}</option>
+                      <option value="thursday">{poolTypeLabels.thursday}</option>
+                    </select>
+                  )}
+                </Field>
+                <Field size="short" label={t('admin.activities.pools.filterState')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={poolState}
+                      disabled={!scopeReady}
+                      onChange={(event) =>
+                        commitPoolFilters(poolType, event.target.value as '' | Pool['state'])
+                      }
+                    >
+                      <option value="">{t('admin.activities.pools.allStates')}</option>
+                      <option value="open">{poolStateLabels.open}</option>
+                      <option value="closed">{poolStateLabels.closed}</option>
+                    </select>
+                  )}
+                </Field>
+              </>
+            }
+          />
           {sessionError ? (
             <ErrorState error={sessionError} />
           ) : pools.isPending ? (
@@ -998,50 +1022,56 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
               {t('admin.activities.adjustment.decreaseBlocked')}
             </p>
           ) : null}
-          <div className="nb-grid nb-grid--2">
-            <label>
-              <span>{t('admin.activities.adjustment.direction')}</span>
-              <select
-                value={adjustment.direction}
-                disabled={adjust.isPending}
-                onChange={(event) =>
-                  editAdjustment({
-                    direction: event.target.value as typeof adjustment.direction,
-                  })
-                }
-              >
-                <option value="increase">{t('admin.activities.adjustment.increase')}</option>
-                <option
-                  value="decrease"
-                  disabled={
-                    period?.current_pool_id === adjustment.poolId &&
-                    (period.state === 'open' || period.state === 'settling')
+          <Fields>
+            <Field size="short" label={t('admin.activities.adjustment.direction')}>
+              {(props) => (
+                <select
+                  {...props}
+                  value={adjustment.direction}
+                  disabled={adjust.isPending}
+                  onChange={(event) =>
+                    editAdjustment({
+                      direction: event.target.value as typeof adjustment.direction,
+                    })
                   }
                 >
-                  {t('admin.activities.adjustment.decrease')}
-                </option>
-              </select>
-            </label>
-            <label>
-              <span>{t('admin.activities.adjustment.amount')}</span>
-              <input
-                value={adjustment.amount}
-                disabled={adjust.isPending}
-                onChange={(event) => editAdjustment({ amount: event.target.value })}
-              />
-            </label>
-            <label>
-              <span>{t('admin.activities.adjustment.reason')}</span>
-              <input
-                value={adjustment.reason}
-                maxLength={1024}
-                disabled={adjust.isPending}
-                onChange={(event) => editAdjustment({ reason: event.target.value })}
-              />
-            </label>
-          </div>
+                  <option value="increase">{t('admin.activities.adjustment.increase')}</option>
+                  <option
+                    value="decrease"
+                    disabled={
+                      period?.current_pool_id === adjustment.poolId &&
+                      (period.state === 'open' || period.state === 'settling')
+                    }
+                  >
+                    {t('admin.activities.adjustment.decrease')}
+                  </option>
+                </select>
+              )}
+            </Field>
+            <Field size="short" label={t('admin.activities.adjustment.amount')}>
+              {(props) => (
+                <input
+                  {...props}
+                  value={adjustment.amount}
+                  disabled={adjust.isPending}
+                  onChange={(event) => editAdjustment({ amount: event.target.value })}
+                />
+              )}
+            </Field>
+            <Field size="long" label={t('admin.activities.adjustment.reason')}>
+              {(props) => (
+                <input
+                  {...props}
+                  value={adjustment.reason}
+                  maxLength={1024}
+                  disabled={adjust.isPending}
+                  onChange={(event) => editAdjustment({ reason: event.target.value })}
+                />
+              )}
+            </Field>
+          </Fields>
           {adjust.error ? <ErrorState error={adjust.error} /> : null}
-          <div className="ops-actions">
+          <FormActions>
             <button
               className={
                 adjustment.direction === 'decrease'
@@ -1074,7 +1104,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
             >
               {t('admin.activities.adjustment.cancel')}
             </button>
-          </div>
+          </FormActions>
         </Card>
       ) : null}
       {confirmAdjustment ? (

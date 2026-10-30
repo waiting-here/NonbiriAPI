@@ -11,7 +11,7 @@ import {
   StationSessionChangedError,
   stationSessionMatches,
 } from '@shared/charityManagement';
-import { DataTable, Field, Toggle } from '@shared/components/ui';
+import { DataTable, Field, Fields, FilterBar, FormActions, Toggle } from '@shared/components/ui';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import './mainstream-channels.css';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -192,17 +192,19 @@ function ChannelForm({
         if (valid) onSubmit(draft);
       }}
     >
-      <div className="ops-field-grid">
-        <label>
-          <span>{t('admin.mainstreamChannels.form.name')}</span>
-          <input
-            value={draft.name}
-            maxLength={128}
-            autoComplete="off"
-            disabled={!canEdit || busy}
-            onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-          />
-        </label>
+      <Fields>
+        <Field label={t('admin.mainstreamChannels.form.name')}>
+          {(props) => (
+            <input
+              {...props}
+              value={draft.name}
+              maxLength={128}
+              autoComplete="off"
+              disabled={!canEdit || busy}
+              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+            />
+          )}
+        </Field>
         <Field label={t('admin.mainstreamChannels.form.category')}>
           {(field) => (
             <select
@@ -221,7 +223,7 @@ function ChannelForm({
             </select>
           )}
         </Field>
-      </div>
+      </Fields>
       {nativeOptions.error ? (
         <ErrorState error={nativeOptions.error} onRetry={() => void nativeOptions.refetch()} />
       ) : null}
@@ -258,7 +260,7 @@ function ChannelForm({
         <p className="inline-notice">{t('admin.mainstreamChannels.validation.invalid')}</p>
       ) : null}
       {error ? <ErrorState error={error} /> : null}
-      <div className="ops-actions">
+      <FormActions>
         <button className="nb-btn nb-btn--primary" type="submit" disabled={!canEdit || busy}>
           {busy
             ? t('common.working')
@@ -278,7 +280,7 @@ function ChannelForm({
             {t('common.cancel')}
           </button>
         ) : null}
-      </div>
+      </FormActions>
     </form>
   );
 }
@@ -575,33 +577,41 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
         />
       ) : null}
       <Card>
-        <div className="ops-toolbar">
-          <label>
-            <span>{t('admin.mainstreamChannels.filters.state')}</span>
-            <select
-              value={state}
-              onChange={(event) => {
-                const nextState = event.target.value as MainstreamChannelListState;
-                if (nextState !== 'active' && nextState !== 'retired' && nextState !== 'all')
-                  return;
-                setSearchParams((previous) => {
-                  const next = new URLSearchParams(previous);
-                  next.set(CHANNEL_STATE_PARAM, nextState);
-                  next.delete('page');
-                  next.set('page', '1');
-                  next.delete('page_size');
-                  next.set('page_size', String(pager.pageSize));
-                  return next;
-                });
-              }}
-            >
-              <option value="active">{t(STATE_LABEL_KEYS.active)}</option>
-              <option value="retired">{t(STATE_LABEL_KEYS.retired)}</option>
-              <option value="all">{t('admin.mainstreamChannels.state.all')}</option>
-            </select>
-          </label>
-          {!showHeader ? newChannelAction : null}
-        </div>
+        <FilterBar
+          activeCount={Number(state !== 'active')}
+          onSubmit={() => {}}
+          search={
+            <>
+              <Field size="short" label={t('admin.mainstreamChannels.filters.state')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={state}
+                    onChange={(event) => {
+                      const nextState = event.target.value as MainstreamChannelListState;
+                      if (nextState !== 'active' && nextState !== 'retired' && nextState !== 'all')
+                        return;
+                      setSearchParams((previous) => {
+                        const next = new URLSearchParams(previous);
+                        next.set(CHANNEL_STATE_PARAM, nextState);
+                        next.delete('page');
+                        next.set('page', '1');
+                        next.delete('page_size');
+                        next.set('page_size', String(pager.pageSize));
+                        return next;
+                      });
+                    }}
+                  >
+                    <option value="active">{t(STATE_LABEL_KEYS.active)}</option>
+                    <option value="retired">{t(STATE_LABEL_KEYS.retired)}</option>
+                    <option value="all">{t('admin.mainstreamChannels.state.all')}</option>
+                  </select>
+                )}
+              </Field>
+              {!showHeader ? newChannelAction : null}
+            </>
+          }
+        />
         {session.error || authorityLoss ? (
           <ErrorState
             error={session.error ?? authorityLoss}

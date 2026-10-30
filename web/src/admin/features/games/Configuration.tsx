@@ -1,4 +1,4 @@
-import { Affix, Field, Note, Toggle } from '@shared/components/ui';
+import { Affix, Field, Fields, Note, Toggle } from '@shared/components/ui';
 import { modeLabel, modesFor, useGameAdminText, type GameID } from './copy';
 import { percentBP, type DuelGameConfig } from './config';
 
@@ -35,7 +35,7 @@ export function DuelConfiguration({
               disabled={disabled}
               onChange={(enabled) => update({ enabled })}
             />
-            <Field label={text('每人票价', 'Entry per player')}>
+            <Field size="short" label={text('每人票价', 'Entry per player')}>
               {(props) => (
                 <Affix
                   {...props}
@@ -53,9 +53,10 @@ export function DuelConfiguration({
               <p className="nb-fieldset__hint">
                 {text('三项合计须小于 100%。', 'The total must be below 100%.')}
               </p>
-              <div className="nb-grid nb-grid--3">
+              <Fields>
                 {(['platform', 'welfare', 'thursday'] as const).map((field) => (
                   <Field
+                    size="short"
                     key={field}
                     label={
                       {
@@ -85,7 +86,7 @@ export function DuelConfiguration({
                     )}
                   </Field>
                 ))}
-              </div>
+              </Fields>
             </fieldset>
           </fieldset>
         );

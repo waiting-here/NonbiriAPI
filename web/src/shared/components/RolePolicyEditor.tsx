@@ -1,4 +1,5 @@
 import { Button } from '@shared/components/ui/Button';
+import { Field, Fields, FormActions } from '@shared/components/ui';
 import { useEffect, useId, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import '@shared/operations/operations.css';
@@ -73,68 +74,78 @@ export function RolePolicyEditor({ value, onChange, disabled, idPrefix }: RolePo
       >
         <legend>{t('common.rolePolicy.title')}</legend>
         <p id={`${id}-help`}>{t('common.rolePolicy.help')}</p>
-        <label>
-          <span>{t('common.rolePolicy.defaultAction')}</span>
-          <select
-            value={value.defaultAction}
-            onChange={(event) =>
-              onChange({ ...value, defaultAction: event.target.value as RoleAction })
-            }
-          >
-            {roleActions.map((action) => (
-              <option key={action} value={action}>
-                {t(actionKeys[action])}
-              </option>
-            ))}
-          </select>
-        </label>
-        <small>{t('common.rolePolicy.nativeHelp')}</small>
+        <Field
+          label={t('common.rolePolicy.defaultAction')}
+          help={t('common.rolePolicy.nativeHelp')}
+        >
+          {(props) => (
+            <select
+              {...props}
+              value={value.defaultAction}
+              onChange={(event) =>
+                onChange({ ...value, defaultAction: event.target.value as RoleAction })
+              }
+            >
+              {roleActions.map((action) => (
+                <option key={action} value={action}>
+                  {t(actionKeys[action])}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
         <div className="ops-stack">
           {value.rules.map((row, index) => (
             <div className="ops-subcard" key={index}>
-              <div className="ops-field-grid">
-                <label>
-                  <span>{t('common.rolePolicy.roleName')}</span>
-                  <input
-                    ref={(element) => {
-                      inputRefs.current[index] = element;
-                    }}
-                    value={row.role}
-                    placeholder="developer"
-                    aria-describedby={`${id}-name-help`}
-                    aria-invalid={error?.row === index}
-                    onChange={(event) => updateRow(index, { role: event.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>{t('common.rolePolicy.roleAction')}</span>
-                  <select
-                    value={row.action}
-                    onChange={(event) =>
-                      updateRow(index, { action: event.target.value as RoleAction })
-                    }
-                  >
-                    {roleActions.map((action) => (
-                      <option key={action} value={action}>
-                        {t(actionKeys[action])}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  pendingFocus.current = Math.min(index, value.rules.length - 2);
-                  onChange({
-                    ...value,
-                    rules: value.rules.filter((_, current) => current !== index),
-                  });
-                }}
-              >
-                {t('common.rolePolicy.removeRule', { number: index + 1 })}
-              </Button>
+              <Fields>
+                <Field label={t('common.rolePolicy.roleName')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      ref={(element) => {
+                        inputRefs.current[index] = element;
+                      }}
+                      value={row.role}
+                      placeholder="developer"
+                      aria-describedby={`${id}-name-help`}
+                      aria-invalid={error?.row === index}
+                      onChange={(event) => updateRow(index, { role: event.target.value })}
+                    />
+                  )}
+                </Field>
+                <Field label={t('common.rolePolicy.roleAction')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={row.action}
+                      onChange={(event) =>
+                        updateRow(index, { action: event.target.value as RoleAction })
+                      }
+                    >
+                      {roleActions.map((action) => (
+                        <option key={action} value={action}>
+                          {t(actionKeys[action])}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+              </Fields>
+              <FormActions>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    pendingFocus.current = Math.min(index, value.rules.length - 2);
+                    onChange({
+                      ...value,
+                      rules: value.rules.filter((_, current) => current !== index),
+                    });
+                  }}
+                >
+                  {t('common.rolePolicy.removeRule', { number: index + 1 })}
+                </Button>
+              </FormActions>
               {error?.row === index ? (
                 <p className="field-error" role="alert">
                   {t(errorKeys[error.kind])}
@@ -146,18 +157,20 @@ export function RolePolicyEditor({ value, onChange, disabled, idPrefix }: RolePo
         <p id={`${id}-name-help`} className="muted">
           {t('common.rolePolicy.nameHelp')}
         </p>
-        <Button
-          ref={addButton}
-          type="button"
+        <FormActions>
+          <Button
+            ref={addButton}
+            type="button"
 
-          disabled={value.rules.length >= 32}
-          onClick={() => {
-            pendingFocus.current = value.rules.length;
-            onChange({ ...value, rules: [...value.rules, { role: '', action: 'native' }] });
-          }}
-        >
-          {t('common.rolePolicy.addRule')}
-        </Button>
+            disabled={value.rules.length >= 32}
+            onClick={() => {
+              pendingFocus.current = value.rules.length;
+              onChange({ ...value, rules: [...value.rules, { role: '', action: 'native' }] });
+            }}
+          >
+            {t('common.rolePolicy.addRule')}
+          </Button>
+        </FormActions>
         {error?.kind === 'count' ? (
           <p className="field-error" role="alert">
             {t(errorKeys.count)}

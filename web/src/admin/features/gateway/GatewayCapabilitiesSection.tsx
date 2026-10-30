@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { OperationFeedback } from '@shared/components/OperationFeedback';
+import { Field, Fields, FormActions } from '@shared/components/ui';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { GatewayCapabilitySummary } from '@shared/gateway/GatewayCapabilitySummary';
@@ -178,175 +179,198 @@ export default function GatewayCapabilitiesSection() {
           }}
         >
           <h3>{t(editor ? 'gatewayCapabilities.edit' : 'gatewayCapabilities.add')}</h3>
-          <fieldset className="ops-field-grid" disabled={operation.isPending}>
-            <legend>{t('gatewayCapabilities.target')}</legend>
-            <label>
-              <span>{t('gatewayCapabilities.baseUrl')}</span>
-              <input
-                required
-                type="url"
-                value={draft.base_url}
-                maxLength={8192}
-                aria-describedby={`${prefix}-target-hint`}
-                onChange={(event) => change({ base_url: event.target.value })}
-              />
-            </label>
-            <label>
-              <span>{t('gatewayCapabilities.model')}</span>
-              <input
-                required
-                value={draft.model}
-                maxLength={512}
-                aria-describedby={`${prefix}-target-hint`}
-                onChange={(event) => change({ model: event.target.value })}
-              />
-            </label>
-          </fieldset>
-          <p className="muted" id={`${prefix}-target-hint`}>
-            {t('gatewayCapabilities.targetHint')}
-          </p>
-          <label className="ops-form-field">
-            <span>{t('gatewayCapabilities.adapter')}</span>
-            <select
-              value={draft.adapter}
-              aria-label={t('gatewayCapabilities.adapter')}
-              disabled={operation.isPending}
-              aria-describedby={`${prefix}-adapter-hint`}
-              onChange={(event) => {
-                const adapter = event.target.value as GatewayAdapter;
-                const efforts = draft.efforts.filter((value) =>
-                  gatewayAdapterEfforts(adapter).includes(value),
-                );
-                change({
-                  adapter,
-                  efforts,
-                  storage:
-                    adapter.startsWith('anthropic_') && draft.storage === 'openai'
-                      ? 'reject'
-                      : draft.storage,
-                  cache: adapter.startsWith('openai_') ? 'reject' : draft.cache,
-                });
-              }}
+          <Fields>
+            <fieldset disabled={operation.isPending}>
+              <legend>{t('gatewayCapabilities.target')}</legend>
+              <Fields>
+                <Field size="long" label={t('gatewayCapabilities.baseUrl')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      required
+                      type="url"
+                      value={draft.base_url}
+                      maxLength={8192}
+                      aria-describedby={`${prefix}-target-hint`}
+                      onChange={(event) => change({ base_url: event.target.value })}
+                    />
+                  )}
+                </Field>
+                <Field label={t('gatewayCapabilities.model')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      required
+                      value={draft.model}
+                      maxLength={512}
+                      aria-describedby={`${prefix}-target-hint`}
+                      onChange={(event) => change({ model: event.target.value })}
+                    />
+                  )}
+                </Field>
+              </Fields>
+            </fieldset>
+            <p className="muted" id={`${prefix}-target-hint`}>
+              {t('gatewayCapabilities.targetHint')}
+            </p>
+            <Field
+              label={t('gatewayCapabilities.adapter')}
+              help={t('gatewayCapabilities.adapterHint')}
             >
-              {GATEWAY_ADAPTERS.map((adapter) => (
-                <option key={adapter} value={adapter}>
-                  {t(gatewayAdapterLabels[adapter])}
-                </option>
-              ))}
-            </select>
-            <small className="muted" id={`${prefix}-adapter-hint`}>
-              {t('gatewayCapabilities.adapterHint')}
-            </small>
-          </label>
-          <fieldset
-            className="ops-field-grid"
-            disabled={operation.isPending}
-            aria-describedby={`${prefix}-effort-hint`}
-          >
-            <legend>{t('gatewayCapabilities.efforts')}</legend>
-            {gatewayAdapterEfforts(draft.adapter).map((effort) => (
-              <label className="checkbox-label" key={effort}>
-                <input
-                  type="checkbox"
-                  checked={draft.efforts.includes(effort)}
-                  onChange={(event) =>
+              {(props) => (
+                <select
+                  {...props}
+                  value={draft.adapter}
+                  aria-label={t('gatewayCapabilities.adapter')}
+                  disabled={operation.isPending}
+                  onChange={(event) => {
+                    const adapter = event.target.value as GatewayAdapter;
+                    const efforts = draft.efforts.filter((value) =>
+                      gatewayAdapterEfforts(adapter).includes(value),
+                    );
                     change({
-                      efforts: event.target.checked
-                        ? [...draft.efforts, effort]
-                        : draft.efforts.filter((value) => value !== effort),
-                    })
-                  }
-                />
-                <span>{t(gatewayEffortLabels[effort])}</span>
-              </label>
-            ))}
-          </fieldset>
-          <p className="muted" id={`${prefix}-effort-hint`}>
-            {t('gatewayCapabilities.effortsHint')}
-          </p>
-          <label className="ops-form-field">
-            <span>{t('gatewayCapabilities.output')}</span>
-            <input
-              required
-              type="number"
-              min={anthropic ? 1 : 0}
-              max={2147483647}
-              step={1}
-              value={outputText}
-              aria-label={t('gatewayCapabilities.output')}
-              disabled={operation.isPending}
-              aria-describedby={`${prefix}-output-hint`}
-              onChange={(event) => {
-                operation.reset();
-                setOutputText(event.target.value);
-              }}
-            />
-            <small className="muted" id={`${prefix}-output-hint`}>
-              {t(
+                      adapter,
+                      efforts,
+                      storage:
+                        adapter.startsWith('anthropic_') && draft.storage === 'openai'
+                          ? 'reject'
+                          : draft.storage,
+                      cache: adapter.startsWith('openai_') ? 'reject' : draft.cache,
+                    });
+                  }}
+                >
+                  {GATEWAY_ADAPTERS.map((adapter) => (
+                    <option key={adapter} value={adapter}>
+                      {t(gatewayAdapterLabels[adapter])}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+            <fieldset disabled={operation.isPending} aria-describedby={`${prefix}-effort-hint`}>
+              <legend>{t('gatewayCapabilities.efforts')}</legend>
+              <Fields>
+                {gatewayAdapterEfforts(draft.adapter).map((effort) => (
+                  <Field size="short" label={t(gatewayEffortLabels[effort])} key={effort}>
+                    {(props) => (
+                      <input
+                        {...props}
+                        type="checkbox"
+                        checked={draft.efforts.includes(effort)}
+                        onChange={(event) =>
+                          change({
+                            efforts: event.target.checked
+                              ? [...draft.efforts, effort]
+                              : draft.efforts.filter((value) => value !== effort),
+                          })
+                        }
+                      />
+                    )}
+                  </Field>
+                ))}
+              </Fields>
+            </fieldset>
+            <p className="muted" id={`${prefix}-effort-hint`}>
+              {t('gatewayCapabilities.effortsHint')}
+            </p>
+            <Field
+              size="short"
+              label={t('gatewayCapabilities.output')}
+              help={t(
                 anthropic
                   ? 'gatewayCapabilities.outputAnthropicHint'
                   : 'gatewayCapabilities.outputHint',
               )}
-            </small>
-          </label>
-          <details className="ops-advanced" ref={advanced}>
-            <summary>{t('gatewayCapabilities.advanced')}</summary>
-            <fieldset className="ops-field-grid" disabled={operation.isPending}>
-              <label>
-                <span>{t('gatewayCapabilities.storage')}</span>
-                <select
-                  value={draft.storage}
-                  aria-label={t('gatewayCapabilities.storage')}
-                  aria-describedby={`${prefix}-storage-hint`}
-                  onChange={(event) =>
-                    change({ storage: event.target.value as GatewayCapabilityEntry['storage'] })
-                  }
-                >
-                  <option value="reject">{t('gatewayCapabilities.storageOptions.reject')}</option>
-                  {!anthropic ? (
-                    <option value="openai">{t('gatewayCapabilities.storageOptions.openai')}</option>
+            >
+              {(props) => (
+                <input
+                  {...props}
+                  required
+                  type="number"
+                  min={anthropic ? 1 : 0}
+                  max={2147483647}
+                  step={1}
+                  value={outputText}
+                  aria-label={t('gatewayCapabilities.output')}
+                  disabled={operation.isPending}
+                  onChange={(event) => {
+                    operation.reset();
+                    setOutputText(event.target.value);
+                  }}
+                />
+              )}
+            </Field>
+            <details className="ops-advanced" ref={advanced}>
+              <summary>{t('gatewayCapabilities.advanced')}</summary>
+              <fieldset disabled={operation.isPending}>
+                <Fields>
+                  <Field
+                    label={t('gatewayCapabilities.storage')}
+                    help={t('gatewayCapabilities.storageHint')}
+                  >
+                    {(props) => (
+                      <select
+                        {...props}
+                        value={draft.storage}
+                        aria-label={t('gatewayCapabilities.storage')}
+                        onChange={(event) =>
+                          change({
+                            storage: event.target.value as GatewayCapabilityEntry['storage'],
+                          })
+                        }
+                      >
+                        <option value="reject">
+                          {t('gatewayCapabilities.storageOptions.reject')}
+                        </option>
+                        {!anthropic ? (
+                          <option value="openai">
+                            {t('gatewayCapabilities.storageOptions.openai')}
+                          </option>
+                        ) : null}
+                        <option value="omit_false">
+                          {t('gatewayCapabilities.storageOptions.omit_false')}
+                        </option>
+                      </select>
+                    )}
+                  </Field>
+                  {draft.storage === 'omit_false' ? (
+                    <p className="inline-notice">{t('gatewayCapabilities.omitWarning')}</p>
                   ) : null}
-                  <option value="omit_false">
-                    {t('gatewayCapabilities.storageOptions.omit_false')}
-                  </option>
-                </select>
-                <small className="muted" id={`${prefix}-storage-hint`}>
-                  {t('gatewayCapabilities.storageHint')}
-                </small>
-                {draft.storage === 'omit_false' ? (
-                  <p className="inline-notice">{t('gatewayCapabilities.omitWarning')}</p>
-                ) : null}
-              </label>
-              <label>
-                <span>{t('gatewayCapabilities.cache')}</span>
-                <select
-                  value={draft.cache}
-                  aria-label={t('gatewayCapabilities.cache')}
-                  aria-describedby={`${prefix}-cache-hint`}
-                  onChange={(event) =>
-                    change({ cache: event.target.value as GatewayCapabilityEntry['cache'] })
-                  }
-                >
-                  <option value="reject">{t('gatewayCapabilities.cacheOptions.reject')}</option>
-                  {anthropic ? (
-                    <>
-                      <option value="anthropic">
-                        {t('gatewayCapabilities.cacheOptions.anthropic')}
-                      </option>
-                      <option value="anthropic_explicit">
-                        {t('gatewayCapabilities.cacheOptions.anthropic_explicit')}
-                      </option>
-                    </>
-                  ) : null}
-                </select>
-                <small className="muted" id={`${prefix}-cache-hint`}>
-                  {t('gatewayCapabilities.cacheHint')}
-                </small>
-              </label>
-            </fieldset>
-          </details>
+                  <Field
+                    label={t('gatewayCapabilities.cache')}
+                    help={t('gatewayCapabilities.cacheHint')}
+                  >
+                    {(props) => (
+                      <select
+                        {...props}
+                        value={draft.cache}
+                        aria-label={t('gatewayCapabilities.cache')}
+                        onChange={(event) =>
+                          change({ cache: event.target.value as GatewayCapabilityEntry['cache'] })
+                        }
+                      >
+                        <option value="reject">
+                          {t('gatewayCapabilities.cacheOptions.reject')}
+                        </option>
+                        {anthropic ? (
+                          <>
+                            <option value="anthropic">
+                              {t('gatewayCapabilities.cacheOptions.anthropic')}
+                            </option>
+                            <option value="anthropic_explicit">
+                              {t('gatewayCapabilities.cacheOptions.anthropic_explicit')}
+                            </option>
+                          </>
+                        ) : null}
+                      </select>
+                    )}
+                  </Field>
+                </Fields>
+              </fieldset>
+            </details>
+          </Fields>
           {!deleteTarget ? feedback : null}
-          <div className="ops-actions">
+          <FormActions>
             <button className="nb-btn nb-btn--primary" type="submit" disabled={operation.isPending}>
               {t(operation.isPending ? 'common.working' : 'common.save')}
             </button>
@@ -361,7 +385,7 @@ export default function GatewayCapabilitiesSection() {
             >
               {t('common.cancel')}
             </button>
-          </div>
+          </FormActions>
         </form>
       ) : !deleteTarget ? (
         feedback

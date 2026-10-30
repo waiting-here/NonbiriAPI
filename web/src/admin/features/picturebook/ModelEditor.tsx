@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Card, ErrorState } from '@shared/components/States';
 import { Fold } from '@shared/components/ui/Fold';
+import { Fields, FormActions, Toggle } from '@shared/components/ui';
 import { usePictureBookText } from '@shared/picturebook/copy';
 import {
   initialValues,
@@ -140,22 +141,18 @@ export const ModelEditor = forwardRef<
         </div>
       ) : null}
       <form
-        className="picturebook-form"
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
         }}
       >
         <fieldset disabled={save.locked || saved || disabled}>
-          <label className="picturebook-checkbox">
-            <input
-              type="checkbox"
-              checked={enabled}
-              disabled={!available && !enabled}
-              onChange={(event) => setEnabled(event.target.checked)}
-            />
-            {t('向用户开放此模型', 'Make this model available')}
-          </label>
+          <Toggle
+            label={t('向用户开放此模型', 'Make this model available')}
+            checked={enabled}
+            disabled={!available && !enabled}
+            onChange={setEnabled}
+          />
           <PriceFields model={value} value={prices} onChange={setPrices} />
         </fieldset>
         <p>
@@ -181,18 +178,20 @@ export const ModelEditor = forwardRef<
           </p>
         ) : null}
         {formError || save.error ? <ErrorState error={formError ?? save.error} /> : null}
-        <button
-          className="nb-btn nb-btn--primary"
-          type="submit"
-          disabled={save.pending || saved || disabled}
-        >
-          {save.uncertain
-            ? t('重试同一次保存', 'Retry the same save')
-            : t('保存模型配置', 'Save model settings')}
-        </button>
+        <FormActions>
+          <button
+            className="nb-btn nb-btn--primary"
+            type="submit"
+            disabled={save.pending || saved || disabled}
+          >
+            {save.uncertain
+              ? t('重试同一次保存', 'Retry the same save')
+              : t('保存模型配置', 'Save model settings')}
+          </button>
+        </FormActions>
       </form>
       <Fold title={t('试选参数与查看价格（不扣币）', 'Try parameters and prices (no charge)')}>
-        <div className="picturebook-form">
+        <Fields>
           <p>
             {t(
               '可选的本地预览，不会调用生成服务或扣费。',
@@ -226,37 +225,39 @@ export const ModelEditor = forwardRef<
               )}
             </p>
           )}
-          <button
-            className="nb-btn nb-btn--secondary"
-            type="button"
-            disabled={checking || save.locked || disabled || !previewModel}
-            onClick={() => {
-              setCheckedSignature(currentSignature);
-              if (!draft || !previewPrepared || 'problem' in previewPrepared) {
-                setCheckError(
-                  new ApiError(
-                    'invalid_request',
-                    t('请先修正价格或预览参数。', 'Fix the prices or preview parameters first.'),
-                    400,
-                  ),
-                );
-                return;
-              }
-              const parameters: Partial<SubmitInput> = { ...previewPrepared.input };
-              delete parameters.model_id;
-              delete parameters.expected_model_revision;
-              delete parameters.expected_pricing_revision;
-              setChecking(true);
-              setCheckError(null);
-              setCheckResult(null);
-              void checkModel({ model_id: value.id, draft, parameters })
-                .then(setCheckResult)
-                .catch(setCheckError)
-                .finally(() => setChecking(false));
-            }}
-          >
-            {checking ? t('正在检查', 'Checking') : t('检查草稿', 'Check draft')}
-          </button>
+          <FormActions>
+            <button
+              className="nb-btn nb-btn--secondary"
+              type="button"
+              disabled={checking || save.locked || disabled || !previewModel}
+              onClick={() => {
+                setCheckedSignature(currentSignature);
+                if (!draft || !previewPrepared || 'problem' in previewPrepared) {
+                  setCheckError(
+                    new ApiError(
+                      'invalid_request',
+                      t('请先修正价格或预览参数。', 'Fix the prices or preview parameters first.'),
+                      400,
+                    ),
+                  );
+                  return;
+                }
+                const parameters: Partial<SubmitInput> = { ...previewPrepared.input };
+                delete parameters.model_id;
+                delete parameters.expected_model_revision;
+                delete parameters.expected_pricing_revision;
+                setChecking(true);
+                setCheckError(null);
+                setCheckResult(null);
+                void checkModel({ model_id: value.id, draft, parameters })
+                  .then(setCheckResult)
+                  .catch(setCheckError)
+                  .finally(() => setChecking(false));
+              }}
+            >
+              {checking ? t('正在检查', 'Checking') : t('检查草稿', 'Check draft')}
+            </button>
+          </FormActions>
           {checkError && checkedSignature === currentSignature ? (
             <ErrorState error={checkError} />
           ) : null}
@@ -279,7 +280,7 @@ export const ModelEditor = forwardRef<
               </ul>
             )
           ) : null}
-        </div>
+        </Fields>
       </Fold>
     </Card>
   );

@@ -12,7 +12,7 @@ import {
   PageHeader,
   StatusBadge,
 } from '@shared/components/States';
-import { DataTable, Fold, MoreMenu } from '@shared/components/ui';
+import { DataTable, Field, FilterBar, Fold, MoreMenu } from '@shared/components/ui';
 import './alerts.css';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -603,50 +603,67 @@ export function AlertsPage() {
         </Card>
       ) : null}
       <Card>
-        <div className="ops-field-grid">
-          <label className="ops-form-field">
-            <span>{t('admin.alerts.filterResolved')}</span>
-            <select
-              value={resolved}
-              onChange={(event) => selectResolved(event.target.value as AdminAlertResolvedFilter)}
-            >
-              <option value="false">{t('admin.alerts.open')}</option>
-              <option value="true">{t('admin.alerts.resolvedValue')}</option>
-              <option value="all">{t('common.all')}</option>
-            </select>
-          </label>
-          <label className="ops-form-field">
-            <span>{t('admin.alerts.filterKind')}</span>
-            <select value={kind} onChange={(event) => selectKind(event.target.value)}>
-              <option value="all">{t('common.all')}</option>
-              {kindGroups.map((group) => (
-                <optgroup key={group.label} label={group.label}>
-                  {group.kinds.map((value) => (
-                    <option key={value} value={value}>
-                      {kindLabels[value]}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </label>
-        </div>
+        <FilterBar
+          activeCount={Number(resolved !== 'false') + Number(kind !== 'all')}
+          onSubmit={() => {}}
+          search={
+            <>
+              <Field size="short" label={t('admin.alerts.filterResolved')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={resolved}
+                    onChange={(event) =>
+                      selectResolved(event.target.value as AdminAlertResolvedFilter)
+                    }
+                  >
+                    <option value="false">{t('admin.alerts.open')}</option>
+                    <option value="true">{t('admin.alerts.resolvedValue')}</option>
+                    <option value="all">{t('common.all')}</option>
+                  </select>
+                )}
+              </Field>
+              <Field label={t('admin.alerts.filterKind')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={kind}
+                    onChange={(event) => selectKind(event.target.value)}
+                  >
+                    <option value="all">{t('common.all')}</option>
+                    {kindGroups.map((group) => (
+                      <optgroup key={group.label} label={group.label}>
+                        {group.kinds.map((value) => (
+                          <option key={value} value={value}>
+                            {kindLabels[value]}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                )}
+              </Field>
+            </>
+          }
+        />
         <div className="ops-actions">
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              aria-label={t('admin.alerts.selectPage')}
-              disabled={actionDisabled || selectable.length === 0}
-              checked={selectable.length > 0 && selected.length === selectable.length}
-              onChange={() =>
-                setSelection({
-                  scope: selectionScope,
-                  ids: selected.length === selectable.length ? [] : selectable,
-                })
-              }
-            />
-            <span>{t('admin.alerts.selectPage')}</span>
-          </label>
+          <Field size="short" label={t('admin.alerts.selectPage')}>
+            {(props) => (
+              <input
+                {...props}
+                type="checkbox"
+                aria-label={t('admin.alerts.selectPage')}
+                disabled={actionDisabled || selectable.length === 0}
+                checked={selectable.length > 0 && selected.length === selectable.length}
+                onChange={() =>
+                  setSelection({
+                    scope: selectionScope,
+                    ids: selected.length === selectable.length ? [] : selectable,
+                  })
+                }
+              />
+            )}
+          </Field>
           {selected.length > 0 ? (
             <button
               className="nb-btn nb-btn--secondary"

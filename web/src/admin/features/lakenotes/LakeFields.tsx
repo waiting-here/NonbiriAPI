@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { Field, Fields, Toggle } from '@shared/components/ui';
 import type { GamesConfig } from '../operations/economy';
 import {
   directions,
@@ -63,16 +64,11 @@ export function LakeFields({
     { t: lakeText } = useLakeAdminCopy();
   return (
     <fieldset className="lake-period-form" disabled={disabled}>
-      <label className="lake-period-check">
-        <input
-          type="checkbox"
-          checked={draft.lakenotes.enabled}
-          onChange={(e) =>
-            edit((c) => ({ ...c, lakenotes: { ...c.lakenotes, enabled: e.target.checked } }))
-          }
-        />
-        {lakeText('enabled')}
-      </label>
+      <Toggle
+        label={lakeText('enabled')}
+        checked={draft.lakenotes.enabled}
+        onChange={(enabled) => edit((c) => ({ ...c, lakenotes: { ...c.lakenotes, enabled } }))}
+      />
       <p>
         {text(
           '免费游玩。每个兑换方向可分别开启；先填写每份扣除和获得的数量。',
@@ -100,25 +96,34 @@ export function LakeFields({
           return (
             <section className="lake-exchange-setting" key={d}>
               <h3>{lakeText(d)}</h3>
-              <label className="lake-period-check">
-                <input
-                  type="checkbox"
-                  checked={value.enabled}
-                  onChange={(e) => change('enabled', e.target.checked)}
-                />
-                {lakeText('enabled')}
-              </label>
-              {(['source_amount', 'target_amount'] as const).map((field, i) => (
-                <label key={field}>
-                  {lakeText(i === 0 ? 'source' : 'target')} · {lakeText(pair[i])}
-                  <input
-                    inputMode={pair[i] === 'coins' ? 'numeric' : 'decimal'}
-                    value={value[field]}
-                    required={value.enabled}
-                    onChange={(e) => change(field, e.target.value)}
-                  />
-                </label>
-              ))}
+              <Toggle
+                label={lakeText('enabled')}
+                checked={value.enabled}
+                onChange={(enabled) => change('enabled', enabled)}
+              />
+              <Fields>
+                {(['source_amount', 'target_amount'] as const).map((field, i) => (
+                  <Field
+                    size="short"
+                    key={field}
+                    label={
+                      <>
+                        {lakeText(i === 0 ? 'source' : 'target')} · {lakeText(pair[i])}
+                      </>
+                    }
+                  >
+                    {(props) => (
+                      <input
+                        {...props}
+                        inputMode={pair[i] === 'coins' ? 'numeric' : 'decimal'}
+                        value={value[field]}
+                        required={value.enabled}
+                        onChange={(e) => change(field, e.target.value)}
+                      />
+                    )}
+                  </Field>
+                ))}
+              </Fields>
             </section>
           );
         })}
