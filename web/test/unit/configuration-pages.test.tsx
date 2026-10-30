@@ -431,10 +431,15 @@ describe('authoritative site-config frontend', () => {
     expect(limitsGroup).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByLabelText('Site name')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Endpoint limit'), { target: { value: '8' } });
-    fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'Site name' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search' }), {
+      target: { value: 'Site name' },
+    });
+    expect(screen.getByLabelText('Endpoint limit')).toHaveValue(8);
+    await rendered.user.click(screen.getByRole('button', { name: 'Search', exact: true }));
     expect(screen.queryByLabelText('Endpoint limit')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Site name')).toHaveValue('After');
-    fireEvent.change(screen.getByLabelText('Search'), { target: { value: '' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search' }), { target: { value: '' } });
+    await rendered.user.click(screen.getByRole('button', { name: 'Search', exact: true }));
     await rendered.user.click(identityGroup);
     expect(identityGroup).toHaveAttribute('aria-current', 'page');
     expect(screen.getByLabelText('Site name')).toHaveValue('After');

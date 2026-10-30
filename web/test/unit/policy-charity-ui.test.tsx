@@ -1653,7 +1653,10 @@ describe('experimental policy and charity controls', () => {
       if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20') {
         return jsonResponse(coreNumberedPage([coreEndpoint]));
       }
-      if (method === 'GET' && path === '/api/endpoints/1/keys?page=1&page_size=20') {
+      if (
+        method === 'GET' &&
+        path === '/api/endpoints/1/keys?page=1&page_size=20&credential_available=true'
+      ) {
         return jsonResponse(
           coreNumberedPage([
             {
