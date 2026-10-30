@@ -1,3 +1,4 @@
+import { DriverFailure, decodeOperationFailure } from './DriverFailure';
 import { stateLabels, textDiff } from './presentation';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -27,6 +28,9 @@ export function AgentState({ state }: { state: string }) {
 }
 export function AgentError({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
   const { t } = useTranslation();
+  const operation =
+    error instanceof ApiError ? decodeOperationFailure(error.operationDiagnostic) : null;
+  if (operation) return <DriverFailure failure={operation} onRetry={onRetry} />;
   return error instanceof ApiError &&
     ['steward_permission_denied', 'forbidden'].includes(error.code) ? (
     <Note tone="warn">{t('common.agent.permissionHelp')}</Note>

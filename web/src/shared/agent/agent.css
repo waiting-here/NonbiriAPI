@@ -284,3 +284,12 @@
 .agent-login-steps li > * + * {
   margin-block-start: var(--nb-space-3);
 }
+.agent-quota-progress {
+  width: 100%;
+  accent-color: var(--nb-color-accent);
+}
+.agent-quota-bucket {
+  border-top: 1px solid var(--nb-color-border);
+  padding-top: var(--nb-space-3);
+  overflow-wrap: anywhere;
+}

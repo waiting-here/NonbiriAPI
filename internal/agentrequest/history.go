@@ -88,6 +88,9 @@ func (r *Runtime) List(ctx context.Context, filter ListFilter) (Page, error) {
 		return Page{}, ErrInvalid
 	}
 	where, args, err := sourceFilter(filter.Source, filter.Kind, filter.ActorID, filter.State)
+	if err == nil {
+		where, args, err = usageRequestFilter(where, args, filter.Provider, filter.From, filter.To)
+	}
 	if err != nil {
 		return Page{}, err
 	}
@@ -125,6 +128,9 @@ func (r *Runtime) Cleanup(ctx context.Context, in CleanupInput) (out CleanupResu
 		return out, ErrInvalid
 	}
 	where, args, err := sourceFilter(in.Source, in.Kind, in.ActorID, in.State)
+	if err == nil {
+		where, args, err = usageRequestFilter(where, args, in.Provider, in.From, in.To)
+	}
 	if err != nil {
 		return out, err
 	}

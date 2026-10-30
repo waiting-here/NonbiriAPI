@@ -1,3 +1,5 @@
+import { CodexUsageCard } from './CodexUsage';
+import { DriverFailure } from './DriverFailure';
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -126,6 +128,15 @@ export function CodexConnection({ account, active }: { account: string; active: 
                         : 'common.agent.codex.failed',
                   )}
                 </Note>
+              ) : null}
+              {status.login?.error ? <DriverFailure failure={status.login.error} /> : null}
+              {status.connected ? (
+                <CodexUsageCard
+                  key={status.revision}
+                  account={account}
+                  active={active}
+                  status={status}
+                />
               ) : null}
               {status.connected ? (
                 <p className="nb-small nb-muted">{t('common.agent.codex.disconnectHelp')}</p>

@@ -132,6 +132,8 @@ type Event struct {
 	Queue           QueueStatus `json:"queue"`
 }
 type ListFilter struct {
+	Provider string
+	From, To int64
 	Source   string
 	Kind     string
 	ActorID  *int64
@@ -152,6 +154,9 @@ type CleanupResult struct {
 	SkippedCount int64 `json:"skipped_count,string"`
 }
 type CleanupInput struct {
+	Provider  string   `json:"provider,omitempty"`
+	From      int64    `json:"from,string,omitempty"`
+	To        int64    `json:"to,string,omitempty"`
 	State     string   `json:"state,omitempty"`
 	IDs       []string `json:"ids,omitempty"`
 	ThroughID int64    `json:"through_id,string,omitempty"` // fixed by the confirmation view

@@ -814,6 +814,9 @@ dynamicCopyKeys.push(
     [
       'category',
       [
+        'configuration',
+        'connection',
+        'unavailable',
         'network',
         'policy',
         'tls',
@@ -833,6 +836,9 @@ dynamicCopyKeys.push(
     [
       'phase',
       [
+        'configuration',
+        'decode_catalogue',
+        'local_usage',
         'dispatch',
         'dns',
         'connect',
@@ -1547,6 +1553,72 @@ dynamicCopyKeys.push(
       'src/admin/features/managementHistory/ManagementHistory.tsx',
       '`admin.managementHistory.roles.${subject.role}`',
       'Retained executor identities show these administrator and steward role labels; unknown roles retain their value.',
+    ),
+  ),
+);
+
+dynamicCopyKeys.push(
+  ...[
+    [
+      'common.agent.quota.localFields.',
+      [
+        'requests',
+        'input_tokens',
+        'output_tokens',
+        'cached_input_tokens',
+        'cache_write_input_tokens',
+        'reasoning_tokens',
+        'unknown_count',
+      ],
+      'src/shared/agent/CodexUsage.tsx',
+      '`common.agent.quota.localFields.${name}`',
+    ],
+    [
+      'common.agent.diagnostic.reasons.',
+      [
+        'upstream_authentication',
+        'upstream_account_restricted',
+        'upstream_rate_limited',
+        'connection_changed',
+        'connection_disconnected',
+        'credential_expired',
+        'credential_unreadable',
+        'response_limit',
+        'invalid_json',
+        'json_type_mismatch',
+        'credential_reflected',
+        'driver_unconfigured',
+        'endpoint_invalid',
+        'timeout',
+        'network',
+        'unknown',
+      ],
+      'src/shared/agent/DriverFailure.tsx',
+      '`common.agent.diagnostic.reasons.${reason}`',
+    ],
+    [
+      'common.agent.diagnostic.operations.',
+      [
+        'device_code',
+        'device_poll',
+        'token_exchange',
+        'token_refresh',
+        'model_catalogue',
+        'codex_quota',
+        'codex_local_usage',
+      ],
+      'src/shared/agent/DriverFailure.tsx',
+      '`common.agent.diagnostic.operations.${failure.operation}`',
+    ],
+  ].flatMap(([prefix, names, source, anchor]) =>
+    names.map((name) =>
+      entry(
+        'common',
+        prefix + name,
+        source,
+        anchor,
+        'Administrator Codex quota metrics and operation diagnostics use these exact safe domains.',
+      ),
     ),
   ),
 );
