@@ -180,6 +180,16 @@ key still consume its existing limits. Existing key-wide recovery gates are
 preserved during upgrades. No cross-entry quota pool is created, and one failed
 service is not treated as proof that the whole credential is unusable.
 
+Failure reset acts on eligible approved services and their exact credential
+versions. It clears only their consecutive-failure counters/pauses and advances
+the generation so older callbacks cannot restore them. A zero counter also gets
+a fresh generation and is reported as already clear. Approval, limits, usage,
+manual disablement, Retry-After and smart-backoff waits remain effective; a reset
+does not by itself guarantee availability. Missing approved or usable material
+produces an explicit conflict for a single reset, or a skipped `no_service`
+result in a batch. See [reset receipts](api-contract.md#42-donation-failure-streak-reset)
+for per-service outcomes and exact batch counts.
+
 Removing a key from one endpoint revokes only that endpoint's use. Deleting an
 endpoint removes its authorization and bindings while keeping the service's
 keys available to its other endpoints. Replacing, disabling or deleting an
@@ -189,6 +199,15 @@ keys and uses. Already
 accepted work retains only the references required for safe completion and
 settlement; cleanup releases unused encrypted versions. See the
 [data lifecycle](data-lifecycle-checklist.md) for export and retention details.
+
+The endpoint's **Remove key from endpoint** action keeps the shared key and model
+discovery usable on its other protocol entries. The service-level **Delete service key**
+action affects the entire credential; review its listed uses before confirming.
+Generic key metadata may remain after that deletion with
+`credential_available:false`. It is not selectable donation material. The
+donation picker refreshes its candidates after credential changes, while current
+backend authorization also rejects a stale selection submitted directly. Other
+valid choices remain usable; no deletion restores an old credential.
 
 ## API families
 

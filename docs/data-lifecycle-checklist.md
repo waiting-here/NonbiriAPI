@@ -108,6 +108,14 @@ records keep their saved facts; absent names/values are not reconstructed.
 Large text and secret changes retain permitted change/length facts, never the
 text or secret. Existing administrator-only access and explicit cleanup apply.
 
+Schema 43 adds managed donation service-health snapshots under the same bounded
+capture and cleanup rules. They retain readable source/donation/key/service
+names, actual failure streak/pause and reset-generation changes, reset outcomes
+and retained waits. An already-clear reset advances its generation and is not
+mistaken for an unchanged write or a recovery from failure. Ineligible service
+skips can retain their bounded reason. Ordinary inference health writes outside
+a management operation are excluded; historical service changes are not backfilled.
+
 Management-history cleanup and model-request cleanup are separate operations.
 The former updates incremental rollups and may split a single large operation's
 items across transactions; it resumes persisted progress after restart. The
@@ -468,10 +476,10 @@ only addresses already retained by endpoints, donation keys or manual tags, and
 is removed when its final source address is removed. Neither rules nor the index
 add credentials or change account export format or donation-history retention.
 
-Normal startup initializes absent storage or opens only exact current schema 42.
+Normal startup initializes absent storage or opens only exact current schema 43.
 Older, newer, unknown and incomplete databases are rejected before migration,
 repair, WAL checkpoint or recovery writes. Exact registered schema 16–26 and
-33–41 sources require a deliberate standalone-converter invocation after the
+33–42 sources require a deliberate standalone-converter invocation after the
 matching recovery set is preserved; service startup and deployment helpers must
 not apply upgrades implicitly. Atomic conversion preserves the relevant indexes,
 authorization, steward policy/audit/tag data and assistant storage. Pending
