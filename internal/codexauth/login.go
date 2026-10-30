@@ -64,6 +64,7 @@ func (m *Manager) Begin(ctx context.Context, revision int64) (Status, error) {
 		if m.login == p && p.status.State == "starting" {
 			_ = m.auditLoginEnd(p, managementlog.Failed, safeError(err))
 			p.status = terminalLogin(p.status, "failed", safeError(err))
+			errors.As(err, &p.status.Error)
 			p.cancel()
 		}
 		m.mu.Unlock()
@@ -152,6 +153,11 @@ func (m *Manager) completeLogin(ctx context.Context, p *pendingLogin, device dev
 		}
 	}
 	p.status = terminalLogin(p.status, state, code)
+	if err != nil {
+		errors.As(err, &p.status.Error)
+	} else {
+		m.resetConnection()
+	}
 }
 func (m *Manager) Cancel(ctx context.Context, id string) (Status, error) {
 	if err := m.authorize(ctx); err != nil {

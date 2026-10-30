@@ -165,6 +165,9 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
   const client = useQueryClient();
   const [params, setParams] = useSearchState();
   const filters: RequestFilters = {
+    provider: params.get('ai_provider') || undefined,
+    from: params.get('ai_from') || undefined,
+    to: params.get('ai_to') || undefined,
     source: params.get('ai_source') ?? '',
     kind: params.get('ai_kind') ?? '',
     state: params.get('ai_state') ?? '',
@@ -327,6 +330,12 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
           </div>
         ) : (
           <>
+            {filters.provider === 'codex' ? (
+              <Note>
+                {t('common.agent.quota.filteredRecords')} <AgentTime value={Number(filters.from)} />{' '}
+                – <AgentTime value={Number(filters.to)} />
+              </Note>
+            ) : null}
             <FilterBar
               ariaLabel={t('common.agent.requestFilters')}
               activeCount={Object.values(filters).filter(Boolean).length}
@@ -336,7 +345,15 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
                 setSelected(new Set());
                 setParams((previous) => {
                   const next = new URLSearchParams(previous);
-                  for (const key of ['ai_source', 'ai_kind', 'ai_state', 'ai_actor'])
+                  for (const key of [
+                    'ai_source',
+                    'ai_kind',
+                    'ai_state',
+                    'ai_actor',
+                    'ai_provider',
+                    'ai_from',
+                    'ai_to',
+                  ])
                     next.delete(key);
                   return next;
                 });

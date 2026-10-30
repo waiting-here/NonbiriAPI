@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/chatgptauth"
 	"github.com/waiting-here/NonbiriAPI/internal/codexauth"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 )
 
@@ -70,7 +72,7 @@ func parseStoredResult(id int64, d Detail) (Result, error) {
 	result, _, _, err := parseResponsesResult(id, []byte(d.ResponseBody), s)
 	return result, err
 }
-func (r *Runtime) DiscoverDriverModels(ctx context.Context, id int64) ([]Model, error) {
+func (r *Runtime) DiscoverDriverModels(ctx context.Context, id int64) (models []Model, resultErr error) {
 	if id < 0 {
 		return nil, ErrInvalid
 	}
@@ -82,30 +84,50 @@ func (r *Runtime) DiscoverDriverModels(ctx context.Context, id int64) ([]Model, 
 		return nil, err
 	}
 	s := p.Settings
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.TimeoutSeconds)*time.Second)
+	defer cancel()
+	ctx = diagnostic.WithRecorder(ctx)
+	var upstreamCode string
+	defer func() {
+		if resultErr == nil {
+			return
+		}
+		failure := diagnostic.OperationFailure(ctx, "model_catalogue", p.Name, resultErr)
+		if failure.UpstreamCode == "" {
+			failure.UpstreamCode = upstreamCode
+		}
+		diagnostic.SaveOperation(ctx, r.db, failure)
+		resultErr = failure
+	}()
 	if s.BaseURL == "" {
+		diagnostic.RecordKnownError(ctx, "configuration", "configuration", "driver_unconfigured", "Configure this model source before discovering models", ErrUnconfigured)
 		return nil, ErrUnconfigured
 	}
+	diagnostic.Phase(ctx, "credential")
 	key, err = r.modelKey(ctx, &s, key)
 	if err != nil {
+		codexauth.RecordCredentialFailure(ctx, err)
 		return nil, err
 	}
 	if key == "" {
+		diagnostic.RecordKnownError(ctx, "configuration", "configuration", "driver_unconfigured", "Configure credentials before discovering models", ErrUnconfigured)
 		return nil, ErrUnconfigured
 	}
 	plaintext, err := r.secrets.OpenAgentKey(key, "model")
 	if err != nil {
+		codexauth.RecordCredentialFailure(ctx, err)
 		return nil, err
 	}
-	defer clear(plaintext)
+	defer func() { clear(plaintext) }()
 	client, err := r.stack.NewClient(s.BaseURL)
 	if err != nil {
-		return nil, ErrInvalid
+		diagnostic.RecordKnownError(ctx, "policy", "configuration", "endpoint_invalid", "The configured endpoint could not pass outbound policy", err)
+		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.TimeoutSeconds)*time.Second)
-	defer cancel()
 	if s.Provider == ProviderCodex {
 		child, release, e := r.codex.RequestContext(ctx, s.ConnectionRevision)
 		if e != nil {
+			codexauth.RecordCredentialFailure(ctx, e)
 			return nil, e
 		}
 		defer release()
@@ -116,35 +138,86 @@ func (r *Runtime) DiscoverDriverModels(ctx context.Context, id int64) ([]Model, 
 			return err
 		}
 		if s.Provider == ProviderCodex {
-			return r.codex.ValidateGeneration(check, s.ConnectionRevision)
+			err := r.codex.ValidateGeneration(check, s.ConnectionRevision)
+			if err != nil {
+				codexauth.RecordCredentialFailure(check, err)
+			}
+			return err
 		}
 		return nil
 	})
-	request, err := http.NewRequestWithContext(ctx, "GET", strings.TrimRight(s.BaseURL, "/")+"/models", nil)
-	if err != nil {
-		return nil, ErrInvalid
+	for attempt := 0; attempt < 2; attempt++ {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(s.BaseURL, "/")+"/models", nil)
+		if err != nil {
+			return nil, err
+		}
+		request.Header.Set("Authorization", "Bearer "+string(plaintext))
+		request.Header.Set("Accept", "application/json")
+		if s.Provider == ProviderCodex {
+			// The pinned source workspace declares 0.0.0. Do not advertise a release
+			// version or additional capabilities this native adapter has not verified.
+			request.URL.RawQuery = "client_version=0.0.0"
+			request.Header.Set("ChatGPT-Account-ID", s.CodexAccountID)
+			request.Header.Set("originator", "nonbiriapi")
+		}
+		response, err := client.Do(request)
+		if err != nil {
+			if response != nil && response.Body != nil {
+				response.Body.Close()
+			}
+			return nil, err
+		}
+		if s.Provider == ProviderCodex && response.StatusCode == 401 && attempt == 0 {
+			response.Body.Close()
+			next, account, revision, e := r.codex.RecoverAccessToken(ctx, s.ConnectionRevision, plaintext)
+			if e != nil {
+				codexauth.RecordCredentialFailure(ctx, e)
+				return nil, e
+			}
+			clear(plaintext)
+			plaintext = next
+			if revision != s.ConnectionRevision {
+				codexauth.RecordCredentialFailure(ctx, codexauth.ErrConflict)
+				return nil, codexauth.ErrConflict
+			}
+			s.CodexAccountID = account
+			ctx = diagnostic.WithRecorder(ctx)
+			continue
+		}
+		raw, readErr := io.ReadAll(io.LimitReader(response.Body, (4<<20)+1))
+		response.Body.Close()
+		defer clear(raw)
+		if readErr != nil {
+			diagnostic.RecordError(ctx, "read_response", readErr)
+			return nil, readErr
+		}
+		if len(raw) > 4<<20 {
+			err = errors.New("model catalogue response too large")
+			diagnostic.RecordLimit(ctx, "response_bytes", 4<<20, err)
+			return nil, err
+		}
+		if response.StatusCode < 200 || response.StatusCode >= 300 {
+			upstreamCode, err = diagnostic.RecordHTTPFailure(ctx, response.StatusCode, raw, func(value []byte) bool { return diagnostic.ReflectsSecret(value, plaintext) })
+			return nil, err
+		}
+		if diagnostic.ReflectsSecret(raw, plaintext) {
+			diagnostic.RecordKnownError(ctx, "decode_catalogue", "protocol", "credential_reflected", "The catalogue contained authentication data and was withheld", ErrProtocol)
+			return nil, ErrProtocol
+		}
+		models, err = decodeDriverModels(raw, s.Provider)
+		if err != nil {
+			diagnostic.RecordError(ctx, "decode_catalogue", err)
+			return nil, err
+		}
+		if s.Provider == ProviderCodex {
+			if err = r.codex.ValidateGeneration(ctx, s.ConnectionRevision); err != nil {
+				codexauth.RecordCredentialFailure(ctx, err)
+				return nil, err
+			}
+		}
+		return models, nil
 	}
-	request.Header.Set("Authorization", "Bearer "+string(plaintext))
-	if s.Provider == ProviderCodex {
-		request.URL.RawQuery = "client_version=0.0.0"
-		request.Header.Set("ChatGPT-Account-ID", s.CodexAccountID)
-		request.Header.Set("originator", "nonbiriapi")
-	}
-	response, err := client.Do(request)
-	if response != nil && response.Body != nil {
-		defer response.Body.Close()
-	}
-	if err != nil {
-		return nil, err
-	}
-	raw, err := io.ReadAll(io.LimitReader(response.Body, 4<<20+1))
-	if err != nil || len(raw) > 4<<20 || response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, ErrUpstream
-	}
-	if containsSecret(raw, plaintext) {
-		return nil, ErrProtocol
-	}
-	return decodeDriverModels(raw, s.Provider)
+	return nil, ErrProtocol
 }
 
 func decodeDriverModels(raw []byte, provider string) ([]Model, error) {
@@ -157,7 +230,10 @@ func decodeDriverModels(raw []byte, provider string) ([]Model, error) {
 				Visibility  string `json:"visibility"`
 			} `json:"models"`
 		}
-		if json.Unmarshal(raw, &payload) != nil || payload.Models == nil || len(payload.Models) > 10000 {
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			return nil, errors.Join(ErrProtocol, err)
+		}
+		if payload.Models == nil || len(payload.Models) > 10000 {
 			return nil, ErrProtocol
 		}
 		for _, m := range payload.Models {
@@ -171,7 +247,10 @@ func decodeDriverModels(raw []byte, provider string) ([]Model, error) {
 				ID string `json:"id"`
 			} `json:"data"`
 		}
-		if json.Unmarshal(raw, &payload) != nil || payload.Data == nil || len(payload.Data) > 10000 {
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			return nil, errors.Join(ErrProtocol, err)
+		}
+		if payload.Data == nil || len(payload.Data) > 10000 {
 			return nil, ErrProtocol
 		}
 		for _, m := range payload.Data {

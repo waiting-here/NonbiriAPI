@@ -10,6 +10,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/chatgptauth"
 	"github.com/waiting-here/NonbiriAPI/internal/codexauth"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -109,7 +110,14 @@ func (r *Runtime) emit(id int64, client, state string) {
 }
 func (r *Runtime) schedule() {
 	defer r.workers.Done()
+	nextDiagnosticCleanup := time.Time{}
 	for r.context.Err() == nil {
+		if time.Now().After(nextDiagnosticCleanup) {
+			child, cancel := context.WithTimeout(r.context, 2*time.Second)
+			_ = diagnostic.RetainOperations(child, r.db, time.Now())
+			cancel()
+			nextDiagnosticCleanup = time.Now().Add(time.Hour)
+		}
 		r.mu.Lock()
 		active := len(r.active)
 		changed := r.changed

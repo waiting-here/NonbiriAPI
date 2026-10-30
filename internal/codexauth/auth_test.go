@@ -37,6 +37,7 @@ type fixture struct {
 	denied    atomic.Bool
 	poll      func(http.ResponseWriter, *http.Request)
 	refreshFn func(http.ResponseWriter, *http.Request)
+	usageFn   func(http.ResponseWriter, *http.Request)
 }
 
 func jwt(value any) string {
@@ -52,6 +53,12 @@ func newFixture(t *testing.T) *fixture {
 	f.now.Store(1800000000)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/backend-api/wham/usage":
+			if f.usageFn != nil {
+				f.usageFn(w, r)
+			} else {
+				http.NotFound(w, r)
+			}
 		case "/api/accounts/deviceauth/usercode":
 			var body map[string]string
 			_ = json.NewDecoder(r.Body).Decode(&body)
@@ -122,6 +129,7 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	f.m.client.issuer = server.URL
+	f.m.client.usageURL = server.URL + "/backend-api/wham/usage"
 	t.Cleanup(func() { f.m.Close() })
 	return f
 }

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Button, Field, Fields, FormActions, Fold, Note } from '@shared/components/ui';
 import { useOperation } from '@shared/operations/useOperation';
 import { agentRoot } from './api';
-import { AgentError } from './AgentParts';
+import { AgentError, AgentTime } from './AgentParts';
 import {
   changeProvider,
   deleteProfile,
@@ -44,6 +44,7 @@ export function DriverProfileEditor({
   );
   const [key, setKey] = useState<string | undefined>();
   const [models, setModels] = useState<string[]>([]);
+  const [modelsAt, setModelsAt] = useState<number | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [current, setCurrent] = useState<DriverProfile | null>(null);
   const [candidates, setCandidates] = useState<DriverProfile[]>([]);
@@ -117,7 +118,10 @@ export function DriverProfileEditor({
     authorityRoot: root,
     execute: async (id, _secret, _operationKey, context) => {
       const value = await discoverProfileModels(id, context.signal);
-      context.commit(() => setModels(value));
+      context.commit(() => {
+        setModels(value);
+        setModelsAt(Date.now());
+      });
       return value;
     },
     reconcile: () => undefined,
@@ -133,7 +137,6 @@ export function DriverProfileEditor({
     },
     reconcile: () => undefined,
   });
-  const busy = save.isPending || discover.isPending || read.isPending;
   const unresolved = save.outcome === 'unknown' || save.outcome === 'conflict';
   const dirty =
     key !== undefined ||
@@ -174,7 +177,7 @@ export function DriverProfileEditor({
     setError(null);
     try {
       const value = dirty || !base.id ? await write() : base;
-      if (value) await discover.run(value.id);
+      if (value) await discover.run(value.id).catch(() => undefined);
     } catch (failure) {
       setError(failure);
     }
@@ -188,7 +191,7 @@ export function DriverProfileEditor({
         runSave();
       }}
     >
-      <fieldset disabled={busy} className="nb-stack">
+      <fieldset disabled={save.isPending || read.isPending} className="nb-stack">
         <Fields>
           <Field label={t('common.agent.drivers.name')}>
             {(props) => (
@@ -227,6 +230,7 @@ export function DriverProfileEditor({
                   keyRef.current = undefined;
                   setExtra('{}');
                   setModels([]);
+                  setModelsAt(null);
                 }}
               >
                 <option value="chat_completions">Chat Completions API</option>
@@ -316,12 +320,29 @@ export function DriverProfileEditor({
           <Button
             type="button"
             variant="secondary"
-            disabled={unresolved}
+            disabled={unresolved || discover.isPending}
             onClick={() => void loadModels()}
           >
-            {t('common.agent.discoverModels')}
+            {t(
+              discover.isPending ? 'common.agent.quota.refreshing' : 'common.agent.discoverModels',
+            )}
           </Button>
         </FormActions>
+        {discover.isPending ? (
+          <Button type="button" onClick={discover.cancel}>
+            {t('common.cancel')}
+          </Button>
+        ) : null}
+        {modelsAt ? (
+          <p className="nb-small nb-muted">
+            {t('common.agent.quota.catalogueUpdated', { count: models.length })}{' '}
+            <AgentTime value={modelsAt} />
+            {discover.error ? <> · {t('common.agent.quota.stale')}</> : null}
+          </p>
+        ) : null}
+        {discover.error ? (
+          <AgentError error={discover.error} onRetry={() => void loadModels()} />
+        ) : null}
         <Fold title={t('common.agent.advanced')}>
           <Fields>
             <Field

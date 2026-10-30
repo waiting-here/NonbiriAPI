@@ -86,7 +86,7 @@ func observeResponse(ctx context.Context, request *http.Request, response *http.
 		encoding = "other"
 	}
 	var retry *int64
-	if raw := response.Header.Get("Retry-After"); len(raw) > 0 && len(raw) <= 128 {
+	if raw := response.Header.Get("Retry-After"); len(raw) > 0 && len(raw) <= 128 && !reflectsRequestSecret(request, raw) {
 		if seconds, err := strconv.ParseInt(raw, 10, 64); err == nil && seconds >= 0 && seconds <= 86400*7 {
 			retry = &seconds
 		} else if at, err := http.ParseTime(raw); err == nil {

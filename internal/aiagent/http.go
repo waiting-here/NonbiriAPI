@@ -85,6 +85,9 @@ func writeResult(w http.ResponseWriter, value any, err error) {
 	httperr.WriteJSON(w, http.StatusOK, value)
 }
 func writeError(w http.ResponseWriter, err error) {
+	if writeDriverFailure(w, err) {
+		return
+	}
 	code, message := httperr.CodeInternal, "操作未完成，请重试。"
 	switch {
 	case errors.Is(err, authz.ErrElevatedRequired):
@@ -326,7 +329,7 @@ func (a *httpAPI) requestsPage(w http.ResponseWriter, r *http.Request, actor Act
 		return
 	}
 	q := r.URL.Query()
-	filter := agentrequest.ListFilter{Source: q.Get("source"), Kind: q.Get("kind"), State: q.Get("state"), Page: p, PageSize: n}
+	filter := agentrequest.ListFilter{Provider: q.Get("provider"), Source: q.Get("source"), Kind: q.Get("kind"), State: q.Get("state"), Page: p, PageSize: n}
 	if raw := q.Get("actor_id"); raw != "" {
 		id, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || id < 0 {
@@ -334,6 +337,16 @@ func (a *httpAPI) requestsPage(w http.ResponseWriter, r *http.Request, actor Act
 			return
 		}
 		filter.ActorID = &id
+	}
+	for key, target := range map[string]*int64{"from": &filter.From, "to": &filter.To} {
+		if raw := q.Get(key); raw != "" {
+			value, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil || value < 0 {
+				writeError(w, ErrInvalid)
+				return
+			}
+			*target = value
+		}
 	}
 	v, e := a.requests.List(r.Context(), filter)
 	writeResult(w, v, e)
