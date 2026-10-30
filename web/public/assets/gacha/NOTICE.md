@@ -49,8 +49,9 @@ The retained portrait sources are 1024 × 1536; the group source is 1536 × 864 
 ## Moment-only expanded frames
 
 The adopted derivatives in `moment/c-gemini/`, `moment/q-glm/`, `moment/n-gemini/`,
-`moment/o-claude/`, `moment/g-claude/`, `moment/l-chatgpt/`, `moment/g-gemini/`
-`moment/g-glm/`, `moment/b-glm/` and `moment/f-gemini/`,
+`moment/o-claude/`, `moment/g-claude/`, `moment/l-chatgpt/`, `moment/g-gemini/`,
+`moment/g-glm/`, `moment/b-glm/`, `moment/f-gemini/`, `moment/e-gemini/`,
+`moment/b-deepseek/` and `moment/d-gemini/`,
 with matching `hires/moment/` paths, retain the established
 characters and original card and appearance inputs. Their separate
 `composition.json` registrations describe the expanded canvas and the unchanged
@@ -60,7 +61,7 @@ b-glm's tables. Heights are 1536, 1544 or 1664 pixels. Their large derivatives
 use 2.5× Lanczos resampling and do not add native detail.
 
 The additional margins for c-gemini, g-claude, l-chatgpt, g-gemini, g-glm,
-b-glm and f-gemini were
+b-glm, f-gemini, e-gemini, b-deepseek and d-gemini were
 generated from their retained project sources
 using [BRIA Fibo-2.0-edit-turbo](https://huggingface.co/briaai/Fibo-2.0-edit-turbo/tree/177f2d4a06b6587144ef5c2b8452a4f1fe2ab4b7),
 with foreground alpha prepared using
