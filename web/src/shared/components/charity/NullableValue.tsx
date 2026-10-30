@@ -1,4 +1,5 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
+import { Field } from '../ui';
 import { useTranslation } from 'react-i18next';
 
 export function NullableValue({
@@ -11,21 +12,21 @@ export function NullableValue({
   onChange: (value: string | null) => void;
 }) {
   const { t } = useTranslation();
-  const valueId = useId();
-  const unlimitedId = useId();
   const [unlimited, setUnlimited] = useState(value === null);
   return (
-    <div className="ops-form-field">
-      <label htmlFor={valueId}>{label}</label>
-      <input
-        id={valueId}
-        value={value ?? ''}
-        disabled={unlimited}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      <label className="checkbox-label" htmlFor={unlimitedId}>
+    <div className="nb-stack nb-stack--sm nb-field--short">
+      <Field label={label}>
+        {(field) => (
+          <input
+            {...field}
+            value={value ?? ''}
+            disabled={unlimited}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        )}
+      </Field>
+      <label className="checkbox-label">
         <input
-          id={unlimitedId}
           type="checkbox"
           checked={unlimited}
           onChange={(event) => {

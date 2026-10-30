@@ -335,10 +335,12 @@ describe('public charity pricing', () => {
       { station: 'user', role: 'user' },
     );
     await rendered.user.type(screen.getByRole('searchbox'), 'extra');
+    expect(screen.getAllByRole('table')).toHaveLength(2);
+    await rendered.user.click(screen.getByRole('button', { name: 'Search' }));
     rendered.rerender(<CharityCapabilityPanel capability={CHARITY_OPEN} />);
     expect(screen.getByRole('searchbox')).toHaveValue('extra');
     expect(screen.queryByRole('table')).toBeNull();
-    await rendered.user.clear(screen.getByRole('searchbox'));
+    await rendered.user.click(screen.getByRole('button', { name: 'Reset' }));
     expect(screen.getByRole('table', { name: charityCopy.priceCaption })).toBeVisible();
   });
 

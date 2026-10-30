@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Button, Note } from '@shared/components/ui';
+import { Button, FormActions, Note } from '@shared/components/ui';
 import { ErrorState } from '@shared/components/States';
 import {
   captureStationSession,
@@ -147,7 +147,7 @@ export function DonationHistoryBatch({
   return (
     <div className="economy-status-stack">
       <Note>{t('user.charity.ownerHistory.help')}</Note>
-      <div className="form-actions">
+      <FormActions>
         <Button
           type="button"
           disabled={disabled || running || (paused && (!progress.error || unknown))}
@@ -169,7 +169,7 @@ export function DonationHistoryBatch({
             {t('user.charity.ownerHistory.resume')}
           </Button>
         ) : null}
-      </div>
+      </FormActions>
       {progress ? (
         <p role="status">
           {t('user.charity.ownerHistory.progress', {

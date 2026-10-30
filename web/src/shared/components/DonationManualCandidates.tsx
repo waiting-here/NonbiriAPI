@@ -1,4 +1,5 @@
 import { Button } from '@shared/components/ui/Button';
+import { Field, FilterBar, FormActions } from './ui';
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -129,10 +130,18 @@ export function DonationManualCandidates({
     <section className="ops-subcard ops-stack">
       <h4>{t('common.manualCandidates.title')}</h4>
       <p>{t('common.manualCandidates.help')}</p>
-      <form
-        className="ops-toolbar"
-        onSubmit={(event) => {
-          event.preventDefault();
+      <FilterBar
+        activeCount={q ? 1 : 0}
+        onReset={() => {
+          setSearchDraft({ query: '', value: '' });
+          setParams((previous) => {
+            const next = new URLSearchParams(previous);
+            next.delete(`${prefix}_q`);
+            next.delete(`${prefix}_page`);
+            return next;
+          });
+        }}
+        onSubmit={() => {
           setParams((previous) => {
             const next = new URLSearchParams(previous);
             if (search.trim()) next.set(`${prefix}_q`, search.trim());
@@ -141,19 +150,21 @@ export function DonationManualCandidates({
             return next;
           });
         }}
-      >
-        <label>
-          <span>{t('common.manualCandidates.search')}</span>
-          <input
-            value={search}
-            maxLength={512}
-            onChange={(event) => setSearchDraft({ query: q, value: event.target.value })}
-          />
-        </label>
-        <Button type="submit"  disabled={mutation.isPending}>
-          {t('common.manualCandidates.searchAction')}
-        </Button>
-      </form>
+        search={
+          <Field label={t('common.manualCandidates.search')}>
+            {(field) => (
+              <input
+                {...field}
+                type="search"
+                placeholder={t('common.manualCandidates.search')}
+                value={search}
+                maxLength={512}
+                onChange={(event) => setSearchDraft({ query: q, value: event.target.value })}
+              />
+            )}
+          </Field>
+        }
+      />
       {query.isPending ? <LoadingState /> : null}
       {query.error ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : null}
       {query.data?.candidates ? (
@@ -200,34 +211,39 @@ export function DonationManualCandidates({
       ) : null}
       {editable ? (
         <fieldset className="ops-stack ops-unframed" disabled={busy || !revision}>
-          <label>
-            <span>{t('common.manualCandidates.names')}</span>
-            <textarea
-              rows={4}
-              value={names}
-              onChange={(event) => {
-                if (busy) return;
-                setNames(event.target.value);
-                mutation.reset();
-              }}
-            />
-          </label>
+          <Field label={t('common.manualCandidates.names')} size="long">
+            {(field) => (
+              <textarea
+                {...field}
+                rows={4}
+                value={names}
+                onChange={(event) => {
+                  if (busy) return;
+                  setNames(event.target.value);
+                  mutation.reset();
+                }}
+              />
+            )}
+          </Field>
           <p>{t('common.manualCandidates.addHelp')}</p>
           {invalidNames ? (
             <p role="alert" className="field-error">
               {t('common.manualCandidates.invalidNames')}
             </p>
           ) : null}
-          <Button
-            type="button"
-            variant="primary"
-            disabled={entries.length === 0 || invalidNames}
-            onClick={() =>
-              revision && mutation.mutate({ entries, revision }, { onSuccess: () => setNames('') })
-            }
-          >
-            {t('common.manualCandidates.add')}
-          </Button>
+          <FormActions>
+            <Button
+              type="button"
+              variant="primary"
+              disabled={entries.length === 0 || invalidNames}
+              onClick={() =>
+                revision &&
+                mutation.mutate({ entries, revision }, { onSuccess: () => setNames('') })
+              }
+            >
+              {t('common.manualCandidates.add')}
+            </Button>
+          </FormActions>
         </fieldset>
       ) : (
         <p>{t('common.operations.charity.terminalKeyImmutable')}</p>

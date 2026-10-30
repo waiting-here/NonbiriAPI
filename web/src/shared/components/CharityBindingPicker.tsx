@@ -3,6 +3,7 @@ import type { NativeService } from '@shared/nativeServices';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { Button } from '@shared/components/ui/Button';
 import { Field } from './ui/Field';
+import { FilterBar } from './ui/FilterBar';
 import { KeyStateFilter } from './charity/KeyStateFilter';
 import type { KeyStateFilter as KeyState } from '@shared/operations/keyState';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -602,59 +603,64 @@ function CharityBindingPickerBody({
 
       {!selectedSource ? (
         <>
-          <div className="ops-toolbar">
-            <KeyStateFilter
-              value={keyState}
-              disabled={interactionBlocked}
-              onChange={(state) => {
-                setKeyState(state);
-                setScope('all');
-                setSelectedSource(null);
-                resetKeySelection();
-              }}
-            />
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                submitSourceQuery();
-              }}
-            >
-              <label>
-                <span>{t('common.operations.charity.searchSources')}</span>
-                <input
-                  type="search"
-                  value={sourceQueryDraft}
-                  maxLength={256}
+          <FilterBar
+            activeCount={sourceQuery ? 1 : 0}
+            onSubmit={submitSourceQuery}
+            onReset={() => {
+              if (interactionBlocked) return;
+              setSourceQueryDraft('');
+              setSourceQuery('');
+              setKeyState('all');
+              changeScope('all');
+            }}
+            secondaryAlwaysVisible
+            secondary={
+              <>
+                <KeyStateFilter
+                  value={keyState}
                   disabled={interactionBlocked}
-                  aria-invalid={!sourceQueryValid}
-                  onChange={(event) => setSourceQueryDraft(event.target.value)}
+                  onChange={(state) => {
+                    setKeyState(state);
+                    setScope('all');
+                    setSelectedSource(null);
+                    resetKeySelection();
+                  }}
                 />
-                {!sourceQueryValid ? (
-                  <span className="field-error" role="alert">
-                    {t('common.operations.charity.searchInvalid')}
-                  </span>
-                ) : null}
-              </label>
-              <Button
-                type="submit"
-
-                disabled={interactionBlocked || !sourceQueryValid}
+                <Field label={t('common.operations.charity.sourceScope')} size="short">
+                  {(field) => (
+                    <select
+                      {...field}
+                      value={scope}
+                      disabled={interactionBlocked}
+                      onChange={(event) => changeScope(event.target.value as SourceScope)}
+                    >
+                      <option value="active">{t('common.operations.charity.scopeActive')}</option>
+                      <option value="all">{t('common.operations.charity.scopeAll')}</option>
+                    </select>
+                  )}
+                </Field>
+              </>
+            }
+            search={
+              <Field
+                label={t('common.operations.charity.searchSources')}
+                error={!sourceQueryValid ? t('common.operations.charity.searchInvalid') : undefined}
               >
-                {t('common.search')}
-              </Button>
-            </form>
-            <label>
-              <span>{t('common.operations.charity.sourceScope')}</span>
-              <select
-                value={scope}
-                disabled={interactionBlocked}
-                onChange={(event) => changeScope(event.target.value as SourceScope)}
-              >
-                <option value="active">{t('common.operations.charity.scopeActive')}</option>
-                <option value="all">{t('common.operations.charity.scopeAll')}</option>
-              </select>
-            </label>
-          </div>
+                {(field) => (
+                  <input
+                    {...field}
+                    placeholder={t('common.operations.charity.searchSources')}
+                    type="search"
+                    value={sourceQueryDraft}
+                    maxLength={256}
+                    disabled={interactionBlocked}
+                    aria-invalid={!sourceQueryValid}
+                    onChange={(event) => setSourceQueryDraft(event.target.value)}
+                  />
+                )}
+              </Field>
+            }
+          />
           {sources.isPending ? (
             <LoadingState />
           ) : sources.error ? (
@@ -736,38 +742,36 @@ function CharityBindingPickerBody({
           </div>
           {!selectedKey ? (
             <>
-              <div className="ops-toolbar">
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    submitKeyQuery();
-                  }}
-                >
-                  <label>
-                    <span>{t('common.operations.charity.searchKeys')}</span>
-                    <input
-                      type="search"
-                      value={keyQueryDraft}
-                      maxLength={256}
-                      disabled={interactionBlocked}
-                      aria-invalid={!keyQueryValid}
-                      onChange={(event) => setKeyQueryDraft(event.target.value)}
-                    />
-                    {!keyQueryValid ? (
-                      <span className="field-error" role="alert">
-                        {t('common.operations.charity.searchInvalid')}
-                      </span>
-                    ) : null}
-                  </label>
-                  <Button
-                    type="submit"
-
-                    disabled={interactionBlocked || !keyQueryValid}
+              <FilterBar
+                activeCount={keyQuery ? 1 : 0}
+                onSubmit={submitKeyQuery}
+                onReset={() => {
+                  if (interactionBlocked) return;
+                  setKeyQueryDraft('');
+                  setKeyQuery('');
+                }}
+                search={
+                  <Field
+                    label={t('common.operations.charity.searchKeys')}
+                    error={
+                      !keyQueryValid ? t('common.operations.charity.searchInvalid') : undefined
+                    }
                   >
-                    {t('common.search')}
-                  </Button>
-                </form>
-              </div>
+                    {(field) => (
+                      <input
+                        {...field}
+                        placeholder={t('common.operations.charity.searchKeys')}
+                        type="search"
+                        value={keyQueryDraft}
+                        maxLength={256}
+                        disabled={interactionBlocked}
+                        aria-invalid={!keyQueryValid}
+                        onChange={(event) => setKeyQueryDraft(event.target.value)}
+                      />
+                    )}
+                  </Field>
+                }
+              />
               {sourceKeys.isPending ? (
                 <LoadingState />
               ) : sourceKeys.error ? (
@@ -907,54 +911,61 @@ function CharityBindingPickerBody({
               {sourceKeys.error ? (
                 <ErrorState error={sourceKeys.error} onRetry={() => void sourceKeys.refetch()} />
               ) : null}
-              <div className="ops-toolbar">
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    submitCandidateQuery();
-                  }}
-                >
-                  <label>
-                    <span>{t('common.operations.charity.searchModels')}</span>
-                    <input
-                      type="search"
-                      value={candidateQueryDraft}
-                      placeholder={t('common.workflow.upstreamSearch')}
-                      maxLength={1024}
-                      disabled={interactionBlocked}
-                      aria-invalid={!candidateQueryValid}
-                      onChange={(event) => setCandidateQueryDraft(event.target.value)}
-                    />
-                    {!candidateQueryValid ? (
-                      <span className="field-error" role="alert">
-                        {t('common.operations.charity.candidateSearchInvalid')}
-                      </span>
-                    ) : null}
-                  </label>
-                  <Button
-                    type="submit"
-
-                    disabled={interactionBlocked || !candidateQueryValid}
+              <FilterBar
+                activeCount={[candidateQuery, candidateSource].filter(Boolean).length}
+                onSubmit={submitCandidateQuery}
+                onReset={() => {
+                  if (interactionBlocked) return;
+                  setCandidateQueryDraft('');
+                  setCandidateQuery('');
+                  setCandidateSource('');
+                }}
+                search={
+                  <Field
+                    label={t('common.operations.charity.searchModels')}
+                    error={
+                      !candidateQueryValid
+                        ? t('common.operations.charity.candidateSearchInvalid')
+                        : undefined
+                    }
                   >
-                    {t('common.search')}
-                  </Button>
-                </form>
-                <label>
-                  <span>{t('common.operations.charity.candidateSourceFilter')}</span>
-                  <select
-                    value={candidateSource}
-                    disabled={interactionBlocked}
-                    onChange={(event) => {
-                      if (interactionBlocked) return;
-                      setCandidateSource(event.target.value as CandidateSource);
-                    }}
-                  >
-                    <option value="">{t('common.operations.charity.candidateSourceAny')}</option>
-                    <option value="automatic">{t(sourceTypeKey('automatic'))}</option>
-                    <option value="manual">{t(sourceTypeKey('manual'))}</option>
-                  </select>
-                </label>
-              </div>
+                    {(field) => (
+                      <input
+                        {...field}
+                        type="search"
+                        value={candidateQueryDraft}
+                        placeholder={t('common.workflow.upstreamSearch')}
+                        maxLength={1024}
+                        disabled={interactionBlocked}
+                        aria-invalid={!candidateQueryValid}
+                        onChange={(event) => setCandidateQueryDraft(event.target.value)}
+                      />
+                    )}
+                  </Field>
+                }
+                secondaryAlwaysVisible
+                secondary={
+                  <Field label={t('common.operations.charity.candidateSourceFilter')}>
+                    {(field) => (
+                      <select
+                        {...field}
+                        value={candidateSource}
+                        disabled={interactionBlocked}
+                        onChange={(event) => {
+                          if (interactionBlocked) return;
+                          setCandidateSource(event.target.value as CandidateSource);
+                        }}
+                      >
+                        <option value="">
+                          {t('common.operations.charity.candidateSourceAny')}
+                        </option>
+                        <option value="automatic">{t(sourceTypeKey('automatic'))}</option>
+                        <option value="manual">{t(sourceTypeKey('manual'))}</option>
+                      </select>
+                    )}
+                  </Field>
+                }
+              />
               {candidates.isPending ? (
                 <LoadingState />
               ) : candidates.error ? (
@@ -976,76 +987,80 @@ function CharityBindingPickerBody({
                           const key = charitySelectionKey(entry);
                           return (
                             <li key={key}>
-                              <label className="ops-picker-choice checkbox-label">
-                                <input
-                                  type="checkbox"
-                                  disabled={
-                                    interactionBlocked ||
-                                    Boolean(entry.current_binding_id) ||
-                                    entry.capabilities?.can_bind === false ||
-                                    (!selected[key] && Object.keys(selected).length >= capacity)
-                                  }
-                                  checked={Boolean(selected[key])}
-                                  onChange={(event) => {
-                                    if (
-                                      interactionBlocked ||
-                                      Boolean(entry.current_binding_id) ||
-                                      entry.capabilities?.can_bind === false ||
-                                      (event.target.checked &&
-                                        !selected[key] &&
-                                        Object.keys(selected).length >= capacity)
-                                    )
-                                      return;
-                                    const next = { ...selected };
-                                    if (event.target.checked) {
-                                      next[key] = {
-                                        ...entry,
-                                        note: selectedKey.safe_note,
-                                        selected_native_services: entry.capabilities?.can_bind
-                                          ? entry.native_services?.slice()
-                                          : undefined,
-                                      };
-                                    } else {
-                                      delete next[key];
-                                    }
-                                    onChange(next);
-                                  }}
-                                />
-                                <span>
-                                  {entry.upstream_model_id}
-                                  {entry.current_binding_id ? (
-                                    <small className="ops-picker-source-types">
-                                      {t('common.bindingBatch.boundHere')}
-                                    </small>
-                                  ) : null}
-                                  {entry.other_bindings?.length ? (
-                                    <small className="ops-picker-source-types">
-                                      {t('common.bindingBatch.boundElsewhere', {
-                                        names: entry.other_bindings
-                                          .map((binding) => binding.full_name)
-                                          .join(' / '),
-                                      })}
-                                    </small>
-                                  ) : null}
-                                  {entry.other_binding_count &&
-                                  BigInt(entry.other_binding_count) >
-                                    BigInt(entry.other_bindings?.length ?? 0) ? (
-                                    <small className="ops-picker-source-types">
-                                      {t('common.bindingBatch.moreBindings', {
-                                        count: Number(
-                                          BigInt(entry.other_binding_count) -
-                                            BigInt(entry.other_bindings?.length ?? 0),
-                                        ),
-                                      })}
-                                    </small>
-                                  ) : null}
-                                  <small className="ops-picker-source-types">
-                                    {entry.source_types
-                                      .map((source) => t(sourceTypeKey(source)))
-                                      .join(' / ')}
-                                  </small>
-                                </span>
-                              </label>
+                              <Field label={entry.upstream_model_id}>
+                                {(field) => (
+                                  <>
+                                    <input
+                                      {...field}
+                                      type="checkbox"
+                                      disabled={
+                                        interactionBlocked ||
+                                        Boolean(entry.current_binding_id) ||
+                                        entry.capabilities?.can_bind === false ||
+                                        (!selected[key] && Object.keys(selected).length >= capacity)
+                                      }
+                                      checked={Boolean(selected[key])}
+                                      onChange={(event) => {
+                                        if (
+                                          interactionBlocked ||
+                                          Boolean(entry.current_binding_id) ||
+                                          entry.capabilities?.can_bind === false ||
+                                          (event.target.checked &&
+                                            !selected[key] &&
+                                            Object.keys(selected).length >= capacity)
+                                        )
+                                          return;
+                                        const next = { ...selected };
+                                        if (event.target.checked) {
+                                          next[key] = {
+                                            ...entry,
+                                            note: selectedKey.safe_note,
+                                            selected_native_services: entry.capabilities?.can_bind
+                                              ? entry.native_services?.slice()
+                                              : undefined,
+                                          };
+                                        } else {
+                                          delete next[key];
+                                        }
+                                        onChange(next);
+                                      }}
+                                    />
+                                    <span>
+                                      {entry.current_binding_id ? (
+                                        <small className="ops-picker-source-types">
+                                          {t('common.bindingBatch.boundHere')}
+                                        </small>
+                                      ) : null}
+                                      {entry.other_bindings?.length ? (
+                                        <small className="ops-picker-source-types">
+                                          {t('common.bindingBatch.boundElsewhere', {
+                                            names: entry.other_bindings
+                                              .map((binding) => binding.full_name)
+                                              .join(' / '),
+                                          })}
+                                        </small>
+                                      ) : null}
+                                      {entry.other_binding_count &&
+                                      BigInt(entry.other_binding_count) >
+                                        BigInt(entry.other_bindings?.length ?? 0) ? (
+                                        <small className="ops-picker-source-types">
+                                          {t('common.bindingBatch.moreBindings', {
+                                            count: Number(
+                                              BigInt(entry.other_binding_count) -
+                                                BigInt(entry.other_bindings?.length ?? 0),
+                                            ),
+                                          })}
+                                        </small>
+                                      ) : null}
+                                      <small className="ops-picker-source-types">
+                                        {entry.source_types
+                                          .map((source) => t(sourceTypeKey(source)))
+                                          .join(' / ')}
+                                      </small>
+                                    </span>
+                                  </>
+                                )}
+                              </Field>
                               {entry.other_binding_count &&
                               BigInt(entry.other_binding_count) >
                                 BigInt(entry.other_bindings?.length ?? 0) &&

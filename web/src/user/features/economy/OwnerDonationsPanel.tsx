@@ -252,7 +252,16 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
         }
       />
       <FilterBar
-        secondaryLabel={t('user.charity.ownerPages.status')}
+        onReset={() => {
+          setDraft({ source: '', value: '', invalid: false });
+          setParams((previous) => {
+            const next = new URLSearchParams(previous);
+            next.delete('donation_q');
+            next.delete('donation_status');
+            next.delete('donations_page');
+            return next;
+          });
+        }}
         activeCount={status ? 1 : 0}
         secondaryAlwaysVisible
         onSubmit={search}
@@ -275,17 +284,6 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
                 />
               )}
             </Field>
-            <Button type="submit">{t('common.search')}</Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setDraft({ source: '', value: '', invalid: false });
-                setFilter('donation_q', '');
-              }}
-            >
-              {t('user.charity.ownerPages.clear')}
-            </Button>
           </>
         }
         secondary={

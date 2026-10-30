@@ -115,7 +115,7 @@ export function UserDonationHistory({
       ) : (
         <>
           <FilterBar
-            secondaryLabel={t('common.filter')}
+            onReset={reset}
             activeCount={[query, status].filter(Boolean).length}
             search={
               <>
@@ -137,9 +137,6 @@ export function UserDonationHistory({
                     />
                   )}
                 </Field>
-                <Button type="submit" disabled={!validManagementSearch(draft)}>
-                  {t('common.donationHandling.applySearch')}
-                </Button>
               </>
             }
             secondary={

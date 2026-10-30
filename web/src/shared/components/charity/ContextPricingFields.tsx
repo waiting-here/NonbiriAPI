@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Field } from '@shared/components/ui/Field';
+import { Fields } from '@shared/components/ui/Fields';
 import { Toggle } from '@shared/components/ui/Toggle';
 import { Fold } from '@shared/components/ui/Fold';
 import type { CharityRole, TokenPrices } from '@shared/operations/charity';
@@ -52,8 +53,8 @@ export function ContextPricingFields({
           />
         )}
         {value.longEnabled && value.mode !== 'per_search_unit' && (
-          <div className="nb-grid nb-grid--2">
-            <Field label={t('common.operations.charity.context.longThreshold')}>
+          <Fields>
+            <Field size="short" label={t('common.operations.charity.context.longThreshold')}>
               {(props) => (
                 <input
                   {...props}
@@ -95,7 +96,7 @@ export function ContextPricingFields({
                 </Field>
               ))
             )}
-          </div>
+          </Fields>
         )}
         {value.longEnabled && value.mode !== 'per_search_unit' && (
           <>
@@ -118,7 +119,7 @@ export function ContextPricingFields({
                   )}
                 </Field>
               ) : (
-                <div className="nb-grid nb-grid--2">
+                <Fields>
                   {(Object.keys(value.longDonorRewards) as (keyof TokenPrices)[]).map((field) => (
                     <Field key={field} label={t(tokenPriceCopyKey(role, 'donorRewards', field))}>
                       {(props) => (
@@ -138,7 +139,7 @@ export function ContextPricingFields({
                       )}
                     </Field>
                   ))}
-                </div>
+                </Fields>
               ))}
             {value.mode === 'per_token' && (
               <>
@@ -179,8 +180,8 @@ export function ContextPricingFields({
           }
         />
         {value.penaltyEnabled && (
-          <div className="nb-grid nb-grid--2">
-            <Field label={t('common.operations.charity.context.penaltyThreshold')}>
+          <Fields>
+            <Field size="short" label={t('common.operations.charity.context.penaltyThreshold')}>
               {(props) => (
                 <input
                   {...props}
@@ -200,7 +201,7 @@ export function ContextPricingFields({
                 />
               )}
             </Field>
-          </div>
+          </Fields>
         )}
       </div>
     </Fold>

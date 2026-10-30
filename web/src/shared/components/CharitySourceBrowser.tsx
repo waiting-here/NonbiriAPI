@@ -3,6 +3,7 @@ import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel'
 import { ServiceHealth } from './ResourceHealth';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { Button } from '@shared/components/ui/Button';
+import { Field, FilterBar } from './ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
 import { Fold } from '@shared/components/ui/Fold';
@@ -876,10 +877,28 @@ export function CharitySourceBrowser({
         ) : null}
       </header>
       <div className="charity-source-browser__filters">
-        <form
-          className="ops-toolbar"
-          onSubmit={(event) => {
-            event.preventDefault();
+        <FilterBar
+          activeCount={
+            [sourceSearch.value, handling.value, keyState === 'all' ? '' : keyState].filter(Boolean)
+              .length
+          }
+          onReset={() => {
+            setSourceSearchDraft('');
+            setKeySearchDraft('');
+            setSourceSearchError(false);
+            setKeySearchError(false);
+            setSearchParams((current) => {
+              const next = new URLSearchParams(current);
+              for (const name of [SOURCE_QUERY_PARAM, KEY_QUERY_PARAM, HANDLING_PARAM, IDLE_PARAM])
+                next.delete(name);
+              next.set(SCOPE_PARAM, 'all');
+              next.set('source_key_state', 'all');
+              next.set(SOURCE_PAGE_PARAM, '1');
+              next.set(SOURCE_KEYS_PAGE_PARAM, '1');
+              return next;
+            });
+          }}
+          onSubmit={() => {
             if (!validSearch(sourceSearchDraft)) {
               setSourceSearchError(true);
               return;
@@ -887,106 +906,90 @@ export function CharitySourceBrowser({
             setSourceSearchError(false);
             updateSearch(SOURCE_QUERY_PARAM, sourceSearchDraft.trim(), true, true);
           }}
-        >
-          <label>
-            <span>{t('common.operations.charity.sourceBrowser.searchSources')}</span>
-            <input
-              type="search"
-              value={sourceSearchDraft}
-              maxLength={256}
-              aria-invalid={sourceSearchError}
-              aria-describedby={
-                sourceSearchError ? 'charity-source-browser-source-search-error' : undefined
-              }
-              onChange={(event) => {
-                setSourceSearchDraft(event.target.value);
-                setSourceSearchError(false);
-              }}
-            />
-            {sourceSearchError ? (
-              <span
-                id="charity-source-browser-source-search-error"
-                className="field-error"
-                role="alert"
+          search={
+            <Field label={t('common.operations.charity.sourceBrowser.searchSources')}>
+              {(field) => (
+                <>
+                  <input
+                    {...field}
+                    placeholder={t('common.operations.charity.sourceBrowser.searchSources')}
+                    type="search"
+                    value={sourceSearchDraft}
+                    maxLength={256}
+                    aria-invalid={sourceSearchError}
+                    aria-describedby={
+                      sourceSearchError ? 'charity-source-browser-source-search-error' : undefined
+                    }
+                    onChange={(event) => {
+                      setSourceSearchDraft(event.target.value);
+                      setSourceSearchError(false);
+                    }}
+                  />
+                  {sourceSearchError ? (
+                    <span
+                      id="charity-source-browser-source-search-error"
+                      className="field-error"
+                      role="alert"
+                    >
+                      {t('common.operations.charity.sourceBrowser.searchInvalid')}
+                    </span>
+                  ) : null}
+                </>
+              )}
+            </Field>
+          }
+          secondaryAlwaysVisible
+          secondary={
+            <>
+              <Field label={t('common.operations.charity.sourceBrowser.scope')} size="short">
+                {(field) => (
+                  <select
+                    {...field}
+                    value={scope.value}
+                    onChange={(event) => updateSearch(SCOPE_PARAM, event.target.value, true, true)}
+                  >
+                    <option value="active">
+                      {t('common.operations.charity.sourceBrowser.active')}
+                    </option>
+                    <option value="all">{t('common.operations.charity.sourceBrowser.all')}</option>
+                  </select>
+                )}
+              </Field>
+              <KeyStateFilter
+                value={keyState}
+                onChange={(state) =>
+                  setSearchParams((current) => {
+                    const next = new URLSearchParams(current);
+                    next.set('source_key_state', state);
+                    next.set(SCOPE_PARAM, 'all');
+                    next.set(SOURCE_PAGE_PARAM, '1');
+                    next.set(SOURCE_KEYS_PAGE_PARAM, '1');
+                    return next;
+                  })
+                }
+              />
+              <Field
+                label={t('common.operations.charity.sourceBrowser.handlingFilter')}
+                size="short"
               >
-                {t('common.operations.charity.sourceBrowser.searchInvalid')}
-              </span>
-            ) : null}
-          </label>
-          <Button type="submit">{t('common.operations.charity.sourceBrowser.applySearch')}</Button>
-          {sourceSearch.value ? (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setSourceSearchDraft('');
-                updateSearch(SOURCE_QUERY_PARAM, '', true, true);
-              }}
-            >
-              {t('common.operations.charity.sourceBrowser.clearSearch')}
-            </Button>
-          ) : null}
-          <label>
-            <span>{t('common.operations.charity.sourceBrowser.scope')}</span>
-            <select
-              value={scope.value}
-              onChange={(event) => updateSearch(SCOPE_PARAM, event.target.value, true, true)}
-            >
-              <option value="active">{t('common.operations.charity.sourceBrowser.active')}</option>
-              <option value="all">{t('common.operations.charity.sourceBrowser.all')}</option>
-            </select>
-          </label>
-          <KeyStateFilter
-            value={keyState}
-            onChange={(state) =>
-              setSearchParams((current) => {
-                const next = new URLSearchParams(current);
-                next.set('source_key_state', state);
-                next.set(SCOPE_PARAM, 'all');
-                next.set(SOURCE_PAGE_PARAM, '1');
-                next.set(SOURCE_KEYS_PAGE_PARAM, '1');
-                return next;
-              })
-            }
-          />
-          <label>
-            <span>{t('common.operations.charity.sourceBrowser.handlingFilter')}</span>
-            <select
-              value={handling.value}
-              onChange={(event) => updateSearch(HANDLING_PARAM, event.target.value, true, true)}
-            >
-              <option value="">{t('common.donationHandling.all')}</option>
-              <option value="pending">
-                {t('common.operations.charity.sourceBrowser.pendingOnly')}
-              </option>
-            </select>
-          </label>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              setSourceSearchDraft('');
-              setKeySearchDraft('');
-              setSearchParams((current) => {
-                const next = new URLSearchParams(current);
-                for (const name of [
-                  SOURCE_QUERY_PARAM,
-                  KEY_QUERY_PARAM,
-                  HANDLING_PARAM,
-                  IDLE_PARAM,
-                ])
-                  next.delete(name);
-                next.set(SCOPE_PARAM, 'all');
-                next.set('source_key_state', 'all');
-                next.set(SOURCE_PAGE_PARAM, '1');
-                next.set(SOURCE_KEYS_PAGE_PARAM, '1');
-                return next;
-              });
-            }}
-          >
-            {t('common.resetFilter')}
-          </Button>
-        </form>
+                {(field) => (
+                  <select
+                    {...field}
+                    value={handling.value}
+                    onChange={(event) =>
+                      updateSearch(HANDLING_PARAM, event.target.value, true, true)
+                    }
+                  >
+                    <option value="">{t('common.donationHandling.all')}</option>
+                    <option value="pending">
+                      {t('common.operations.charity.sourceBrowser.pendingOnly')}
+                    </option>
+                  </select>
+                )}
+              </Field>
+            </>
+          }
+        />
       </div>
       {sourceBusy && sourcePage ? <LoadingState label={t('common.loading')} /> : null}
       <div className={`charity-source-browser__columns${sourceKey ? ' has-selection' : ''}`}>
@@ -1073,10 +1076,20 @@ export function CharitySourceBrowser({
                   {t('common.operations.charity.sourceBrowser.backToSources')}
                 </Button>
               </header>
-              <form
-                className="ops-toolbar"
-                onSubmit={(event) => {
-                  event.preventDefault();
+              <FilterBar
+                activeCount={[keySearch.value, idle.value].filter(Boolean).length}
+                onReset={() => {
+                  setKeySearchDraft('');
+                  setKeySearchError(false);
+                  setSearchParams((current) => {
+                    const next = new URLSearchParams(current);
+                    next.delete(KEY_QUERY_PARAM);
+                    next.delete(IDLE_PARAM);
+                    next.set(SOURCE_KEYS_PAGE_PARAM, '1');
+                    return next;
+                  });
+                }}
+                onSubmit={() => {
                   if (!validSearch(keySearchDraft)) {
                     setKeySearchError(true);
                     return;
@@ -1084,65 +1097,66 @@ export function CharitySourceBrowser({
                   setKeySearchError(false);
                   updateSearch(KEY_QUERY_PARAM, keySearchDraft.trim(), false, true);
                 }}
-              >
-                <label>
-                  <span>{t('common.operations.charity.sourceBrowser.searchKeys')}</span>
-                  <input
-                    type="search"
-                    value={keySearchDraft}
-                    maxLength={256}
-                    aria-invalid={keySearchError}
-                    aria-describedby={
-                      keySearchError ? 'charity-source-browser-key-search-error' : undefined
-                    }
-                    onChange={(event) => {
-                      setKeySearchDraft(event.target.value);
-                      setKeySearchError(false);
-                    }}
-                  />
-                  {keySearchError ? (
-                    <span
-                      id="charity-source-browser-key-search-error"
-                      className="field-error"
-                      role="alert"
-                    >
-                      {t('common.operations.charity.sourceBrowser.searchInvalid')}
-                    </span>
-                  ) : null}
-                </label>
-                <Button type="submit">
-                  {t('common.operations.charity.sourceBrowser.applySearch')}
-                </Button>
-                {keySearch.value ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => {
-                      setKeySearchDraft('');
-                      updateSearch(KEY_QUERY_PARAM, '', false, true);
-                    }}
+                search={
+                  <Field label={t('common.operations.charity.sourceBrowser.searchKeys')}>
+                    {(field) => (
+                      <>
+                        <input
+                          {...field}
+                          placeholder={t('common.operations.charity.sourceBrowser.searchKeys')}
+                          type="search"
+                          value={keySearchDraft}
+                          maxLength={256}
+                          aria-invalid={keySearchError}
+                          aria-describedby={
+                            keySearchError ? 'charity-source-browser-key-search-error' : undefined
+                          }
+                          onChange={(event) => {
+                            setKeySearchDraft(event.target.value);
+                            setKeySearchError(false);
+                          }}
+                        />
+                        {keySearchError ? (
+                          <span
+                            id="charity-source-browser-key-search-error"
+                            className="field-error"
+                            role="alert"
+                          >
+                            {t('common.operations.charity.sourceBrowser.searchInvalid')}
+                          </span>
+                        ) : null}
+                      </>
+                    )}
+                  </Field>
+                }
+                secondaryAlwaysVisible
+                secondary={
+                  <Field
+                    label={t('common.operations.charity.sourceBrowser.idleFilter')}
+                    size="short"
                   >
-                    {t('common.operations.charity.sourceBrowser.clearSearch')}
-                  </Button>
-                ) : null}
-                <label>
-                  <span>{t('common.operations.charity.sourceBrowser.idleFilter')}</span>
-                  <select
-                    value={idle.value}
-                    onChange={(event) => updateSearch(IDLE_PARAM, event.target.value, false, true)}
-                  >
-                    <option value="">
-                      {t('common.operations.charity.sourceBrowser.allBindingStates')}
-                    </option>
-                    <option value="yes">
-                      {t('common.operations.charity.sourceBrowser.idleOnly')}
-                    </option>
-                    <option value="no">
-                      {t('common.operations.charity.sourceBrowser.boundOnly')}
-                    </option>
-                  </select>
-                </label>
-              </form>
+                    {(field) => (
+                      <select
+                        {...field}
+                        value={idle.value}
+                        onChange={(event) =>
+                          updateSearch(IDLE_PARAM, event.target.value, false, true)
+                        }
+                      >
+                        <option value="">
+                          {t('common.operations.charity.sourceBrowser.allBindingStates')}
+                        </option>
+                        <option value="yes">
+                          {t('common.operations.charity.sourceBrowser.idleOnly')}
+                        </option>
+                        <option value="no">
+                          {t('common.operations.charity.sourceBrowser.boundOnly')}
+                        </option>
+                      </select>
+                    )}
+                  </Field>
+                }
+              />
               {keyPage ? (
                 <FailureResetControl
                   key={JSON.stringify([role, accountId, sourceKey, sourceKeysFilters])}

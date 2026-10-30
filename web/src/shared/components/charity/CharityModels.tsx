@@ -34,6 +34,9 @@ import {
   DataTable,
   Field,
   FilterBar,
+  Fields,
+  FormActions,
+  Toggle,
   Fold,
   Note,
   Panel,
@@ -354,39 +357,37 @@ function ModelForm({
         ) : null}
         <fieldset className="ops-form-section">
           <legend>{copy.basicSettings}</legend>
-          <div className="ops-field-grid">
-            <label>
-              <span>{t(charityCopyKey(role, 'provider'))}</span>
-              <input
-                value={draft.provider}
-                onChange={(event) => {
-                  const provider = event.target.value;
-                  setDraft((current) => ({ ...current, provider }));
-                }}
-              />
-            </label>
-            <label>
-              <span>{t(charityCopyKey(role, 'model'))}</span>
-              <input
-                value={draft.model}
-                onChange={(event) => {
-                  const model = event.target.value;
-                  setDraft((current) => ({ ...current, model }));
-                }}
-              />
-            </label>
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={draft.enabled}
-                onChange={(event) => {
-                  const enabled = event.target.checked;
-                  setDraft((current) => ({ ...current, enabled }));
-                }}
-              />
-              <span>{t('common.operations.charity.enableCharityModel')}</span>
-            </label>
-          </div>
+          <Fields>
+            <Field label={t(charityCopyKey(role, 'provider'))}>
+              {(field) => (
+                <input
+                  {...field}
+                  value={draft.provider}
+                  onChange={(event) => {
+                    const provider = event.target.value;
+                    setDraft((current) => ({ ...current, provider }));
+                  }}
+                />
+              )}
+            </Field>
+            <Field label={t(charityCopyKey(role, 'model'))}>
+              {(field) => (
+                <input
+                  {...field}
+                  value={draft.model}
+                  onChange={(event) => {
+                    const model = event.target.value;
+                    setDraft((current) => ({ ...current, model }));
+                  }}
+                />
+              )}
+            </Field>
+            <Toggle
+              label={t('common.operations.charity.enableCharityModel')}
+              checked={draft.enabled}
+              onChange={(enabled) => setDraft((current) => ({ ...current, enabled }))}
+            />
+          </Fields>
         </fieldset>
         <ModelTypesField
           value={draft.modelTypes}
@@ -413,53 +414,62 @@ function ModelForm({
         ) : null}
         <fieldset className="ops-form-section">
           <legend>{copy.accessRouting}</legend>
-          <div className="ops-field-grid">
-            <label>
-              <span>{t('common.operations.charity.routeStrategy')}</span>
-              <select
-                value={draft.routeStrategy}
-                onChange={(event) => {
-                  const routeStrategy = event.target.value as ModelDraft['routeStrategy'];
-                  setDraft((current) => ({ ...current, routeStrategy }));
-                }}
-              >
-                <option value="ordered">{t('common.operations.charity.routeOrdered')}</option>
-                <option value="random">{t('common.operations.charity.routeRandom')}</option>
-                <option value="expiry_weighted">
-                  {t('common.operations.charity.routeExpiryWeighted')}
-                </option>
-                <option value="cache_balanced">
-                  {t('common.operations.charity.routeCacheBalanced')}
-                </option>
-              </select>
-              <small>
-                {t(
-                  draft.routeStrategy === 'ordered'
-                    ? 'common.operations.charity.routeOrderedHelp'
-                    : draft.routeStrategy === 'random'
-                      ? 'common.operations.charity.routeRandomHelp'
-                      : draft.routeStrategy === 'cache_balanced'
-                        ? 'common.operations.charity.routeCacheBalancedHelp'
-                        : 'common.operations.charity.routeExpiryWeightedHelp',
-                )}
-              </small>
-            </label>
+          <Fields>
+            <Field label={t('common.operations.charity.routeStrategy')}>
+              {(field) => (
+                <>
+                  <select
+                    {...field}
+                    value={draft.routeStrategy}
+                    onChange={(event) => {
+                      const routeStrategy = event.target.value as ModelDraft['routeStrategy'];
+                      setDraft((current) => ({ ...current, routeStrategy }));
+                    }}
+                  >
+                    <option value="ordered">{t('common.operations.charity.routeOrdered')}</option>
+                    <option value="random">{t('common.operations.charity.routeRandom')}</option>
+                    <option value="expiry_weighted">
+                      {t('common.operations.charity.routeExpiryWeighted')}
+                    </option>
+                    <option value="cache_balanced">
+                      {t('common.operations.charity.routeCacheBalanced')}
+                    </option>
+                  </select>
+                  <small>
+                    {t(
+                      draft.routeStrategy === 'ordered'
+                        ? 'common.operations.charity.routeOrderedHelp'
+                        : draft.routeStrategy === 'random'
+                          ? 'common.operations.charity.routeRandomHelp'
+                          : draft.routeStrategy === 'cache_balanced'
+                            ? 'common.operations.charity.routeCacheBalancedHelp'
+                            : 'common.operations.charity.routeExpiryWeightedHelp',
+                    )}
+                  </small>
+                </>
+              )}
+            </Field>
             {role === 'admin' ? (
-              <label>
-                <span>{t('common.operations.charity.routeAffinityTTL')}</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={86_400}
-                  step={1}
-                  value={draft.affinityTTLSeconds}
-                  onChange={(event) => {
-                    const affinityTTLSeconds = Number(event.target.value);
-                    setDraft((current) => ({ ...current, affinityTTLSeconds }));
-                  }}
-                />
-                <small>{t('common.operations.charity.routeAffinityTTLHelp')}</small>
-              </label>
+              <Field
+                label={t('common.operations.charity.routeAffinityTTL')}
+                size="short"
+                help={t('common.operations.charity.routeAffinityTTLHelp')}
+              >
+                {(field) => (
+                  <input
+                    {...field}
+                    type="number"
+                    min={1}
+                    max={86_400}
+                    step={1}
+                    value={draft.affinityTTLSeconds}
+                    onChange={(event) => {
+                      const affinityTTLSeconds = Number(event.target.value);
+                      setDraft((current) => ({ ...current, affinityTTLSeconds }));
+                    }}
+                  />
+                )}
+              </Field>
             ) : null}
             {draft.modelTypes.includes('chat_completions') ||
             draft.modelTypes.includes('responses') ? (
@@ -470,21 +480,15 @@ function ModelForm({
                     setDraft((current) => ({ ...current, transportRule }))
                   }
                 />
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={draft.flatten}
-                    onChange={(event) => {
-                      const flatten = event.target.checked;
-                      setDraft((current) => ({ ...current, flatten }));
-                    }}
-                  />
-                  <span>{t(charityCopyKey(role, 'flattenExperimental'))}</span>
-                </label>
+                <Toggle
+                  label={t(charityCopyKey(role, 'flattenExperimental'))}
+                  checked={draft.flatten}
+                  onChange={(flatten) => setDraft((current) => ({ ...current, flatten }))}
+                />
               </>
             ) : null}
-          </div>
-          <div className="ops-model-settings">
+          </Fields>
+          <Fields>
             <fieldset className="ops-model-levels">
               <legend>{t('common.operations.charity.allowedLevels')}</legend>
               <div className="ops-model-level-actions">
@@ -507,24 +511,31 @@ function ModelForm({
               </div>
               <div className="ops-model-level-options">
                 {MODEL_LEVELS.map((level) => (
-                  <label className="checkbox-label" key={level}>
-                    <input
-                      type="checkbox"
-                      checked={draft.allowedLevels.includes(level)}
-                      onChange={(event) =>
-                        setDraft((current) => ({
-                          ...current,
-                          allowedLevels: event.target.checked
-                            ? MODEL_LEVELS.filter(
-                                (candidate) =>
-                                  candidate === level || current.allowedLevels.includes(candidate),
-                              )
-                            : current.allowedLevels.filter((candidate) => candidate !== level),
-                        }))
-                      }
-                    />
-                    <span>{t('common.operations.charity.levelLabel', { level })}</span>
-                  </label>
+                  <Field
+                    label={t('common.operations.charity.levelLabel', { level })}
+                    size="short"
+                    key={level}
+                  >
+                    {(field) => (
+                      <input
+                        {...field}
+                        type="checkbox"
+                        checked={draft.allowedLevels.includes(level)}
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            allowedLevels: event.target.checked
+                              ? MODEL_LEVELS.filter(
+                                  (candidate) =>
+                                    candidate === level ||
+                                    current.allowedLevels.includes(candidate),
+                                )
+                              : current.allowedLevels.filter((candidate) => candidate !== level),
+                          }))
+                        }
+                      />
+                    )}
+                  </Field>
                 ))}
               </div>
               {draft.allowedLevels.length === 0 ? (
@@ -533,41 +544,41 @@ function ModelForm({
                 </small>
               ) : null}
             </fieldset>
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={draft.isMainstream}
-                onChange={(event) => {
-                  const isMainstream = event.target.checked;
-                  setDraft((current) => ({ ...current, isMainstream }));
-                }}
-              />
-              <span>{copy.mainstream}</span>
-            </label>
-            <label>
-              <span>{copy.excluded}</span>
-              <textarea
-                value={draft.excluded}
-                onChange={(event) => {
-                  const excluded = event.target.value;
-                  setDraft((current) => ({ ...current, excluded }));
-                }}
-              />
-              <small>{copy.excludedHint}</small>
-            </label>
-            <label className="ops-model-description">
-              <span>{t('common.operations.charity.publicDescription')}</span>
-              <textarea
-                rows={5}
-                value={draft.publicDescription}
-                aria-label={t('common.operations.charity.publicDescription')}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, publicDescription: event.target.value }))
-                }
-              />
-              <small>{t('common.operations.charity.publicDescriptionHelp')}</small>
-            </label>
-          </div>
+            <Toggle
+              label={copy.mainstream}
+              checked={draft.isMainstream}
+              onChange={(isMainstream) => setDraft((current) => ({ ...current, isMainstream }))}
+            />
+            <Field label={copy.excluded} help={copy.excludedHint} size="long">
+              {(field) => (
+                <textarea
+                  {...field}
+                  value={draft.excluded}
+                  onChange={(event) => {
+                    const excluded = event.target.value;
+                    setDraft((current) => ({ ...current, excluded }));
+                  }}
+                />
+              )}
+            </Field>
+            <Field
+              label={t('common.operations.charity.publicDescription')}
+              help={t('common.operations.charity.publicDescriptionHelp')}
+              size="long"
+            >
+              {(field) => (
+                <textarea
+                  {...field}
+                  rows={5}
+                  value={draft.publicDescription}
+                  aria-label={t('common.operations.charity.publicDescription')}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, publicDescription: event.target.value }))
+                  }
+                />
+              )}
+            </Field>
+          </Fields>
         </fieldset>
         {draft.modelTypes.includes('chat_completions') || draft.modelTypes.includes('responses') ? (
           <RolePolicyEditor
@@ -691,7 +702,7 @@ function ModelForm({
                       : t(`common.operations.charity.validation.${validationError}`)}
         </p>
       ) : null}
-      <div className="ops-actions">
+      <FormActions>
         <button
           className="nb-btn nb-btn--primary"
           type="button"
@@ -793,7 +804,7 @@ function ModelForm({
             {t('common.operations.charity.deleteModel')}
           </button>
         ) : null}
-      </div>
+      </FormActions>
       {confirmDelete && model ? (
         <ConfirmDialog
           open
@@ -1160,7 +1171,7 @@ function BindingsPanel({
           </Fold>
         ) : null}
         {orderChanged ? (
-          <div className="ops-actions">
+          <FormActions note={t('common.operations.charity.saveOrderHelp')}>
             <button
               type="button"
               className="nb-btn nb-btn--primary"
@@ -1179,8 +1190,7 @@ function BindingsPanel({
             >
               {t('common.cancel')}
             </button>
-            <span>{t('common.operations.charity.saveOrderHelp')}</span>
-          </div>
+          </FormActions>
         ) : null}
         {visitedBindings
           .filter((id) => bindings.data?.bindings.some((row) => row.id === id))
@@ -1489,7 +1499,10 @@ export function ModelsPanel({
           <FilterBar
             activeCount={[query, enabled].filter(Boolean).length}
             secondaryAlwaysVisible
-            secondaryLabel={t('common.workflow.filters')}
+            onReset={() => {
+              setQueryDraft('');
+              updateFilters('', '');
+            }}
             onSubmit={() => {
               if (validManagementSearch(queryDraft)) updateFilters(queryDraft.trim());
             }}
@@ -1507,9 +1520,6 @@ export function ModelsPanel({
                     />
                   )}
                 </Field>
-                <Button type="submit" disabled={!validManagementSearch(queryDraft)}>
-                  {t('common.applyFilter')}
-                </Button>
               </>
             }
             secondary={

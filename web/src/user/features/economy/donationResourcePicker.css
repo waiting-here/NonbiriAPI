@@ -49,26 +49,6 @@
   background: var(--nb-color-surface-alt);
 }
 
-.donation-resource-picker__search {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: end;
-  gap: var(--nb-space-2);
-}
-
-.donation-resource-picker__search label {
-  display: grid;
-  min-width: 0;
-  gap: var(--nb-space-1);
-}
-
-.donation-resource-picker__search input {
-  box-sizing: border-box;
-  min-width: 0;
-  max-width: 100%;
-}
-
 .donation-resource-picker__endpoint-list,
 .donation-resource-picker__key-list,
 .donation-resource-picker__selected-list {
@@ -187,18 +167,6 @@
 
   .donation-resource-picker__count {
     text-align: left;
-  }
-
-  .donation-resource-picker__search {
-    grid-template-columns: minmax(0, 1fr) minmax(0, auto);
-  }
-
-  .donation-resource-picker__search label {
-    grid-column: 1 / -1;
-  }
-
-  .donation-resource-picker__search :is(.btn, .nb-btn) {
-    min-width: 0;
   }
 
   .donation-resource-picker__selected-list :is(.btn, .nb-btn) {
