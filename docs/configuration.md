@@ -23,6 +23,9 @@ the ChatGPT connection, or the separate [Codex device-code connection](codex-age
 plus local context/output-reserve budgets, shared concurrency and timeout.
 Codex is limited to administrator chat and individually assigned stewards; it
 cannot be a global/steward default, automatic-review source or public model route.
+Its connected card exposes official quota and a separate retained local 24-hour
+usage summary to administrators only. See [usage and limits](codex-agent.md#usage-and-limits)
+for their different account scope, refresh behavior and missing-field handling.
 Built-in [presets](ai-agent-presets.md) supply editable messages, initial
 shared memories and tool descriptions without overwriting saved customization.
 
@@ -40,6 +43,12 @@ totals remain independently retained, and clearing a conversation only resets
 its active context. Disabling chat preserves those assets and leaves the
 automatic-review mode independent. See [configuration fields, defaults and retention](api-contract.md#78-experimental-ai-assistant)
 before enabling calls or publishing instance privacy text.
+
+Connection, catalogue and quota operation diagnostics have a separate fixed
+retention of 30 days and at most 1,000 recent records. This does not change the
+manual retention of complete assistant model-request logs or the independently
+retained usage totals. See [operation diagnostics](api-contract.md#administrator-operation-diagnostics)
+for safe fields, administrator-only retrieval and write-failure behavior.
 
 ## Gateway cost attribution
 

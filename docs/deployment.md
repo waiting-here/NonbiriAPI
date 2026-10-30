@@ -315,12 +315,27 @@ explicit administrator-chat and individual-steward bindings may use it; see
 [the connection guide](codex-agent.md). A deployment check must not treat local
 fixtures as real account/workspace authorization or model availability.
 
+Validate model discovery and the separate read-only quota query through the
+administrator connection UI. Record the actual upstream result and optional
+fields rather than assuming a plan's capabilities from local connection status.
+The card distinguishes official account quota from retained local Codex usage;
+see [usage and recovery](codex-agent.md#usage-and-limits). A normal authenticated
+read can renew an expired or rejected access token through the existing connection.
+
 For failures, inspect the recorded final result, actual client HTTP delivery
 and confirmed upstream status separately. A 200 or a successful proxy write
 can precede a later protocol/read failure. Structured failure facts are bounded
 and follow existing diagnostic access and retention; missing historical facts
 remain unavailable. The separate raw-error capacity and privacy rules above
 continue to apply.
+
+Connection, model-catalogue and quota failures use separate administrator-only
+[operation diagnostics](api-contract.md#administrator-operation-diagnostics),
+retained for 30 days and bounded to 1,000 recent records. Their safe lookup ID
+does not identify a synthetic inference call. A diagnostic storage failure leaves
+the original error available with `saved:false`; the ID alone does not guarantee
+that a later lookup will succeed. Upstream authentication errors retain their
+own status in the details and do not acquire the site's login/session semantics.
 
 ## Database compatibility and version changes
 

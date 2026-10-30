@@ -1843,9 +1843,11 @@ no steward or CallerKey equivalent.
 | `POST /admin/api/ai/chatgpt/import` | Local helper's encrypted envelope; returns safe connection status. |
 | `POST /admin/api/ai/chatgpt/logout` | `{expected_revision}`; returns `{remote_revocation_confirmed:boolean}`. |
 | `GET /admin/api/ai/codex` | Safe Codex connection and pending-login status. |
+| `GET /admin/api/ai/codex/usage` | Independent official quota and retained local Codex usage; optional `refresh=1` bypasses the short quota cache. |
 | `POST /admin/api/ai/codex/login` | `{expected_revision}`; starts device-code login and returns status. |
 | `POST /admin/api/ai/codex/cancel` | `{login_id}`; cancels that pending login and returns status. |
 | `POST /admin/api/ai/codex/logout` | `{expected_revision}`; disconnects the local Codex connection and returns status. |
+| `GET /admin/api/ai/diagnostics/{id}` | Sanitized retained administrator-operation diagnostic by its 32-character lowercase hexadecimal ID. |
 
 Profile settings include `revision,driver_id,provider,base_url,has_key,model,
 context_window,output_reserve_tokens,max_output_tokens,output_token_parameter,
@@ -1952,11 +1954,12 @@ Global defaults, the all-steward default, automatic review, personal/charity
 model catalogs and public API routes cannot use it. Existing AI/tool permissions
 still apply to each operator.
 
-The four Codex routes above require an administrator session. Status contains
+The Codex routes above require an administrator session. Status contains
 `connected,revision,account_label,account_id,expires_at,updated_at,login?`.
 Revision is a decimal string; expiry is Unix seconds and update time is Unix
 milliseconds. Optional `login` contains `id,state,expires_at` and, when applicable,
-`verification_url,user_code,error_code`. There is one bounded pending login in
+`verification_url,user_code,error_code,error`. The optional `error` is the safe
+operation diagnostic described below. There is one bounded pending login in
 memory; restart requires a new login. The administrator completes authorization
 on the displayed official page. Access/refresh tokens and raw authentication
 responses are never returned. Successfully connected credentials persist encrypted.
@@ -1977,13 +1980,106 @@ The source shares outbound limits, request scheduling and administrator history.
 No fallback source or broader tool authority is implied. Real Business-account
 authorization and inference remain unverified; see the [connection guide](codex-agent.md).
 
+#### Codex quota and retained local usage
+
+`GET /admin/api/ai/codex/usage` returns `{official,local}` directly. These are
+administrator-only account/configuration reads with `Cache-Control: no-store`;
+an individual steward model assignment does not grant access. The only accepted
+nonempty `refresh` value is `1`. Authorization, disconnected/changed connection
+and service errors may fail the whole request. An ordinary upstream quota failure
+instead returns HTTP 200 with `official.availability:"unavailable"` and a safe
+`official.error`; the HTTP success alone does not establish available quota.
+A local statistics failure is independent in `local.error`.
+
+`official` contains `source:"openai_codex"`, decimal-string `revision`,
+`availability:"available"|"unavailable"`, Unix-millisecond `fetched_at` and
+`attempted_at`, `stale`, nullable `data` and optional `error`. `fetched_at` is zero
+until a successful read. Failed refreshes preserve the last successful data and
+its fetch time with `stale:true`; clients must not show it as a current result.
+The server uses a 30-second memory cache, combines overlapping queries for the
+same connection and bounds the read to 15 seconds and 1 MiB. Disconnect or
+replacement invalidates the cache and cancels its work; old results cannot
+populate a new connection. Upstream 401 permits at most one serialized credential
+recovery and retry. Other status, transport and parsing errors do not trigger a
+refresh loop.
+
+Official `data` contains optional `plan_type,workspace_name`, `buckets`, optional
+`reset_credits_available` and `partial`. Each bucket has `id`, optional `name` and
+`plan_type`, `windows`, and optional `credits,reached_type,allowed,limit_reached`.
+Each window contains `name,used_percent,window_seconds,resets_at`; absent numeric
+values are null, and reset timestamps are Unix seconds. Credits contain nullable
+`has_credits,unlimited` and optional string `balance,unit`. No missing value implies
+zero, exhaustion or unlimited access. Original percentages and independent
+windows are retained; only the UI bar and computed remaining percentage are
+clamped to 0–100. Multi-bucket data takes precedence over a legacy single bucket,
+and malformed independent entries do not hide valid ones. Unknown window lengths
+or credits are not converted into a request/token count. `partial` marks dropped
+or malformed entries. The read does not enable Reserve or mutate an allowance.
+
+`local` contains `source:"retained_instance_requests"`, availability,
+Unix-millisecond `fetched_at`, nullable `data` and optional `error`. Its data has
+`scope:"all_codex_connections"`, Unix-millisecond `window_start,window_end`, and
+decimal-string `requests,input_tokens,output_tokens,cached_input_tokens,
+cache_write_input_tokens,reasoning_tokens,unknown_count`. The indexed read covers
+the preceding 24 hours of usage events whose retained request snapshot identifies
+the Codex provider. It includes historical connections on this instance and
+excludes other providers, public calls and charity calls. Unknown usage is not
+zero usage. Request cleanup can remove the snapshot needed for this summary;
+the independent `/admin/api/ai/usage` totals do not shrink with that cleanup.
+Official account quota can include activity outside this instance and is not
+derived from these local counters.
+
+#### Administrator operation diagnostics
+
+Device-code start/poll/exchange, token refresh, model discovery and Codex quota
+use a shared sanitized operation diagnostic. Model discovery includes both
+profile and legacy administrator routes; it does not fabricate inference request
+records. The direct diagnostic lookup and account quota routes require current
+administrator authorization and have no ordinary-user, steward or CallerKey
+equivalent.
+
+The operation object is `{id,operation,source_name,site_status,upstream_code?,
+details,saved}`. Operation values are `device_code,device_poll,token_exchange,
+token_refresh,model_catalogue,codex_quota,codex_local_usage`. `details` reuses the
+structured failure facts: occurrence time, category/code, known phase, bounded
+causes/timings, response-header observation, upstream status, allowed correlation
+IDs and optional Retry-After. An absent response is not assigned the site's
+status. `source_name` is limited to 200 UTF-8 bytes, safe upstream codes to 64
+ASCII bytes and serialized details to 16 KiB. HTML, unknown error objects,
+credential reflections, raw OAuth responses, tokens and device codes are not
+retained in these details.
+
+Driver failures retain the existing `error` envelope and add
+`error.operation_diagnostic`; `error.request_id` equals that operation's ID.
+Upstream authentication/status/protocol failures use 502, gateway timeouts 504,
+and recoverable unavailability or upstream rate limits 503. Invalid local
+configuration uses 400; actual platform failures can use 500. Safe Retry-After
+is returned when known. Local authorization keeps its existing 401/403 meaning;
+an upstream 401 must not invalidate the administrator's site session. A 403 alone
+does not prove an account/workspace restriction: the diagnostic uses a safe
+upstream code when it establishes that more specific reason.
+
+`GET /admin/api/ai/diagnostics/{id}` returns the retained operation object directly.
+The independent store retains at most 30 days and the newest 1,000 records, with
+bounded cleanup after successful writes and hourly maintenance. It does not
+share inference-request manual cleanup or raw-error-body storage. If persistence
+fails, the operation still returns its original failure, ID and safe details
+with `saved:false`; a subsequent lookup need not succeed. Reading expired,
+missing or invalid IDs returns not found.
+
+The model editor retains its draft, selection and previous successful catalogue
+after failure, shows the last success time and permits local retry/cancellation.
+A successful empty array is not an error. Quota failures preserve stale data
+separately and do not silently clear login or change model bindings. Clients must
+discard responses belonging to a different connection revision.
+
 #### Model-request history, cleanup and archives
 
 These routes are administrator-only and separate from ordinary user request logs.
 
 | Method and path | Request / response |
 | --- | --- |
-| `GET /admin/api/ai/requests` | Numbered page; optional `source,kind,state,actor_id` filters. Adds decimal-string `cutoff_id`. |
+| `GET /admin/api/ai/requests` | Numbered page; optional `source,kind,state,actor_id` filters and the bounded Codex `provider,from,to` filter below. Adds decimal-string `cutoff_id`. |
 | `GET /admin/api/ai/requests/{id}` | Complete saved request detail. |
 | `POST /admin/api/ai/requests/cleanup` | Exactly one selection: nonempty `ids:[string,...]` (at most 1000) or positive `through_id`; optional matching filters. Returns string `deleted_count,skipped_count`. |
 | `GET /admin/api/ai/usage` | `{total,last_24_hours,as_of}`, independent of retained request rows. |
@@ -1993,6 +2089,15 @@ These routes are administrator-only and separate from ordinary user request logs
 | `GET /admin/api/ai/archives/{owner}/results` | Numbered independent model-result page. |
 
 Request filters are `source=auto_review|admin_chat|steward_chat`, `kind=model|compaction`, `state=pending|running|succeeded|failed|cancelled|interrupted` and an exact actor ID; omit a filter for all. Rows include `id,client_request_id,source,kind,actor_id,actor_role,actor_label,state,base_url,model,driver_id,provider,created_at,started_at?,completed_at?,consumed_at?,status_code,error_code,content_redacted,response_complete,usage`. Actor snapshots remain after account deletion. Detail adds safe resolved `driver_settings`, `queued_input`, the exact serialized `request_body` when prepared for dispatch, saved `response_body` and optional `response_body_base64` for non-UTF-8 content. A request cancelled before preparation may have an empty wire body while retaining its queued input. Incomplete/error/interrupted responses retain received content and an explicit completeness flag; no missing response is fabricated. Request/response capture remains bounded by transport limits. Authorization headers and the dedicated raw key are excluded; recognized key reflections are redacted.
+
+The quota-card record link supplies `provider=codex&from=<Unix-ms>&to=<Unix-ms>`.
+These three fields must form a complete filter with `from>0`, `to>from` and a
+range of at most 24 hours. Bounds are inclusive and refer to the usage event's
+recorded time, not the request's creation time. Other provider values are not
+accepted by this filter. It selects retained request snapshots for all Codex
+connections on the instance, and may combine with the existing filters. Cleanup
+accepts the same optional fields; JSON `from` and `to` are decimal strings.
+Keep that provider/time scope when confirming or retrying cleanup.
 
 Model-request logs have no automatic expiry. Cleanup is an explicit irreversible administrator action: freeze the list's `cutoff_id` and filters when confirming a range, or retain the exact selected IDs. Never replace that cutoff with a fresh value on retry. Newer rows are excluded. Only terminal requests whose reply or failure has been durably handed to the independent workflow records are eligible; pending/running or still-needed rows are skipped. Cleanup runs in bounded batches, so an interrupted call may already have removed some rows; retrying the same selection is safe but returned counts describe only that call.
 
