@@ -59,6 +59,38 @@ Prepare missing layers, backing plates or bindings before accepting a finished
 animation. Blinking plus barely visible tip movement is insufficient; whole-body
 waves, unsupported bouncing and extra particles cannot replace character motion.
 
+### Moment-only expanded frames
+
+Keep adopted expanded derivatives under moment/<card-id>/ and
+hires/moment/<card-id>/, separate from existing cards, portrait crops and site
+appearances. composition.json is the display-registration source:
+moment_layers.expansion retains canvas, originalRegion and adopted hero/eye
+paths; an aligned scene has its own moment_layers.scene registration. Use the
+actual recorded offsets and dimensions, including additional top or transparent
+padding. Keep the original character scale, bottom anchor, eye coordinates and
+motion rig. On ordinary wide pages, move the canonical box inward by its actual
+right margin and reserve both added sides beside the readable content; phone
+and game layouts keep their existing placement.
+
+For native SP inputs, first reveal the uncropped source through the camera.
+A separately painted still beneath cropped animation cannot supply moving hair
+or clothing. Keep static fallback and reduced-motion output registered with
+the same complete frame. Sweet eye-state sampling adds only the registered
+source offset; its face masks and original motion vertices remain canonical.
+An expanded s-claude scene must use the character's scale and hand-to-door
+contact transform, with the existing character-free theme as the surrounding
+plate; independent background cover would break that registration.
+
+Retain each source PNG, source/output SHA-256, canvas and original region,
+workflow/model revision, available model-license evidence and adoption status
+with the artwork record. Generated margins must preserve the complete original
+RGBA rectangle; keep native renderer sampling limits separate from static
+pixel-retention checks. State resampling dimensions explicitly. Authoring model
+licenses are distinct from project code and artwork notices; do not substitute
+an architecture source license for a model-weight license. The
+[asset notice](../web/public/assets/gacha/NOTICE.md#moment-only-expanded-frames)
+records the currently shipped derivatives and authoring sources.
+
 ## High-resolution delivery
 
 Target 2560 × 3840 portrait derivatives and 3840 × 2160 landscape derivatives for desktop appreciation, including animation layers. Keep native masters and enhancement settings separately. Enhanced derivatives improve display clarity but must not be described as new native detail. Inspect faces, fine jewelry, patterned cloth, transparent edges and painted textures before adoption; reject oversharpening and invented features.
@@ -67,12 +99,12 @@ Use responsive image candidates for full illustrations and pool covers. Continue
 
 ## Rarity requirements
 
-| Rarity | Artwork | Draw presentation |
-| --- | --- | --- |
-| N / R | Complete static illustration | Brief automatic reveal with clearly readable rarity |
-| SR | Complete static illustration | Stronger reveal; wait for interaction |
-| SSR | Layered animated illustration, static fallback and pause | Full-viewport spectacle and individual close-up; wait for interaction |
-| SP | Individually composed character scene, continuously animated background and coordinated character motion; static fallback and pause | More prominent spectacle than SSR, distinct rarity treatment and close-up; wait for interaction |
+| Rarity | Artwork                                                                                                                             | Draw presentation                                                                               |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| N / R  | Complete static illustration                                                                                                        | Brief automatic reveal with clearly readable rarity                                             |
+| SR     | Complete static illustration                                                                                                        | Stronger reveal; wait for interaction                                                           |
+| SSR    | Layered animated illustration, static fallback and pause                                                                            | Full-viewport spectacle and individual close-up; wait for interaction                           |
+| SP     | Individually composed character scene, continuously animated background and coordinated character motion; static fallback and pause | More prominent spectacle than SSR, distinct rarity treatment and close-up; wait for interaction |
 
 N and R continue automatically. SR and higher wait for a click on the presentation surface or Continue, while their artwork keeps moving. First-acquisition SSR/SP scenes keep Skip, close, Escape and Continue unavailable until their full dialogue is visible. After all required encounters finish, Skip reaches the final results. Owned SSR/SP cards offer both encounter replays, which remain freely closable. Ten-pulls end with all ten cards visible; duplicate cards additionally animate their conversion into shards. Music, sound effects, supported-device vibration and reduced motion remain controllable.
 
@@ -125,7 +157,6 @@ Acquisition unlocks the appearance immediately, including shop redemption. Selec
 Review the original, thumbnail, close-up and complete theme together. Inspect faces, hands, accessories, character identity, layer edges and crop safety. Watch a complete animation loop and its seam at normal speed; inspect motion on a phone-sized card, including pause and static fallback.
 
 Check the production components at desktop and phone sizes, in light and dark modes. Review readable rarity, SR-or-higher hold, skip, duplicate conversion, theme unlock and SP appearance selection. Asset availability, automated checks and a still screenshot do not replace watching the actual motion.
-
 
 ## Copy
 
