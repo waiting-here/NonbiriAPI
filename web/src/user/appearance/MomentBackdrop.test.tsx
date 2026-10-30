@@ -152,6 +152,8 @@ it('expands only a registered moment canvas while preserving the original static
   expect(document.documentElement.style.getPropertyValue('--nb-moment-extra-reserve')).toContain(
     '0.5',
   );
+  expect(document.documentElement.style.getPropertyValue('--nb-moment-width-ratio')).toBe('1.5');
+  expect(document.documentElement.style.getPropertyValue('--nb-moment-height-ratio')).toBe('1');
   expect(document.documentElement.style.getPropertyValue('--nb-moment-right-reserve')).toContain(
     '0.25',
   );
@@ -161,6 +163,8 @@ it('expands only a registered moment canvas while preserving the original static
     'false',
   );
   expect(document.documentElement.style.getPropertyValue('--nb-moment-extra-reserve')).toBe('');
+  expect(document.documentElement.style.getPropertyValue('--nb-moment-width-ratio')).toBe('');
+  expect(document.documentElement.style.getPropertyValue('--nb-moment-height-ratio')).toBe('');
   expect(document.documentElement.style.getPropertyValue('--nb-moment-right-reserve')).toBe('');
   expect(
     view.container.querySelector('.nb-moment-character img')!.getAttribute('style'),

@@ -26,6 +26,10 @@ const expandedExamples = new Set([
   'g-glm',
   'f-gemini',
   'f-chatgpt',
+  'e-glm',
+  'e-claude',
+  'c-glm',
+  'g-deepseek',
   's-chatgpt',
   's-claude',
 ]);
@@ -300,6 +304,12 @@ for (const theme of ['light', 'dark'])
             if ((expansion || layers?.scene) && width >= 1280) {
               expect(frame!.x).toBeGreaterThanOrEqual(-1);
               expect(frame!.x + frame!.width).toBeLessThanOrEqual(width + 1);
+              if (expansion) {
+                expect(frame!.y).toBeGreaterThanOrEqual(67);
+                expect(frame!.y + frame!.height).toBeLessThanOrEqual(
+                  page.viewportSize()!.height + 1,
+                );
+              }
               const main = await page.locator('main').evaluate((element) => {
                 const bounds = element.getBoundingClientRect();
                 const style = getComputedStyle(element);

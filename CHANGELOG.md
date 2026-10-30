@@ -12,7 +12,7 @@ Each version entry describes its source and compatibility boundary; a release ta
   and individually assigned stewards. Keep credentials encrypted, serialize
   refresh and cancel related work on disconnect. No external CLI, automatic
   review, public model routing or inherited steward access is added. Real
-  Business-account authorization and inference remain unverified.
+  Business-account model access and inference remain unverified.
 - Record safe request-failure causes, phases, bounded correlation identifiers
   and observed stream progress. Separate actual client HTTP delivery from final
   outcome and confirmed upstream status across forwarding, assistant and image

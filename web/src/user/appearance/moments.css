@@ -140,14 +140,18 @@
  * Wide screens keep the character beside the content instead of behind it. The content
  * gives up a right-hand column; the character fills that column at full height when the
  * window is tall enough, otherwise it shrinks to the column width. Expanded margins use
- * extra content reserve and move only the original anchor inward. Game pages keep their
- * own layout.
+ * extra content reserve and move only the original anchor inward. Wide artwork shrinks
+ * as a whole to keep at least 40rem of usable content. Game pages keep their own layout.
  */
 @media (width >= 80rem) {
   html[data-appearance='heart-moment'] {
     --nb-moment-gutter: var(
       --nb-moment-scene-frame-width,
-      min(calc((100dvh - 4.25rem) * 2 / 3), max(20rem, calc(100vw - 64rem)))
+      min(
+        calc((100dvh - 4.25rem) * 2 / 3 / var(--nb-moment-height-ratio, 1)),
+        max(20rem, calc(100vw - 64rem)),
+        calc((100vw - 45rem) / var(--nb-moment-width-ratio, 1))
+      )
     );
   }
   html[data-appearance='heart-moment']
