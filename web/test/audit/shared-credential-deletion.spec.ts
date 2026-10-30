@@ -214,7 +214,9 @@ test('protocol unlink preserves a shared credential and deletion refreshes donat
         ownership_confirmed: true,
         force_store_false: false,
         native_services,
-        discovery_source_id: credential.id === shared.id ? source.id : null,
+        // A discovery source belongs to one service key; the credential is shared.
+        discovery_source_id:
+          credential.id === shared.id && entry.id === anthropic.id ? source.id : null,
       });
     const removed = await bind(openai, shared, openaiName, ['chat_completions']);
     const kept = await bind(anthropic, shared, anthropicName, ['anthropic_messages']);
@@ -231,9 +233,9 @@ test('protocol unlink preserves a shared credential and deletion refreshes donat
     await page.evaluate((marker) => {
       (window as Window & { sharedDeletionMarker?: string }).sharedDeletionMarker = marker;
     }, navigationMarker);
-    const removedRow = page.locator('tr.core-key-card').filter({ hasText: openaiName });
+    const removedRow = page.locator('tr.core-key-card').filter({ hasText: sharedName });
     await removedRow
-      .getByRole('button', { name: `${services.more} · ${openaiName}`, exact: true })
+      .getByRole('button', { name: `${services.more} · ${sharedName}`, exact: true })
       .click();
     await page
       .getByRole('menuitem', { name: core['endpoints.deleteKey'] + '…', exact: true })
@@ -255,10 +257,18 @@ test('protocol unlink preserves a shared credential and deletion refreshes donat
       enabled: true,
     });
     const keptPath = `/api/endpoints/${anthropic.id}/keys/${kept.id}`;
-    const snapshot = await api<Key>(owner, state, keptPath);
+    const currentKeys = await api<KeyPage>(
+      owner,
+      state,
+      `/api/endpoints/${anthropic.id}/keys?page=1&page_size=20`,
+    );
+    const snapshot = currentKeys.data.find((key) => key.id === kept.id)!;
     expect(snapshot).toMatchObject({ credential_available: true, enabled: true });
     await page.getByRole('combobox', { name: c.entry, exact: true }).selectOption(anthropic.id);
-    const keptRow = page.locator('tr.core-key-card').filter({ hasText: anthropicName });
+    await page
+      .getByRole('combobox', { name: services.currentKey, exact: true })
+      .selectOption(kept.id);
+    const keptRow = page.locator('tr.core-key-card').filter({ hasText: sharedName });
     const discovery = responseFor(page, 'POST', keptPath + '/models/refresh');
     await keptRow
       .getByRole('button', { name: core['endpoints.refreshDiscovery'], exact: true })

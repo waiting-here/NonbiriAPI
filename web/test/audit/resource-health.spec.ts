@@ -127,7 +127,7 @@ test('current service failures are visible to owner and managers and recover thr
     await context.addInitScript(() => localStorage.setItem('nb.lang', 'en'));
     const page = await context.newPage();
     await page.goto(`${fixture.admin_url}/charity?donation_id=${ids.donation_id}`);
-    const reset = page.locator('.failure-reset-control').first();
+    const reset = page.locator('.failure-reset-control:visible').first();
     await reset.getByText('Reset failure count', { exact: true }).click();
     const completed = page.waitForResponse(
       (response) =>
