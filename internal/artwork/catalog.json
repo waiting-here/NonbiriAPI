@@ -884,10 +884,6 @@
         "hires/layers/a-claude.webp",
         "layers/a-claude.webp",
         "thumbs/a-claude.webp"
-      ],
-      "prefixes": [
-        "hires/moment/a-claude/",
-        "moment/a-claude/"
       ]
     },
     {
@@ -1038,10 +1034,6 @@
         "hires/layers/c-deepseek.webp",
         "layers/c-deepseek.webp",
         "thumbs/c-deepseek.webp"
-      ],
-      "prefixes": [
-        "hires/moment/c-deepseek/",
-        "moment/c-deepseek/"
       ]
     },
     {
@@ -1080,10 +1072,6 @@
         "hires/layers/d-chatgpt.webp",
         "layers/d-chatgpt.webp",
         "thumbs/d-chatgpt.webp"
-      ],
-      "prefixes": [
-        "hires/moment/d-chatgpt/",
-        "moment/d-chatgpt/"
       ]
     },
     {
@@ -1094,10 +1082,6 @@
         "hires/layers/d-claude.webp",
         "layers/d-claude.webp",
         "thumbs/d-claude.webp"
-      ],
-      "prefixes": [
-        "hires/moment/d-claude/",
-        "moment/d-claude/"
       ]
     },
     {
@@ -1178,10 +1162,6 @@
         "hires/layers/e-deepseek.webp",
         "layers/e-deepseek.webp",
         "thumbs/e-deepseek.webp"
-      ],
-      "prefixes": [
-        "hires/moment/e-deepseek/",
-        "moment/e-deepseek/"
       ]
     },
     {
@@ -1291,9 +1271,7 @@
       ],
       "prefixes": [
         "hires/motion/g-chatgpt/",
-        "motion/g-chatgpt/",
-        "hires/moment/g-chatgpt/",
-        "moment/g-chatgpt/"
+        "motion/g-chatgpt/"
       ]
     },
     {
@@ -1374,10 +1352,6 @@
         "hires/layers/h-claude.webp",
         "layers/h-claude.webp",
         "thumbs/h-claude.webp"
-      ],
-      "prefixes": [
-        "hires/moment/h-claude/",
-        "moment/h-claude/"
       ]
     },
     {
@@ -1431,9 +1405,7 @@
       ],
       "prefixes": [
         "hires/motion/i-chatgpt/",
-        "motion/i-chatgpt/",
-        "hires/moment/i-chatgpt/",
-        "moment/i-chatgpt/"
+        "motion/i-chatgpt/"
       ]
     },
     {
@@ -1445,9 +1417,7 @@
       ],
       "prefixes": [
         "hires/motion/i-claude/",
-        "motion/i-claude/",
-        "hires/moment/i-claude/",
-        "moment/i-claude/"
+        "motion/i-claude/"
       ]
     },
     {
@@ -1459,9 +1429,7 @@
       ],
       "prefixes": [
         "hires/motion/i-deepseek/",
-        "motion/i-deepseek/",
-        "hires/moment/i-deepseek/",
-        "moment/i-deepseek/"
+        "motion/i-deepseek/"
       ]
     },
     {
@@ -1473,9 +1441,7 @@
       ],
       "prefixes": [
         "hires/motion/i-gemini/",
-        "motion/i-gemini/",
-        "hires/moment/i-gemini/",
-        "moment/i-gemini/"
+        "motion/i-gemini/"
       ]
     },
     {
@@ -1487,9 +1453,7 @@
       ],
       "prefixes": [
         "hires/motion/i-glm/",
-        "motion/i-glm/",
-        "hires/moment/i-glm/",
-        "moment/i-glm/"
+        "motion/i-glm/"
       ]
     },
     {
@@ -1501,9 +1465,7 @@
       ],
       "prefixes": [
         "hires/motion/j-chatgpt/",
-        "motion/j-chatgpt/",
-        "hires/moment/j-chatgpt/",
-        "moment/j-chatgpt/"
+        "motion/j-chatgpt/"
       ]
     },
     {
@@ -1515,9 +1477,7 @@
       ],
       "prefixes": [
         "hires/motion/j-claude/",
-        "motion/j-claude/",
-        "hires/moment/j-claude/",
-        "moment/j-claude/"
+        "motion/j-claude/"
       ]
     },
     {
@@ -1529,9 +1489,7 @@
       ],
       "prefixes": [
         "hires/motion/j-deepseek/",
-        "motion/j-deepseek/",
-        "hires/moment/j-deepseek/",
-        "moment/j-deepseek/"
+        "motion/j-deepseek/"
       ]
     },
     {
@@ -1543,9 +1501,7 @@
       ],
       "prefixes": [
         "hires/motion/j-gemini/",
-        "motion/j-gemini/",
-        "hires/moment/j-gemini/",
-        "moment/j-gemini/"
+        "motion/j-gemini/"
       ]
     },
     {
@@ -1557,9 +1513,7 @@
       ],
       "prefixes": [
         "hires/motion/j-glm/",
-        "motion/j-glm/",
-        "hires/moment/j-glm/",
-        "moment/j-glm/"
+        "motion/j-glm/"
       ]
     },
     {
@@ -1570,10 +1524,6 @@
         "hires/layers/k-chatgpt.webp",
         "layers/k-chatgpt.webp",
         "thumbs/k-chatgpt.webp"
-      ],
-      "prefixes": [
-        "hires/moment/k-chatgpt/",
-        "moment/k-chatgpt/"
       ]
     },
     {
@@ -1584,10 +1534,6 @@
         "hires/layers/k-claude.webp",
         "layers/k-claude.webp",
         "thumbs/k-claude.webp"
-      ],
-      "prefixes": [
-        "hires/moment/k-claude/",
-        "moment/k-claude/"
       ]
     },
     {
@@ -1598,10 +1544,6 @@
         "hires/layers/k-deepseek.webp",
         "layers/k-deepseek.webp",
         "thumbs/k-deepseek.webp"
-      ],
-      "prefixes": [
-        "hires/moment/k-deepseek/",
-        "moment/k-deepseek/"
       ]
     },
     {
@@ -1655,9 +1597,7 @@
       ],
       "prefixes": [
         "hires/motion/m-deepseek/",
-        "motion/m-deepseek/",
-        "hires/moment/m-deepseek/",
-        "moment/m-deepseek/"
+        "motion/m-deepseek/"
       ]
     },
     {
@@ -1697,9 +1637,7 @@
       ],
       "prefixes": [
         "hires/motion/p-claude/",
-        "motion/p-claude/",
-        "hires/moment/p-claude/",
-        "moment/p-claude/"
+        "motion/p-claude/"
       ]
     },
     {
@@ -1727,9 +1665,7 @@
         "hires/motion/r-chatgpt/",
         "hires/tomorrow/",
         "motion/r-chatgpt/",
-        "tomorrow/",
-        "hires/moment/r-chatgpt/",
-        "moment/r-chatgpt/"
+        "tomorrow/"
       ]
     },
     {
