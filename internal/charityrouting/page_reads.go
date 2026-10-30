@@ -95,7 +95,7 @@ func (s *Service) modelsPage(ctx context.Context, role roleKind, actorID int64, 
 
 // Probe the approved member's runs directly. Materializing the aggregate catalog
 // view here would collect other members' catalogs before pagination or filtering.
-const candidateApprovedRuns = `SELECT r.id FROM donation_uses u
+var candidateApprovedRuns = `SELECT r.id FROM donation_uses u
 JOIN donation_use_revisions ur ON ur.id=u.current_approved_revision_id AND ur.use_id=u.id AND ur.review_state='approved'
 JOIN (SELECT g.id,g.owner_user_id,g.credential_id,g.credential_version_id,e.connector_type AS configured_type,e.base_url AS canonical_base_url
  FROM endpoint_key_grant_revisions g JOIN endpoints e ON e.id=g.endpoint_id) a ON a.id=ur.grant_revision_id
@@ -103,14 +103,14 @@ JOIN discovery_source_states st ON st.source_revision_id=` + connectionstore.Dis
 JOIN discovery_runs r ON r.id=st.last_successful_run_id AND r.source_revision_id=st.source_revision_id AND r.credential_version_id=a.credential_version_id AND r.state='succeeded'
 WHERE u.donation_key_id=dk.id`
 
-const candidateAutomaticJoin = `CROSS JOIN model_catalog_entries pc INDEXED BY idx_catalog_run_model
+var candidateAutomaticJoin = `CROSS JOIN model_catalog_entries pc INDEXED BY idx_catalog_run_model
 ON pc.discovery_run_id IN (` + candidateApprovedRuns + `) AND pc.source_type='automatic'`
 
-const candidateMatchingAutomatic = ` FROM model_catalog_entries ac INDEXED BY idx_catalog_run_model
+var candidateMatchingAutomatic = ` FROM model_catalog_entries ac INDEXED BY idx_catalog_run_model
 WHERE ac.discovery_run_id IN (` + candidateApprovedRuns + `)
 AND ac.normalized_model_id=pc.normalized_model_id AND ac.source_type='automatic'`
 
-const candidatePageFrom = ` FROM charity_models cm
+var candidatePageFrom = ` FROM charity_models cm
 CROSS JOIN donation_keys dk NOT INDEXED
 CROSS JOIN donations d ON d.id=dk.donation_id
 CROSS JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
