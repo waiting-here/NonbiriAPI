@@ -17,6 +17,7 @@ import type { RerankFormat } from '@shared/nativeServices';
 import { connectionAPI, resourcePath } from './api';
 import { useMetadataOperation } from './useMetadataOperation';
 import { ConnectionOperationNotice } from './OperationNotice';
+import { defaultDiscovery } from './discoveryDefaults';
 
 export function EntryScope(props: {
   accountId: string;
@@ -255,7 +256,12 @@ function PairListSettings({
       accountId={accountId}
       connectionId={endpoint.connection_id ?? ''}
       source={source.data}
-      preset={{ base_url: endpoint.base_url, list_format: 'openai' }}
+      preset={
+        defaultDiscovery(endpoint.connector_type, endpoint.base_url) ?? {
+          base_url: endpoint.base_url,
+          list_format: 'openai',
+        }
+      }
       pairSettings
       fixedCredentialId={entryKey.credential_id ?? undefined}
       onSaved={(saved) =>

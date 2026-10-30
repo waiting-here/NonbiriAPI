@@ -40,6 +40,86 @@ const emptyPage = {
   pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
 };
 describe('persistent entry metadata drafts', () => {
+  it.each([
+    ['typesafe-systemone', 'systemone', 'openai'],
+    ['anthropic-compatible', 'anthropic_messages', 'anthropic'],
+    ['google-gemini', 'gemini_generate_content', 'gemini'],
+  ])('uses the %s catalog default in new list settings', async (protocol, service, format) => {
+    const view = await renderWithProviders(
+      <KeyCredentialScope
+        accountId="1"
+        endpoint={normalizeEndpoint({
+          ...endpointWire(),
+          connector_type: protocol,
+          configuration_type: protocol,
+          native_services: [service],
+        })}
+        entryKey={normalizeEndpointKey({
+          ...keyWire(),
+          discovery_source_id: null,
+          native_services: [service],
+        })}
+        defaultOpen
+      />,
+      { station: 'user', role: 'user' },
+    );
+    expect(screen.getByRole('combobox', { name: 'Catalog format' })).toHaveValue(format);
+    expect(screen.getByRole('textbox', { name: 'Model list base URL' })).toHaveValue(
+      endpointWire().base_url,
+    );
+    view.unmount();
+  });
+  it('keeps an existing System One catalog format ahead of the default', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input) => {
+        const url = new URL(String(input), 'https://app.example');
+        if (url.pathname !== '/api/discovery-sources/51') throw Error('Unexpected ' + url.pathname);
+        return json({
+          id: '51',
+          connection_id: null,
+          name: 'Chosen catalog',
+          base_url: 'https://catalog.example/custom',
+          models_url: 'https://catalog.example/custom/models',
+          list_format: 'anthropic',
+          credential_id: '8',
+          credential_version: '2',
+          revision: '1',
+          discovery_source_revision: '1',
+          enabled: true,
+          state: 'unknown',
+          checked_at: null,
+          safe_class: 'none',
+          safe_diag: '',
+          created_at: 1700000000,
+          updated_at: 1700000000,
+        });
+      }),
+    );
+    await renderWithProviders(
+      <KeyCredentialScope
+        accountId="1"
+        endpoint={normalizeEndpoint({
+          ...endpointWire(),
+          connector_type: 'typesafe-systemone',
+          configuration_type: 'typesafe-systemone',
+          native_services: ['systemone'],
+        })}
+        entryKey={normalizeEndpointKey({
+          ...keyWire(),
+          native_services: ['systemone'],
+        })}
+        defaultOpen
+      />,
+      { station: 'user', role: 'user' },
+    );
+    expect(await screen.findByRole('combobox', { name: 'Catalog format' })).toHaveValue(
+      'anthropic',
+    );
+    expect(screen.getByRole('textbox', { name: 'Model list base URL' })).toHaveValue(
+      'https://catalog.example/custom',
+    );
+  });
   it('edits the service name with one patch while explicitly authorizing the complete protocol', async () => {
     let endpoint = endpointWire();
     const writes: Record<string, unknown>[] = [];
