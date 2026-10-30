@@ -17,7 +17,7 @@ import { useSearchState } from '@shared/operations/useSearchState';
 import { isStewardPermissionDenied, isUnauthorized } from '@shared/query/http';
 import { EmptyState, ErrorState, LoadingState } from './States';
 import { StewardPermissionNotice } from './StewardPermissionNotice';
-import { Button, DataTable, Field, FilterBar, Note, Segmented } from './ui';
+import { Button, DataTable, Field, Fields, FilterBar, FormActions, Note, Segmented } from './ui';
 import { endpointTagBadgeClass, endpointTagKeys } from './endpointTagLabels';
 
 type RuleMutation =
@@ -115,9 +115,12 @@ export function EndpointTagRules({
       <p className="nb-muted">{t('management.endpoints.rules.precedence')}</p>
       <FilterBar
         ariaLabel={t('management.endpoints.rules.search')}
-        secondaryLabel={t('common.filter')}
         activeCount={Number(Boolean(query))}
         onSubmit={() => changeQuery(draft.trim())}
+        onReset={() => {
+          setDraft('');
+          changeQuery('');
+        }}
         search={
           <>
             <Field label={t('management.endpoints.rules.search')}>
@@ -131,7 +134,6 @@ export function EndpointTagRules({
                 />
               )}
             </Field>
-            <Button type="submit">{t('common.applyFilter')}</Button>
           </>
         }
       />
@@ -171,63 +173,67 @@ export function EndpointTagRules({
             )}
           </h3>
           <fieldset className="endpoint-rule-editor__fields nb-stack" disabled={busy}>
-            <Field
-              label={t('management.endpoints.rules.pattern')}
-              help={t('management.endpoints.rules.patternHelp')}
-            >
-              {(field) => (
-                <input
-                  {...field}
-                  type="text"
-                  autoFocus
-                  required
-                  value={editor.rule.pattern}
-                  readOnly={editor.editing}
-                  placeholder="*.example.com"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  onChange={(event) => update({ pattern: event.target.value })}
-                />
+            <Fields>
+              <Field
+                label={t('management.endpoints.rules.pattern')}
+                help={t('management.endpoints.rules.patternHelp')}
+              >
+                {(field) => (
+                  <input
+                    {...field}
+                    type="text"
+                    autoFocus
+                    required
+                    value={editor.rule.pattern}
+                    readOnly={editor.editing}
+                    placeholder="*.example.com"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    onChange={(event) => update({ pattern: event.target.value })}
+                  />
+                )}
+              </Field>
+              <Segmented
+                label={t('management.endpoints.rules.action')}
+                value={editor.rule.action}
+                onChange={(action) => update({ action })}
+                options={[
+                  { value: 'add', label: t('management.endpoints.rules.addTags') },
+                  { value: 'remove', label: t('management.endpoints.rules.clearTags') },
+                ]}
+              />
+              {editor.rule.action === 'add' ? (
+                <fieldset className="endpoint-rule-tags">
+                  <legend>{t('management.endpoints.rules.chooseTags')}</legend>
+                  <div className="endpoint-rule-tags__options">
+                    {ENDPOINT_TAGS.map((tag) => (
+                      <Field label={label(tag)} key={tag} size="short">
+                        {(props) => (
+                          <input
+                            {...props}
+                            type="checkbox"
+                            checked={editor.rule.tags.includes(tag)}
+                            onChange={(event) =>
+                              update({
+                                tags: event.target.checked
+                                  ? [...editor.rule.tags, tag]
+                                  : editor.rule.tags.filter((value) => value !== tag),
+                              })
+                            }
+                          />
+                        )}
+                      </Field>
+                    ))}
+                  </div>
+                  {editor.rule.tags.includes('mainstream') ? (
+                    <p className="nb-muted">{t('management.endpoints.rules.mainstreamHelp')}</p>
+                  ) : null}
+                </fieldset>
+              ) : (
+                <Note>{t('management.endpoints.rules.clearHelp')}</Note>
               )}
-            </Field>
-            <Segmented
-              label={t('management.endpoints.rules.action')}
-              value={editor.rule.action}
-              onChange={(action) => update({ action })}
-              options={[
-                { value: 'add', label: t('management.endpoints.rules.addTags') },
-                { value: 'remove', label: t('management.endpoints.rules.clearTags') },
-              ]}
-            />
-            {editor.rule.action === 'add' ? (
-              <fieldset className="endpoint-rule-tags">
-                <legend>{t('management.endpoints.rules.chooseTags')}</legend>
-                <div className="endpoint-rule-tags__options">
-                  {ENDPOINT_TAGS.map((tag) => (
-                    <label className="checkbox-label" key={tag}>
-                      <input
-                        type="checkbox"
-                        checked={editor.rule.tags.includes(tag)}
-                        onChange={(event) =>
-                          update({
-                            tags: event.target.checked
-                              ? [...editor.rule.tags, tag]
-                              : editor.rule.tags.filter((value) => value !== tag),
-                          })
-                        }
-                      />
-                      <span>{label(tag)}</span>
-                    </label>
-                  ))}
-                </div>
-                {editor.rule.tags.includes('mainstream') ? (
-                  <p className="nb-muted">{t('management.endpoints.rules.mainstreamHelp')}</p>
-                ) : null}
-              </fieldset>
-            ) : (
-              <Note>{t('management.endpoints.rules.clearHelp')}</Note>
-            )}
-            <div className="nb-actions">
+            </Fields>
+            <FormActions>
               <Button type="submit" variant="primary">
                 {t('management.endpoints.rules.save')}
               </Button>
@@ -240,7 +246,7 @@ export function EndpointTagRules({
               >
                 {t('common.cancel')}
               </Button>
-            </div>
+            </FormActions>
           </fieldset>
         </form>
       ) : null}

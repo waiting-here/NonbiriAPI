@@ -2,7 +2,15 @@ import { NativeServicesField } from '@shared/components/NativeServicesField';
 import type { NativeService } from '@shared/nativeServices';
 import { BindingTargets } from '../connections/BindingTargets';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import { Fold, MoreMenu, Panel, PanelBody, PanelHead, Segmented } from '@shared/components/ui';
+import {
+  FormActions,
+  Fold,
+  MoreMenu,
+  Panel,
+  PanelBody,
+  PanelHead,
+  Segmented,
+} from '@shared/components/ui';
 import type { PageMetadata, PageSize } from '@shared/operations/pageNumbers';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { usePagePager } from '@shared/operations/usePagePager';
@@ -198,7 +206,8 @@ function BindingSelector({
 
   const accessLossError =
     (isAccessLoss(operation.error) ? operation.error : null) ??
-    (isAccessLoss(bindings.error) ? bindings.error : null) ?? readAccessError;
+    (isAccessLoss(bindings.error) ? bindings.error : null) ??
+    readAccessError;
   if (accessLossError) {
     return (
       <section className="core-card">
@@ -308,7 +317,7 @@ function BindingSelector({
               : null
         }
       />
-      <div className="core-form-actions">
+      <FormActions>
         {operationStatus === 'conflict' || operationStatus === 'unknown' ? (
           <button
             type="button"
@@ -342,7 +351,7 @@ function BindingSelector({
               ? t('common.reconcile')
               : t('models.addSelected', { count: draft.selections.length })}
         </button>
-      </div>
+      </FormActions>
     </section>
   );
 }
@@ -656,7 +665,7 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
         busy,
         operation.outcome === 'refresh-failed',
       )}
-      <div className="core-form-actions">
+      <FormActions>
         {reconciliationRequired ? (
           <button
             type="button"
@@ -686,7 +695,7 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
               ? t('common.reconcile')
               : t('models.saveOrder')}
         </button>
-      </div>
+      </FormActions>
       <ConfirmDialog
         open={Boolean(removing)}
         title={t('models.removeBindingTitle')}

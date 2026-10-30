@@ -42,7 +42,7 @@ export function DriverPanel({ account, active }: { account: string; active: bool
           }
         />
         <PanelBody>
-          <div className="agent-form-fields">
+          <div className="nb-stack">
             {config.isPending ? (
               <LoadingState />
             ) : config.error ? (

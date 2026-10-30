@@ -1,4 +1,4 @@
-import { Note } from '@shared/components/ui';
+import { Field, Fields, FormActions, Note } from '@shared/components/ui';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
@@ -150,90 +150,106 @@ export function CredentialReportPage() {
             </div>
           ) : (
             <form className="ops-stack" onSubmit={submit}>
-              <label className="ops-form-field">
-                {t('user.report.connectorLabel')}
-                <select
-                  value={connector}
-                  onChange={(event) => {
-                    intentKey.current = null;
-                    setConnector(event.target.value as CredentialReportInput['connector_type']);
-                  }}
-                >
-                  <option value="openai-compatible">
-                    {t(CONNECTOR_LABEL_KEYS['openai-compatible'])}
-                  </option>
-                  <option value="anthropic-compatible">
-                    {t(CONNECTOR_LABEL_KEYS['anthropic-compatible'])}
-                  </option>
-                  <option value="ai-sdk-gateway-v3">
-                    {t(CONNECTOR_LABEL_KEYS['ai-sdk-gateway-v3'])}
-                  </option>
-                  <option value="ai-sdk-gateway-v4">
-                    {t(CONNECTOR_LABEL_KEYS['ai-sdk-gateway-v4'])}
-                  </option>
-                  <option value="google-gemini">{t(CONNECTOR_LABEL_KEYS['google-gemini'])}</option>
-                  <option value="openai-responses">
-                    {t(CONNECTOR_LABEL_KEYS['openai-responses'])}
-                  </option>
-                  <option value="openai-decisions">
-                    {t(CONNECTOR_LABEL_KEYS['openai-decisions'])}
-                  </option>
-                  <option value="cohere-rerank">{t(CONNECTOR_LABEL_KEYS['cohere-rerank'])}</option>
-                  <option value="jina-rerank">{t(CONNECTOR_LABEL_KEYS['jina-rerank'])}</option>
-                  <option value="siliconflow-rerank">
-                    {t(CONNECTOR_LABEL_KEYS['siliconflow-rerank'])}
-                  </option>
-                  <option value="voyage-rerank">{t(CONNECTOR_LABEL_KEYS['voyage-rerank'])}</option>
-                  <option value="typesafe-systemone">
-                    {t(CONNECTOR_LABEL_KEYS['typesafe-systemone'])}
-                  </option>
-                  <option value="openai-chat-completions">
-                    {t(CONNECTOR_LABEL_KEYS['openai-chat-completions'])}
-                  </option>
-                </select>
-              </label>
-              <label className="ops-form-field">
-                {t('user.report.baseUrlLabel')}
-                <input
-                  type="url"
-                  placeholder="https://api.example.com/v1"
-                  required
-                  maxLength={4096}
-                  value={baseURL}
-                  onChange={(event) => {
-                    intentKey.current = null;
-                    setBaseURL(event.target.value);
-                  }}
-                  autoComplete="url"
-                />
-              </label>
-              <label className="ops-form-field">
-                {t('user.report.secretLabel')}
-                <textarea
-                  className="ops-secret"
-                  required
-                  rows={4}
-                  value={secret}
-                  onChange={(event) => {
-                    intentKey.current = null;
-                    setSecret(event.target.value);
-                  }}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-              </label>
-              <label className="ops-form-field">
-                {t('user.report.noteLabel')}
-                <textarea
-                  rows={5}
-                  maxLength={2048}
-                  value={note}
-                  onChange={(event) => {
-                    intentKey.current = null;
-                    setNote(event.target.value);
-                  }}
-                />
-              </label>
+              <Fields>
+                <Field label={t('user.report.connectorLabel')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={connector}
+                      onChange={(event) => {
+                        intentKey.current = null;
+                        setConnector(event.target.value as CredentialReportInput['connector_type']);
+                      }}
+                    >
+                      <option value="openai-compatible">
+                        {t(CONNECTOR_LABEL_KEYS['openai-compatible'])}
+                      </option>
+                      <option value="anthropic-compatible">
+                        {t(CONNECTOR_LABEL_KEYS['anthropic-compatible'])}
+                      </option>
+                      <option value="ai-sdk-gateway-v3">
+                        {t(CONNECTOR_LABEL_KEYS['ai-sdk-gateway-v3'])}
+                      </option>
+                      <option value="ai-sdk-gateway-v4">
+                        {t(CONNECTOR_LABEL_KEYS['ai-sdk-gateway-v4'])}
+                      </option>
+                      <option value="google-gemini">
+                        {t(CONNECTOR_LABEL_KEYS['google-gemini'])}
+                      </option>
+                      <option value="openai-responses">
+                        {t(CONNECTOR_LABEL_KEYS['openai-responses'])}
+                      </option>
+                      <option value="openai-decisions">
+                        {t(CONNECTOR_LABEL_KEYS['openai-decisions'])}
+                      </option>
+                      <option value="cohere-rerank">
+                        {t(CONNECTOR_LABEL_KEYS['cohere-rerank'])}
+                      </option>
+                      <option value="jina-rerank">{t(CONNECTOR_LABEL_KEYS['jina-rerank'])}</option>
+                      <option value="siliconflow-rerank">
+                        {t(CONNECTOR_LABEL_KEYS['siliconflow-rerank'])}
+                      </option>
+                      <option value="voyage-rerank">
+                        {t(CONNECTOR_LABEL_KEYS['voyage-rerank'])}
+                      </option>
+                      <option value="typesafe-systemone">
+                        {t(CONNECTOR_LABEL_KEYS['typesafe-systemone'])}
+                      </option>
+                      <option value="openai-chat-completions">
+                        {t(CONNECTOR_LABEL_KEYS['openai-chat-completions'])}
+                      </option>
+                    </select>
+                  )}
+                </Field>
+                <Field label={t('user.report.baseUrlLabel')} size="long">
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="url"
+                      placeholder="https://api.example.com/v1"
+                      required
+                      maxLength={4096}
+                      value={baseURL}
+                      onChange={(event) => {
+                        intentKey.current = null;
+                        setBaseURL(event.target.value);
+                      }}
+                      autoComplete="url"
+                    />
+                  )}
+                </Field>
+                <Field label={t('user.report.secretLabel')} size="long">
+                  {(props) => (
+                    <textarea
+                      {...props}
+                      className="ops-secret"
+                      required
+                      rows={4}
+                      value={secret}
+                      onChange={(event) => {
+                        intentKey.current = null;
+                        setSecret(event.target.value);
+                      }}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                  )}
+                </Field>
+                <Field label={t('user.report.noteLabel')} size="long">
+                  {(props) => (
+                    <textarea
+                      {...props}
+                      rows={5}
+                      maxLength={2048}
+                      value={note}
+                      onChange={(event) => {
+                        intentKey.current = null;
+                        setNote(event.target.value);
+                      }}
+                    />
+                  )}
+                </Field>
+              </Fields>
               <Note tone="warn">{t('user.report.noteWarning')}</Note>
               {validation ? (
                 <p className="field-error" role="alert">
@@ -241,7 +257,7 @@ export function CredentialReportPage() {
                 </p>
               ) : null}
               {error ? <ErrorState error={error} /> : null}
-              <div className="ops-actions">
+              <FormActions>
                 <button
                   className="nb-btn nb-btn--primary"
                   type="submit"
@@ -252,7 +268,7 @@ export function CredentialReportPage() {
                 <button className="nb-btn nb-btn--secondary" type="button" onClick={clearForm}>
                   {t('user.report.cancelAndClear')}
                 </button>
-              </div>
+              </FormActions>
             </form>
           )}
         </Card>

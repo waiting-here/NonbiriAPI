@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Field, Note } from '@shared/components/ui';
+import { Field, Fields, FormActions, Note } from '@shared/components/ui';
 import { ConnectionOperationNotice } from './OperationNotice';
 import { useConnectionOperation } from './useConnectionOperation';
 import type { Credential } from './types';
@@ -51,54 +51,57 @@ export function CredentialCreateForm({
         void operation.run(intent, secret).catch(() => undefined);
       }}
     >
-      {!replace ? (
+      <Fields>
+        {!replace ? (
+          <Field
+            label={t('common.connections.credentialName')}
+            optional={t('common.connections.optional')}
+          >
+            {(props) => (
+              <input
+                {...props}
+                value={note}
+                maxLength={1024}
+                disabled={locked}
+                onChange={(event) => setNote(event.target.value)}
+              />
+            )}
+          </Field>
+        ) : (
+          <Note>{t('common.connections.rotationEffect')}</Note>
+        )}
         <Field
-          label={t('common.connections.credentialName')}
-          optional={t('common.connections.optional')}
+          label={replace ? t('common.connections.newSecret') : t('common.connections.secret')}
+          help={t('common.connections.secretHelp')}
+          size="long"
         >
           {(props) => (
             <input
               {...props}
-              value={note}
-              maxLength={1024}
+              type="password"
+              autoComplete="new-password"
+              value={secret}
+              required
               disabled={locked}
-              onChange={(event) => setNote(event.target.value)}
+              onChange={(event) => setSecret(event.target.value)}
             />
           )}
         </Field>
-      ) : (
-        <Note>{t('common.connections.rotationEffect')}</Note>
-      )}
-      <Field
-        label={replace ? t('common.connections.newSecret') : t('common.connections.secret')}
-        help={t('common.connections.secretHelp')}
-      >
-        {(props) => (
-          <input
-            {...props}
-            type="password"
-            autoComplete="new-password"
-            value={secret}
-            required
-            disabled={locked}
-            onChange={(event) => setSecret(event.target.value)}
-          />
-        )}
-      </Field>
-      <Field label={t('common.connections.ownership')}>
-        {(props) => (
-          <input
-            {...props}
-            type="checkbox"
-            checked={owned}
-            disabled={locked}
-            required
-            onChange={(event) => setOwned(event.target.checked)}
-          />
-        )}
-      </Field>
+        <Field label={t('common.connections.ownership')}>
+          {(props) => (
+            <input
+              {...props}
+              type="checkbox"
+              checked={owned}
+              disabled={locked}
+              required
+              onChange={(event) => setOwned(event.target.checked)}
+            />
+          )}
+        </Field>
+      </Fields>
       <ConnectionOperationNotice operation={operation} />
-      <div className="nb-actions">
+      <FormActions>
         <button
           type="submit"
           className="nb-btn nb-btn--primary"
@@ -106,7 +109,7 @@ export function CredentialCreateForm({
         >
           {replace ? t('common.connections.rotate') : t('common.connections.saveCredential')}
         </button>
-      </div>
+      </FormActions>
     </form>
   );
 }

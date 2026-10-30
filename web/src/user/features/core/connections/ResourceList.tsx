@@ -107,7 +107,6 @@ export function ConnectionResourceList<T>({
         <FilterBar
           as="div"
           activeCount={q ? 1 : 0}
-          secondaryLabel={t('common.connections.filters')}
           search={
             <>
               <Field label={t('common.connections.search')}>
@@ -121,13 +120,18 @@ export function ConnectionResourceList<T>({
                   />
                 )}
               </Field>
-              <button type="button" className="nb-btn nb-btn--secondary" onClick={search}>
-                {t('common.connections.search')}
-              </button>
             </>
           }
           secondary={filters}
           onSubmit={search}
+          onReset={() => {
+            setDraft('');
+            setParams((previous) => {
+              const next = new URLSearchParams(previous);
+              next.delete(queryParam);
+              return next;
+            });
+          }}
         />
         {query.error ? (
           <CoreErrorPanel error={query.error} onRetry={() => void query.refetch()} />

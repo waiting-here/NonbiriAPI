@@ -8,20 +8,12 @@ import {
   type SessionHeaderInput,
 } from '@shared/sessionHeaders';
 import { CloudflareProxyField } from '@shared/components/CloudflareProxyField';
-import { Field } from '@shared/components/ui';
+import { Field, Fields, FormActions } from '@shared/components/ui';
 import { sameRolePolicy } from './policy';
 import { ModelTypesField } from '@shared/components/ModelTypesField';
 import { RolePolicyEditor } from '@shared/components/RolePolicyEditor';
 import { TransportRuleField } from '@shared/components/TransportRuleField';
-import {
-  Fold,
-  Panel,
-  PanelBody,
-  PanelFoot,
-  PanelHead,
-  SaveBar,
-  Toggle,
-} from '@shared/components/ui';
+import { Fold, Panel, PanelBody, PanelHead, SaveBar, Toggle } from '@shared/components/ui';
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { sameModelTypes, type ModelType } from '@shared/modelTypes';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
@@ -326,7 +318,7 @@ export function ModelEditor({
           }
         />
         <PanelBody>
-          <div className="core-field-grid">
+          <Fields>
             <Field label={t('models.provider')} help={textModel('prefixHelp')}>
               {(props) => (
                 <input
@@ -353,7 +345,7 @@ export function ModelEditor({
                 />
               )}
             </Field>
-          </div>
+          </Fields>
           <ModelTypesField
             value={modelTypes}
             onChange={setModelTypes}
@@ -444,7 +436,7 @@ export function ModelEditor({
           dirtyLabel={(count) => textModel('dirtyCount', { count })}
         />
       ) : (
-        <PanelFoot>
+        <FormActions>
           <button
             type="submit"
             className="nb-btn nb-btn--primary"
@@ -452,7 +444,7 @@ export function ModelEditor({
           >
             {busy ? t('common.working') : hasAttempt ? text('checkResult') : t('common.save')}
           </button>
-        </PanelFoot>
+        </FormActions>
       )}
     </form>
   );

@@ -1,3 +1,4 @@
+import { Field, Fields, FormActions, OptionCards, Toggle } from '@shared/components/ui';
 import { supportsChatStoragePolicy } from '@shared/operations/connectorPolicy';
 import { EndpointTransportNotice } from '@shared/components/EndpointTransportNotice';
 import { useEffect, useReducer, useRef, useState } from 'react';
@@ -335,79 +336,70 @@ export function EndpointWizard({
 
       {step === 0 ? (
         <div className="core-form">
-          <div className="core-choice-grid">
-            <button
-              type="button"
-              className={`core-choice${selectedSource === 'mainstream' ? ' is-selected' : ''}`}
-              aria-pressed={selectedSource === 'mainstream'}
-              disabled={mainstreamChannels.length === 0 || hasEndpointAttempt}
-              onClick={() => {
-                setSource('mainstream');
-                if (!selectedChannel) setChannelId(mainstreamChannels[0]?.id ?? '');
-              }}
-            >
-              <strong>{t('endpoints.mainstream')}</strong>
-            </button>
-            <button
-              type="button"
-              className={`core-choice${selectedSource === 'custom' ? ' is-selected' : ''}`}
-              aria-pressed={selectedSource === 'custom'}
-              disabled={hasEndpointAttempt}
-              onClick={() => setSource('custom')}
-            >
-              <strong>{t('endpoints.custom')}</strong>
-            </button>
-          </div>
+          <OptionCards
+            value={selectedSource}
+            legend={t('filters.source')}
+            options={[
+              {
+                value: 'mainstream',
+                title: t('endpoints.mainstream'),
+                disabled: mainstreamChannels.length === 0 || hasEndpointAttempt,
+              },
+              { value: 'custom', title: t('endpoints.custom'), disabled: hasEndpointAttempt },
+            ]}
+            onChange={(value) => {
+              setSource(value);
+              if (value === 'mainstream' && !selectedChannel)
+                setChannelId(mainstreamChannels[0]?.id ?? '');
+            }}
+          />
 
           {selectedSource === 'mainstream' ? (
-            <div className="core-field-grid">
-              <label>
-                <span>{t('endpoints.channel')}</span>
-                <select
-                  aria-label={t('endpoints.channel')}
-                  value={selectedChannel?.id ?? ''}
-                  disabled={hasEndpointAttempt || mainstreamChannels.length === 0}
-                  onChange={(event) => setChannelId(event.target.value)}
-                >
-                  {mainstreamChannels.map((channel) => (
-                    <option key={channel.id} value={channel.id}>
-                      {channel.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>{t('endpoints.baseUrl')}</span>
-                <input
-                  aria-label={t('endpoints.baseUrl')}
-                  value={selectedChannel?.base_url ?? ''}
-                  readOnly
-                  aria-readonly="true"
-                  disabled={hasEndpointAttempt}
-                />
-              </label>
-            </div>
+            <Fields>
+              <Field label={t('endpoints.channel')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    aria-label={t('endpoints.channel')}
+                    value={selectedChannel?.id ?? ''}
+                    disabled={hasEndpointAttempt || mainstreamChannels.length === 0}
+                    onChange={(event) => setChannelId(event.target.value)}
+                  >
+                    {mainstreamChannels.map((channel) => (
+                      <option key={channel.id} value={channel.id}>
+                        {channel.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              <Field label={t('endpoints.baseUrl')} size="long">
+                {(props) => (
+                  <input
+                    {...props}
+                    aria-label={t('endpoints.baseUrl')}
+                    value={selectedChannel?.base_url ?? ''}
+                    readOnly
+                    aria-readonly="true"
+                    disabled={hasEndpointAttempt}
+                  />
+                )}
+              </Field>
+            </Fields>
           ) : (
-            <div className="core-choice-grid">
-              {availableConnectors.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={`core-choice${selectedConnector === value ? ' is-selected' : ''}`}
-                  aria-pressed={selectedConnector === value}
-                  disabled={hasEndpointAttempt}
-                  onClick={() => setConnector(value)}
-                >
-                  <strong>
-                    <ConnectorLabel value={value} />
-                  </strong>
-                </button>
-              ))}
-            </div>
+            <OptionCards
+              legend={t('endpoints.connector')}
+              value={selectedConnector}
+              options={availableConnectors.map((value) => ({
+                value,
+                title: <ConnectorLabel value={value} />,
+                disabled: hasEndpointAttempt,
+              }))}
+              onChange={setConnector}
+            />
           )}
 
-          <div className="core-form-actions">
-            <span />
+          <FormActions>
             <button
               type="button"
               className="nb-btn nb-btn--primary"
@@ -421,7 +413,7 @@ export function EndpointWizard({
             >
               {t('common.next')}
             </button>
-          </div>
+          </FormActions>
         </div>
       ) : null}
 
@@ -433,31 +425,35 @@ export function EndpointWizard({
             void createEndpointStep();
           }}
         >
-          <div className="core-field-grid">
-            <label>
-              <span>{t('endpoints.baseUrl')}</span>
-              <input
-                value={formBaseURL}
-                maxLength={4096}
-                disabled={hasEndpointAttempt}
-                readOnly={selectedSource === 'mainstream'}
-                aria-readonly={selectedSource === 'mainstream' ? 'true' : undefined}
-                onChange={(event) => {
-                  if (selectedSource === 'custom') setBaseURL(event.target.value);
-                }}
-                required
-              />
-            </label>
-            <label>
-              <span>{t('endpoints.note')}</span>
-              <input
-                value={endpointNote}
-                maxLength={2048}
-                disabled={hasEndpointAttempt}
-                onChange={(event) => setEndpointNote(event.target.value)}
-              />
-            </label>
-          </div>
+          <Fields>
+            <Field label={t('endpoints.baseUrl')} size="long">
+              {(props) => (
+                <input
+                  {...props}
+                  value={formBaseURL}
+                  maxLength={4096}
+                  disabled={hasEndpointAttempt}
+                  readOnly={selectedSource === 'mainstream'}
+                  aria-readonly={selectedSource === 'mainstream' ? 'true' : undefined}
+                  onChange={(event) => {
+                    if (selectedSource === 'custom') setBaseURL(event.target.value);
+                  }}
+                  required
+                />
+              )}
+            </Field>
+            <Field label={t('endpoints.note')} size="long">
+              {(props) => (
+                <input
+                  {...props}
+                  value={endpointNote}
+                  maxLength={2048}
+                  disabled={hasEndpointAttempt}
+                  onChange={(event) => setEndpointNote(event.target.value)}
+                />
+              )}
+            </Field>
+          </Fields>
           <EndpointTransportNotice url={formBaseURL} />
           {formBaseURL ? (
             <div className={previewError ? 'core-inline-error' : 'core-inline-success'}>
@@ -473,7 +469,7 @@ export function EndpointWizard({
           {outcome === 'unknown' ? (
             <p className="core-inline-warning">{t('common.outcomeUnknown')}</p>
           ) : null}
-          <div className="core-form-actions">
+          <FormActions>
             <button
               type="button"
               className="nb-btn nb-btn--secondary"
@@ -493,7 +489,7 @@ export function EndpointWizard({
                   ? copy.t('checkResult')
                   : t('endpoints.createEndpointStep')}
             </button>
-          </div>
+          </FormActions>
         </form>
       ) : null}
 
@@ -563,36 +559,40 @@ export function EndpointWizard({
             <span>{t('endpoints.savedForLater')}</span>
             <span className="core-mono">{endpoint.base_url}</span>
           </div>
-          <div className="core-field-grid">
-            <label>
-              <span>{t('endpoints.secret')}</span>
-              <input
-                type="password"
-                autoComplete="new-password"
-                value={secret.secret}
-                maxLength={65536}
-                disabled={busy}
-                onChange={(event) =>
-                  dispatchSecret({
-                    type: 'change',
-                    accountId,
-                    pageInstanceId,
-                    secret: event.target.value,
-                  })
-                }
-                required={outcome !== 'unknown'}
-              />
-            </label>
-            <label>
-              <span>{t('endpoints.keyNote')}</span>
-              <input
-                value={keyNote}
-                maxLength={2048}
-                disabled={hasKeyAttempt}
-                onChange={(event) => setKeyNote(event.target.value)}
-              />
-            </label>
-          </div>
+          <Fields>
+            <Field label={t('endpoints.secret')} size="long">
+              {(props) => (
+                <input
+                  {...props}
+                  type="password"
+                  autoComplete="new-password"
+                  value={secret.secret}
+                  maxLength={65536}
+                  disabled={busy}
+                  onChange={(event) =>
+                    dispatchSecret({
+                      type: 'change',
+                      accountId,
+                      pageInstanceId,
+                      secret: event.target.value,
+                    })
+                  }
+                  required={outcome !== 'unknown'}
+                />
+              )}
+            </Field>
+            <Field label={t('endpoints.keyNote')} size="long">
+              {(props) => (
+                <input
+                  {...props}
+                  value={keyNote}
+                  maxLength={2048}
+                  disabled={hasKeyAttempt}
+                  onChange={(event) => setKeyNote(event.target.value)}
+                />
+              )}
+            </Field>
+          </Fields>
           <KeyLimitFields
             concurrency={maxConcurrency}
             rpm={maxRPM}
@@ -600,32 +600,31 @@ export function EndpointWizard({
             onRPM={setMaxRPM}
             disabled={hasKeyAttempt}
           />
-          <label className="core-checkbox">
-            <input
-              type="checkbox"
-              checked={secret.ownershipConfirmed}
-              disabled={hasKeyAttempt}
-              onChange={(event) =>
-                dispatchSecret({
-                  type: 'ownership',
-                  accountId,
-                  pageInstanceId,
-                  confirmed: event.target.checked,
-                })
-              }
-            />
-            <span>{t('endpoints.ownership')}</span>
-          </label>
-          {supportsChatStoragePolicy(endpoint.connector_type) ? (
-            <label className="core-checkbox">
+          <Field label={t('endpoints.ownership')}>
+            {(props) => (
               <input
+                {...props}
                 type="checkbox"
-                checked={forceStoreFalse}
+                checked={secret.ownershipConfirmed}
                 disabled={hasKeyAttempt}
-                onChange={(event) => setForceStoreFalse(event.target.checked)}
+                onChange={(event) =>
+                  dispatchSecret({
+                    type: 'ownership',
+                    accountId,
+                    pageInstanceId,
+                    confirmed: event.target.checked,
+                  })
+                }
               />
-              <span>{t('endpoints.storePolicy')}</span>
-            </label>
+            )}
+          </Field>
+          {supportsChatStoragePolicy(endpoint.connector_type) ? (
+            <Toggle
+              label={t('endpoints.storePolicy')}
+              checked={forceStoreFalse}
+              disabled={hasKeyAttempt}
+              onChange={setForceStoreFalse}
+            />
           ) : null}
           <p className="core-inline-warning">{t('endpoints.costWarning')}</p>
           {secret.message ? (
@@ -634,8 +633,7 @@ export function EndpointWizard({
             </p>
           ) : null}
           {error ? <CoreErrorPanel error={error} compact /> : null}
-          <div className="core-form-actions">
-            <span />
+          <FormActions>
             <button type="submit" className="nb-btn nb-btn--primary" disabled={busy}>
               {busy
                 ? t('common.working')
@@ -643,7 +641,7 @@ export function EndpointWizard({
                   ? copy.t('checkResult')
                   : t('endpoints.addKeyStep')}
             </button>
-          </div>
+          </FormActions>
         </form>
       ) : null}
 
@@ -651,8 +649,7 @@ export function EndpointWizard({
         <div className="core-form">
           <p className="core-inline-warning">{t('endpoints.costWarning')}</p>
           {error ? <CoreErrorPanel error={error} compact /> : null}
-          <div className="core-form-actions">
-            <span />
+          <FormActions>
             <button
               type="button"
               className="nb-btn nb-btn--primary"
@@ -665,7 +662,7 @@ export function EndpointWizard({
                   ? copy.t('checkResult')
                   : t('endpoints.refreshDiscovery')}
             </button>
-          </div>
+          </FormActions>
         </div>
       ) : null}
 
@@ -681,7 +678,7 @@ export function EndpointWizard({
               onRetry={() => void liveCatalog.refetch()}
             />
           ) : null}
-          <div className="core-form-actions">
+          <FormActions>
             {(liveCatalog.data?.evidence ?? catalog?.evidence ?? accepted?.evidence)?.state ===
             'failed' ? (
               <>
@@ -713,7 +710,7 @@ export function EndpointWizard({
             >
               {t('endpoints.openBindings')}
             </Link>
-          </div>
+          </FormActions>
         </div>
       ) : null}
 

@@ -210,7 +210,25 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
       ]),
     ),
   );
+  const textSeed = JSON.stringify(
+    filterFields
+      .filter((key) => !['source', 'outcome', 'domain'].includes(key))
+      .map((key) => filter[key]),
+  );
+  const [seededFor, setSeededFor] = useState(textSeed);
   const [invalidRange, setInvalidRange] = useState(false);
+  if (seededFor !== textSeed) {
+    setSeededFor(textSeed);
+    setInvalidRange(false);
+    setDraft(
+      Object.fromEntries(
+        filterFields.map((key) => [
+          key,
+          key === 'time_from' || key === 'time_to' ? localDate(filter[key]) : (filter[key] ?? ''),
+        ]),
+      ),
+    );
+  }
   const field = (name: string, type = 'text') => (
     <Field label={t(`admin.managementHistory.fields.${name}`)} key={name}>
       {(props) => (
@@ -228,8 +246,11 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
       {(props) => (
         <select
           {...props}
-          value={draft[name] ?? ''}
-          onChange={(event) => setDraft((old) => ({ ...old, [name]: event.target.value }))}
+          value={filter[name as keyof Filter] ?? ''}
+          onChange={(event) => {
+            setDraft((old) => ({ ...old, [name]: event.target.value }));
+            onApply({ ...filter, [name]: event.target.value || undefined });
+          }}
         >
           <option value="">{t('admin.managementHistory.all')}</option>
           {values.map((value) => (
@@ -245,13 +266,17 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
     <>
       <FilterBar
         ariaLabel={t('admin.managementHistory.fields.search')}
-        secondaryLabel={t('admin.managementHistory.moreFilters')}
         activeCount={
           filterFields.filter(
             (key) =>
               draft[key] && !['search', 'source', 'outcome', 'domain', 'group_key'].includes(key),
           ).length
         }
+        onReset={() => {
+          setDraft({});
+          setInvalidRange(false);
+          onApply({});
+        }}
         onSubmit={() => {
           const next: Filter = {};
           for (const key of filterFields) {
@@ -269,7 +294,7 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
           onApply(next);
         }}
         search={
-          <div className="management-history__filters">
+          <>
             <Field
               label={t('admin.managementHistory.fields.search')}
               help={t('admin.managementHistory.searchHelp')}
@@ -287,13 +312,7 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
             {select('source', sources, 'sources')}
             {select('outcome', outcomes, 'outcomes')}
             {select('domain', domains, 'domains')}
-            <div className="nb-actions">
-              <Button type="submit">{t('admin.managementHistory.apply')}</Button>
-              <Button type="button" variant="secondary" onClick={() => onApply({})}>
-                {t('admin.managementHistory.clearFilters')}
-              </Button>
-            </div>
-          </div>
+          </>
         }
         secondary={
           <>
@@ -463,7 +482,7 @@ export function ManagementHistory({ account }: { account: string }) {
       />
       <Panel>
         <PanelBody>
-          <Filters key={filterKey} filter={filter} onApply={apply} />
+          <Filters filter={filter} onApply={apply} />
         </PanelBody>
       </Panel>
       <Panel>

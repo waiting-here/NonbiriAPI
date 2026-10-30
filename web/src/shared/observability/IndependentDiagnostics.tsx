@@ -1,3 +1,4 @@
+import { Field, FilterBar } from '@shared/components/ui';
 import { FailureDetails } from './FailureDiagnostics';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -57,7 +58,7 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
     image_task: words('Image generation and polling', '绘本生成与查询'),
     image_discovery: words('Image model discovery', '绘本模型拉取'),
   };
-  async function load(next = false) {
+  async function load(next = false, selection?: Partial<IndependentFilter>) {
     controller.current?.abort();
     const request = new AbortController();
     controller.current = request;
@@ -72,10 +73,11 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
         : {
             kind,
             ...(storage ? { storage: reason } : {}),
-            user_id: user.trim() || undefined,
-            subject_id: subject.trim() || undefined,
+            user_id: selection ? applied?.user_id : user.trim() || undefined,
+            subject_id: selection ? applied?.subject_id : subject.trim() || undefined,
             from: to - Number(hours) * 3600,
             to,
+            ...selection,
           };
     try {
       const result = await getIndependentDiagnostics(role, filter, request.signal);
@@ -112,69 +114,119 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
           '最近30天内的失败详情。可查看的记录及上游错误详情取决于当前授权。',
         )}
       </p>
-      <form
-        className="diagnostic-filters"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void load();
+      <FilterBar
+        activeCount={0}
+        onSubmit={() => void load()}
+        onReset={() => {
+          setKind('all');
+          setReason('missing');
+          setUser('');
+          setSubject('');
+          setHours(storage ? '720' : '24');
+          const to = Math.floor(Date.now() / 1000);
+          void load(false, {
+            kind: 'all',
+            storage: storage ? 'missing' : undefined,
+            user_id: undefined,
+            subject_id: undefined,
+            from: to - (storage ? 720 : 24) * 3600,
+            to,
+          });
         }}
-      >
-        <label>
-          {words('Category', '类别')}
-          <select value={kind} onChange={(event) => setKind(event.target.value as IndependentKind)}>
-            {(Object.keys(labels) as IndependentKind[])
-              .filter((key) => storage || key !== 'api_request')
-              .map((key) => (
-                <option key={key} value={key}>
-                  {labels[key]}
-                </option>
-              ))}
-          </select>
-        </label>
-        {storage ? (
-          <label>
-            {words('Reason', '原因')}
-            <select value={reason} onChange={(event) => setReason(event.target.value)}>
-              <option value="missing">{words('All missing bodies', '全部未保存')}</option>
-              <option value="capacity_exhausted">{words('Storage budget full', '容量不足')}</option>
-              <option value="read_failure">{words('Read failure', '读取失败')}</option>
-              <option value="storage_failure">{words('Storage failure', '保存失败')}</option>
-              <option value="unspecified">
-                {words('Unspecified older failure', '旧记录，原因未细分')}
-              </option>
-            </select>
-          </label>
-        ) : null}
-        <label>
-          {words('User ID', '用户 ID')}
-          <input
-            value={user}
-            maxLength={19}
-            inputMode="numeric"
-            pattern="[1-9][0-9]{0,18}"
-            onChange={(event) => setUser(event.target.value)}
-          />
-        </label>
-        <label>
-          {words('Request, task or operation ID', '请求、任务或操作 ID')}
-          <input
-            value={subject}
-            maxLength={27}
-            onChange={(event) => setSubject(event.target.value)}
-          />
-        </label>
-        <label>
-          {words('Period', '时间范围')}
-          <select value={hours} onChange={(event) => setHours(event.target.value)}>
-            <option value="24">{words('Last 24 hours', '最近24小时')}</option>
-            <option value="168">{words('Last 7 days', '最近7天')}</option>
-            <option value="720">{words('Last 30 days', '最近30天')}</option>
-          </select>
-        </label>
-        <button className="nb-btn nb-btn--primary" type="submit" disabled={busy}>
-          {words('Search diagnostics', '查询诊断')}
-        </button>
-      </form>
+        search={
+          <>
+            <Field label={words('Category', '类别')} size="short">
+              {(props) => (
+                <select
+                  {...props}
+                  value={kind}
+                  onChange={(event) => {
+                    const kind = event.target.value as IndependentKind;
+                    setKind(kind);
+                    void load(false, { kind });
+                  }}
+                >
+                  {(Object.keys(labels) as IndependentKind[])
+                    .filter((key) => storage || key !== 'api_request')
+                    .map((key) => (
+                      <option key={key} value={key}>
+                        {labels[key]}
+                      </option>
+                    ))}
+                </select>
+              )}
+            </Field>
+            {storage ? (
+              <Field label={words('Reason', '原因')} size="short">
+                {(props) => (
+                  <select
+                    {...props}
+                    value={reason}
+                    onChange={(event) => {
+                      setReason(event.target.value);
+                      void load(false, { storage: event.target.value });
+                    }}
+                  >
+                    <option value="missing">{words('All missing bodies', '全部未保存')}</option>
+                    <option value="capacity_exhausted">
+                      {words('Storage budget full', '容量不足')}
+                    </option>
+                    <option value="read_failure">{words('Read failure', '读取失败')}</option>
+                    <option value="storage_failure">{words('Storage failure', '保存失败')}</option>
+                    <option value="unspecified">
+                      {words('Unspecified older failure', '旧记录，原因未细分')}
+                    </option>
+                  </select>
+                )}
+              </Field>
+            ) : null}
+            <Field label={words('User ID', '用户 ID')} size="short">
+              {(props) => (
+                <input
+                  {...props}
+                  placeholder={words('Search user ID', '搜索用户 ID')}
+                  value={user}
+                  maxLength={19}
+                  inputMode="numeric"
+                  pattern="[1-9][0-9]{0,18}"
+                  onChange={(event) => setUser(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field label={words('Request, task or operation ID', '请求、任务或操作 ID')}>
+              {(props) => (
+                <input
+                  {...props}
+                  placeholder={words(
+                    'Search request, task or operation ID',
+                    '搜索请求、任务或操作 ID',
+                  )}
+                  value={subject}
+                  maxLength={27}
+                  onChange={(event) => setSubject(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field label={words('Period', '时间范围')} size="short">
+              {(props) => (
+                <select
+                  {...props}
+                  value={hours}
+                  onChange={(event) => {
+                    setHours(event.target.value);
+                    const to = Math.floor(Date.now() / 1000);
+                    void load(false, { from: to - Number(event.target.value) * 3600, to });
+                  }}
+                >
+                  <option value="24">{words('Last 24 hours', '最近24小时')}</option>
+                  <option value="168">{words('Last 7 days', '最近7天')}</option>
+                  <option value="720">{words('Last 30 days', '最近30天')}</option>
+                </select>
+              )}
+            </Field>
+          </>
+        }
+      />
       {failure != null && <ErrorState error={failure} onRetry={() => void load()} />}
       {page?.data.length === 0 && (
         <p>{words('No matching diagnostics.', '没有符合条件的诊断。')}</p>

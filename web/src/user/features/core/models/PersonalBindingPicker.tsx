@@ -207,9 +207,9 @@ export function PersonalBindingPicker({
         as="div"
         ariaLabel={copy.filterService}
         activeCount={service ? 1 : 0}
-        secondaryLabel={copy.filterService}
         secondaryAlwaysVisible
         onSubmit={() => undefined}
+        onReset={() => setServiceQuery('')}
         search={
           <Field label={copy.searchServices}>
             {(props) => (
@@ -459,8 +459,12 @@ export function PersonalBindingPicker({
                 as="div"
                 ariaLabel={copy.models}
                 activeCount={source ? 1 : 0}
-                secondaryLabel={copy.source}
                 onSubmit={() => setQuery(queryDraft.trim())}
+                onReset={() => {
+                  setQueryDraft('');
+                  setQuery('');
+                  setSource('');
+                }}
                 search={
                   <Field label={copy.searchModels}>
                     {(props) => (

@@ -59,7 +59,6 @@ describe('independent management diagnostics', () => {
     request.apiFetch.mockResolvedValueOnce(page([missing]));
     render(<IndependentDiagnostics role="admin" accountId="a" scopeReady storage />);
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'read_failure' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Search diagnostics' }));
     expect(await screen.findByText('The upstream body could not be read.')).toBeInTheDocument();
     const url = new URL(request.apiFetch.mock.calls[0][0], 'https://example.test');
     expect(url.searchParams.get('storage')).toBe('read_failure');
@@ -85,7 +84,7 @@ describe('independent management diagnostics', () => {
     });
     const view = render(<IndependentDiagnostics role="admin" accountId="a" scopeReady />);
     expect(request.apiFetch).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Search diagnostics' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     const summary = await screen.findByText(/img_AAAAA.*Attempt 3/);
     expect(request.apiFetch).toHaveBeenCalledTimes(1);
     fireEvent.click(summary);
@@ -103,7 +102,7 @@ describe('independent management diagnostics', () => {
     expect(screen.queryByText('<img src=x>')).toBeNull();
     expect(request.apiFetch).toHaveBeenCalledTimes(2);
     view.rerender(<IndependentDiagnostics role="admin" accountId="b" scopeReady={false} />);
-    expect(screen.queryByRole('button', { name: 'Search diagnostics' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Search' })).toBeNull();
   });
   it('labels omitted, truncated and synthetic details without calling a summary original', async () => {
     const text =
@@ -119,7 +118,7 @@ describe('independent management diagnostics', () => {
         source: null,
       });
     render(<IndependentDiagnostics role="steward" accountId={6} scopeReady />);
-    fireEvent.click(screen.getByRole('button', { name: 'Search diagnostics' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     expect(await screen.findByText(/storage budget was full/)).toBeInTheDocument();
     expect(screen.getByText(/truncated$/)).toBeInTheDocument();
     fireEvent.click(screen.getByText(/safe diagnostic$/));
@@ -136,10 +135,11 @@ describe('independent management diagnostics', () => {
       .mockResolvedValueOnce(page([entry('3')], '3'))
       .mockResolvedValueOnce(page([entry('2')]));
     render(<IndependentDiagnostics role="admin" accountId="a" scopeReady />);
-    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'image_task' } });
     fireEvent.change(screen.getByLabelText('User ID'), { target: { value: '17' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Search diagnostics' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     await screen.findByRole('button', { name: 'Next diagnostics' });
+    const first = new URL(String(request.apiFetch.mock.calls[0][0]), 'https://example.invalid');
+    expect(first.searchParams.get('user_id')).toBe('17');
     fireEvent.change(screen.getByLabelText('User ID'), { target: { value: '99' } });
     fireEvent.click(screen.getByRole('button', { name: 'Next diagnostics' }));
     await waitFor(() => expect(request.apiFetch).toHaveBeenCalledTimes(2));
@@ -159,11 +159,11 @@ describe('independent management diagnostics', () => {
       })
       .mockRejectedValueOnce(new ApiError('forbidden', 'Access changed', 403));
     render(<IndependentDiagnostics role="admin" accountId="a" scopeReady />);
-    fireEvent.click(screen.getByRole('button', { name: 'Search diagnostics' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     fireEvent.click(await screen.findByText(/img_AAAAA.*Attempt 3/));
     fireEvent.click(screen.getByRole('button', { name: 'Load error details and source' }));
     await screen.findByText('<script>untrusted</script>');
-    fireEvent.click(screen.getByRole('button', { name: 'Search diagnostics' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     await screen.findByRole('alert');
     expect(screen.queryByText('<script>untrusted</script>')).toBeNull();
   });
@@ -179,7 +179,7 @@ describe('independent management diagnostics', () => {
       })
       .mockRejectedValueOnce(new ApiError('forbidden', 'Access changed', 403));
     render(<IndependentDiagnostics role="admin" accountId="a" scopeReady />);
-    fireEvent.click(screen.getByRole('button', { name: 'Search diagnostics' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() => expect(screen.getAllByText(/img_AAAAA.*Attempt 3/)).toHaveLength(2));
     fireEvent.click(screen.getAllByText(/img_AAAAA.*Attempt 3/)[0]);
     fireEvent.click(screen.getAllByRole('button', { name: 'Load error details and source' })[0]);
@@ -221,7 +221,7 @@ describe('independent management diagnostics', () => {
         source: null,
       });
     render(<IndependentDiagnostics role="admin" accountId="a" scopeReady />);
-    fireEvent.click(screen.getByRole('button', { name: 'Search diagnostics' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     fireEvent.click(await screen.findByText(/op_AAAAA.*Attempt 3/));
     expect(screen.queryByText('https://sent.example.invalid/models?revision=1')).toBeNull();
     fireEvent.click(screen.getAllByRole('button', { name: 'Load error details and source' })[0]);

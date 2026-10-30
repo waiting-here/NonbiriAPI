@@ -2593,7 +2593,10 @@ describe('experimental policy and charity controls', () => {
       route: '/steward?tab=logs',
     });
     const load = async () => {
-      fireEvent.click(await screen.findByRole('button', { name: 'Search diagnostics' }));
+      const diagnostics = await screen.findByRole('region', {
+        name: 'Discovery and activity diagnostics',
+      });
+      fireEvent.click(within(diagnostics).getByRole('button', { name: 'Search' }));
       fireEvent.click(await screen.findByText(/req_AAAAA.*Attempt 1/));
       fireEvent.click(screen.getByRole('button', { name: 'Load error details and source' }));
     };

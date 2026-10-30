@@ -167,7 +167,7 @@ test('administrator submits endpoint search, resets it and pages actual shared m
     await search
       .getByLabel(commonEn.management.endpoints.searchAria)
       .fill('directory.example.test');
-    await search.getByRole('button', { name: commonEn.common.applyFilter, exact: true }).click();
+    await search.getByRole('button', { name: commonEn.common.search, exact: true }).click();
     await expect(endpointTable.locator(':scope > tbody > tr')).toHaveCount(1);
     expect(
       (
@@ -631,7 +631,7 @@ test('administrator filters retained log origins by exact Discord ID and account
       });
     const apply = async (expected: Record<string, string>) => {
       const pending = waitForLogs(expected);
-      await filters.getByRole('button', { name: commonEn.common.applyFilter, exact: true }).click();
+      await filters.getByRole('button', { name: commonEn.common.search, exact: true }).click();
       const response = await pending;
       expect(response.status()).toBe(200);
       expect(response.headers()['cache-control']).toContain('no-store');
@@ -706,7 +706,7 @@ test('administrator applies log filters, exports them and downloads retained dia
     const filters = page.getByTestId('log-filters');
     await filters.locator('.nb-filter__more > summary').click();
     await filters.getByLabel(commonEn.common.status, { exact: true }).fill('503');
-    await filters.getByRole('button', { name: commonEn.common.applyFilter, exact: true }).click();
+    await filters.getByRole('button', { name: commonEn.common.search, exact: true }).click();
     await expect(page).toHaveURL(/status=503/);
     const logs = await read(
       admin,

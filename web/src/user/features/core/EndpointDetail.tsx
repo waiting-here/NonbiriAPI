@@ -1,7 +1,7 @@
 import { EntryScope, KeyCredentialScope } from './connections/EntryScope';
 import { ServiceModelSetup } from './connections/ServiceModelSetup';
 import { useTranslation } from 'react-i18next';
-import { Field } from '@shared/components/ui';
+import { Field, Fields, FormActions, Toggle } from '@shared/components/ui';
 import { CredentialGrantForm } from './connections/CredentialGrantForm';
 import { supportsChatStoragePolicy } from '@shared/operations/connectorPolicy';
 import { EndpointTransportNotice } from '@shared/components/EndpointTransportNotice';
@@ -256,35 +256,39 @@ function AddEndpointKeyForm({
           {t('common.cancel')}
         </button>
       </div>
-      <div className="core-field-grid">
-        <label>
-          <span>{t('endpoints.secret')}</span>
-          <input
-            type="password"
-            autoComplete="new-password"
-            maxLength={65536}
-            disabled={busy}
-            value={draft.secret}
-            onChange={(event) =>
-              dispatch({
-                type: 'change',
-                accountId,
-                pageInstanceId: instance,
-                secret: event.target.value,
-              })
-            }
-          />
-        </label>
-        <label>
-          <span>{t('endpoints.keyNote')}</span>
-          <input
-            maxLength={2048}
-            disabled={hasAttempt}
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-          />
-        </label>
-      </div>
+      <Fields>
+        <Field label={t('endpoints.secret')} size="long">
+          {(props) => (
+            <input
+              {...props}
+              type="password"
+              autoComplete="new-password"
+              maxLength={65536}
+              disabled={busy}
+              value={draft.secret}
+              onChange={(event) =>
+                dispatch({
+                  type: 'change',
+                  accountId,
+                  pageInstanceId: instance,
+                  secret: event.target.value,
+                })
+              }
+            />
+          )}
+        </Field>
+        <Field label={t('endpoints.keyNote')} size="long">
+          {(props) => (
+            <input
+              {...props}
+              maxLength={2048}
+              disabled={hasAttempt}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+            />
+          )}
+        </Field>
+      </Fields>
       <KeyLimitFields
         concurrency={maxConcurrency}
         rpm={maxRPM}
@@ -292,32 +296,31 @@ function AddEndpointKeyForm({
         onRPM={setMaxRPM}
         disabled={hasAttempt}
       />
-      <label className="core-checkbox">
-        <input
-          type="checkbox"
-          checked={draft.ownershipConfirmed}
-          disabled={hasAttempt}
-          onChange={(event) =>
-            dispatch({
-              type: 'ownership',
-              accountId,
-              pageInstanceId: instance,
-              confirmed: event.target.checked,
-            })
-          }
-        />
-        <span>{t('endpoints.ownership')}</span>
-      </label>
-      {supportsChatStoragePolicy(endpoint.connector_type) ? (
-        <label className="core-checkbox">
+      <Field label={t('endpoints.ownership')}>
+        {(props) => (
           <input
+            {...props}
             type="checkbox"
-            checked={forceStoreFalse}
+            checked={draft.ownershipConfirmed}
             disabled={hasAttempt}
-            onChange={(event) => setForceStoreFalse(event.target.checked)}
+            onChange={(event) =>
+              dispatch({
+                type: 'ownership',
+                accountId,
+                pageInstanceId: instance,
+                confirmed: event.target.checked,
+              })
+            }
           />
-          <span>{t('endpoints.storePolicy')}</span>
-        </label>
+        )}
+      </Field>
+      {supportsChatStoragePolicy(endpoint.connector_type) ? (
+        <Toggle
+          label={t('endpoints.storePolicy')}
+          checked={forceStoreFalse}
+          disabled={hasAttempt}
+          onChange={setForceStoreFalse}
+        />
       ) : null}
       <p className="core-inline-warning">{t('endpoints.costWarning')}</p>
       {outcome === 'unknown' && needsSecret ? <p>{text('secretAgain')}</p> : null}
@@ -329,8 +332,7 @@ function AddEndpointKeyForm({
         onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
         busy={busy}
       />
-      <div className="core-form-actions">
-        <span />
+      <FormActions>
         <button type="submit" className="nb-btn nb-btn--primary" disabled={busy}>
           {busy
             ? t('common.working')
@@ -338,7 +340,7 @@ function AddEndpointKeyForm({
               ? text('checkResult')
               : t('endpoints.addKeyStep')}
         </button>
-      </div>
+      </FormActions>
     </form>
   );
 }
@@ -598,45 +600,55 @@ function ManualEntryRow({
       ) : null}
       {editing ? (
         <div className="core-form">
-          <div className="core-field-grid">
-            <label>
-              <span>{t('endpoints.manualModel')}</span>
-              <input
-                value={model}
-                maxLength={1024}
-                disabled={Boolean(attemptKind)}
-                onChange={(event) => setModel(event.target.value)}
-              />
-            </label>
-            <label>
-              <span>{t('endpoints.manualProvider')}</span>
-              <input
-                value={provider}
-                maxLength={256}
-                disabled={Boolean(attemptKind)}
-                onChange={(event) => setProvider(event.target.value)}
-              />
-            </label>
-            {visibleImpacts.map((impact) => (
-              <label key={impact.bindingId}>
-                <span>
-                  {t('endpoints.replacement', { id: impact.bindingId, model: impact.modelName })}
-                </span>
+          <Fields>
+            <Field label={t('endpoints.manualModel')}>
+              {(props) => (
                 <input
-                  className="core-mono"
+                  {...props}
+                  value={model}
                   maxLength={1024}
                   disabled={Boolean(attemptKind)}
-                  value={replacements[impact.bindingId] ?? ''}
-                  onChange={(event) =>
-                    setReplacements((current) => ({
-                      ...current,
-                      [impact.bindingId]: event.target.value,
-                    }))
-                  }
+                  onChange={(event) => setModel(event.target.value)}
                 />
-              </label>
+              )}
+            </Field>
+            <Field label={t('endpoints.manualProvider')}>
+              {(props) => (
+                <input
+                  {...props}
+                  value={provider}
+                  maxLength={256}
+                  disabled={Boolean(attemptKind)}
+                  onChange={(event) => setProvider(event.target.value)}
+                />
+              )}
+            </Field>
+            {visibleImpacts.map((impact) => (
+              <Field
+                key={impact.bindingId}
+                label={t('endpoints.replacement', {
+                  id: impact.bindingId,
+                  model: impact.modelName,
+                })}
+              >
+                {(props) => (
+                  <input
+                    {...props}
+                    className="core-mono"
+                    maxLength={1024}
+                    disabled={Boolean(attemptKind)}
+                    value={replacements[impact.bindingId] ?? ''}
+                    onChange={(event) =>
+                      setReplacements((current) => ({
+                        ...current,
+                        [impact.bindingId]: event.target.value,
+                      }))
+                    }
+                  />
+                )}
+              </Field>
             ))}
-          </div>
+          </Fields>
           {impactsKnown && impacts.length > 0 ? (
             <PagePagination
               metadata={{
@@ -658,7 +670,7 @@ function ManualEntryRow({
             onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
             busy={busy}
           />
-          <div className="core-form-actions">
+          <FormActions>
             <button
               type="button"
               className="nb-btn nb-btn--danger-outline"
@@ -689,7 +701,7 @@ function ManualEntryRow({
                   ? t('common.reconcile')
                   : t('endpoints.updateManual')}
             </button>
-          </div>
+          </FormActions>
         </div>
       ) : null}
     </li>
@@ -854,8 +866,8 @@ export function PairManualCatalog({
       </div>
       <p className="nb-small nb-muted">{text('user.services.manualBulkHelp')}</p>
       <form className="core-form" onSubmit={(event) => void create(event)}>
-        <div className="core-field-grid">
-          <Field label={t('endpoints.manualModel')}>
+        <Fields>
+          <Field size="long" label={t('endpoints.manualModel')}>
             {(props) => (
               <textarea
                 {...props}
@@ -879,7 +891,7 @@ export function PairManualCatalog({
               />
             )}
           </Field>
-        </div>
+        </Fields>
         <OutcomeNotice
           outcome={outcome}
           error={operation.error}
@@ -887,8 +899,7 @@ export function PairManualCatalog({
           onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
           busy={busy}
         />
-        <div className="core-form-actions">
-          <span />
+        <FormActions>
           <button
             type="submit"
             className="nb-btn nb-btn--primary"
@@ -900,7 +911,7 @@ export function PairManualCatalog({
                 ? t('common.reconcile')
                 : t('endpoints.manualAdd')}
           </button>
-        </div>
+        </FormActions>
       </form>
       {catalog.isPending && !catalog.data ? (
         <CoreLoading compact />
@@ -1458,17 +1469,19 @@ function EndpointKeyCard({
                 });
               }}
             >
-              <div className="core-field-grid">
-                <label>
-                  <span>{t('endpoints.keyNote')}</span>
-                  <input
-                    value={note}
-                    maxLength={2048}
-                    disabled={Boolean(replayAttempt)}
-                    onChange={(event) => setNote(event.target.value)}
-                  />
-                </label>
-              </div>
+              <Fields>
+                <Field label={t('endpoints.keyNote')} size="long">
+                  {(props) => (
+                    <input
+                      {...props}
+                      value={note}
+                      maxLength={2048}
+                      disabled={Boolean(replayAttempt)}
+                      onChange={(event) => setNote(event.target.value)}
+                    />
+                  )}
+                </Field>
+              </Fields>
               <KeyLimitFields
                 concurrency={maxConcurrency}
                 rpm={maxRPM}
@@ -1476,7 +1489,7 @@ function EndpointKeyCard({
                 onRPM={setMaxRPM}
                 disabled={busy || Boolean(replayAttempt)}
               />
-              <div className="core-form-actions">
+              <FormActions>
                 <button
                   type="button"
                   className="nb-btn nb-btn--secondary"
@@ -1502,7 +1515,7 @@ function EndpointKeyCard({
                 >
                   {t('common.save')}
                 </button>
-              </div>
+              </FormActions>
             </form>
           </ExpandablePanel>
         </td>

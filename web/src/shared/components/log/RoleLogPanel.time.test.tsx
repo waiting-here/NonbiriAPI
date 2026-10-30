@@ -129,7 +129,7 @@ describe('role log time filters', () => {
       ),
     );
     currentZone = 'Asia/Tokyo';
-    fireEvent.submit(screen.getByRole('button', { name: 'Apply filter' }).closest('form')!);
+    fireEvent.submit(screen.getByRole('button', { name: 'Search' }).closest('form')!);
     expect(screen.getByText(/status code or time range is invalid/i)).toBeVisible();
     expect(fetchMock.mock.calls.map(([path]) => String(path))).not.toContain(
       `/admin/api/logs?from=${from}&to=${to}&page=1&page_size=20`,
@@ -173,10 +173,8 @@ describe('role log time filters', () => {
       const toInput = screen.getByLabelText('To');
       fireEvent.change(fromInput, { target: { value: localFrom.slice(0, 16) } });
       fireEvent.change(toInput, { target: { value: localTo.slice(0, 16) } });
-      await waitFor(() =>
-        expect(screen.getByRole('button', { name: 'Apply filter' })).toBeEnabled(),
-      );
-      await view.user.click(screen.getByRole('button', { name: 'Apply filter' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled());
+      await view.user.click(screen.getByRole('button', { name: 'Search' }));
       await waitFor(() =>
         expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
           `${role === 'admin' ? '/admin/api/logs' : '/api/steward/logs'}?from=${from}&to=${to}&page=1&page_size=20`,
@@ -195,8 +193,8 @@ describe('role log time filters', () => {
     const toInput = screen.getByLabelText('To');
     fireEvent.change(fromInput, { target: { value: localTo.slice(0, 16) } });
     fireEvent.change(toInput, { target: { value: localFrom.slice(0, 16) } });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Apply filter' })).toBeEnabled());
-    await view.user.click(screen.getByRole('button', { name: 'Apply filter' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled());
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
     expect(screen.getByText(/status code or time range is invalid/i)).toBeVisible();
     expect(fromInput).toHaveValue(localTo.slice(0, 16));
     expect(toInput).toHaveValue(localFrom.slice(0, 16));

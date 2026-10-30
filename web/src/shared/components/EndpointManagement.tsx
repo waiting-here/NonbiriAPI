@@ -258,7 +258,6 @@ export function EndpointManagement({
         <EndpointTagRules role={role} account={account} canTag={canTag} />
       </Fold>
       <FilterBar
-        secondaryLabel={t('common.filter')}
         activeCount={Number(Boolean(query)) + Number(Boolean(userId)) + Number(Boolean(tag))}
         onSubmit={() => {
           const bytes = new TextEncoder().encode(draft).byteLength;
@@ -268,6 +267,12 @@ export function EndpointManagement({
           }
           setQueryError(null);
           commitFilter(draft, userDraft.trim());
+        }}
+        onReset={() => {
+          setDraft('');
+          setUserDraft('');
+          setQueryError(null);
+          commitFilter('', '', true);
         }}
         search={
           <>
@@ -286,18 +291,6 @@ export function EndpointManagement({
                 />
               )}
             </Field>
-            <Button type="submit">{t('common.applyFilter')}</Button>
-            <Button
-              type="button"
-              onClick={() => {
-                setDraft('');
-                setUserDraft('');
-                setQueryError(null);
-                commitFilter('', '', true);
-              }}
-            >
-              {t('common.resetFilter')}
-            </Button>
           </>
         }
         secondaryAlwaysVisible

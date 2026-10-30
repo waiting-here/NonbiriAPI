@@ -1,9 +1,3 @@
-.management-history__filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
-  gap: var(--nb-space-4);
-  align-items: start;
-}
 .management-history__filter-help {
   grid-column: 1 / -1;
   margin: 0;

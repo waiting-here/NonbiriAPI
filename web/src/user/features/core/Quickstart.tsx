@@ -1,6 +1,16 @@
 import { supportsChatStoragePolicy } from '@shared/operations/connectorPolicy';
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
-import { Field, Fold, Note, OptionCards } from '@shared/components/ui';
+import {
+  Field,
+  Fields,
+  FilterBar,
+  FormActions,
+  Fold,
+  Note,
+  OptionCards,
+  Segmented,
+  Toggle,
+} from '@shared/components/ui';
 import { TransportRuleField } from '@shared/components/TransportRuleField';
 import type { TransportRule } from '@shared/transportRule';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
@@ -103,6 +113,9 @@ export function Quickstart({
   const flow = useRef(new AbortController()),
     mounted = useRef(true);
   const [source, setSource] = useState<'new' | 'existing'>('new');
+  const [serviceQueryDraft, setServiceQueryDraft] = useState('');
+  const [keyQueryDraft, setKeyQueryDraft] = useState('');
+  const [modelQueryDraft, setModelQueryDraft] = useState('');
   const [serviceQuery, setServiceQuery] = useState(''),
     [keyQuery, setKeyQuery] = useState('');
   const [channel, setChannel] = useState(''),
@@ -600,24 +613,28 @@ export function Quickstart({
           </div>
           {operation.variables?.kind === 'key' && !stopped && receipt?.status === 'not_recorded' ? (
             <>
-              <label>
-                {text('secretAgain')}
-                <input
-                  type="password"
-                  autoComplete="off"
-                  value={secret}
-                  onChange={(e) => setSecret(e.target.value)}
-                />
-              </label>
-              {!ownership ? (
-                <label className="core-check">
+              <Field label={text('secretAgain')} size="long">
+                {(props) => (
                   <input
-                    type="checkbox"
-                    checked={ownership}
-                    onChange={(e) => setOwnership(e.target.checked)}
+                    {...props}
+                    type="password"
+                    autoComplete="off"
+                    value={secret}
+                    onChange={(e) => setSecret(e.target.value)}
                   />
-                  {text('ownership')}
-                </label>
+                )}
+              </Field>
+              {!ownership ? (
+                <Field label={text('ownership')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="checkbox"
+                      checked={ownership}
+                      onChange={(e) => setOwnership(e.target.checked)}
+                    />
+                  )}
+                </Field>
               ) : null}
             </>
           ) : null}
@@ -693,69 +710,75 @@ export function Quickstart({
                   />
                 ) : (
                   <form className="quickstart-form" onSubmit={(e) => void createService(e)}>
-                    {channel ? (
-                      <label>
-                        {text('channel')}
-                        <select
-                          aria-label={text('channel')}
-                          disabled={locked}
-                          value={channel}
-                          onChange={(e) => setChannel(e.target.value)}
-                        >
-                          {options.data?.mainstream_channels.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : (
-                      <>
-                        <label>
-                          {text('address')}
-                          <input
-                            aria-label={text('address')}
-                            required
-                            type="url"
-                            placeholder="https://api.example.com/v1"
-                            value={address}
-                            disabled={locked}
-                            onChange={(e) => setAddress(e.target.value)}
-                          />
-                          <small>{text('addressHelp')}</small>
-                        </label>
-                        <Field label={text('connector')} help={ui('user.services.connectorHelp')}>
-                          {(field) => (
+                    <Fields>
+                      {channel ? (
+                        <Field label={text('channel')}>
+                          {(props) => (
                             <select
-                              {...field}
-                              value={connector}
+                              {...props}
+                              aria-label={text('channel')}
                               disabled={locked}
-                              onChange={(event) =>
-                                setConnector(event.target.value as ConnectorType)
-                              }
+                              value={channel}
+                              onChange={(e) => setChannel(e.target.value)}
                             >
-                              {(options.data?.base_connector_types ?? []).map((value) => (
-                                <option key={value} value={value}>
-                                  {core(CONNECTOR_COPY_KEYS[value])}
+                              {options.data?.mainstream_channels.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
                                 </option>
                               ))}
                             </select>
                           )}
                         </Field>
-                      </>
-                    )}
-                    <label>
-                      {text('serviceNote')}
-                      <input
-                        aria-label={text('serviceNote')}
-                        value={note}
-                        maxLength={1024}
-                        disabled={locked}
-                        onChange={(e) => setNote(e.target.value)}
-                      />
-                      <small>{text('noteHelp')}</small>
-                    </label>
-                    <div className="nb-panel__foot nb-actionbar">
+                      ) : (
+                        <>
+                          <Field label={text('address')} size="long" help={text('addressHelp')}>
+                            {(props) => (
+                              <input
+                                {...props}
+                                aria-label={text('address')}
+                                required
+                                type="url"
+                                placeholder="https://api.example.com/v1"
+                                value={address}
+                                disabled={locked}
+                                onChange={(e) => setAddress(e.target.value)}
+                              />
+                            )}
+                          </Field>
+                          <Field label={text('connector')} help={ui('user.services.connectorHelp')}>
+                            {(field) => (
+                              <select
+                                {...field}
+                                value={connector}
+                                disabled={locked}
+                                onChange={(event) =>
+                                  setConnector(event.target.value as ConnectorType)
+                                }
+                              >
+                                {(options.data?.base_connector_types ?? []).map((value) => (
+                                  <option key={value} value={value}>
+                                    {core(CONNECTOR_COPY_KEYS[value])}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </Field>
+                        </>
+                      )}
+                      <Field label={text('serviceNote')} help={text('noteHelp')} size="long">
+                        {(props) => (
+                          <input
+                            {...props}
+                            aria-label={text('serviceNote')}
+                            value={note}
+                            maxLength={1024}
+                            disabled={locked}
+                            onChange={(e) => setNote(e.target.value)}
+                          />
+                        )}
+                      </Field>
+                    </Fields>
+                    <FormActions>
                       {onManual ? (
                         <button
                           type="button"
@@ -769,23 +792,35 @@ export function Quickstart({
                       <button type="submit" className="nb-btn nb-btn--primary" disabled={locked}>
                         {operation.isPending ? core('common.working') : text('createService')}
                       </button>
-                    </div>
+                    </FormActions>
                   </form>
                 )
               ) : (
                 <>
-                  <label>
-                    {text('serviceSearch')}
-                    <input
-                      aria-label={text('serviceSearch')}
-                      type="search"
-                      maxLength={128}
-                      value={serviceQuery}
-                      disabled={locked}
-                      onChange={(e) => setServiceQuery(e.target.value)}
-                    />
-                    <small>{text('searchHelp')}</small>
-                  </label>
+                  <FilterBar
+                    activeCount={serviceQuery ? 1 : 0}
+                    onSubmit={() => setServiceQuery(serviceQueryDraft.trim())}
+                    onReset={() => {
+                      setServiceQuery('');
+                      setServiceQueryDraft('');
+                    }}
+                    search={
+                      <Field label={text('serviceSearch')} help={text('searchHelp')}>
+                        {(props) => (
+                          <input
+                            {...props}
+                            placeholder={text('serviceSearch')}
+                            aria-label={text('serviceSearch')}
+                            type="search"
+                            maxLength={128}
+                            value={serviceQueryDraft}
+                            disabled={locked}
+                            onChange={(e) => setServiceQueryDraft(e.target.value)}
+                          />
+                        )}
+                      </Field>
+                    }
+                  />
                   {endpoints.isPending ? (
                     <CoreLoading compact />
                   ) : endpoints.error ? (
@@ -839,97 +874,105 @@ export function Quickstart({
           ) : null}
           {stage === 1 && endpoint ? (
             <>
-              <div className="core-row-actions">
-                <button
-                  type="button"
-                  className="nb-btn nb-btn--secondary"
-                  disabled={locked}
-                  aria-pressed={keyMode === 'new'}
-                  onClick={() => setKeyMode('new')}
-                >
-                  {text('newKey')}
-                </button>
-                <button
-                  type="button"
-                  className="nb-btn nb-btn--secondary"
-                  disabled={locked}
-                  aria-pressed={keyMode === 'existing'}
-                  onClick={() => {
-                    setSecret('');
-                    setKeyMode('existing');
-                  }}
-                >
-                  {text('existingKey')}
-                </button>
-              </div>
+              <Segmented
+                label={text('secretMode')}
+                value={keyMode}
+                disabled={locked}
+                options={[
+                  { value: 'new', label: text('newKey') },
+                  { value: 'existing', label: text('existingKey') },
+                ]}
+                onChange={(value) => {
+                  if (value === 'existing') setSecret('');
+                  setKeyMode(value);
+                }}
+              />
               {keyMode === 'new' ? (
                 <form className="quickstart-form" onSubmit={(e) => void addKey(e)}>
-                  <label>
-                    {text('secret')}
-                    <input
-                      aria-label={text('secret')}
-                      required
-                      type="password"
-                      autoComplete="off"
-                      value={secret}
-                      disabled={locked}
-                      onChange={(e) => setSecret(e.target.value)}
-                    />
-                    <small>{text('secretHelp')}</small>
-                  </label>
-                  <label>
-                    {text('keyNote')}
-                    <input
-                      value={keyNote}
-                      maxLength={1024}
-                      disabled={locked}
-                      onChange={(e) => setKeyNote(e.target.value)}
-                    />
-                  </label>
-                  <label className="core-check">
-                    <input
-                      type="checkbox"
-                      checked={ownership}
-                      disabled={locked}
-                      onChange={(e) => setOwnership(e.target.checked)}
-                    />
-                    {text('ownership')}
-                  </label>
+                  <Fields>
+                    <Field label={text('secret')} help={text('secretHelp')} size="long">
+                      {(props) => (
+                        <input
+                          {...props}
+                          aria-label={text('secret')}
+                          required
+                          type="password"
+                          autoComplete="off"
+                          value={secret}
+                          disabled={locked}
+                          onChange={(e) => setSecret(e.target.value)}
+                        />
+                      )}
+                    </Field>
+                    <Field label={text('keyNote')} size="long">
+                      {(props) => (
+                        <input
+                          {...props}
+                          value={keyNote}
+                          maxLength={1024}
+                          disabled={locked}
+                          onChange={(e) => setKeyNote(e.target.value)}
+                        />
+                      )}
+                    </Field>
+                    <Field label={text('ownership')}>
+                      {(props) => (
+                        <input
+                          {...props}
+                          type="checkbox"
+                          checked={ownership}
+                          disabled={locked}
+                          onChange={(e) => setOwnership(e.target.checked)}
+                        />
+                      )}
+                    </Field>
+                  </Fields>
                   {supportsChatStoragePolicy(endpoint.connector_type) ? (
                     <Fold title={core('models.configurationTitle')}>
-                      <label className="core-check">
-                        <input
-                          type="checkbox"
-                          checked={store}
-                          disabled={locked}
-                          onChange={(e) => setStore(e.target.checked)}
-                        />
-                        {core('endpoints.storePolicy')}
-                      </label>
-                      <p className="core-muted">{text('storeHelp')}</p>
+                      <Toggle
+                        label={core('endpoints.storePolicy')}
+                        description={text('storeHelp')}
+                        checked={store}
+                        disabled={locked}
+                        onChange={setStore}
+                      />
                     </Fold>
                   ) : null}
-                  <button
-                    type="submit"
-                    className="nb-btn nb-btn--primary"
-                    disabled={locked || !ownership || !secret}
-                  >
-                    {text('addKey')}
-                  </button>
+                  <FormActions>
+                    <button
+                      type="submit"
+                      className="nb-btn nb-btn--primary"
+                      disabled={locked || !ownership || !secret}
+                    >
+                      {text('addKey')}
+                    </button>
+                  </FormActions>
                 </form>
               ) : (
                 <>
-                  <label>
-                    {text('keySearch')}
-                    <input
-                      aria-label={text('keySearch')}
-                      type="search"
-                      maxLength={128}
-                      value={keyQuery}
-                      onChange={(e) => setKeyQuery(e.target.value)}
-                    />
-                    <small>{text('searchHelp')}</small>
-                  </label>
+                  <FilterBar
+                    activeCount={keyQuery ? 1 : 0}
+                    onSubmit={() => setKeyQuery(keyQueryDraft.trim())}
+                    onReset={() => {
+                      setKeyQuery('');
+                      setKeyQueryDraft('');
+                    }}
+                    search={
+                      <Field label={text('keySearch')} help={text('searchHelp')}>
+                        {(props) => (
+                          <input
+                            {...props}
+                            placeholder={text('keySearch')}
+                            aria-label={text('keySearch')}
+                            type="search"
+                            maxLength={128}
+                            value={keyQueryDraft}
+                            onChange={(e) => setKeyQueryDraft(e.target.value)}
+                          />
+                        )}
+                      </Field>
+                    }
+                  />
                   {keys.isPending ? (
                     <CoreLoading compact />
                   ) : keys.error ? (
@@ -1061,45 +1104,59 @@ export function Quickstart({
                             count: catalog.data?.pagination.total_items ?? '0',
                           })}
                         </h2>
-                        <label>
-                          <span className="nb-sr">{ui('user.services.modelSearch')}</span>
-                          <input
-                            type="search"
-                            className="nb-input"
-                            value={modelQuery}
-                            onChange={(event) => setModelQuery(event.target.value)}
-                          />
-                        </label>
+                        <FilterBar
+                          activeCount={modelQuery ? 1 : 0}
+                          onSubmit={() => setModelQuery(modelQueryDraft.trim())}
+                          onReset={() => {
+                            setModelQuery('');
+                            setModelQueryDraft('');
+                          }}
+                          search={
+                            <Field label={ui('user.services.modelSearch')}>
+                              {(props) => (
+                                <input
+                                  {...props}
+                                  placeholder={ui('user.services.modelSearch')}
+                                  type="search"
+                                  className="nb-input"
+                                  value={modelQueryDraft}
+                                  onChange={(event) => setModelQueryDraft(event.target.value)}
+                                />
+                              )}
+                            </Field>
+                          }
+                        />
                       </div>
                       {catalog.data?.evidence.state === 'checking' ? (
                         <Note tone="info">{text('checking')}</Note>
                       ) : null}
-                      <label>
-                        {ui('user.services.prefix')}
-                        <input
-                          aria-label={ui('user.services.prefix')}
-                          value={manualProvider}
-                          maxLength={64}
-                          disabled={locked}
-                          onChange={(event) => {
-                            setManualProvider(event.target.value);
-                            setRows((previous) =>
-                              previous.map((row) =>
-                                row.model || row.complete
-                                  ? row
-                                  : {
-                                      ...row,
-                                      provider: event.target.value,
-                                      checked: false,
-                                      existing: undefined,
-                                      decision: '',
-                                    },
-                              ),
-                            );
-                          }}
-                        />
-                        <small>{text('providerHelp')}</small>
-                      </label>
+                      <Field label={ui('user.services.prefix')} help={text('providerHelp')}>
+                        {(props) => (
+                          <input
+                            {...props}
+                            aria-label={ui('user.services.prefix')}
+                            value={manualProvider}
+                            maxLength={64}
+                            disabled={locked}
+                            onChange={(event) => {
+                              setManualProvider(event.target.value);
+                              setRows((previous) =>
+                                previous.map((row) =>
+                                  row.model || row.complete
+                                    ? row
+                                    : {
+                                        ...row,
+                                        provider: event.target.value,
+                                        checked: false,
+                                        existing: undefined,
+                                        decision: '',
+                                      },
+                                ),
+                              );
+                            }}
+                          />
+                        )}
+                      </Field>
                       {catalog.isPending ? (
                         <CoreLoading compact />
                       ) : catalog.error ? (
@@ -1135,47 +1192,57 @@ export function Quickstart({
                                     .toLowerCase()
                                     .includes(modelQuery.toLowerCase()),
                               )
-                              .map((entry, index) => {
+                              .map((entry) => {
                                 const row = rows.find(
                                   (item) => item.id === `${keyId}\u0000${entry.upstream_model_id}`,
                                 );
                                 return (
                                   <section className="quickstart-model" key={entry.id}>
-                                    <label className="core-check">
-                                      <input
-                                        type="checkbox"
-                                        checked={Boolean(row?.selected)}
-                                        disabled={locked || Boolean(row?.complete)}
-                                        onChange={() => selectEntry(entry as CatalogEntry)}
-                                      />
-                                      <span className="nb-mono">{entry.upstream_model_id}</span>
-                                    </label>
+                                    <Field
+                                      label={
+                                        <span className="nb-mono">{entry.upstream_model_id}</span>
+                                      }
+                                    >
+                                      {(props) => (
+                                        <input
+                                          {...props}
+                                          type="checkbox"
+                                          checked={Boolean(row?.selected)}
+                                          disabled={locked || Boolean(row?.complete)}
+                                          onChange={() => selectEntry(entry as CatalogEntry)}
+                                        />
+                                      )}
+                                    </Field>
                                     {row?.selected ? (
                                       <div className="quickstart-model__name">
-                                        <label>
-                                          <span className="nb-sr">{text('callName')}</span>
-                                          <span className="nb-affix">
-                                            <span className="nb-affix__unit">{row.provider}/</span>
-                                            <input
-                                              aria-label={text('callName')}
-                                              className="nb-input"
-                                              ref={(input) => {
-                                                callNames.current[row.id] = input;
-                                              }}
-                                              value={row.name}
-                                              maxLength={64}
-                                              disabled={locked || Boolean(row.model)}
-                                              onChange={(event) =>
-                                                updateRow(row.id, {
-                                                  name: event.target.value,
-                                                  checked: false,
-                                                  existing: undefined,
-                                                  decision: '',
-                                                })
-                                              }
-                                            />
-                                          </span>
-                                        </label>
+                                        <Field label={text('callName')}>
+                                          {(props) => (
+                                            <span className="nb-affix">
+                                              <span className="nb-affix__unit">
+                                                {row.provider}/
+                                              </span>
+                                              <input
+                                                {...props}
+                                                aria-label={text('callName')}
+                                                className="nb-input"
+                                                ref={(input) => {
+                                                  callNames.current[row.id] = input;
+                                                }}
+                                                value={row.name}
+                                                maxLength={64}
+                                                disabled={locked || Boolean(row.model)}
+                                                onChange={(event) =>
+                                                  updateRow(row.id, {
+                                                    name: event.target.value,
+                                                    checked: false,
+                                                    existing: undefined,
+                                                    decision: '',
+                                                  })
+                                                }
+                                              />
+                                            </span>
+                                          )}
+                                        </Field>
                                         {row.complete ? (
                                           <span className="nb-badge nb-badge--ok" role="status">
                                             {text('connected')}
@@ -1192,34 +1259,20 @@ export function Quickstart({
                                           <small>{text('modelSaved')}</small>
                                         ) : null}
                                         {row.checked && row.existing && !row.complete ? (
-                                          <fieldset className="quickstart-conflict">
-                                            <legend>{text('sameName')}</legend>
-                                            <label>
-                                              <input
-                                                type="radio"
-                                                name={`call-choice-${index}`}
-                                                checked={row.decision === 'append'}
-                                                disabled={locked}
-                                                onChange={() =>
-                                                  updateRow(row.id, { decision: 'append' })
-                                                }
-                                              />
-                                              {text('append')}
-                                            </label>
-                                            <label>
-                                              <input
-                                                type="radio"
-                                                name={`call-choice-${index}`}
-                                                checked={row.decision === 'rename'}
-                                                disabled={locked}
-                                                onChange={() => {
-                                                  updateRow(row.id, { decision: 'rename' });
-                                                  callNames.current[row.id]?.focus();
-                                                }}
-                                              />
-                                              {text('rename')}
-                                            </label>
-                                          </fieldset>
+                                          <Segmented
+                                            label={text('sameName')}
+                                            value={row.decision}
+                                            disabled={locked}
+                                            options={[
+                                              { value: 'append', label: text('append') },
+                                              { value: 'rename', label: text('rename') },
+                                            ]}
+                                            onChange={(decision) => {
+                                              updateRow(row.id, { decision });
+                                              if (decision === 'rename')
+                                                callNames.current[row.id]?.focus();
+                                            }}
+                                          />
                                         ) : null}
                                       </div>
                                     ) : (
@@ -1266,19 +1319,29 @@ export function Quickstart({
                       }}
                     >
                       <p>{text('manualHelp')}</p>
-                      <label>
-                        {text('upstream')}
-                        <input
-                          required
-                          maxLength={512}
-                          value={manualName}
+                      <Fields>
+                        <Field label={text('upstream')}>
+                          {(props) => (
+                            <input
+                              {...props}
+                              required
+                              maxLength={512}
+                              value={manualName}
+                              disabled={locked}
+                              onChange={(event) => setManualName(event.target.value)}
+                            />
+                          )}
+                        </Field>
+                      </Fields>
+                      <FormActions>
+                        <button
+                          type="submit"
+                          className="nb-btn nb-btn--secondary"
                           disabled={locked}
-                          onChange={(event) => setManualName(event.target.value)}
-                        />
-                      </label>
-                      <button type="submit" className="nb-btn nb-btn--secondary" disabled={locked}>
-                        {text('manual')}
-                      </button>
+                        >
+                          {text('manual')}
+                        </button>
+                      </FormActions>
                     </form>
                   </Fold>
                   <Fold title={core('models.configurationTitle')} plain>

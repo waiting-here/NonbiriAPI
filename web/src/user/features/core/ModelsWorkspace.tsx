@@ -7,6 +7,7 @@ import { PageHeader } from '@shared/components/States';
 import { TransportRuleSummary } from '@shared/components/TransportRuleField';
 import {
   DataTable,
+  FormActions,
   Fold,
   Panel,
   PanelBody,
@@ -322,7 +323,7 @@ function ModelDetail({
           busy,
           operation.outcome === 'refresh-failed',
         )}
-        <div className="core-form-actions">
+        <FormActions>
           {reconciliationRequired ? (
             <button
               type="button"
@@ -353,7 +354,7 @@ function ModelDetail({
           >
             {t('models.deleteModel')}
           </button>
-        </div>
+        </FormActions>
       </section>
       <ConfirmDialog
         open={deleteOpen}
