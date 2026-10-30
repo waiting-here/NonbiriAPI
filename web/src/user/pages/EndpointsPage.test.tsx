@@ -160,7 +160,6 @@ describe('connection entry list', () => {
     await view.user.click(createButtons[1]);
     const form = screen.getByRole('region', { name: 'Add service' });
     expect(await within(form).findByRole('textbox', { name: 'Service address' })).toBeVisible();
-    await view.user.click(within(form).getByText('Service name', { selector: 'strong' }));
     expect(await within(form).findByRole('textbox', { name: 'Service name' })).toBeVisible();
   });
   it('returns to the same connection search and page from a real detail route', async () => {
