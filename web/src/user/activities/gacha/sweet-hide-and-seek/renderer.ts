@@ -34,10 +34,16 @@ export async function renderSweetHideAndSeek(
   const measure = () => {
     if (disposed) return;
     const width = canvas.getBoundingClientRect().width || canvas.width;
-    const cap = options.highResolution ? 2560 : 1024;
+    const frame =
+      options.characterOnly && options.momentFrame?.mode === 'expanded-layer'
+        ? options.momentFrame
+        : undefined;
+    const cap =
+      (options.highResolution ? 2560 : 1024) *
+      (frame ? frame.canvas[0] / frame.originalRegion.width : 1);
     const next = Math.max(1, Math.min(cap, Math.round(width * (window.devicePixelRatio || 1))));
     canvas.width = next;
-    canvas.height = Math.round(next * 1.5);
+    canvas.height = Math.round(next * (frame ? frame.canvas[1] / frame.canvas[0] : 1.5));
     scene.resize();
     paint();
   };

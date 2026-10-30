@@ -1,3 +1,4 @@
+import type { MomentExpansion } from '../moment-frame';
 import { highResolutionArt } from '../art-resolution';
 import { eyeTextures, faceCrops, profileWidth } from './eyelid';
 import { fragmentShader, vertexShader } from './shader';
@@ -7,6 +8,7 @@ import type { SweetCard } from './motion';
 export type SceneOptions = {
   highResolution?: boolean;
   characterOnly?: boolean;
+  momentFrame?: MomentExpansion;
   signal?: AbortSignal;
 };
 export type SweetScene = {
@@ -50,12 +52,28 @@ export async function createSweetScene(
   options: SceneOptions = {},
   failed?: () => void,
 ): Promise<SweetScene> {
+  const frame =
+    options.characterOnly && options.momentFrame?.mode === 'expanded-layer'
+      ? options.momentFrame
+      : undefined;
+  if (frame && (!frame.hero || !frame.half || !frame.closed))
+    throw new Error('eye-registration-unavailable');
   const loading = new AbortController();
   const abortLoading = () => loading.abort();
   options.signal?.addEventListener('abort', abortLoading, { once: true });
   if (options.signal?.aborted) loading.abort();
   const source = (name: string) => {
-    const path = `/assets/gacha/motion/${id}/${name}.webp`;
+    const registered =
+      name === 'hero'
+        ? frame?.hero
+        : name === 'half'
+          ? frame?.half
+          : name === 'closed'
+            ? frame?.closed
+            : undefined;
+    const path = registered
+      ? '/assets/gacha/' + registered
+      : '/assets/gacha/motion/' + id + '/' + name + '.webp';
     return loadImage(options.highResolution ? highResolutionArt(path) : path, loading.signal);
   };
   let images: [HTMLImageElement | null, HTMLImageElement, HTMLImageElement, HTMLImageElement];
@@ -142,7 +160,7 @@ export async function createSweetScene(
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error('shader-unavailable');
     gl.useProgram(program);
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    const mesh = createMotionMesh(id);
+    const mesh = createMotionMesh(id, frame);
     gl.bufferData(gl.ARRAY_BUFFER, mesh.vertices, gl.STATIC_DRAW);
     for (const [name, size, offset] of [
       ['position', 2, 0],
@@ -173,7 +191,7 @@ export async function createSweetScene(
     texture('hero', 0);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hero);
     const face = faceCrops[id],
-      scale = hero.naturalWidth / 1024;
+      scale = hero.naturalWidth / (frame?.canvas[0] ?? 1024);
     atlas.width = Math.round(face[2] * scale);
     atlas.height = Math.round(face[3] * scale) * 2;
     const context = atlas.getContext('2d');
@@ -181,8 +199,8 @@ export async function createSweetScene(
     [half, closed].forEach((image, state) =>
       context.drawImage(
         image,
-        face[0] * scale,
-        face[1] * scale,
+        (face[0] + (frame?.originalRegion.x ?? 0)) * scale,
+        (face[1] + (frame?.originalRegion.y ?? 0)) * scale,
         face[2] * scale,
         face[3] * scale,
         0,
@@ -194,6 +212,16 @@ export async function createSweetScene(
     texture('eyeAtlas', 1);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, atlas);
     gl.uniform4f(gl.getUniformLocation(program, 'face'), ...face);
+    gl.uniform2f(
+      gl.getUniformLocation(program, 'sourceOffset'),
+      frame?.originalRegion.x ?? 0,
+      frame?.originalRegion.y ?? 0,
+    );
+    gl.uniform2f(
+      gl.getUniformLocation(program, 'sourceCanvas'),
+      frame?.canvas[0] ?? 1024,
+      frame?.canvas[1] ?? 1536,
+    );
     const data = eyeTextures(id);
     texture('masks', 2);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);

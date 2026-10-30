@@ -1,3 +1,4 @@
+import type { MomentFrame } from '../moment-frame';
 export type SweetCard = 's-chatgpt' | 's-claude';
 export type Point = readonly [number, number];
 export type MotionRegion = {
@@ -419,16 +420,35 @@ export const vertexStride = 14;
 export const meshColumns = 1024 / meshStep + 1;
 export type MotionMesh = { vertices: Float32Array; indices: Uint16Array };
 
-export function createMotionMesh(id: SweetCard): MotionMesh {
-  const rows = 1536 / meshStep + 1;
-  const vertices = new Float32Array(meshColumns * rows * vertexStride);
-  const indices = new Uint16Array((meshColumns - 1) * (rows - 1) * 6);
+function axis(limit: number, before = 0, after = 0) {
+  const values = [0];
+  for (let p = meshStep; p <= limit; p += meshStep) values.push(p);
+  for (let p = meshStep; p < before; p += meshStep) values.push(-p);
+  if (before > 0) values.push(-before);
+  for (let p = meshStep; p < after; p += meshStep) values.push(limit + p);
+  if (after > 0) values.push(limit + after);
+  return values.sort((a, b) => a - b);
+}
+
+export function createMotionMesh(id: SweetCard, frame?: MomentFrame): MotionMesh {
+  const region = frame?.originalRegion;
+  const xs = axis(1024, region?.x, frame ? frame.canvas[0] - frame.originalRegion.x - 1024 : 0);
+  const ys = axis(1536, region?.y, frame ? frame.canvas[1] - frame.originalRegion.y - 1536 : 0);
+  const columns = xs.length,
+    rows = ys.length;
+  if (columns * rows > 65535) throw new Error('motion-mesh-unavailable');
+  const vertices = new Float32Array(columns * rows * vertexStride);
+  const indices = new Uint16Array((columns - 1) * (rows - 1) * 6);
   for (let row = 0; row < rows; row++) {
-    for (let column = 0; column < meshColumns; column++) {
-      const point: Point = [column * meshStep, row * meshStep];
-      const index = (row * meshColumns + column) * vertexStride;
-      vertices[index] = point[0];
-      vertices[index + 1] = point[1];
+    for (let column = 0; column < columns; column++) {
+      const position: Point = [xs[column]!, ys[row]!];
+      const point: Point = [
+        Math.max(0, Math.min(1024, position[0])),
+        Math.max(0, Math.min(1536, position[1])),
+      ];
+      const index = (row * columns + column) * vertexStride;
+      vertices[index] = position[0];
+      vertices[index + 1] = position[1];
       let protection = 1,
         bodyProtection = 1;
       for (const polygon of fixedRegions[id]) {
@@ -467,10 +487,10 @@ export function createMotionMesh(id: SweetCard): MotionMesh {
   }
   let index = 0;
   for (let row = 0; row < rows - 1; row++)
-    for (let column = 0; column < meshColumns - 1; column++) {
-      const a = row * meshColumns + column,
+    for (let column = 0; column < columns - 1; column++) {
+      const a = row * columns + column,
         b = a + 1,
-        c = a + meshColumns,
+        c = a + columns,
         d = c + 1;
       indices[index++] = a;
       indices[index++] = b;

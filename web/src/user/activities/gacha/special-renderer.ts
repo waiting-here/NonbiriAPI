@@ -1,3 +1,4 @@
+import type { MomentFrame } from './moment-frame';
 import type { SpecialTheme } from './special-scenes';
 
 export async function renderSpecial(
@@ -9,6 +10,7 @@ export async function renderSpecial(
     dark?: boolean;
     highResolution?: boolean;
     characterOnly?: boolean;
+    momentFrame?: MomentFrame;
     characterPlate?: boolean;
     backgroundOnly?: boolean;
     frozenTime?: number;

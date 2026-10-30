@@ -1,9 +1,15 @@
+import type { MomentFrame } from '../moment-frame';
 export type SceneVariant = 'card' | 'cover' | 'illustration' | 'appearance';
 export type SceneLayer = 'complete' | 'background' | 'hero';
 export function createScene(
   id: 'elopement' | 'heart-thief',
   polished?: boolean,
-  options?: { highResolution?: boolean; dark?: boolean },
+  options?: {
+    highResolution?: boolean;
+    dark?: boolean;
+    characterOnly?: boolean;
+    momentFrame?: MomentFrame;
+  },
 ): Promise<{
   paintCharacter(
     canvas: HTMLCanvasElement,

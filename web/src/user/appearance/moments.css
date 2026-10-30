@@ -112,6 +112,9 @@
     transparent
   );
 }
+.nb-moment-character[data-expanded='true'] {
+  mask-image: none;
+}
 .nb-moment-character > img,
 .nb-moment-character > canvas {
   position: absolute;
@@ -129,13 +132,15 @@
 .nb-moment-character > canvas[data-ready='true'] {
   opacity: 1;
 }
-.nb-moment-character:has(canvas[data-ready='true']) > img:not(.nb-moment-character__plate) {
+.nb-moment-character:has(canvas[data-ready='true'])
+  > img:not(.nb-moment-character__plate, .nb-moment-character__scene) {
   visibility: hidden;
 }
 /*
  * Wide screens keep the character beside the content instead of behind it. The content
  * gives up a right-hand column; the character fills that column at full height when the
- * window is tall enough, otherwise it shrinks to the column width. Game pages keep their
+ * window is tall enough, otherwise it shrinks to the column width. Expanded margins use
+ * extra content reserve and move only the original anchor inward. Game pages keep their
  * own layout.
  */
 @media (width >= 80rem) {
@@ -145,12 +150,14 @@
   html[data-appearance='heart-moment']
     .nb-user-shell:not([data-layout='game'])
     > :is(.nb-user-shell__main, .nb-user-shell__footer) {
-    padding-inline-end: calc(var(--nb-moment-gutter) + var(--nb-space-8));
+    padding-inline-end: calc(
+      var(--nb-moment-gutter) + var(--nb-moment-extra-reserve, 0px) + var(--nb-space-8)
+    );
   }
   html[data-appearance='heart-moment']:has(.nb-user-shell:not([data-layout='game']))
     .nb-moment-character {
     top: auto;
-    right: 0;
+    right: var(--nb-moment-right-reserve, 0px);
     width: var(--nb-moment-gutter);
     height: auto;
   }

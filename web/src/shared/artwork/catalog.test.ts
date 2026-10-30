@@ -66,3 +66,19 @@ it('uses an exact asset owner before the longest prefix', () => {
   expect(catalog.assetRating('/assets/gacha/motion/test/appearance-hero.webp')).toBe('general');
   expect(catalog.assetRating('/assets/gacha/motion/test/appearance-cover.webp')).toBe('r18');
 });
+
+it('keeps moment-only derivatives under the original card rating at both resolutions', () => {
+  for (const [key] of Object.entries(source.artworks)) {
+    if (!key.startsWith('card:')) continue;
+    const rating = artworkCatalog.rating(key);
+    for (const prefix of ['moment/', 'hires/moment/']) {
+      const path = '/assets/gacha/' + prefix + key.slice(5) + '/hero.webp';
+      expect(artworkCatalog.assetRating(path), path).toBe(rating);
+      expect(artworkCatalog.sourceAllowed(path, true), path).toBe(rating === 'general');
+      expect(artworkCatalog.sourceAllowed(path, false), path).toBe(true);
+    }
+  }
+  const scene = '/assets/gacha/moment/s-claude/background.webp';
+  expect(artworkCatalog.assetRating(scene)).toBe(artworkCatalog.rating('card:s-claude'));
+  expect(artworkCatalog.sourceAllowed(scene, true)).toBe(false);
+});

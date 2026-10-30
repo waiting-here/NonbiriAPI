@@ -126,3 +126,40 @@ it.each(['elopement', 'heart-thief'] as const)(
     dispose();
   },
 );
+
+it.each([false, true])(
+  'limits the expanded output to a character-only moment: %s',
+  async (characterOnly) => {
+    vi.stubGlobal('requestAnimationFrame', vi.fn());
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    const canvas = document.createElement('canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      width: 600,
+      height: 600,
+    } as DOMRect);
+    const frame = {
+      canvas: [1536, 1536] as [number, number],
+      originalRegion: { x: 256, y: 0, width: 1024, height: 1536 },
+    };
+    const dispose = await renderRomance(canvas, 'heart-thief', {
+      characterOnly,
+      momentFrame: frame,
+      frozenTime: 0,
+    });
+    expect(canvas.width).toBe(600);
+    expect(canvas.height).toBe(characterOnly ? 600 : 900);
+    expect(scene.paint.mock.calls[0][7]).toBe(characterOnly ? 400 : 600);
+    dispose();
+  },
+);

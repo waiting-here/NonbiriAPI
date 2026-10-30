@@ -1,3 +1,4 @@
+import type { MomentExpansion } from './moment-frame';
 import {
   blinkAt,
   PaintCadence,
@@ -67,7 +68,7 @@ export async function renderSSR(
   frozenTime?: number,
   paused?: () => boolean,
   highResolution = false,
-  options: { characterOnly?: boolean; signal?: AbortSignal } = {},
+  options: { characterOnly?: boolean; signal?: AbortSignal; momentFrame?: MomentExpansion } = {},
 ) {
   if (options.signal?.aborted) return () => {};
   if (id === 's-chatgpt' || id === 's-claude') {
@@ -82,13 +83,20 @@ export async function renderSSR(
     return renderSpecial(canvas, theme, { ...options, frozenTime, paused, highResolution });
   }
   const cfg = configFor(id);
+  const expansion =
+    options.characterOnly &&
+    options.momentFrame?.hero &&
+    options.momentFrame.mode === 'expanded-layer'
+      ? options.momentFrame
+      : undefined;
   const scene = spScenes[id];
   const image = (src: string) => load(highResolution ? highResolutionArt(src) : src);
-  const [background, hero, closed, cloud] = await Promise.all([
+  const [background, hero, closed, cloud, expanded] = await Promise.all([
     options.characterOnly ? null : image(cfg.background),
     image(cfg.hero),
     cfg.closed ? image(cfg.closed) : null,
     !options.characterOnly && cfg.cloud ? image(cfg.cloud) : null,
+    expansion?.hero ? image('/assets/gacha/' + expansion.hero) : null,
   ]);
   if (options.signal?.aborted) return () => {};
   const ctx = canvas.getContext('2d', { alpha: !!options.characterOnly });
@@ -120,13 +128,13 @@ export async function renderSSR(
   compile(
     gl.FRAGMENT_SHADER,
     `precision highp float;
-varying vec2 uv;uniform sampler2D art,closed,lids,tex3;uniform float phase,blink,strength,scene,backgroundPass;uniform vec4 leftEye,rightEye;uniform vec2 pivot;
+varying vec2 uv;uniform sampler2D art,closed,lids,tex3,expandedArt;uniform vec4 expandedRegion;uniform float expandedPass;uniform float phase,blink,strength,scene,backgroundPass;uniform vec4 leftEye,rightEye;uniform vec2 pivot;
 float bump(vec2 p,vec2 c,vec2 r){return exp(-dot((p-c)/r,(p-c)/r)*2.);}
 ${eyelidShader}
 ${backdropShader}
 void main(){
  if(backgroundPass>.5){gl_FragColor=backdrop(uv);return;}
- vec2 p=uv;float s=strength;
+ vec2 p=expandedPass>.5?(uv-expandedRegion.xy)/expandedRegion.zw:uv;float s=strength;
  if(scene>.5)p+=vec2(.0035*sin(phase),.0025*sin(phase+.4));float upper=1.-smoothstep(pivot.y-.09,pivot.y+.16,p.y);float angle=.0028*sin(phase)*upper*s;
  vec2 q=p-pivot;p=vec2(q.x*cos(angle)-q.y*sin(angle),q.x*sin(angle)+q.y*cos(angle))+pivot;
  float body=bump(p,pivot+vec2(0.,.08),vec2(.27,.28));p.y+=.0015*sin(phase*2.)*body*s;
@@ -136,7 +144,7 @@ void main(){
  float hand=1.-bump(p,vec2(.87,.33),vec2(.20,.10));
  p.x+=.0058*sin(phase-p.y*6.)*hair*hand*s;p.y+=.0016*cos(phase-p.y*4.)*hair*hand*s;
  p.x+=.004*sin(phase*2.-p.y*5.)*side*smoothstep(.54,.86,p.y)*s;
- vec4 color=texture2D(art,p);
+ vec4 color=expandedPass>.5?texture2D(expandedArt,expandedRegion.xy+p*expandedRegion.zw):texture2D(art,p);
  color=eyelid(p,leftEye,.125,color);
  gl_FragColor=eyelid(p,rightEye,.625,color);
 }`,
@@ -154,19 +162,33 @@ void main(){
   const attr = gl.getAttribLocation(program, 'a');
   gl.enableVertexAttribArray(attr);
   gl.vertexAttribPointer(attr, 2, gl.FLOAT, false, 0, 0);
-  const textures = [hero, closed ?? hero, background ?? hero].map((image, index) => {
-    const i = index === 2 ? 3 : index;
-    const texture = gl.createTexture();
-    gl.activeTexture(gl.TEXTURE0 + i);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-    gl.uniform1i(gl.getUniformLocation(program, ['art', 'closed', '', 'tex3'][i]), i);
-    return texture;
-  });
+  const textures = [hero, closed ?? hero, background ?? hero, ...(expanded ? [expanded] : [])].map(
+    (image, index) => {
+      const i = [0, 1, 3, 4][index]!;
+      const texture = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE0 + i);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      gl.uniform1i(
+        gl.getUniformLocation(program, ['art', 'closed', '', 'tex3', 'expandedArt'][i]),
+        i,
+      );
+      return texture;
+    },
+  );
+  gl.uniform1f(gl.getUniformLocation(program, 'expandedPass'), expansion ? 1 : 0);
+  const region = expansion?.originalRegion;
+  gl.uniform4f(
+    gl.getUniformLocation(program, 'expandedRegion'),
+    region ? region.x / expansion!.canvas[0] : 0,
+    region ? region.y / expansion!.canvas[1] : 0,
+    region ? region.width / expansion!.canvas[0] : 1,
+    region ? region.height / expansion!.canvas[1] : 1,
+  );
   const profiles = cardEyelids[id];
   if (!profiles) throw new Error('eye-profile-unavailable');
   const lids = gl.createTexture();
@@ -215,9 +237,12 @@ void main(){
   const resize = () => {
     const rect = canvas.getBoundingClientRect();
     const width = Math.max(1, rect.width || canvas.width);
-    const density = Math.min(window.devicePixelRatio || 1, 2560 / width);
+    const cap = expansion ? (2560 * expansion.canvas[0]) / expansion.originalRegion.width : 2560;
+    const density = Math.min(window.devicePixelRatio || 1, cap / width);
     const nextWidth = Math.round(width * density);
-    const nextHeight = Math.round(nextWidth * 1.5);
+    const nextHeight = Math.round(
+      nextWidth * (expansion ? expansion.canvas[1] / expansion.canvas[0] : 1.5),
+    );
     if (canvas.width === nextWidth && canvas.height === nextHeight) return;
     canvas.width = nextWidth;
     canvas.height = nextHeight;

@@ -235,7 +235,24 @@
         1536
       ],
       "backgroundFit": "center-cover",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1536,
+            1536
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "hero": "moment/c-gemini/hero.webp",
+          "highResolutionWidth": 3840
+        }
+      }
     },
     "d-chatgpt": {
       "background": "backgrounds/d.webp",
@@ -600,7 +617,22 @@
         "high_resolution": [
           2560,
           3840
-        ]
+        ],
+        "expansion": {
+          "mode": "native-camera",
+          "canvas": [
+            1536,
+            1536
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3840,
+          "hero": "moment/n-gemini/hero.webp"
+        }
       },
       "appearance_layers": {
         "background": "appearances/mirrorsea-{light,dark}.webp",
@@ -650,7 +682,22 @@
         "high_resolution": [
           2560,
           3840
-        ]
+        ],
+        "expansion": {
+          "mode": "native-camera",
+          "canvas": [
+            1536,
+            1536
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3840,
+          "hero": "moment/o-claude/hero.webp"
+        }
       },
       "appearance_layers": {
         "background": "appearances/amber-{light,dark}.webp",
@@ -748,7 +795,22 @@
         "high_resolution": [
           2560,
           3840
-        ]
+        ],
+        "expansion": {
+          "mode": "native-camera",
+          "canvas": [
+            1536,
+            1536
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3840,
+          "hero": "moment/q-glm/hero.webp"
+        }
       },
       "appearance_layers": {
         "background": "appearances/heart-thief-{light,dark}.webp",

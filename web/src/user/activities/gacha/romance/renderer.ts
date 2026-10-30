@@ -1,3 +1,4 @@
+import { momentReferenceSize, type MomentFrame } from '../moment-frame';
 import { createScene } from './compositor.js';
 import { PaintCadence } from '@shared/animation/illustration';
 
@@ -13,6 +14,7 @@ export async function renderRomance(
     dark?: boolean;
     highResolution?: boolean;
     characterOnly?: boolean;
+    momentFrame?: MomentFrame;
     characterPlate?: boolean;
     backgroundOnly?: boolean;
     frozenTime?: number;
@@ -43,11 +45,19 @@ export async function renderRomance(
     }
     const width = canvas.getBoundingClientRect().width || 768;
     const ratio = window.devicePixelRatio || 1;
-    const cap = options.highResolution ? 2560 : 1280;
+    const frame = options.characterOnly ? options.momentFrame : undefined;
+    const cap =
+      (options.highResolution ? 2560 : 1280) *
+      (frame ? frame.canvas[0] / frame.originalRegion.width : 1);
     canvas.width = Math.max(256, Math.min(cap, Math.round(width * ratio)));
     canvas.height = landscape
       ? Math.round((canvas.width * (canvas.getBoundingClientRect().height || innerHeight)) / width)
-      : Math.round(canvas.width * 1.5);
+      : Math.round(
+          canvas.width *
+            (options.characterOnly && options.momentFrame
+              ? options.momentFrame.canvas[1] / options.momentFrame.canvas[0]
+              : 1.5),
+        );
     buffer.width = independentAppearance
       ? canvas.width
       : landscape
@@ -70,7 +80,13 @@ export async function renderRomance(
         options.characterOnly ? 'hero' : options.backgroundOnly ? 'background' : 'complete',
         true,
         options.blink,
-        options.exportSize ? undefined : canvas.getBoundingClientRect().width || innerWidth,
+        options.exportSize
+          ? undefined
+          : momentReferenceSize(
+              canvas.getBoundingClientRect().width || innerWidth,
+              canvas.getBoundingClientRect().height || canvas.height,
+              options.characterOnly ? options.momentFrame : undefined,
+            ).width,
       );
     const context = canvas.getContext('2d')!;
     context.imageSmoothingQuality = 'high';

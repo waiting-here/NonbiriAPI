@@ -1,6 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { artSourceSet } from '../activities/gacha/art-resolution';
 import { isRare } from '../activities/gacha/catalog';
+import {
+  momentFrameStyle,
+  momentImageSizes,
+  momentHorizontalMargins,
+} from '../activities/gacha/moment-frame';
+import { useMomentExpansion } from '../activities/gacha/moment-registration';
 import { defaultMoment, momentByKey, momentArtworkKeys } from './moments';
 import { useArtworkPolicy } from '@shared/artwork/context';
 import { useArtworkHue } from './artwork-hue';
@@ -15,19 +21,49 @@ export function MomentBackdrop({ moment }: { moment?: string }) {
 function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment }) {
   const card = artwork.card;
   const rare = !!card && isRare(card.rarity);
+  const {
+    expansion,
+    scene: expandedScene,
+    ready: registrationReady,
+  } = useMomentExpansion(card?.id);
+  const expandedStyle = expansion ? momentFrameStyle(expansion) : undefined;
+  const asset = (path: string) => '/assets/gacha/' + path;
+  const expandedHero = expansion?.hero ? asset(expansion.hero) : undefined;
   const canvas = useRef<HTMLCanvasElement>(null);
   const scene = useRef<HTMLImageElement>(null);
   useArtworkHue(scene, artwork.key);
-  const hero = card
-    ? rare
-      ? '/assets/gacha/motion/' + card.id + '/hero.webp'
-      : '/assets/gacha/layers/' + card.id + '.webp'
-    : undefined;
+  const hero =
+    expandedHero ??
+    (card
+      ? rare
+        ? '/assets/gacha/motion/' + card.id + '/hero.webp'
+        : '/assets/gacha/layers/' + card.id + '.webp'
+      : undefined);
+  const expandedBackground = expandedScene ? asset(expandedScene.path) : undefined;
   const registeredScene =
-    card?.theme === 's' ? '/assets/gacha/motion/' + card.id + '/background.webp' : undefined;
+    !expandedScene && card?.theme === 's'
+      ? '/assets/gacha/motion/' + card.id + '/background.webp'
+      : undefined;
+  useEffect(() => {
+    if (!expansion) return;
+    const root = document.documentElement;
+    const margins = momentHorizontalMargins(expansion);
+    root.style.setProperty(
+      '--nb-moment-extra-reserve',
+      'calc(var(--nb-moment-gutter) * ' + margins.total + ')',
+    );
+    root.style.setProperty(
+      '--nb-moment-right-reserve',
+      'calc(var(--nb-moment-gutter) * ' + margins.right + ')',
+    );
+    return () => {
+      root.style.removeProperty('--nb-moment-extra-reserve');
+      root.style.removeProperty('--nb-moment-right-reserve');
+    };
+  }, [expansion]);
   useEffect(() => {
     const surface = canvas.current;
-    if (!surface || !card || !rare) return;
+    if (!surface || !card || !rare || !registrationReady) return;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
     let controller: AbortController | undefined;
     let release: (() => void) | undefined;
@@ -41,11 +77,13 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
       const next = new AbortController();
       controller = next;
       highResolution =
-        surface.getBoundingClientRect().width * (window.devicePixelRatio || 1) > 1024;
+        surface.getBoundingClientRect().width * (window.devicePixelRatio || 1) >
+        (expansion?.canvas[0] ?? 1024);
       void import('../activities/gacha/ssr-renderer')
         .then(({ renderSSR }) =>
           renderSSR(surface, card.id, undefined, undefined, highResolution, {
             characterOnly: true,
+            momentFrame: expansion,
             signal: next.signal,
           }),
         )
@@ -63,7 +101,8 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
     const resize = () => {
       if (
         !reduced.matches &&
-        surface.getBoundingClientRect().width * (window.devicePixelRatio || 1) > 1024 !==
+        surface.getBoundingClientRect().width * (window.devicePixelRatio || 1) >
+          (expansion?.canvas[0] ?? 1024) !==
           highResolution
       )
         update();
@@ -77,7 +116,7 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
       controller?.abort();
       release?.();
     };
-  }, [card, rare]);
+  }, [card, rare, expansion, registrationReady]);
   const background =
     registeredScene ?? (card ? '/assets/gacha/backgrounds/' + card.theme + '.webp' : artwork.art);
   return (
@@ -100,7 +139,21 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
         alt=""
       />
       {hero && (
-        <div className="nb-moment-character">
+        <div className="nb-moment-character" data-expanded={Boolean(expansion || expandedScene)}>
+          {expandedScene && expandedBackground && (
+            <img
+              className="nb-moment-character__scene"
+              style={momentFrameStyle(expandedScene)}
+              src={expandedBackground}
+              srcSet={artSourceSet(
+                expandedBackground,
+                expandedScene.canvas[0],
+                expandedScene.highResolutionWidth ?? expandedScene.canvas[0] * 2.5,
+              )}
+              sizes={momentImageSizes(expandedScene)}
+              alt=""
+            />
+          )}
           {registeredScene && (
             <img
               className="nb-moment-character__plate"
@@ -111,12 +164,25 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
             />
           )}
           <img
+            style={expandedHero ? expandedStyle : undefined}
             src={hero}
-            srcSet={artSourceSet(hero, 1024, 2560)}
-            sizes="(width < 40rem) 100vw, 66.67vh"
+            srcSet={artSourceSet(
+              hero,
+              expandedHero ? expansion!.canvas[0] : 1024,
+              expandedHero ? (expansion!.highResolutionWidth ?? expansion!.canvas[0] * 2.5) : 2560,
+            )}
+            sizes={expandedHero ? momentImageSizes(expansion!) : '(width < 40rem) 100vw, 66.67vh'}
             alt=""
           />
-          {rare && <canvas ref={canvas} width="768" height="1152" data-ready="false" />}
+          {rare && (
+            <canvas
+              style={expandedStyle}
+              ref={canvas}
+              width="768"
+              height="1152"
+              data-ready="false"
+            />
+          )}
         </div>
       )}
     </div>
