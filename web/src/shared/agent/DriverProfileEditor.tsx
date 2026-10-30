@@ -210,6 +210,7 @@ export function DriverProfileEditor({
                 {...props}
                 value={draft.settings.provider}
                 onChange={(event) => {
+                  discover.cancel();
                   const provider = event.target.value as DriverProvider;
                   setDraft({
                     ...draft,

@@ -23,7 +23,7 @@ it('submits card search explicitly, applies selects immediately, and preserves f
   );
   const count = () => view.container.querySelectorAll('.gacha-catalog .gacha-card').length;
   expect(count()).toBe(visible.length);
-  const search = screen.getByRole('textbox', { name: 'Search', exact: true });
+  const search = screen.getByRole('textbox', { name: 'Search' });
   await view.user.type(search, 'no matching card');
   expect(count()).toBe(visible.length);
   await view.user.click(screen.getByText('More filters', { exact: true }));
@@ -33,7 +33,7 @@ it('submits card search explicitly, applies selects immediately, and preserves f
   );
   expect(count()).toBe(visible.filter((card) => card.character === first.character).length);
   await view.user.keyboard('{Enter}');
-  await view.user.click(screen.getByRole('button', { name: 'Search', exact: true }));
+  await view.user.click(screen.getByRole('button', { name: 'Search' }));
   expect(count()).toBe(0);
   await view.user.click(screen.getByRole('button', { name: 'Reset' }));
   expect(search).toHaveValue('');
@@ -42,8 +42,8 @@ it('submits card search explicitly, applies selects immediately, and preserves f
   await view.user.type(search, first.name_en);
   await view.user.keyboard('{Enter}');
   expect(count()).toBe(1);
-  await view.user.click(screen.getByRole('tab', { name: 'Theme memories', exact: true }));
-  await view.user.click(screen.getByRole('tab', { name: 'Cards', exact: true }));
-  expect(screen.getByRole('textbox', { name: 'Search', exact: true })).toHaveValue(first.name_en);
+  await view.user.click(screen.getByRole('tab', { name: 'Theme memories' }));
+  await view.user.click(screen.getByRole('tab', { name: 'Cards' }));
+  expect(screen.getByRole('textbox', { name: 'Search' })).toHaveValue(first.name_en);
   expect(count()).toBe(1);
 });

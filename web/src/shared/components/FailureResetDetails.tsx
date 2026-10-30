@@ -2,7 +2,10 @@ import { useTranslation } from 'react-i18next';
 import { NATIVE_SERVICE_LABEL_KEYS } from '@shared/nativeServices';
 import { formatDateTime } from '@shared/utils/datetime';
 import { formatCount } from '@shared/utils/formatNumber';
-import type { ServiceFailureReset } from '@shared/operations/failureReset';
+import {
+  FAILURE_RESET_REASON_KEYS,
+  type ServiceFailureReset,
+} from '@shared/operations/failureReset';
 
 export function FailureResetDetails({ services }: { services: ServiceFailureReset[] }) {
   const { t } = useTranslation();
@@ -14,12 +17,11 @@ export function FailureResetDetails({ services }: { services: ServiceFailureRese
           {t(NATIVE_SERVICE_LABEL_KEYS[service.native_service])}
           {' · '}
           {t(
-            'common.failureReset.' +
-              (service.status === 'reset'
-                ? 'serviceRecovered'
-                : service.status === 'already_clear'
-                  ? 'alreadyClear'
-                  : 'ineligible'),
+            service.status === 'reset'
+              ? 'common.failureReset.serviceRecovered'
+              : service.status === 'already_clear'
+                ? 'common.failureReset.alreadyClear'
+                : 'common.failureReset.ineligible',
             { failures: formatCount(service.failure_streak_before).display },
           )}
           {service.status === 'reset' && service.failure_disabled_before
@@ -27,9 +29,7 @@ export function FailureResetDetails({ services }: { services: ServiceFailureRese
             : null}
           {service.reason
             ? ' · ' +
-              t('common.failureReset.reasons.' + service.reason, {
-                defaultValue: t('common.failureReset.ineligible'),
-              })
+              t(FAILURE_RESET_REASON_KEYS[service.reason] ?? 'common.failureReset.ineligible')
             : null}
           {service.manually_disabled ? ' · ' + t('common.failureReset.manualRetained') : null}
           {service.retry_after_until

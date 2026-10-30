@@ -101,6 +101,30 @@ async function mount(connectionOnly = false) {
   return view;
 }
 describe('Model source settings', () => {
+  it('discards a late catalogue after the source protocol changes', async () => {
+    let complete!: (models: string[]) => void;
+    mocks.models.mockImplementation(
+      () =>
+        new Promise<string[]>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const view = await mount();
+    await view.user.click(screen.getByRole('button', { name: common.common.edit }));
+    const editor = screen.getByRole('form', { name: text.editSource });
+    await view.user.click(
+      within(editor).getByRole('button', { name: common.common.agent.discoverModels }),
+    );
+    await waitFor(() => expect(mocks.models).toHaveBeenCalledOnce());
+    await view.user.selectOptions(within(editor).getByLabelText(text.provider), 'responses');
+    await act(async () => {
+      complete(['late-old-provider-model']);
+    });
+    expect(
+      editor.querySelector('datalist option[value="late-old-provider-model"]'),
+    ).not.toBeInTheDocument();
+    expect(within(editor).getByLabelText(text.provider)).toHaveValue('responses');
+  });
   it('saves before fetching models and keeps API keys out of caches', async () => {
     const order: string[] = [];
     mocks.save.mockImplementation(async (_id, input) => {

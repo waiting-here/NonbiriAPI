@@ -30,6 +30,12 @@ export interface FailureResetRef {
   expected_revision: string;
 }
 export type FailureResetStatus = 'reset' | 'ineligible' | 'conflict' | 'not_found' | 'no_service';
+export const FAILURE_RESET_REASON_KEYS: Readonly<Record<string, string>> = {
+  ineligible: 'common.failureReset.reasons.ineligible',
+  not_approved: 'common.failureReset.reasons.not_approved',
+  review_required: 'common.failureReset.reasons.review_required',
+  credential_unavailable: 'common.failureReset.reasons.credential_unavailable',
+};
 export interface ServiceFailureReset {
   use_id: string;
   native_service: NativeService;

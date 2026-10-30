@@ -43,7 +43,7 @@ it('submits moment search explicitly and resets filters without changing the cho
   expect(choices.getAllByRole('radio')).toHaveLength(2);
   expect(choices.getByRole('radio', { checked: true })).toHaveAttribute('value', card.key);
   await view.user.type(search, defaultMoment.nameEN);
-  await view.user.click(screen.getByRole('button', { name: 'Search', exact: true }));
+  await view.user.click(screen.getByRole('button', { name: 'Search' }));
   expect(choices.getAllByRole('radio')).toHaveLength(1);
   expect(choices.getByRole('radio')).toHaveAttribute('value', defaultMoment.key);
   expect(select).not.toHaveBeenCalled();

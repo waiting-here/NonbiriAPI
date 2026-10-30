@@ -3,6 +3,8 @@ import { Amount } from '@shared/components/Amount';
 import { Fold, Note } from '@shared/components/ui';
 import { formatCount } from '@shared/utils/formatNumber';
 import { formatDateTime } from '@shared/utils/datetime';
+import { FAILURE_RESET_REASON_KEYS } from '@shared/operations/failureReset';
+import { NATIVE_SERVICE_LABEL_KEYS, type NativeService } from '@shared/nativeServices';
 import type { Change, Item } from './api';
 
 function ChangeValue({ value, change }: { value?: string; change: Change }) {
@@ -10,11 +12,21 @@ function ChangeValue({ value, change }: { value?: string; change: Change }) {
   if (value === undefined)
     return <span className="nb-muted">{t('admin.managementHistory.snapshot.notSet')}</span>;
   if (change.field === 'reset_skip_reason')
-    return <span>{t('common.failureReset.reasons.' + value, { defaultValue: value })}</span>;
+    return (
+      <span>{FAILURE_RESET_REASON_KEYS[value] ? t(FAILURE_RESET_REASON_KEYS[value]) : value}</span>
+    );
+  if (change.field === 'native_service') {
+    const key = NATIVE_SERVICE_LABEL_KEYS[value as NativeService];
+    return <span>{key ? t(key) : value}</span>;
+  }
   if (change.field === 'reset_result')
     return (
       <span>
-        {t('admin.managementHistory.snapshot.resetResults.' + value, { defaultValue: value })}
+        {value === 'recovered'
+          ? t('admin.managementHistory.snapshot.resetResults.recovered')
+          : value === 'already_clear'
+            ? t('admin.managementHistory.snapshot.resetResults.already_clear')
+            : value}
       </span>
     );
   if (change.unit === 'milli_credits') return <Amount value={value} />;
