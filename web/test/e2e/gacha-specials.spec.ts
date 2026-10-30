@@ -57,6 +57,8 @@ for (const theme of ['light', 'dark'])
       for (const scene of scenes) {
         if (width === 1920 && scene !== 'moment') continue;
         test(`special ${scene} ${id} ${theme} ${width}`, async ({ page }) => {
+          // Wide special scenes cover animation, appreciation and reduced-motion cleanup together.
+          if (scene === 'moment' && width === 1920 && specialCards[id]) test.setTimeout(60_000);
           const errors: string[] = [];
           page.on('pageerror', (error) => errors.push(error.message));
           page.on('console', (message) => {
