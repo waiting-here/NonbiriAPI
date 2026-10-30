@@ -825,8 +825,11 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
           'Image generation',
           'Embeddings',
           'Rerank',
-        ])
+        ]) {
+          const more = page.locator('details.model-types-field__more:not([open]) > summary');
+          if (await more.count()) await more.click();
           await page.getByRole('checkbox', { name: label, exact: true }).check();
+        }
         const savingTypes = page.waitForResponse(
           (response) =>
             response.request().method() === 'PATCH' &&

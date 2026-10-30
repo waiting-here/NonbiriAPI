@@ -513,7 +513,6 @@ test.describe('administrator policy changes and subsequent steward review', () =
       for (const asset of Object.keys(names) as Asset[]) {
         const net = f.summaries[asset].inventory.net;
         await page.getByLabel('Asset').selectOption(asset);
-        await page.getByRole('button', { name: 'Apply', exact: true }).click();
         await expect(page.getByRole('heading', { name: names[asset], exact: true })).toBeVisible();
         const response = await api(
           context,
