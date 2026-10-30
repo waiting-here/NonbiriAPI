@@ -234,17 +234,6 @@
 .nb-recurring-discount__weekdays > legend {
   margin-block-end: var(--nb-space-2);
 }
-.nb-recurring-discount__weekdays label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--nb-space-1);
-}
-.nb-recurring-discount__weekdays label,
-.nb-recurring-discount label.nb-inline {
-  min-block-size: var(--nb-space-10);
-  min-inline-size: var(--nb-space-10);
-  cursor: pointer;
-}
 .nb-recurring-discount .nb-field {
   align-content: start;
 }

@@ -16,6 +16,7 @@ export interface ApiErrorBody {
   message: string;
   diag?: string;
   request_id?: string;
+  operation_diagnostic?: unknown;
 }
 
 function boundedText(value: unknown, maxCharacters: number, maxBytes?: number): string | undefined {
@@ -51,12 +52,13 @@ export class ApiError extends Error {
   readonly status: number;
   readonly diag?: string;
   readonly requestId?: string;
+  readonly operationDiagnostic?: unknown;
 
   constructor(
     code: string,
     message: string,
     status: number,
-    options: { diag?: string; requestId?: string } = {},
+    options: { diag?: string; requestId?: string; operationDiagnostic?: unknown } = {},
   ) {
     const safeMessage = boundedText(message, 1000) ?? 'The request could not be completed.';
     super(safeMessage);
@@ -65,6 +67,7 @@ export class ApiError extends Error {
     this.status = Number.isFinite(status) && status >= 0 ? Math.trunc(status) : 0;
     this.diag = boundedText(options.diag, 4096, 4096);
     this.requestId = boundedText(options.requestId, 128);
+    this.operationDiagnostic = options.operationDiagnostic;
   }
 }
 
@@ -91,6 +94,7 @@ function parseEnvelope(body: unknown): ApiErrorBody | null {
     message,
     ...(diag ? { diag } : {}),
     ...(requestId ? { request_id: requestId } : {}),
+    operation_diagnostic: error.operation_diagnostic,
   };
 }
 
@@ -264,6 +268,7 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
       {
         diag: detail?.diag,
         requestId: detail?.request_id,
+        operationDiagnostic: detail?.operation_diagnostic,
       },
     );
   }

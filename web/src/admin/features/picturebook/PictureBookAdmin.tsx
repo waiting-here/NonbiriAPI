@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { stationSessionWrite } from '@shared/charityManagement';
 import { Card, ErrorState, LoadingState } from '@shared/components/States';
 import { Fold } from '@shared/components/ui/Fold';
+import { Field, Fields, FilterBar, FormActions } from '@shared/components/ui';
 import { usePictureBookText } from '@shared/picturebook/copy';
 import { useImageOperation } from '@shared/picturebook/useImageOperation';
 import { useAdminSession } from '../../data';
@@ -279,78 +280,101 @@ const Catalog = forwardRef<
         ) : models.error ? (
           <ErrorState error={models.error} onRetry={() => void models.refetch()} />
         ) : null}
-        <div className="picturebook-grid">
-          <label>
-            {t('搜索全部模型目录', 'Search the full model catalog')}
-            <input
-              value={filter.q}
-              maxLength={128}
-              onChange={(event) =>
-                setFilter((current) => ({
-                  ...current,
-                  q: event.target.value,
-                  page: 1,
-                  catalog_revision: undefined,
-                }))
-              }
-            />
-          </label>
-          <label>
-            {t('模型类型', 'Model type')}
-            <select
-              value={filter.type}
-              onChange={(event) =>
-                setFilter((current) => ({
-                  ...current,
-                  type: event.target.value as CatalogFilter['type'],
-                  page: 1,
-                  catalog_revision: undefined,
-                }))
-              }
-            >
-              <option value="image">{t('图像', 'Image')}</option>
-              <option value="unknown">{t('未分类', 'Unknown')}</option>
-              <option value="other">{t('其他类型', 'Other types')}</option>
-              <option value="all">{t('全部类型', 'All types')}</option>
-            </select>
-          </label>
-          <label>
-            {t('配置状态', 'Configuration')}
-            <select
-              value={filter.configured}
-              onChange={(event) =>
-                setFilter((current) => ({
-                  ...current,
-                  configured: event.target.value as CatalogFilter['configured'],
-                  page: 1,
-                  catalog_revision: undefined,
-                }))
-              }
-            >
-              <option value="all">{t('全部', 'All')}</option>
-              <option value="true">{t('已配置', 'Configured')}</option>
-              <option value="false">{t('未配置', 'Unconfigured')}</option>
-            </select>
-          </label>
-          <label>
-            {t('开放状态', 'Availability')}
-            <select
-              value={filter.enabled}
-              onChange={(event) =>
-                setFilter((current) => ({
-                  ...current,
-                  enabled: event.target.value as CatalogFilter['enabled'],
-                  page: 1,
-                  catalog_revision: undefined,
-                }))
-              }
-            >
-              <option value="all">{t('全部', 'All')}</option>
-              <option value="true">{t('已开放', 'Enabled')}</option>
-              <option value="false">{t('未开放', 'Disabled')}</option>
-            </select>
-          </label>
-        </div>
+        <FilterBar
+          activeCount={
+            Number(Boolean(filter.q)) +
+            Number(filter.type !== 'image') +
+            Number(filter.configured !== 'all') +
+            Number(filter.enabled !== 'all')
+          }
+          onSubmit={() => {}}
+          search={
+            <Field label={t('搜索全部模型目录', 'Search the full model catalog')}>
+              {(props) => (
+                <input
+                  {...props}
+                  placeholder={t('搜索全部模型目录', 'Search the full model catalog')}
+                  value={filter.q}
+                  maxLength={128}
+                  onChange={(event) =>
+                    setFilter((current) => ({
+                      ...current,
+                      q: event.target.value,
+                      page: 1,
+                      catalog_revision: undefined,
+                    }))
+                  }
+                />
+              )}
+            </Field>
+          }
+          secondaryAlwaysVisible
+          secondary={
+            <>
+              <Field size="short" label={t('模型类型', 'Model type')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={filter.type}
+                    onChange={(event) =>
+                      setFilter((current) => ({
+                        ...current,
+                        type: event.target.value as CatalogFilter['type'],
+                        page: 1,
+                        catalog_revision: undefined,
+                      }))
+                    }
+                  >
+                    <option value="image">{t('图像', 'Image')}</option>
+                    <option value="unknown">{t('未分类', 'Unknown')}</option>
+                    <option value="other">{t('其他类型', 'Other types')}</option>
+                    <option value="all">{t('全部类型', 'All types')}</option>
+                  </select>
+                )}
+              </Field>
+              <Field size="short" label={t('配置状态', 'Configuration')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={filter.configured}
+                    onChange={(event) =>
+                      setFilter((current) => ({
+                        ...current,
+                        configured: event.target.value as CatalogFilter['configured'],
+                        page: 1,
+                        catalog_revision: undefined,
+                      }))
+                    }
+                  >
+                    <option value="all">{t('全部', 'All')}</option>
+                    <option value="true">{t('已配置', 'Configured')}</option>
+                    <option value="false">{t('未配置', 'Unconfigured')}</option>
+                  </select>
+                )}
+              </Field>
+              <Field size="short" label={t('开放状态', 'Availability')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={filter.enabled}
+                    onChange={(event) =>
+                      setFilter((current) => ({
+                        ...current,
+                        enabled: event.target.value as CatalogFilter['enabled'],
+                        page: 1,
+                        catalog_revision: undefined,
+                      }))
+                    }
+                  >
+                    <option value="all">{t('全部', 'All')}</option>
+                    <option value="true">{t('已开放', 'Enabled')}</option>
+                    <option value="false">{t('未开放', 'Disabled')}</option>
+                  </select>
+                )}
+              </Field>
+            </>
+          }
+        />
         {models.data ? (
           <p role="status">
             {t('匹配模型数：', 'Matching models: ')}
@@ -358,32 +382,36 @@ const Catalog = forwardRef<
             {Math.max(1, Math.ceil(models.data.total / filter.page_size))}
           </p>
         ) : null}
-        <div className="picturebook-form">
-          <label>
-            {t('选择要配置的模型', 'Choose a model to configure')}
-            <select
-              disabled={locked || refreshActive || upstreamLocked}
-              value={selected?.id ?? ''}
-              onChange={(event) =>
-                selectModel(
-                  models.data?.data.find((model) => model.id === event.target.value) ?? null,
-                )
-              }
-            >
-              <option value="">{t('请选择', 'Select a model')}</option>
-              {selected && !models.data?.data.some((model) => model.id === selected.id) ? (
-                <option value={selected.id}>{selected.upstream_model_id}</option>
-              ) : null}
-              {models.data?.data.map((model) => (
-                <option value={model.id} key={model.id}>
-                  {model.upstream_model_id} ·{' '}
-                  {model.enabled ? t('已开放', 'Enabled') : t('未开放', 'Not enabled')}
-                  {model.missing ? ` · ${t('最新目录未返回', 'Missing from latest catalog')}` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <Fields>
+          <Field label={t('选择要配置的模型', 'Choose a model to configure')}>
+            {(props) => (
+              <select
+                {...props}
+                disabled={locked || refreshActive || upstreamLocked}
+                value={selected?.id ?? ''}
+                onChange={(event) =>
+                  selectModel(
+                    models.data?.data.find((model) => model.id === event.target.value) ?? null,
+                  )
+                }
+              >
+                <option value="">{t('请选择', 'Select a model')}</option>
+                {selected && !models.data?.data.some((model) => model.id === selected.id) ? (
+                  <option value={selected.id}>{selected.upstream_model_id}</option>
+                ) : null}
+                {models.data?.data.map((model) => (
+                  <option value={model.id} key={model.id}>
+                    {model.upstream_model_id} ·{' '}
+                    {model.enabled ? t('已开放', 'Enabled') : t('未开放', 'Not enabled')}
+                    {model.missing
+                      ? ` · ${t('最新目录未返回', 'Missing from latest catalog')}`
+                      : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+        </Fields>
         {pendingSelection ? (
           <div role="alert" className="picturebook-stack">
             <p>
@@ -392,7 +420,7 @@ const Catalog = forwardRef<
                 'The current model has an unsaved draft. Save it first, explicitly discard it, or continue editing.',
               )}
             </p>
-            <div className="picturebook-actions">
+            <FormActions>
               <button
                 className="nb-btn nb-btn--primary"
                 type="button"
@@ -428,7 +456,7 @@ const Catalog = forwardRef<
               >
                 {t('放弃草稿并切换', 'Discard draft and switch')}
               </button>
-            </div>
+            </FormActions>
           </div>
         ) : null}
         {models.data ? (
@@ -440,29 +468,31 @@ const Catalog = forwardRef<
               )}
             </p>
             {models.data.data.map((model) => (
-              <label className="picturebook-checkbox" key={model.id}>
-                <input
-                  type="checkbox"
-                  checked={batchIDs.includes(model.id)}
-                  disabled={
-                    locked ||
-                    refreshActive ||
-                    upstreamLocked ||
-                    (!batchIDs.includes(model.id) && batchIDs.length >= 50)
-                  }
-                  onChange={(event) => {
-                    setBatchResult(null);
-                    if (event.target.checked) {
-                      setBatchIDs((current) => [...current, model.id]);
-                      setOpenModels((current) => ({
-                        ...current,
-                        [model.id]: current[model.id] ?? model,
-                      }));
-                    } else setBatchIDs((current) => current.filter((id) => id !== model.id));
-                  }}
-                />
-                {model.upstream_model_id}
-              </label>
+              <Field key={model.id} label={model.upstream_model_id}>
+                {(props) => (
+                  <input
+                    {...props}
+                    type="checkbox"
+                    checked={batchIDs.includes(model.id)}
+                    disabled={
+                      locked ||
+                      refreshActive ||
+                      upstreamLocked ||
+                      (!batchIDs.includes(model.id) && batchIDs.length >= 50)
+                    }
+                    onChange={(event) => {
+                      setBatchResult(null);
+                      if (event.target.checked) {
+                        setBatchIDs((current) => [...current, model.id]);
+                        setOpenModels((current) => ({
+                          ...current,
+                          [model.id]: current[model.id] ?? model,
+                        }));
+                      } else setBatchIDs((current) => current.filter((id) => id !== model.id));
+                    }}
+                  />
+                )}
+              </Field>
             ))}
             {batchIDs.length ? (
               <p>
@@ -667,7 +697,7 @@ export function AdminContent({
                 'Picture book settings have unsaved drafts. Save successfully before leaving, discard the drafts, or continue editing.',
               )}
             </p>
-            <div className="picturebook-actions">
+            <FormActions>
               <button
                 className="nb-btn nb-btn--primary"
                 type="button"
@@ -692,7 +722,7 @@ export function AdminContent({
               >
                 {t('继续编辑', 'Continue editing')}
               </button>
-            </div>
+            </FormActions>
           </div>
         </Card>
       ) : null}

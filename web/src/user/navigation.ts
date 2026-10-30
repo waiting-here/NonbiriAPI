@@ -1,4 +1,9 @@
-import { USER_ROUTE_DESCRIPTORS, requiredRouteById, type RouteDescriptor } from '@shared/routing/routeRegistry';
+import {
+  USER_ROUTE_DESCRIPTORS,
+  requiredRouteById,
+  type RouteDescriptor,
+} from '@shared/routing/routeRegistry';
+import { matchPath } from 'react-router';
 import type { IconName } from '@shared/components/Icon';
 
 export interface NavItem {
@@ -35,3 +40,11 @@ export const USER_PRIMARY_NAV: NavItem[] = USER_ROUTE_DESCRIPTORS.filter(
   labelKey: route.labelKey,
   fallbackLabelKey: route.fallbackLabelKey,
 }));
+
+/** Layout hint for the current path; unknown paths fall back to the workspace layout. */
+export function userRouteLayout(pathname: string): RouteDescriptor['layout'] {
+  const route = USER_ROUTE_DESCRIPTORS.find((entry) =>
+    matchPath({ path: entry.path, end: true }, pathname),
+  );
+  return route?.layout ?? 'wide';
+}

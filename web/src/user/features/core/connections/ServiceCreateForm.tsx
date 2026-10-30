@@ -387,21 +387,19 @@ export function ServiceCreateForm({
             )}
           </Field>
         ) : null}
-        <Fold title={t('user.workflows.serviceName')} summary={serviceName}>
-          <Field label={t('user.workflows.serviceName')}>
-            {(props) => (
-              <input
-                {...props}
-                form={formID}
-                value={serviceName}
-                required
-                maxLength={128}
-                disabled={locked || started || (!connection && Boolean(saved.connection))}
-                onChange={(event) => setName(event.target.value)}
-              />
-            )}
-          </Field>
-        </Fold>
+        <Field label={t('user.workflows.serviceName')}>
+          {(props) => (
+            <input
+              {...props}
+              form={formID}
+              value={serviceName}
+              required
+              maxLength={128}
+              disabled={locked || started || (!connection && Boolean(saved.connection))}
+              onChange={(event) => setName(event.target.value)}
+            />
+          )}
+        </Field>
         {saved.credential ? (
           <Note>{credentialLabel(saved.credential)}</Note>
         ) : (

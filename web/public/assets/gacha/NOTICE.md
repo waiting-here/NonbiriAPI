@@ -45,3 +45,47 @@ Sweet Hide-and-Seek contains two adult characters, ChatGPT and Claude, with nudi
 Heartfelt moments keep each portrait's registered static scenery behind its character, preserving the door contact and foreground props. The group illustration's two paper price signs were cleaned within their paper interiors; the original clips, frames, counter and character layer remain unchanged.
 
 The retained portrait sources are 1024 × 1536; the group source is 1536 × 864 and the cover is 1920 × 1080. Their standard portraits, 320 × 480 thumbnails and 1672 × 941 landscapes keep the accepted framing. The 2560 × 3840 portrait and 3840 × 2160 group derivatives use resampling, not additional native detail. The cover's large foreground reuses its existing enhanced source with the current cleaned alpha and the same adopted background. Open, half-closed and closed eye inputs share the source coordinates; only the face region is retained in the two alternate product textures to avoid downloading duplicate body pixels. A localized face edit removes an unintended lash extension. The original background and character sources remain separate; the group and cover each retain a combined character-and-prop foreground.
+
+## Moment-only expanded frames
+
+The adopted expanded character layers under `moment/`, with matching
+`hires/moment/` paths, retain the established
+characters and original card and appearance inputs. Their separate
+`composition.json` registrations describe the expanded canvas and the unchanged
+original region. Standard character frames are 1536–2304 pixels wide, with an
+8-pixel transparent left extension for f-gemini. Heights range from 1536 to
+1792 pixels. Their large derivatives
+use 2.5× Lanczos resampling and do not add native detail.
+Original bottom crops remain anchored to the viewport.
+
+Except for the three native SP derivatives identified below, the additional
+character margins were generated from their retained project sources
+using [BRIA Fibo-2.0-edit-turbo](https://huggingface.co/briaai/Fibo-2.0-edit-turbo/tree/177f2d4a06b6587144ef5c2b8452a4f1fe2ab4b7),
+with foreground alpha prepared using
+[ToonOut](https://huggingface.co/joelseytre/toonout/tree/cbf720eca394edcde66b861a8a8c20fbabe9c748).
+Each complete original RGBA rectangle, including c-gemini's forward hand,
+remains unchanged. The native q-glm, n-gemini and o-claude derivatives reveal the existing
+uncropped animation inputs through an expanded camera; no new character parts
+were generated. n-gemini's static original region was restored from the same
+native render baseline. Their native rigs, eye coordinates and motion remain
+the original inputs.
+
+s-chatgpt's additional areas complete the existing hat, hair and candy only.
+Its half-closed and closed textures retain the same face-only content on the
+expanded canvas. All three layers keep the Sweet Hide-and-Seek R-18 classification.
+
+The moment-only s-claude scene extends the retained doorway background to
+2731 × 1536, with the original 1024 × 1536 area unchanged at the right. The new
+left side continues the empty storefront and night street using the same Fibo
+workflow. Character and doorway share the original registration and contact
+points. Its 3840 × 2160 derivative is Lanczos resampling, and all related paths
+retain the Sweet Hide-and-Seek R-18 classification.
+
+The authoring models and inference code are not bundled with these web assets.
+The retained Fibo model card identifies the model's
+[CC BY-NC 4.0 terms](https://creativecommons.org/licenses/by-nc/4.0/deed.en)
+and links a separate
+[BRIA commercial agreement](https://platform.bria.ai/licensing/pricing?model=fibo-2).
+Those model terms are distinct from this project's artwork and code notices.
+The pinned source and processing records retain model revisions, source and
+output hashes, alpha checks and adoption status.

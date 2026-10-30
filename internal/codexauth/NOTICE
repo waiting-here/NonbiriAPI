@@ -6,6 +6,9 @@ from openai/codex at c92700d2993707ee16eb63b35a1cdd7fcc563f69:
 codex-rs/login/src/device_code_auth.rs
 codex-rs/login/src/oauth/client.rs
 codex-rs/login/src/auth/manager.rs
+codex-rs/backend-client/src/client/rate_limit_resets.rs
+codex-rs/backend-client/src/client.rs
+codex-rs/codex-api/src/endpoint/models.rs
 
 The upstream files are licensed under Apache License 2.0; see LICENSE.
 This adaptation uses NonbiriAPI's credential storage, authorization and egress.

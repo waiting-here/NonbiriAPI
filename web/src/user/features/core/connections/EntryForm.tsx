@@ -3,7 +3,7 @@ import { PresetModels } from './PresetModels';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ProtocolRerankField } from '@shared/components/ProtocolRerankField';
-import { Field, Note, Segmented } from '@shared/components/ui';
+import { Field, Fields, FormActions, Note, Segmented } from '@shared/components/ui';
 import type { NativeService, RerankFormat } from '@shared/nativeServices';
 import type { DiscoveryPreset, NativeServiceOption } from '@shared/connections';
 import { ConnectorLabel, CoreErrorPanel, CoreLoading } from '../components';
@@ -156,134 +156,140 @@ export function EntryForm({
           void save();
         }}
       >
-        {mode === 'custom' ? (
-          <>
-            <Field
-              label={t('common.connections.protocol')}
-              help={t('common.connections.protocolHelp')}
-            >
-              {(props) => (
-                <select
-                  {...props}
-                  value={connector}
+        <Fields>
+          {mode === 'custom' ? (
+            <>
+              <Field
+                label={t('common.connections.protocol')}
+                help={t('common.connections.protocolHelp')}
+              >
+                {(props) => (
+                  <select
+                    {...props}
+                    value={connector}
+                    disabled={locked || Boolean(saved.custom)}
+                    required
+                    onChange={(event) =>
+                      chooseConnector(
+                        nativeOptions.find((item) => item.connector_type === event.target.value),
+                      )
+                    }
+                  >
+                    <option value="">{t('common.connections.selectProtocol')}</option>
+                    {configurations.map((item) => (
+                      <option value={item.connector_type} key={item.configuration_type}>
+                        {coreText(CONNECTOR_COPY_KEYS[item.configuration_type as ConnectorType])}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              <Field size="long" label={t('common.connections.entryURL')}>
+                {(props) => (
+                  <input
+                    {...props}
+                    type="url"
+                    value={baseURL}
+                    placeholder="https://api.example.com/v1"
+                    required
+                    disabled={locked || Boolean(saved.custom)}
+                    onChange={(event) => setBaseURL(event.target.value)}
+                  />
+                )}
+              </Field>
+              <Field
+                size="long"
+                label={t('common.connections.note')}
+                optional={t('common.connections.optional')}
+              >
+                {(props) => (
+                  <input
+                    {...props}
+                    value={note}
+                    maxLength={1024}
+                    disabled={locked || Boolean(saved.custom)}
+                    onChange={(event) => setNote(event.target.value)}
+                  />
+                )}
+              </Field>
+              {selectedOption ? (
+                <ProtocolRerankField
+                  formats={selectedOption.rerank_formats}
+                  value={format}
+                  onChange={setFormat}
                   disabled={locked || Boolean(saved.custom)}
-                  required
-                  onChange={(event) =>
-                    chooseConnector(
-                      nativeOptions.find((item) => item.connector_type === event.target.value),
-                    )
-                  }
-                >
-                  <option value="">{t('common.connections.selectProtocol')}</option>
-                  {configurations.map((item) => (
-                    <option value={item.connector_type} key={item.configuration_type}>
-                      {coreText(CONNECTOR_COPY_KEYS[item.configuration_type as ConnectorType])}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </Field>
-            <Field label={t('common.connections.entryURL')}>
-              {(props) => (
-                <input
-                  {...props}
-                  type="url"
-                  value={baseURL}
-                  placeholder="https://api.example.com/v1"
-                  required
-                  disabled={locked || Boolean(saved.custom)}
-                  onChange={(event) => setBaseURL(event.target.value)}
                 />
-              )}
-            </Field>
-            <Field label={t('common.connections.note')} optional={t('common.connections.optional')}>
-              {(props) => (
-                <input
-                  {...props}
-                  value={note}
-                  maxLength={1024}
-                  disabled={locked || Boolean(saved.custom)}
-                  onChange={(event) => setNote(event.target.value)}
-                />
-              )}
-            </Field>
-            {selectedOption ? (
-              <ProtocolRerankField
-                formats={selectedOption.rerank_formats}
-                value={format}
-                onChange={setFormat}
-                disabled={locked || Boolean(saved.custom)}
+              ) : null}
+              <MainstreamMatches
+                options={suggestions}
+                disabled={locked}
+                onAdopt={(snapshot, matchingChannel, entry) => {
+                  client.setQueryData(coreKeys.endpointCreateOptions(accountId), snapshot);
+                  setChannelId(matchingChannel.id);
+                  setSelected({
+                    [entry.id!]: protocolServices(entry.connector_type),
+                  });
+                  setMode('mainstream');
+                }}
               />
-            ) : null}
-            <MainstreamMatches
-              options={suggestions}
-              disabled={locked}
-              onAdopt={(snapshot, matchingChannel, entry) => {
-                client.setQueryData(coreKeys.endpointCreateOptions(accountId), snapshot);
-                setChannelId(matchingChannel.id);
-                setSelected({
-                  [entry.id!]: protocolServices(entry.connector_type),
-                });
-                setMode('mainstream');
-              }}
-            />
-          </>
-        ) : (
-          <>
-            <Field label={t('common.connections.mainstream')}>
-              {(props) => (
-                <select
-                  {...props}
-                  value={channelId}
-                  disabled={locked}
-                  onChange={(event) => {
-                    setChannelId(event.target.value);
-                    setSelected({});
-                  }}
-                >
-                  <option value="">{t('common.connections.selectPreset')}</option>
-                  {options.data?.mainstream_channels.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
+            </>
+          ) : (
+            <>
+              <Field label={t('common.connections.mainstream')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={channelId}
+                    disabled={locked}
+                    onChange={(event) => {
+                      setChannelId(event.target.value);
+                      setSelected({});
+                    }}
+                  >
+                    <option value="">{t('common.connections.selectPreset')}</option>
+                    {options.data?.mainstream_channels.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              {channel?.entries?.map((entry) =>
+                entry.id && entry.enabled ? (
+                  <div key={entry.id} className="nb-stack nb-stack--sm">
+                    <Field label={entry.name || entry.base_url} help={entry.base_url}>
+                      {(props) => (
+                        <input
+                          {...props}
+                          type="checkbox"
+                          disabled={locked || Boolean(saved[entry.id!])}
+                          checked={Boolean(selected[entry.id!])}
+                          onChange={(event) => {
+                            const enabled = event.target.checked;
+                            setSelected((current) => {
+                              const next = { ...current };
+                              if (enabled) next[entry.id!] = protocolServices(entry.connector_type);
+                              else delete next[entry.id!];
+                              return next;
+                            });
+                          }}
+                        />
+                      )}
+                    </Field>
+                  </div>
+                ) : null,
               )}
-            </Field>
-            {channel?.entries?.map((entry) =>
-              entry.id && entry.enabled ? (
-                <div key={entry.id} className="nb-stack nb-stack--sm">
-                  <Field label={entry.name || entry.base_url} help={entry.base_url}>
-                    {(props) => (
-                      <input
-                        {...props}
-                        type="checkbox"
-                        disabled={locked || Boolean(saved[entry.id!])}
-                        checked={Boolean(selected[entry.id!])}
-                        onChange={(event) => {
-                          const enabled = event.target.checked;
-                          setSelected((current) => {
-                            const next = { ...current };
-                            if (enabled) next[entry.id!] = protocolServices(entry.connector_type);
-                            else delete next[entry.id!];
-                            return next;
-                          });
-                        }}
-                      />
-                    )}
-                  </Field>
-                </div>
-              ) : null,
-            )}
-            <Note>{t('common.connections.presetAuthorization')}</Note>
-          </>
-        )}
+              <Note>{t('common.connections.presetAuthorization')}</Note>
+            </>
+          )}
+        </Fields>
         <ConnectionOperationNotice operation={operation} />
-        <div className="nb-actions">
+        <FormActions>
           <button type="submit" className="nb-btn nb-btn--primary" disabled={locked || !ready}>
             {t('common.connections.saveEntries')}
           </button>
-        </div>
+        </FormActions>
       </form>
       {Object.entries(saved).map(([key, endpoint]) => (
         <section className="nb-stack" key={endpoint.id}>

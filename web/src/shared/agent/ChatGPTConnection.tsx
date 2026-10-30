@@ -1,7 +1,17 @@
 import { useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Button, Field, Fold, Note, Panel, PanelBody, PanelHead } from '@shared/components/ui';
+import {
+  Button,
+  Field,
+  Fields,
+  FormActions,
+  Fold,
+  Note,
+  Panel,
+  PanelBody,
+  PanelHead,
+} from '@shared/components/ui';
 import { LoadingState } from '@shared/components/States';
 import { useOperation } from '@shared/operations/useOperation';
 import { agentRoot } from './api';
@@ -118,7 +128,7 @@ export function ChatGPTConnection({ account, active }: { account: string; active
         description={t('common.agent.drivers.connectionHelp')}
       />
       <PanelBody>
-        <div className="agent-form-fields">
+        <div className="nb-stack">
           {status.isPending ? (
             <LoadingState />
           ) : status.error ? (
@@ -159,7 +169,7 @@ export function ChatGPTConnection({ account, active }: { account: string; active
                   </Note>
                 ) : null}
                 {localUsage ? (
-                  <div className="agent-form-fields">
+                  <div className="nb-stack">
                     <p>
                       <strong>{t('common.agent.drivers.localUsage')}</strong>
                     </p>
@@ -205,7 +215,7 @@ export function ChatGPTConnection({ account, active }: { account: string; active
                   </Button>
                 </div>
               </Fold>
-              <div className="nb-actions">
+              <FormActions>
                 <Button
                   type="button"
                   variant="primary"
@@ -243,7 +253,7 @@ export function ChatGPTConnection({ account, active }: { account: string; active
                     </Button>
                   </>
                 ) : null}
-              </div>
+              </FormActions>
             </>
           )}
           <Fold
@@ -252,21 +262,23 @@ export function ChatGPTConnection({ account, active }: { account: string; active
             onOpenChange={setSigningIn}
             lazy
           >
-            <div className="agent-form-fields">
+            <div className="nb-stack">
               <p>{t('common.agent.drivers.localLoginHelp')}</p>
-              <Field label={t('common.agent.drivers.loginAccount')}>
-                {(props) => (
-                  <select
-                    {...props}
-                    value={newAccount ? 'new' : 'same'}
-                    disabled={busy || unresolved}
-                    onChange={(event) => setNewAccount(event.target.value === 'new')}
-                  >
-                    <option value="same">{t('common.agent.drivers.sameAccount')}</option>
-                    <option value="new">{t('common.agent.drivers.switchAccount')}</option>
-                  </select>
-                )}
-              </Field>
+              <Fields>
+                <Field label={t('common.agent.drivers.loginAccount')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={newAccount ? 'new' : 'same'}
+                      disabled={busy || unresolved}
+                      onChange={(event) => setNewAccount(event.target.value === 'new')}
+                    >
+                      <option value="same">{t('common.agent.drivers.sameAccount')}</option>
+                      <option value="new">{t('common.agent.drivers.switchAccount')}</option>
+                    </select>
+                  )}
+                </Field>
+              </Fields>
               <ol className="agent-login-steps">
                 <li>
                   <p>{t('common.agent.drivers.downloadStep')}</p>

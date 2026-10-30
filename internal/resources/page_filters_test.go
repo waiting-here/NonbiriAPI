@@ -140,7 +140,7 @@ func TestResourceFilterHTTPStrictEnumsAndNumberedMode(t *testing.T) {
 		case "endpoints":
 			invalid = append(invalid, "page=1&connector_type=unknown", "page=1&source=", "page=1&source=all", "page=1&state=disabled")
 		case "keys":
-			invalid = append(invalid, "page=1&enabled=1", "page=1&donated=", "page=1&suspension_state=active")
+			invalid = append(invalid, "page=1&enabled=1", "page=1&donated=", "page=1&suspension_state=active", "page=1&credential_available=", "page=1&credential_available=1")
 		case "models":
 			invalid = append(invalid, "page=1&route_strategy=weighted", "page=1&provider=", "page=1&connection_state=disabled", "page=1&q="+strings.Repeat("a", 513))
 		}

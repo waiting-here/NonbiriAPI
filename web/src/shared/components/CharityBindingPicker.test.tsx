@@ -582,7 +582,7 @@ describe('CharityBindingPicker numbered source flow', () => {
     const search = screen.getByRole('searchbox', { name: 'Search sources' });
     fireEvent.change(search, { target: { value: '\u0001' } });
     expect(search).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled();
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

@@ -148,6 +148,15 @@ const terminalBatchCandidatesSQL = `SELECT id FROM game_fishing_batches WHERE se
 
 func (service *Service) cleanupTerminalBatches(ctx context.Context, now int64) (processed int, resultErr error) {
 	cutoff := now - int64(rankWindow/time.Second)
+	// The worker polls every second. An empty expiry queue needs no writer;
+	// candidates are selected again in the write transaction when work is due.
+	var due bool
+	if err := service.readDatabase.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM game_fishing_batches WHERE settled_at<=?)`, cutoff).Scan(&due); err != nil {
+		return 0, classifyDB(err)
+	}
+	if !due {
+		return 0, nil
+	}
 	tx, finish, err := observability.BeginMeasuredTx(ctx, service.database, nil, "fishing_cleanup")
 	if err != nil {
 		return 0, classifyDB(err)

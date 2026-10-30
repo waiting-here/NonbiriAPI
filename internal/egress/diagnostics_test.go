@@ -37,6 +37,18 @@ func TestDiagnosticCorrelationRejectsReflectedCredentials(t *testing.T) {
 	}
 }
 
+func TestDiagnosticRetryAfterRejectsNumericCredentialEcho(t *testing.T) {
+	ctx := diagnostic.WithRecorder(t.Context())
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com", nil)
+	req.Header.Set("Authorization", "Bearer 123456")
+	response := &http.Response{StatusCode: 429, Header: http.Header{"Retry-After": []string{"123456"}}}
+	observeResponse(ctx, req, response)
+	facts := diagnostic.Finish(ctx, false, false, false, 429, "limited", "upstream_response")
+	if facts.RetryAfterSeconds != nil {
+		t.Fatal("numeric credential reflected in diagnostic")
+	}
+}
+
 func TestDiagnosticWireFailuresKeepHeadersAndFirstCause(t *testing.T) {
 	for _, tc := range []struct {
 		name, category, code, encoding string

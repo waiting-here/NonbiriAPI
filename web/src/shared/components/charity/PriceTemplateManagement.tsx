@@ -168,7 +168,10 @@ export function PriceTemplateManagement({
       />
       <FilterBar
         activeCount={state === 'all' ? 0 : 1}
-        secondaryLabel={t('common.workflow.filters')}
+        onReset={() => {
+          setSearch({ q: '', text: '' });
+          filter('', 'all');
+        }}
         onSubmit={() => {
           if (validManagementSearch(searchText)) filter(searchText.trim());
         }}
@@ -185,9 +188,6 @@ export function PriceTemplateManagement({
                 />
               )}
             </Field>
-            <Button type="submit" disabled={!validManagementSearch(searchText)}>
-              {t('common.search')}
-            </Button>
           </>
         }
         secondary={

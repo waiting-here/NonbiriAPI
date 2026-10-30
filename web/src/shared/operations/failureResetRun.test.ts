@@ -55,7 +55,14 @@ describe('failure reset selection and execution', () => {
       '107',
       '207',
     ]);
-    expect(run.counts).toEqual({ selected: 203, processed: 203, reset: 203, skipped: 0 });
+    expect(run.counts).toEqual({
+      selected: 203,
+      processed: 203,
+      reset: 203,
+      skipped: 0,
+      recovered: 0,
+      alreadyClear: 0,
+    });
     expect(run.phase).toBe('done');
     expect(yieldStep.mock.calls.length).toBeGreaterThanOrEqual(events.length);
   });
@@ -115,7 +122,14 @@ describe('failure reset selection and execution', () => {
     });
     await run.resume();
     expect(reset.mock.calls[0][0]).toEqual(refs(4, 1, '7', '2'));
-    expect(run.counts).toEqual({ selected: 4, processed: 4, reset: 1, skipped: 3 });
+    expect(run.counts).toEqual({
+      selected: 4,
+      processed: 4,
+      reset: 1,
+      skipped: 3,
+      recovered: 0,
+      alreadyClear: 0,
+    });
   });
   it('does not advance later keys from a foreign conflict revision', async () => {
     const reset = vi.fn(async (items: FailureResetRef[]): Promise<FailureResetBatch> => ({
@@ -136,7 +150,14 @@ describe('failure reset selection and execution', () => {
     });
     await run.resume();
     expect(reset).toHaveBeenCalledTimes(1);
-    expect(run.counts).toEqual({ selected: 103, processed: 103, reset: 0, skipped: 103 });
+    expect(run.counts).toEqual({
+      selected: 103,
+      processed: 103,
+      reset: 0,
+      skipped: 103,
+      recovered: 0,
+      alreadyClear: 0,
+    });
   });
   it('stops future requests and ignores a late response after the account changes', async () => {
     let current = true;

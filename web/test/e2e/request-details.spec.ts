@@ -168,8 +168,8 @@ test('management diagnostics use shared buttons and recover without refreshing',
   });
   await page.goto(ADMIN_ORIGIN + '/logs');
   const section = page.getByRole('region', { name: 'Discovery and activity diagnostics' });
-  const button = section.getByRole('button', { name: 'Search diagnostics' });
-  await expect(button).toHaveClass(/nb-btn--primary/);
+  const button = section.getByRole('button', { name: 'Search', exact: true });
+  await expect(button).toBeVisible();
   await button.focus();
   await page.keyboard.press('Enter');
   await expect(section.getByRole('alert')).toBeVisible();

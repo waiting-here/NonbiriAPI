@@ -18,7 +18,12 @@ func RegisterDriverRoutes(registrar Registrar, service *Service, requests *agent
 	}
 	api := &httpAPI{s: service, requests: requests}
 	write := func(w http.ResponseWriter, value any, err error) {
+		if writeDriverFailure(w, err) {
+			return
+		}
 		switch {
+		case errors.Is(err, codexauth.ErrClosed):
+			err = agentrequest.ErrClosed
 		case errors.Is(err, codexauth.ErrInvalid):
 			err = ErrInvalid
 		case errors.Is(err, codexauth.ErrConflict):
@@ -57,6 +62,18 @@ func RegisterDriverRoutes(registrar Registrar, service *Service, requests *agent
 		})
 	}
 	routes := []route{
+		{"GET", "/codex/usage", func(w http.ResponseWriter, r *http.Request, _ Actor) {
+			if value := r.URL.Query().Get("refresh"); value != "" && value != "1" {
+				write(w, nil, ErrInvalid)
+				return
+			}
+			v, e := requests.CodexUsage(r.Context(), r.URL.Query().Get("refresh") == "1")
+			write(w, v, e)
+		}},
+		{"GET", "/diagnostics/{id}", func(w http.ResponseWriter, r *http.Request, _ Actor) {
+			v, e := requests.OperationDiagnostic(r.Context(), r.PathValue("id"))
+			write(w, v, e)
+		}},
 		{"GET", "/codex", func(w http.ResponseWriter, r *http.Request, _ Actor) {
 			v, e := requests.CodexStatus(r.Context())
 			write(w, v, e)

@@ -72,6 +72,8 @@ describe('metadata unknown-result recovery', () => {
     view.queryClient.setQueryData(['user', 'session'], {
       user: { id: '1', username: 'reader', effective_level: 4 },
     });
+    const candidates = ['user', 'economy', 'endpoint-choices', '1', 'keys', '11'];
+    view.queryClient.setQueryData(candidates, { data: [] });
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
     await view.user.click(await screen.findByRole('button', { name: 'Check saved result' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
@@ -86,5 +88,6 @@ describe('metadata unknown-result recovery', () => {
     expect(writes[0]?.key).toBeTruthy();
     expect(reads).toHaveLength(1);
     expect(reads[0]).toContain('/api/endpoints/11');
+    expect(view.queryClient.getQueryState(candidates)?.isInvalidated).toBe(true);
   });
 });

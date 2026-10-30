@@ -1,5 +1,6 @@
 import { SimplePager } from '@shared/operations/SimplePager';
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
+import { Field, FilterBar } from '@shared/components/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
@@ -221,20 +222,37 @@ export function DuelHistoryPage() {
     [error, setError] = useState(false);
   const edit = (patch: Partial<Filter>) => {
     setDraft({ ...draft, ...patch });
+    if (patch.game || patch.dataset || patch.mode !== undefined || patch.outcome !== undefined) {
+      setApplied((current) => ({
+        game: patch.game ?? current.game,
+        dataset: patch.dataset ?? current.dataset,
+        selection: {
+          ...current.selection,
+          ...(patch.mode !== undefined ? { mode: patch.mode || undefined } : {}),
+          ...(patch.outcome !== undefined ? { outcome: patch.outcome || undefined } : {}),
+        },
+      }));
+    }
     setError(false);
   };
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
+  const submit = () => {
+    let invalid = false;
+    let selection: Selection = {
+      mode: draft.mode || undefined,
+      outcome: draft.outcome || undefined,
+    };
     try {
-      setApplied({
-        game: draft.game,
-        dataset: draft.dataset,
-        selection: selectionFor(draft, siteOffset),
-      });
-      setError(false);
+      selection = { ...selection, ...selectionFor({ ...draft, from: '', to: '' }, siteOffset) };
     } catch {
-      setError(true);
+      invalid = true;
     }
+    try {
+      selection = { ...selection, ...selectionFor({ ...draft, version: '' }, siteOffset) };
+    } catch {
+      invalid = true;
+    }
+    setApplied({ game: draft.game, dataset: draft.dataset, selection });
+    setError(invalid);
   };
   return (
     <div className="page ops-page admin-duel-page">
@@ -247,92 +265,125 @@ export function DuelHistoryPage() {
         )}
       />
       <Card>
-        <form onSubmit={submit} className="ops-stack">
-          <div className="ops-field-grid">
-            <label>
-              <span>{t('游戏', 'Game')}</span>
-              <select
-                value={draft.game}
-                onChange={(e) => edit({ game: e.target.value as GameID, mode: '' })}
-              >
-                {(['bidding', 'likes', 'gwent'] as const).map((game) => (
-                  <option key={game} value={game}>
-                    {gameLabel(game, t)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>{t('数据集', 'Dataset')}</span>
-              <select
-                value={draft.dataset}
-                onChange={(e) => edit({ dataset: e.target.value as Dataset })}
-              >
-                <option value="recent">{t('近30天完整历史', 'Recent 30 days')}</option>
-                <option value="anonymous">{t('长期匿名资料', 'Anonymous archive')}</option>
-              </select>
-            </label>
-            <label>
-              <span>{t('模式', 'Mode')}</span>
-              <select value={draft.mode} onChange={(e) => edit({ mode: e.target.value })}>
-                <option value="">{t('全部模式', 'All modes')}</option>
-                {modesFor(draft.game).map((mode) => (
-                  <option key={mode} value={mode}>
-                    {modeLabel(mode, t)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>{t('规则版本（留空为全部）', 'Rules version (blank for all)')}</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={draft.version}
-                maxLength={10}
-                onChange={(e) => edit({ version: e.target.value })}
-              />
-            </label>
-            <label>
-              <span>{t('结果', 'Outcome')}</span>
-              <select value={draft.outcome} onChange={(e) => edit({ outcome: e.target.value })}>
-                <option value="">{t('全部结果', 'All outcomes')}</option>
-                <option value="normal">{t('分出胜负', 'Decided')}</option>
-                <option value="draw">{t('平局', 'Draw')}</option>
-                <option value="system_cancelled">{t('系统取消', 'System cancelled')}</option>
-              </select>
-            </label>
+        <FilterBar
+          activeCount={
+            Object.values(applied.selection).filter((value) => value !== undefined).length
+          }
+          onSubmit={submit}
+          onReset={() => {
+            setDraft(initialFilter);
+            setApplied({ game: initialFilter.game, dataset: initialFilter.dataset, selection: {} });
+            setError(false);
+          }}
+          search={
+            <Field
+              size="short"
+              label={t('规则版本（留空为全部）', 'Rules version (blank for all)')}
+            >
+              {(props) => (
+                <input
+                  {...props}
+                  type="text"
+                  inputMode="numeric"
+                  value={draft.version}
+                  placeholder={t('规则版本（留空为全部）', 'Rules version (blank for all)')}
+                  maxLength={10}
+                  onChange={(e) => edit({ version: e.target.value })}
+                />
+              )}
+            </Field>
+          }
+          secondaryAlwaysVisible
+          secondary={
             <>
-              <label>
-                <span>{t('结束时间从', 'Ended from')}</span>
-                <input
-                  type="datetime-local"
-                  disabled={siteOffset === null}
-                  value={draft.from}
-                  onChange={(e) => edit({ from: e.target.value })}
-                />
-              </label>
-              <label>
-                <span>{t('结束时间至', 'Ended through')}</span>
-                <input
-                  type="datetime-local"
-                  disabled={siteOffset === null}
-                  value={draft.to}
-                  onChange={(e) => edit({ to: e.target.value })}
-                />
-              </label>
+              <Field label={t('游戏', 'Game')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={draft.game}
+                    onChange={(e) => edit({ game: e.target.value as GameID, mode: '' })}
+                  >
+                    {(['bidding', 'likes', 'gwent'] as const).map((game) => (
+                      <option key={game} value={game}>
+                        {gameLabel(game, t)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              <Field label={t('数据集', 'Dataset')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={draft.dataset}
+                    onChange={(e) => edit({ dataset: e.target.value as Dataset })}
+                  >
+                    <option value="recent">{t('近30天完整历史', 'Recent 30 days')}</option>
+                    <option value="anonymous">{t('长期匿名资料', 'Anonymous archive')}</option>
+                  </select>
+                )}
+              </Field>
+              <Field size="short" label={t('模式', 'Mode')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={draft.mode}
+                    onChange={(e) => edit({ mode: e.target.value })}
+                  >
+                    <option value="">{t('全部模式', 'All modes')}</option>
+                    {modesFor(draft.game).map((mode) => (
+                      <option key={mode} value={mode}>
+                        {modeLabel(mode, t)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              <Field size="short" label={t('结果', 'Outcome')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={draft.outcome}
+                    onChange={(e) => edit({ outcome: e.target.value })}
+                  >
+                    <option value="">{t('全部结果', 'All outcomes')}</option>
+                    <option value="normal">{t('分出胜负', 'Decided')}</option>
+                    <option value="draw">{t('平局', 'Draw')}</option>
+                    <option value="system_cancelled">{t('系统取消', 'System cancelled')}</option>
+                  </select>
+                )}
+              </Field>
+              <Field label={t('结束时间从', 'Ended from')}>
+                {(props) => (
+                  <input
+                    {...props}
+                    type="datetime-local"
+                    disabled={siteOffset === null}
+                    value={draft.from}
+                    onChange={(e) => edit({ from: e.target.value })}
+                  />
+                )}
+              </Field>
+              <Field label={t('结束时间至', 'Ended through')}>
+                {(props) => (
+                  <input
+                    {...props}
+                    type="datetime-local"
+                    disabled={siteOffset === null}
+                    value={draft.to}
+                    onChange={(e) => edit({ to: e.target.value })}
+                  />
+                )}
+              </Field>
             </>
-          </div>
-          <TimeContextNotice station="admin" />
-          {error && (
-            <p className="field-error" role="alert">
-              {t('请检查版本号和时间范围。', 'Check the version and time range.')}
-            </p>
-          )}
-          <button type="submit" className="nb-btn nb-btn--primary">
-            {t('应用筛选', 'Apply filters')}
-          </button>
-        </form>
+          }
+        />
+        <TimeContextNotice station="admin" />
+        {error && (
+          <p className="field-error" role="alert">
+            {t('请检查版本号和时间范围。', 'Check the version and time range.')}
+          </p>
+        )}
       </Card>
       {applied.dataset === 'anonymous' &&
       (applied.selection.from !== undefined || applied.selection.to !== undefined) ? null : (

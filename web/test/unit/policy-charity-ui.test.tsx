@@ -1653,7 +1653,10 @@ describe('experimental policy and charity controls', () => {
       if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20') {
         return jsonResponse(coreNumberedPage([coreEndpoint]));
       }
-      if (method === 'GET' && path === '/api/endpoints/1/keys?page=1&page_size=20') {
+      if (
+        method === 'GET' &&
+        path === '/api/endpoints/1/keys?page=1&page_size=20&credential_available=true'
+      ) {
         return jsonResponse(
           coreNumberedPage([
             {
@@ -2291,7 +2294,7 @@ describe('experimental policy and charity controls', () => {
       const editForm = editHeading.closest('.card');
       if (!(editForm instanceof HTMLElement)) throw new Error('Missing charity model editor');
       await rendered.user.click(
-        within(editForm).getByRole('checkbox', {
+        within(editForm).getByRole('switch', {
           name: flattenLabel,
         }),
       );
@@ -2311,7 +2314,7 @@ describe('experimental policy and charity controls', () => {
       await rendered.user.type(within(createForm).getByLabelText('Provider'), 'new-provider');
       await rendered.user.type(within(createForm).getByLabelText('Model'), 'new-model');
       await rendered.user.click(
-        within(createForm).getByRole('checkbox', {
+        within(createForm).getByRole('switch', {
           name: flattenLabel,
         }),
       );
@@ -2399,7 +2402,7 @@ describe('experimental policy and charity controls', () => {
     const editForm = editHeading.closest('.card');
     if (!(editForm instanceof HTMLElement)) throw new Error('Missing charity model editor');
     await rendered.user.click(
-      within(editForm).getByRole('checkbox', {
+      within(editForm).getByRole('switch', {
         name: '[Experimental] Turn tool calls into plain text (chat only)',
       }),
     );
@@ -2408,7 +2411,7 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() => {
       expect(screen.getByText(/Charity management access is no longer available/i)).toBeVisible();
       expect(
-        screen.queryByRole('checkbox', {
+        screen.queryByRole('switch', {
           name: '[Experimental] Turn tool calls into plain text (chat only)',
         }),
       ).toBeNull();
@@ -2593,7 +2596,10 @@ describe('experimental policy and charity controls', () => {
       route: '/steward?tab=logs',
     });
     const load = async () => {
-      fireEvent.click(await screen.findByRole('button', { name: 'Search diagnostics' }));
+      const diagnostics = await screen.findByRole('region', {
+        name: 'Discovery and activity diagnostics',
+      });
+      fireEvent.click(within(diagnostics).getByRole('button', { name: 'Search' }));
       fireEvent.click(await screen.findByText(/req_AAAAA.*Attempt 1/));
       fireEvent.click(screen.getByRole('button', { name: 'Load error details and source' }));
     };
@@ -2950,7 +2956,7 @@ describe('experimental policy and charity controls', () => {
     await screen.findByText(/does not have confirmed steward access/i);
     expect(rendered.queryClient.getQueriesData({ queryKey: modelPageKey })).toEqual([]);
     expect(
-      screen.queryByRole('checkbox', {
+      screen.queryByRole('switch', {
         name: '[Experimental] Turn tool calls into plain text (chat only)',
       }),
     ).toBeNull();

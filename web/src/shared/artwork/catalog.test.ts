@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import source from '../../../../internal/artwork/catalog.json';
+import composition from '../../../public/assets/gacha/composition.json';
 import { createArtworkCatalog, artworkCatalog, type ArtworkCatalog } from './catalog';
 
 it('inherits shared textures without adding scene restrictions to normal card viewing', () => {
@@ -65,4 +66,40 @@ it('uses an exact asset owner before the longest prefix', () => {
   expect(catalog.assetRating('/assets/gacha/motion/test/hero.webp')).toBe('r18');
   expect(catalog.assetRating('/assets/gacha/motion/test/appearance-hero.webp')).toBe('general');
   expect(catalog.assetRating('/assets/gacha/motion/test/appearance-cover.webp')).toBe('r18');
+});
+
+it('keeps moment-only derivatives under the original card rating at both resolutions', () => {
+  const cards = composition.cards as Record<
+    string,
+    {
+      moment_layers?: {
+        expansion?: { hero?: string; closed?: string; half?: string };
+        scene?: { path: string };
+      };
+    }
+  >;
+  for (const [id, card] of Object.entries(cards)) {
+    const moment = card.moment_layers;
+    const rating = artworkCatalog.rating('card:' + id);
+    for (const file of [
+      moment?.expansion?.hero,
+      moment?.expansion?.closed,
+      moment?.expansion?.half,
+      moment?.scene?.path,
+    ]) {
+      if (!file) continue;
+      for (const prefix of ['', 'hires/']) {
+        const path = '/assets/gacha/' + prefix + file;
+        expect(artworkCatalog.assetRating(path), path).toBe(rating);
+        expect(artworkCatalog.sourceAllowed(path, true), path).toBe(rating === 'general');
+        expect(artworkCatalog.sourceAllowed(path, false), path).toBe(true);
+      }
+    }
+  }
+  expect(artworkCatalog.sourceAllowed('/assets/gacha/moment/a-claude/hero.webp', false)).toBe(
+    false,
+  );
+  const scene = '/assets/gacha/moment/s-claude/background.webp';
+  expect(artworkCatalog.assetRating(scene)).toBe(artworkCatalog.rating('card:s-claude'));
+  expect(artworkCatalog.sourceAllowed(scene, true)).toBe(false);
 });

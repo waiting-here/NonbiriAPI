@@ -36,6 +36,9 @@ import {
   Button,
   OutcomeNote,
   Field,
+  Fields,
+  FormActions,
+  Toggle,
 } from '@shared/components/ui';
 import {
   charityKeys,
@@ -300,18 +303,20 @@ function KeyExpiryEditor({
           onChange((current) => ({ ...current, expiry: update(current.expiry) }))
         }
       />
-      <label className="checkbox-label">
-        <input
-          type="checkbox"
-          checked={draft.no_expiry}
-          disabled={authorizedExpiresAt !== null}
-          onChange={(event) => {
-            const checked = event.target.checked;
-            onChange((current) => ({ ...current, no_expiry: checked }));
-          }}
-        />
-        <span>{t('common.operations.charity.noExpiry')}</span>
-      </label>
+      <Field label={t('common.operations.charity.noExpiry')} size="short">
+        {(field) => (
+          <input
+            {...field}
+            type="checkbox"
+            checked={draft.no_expiry}
+            disabled={authorizedExpiresAt !== null}
+            onChange={(event) => {
+              const checked = event.target.checked;
+              onChange((current) => ({ ...current, no_expiry: checked }));
+            }}
+          />
+        )}
+      </Field>
       <small className="muted">
         {authorizedExpiresAt === null
           ? t('common.operations.charity.permanentAuthorizationHint')
@@ -336,7 +341,7 @@ function KeyQuotaFields({
     <>
       <fieldset className="ops-form-section">
         <legend>{copy.cumulativeLimits}</legend>
-        <div className="ops-field-grid">
+        <Fields>
           <NullableValue
             label={t('common.operations.charity.priceLimitCredits')}
             value={value.price_limit}
@@ -362,12 +367,12 @@ function KeyQuotaFields({
             value={value.output_tokens_limit}
             onChange={(next) => onChange({ output_tokens_limit: next })}
           />
-        </div>
+        </Fields>
       </fieldset>
       <fieldset className="ops-form-section">
         <legend>{copy.tokenReservations}</legend>
         <p className="muted">{copy.splitHint}</p>
-        <div className="ops-field-grid">
+        <Fields>
           <NullableValue
             label={copy.inputReserve}
             value={value.input_token_reserve}
@@ -378,18 +383,20 @@ function KeyQuotaFields({
             value={value.output_token_reserve}
             onChange={(next) => onChange({ output_token_reserve: next })}
           />
-          <label>
-            <span>{t('common.operations.charity.tokenReserve')}</span>
-            <input
-              type="number"
-              min="0"
-              max={MAX_TOKEN_RESERVE}
-              step="1"
-              value={value.token_reserve}
-              onChange={(event) => onChange({ token_reserve: Number(event.target.value) })}
-            />
-          </label>
-        </div>
+          <Field label={t('common.operations.charity.tokenReserve')} size="short">
+            {(field) => (
+              <input
+                {...field}
+                type="number"
+                min="0"
+                max={MAX_TOKEN_RESERVE}
+                step="1"
+                value={value.token_reserve}
+                onChange={(event) => onChange({ token_reserve: Number(event.target.value) })}
+              />
+            )}
+          </Field>
+        </Fields>
       </fieldset>
     </>
   );
@@ -477,6 +484,7 @@ function DonationKeySettings({
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const modelID = useCharityModelScope();
+  const client = useQueryClient();
   const copy = charityControlCopy(useTranslation().i18n.language);
   const [draft, setDraft] = useState(() => keyManagementDraft(item));
   const [reset, setReset] = useState(false);
@@ -509,7 +517,14 @@ function DonationKeySettings({
         },
         key,
       ),
-    refresh,
+    () =>
+      Promise.all([
+        refresh(),
+        client.invalidateQueries({
+          queryKey:
+            role === 'admin' ? ['admin', 'operations', 'donation-uses'] : ['user', 'donation-uses'],
+        }),
+      ]),
     charityKeys.root(role),
   );
   const validationError = keySettingsError(draft, item.authorized_expires_at);
@@ -645,30 +660,36 @@ function DonationKeySettings({
           </Fold>
           <fieldset className="ops-form-section">
             <legend>{copy.keyManagement}</legend>
-            <div className="ops-field-grid">
-              <label>
-                <span>{t('common.operations.charity.safeNote')}</span>
-                <input
-                  value={draft.safe_note}
-                  onChange={(event) => setDraft({ ...draft, safe_note: event.target.value })}
-                />
-              </label>
-              <label>
-                <span>{t('common.operations.charity.charitySwitchChange')}</span>
-                <select
-                  value={draft.enabled === null ? '' : String(draft.enabled)}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      enabled: event.target.value === '' ? null : event.target.value === 'true',
-                    })
-                  }
-                >
-                  <option value="">{t('common.operations.charity.leaveUnchanged')}</option>
-                  <option value="true">{t('common.operations.charity.enableForCharity')}</option>
-                  <option value="false">{t('common.operations.charity.disableForCharity')}</option>
-                </select>
-              </label>
+            <Fields>
+              <Field label={t('common.operations.charity.safeNote')} size="long">
+                {(field) => (
+                  <input
+                    {...field}
+                    value={draft.safe_note}
+                    onChange={(event) => setDraft({ ...draft, safe_note: event.target.value })}
+                  />
+                )}
+              </Field>
+              <Field label={t('common.operations.charity.charitySwitchChange')} size="short">
+                {(field) => (
+                  <select
+                    {...field}
+                    value={draft.enabled === null ? '' : String(draft.enabled)}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        enabled: event.target.value === '' ? null : event.target.value === 'true',
+                      })
+                    }
+                  >
+                    <option value="">{t('common.operations.charity.leaveUnchanged')}</option>
+                    <option value="true">{t('common.operations.charity.enableForCharity')}</option>
+                    <option value="false">
+                      {t('common.operations.charity.disableForCharity')}
+                    </option>
+                  </select>
+                )}
+              </Field>
               <KeyExpiryEditor
                 station={role === 'admin' ? 'admin' : 'steward'}
                 draft={draft}
@@ -676,16 +697,18 @@ function DonationKeySettings({
                 onChange={(update) => setDraft((current) => ({ ...current, ...update(current) }))}
               />
               {item.streak.failure_disabled ? (
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={reset}
-                    onChange={(event) => setReset(event.target.checked)}
-                  />
-                  <span>{t('common.operations.charity.resetFailureStreak')}</span>
-                </label>
+                <Field label={t('common.operations.charity.resetFailureStreak')} size="short">
+                  {(field) => (
+                    <input
+                      {...field}
+                      type="checkbox"
+                      checked={reset}
+                      onChange={(event) => setReset(event.target.checked)}
+                    />
+                  )}
+                </Field>
               ) : null}
-            </div>
+            </Fields>
           </fieldset>
           {validationError ? (
             <p className="field-error" role="alert">
@@ -693,19 +716,21 @@ function DonationKeySettings({
             </p>
           ) : null}
           {save.error ? <ErrorState error={save.error} /> : null}
-          <button
-            className="nb-btn nb-btn--primary"
-            type="button"
-            disabled={save.isPending || Boolean(validationError)}
-            onClick={() => {
-              const expiresAt = effectiveExpiry(draft);
-              if (expiresAt === undefined || keySettingsError(draft, item.authorized_expires_at))
-                return;
-              save.mutate({ ...keySettingsBody(draft), reset_failure_streak: reset });
-            }}
-          >
-            {t(charityCopyKey(role, 'saveKeyLimits'))}
-          </button>
+          <FormActions>
+            <button
+              className="nb-btn nb-btn--primary"
+              type="button"
+              disabled={save.isPending || Boolean(validationError)}
+              onClick={() => {
+                const expiresAt = effectiveExpiry(draft);
+                if (expiresAt === undefined || keySettingsError(draft, item.authorized_expires_at))
+                  return;
+                save.mutate({ ...keySettingsBody(draft), reset_failure_streak: reset });
+              }}
+            >
+              {t(charityCopyKey(role, 'saveKeyLimits'))}
+            </button>
+          </FormActions>
         </>
       ) : (
         <p className="muted">
@@ -963,32 +988,41 @@ function DonationReview({
                 : 'common.donationReview.forceHelp',
             )}
           </p>
-          <div className="ops-field-grid">
-            <label>
-              <span>{t('common.operations.charity.decisionLabel')}</span>
-              <select
-                value={decision}
-                onChange={(event) => {
-                  setPendingDecision(event.target.value as typeof pendingDecision);
-                }}
-              >
-                {legacyPendingReview ? (
-                  <>
-                    <option value="approve">
-                      {t('common.operations.charity.decision.approve')}
-                    </option>
-                    <option value="reject">{t('common.operations.charity.decision.reject')}</option>
-                  </>
-                ) : (
-                  <option value="force_reject">{t('common.donationReview.forceTitle')}</option>
-                )}
-              </select>
-            </label>
-            <label>
-              <span>{t('common.operations.charity.reason')}</span>
-              <input value={reason} onChange={(event) => setReason(event.target.value)} />
-            </label>
-          </div>
+          <Fields>
+            <Field label={t('common.operations.charity.decisionLabel')} size="short">
+              {(field) => (
+                <select
+                  {...field}
+                  value={decision}
+                  onChange={(event) => {
+                    setPendingDecision(event.target.value as typeof pendingDecision);
+                  }}
+                >
+                  {legacyPendingReview ? (
+                    <>
+                      <option value="approve">
+                        {t('common.operations.charity.decision.approve')}
+                      </option>
+                      <option value="reject">
+                        {t('common.operations.charity.decision.reject')}
+                      </option>
+                    </>
+                  ) : (
+                    <option value="force_reject">{t('common.donationReview.forceTitle')}</option>
+                  )}
+                </select>
+              )}
+            </Field>
+            <Field label={t('common.operations.charity.reason')} size="long">
+              {(field) => (
+                <input
+                  {...field}
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                />
+              )}
+            </Field>
+          </Fields>
           {decision === 'approve' ? (
             <div className="ops-stack">
               {reviewPage.data.map((entry) => {
@@ -1029,19 +1063,21 @@ function DonationReview({
                         }
                       />
                     </Fold>
-                    <div className="ops-field-grid">
-                      <label>
-                        <span>{t('common.operations.charity.safeNote')}</span>
-                        <input
-                          value={draft.safe_note}
-                          onChange={(event) =>
-                            setKeys({
-                              ...keys,
-                              [entry.id]: { ...draft, safe_note: event.target.value },
-                            })
-                          }
-                        />
-                      </label>
+                    <Fields>
+                      <Field label={t('common.operations.charity.safeNote')} size="long">
+                        {(field) => (
+                          <input
+                            {...field}
+                            value={draft.safe_note}
+                            onChange={(event) =>
+                              setKeys({
+                                ...keys,
+                                [entry.id]: { ...draft, safe_note: event.target.value },
+                              })
+                            }
+                          />
+                        )}
+                      </Field>
                       <KeyExpiryEditor
                         station={role === 'admin' ? 'admin' : 'steward'}
                         draft={draft}
@@ -1053,20 +1089,14 @@ function DonationReview({
                           }))
                         }
                       />
-                      <label className="checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={draft.enabled}
-                          onChange={(event) =>
-                            setKeys({
-                              ...keys,
-                              [entry.id]: { ...draft, enabled: event.target.checked },
-                            })
-                          }
-                        />
-                        <span>{t('common.operations.charity.enableForCharity')}</span>
-                      </label>
-                    </div>
+                      <Toggle
+                        label={t('common.operations.charity.enableForCharity')}
+                        checked={draft.enabled}
+                        onChange={(enabled) =>
+                          setKeys({ ...keys, [entry.id]: { ...draft, enabled } })
+                        }
+                      />
+                    </Fields>
                   </section>
                 );
               })}
@@ -1104,59 +1134,63 @@ function DonationReview({
           {review.refreshError ? (
             <ErrorState error={review.refreshError} onRetry={() => void review.refresh()} />
           ) : null}
-          <button
-            className={decision !== 'approve' ? 'nb-btn nb-btn--danger' : 'nb-btn nb-btn--primary'}
-            type="button"
-            disabled={
-              !reason.trim() ||
-              review.isPending ||
-              review.outcome === 'unknown' ||
-              Boolean(validationError)
-            }
-            onClick={() => {
-              if (decision === 'force_reject') {
-                setForceConfirmation(true);
-                return;
+          <FormActions>
+            <button
+              className={
+                decision !== 'approve' ? 'nb-btn nb-btn--danger' : 'nb-btn nb-btn--primary'
               }
-              if (
-                !validText(reason.trim(), 1024, true) ||
-                (decision === 'approve' &&
-                  item.keys.some(
-                    (entry) =>
-                      !keys[entry.id] ||
-                      keySettingsError(keys[entry.id], entry.authorized_expires_at),
-                  ))
-              )
-                return;
-              review.mutate({
-                revision: item.revision,
-                decision,
-                reason: reason.trim(),
-                settings:
-                  decision === 'approve'
-                    ? Object.fromEntries(
-                        item.keys.map((entry) => [
-                          entry.id,
-                          {
-                            ...keySettingsBody(keys[entry.id]),
-                            ...(keys[entry.id].enabled &&
-                            entry.review?.required &&
-                            entry.review.revision
-                              ? { expected_review_revision: entry.review.revision }
-                              : {}),
-                          },
-                        ]),
-                      )
-                    : {},
-              });
-            }}
-          >
-            {t(
-              decision === 'force_reject'
-                ? 'common.donationReview.forceTitle'
-                : charityCopyKey(role, decision === 'approve' ? 'approve' : 'reject'),
-            )}
-          </button>
+              type="button"
+              disabled={
+                !reason.trim() ||
+                review.isPending ||
+                review.outcome === 'unknown' ||
+                Boolean(validationError)
+              }
+              onClick={() => {
+                if (decision === 'force_reject') {
+                  setForceConfirmation(true);
+                  return;
+                }
+                if (
+                  !validText(reason.trim(), 1024, true) ||
+                  (decision === 'approve' &&
+                    item.keys.some(
+                      (entry) =>
+                        !keys[entry.id] ||
+                        keySettingsError(keys[entry.id], entry.authorized_expires_at),
+                    ))
+                )
+                  return;
+                review.mutate({
+                  revision: item.revision,
+                  decision,
+                  reason: reason.trim(),
+                  settings:
+                    decision === 'approve'
+                      ? Object.fromEntries(
+                          item.keys.map((entry) => [
+                            entry.id,
+                            {
+                              ...keySettingsBody(keys[entry.id]),
+                              ...(keys[entry.id].enabled &&
+                              entry.review?.required &&
+                              entry.review.revision
+                                ? { expected_review_revision: entry.review.revision }
+                                : {}),
+                            },
+                          ]),
+                        )
+                      : {},
+                });
+              }}
+            >
+              {t(
+                decision === 'force_reject'
+                  ? 'common.donationReview.forceTitle'
+                  : charityCopyKey(role, decision === 'approve' ? 'approve' : 'reject'),
+              )}
+            </button>
+          </FormActions>
           <ConfirmDialog
             open={forceConfirmation}
             title={t('common.donationReview.forceTitle')}
@@ -1703,7 +1737,11 @@ function DonationsPanel({
           <Card>
             <div className="charity-donation-toolbar">
               <FilterBar
-                secondaryLabel={t('common.filter')}
+                onReset={() => {
+                  setQueryDraft('');
+                  setDonorDraft({ userID: '', discordID: '', user: '', discord: '' });
+                  updateFilters('', '', '', '', '');
+                }}
                 activeCount={[handling, status, query, userID, discordID].filter(Boolean).length}
                 search={
                   <>
@@ -1725,9 +1763,6 @@ function DonationsPanel({
                         />
                       )}
                     </Field>
-                    <Button type="submit" disabled={!queryValid}>
-                      {t('common.donationHandling.applySearch')}
-                    </Button>
                   </>
                 }
                 secondary={

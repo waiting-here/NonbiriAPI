@@ -1,7 +1,7 @@
 import { isAISDKGateway } from '@shared/operations/connectorPolicy';
 import { Button } from '@shared/components/ui/Button';
-import { Field, Fold, Note, OutcomeNote } from '@shared/components/ui';
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { Field, Fields, FormActions, Fold, Note, OutcomeNote } from '@shared/components/ui';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiFetch, isApiError } from '@shared/query/http';
 import { useRequestAdaptationCopy, type RequestAdaptationCopyKey } from './requestAdaptationCopy';
@@ -352,7 +352,7 @@ function MapEditor({
         gatewayCacheDefaults &&
         structuredCache(row) &&
         row.name.trim() === '/cache_control' ? null : (
-          <div className="core-field-grid" key={index}>
+          <Fields key={index}>
             <Field label={copy('name')}>
               {(field) => (
                 <input
@@ -365,7 +365,7 @@ function MapEditor({
                 />
               )}
             </Field>
-            <Field label={copy('action')}>
+            <Field size="short" label={copy('action')}>
               {(field) => (
                 <select
                   {...field}
@@ -386,7 +386,7 @@ function MapEditor({
               )}
             </Field>
             {row.action === 'replace' || (row.action === 'keep' && row.savedValue !== undefined) ? (
-              <Field label={copy('value')}>
+              <Field size="long" label={copy('value')}>
                 {(field) =>
                   kind === 'fixed_headers' ? (
                     <input
@@ -457,7 +457,7 @@ function MapEditor({
               {kind !== 'fixed_headers' &&
               row.sensitivePaths?.length &&
               !row.sensitivePaths.includes('') ? (
-                <Field label={copy('protectedPaths')} help={copy('protectedPathsHelp')}>
+                <Field size="long" label={copy('protectedPaths')} help={copy('protectedPathsHelp')}>
                   {(field) => (
                     <textarea
                       {...field}
@@ -478,7 +478,7 @@ function MapEditor({
                 </Field>
               ) : null}
             </div>
-          </div>
+          </Fields>
         ),
       )}
       {editable ? (
@@ -545,7 +545,6 @@ export function RequestAdaptationEditor({
   const { t } = useTranslation();
   const modelScope = scope === 'personal-model' || scope === 'charity-model';
   const copy = useRequestAdaptationCopy(scope === 'endpoint' || scope === 'personal-model');
-  const exclusionsID = useId();
   const [reload, setReload] = useState(0);
   const [view, setView] = useState<View | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -706,21 +705,23 @@ export function RequestAdaptationEditor({
             : copy(labels[kind])}
         </legend>
         {inherited ? (
-          <label>
-            <span>{copy('mode')}</span>
-            <select
-              value={section.mode}
-              disabled={!canEdit}
-              onChange={(event) => setMode(event.target.value as Mode)}
-            >
-              <option value="inherit">
-                {scope === 'personal-model'
-                  ? t('requestAdaptation.personal.inheritEndpoint')
-                  : copy('inherit')}
-              </option>
-              <option value="replace">{copy('replace')}</option>
-            </select>
-          </label>
+          <Field label={copy('mode')} size="short">
+            {(props) => (
+              <select
+                {...props}
+                value={section.mode}
+                disabled={!canEdit}
+                onChange={(event) => setMode(event.target.value as Mode)}
+              >
+                <option value="inherit">
+                  {scope === 'personal-model'
+                    ? t('requestAdaptation.personal.inheritEndpoint')
+                    : copy('inherit')}
+                </option>
+                <option value="replace">{copy('replace')}</option>
+              </select>
+            )}
+          </Field>
         ) : null}
         {kind === 'forward_headers' || kind === 'native_extension_paths' ? (
           section.mode === 'inherit' ? (
@@ -731,24 +732,27 @@ export function RequestAdaptationEditor({
             </p>
           ) : (
             <div>
-              <label>
-                <span>
-                  {t(
-                    kind === 'forward_headers'
-                      ? 'requestAdaptation.personal.headerListHelp'
-                      : 'requestAdaptation.personal.nativeListHelp',
-                  )}
-                </span>
-                <textarea
-                  value={(section as ListDraft).text}
-                  rows={3}
-                  maxLength={65536}
-                  disabled={!canEdit}
-                  onChange={(event) =>
-                    updateList(kind, { mode: section.mode, text: event.target.value })
-                  }
-                />
-              </label>
+              <Field
+                size="long"
+                label={t(
+                  kind === 'forward_headers'
+                    ? 'requestAdaptation.personal.headerListHelp'
+                    : 'requestAdaptation.personal.nativeListHelp',
+                )}
+              >
+                {(props) => (
+                  <textarea
+                    {...props}
+                    value={(section as ListDraft).text}
+                    rows={3}
+                    maxLength={65536}
+                    disabled={!canEdit}
+                    onChange={(event) =>
+                      updateList(kind, { mode: section.mode, text: event.target.value })
+                    }
+                  />
+                )}
+              </Field>
               {canEdit ? (
                 <Button
                   type="button"
@@ -878,21 +882,22 @@ export function RequestAdaptationEditor({
               <fieldset className="core-form ops-unframed">
                 <legend>{t('requestAdaptation.model.body')}</legend>
                 {scope === 'personal-model' ? (
-                  <label>
-                    <span id={exclusionsID}>{t('requestAdaptation.personal.excluded')}</span>
-                    <textarea
-                      rows={3}
-                      aria-labelledby={exclusionsID}
-                      aria-describedby={exclusionsID + '-help'}
-                      value={draft.excluded}
-                      disabled={!canEdit}
-                      placeholder={'temperature\nmax_tokens'}
-                      onChange={(event) => setDraft({ ...draft, excluded: event.target.value })}
-                    />
-                    <small id={exclusionsID + '-help'}>
-                      {t('requestAdaptation.personal.excludedHelp')}
-                    </small>
-                  </label>
+                  <Field
+                    size="long"
+                    label={t('requestAdaptation.personal.excluded')}
+                    help={t('requestAdaptation.personal.excludedHelp')}
+                  >
+                    {(props) => (
+                      <textarea
+                        {...props}
+                        rows={3}
+                        value={draft.excluded}
+                        disabled={!canEdit}
+                        placeholder={'temperature\nmax_tokens'}
+                        onChange={(event) => setDraft({ ...draft, excluded: event.target.value })}
+                      />
+                    )}
+                  </Field>
                 ) : null}
                 {(['body_defaults', 'body_forced', 'native_extension_paths'] as const).map(
                   renderSection,
@@ -911,9 +916,11 @@ export function RequestAdaptationEditor({
             ).map(renderSection)
           )}
           {editable ? (
-            <Button variant="primary" type="submit" disabled={saving || saveBlocked}>
-              {modelScope ? t('requestAdaptation.model.save') : copy('save')}
-            </Button>
+            <FormActions>
+              <Button variant="primary" type="submit" disabled={saving || saveBlocked}>
+                {modelScope ? t('requestAdaptation.model.save') : copy('save')}
+              </Button>
+            </FormActions>
           ) : null}
         </form>
       ) : null}

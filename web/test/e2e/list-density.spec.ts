@@ -1526,7 +1526,12 @@ test.describe('donation selection expiry in UTC', () => {
     await page
       .getByRole('textbox', { name: 'Donation description', exact: true })
       .fill('A helpful description for the shared resources');
-    await page.locator('.economy-authorization input').check();
+    await page
+      .getByRole('checkbox', {
+        name: 'I own every selected resource or have authorization to contribute its capacity.',
+        exact: true,
+      })
+      .check();
     await page
       .getByRole('radiogroup', { name: 'Accept a public Discord thank-you' })
       .getByText('No', { exact: true })

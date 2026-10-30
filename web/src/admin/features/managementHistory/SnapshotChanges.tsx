@@ -3,12 +3,32 @@ import { Amount } from '@shared/components/Amount';
 import { Fold, Note } from '@shared/components/ui';
 import { formatCount } from '@shared/utils/formatNumber';
 import { formatDateTime } from '@shared/utils/datetime';
+import { FAILURE_RESET_REASON_KEYS } from '@shared/operations/failureReset';
+import { NATIVE_SERVICE_LABEL_KEYS, type NativeService } from '@shared/nativeServices';
 import type { Change, Item } from './api';
 
 function ChangeValue({ value, change }: { value?: string; change: Change }) {
   const { t } = useTranslation();
   if (value === undefined)
     return <span className="nb-muted">{t('admin.managementHistory.snapshot.notSet')}</span>;
+  if (change.field === 'reset_skip_reason')
+    return (
+      <span>{FAILURE_RESET_REASON_KEYS[value] ? t(FAILURE_RESET_REASON_KEYS[value]) : value}</span>
+    );
+  if (change.field === 'native_service') {
+    const key = NATIVE_SERVICE_LABEL_KEYS[value as NativeService];
+    return <span>{key ? t(key) : value}</span>;
+  }
+  if (change.field === 'reset_result')
+    return (
+      <span>
+        {value === 'recovered'
+          ? t('admin.managementHistory.snapshot.resetResults.recovered')
+          : value === 'already_clear'
+            ? t('admin.managementHistory.snapshot.resetResults.already_clear')
+            : value}
+      </span>
+    );
   if (change.unit === 'milli_credits') return <Amount value={value} />;
   if (change.unit === 'unix_seconds' && /^\d+$/.test(value))
     return <span>{formatDateTime(Number(value))}</span>;
@@ -68,7 +88,12 @@ export function SnapshotChanges({ item }: { item: Item }) {
             <div key={change.field}>
               <dt title={change.field}>{label(change.field)}</dt>
               <dd>
-                {change.before !== undefined || change.after !== undefined ? (
+                {change.operation === 'retained' ? (
+                  <>
+                    <ChangeValue value={change.after} change={change} /> ·{' '}
+                    {t('admin.managementHistory.snapshot.operations.retained')}
+                  </>
+                ) : change.before !== undefined || change.after !== undefined ? (
                   <>
                     <span className="nb-small nb-muted">
                       {t('admin.managementHistory.snapshot.before')}{' '}
@@ -145,7 +170,12 @@ export function SnapshotChanges({ item }: { item: Item }) {
                 {related.changes?.map((change) => (
                   <small key={change.field}>
                     {label(change.field)}:{' '}
-                    {change.before !== undefined || change.after !== undefined ? (
+                    {change.operation === 'retained' ? (
+                      <>
+                        <ChangeValue value={change.after} change={change} /> ·{' '}
+                        {t('admin.managementHistory.snapshot.operations.retained')}
+                      </>
+                    ) : change.before !== undefined || change.after !== undefined ? (
                       <>
                         <ChangeValue value={change.before} change={change} /> →{' '}
                         <ChangeValue value={change.after} change={change} />

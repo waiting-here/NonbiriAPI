@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Button, Field, Fold, Note } from '@shared/components/ui';
+import { Button, Field, Fields, FilterBar, FormActions, Fold, Note } from '@shared/components/ui';
 import { LoadingState } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import type { PageSize } from '@shared/operations/pageNumbers';
@@ -74,7 +74,7 @@ export function BindingEditor({
   const unresolved = operation.outcome === 'unknown' || operation.outcome === 'conflict';
   return (
     <form
-      className="agent-form-fields"
+      className="nb-stack"
       onSubmit={(event) => {
         event.preventDefault();
         void operation
@@ -87,45 +87,48 @@ export function BindingEditor({
           .catch(() => undefined);
       }}
     >
-      <Field
-        label={label}
-        help={t('common.agent.drivers.effective', {
-          name: effective.driver_id === '0' ? t('common.agent.drivers.legacy') : name,
-          source,
-        })}
-      >
-        {(props) => (
-          <select
-            {...props}
-            value={value}
-            disabled={operation.isPending}
-            onChange={(event) => setValue(event.target.value)}
-          >
-            <option value="">
-              {t(
-                scope === 'default'
-                  ? 'common.agent.drivers.useLegacy'
-                  : 'common.agent.drivers.inherit',
-              )}
-            </option>
-            {config.profiles
-              .filter(
-                (profile) =>
-                  profile.settings.provider !== 'codex' ||
-                  scope === 'admin_chat' ||
-                  (scope === 'steward_chat' && actor !== '0'),
-              )
-              .map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.id === '0' ? t('common.agent.drivers.legacy') : profile.name}
-                </option>
-              ))}
-          </select>
-        )}
-      </Field>
-      <div className="nb-actions">
+      <Fields>
+        <Field
+          label={label}
+          help={t('common.agent.drivers.effective', {
+            name: effective.driver_id === '0' ? t('common.agent.drivers.legacy') : name,
+            source,
+          })}
+        >
+          {(props) => (
+            <select
+              {...props}
+              value={value}
+              disabled={operation.isPending}
+              onChange={(event) => setValue(event.target.value)}
+            >
+              <option value="">
+                {t(
+                  scope === 'default'
+                    ? 'common.agent.drivers.useLegacy'
+                    : 'common.agent.drivers.inherit',
+                )}
+              </option>
+              {config.profiles
+                .filter(
+                  (profile) =>
+                    profile.settings.provider !== 'codex' ||
+                    scope === 'admin_chat' ||
+                    (scope === 'steward_chat' && actor !== '0'),
+                )
+                .map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.id === '0' ? t('common.agent.drivers.legacy') : profile.name}
+                  </option>
+                ))}
+            </select>
+          )}
+        </Field>
+      </Fields>
+      <FormActions>
         <Button
           type="submit"
+          variant="primary"
           size="sm"
           disabled={operation.isPending || unresolved || value === (base?.driver_id ?? '')}
         >
@@ -141,7 +144,7 @@ export function BindingEditor({
             {t('common.agent.drivers.checkStatus')}
           </Button>
         ) : null}
-      </div>
+      </FormActions>
       {operation.error ? <AgentError error={operation.error} /> : null}
       {operation.refreshError ? (
         <AgentError error={operation.refreshError} onRetry={() => void operation.check()} />
@@ -214,7 +217,7 @@ export function DriverBindings({
       );
   };
   return (
-    <div className="agent-form-fields">
+    <div className="nb-stack">
       <p className="nb-small nb-muted">{t('common.agent.drivers.bindingHelp')}</p>
       {(['default', 'auto_review', 'admin_chat', 'steward_chat'] as const).map((scope) => (
         <BindingEditor
@@ -232,44 +235,57 @@ export function DriverBindings({
         onOpenChange={setExpanded}
         lazy
       >
-        <div className="agent-form-fields">
-          <Field label={t('common.agent.drivers.stewardSearch')}>
-            {(props) => (
-              <input
-                {...props}
-                type="search"
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setPage('1');
-                }}
-              />
-            )}
-          </Field>
-          <Field label={t('common.agent.drivers.steward')}>
-            {(props) => (
-              <select
-                {...props}
-                value={owner?.id ?? ''}
-                onChange={(event) => select(event.target.value)}
-              >
-                <option value="">{t('common.agent.drivers.chooseSteward')}</option>
-                {owner &&
-                !users.data?.items.some(
-                  (user) => user.id === owner.id && ['level5', 'level6'].includes(user.role),
-                ) ? (
-                  <option value={owner.id}>{owner.label}</option>
-                ) : null}
-                {users.data?.items
-                  .filter((user) => ['level5', 'level6'].includes(user.role))
-                  .map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.label || user.id} · {user.id}
-                    </option>
-                  ))}
-              </select>
-            )}
-          </Field>
+        <div className="nb-stack">
+          <FilterBar
+            activeCount={query ? 1 : 0}
+            onSubmit={() => setPage('1')}
+            onReset={() => {
+              setQuery('');
+              setPage('1');
+            }}
+            search={
+              <Field label={t('common.agent.drivers.stewardSearch')}>
+                {(props) => (
+                  <input
+                    {...props}
+                    type="search"
+                    placeholder={t('common.agent.drivers.stewardSearch')}
+                    value={query}
+                    onChange={(event) => {
+                      setQuery(event.target.value);
+                      setPage('1');
+                    }}
+                  />
+                )}
+              </Field>
+            }
+          />
+          <Fields>
+            <Field label={t('common.agent.drivers.steward')}>
+              {(props) => (
+                <select
+                  {...props}
+                  value={owner?.id ?? ''}
+                  onChange={(event) => select(event.target.value)}
+                >
+                  <option value="">{t('common.agent.drivers.chooseSteward')}</option>
+                  {owner &&
+                  !users.data?.items.some(
+                    (user) => user.id === owner.id && ['level5', 'level6'].includes(user.role),
+                  ) ? (
+                    <option value={owner.id}>{owner.label}</option>
+                  ) : null}
+                  {users.data?.items
+                    .filter((user) => ['level5', 'level6'].includes(user.role))
+                    .map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.label || user.id} · {user.id}
+                      </option>
+                    ))}
+                </select>
+              )}
+            </Field>
+          </Fields>
           {users.error ? (
             <AgentError error={users.error} onRetry={() => void users.refetch()} />
           ) : users.data ? (

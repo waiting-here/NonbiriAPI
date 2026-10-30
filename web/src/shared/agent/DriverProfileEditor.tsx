@@ -1,9 +1,9 @@
 import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Field, Fold, Note } from '@shared/components/ui';
+import { Button, Field, Fields, FormActions, Fold, Note } from '@shared/components/ui';
 import { useOperation } from '@shared/operations/useOperation';
 import { agentRoot } from './api';
-import { AgentError } from './AgentParts';
+import { AgentError, AgentTime } from './AgentParts';
 import {
   changeProvider,
   deleteProfile,
@@ -44,6 +44,7 @@ export function DriverProfileEditor({
   );
   const [key, setKey] = useState<string | undefined>();
   const [models, setModels] = useState<string[]>([]);
+  const [modelsAt, setModelsAt] = useState<number | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [current, setCurrent] = useState<DriverProfile | null>(null);
   const [candidates, setCandidates] = useState<DriverProfile[]>([]);
@@ -117,7 +118,10 @@ export function DriverProfileEditor({
     authorityRoot: root,
     execute: async (id, _secret, _operationKey, context) => {
       const value = await discoverProfileModels(id, context.signal);
-      context.commit(() => setModels(value));
+      context.commit(() => {
+        setModels(value);
+        setModelsAt(Date.now());
+      });
       return value;
     },
     reconcile: () => undefined,
@@ -133,7 +137,6 @@ export function DriverProfileEditor({
     },
     reconcile: () => undefined,
   });
-  const busy = save.isPending || discover.isPending || read.isPending;
   const unresolved = save.outcome === 'unknown' || save.outcome === 'conflict';
   const dirty =
     key !== undefined ||
@@ -174,183 +177,211 @@ export function DriverProfileEditor({
     setError(null);
     try {
       const value = dirty || !base.id ? await write() : base;
-      if (value) await discover.run(value.id);
+      if (value) await discover.run(value.id).catch(() => undefined);
     } catch (failure) {
       setError(failure);
     }
   };
   return (
     <form
-      className="agent-form-fields"
+      className="nb-stack"
       aria-label={t('common.agent.drivers.editSource')}
       onSubmit={(event) => {
         event.preventDefault();
         runSave();
       }}
     >
-      <fieldset disabled={busy} className="agent-form-fields">
-        <Field label={t('common.agent.drivers.name')}>
-          {(props) => (
-            <input
-              {...props}
-              value={draft.name}
-              maxLength={200}
-              required
-              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-            />
+      <fieldset disabled={save.isPending || read.isPending} className="nb-stack">
+        <Fields>
+          <Field label={t('common.agent.drivers.name')}>
+            {(props) => (
+              <input
+                {...props}
+                value={draft.name}
+                maxLength={200}
+                required
+                onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+              />
+            )}
+          </Field>
+          <Field label={t('common.agent.drivers.provider')}>
+            {(props) => (
+              <select
+                {...props}
+                value={draft.settings.provider}
+                onChange={(event) => {
+                  discover.cancel();
+                  const provider = event.target.value as DriverProvider;
+                  setDraft({
+                    ...draft,
+                    name: ['Chat Completions API', 'Responses API', 'ChatGPT', 'Codex'].includes(
+                      draft.name,
+                    )
+                      ? provider === 'codex'
+                        ? 'Codex'
+                        : provider === 'chatgpt'
+                          ? 'ChatGPT'
+                          : provider === 'responses'
+                            ? 'Responses API'
+                            : 'Chat Completions API'
+                      : draft.name,
+                    settings: changeProvider(draft.settings, provider),
+                  });
+                  setKey(undefined);
+                  keyRef.current = undefined;
+                  setExtra('{}');
+                  setModels([]);
+                  setModelsAt(null);
+                }}
+              >
+                <option value="chat_completions">Chat Completions API</option>
+                <option value="responses">Responses API</option>
+                <option value="chatgpt">ChatGPT</option>
+                <option value="codex">Codex</option>
+              </select>
+            )}
+          </Field>
+          {draft.settings.provider !== 'chatgpt' && draft.settings.provider !== 'codex' ? (
+            <>
+              <Field label={t('common.connections.entryURL')} size="long">
+                {(props) => (
+                  <input
+                    {...props}
+                    type="url"
+                    value={draft.settings.base_url}
+                    required
+                    onChange={(event) => field('base_url', event.target.value)}
+                  />
+                )}
+              </Field>
+              <Field
+                label={t('common.connections.secret')}
+                size="long"
+                help={t(
+                  base.settings.has_key && base.settings.provider === draft.settings.provider
+                    ? 'common.agent.secretKeep'
+                    : 'common.agent.secretNew',
+                )}
+              >
+                {(props) => (
+                  <input
+                    {...props}
+                    type="password"
+                    autoComplete="new-password"
+                    value={key ?? ''}
+                    onChange={(event) => {
+                      const value = event.target.value || undefined;
+                      setKey(value);
+                      keyRef.current = value;
+                    }}
+                  />
+                )}
+              </Field>
+              {base.settings.has_key && base.settings.provider === draft.settings.provider ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    const value = key === '' ? undefined : '';
+                    setKey(value);
+                    keyRef.current = value;
+                  }}
+                >
+                  {t(key === '' ? 'common.agent.keepSecret' : 'common.agent.removeSecret')}
+                </Button>
+              ) : null}
+              {key === '' ? <Note tone="warn">{t('common.agent.secretRemoval')}</Note> : null}
+            </>
+          ) : (
+            <Note>
+              {t(
+                draft.settings.provider === 'codex'
+                  ? 'common.agent.codex.sourceHelp'
+                  : 'common.agent.drivers.chatgptSourceHelp',
+              )}
+            </Note>
           )}
-        </Field>
-        <Field label={t('common.agent.drivers.provider')}>
-          {(props) => (
-            <select
-              {...props}
-              value={draft.settings.provider}
-              onChange={(event) => {
-                const provider = event.target.value as DriverProvider;
-                setDraft({
-                  ...draft,
-                  name: ['Chat Completions API', 'Responses API', 'ChatGPT', 'Codex'].includes(
-                    draft.name,
-                  )
-                    ? provider === 'codex'
-                      ? 'Codex'
-                      : provider === 'chatgpt'
-                        ? 'ChatGPT'
-                        : provider === 'responses'
-                          ? 'Responses API'
-                          : 'Chat Completions API'
-                    : draft.name,
-                  settings: changeProvider(draft.settings, provider),
-                });
-                setKey(undefined);
-                keyRef.current = undefined;
-                setExtra('{}');
-                setModels([]);
-              }}
+          <Field label={t('common.connections.model')} help={t('common.agent.drivers.modelHelp')}>
+            {(props) => (
+              <input
+                {...props}
+                list={listID}
+                value={draft.settings.model}
+                onChange={(event) => field('model', event.target.value)}
+              />
+            )}
+          </Field>
+          <datalist id={listID}>
+            {models.map((model) => (
+              <option key={model} value={model} />
+            ))}
+          </datalist>
+        </Fields>
+        <FormActions>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={unresolved || discover.isPending}
+            onClick={() => void loadModels()}
+          >
+            {t(
+              discover.isPending ? 'common.agent.quota.refreshing' : 'common.agent.discoverModels',
+            )}
+          </Button>
+        </FormActions>
+        {discover.isPending ? (
+          <Button type="button" onClick={discover.cancel}>
+            {t('common.cancel')}
+          </Button>
+        ) : null}
+        {modelsAt ? (
+          <p className="nb-small nb-muted">
+            {t('common.agent.quota.catalogueUpdated', { count: models.length })}{' '}
+            <AgentTime value={modelsAt} />
+            {discover.error ? <> · {t('common.agent.quota.stale')}</> : null}
+          </p>
+        ) : null}
+        {discover.error ? (
+          <AgentError error={discover.error} onRetry={() => void loadModels()} />
+        ) : null}
+        <Fold title={t('common.agent.advanced')}>
+          <Fields>
+            <Field
+              label={t('common.agent.contextWindow')}
+              size="short"
+              help={t('common.agent.drivers.contextHelp')}
             >
-              <option value="chat_completions">Chat Completions API</option>
-              <option value="responses">Responses API</option>
-              <option value="chatgpt">ChatGPT</option>
-              <option value="codex">Codex</option>
-            </select>
-          )}
-        </Field>
-        {draft.settings.provider !== 'chatgpt' && draft.settings.provider !== 'codex' ? (
-          <>
-            <Field label={t('common.connections.entryURL')}>
               {(props) => (
                 <input
                   {...props}
-                  type="url"
-                  value={draft.settings.base_url}
-                  required
-                  onChange={(event) => field('base_url', event.target.value)}
+                  type="number"
+                  min={1024}
+                  max={10000000}
+                  value={draft.settings.context_window}
+                  onChange={(event) => field('context_window', Number(event.target.value))}
                 />
               )}
             </Field>
             <Field
-              label={t('common.connections.secret')}
-              help={t(
-                base.settings.has_key && base.settings.provider === draft.settings.provider
-                  ? 'common.agent.secretKeep'
-                  : 'common.agent.secretNew',
-              )}
+              label={t('common.agent.drivers.outputReserve')}
+              size="short"
+              help={t('common.agent.drivers.reserveHelp')}
             >
               {(props) => (
                 <input
                   {...props}
-                  type="password"
-                  autoComplete="new-password"
-                  value={key ?? ''}
-                  onChange={(event) => {
-                    const value = event.target.value || undefined;
-                    setKey(value);
-                    keyRef.current = value;
-                  }}
+                  type="number"
+                  min={1}
+                  value={draft.settings.output_reserve_tokens}
+                  onChange={(event) => field('output_reserve_tokens', Number(event.target.value))}
                 />
               )}
             </Field>
-            {base.settings.has_key && base.settings.provider === draft.settings.provider ? (
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => {
-                  const value = key === '' ? undefined : '';
-                  setKey(value);
-                  keyRef.current = value;
-                }}
-              >
-                {t(key === '' ? 'common.agent.keepSecret' : 'common.agent.removeSecret')}
-              </Button>
-            ) : null}
-            {key === '' ? <Note tone="warn">{t('common.agent.secretRemoval')}</Note> : null}
-          </>
-        ) : (
-          <Note>
-            {t(
-              draft.settings.provider === 'codex'
-                ? 'common.agent.codex.sourceHelp'
-                : 'common.agent.drivers.chatgptSourceHelp',
-            )}
-          </Note>
-        )}
-        <Field label={t('common.connections.model')} help={t('common.agent.drivers.modelHelp')}>
-          {(props) => (
-            <input
-              {...props}
-              list={listID}
-              value={draft.settings.model}
-              onChange={(event) => field('model', event.target.value)}
-            />
-          )}
-        </Field>
-        <datalist id={listID}>
-          {models.map((model) => (
-            <option key={model} value={model} />
-          ))}
-        </datalist>
-        <div className="nb-actions">
-          <Button type="button" disabled={unresolved} onClick={() => void loadModels()}>
-            {t('common.agent.discoverModels')}
-          </Button>
-        </div>
-        <Fold title={t('common.agent.advanced')}>
-          <div className="agent-form-fields">
-            <div className="agent-field-grid">
-              <Field
-                label={t('common.agent.contextWindow')}
-                help={t('common.agent.drivers.contextHelp')}
-              >
-                {(props) => (
-                  <input
-                    {...props}
-                    type="number"
-                    min={1024}
-                    max={10000000}
-                    value={draft.settings.context_window}
-                    onChange={(event) => field('context_window', Number(event.target.value))}
-                  />
-                )}
-              </Field>
-              <Field
-                label={t('common.agent.drivers.outputReserve')}
-                help={t('common.agent.drivers.reserveHelp')}
-              >
-                {(props) => (
-                  <input
-                    {...props}
-                    type="number"
-                    min={1}
-                    value={draft.settings.output_reserve_tokens}
-                    onChange={(event) => field('output_reserve_tokens', Number(event.target.value))}
-                  />
-                )}
-              </Field>
-            </div>
             {draft.settings.provider !== 'chatgpt' && draft.settings.provider !== 'codex' ? (
               <>
                 <Field
                   label={t('common.agent.maxOutput')}
+                  size="short"
                   help={t('common.agent.drivers.outputHelp')}
                 >
                   {(props) => (
@@ -364,7 +395,7 @@ export function DriverProfileEditor({
                   )}
                 </Field>
                 {draft.settings.provider === 'chat_completions' ? (
-                  <Field label={t('common.agent.tokenParameter')}>
+                  <Field label={t('common.agent.tokenParameter')} size="short">
                     {(props) => (
                       <select
                         {...props}
@@ -377,10 +408,11 @@ export function DriverProfileEditor({
                     )}
                   </Field>
                 ) : null}
-                <div className="agent-field-grid">
+                <Fields>
                   {(['temperature', 'top_p'] as const).map((name) => (
                     <Field
                       key={name}
+                      size="short"
                       label={t(
                         name === 'temperature' ? 'common.agent.temperature' : 'common.agent.topP',
                       )}
@@ -401,10 +433,10 @@ export function DriverProfileEditor({
                       )}
                     </Field>
                   ))}
-                </div>
+                </Fields>
               </>
             ) : null}
-            <Field label={t('common.agent.timeout')}>
+            <Field label={t('common.agent.timeout')} size="short">
               {(props) => (
                 <input
                   {...props}
@@ -418,6 +450,7 @@ export function DriverProfileEditor({
             </Field>
             <Field
               label={t('common.agent.extraParameters')}
+              size="long"
               help={t(
                 draft.settings.provider === 'chat_completions'
                   ? 'common.agent.extraHelp'
@@ -434,9 +467,9 @@ export function DriverProfileEditor({
                 />
               )}
             </Field>
-          </div>
+          </Fields>
         </Fold>
-        <div className="nb-actions">
+        <FormActions>
           <Button type="submit" variant="primary" disabled={unresolved}>
             {t('common.save')}
           </Button>
@@ -464,7 +497,7 @@ export function DriverProfileEditor({
               {t('common.connections.delete')}
             </Button>
           ) : null}
-        </div>
+        </FormActions>
         {deleting ? (
           <Note tone="warn">
             <p>{t('common.agent.drivers.deleteHelp', { name: base.name })}</p>

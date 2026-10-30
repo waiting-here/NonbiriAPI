@@ -9,7 +9,7 @@ import {
   type DiscountPeriod,
   type RecurringDiscount,
 } from '@shared/operations/recurringDiscount';
-import { Button, Field, Note, Toggle } from '../ui';
+import { Button, Field, Fields, FormActions, Note, Toggle } from '../ui';
 import { ErrorState } from '../States';
 
 export function RecurringDiscountFields({
@@ -55,7 +55,7 @@ export function RecurringDiscountFields({
         onChange={(enabled) => set({ enabled })}
       />
       {fixedEnabled ? <Note>{t('common.recurringDiscount.paused')}</Note> : null}
-      <div className="nb-grid nb-grid--2">
+      <Fields>
         <Field
           label={t('common.recurringDiscount.timeZone')}
           help={t('common.recurringDiscount.zoneHelp')}
@@ -96,7 +96,7 @@ export function RecurringDiscountFields({
             />
           )}
         </Field>
-      </div>
+      </Fields>
       {registry.error ? (
         <ErrorState error={registry.error} onRetry={() => void registry.refetch()} />
       ) : null}
@@ -109,40 +109,47 @@ export function RecurringDiscountFields({
             <fieldset className="nb-recurring-discount__weekdays">
               <legend>{t('common.recurringDiscount.weekdays')}</legend>
               {weekdayKeys.map((key, day) => (
-                <label key={key}>
-                  <input
-                    type="checkbox"
-                    checked={row.weekdays.includes(day + 1)}
-                    onChange={(event) =>
-                      update(index, {
-                        weekdays: (event.target.checked
-                          ? [...row.weekdays, day + 1]
-                          : row.weekdays.filter((value) => value !== day + 1)
-                        ).sort((a, b) => a - b),
-                      })
-                    }
-                  />
-                  {t(key)}
-                </label>
+                <Field label={t(key)} size="short" key={key}>
+                  {(field) => (
+                    <input
+                      {...field}
+                      type="checkbox"
+                      checked={row.weekdays.includes(day + 1)}
+                      onChange={(event) =>
+                        update(index, {
+                          weekdays: (event.target.checked
+                            ? [...row.weekdays, day + 1]
+                            : row.weekdays.filter((value) => value !== day + 1)
+                          ).sort((a, b) => a - b),
+                        })
+                      }
+                    />
+                  )}
+                </Field>
               ))}
             </fieldset>
-            <label className="nb-inline">
-              <input
-                type="checkbox"
-                checked={allDay}
-                onChange={(event) => {
-                  if (event.target.checked)
-                    update(index, { start_time: '00:00', end_time: '24:00' }, true);
-                  else
-                    update(
-                      index,
-                      previousTimes.current.get(row) ?? { start_time: '09:00', end_time: '18:00' },
-                    );
-                }}
-              />
-              {t('common.recurringDiscount.allDay')}
-            </label>
-            <div className="nb-grid nb-grid--3">
+            <Field label={t('common.recurringDiscount.allDay')} size="short">
+              {(field) => (
+                <input
+                  {...field}
+                  type="checkbox"
+                  checked={allDay}
+                  onChange={(event) => {
+                    if (event.target.checked)
+                      update(index, { start_time: '00:00', end_time: '24:00' }, true);
+                    else
+                      update(
+                        index,
+                        previousTimes.current.get(row) ?? {
+                          start_time: '09:00',
+                          end_time: '18:00',
+                        },
+                      );
+                  }}
+                />
+              )}
+            </Field>
+            <Fields>
               <Field label={t('common.recurringDiscount.start')}>
                 {(props) => (
                   <input
@@ -167,16 +174,18 @@ export function RecurringDiscountFields({
                       aria-invalid={!validPeriodTime(row.end_time, true)}
                       onChange={(event) => update(index, { end_time: event.target.value })}
                     />
-                    <label className="nb-inline">
-                      <input
-                        type="checkbox"
-                        checked={row.end_time === '24:00'}
-                        onChange={(event) =>
-                          update(index, { end_time: event.target.checked ? '24:00' : '23:59' })
-                        }
-                      />
-                      {t('common.recurringDiscount.endOfDay')}
-                    </label>
+                    <Field label={t('common.recurringDiscount.endOfDay')} size="short">
+                      {(checkbox) => (
+                        <input
+                          {...checkbox}
+                          type="checkbox"
+                          checked={row.end_time === '24:00'}
+                          onChange={(event) =>
+                            update(index, { end_time: event.target.checked ? '24:00' : '23:59' })
+                          }
+                        />
+                      )}
+                    </Field>
                   </div>
                 )}
               </Field>
@@ -192,38 +201,41 @@ export function RecurringDiscountFields({
                   />
                 )}
               </Field>
-            </div>
+            </Fields>
             {row.end_time < row.start_time ? (
               <p className="muted">{t('common.recurringDiscount.overnight')}</p>
             ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                set({ periods: value.periods.filter((_, i) => i !== index) });
-              }}
-            >
-              {t('common.recurringDiscount.remove', { number: index + 1 })}
-            </Button>
+            <FormActions>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  set({ periods: value.periods.filter((_, i) => i !== index) });
+                }}
+              >
+                {t('common.recurringDiscount.remove', { number: index + 1 })}
+              </Button>
+            </FormActions>
           </fieldset>
         );
       })}
       {!value.periods.length ? <p>{t('common.recurringDiscount.noPeriods')}</p> : null}
-      <Button
-        type="button"
-        disabled={value.periods.length >= 16}
-        onClick={() =>
-          set({
-            periods: [
-              ...value.periods,
-              { weekdays: [1, 2, 3, 4, 5], start_time: '09:00', end_time: '18:00', percent: 100 },
-            ],
-          })
-        }
-      >
-        {t('common.recurringDiscount.add')}
-      </Button>
-      <p className="muted">{t('common.recurringDiscount.limits')}</p>
+      <FormActions note={t('common.recurringDiscount.limits')}>
+        <Button
+          type="button"
+          disabled={value.periods.length >= 16}
+          onClick={() =>
+            set({
+              periods: [
+                ...value.periods,
+                { weekdays: [1, 2, 3, 4, 5], start_time: '09:00', end_time: '18:00', percent: 100 },
+              ],
+            })
+          }
+        >
+          {t('common.recurringDiscount.add')}
+        </Button>
+      </FormActions>
     </div>
   );
 }

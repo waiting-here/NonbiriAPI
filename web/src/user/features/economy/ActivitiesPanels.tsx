@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Fold, Note } from '@shared/components/ui';
+import { Fold, FormActions, Note } from '@shared/components/ui';
 import { Card, ErrorState, StatusBadge } from '@shared/components/States';
 import { MarkdownText } from '@shared/components/MarkdownText';
 import { formatDateTime } from '@shared/utils/datetime';
@@ -216,7 +216,7 @@ export function WelfareCard({
           onRetry={() => void mutation.retryReconcile()}
         />
       ) : null}
-      <div className="form-actions">
+      <FormActions>
         <button
           type="button"
           className="nb-btn nb-btn--primary"
@@ -227,7 +227,7 @@ export function WelfareCard({
             ? t('common.working')
             : t('user.activities.welfare.claim')}
         </button>
-      </div>
+      </FormActions>
     </Card>
   );
 }
@@ -441,7 +441,7 @@ export function ThursdayCard({
           onRetry={() => void mutation.retryReconcile()}
         />
       ) : null}
-      <div className="form-actions">
+      <FormActions>
         <button
           type="button"
           className="nb-btn nb-btn--primary"
@@ -456,7 +456,7 @@ export function ThursdayCard({
                   : 'user.activities.thursday.contributeOnce',
               )}
         </button>
-      </div>
+      </FormActions>
     </Card>
   );
 }

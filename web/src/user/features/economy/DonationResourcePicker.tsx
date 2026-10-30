@@ -17,6 +17,7 @@ import {
   StationSessionChangedError,
   type StationSessionSnapshot,
 } from '@shared/charityManagement';
+import { Field, FilterBar } from '@shared/components/ui';
 import { ErrorState, EmptyState, LoadingState } from '@shared/components/States';
 import { ApiError, isUnauthorized } from '@shared/query/http';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -122,7 +123,8 @@ function keyChoice(endpoint: EndpointSummary, key: CoreEndpointKey): EndpointKey
   if (
     eligibility !== 'eligible' &&
     eligibility !== 'already_donated' &&
-    eligibility !== 'security_processing'
+    eligibility !== 'security_processing' &&
+    eligibility !== 'unavailable'
   ) {
     invalidResponse('The server returned an endpoint key without donation eligibility.');
   }
@@ -141,7 +143,8 @@ function validateKeyPage(
     if (
       eligibility !== 'eligible' &&
       eligibility !== 'already_donated' &&
-      eligibility !== 'security_processing'
+      eligibility !== 'security_processing' &&
+      eligibility !== 'unavailable'
     ) {
       invalidResponse('The server returned an endpoint key without donation eligibility.');
     }
@@ -511,7 +514,10 @@ export function DonationResourcePicker({
         throw new StationSessionChangedError();
       }
       return stationRead(queryClient, accountId, () =>
-        listEndpointKeysPage(rawActiveEndpointId, keyWindow, signal, keySearch),
+        listEndpointKeysPage(rawActiveEndpointId, keyWindow, signal, {
+          q: keySearch,
+          credential_available: 'true',
+        }),
       ).then((page) => validateKeyPage(page, rawActiveEndpointId));
     },
     enabled:
@@ -705,75 +711,62 @@ export function DonationResourcePicker({
   );
 
   const endpointSearchForm = (
-    <form
-      className="donation-resource-picker__search"
-      onSubmit={(event) => {
-        event.preventDefault();
-        commitSearch(ENDPOINT_SEARCH_PARAM, ENDPOINT_PAGE_PARAM, endpointSearchDraft);
+    <FilterBar
+      activeCount={endpointSearch ? 1 : 0}
+      onSubmit={() => {
+        if (enabled && !disabled)
+          commitSearch(ENDPOINT_SEARCH_PARAM, ENDPOINT_PAGE_PARAM, endpointSearchDraft);
       }}
-    >
-      <label>
-        <span>{t('user.charity.resourcePicker.endpointSearch')}</span>
-        <input
-          type="search"
-          value={endpointSearchDraft}
-          maxLength={MAX_SEARCH_UTF16_LENGTH}
-          placeholder={t('user.charity.resourcePicker.endpointSearchPlaceholder')}
-          disabled={!enabled || disabled}
-          onChange={(event) => dispatchEndpointSearchDraft({ value: event.target.value })}
-        />
-      </label>
-      <button type="submit" className="nb-btn nb-btn--secondary" disabled={!enabled || disabled}>
-        {t('common.search')}
-      </button>
-      <button
-        type="button"
-        className="nb-btn nb-btn--ghost"
-        disabled={!enabled || disabled || (!endpointSearchDraft && !endpointSearch)}
-        onClick={() => {
-          dispatchEndpointSearchDraft({ value: '' });
-          commitSearch(ENDPOINT_SEARCH_PARAM, ENDPOINT_PAGE_PARAM, '');
-        }}
-      >
-        {t('common.resetFilter')}
-      </button>
-    </form>
+      onReset={() => {
+        if (!enabled || disabled) return;
+        dispatchEndpointSearchDraft({ value: '' });
+        commitSearch(ENDPOINT_SEARCH_PARAM, ENDPOINT_PAGE_PARAM, '');
+      }}
+      search={
+        <Field label={t('user.charity.resourcePicker.endpointSearch')}>
+          {(field) => (
+            <input
+              {...field}
+              type="search"
+              value={endpointSearchDraft}
+              maxLength={MAX_SEARCH_UTF16_LENGTH}
+              placeholder={t('user.charity.resourcePicker.endpointSearchPlaceholder')}
+              disabled={!enabled || disabled}
+              onChange={(event) => dispatchEndpointSearchDraft({ value: event.target.value })}
+            />
+          )}
+        </Field>
+      }
+    />
   );
 
   const keySearchForm = (
-    <form
-      className="donation-resource-picker__search"
-      onSubmit={(event) => {
-        event.preventDefault();
-        commitSearch(KEY_SEARCH_PARAM, KEY_PAGE_PARAM, keySearchDraft);
+    <FilterBar
+      activeCount={keySearch ? 1 : 0}
+      onSubmit={() => {
+        if (enabled && !disabled) commitSearch(KEY_SEARCH_PARAM, KEY_PAGE_PARAM, keySearchDraft);
       }}
-    >
-      <label>
-        <span>{t('user.charity.resourcePicker.keySearch')}</span>
-        <input
-          type="search"
-          value={keySearchDraft}
-          maxLength={MAX_SEARCH_UTF16_LENGTH}
-          placeholder={t('user.charity.resourcePicker.keySearchPlaceholder')}
-          disabled={!enabled || disabled}
-          onChange={(event) => dispatchKeySearchDraft({ value: event.target.value })}
-        />
-      </label>
-      <button type="submit" className="nb-btn nb-btn--secondary" disabled={!enabled || disabled}>
-        {t('common.search')}
-      </button>
-      <button
-        type="button"
-        className="nb-btn nb-btn--ghost"
-        disabled={!enabled || disabled || (!keySearchDraft && !keySearch)}
-        onClick={() => {
-          dispatchKeySearchDraft({ value: '' });
-          commitSearch(KEY_SEARCH_PARAM, KEY_PAGE_PARAM, '');
-        }}
-      >
-        {t('common.resetFilter')}
-      </button>
-    </form>
+      onReset={() => {
+        if (!enabled || disabled) return;
+        dispatchKeySearchDraft({ value: '' });
+        commitSearch(KEY_SEARCH_PARAM, KEY_PAGE_PARAM, '');
+      }}
+      search={
+        <Field label={t('user.charity.resourcePicker.keySearch')}>
+          {(field) => (
+            <input
+              {...field}
+              type="search"
+              value={keySearchDraft}
+              maxLength={MAX_SEARCH_UTF16_LENGTH}
+              placeholder={t('user.charity.resourcePicker.keySearchPlaceholder')}
+              disabled={!enabled || disabled}
+              onChange={(event) => dispatchKeySearchDraft({ value: event.target.value })}
+            />
+          )}
+        </Field>
+      }
+    />
   );
 
   return (
@@ -964,30 +957,36 @@ export function DonationResourcePicker({
                           key={choice.key.id}
                           className={unavailable ? 'is-unavailable' : undefined}
                         >
-                          <label className="donation-resource-picker__key">
-                            <input
-                              type="checkbox"
-                              checked={selectedHere}
-                              disabled={!enabled || rowDisabled}
-                              onChange={(event) => chooseKey(choice, event.target.checked)}
-                            />
-                            <span>
-                              <strong>{choice.key.note || choiceDisplayKey(choice)}</strong>
-                              <code>{choiceDisplayKey(choice)}</code>
-                              <small>
-                                {t('user.charity.resourcePicker.keyLimits', {
-                                  concurrency: choice.key.maxConcurrency,
-                                  rpm: choice.key.maxRPM,
-                                })}
-                              </small>
-                              {!choice.key.enabled ? (
-                                <small>{t('user.charity.resourcePicker.physicalDisabled')}</small>
-                              ) : null}
-                              {unavailable ? (
-                                <small>{t(eligibilityCopyKey(choice.eligibility))}</small>
-                              ) : null}
-                            </span>
-                          </label>
+                          <Field
+                            label={
+                              <span className="donation-resource-picker__key">
+                                <strong>{choice.key.note || choiceDisplayKey(choice)}</strong>
+                                <code>{choiceDisplayKey(choice)}</code>
+                                <small>
+                                  {t('user.charity.resourcePicker.keyLimits', {
+                                    concurrency: choice.key.maxConcurrency,
+                                    rpm: choice.key.maxRPM,
+                                  })}
+                                </small>
+                                {!choice.key.enabled ? (
+                                  <small>{t('user.charity.resourcePicker.physicalDisabled')}</small>
+                                ) : null}
+                                {unavailable ? (
+                                  <small>{t(eligibilityCopyKey(choice.eligibility))}</small>
+                                ) : null}
+                              </span>
+                            }
+                          >
+                            {(field) => (
+                              <input
+                                {...field}
+                                type="checkbox"
+                                checked={selectedHere}
+                                disabled={!enabled || rowDisabled}
+                                onChange={(event) => chooseKey(choice, event.target.checked)}
+                              />
+                            )}
+                          </Field>
                         </li>
                       );
                     })}

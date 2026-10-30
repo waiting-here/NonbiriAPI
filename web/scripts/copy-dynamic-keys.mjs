@@ -465,13 +465,14 @@ const dynamicCopyKeys = [
     'user.charity.resourcePicker.eligibility.eligible',
     'user.charity.resourcePicker.eligibility.already_donated',
     'user.charity.resourcePicker.eligibility.security_processing',
+    'user.charity.resourcePicker.eligibility.unavailable',
   ].map((key) =>
     entry(
       'user',
       key,
       'src/user/features/economy/DonationResourcePicker.tsx',
       '`user.charity.resourcePicker.eligibility.${eligibility}`',
-      'Eligibility is normalized to the explicit eligible/already_donated/security_processing union.',
+      'Eligibility is normalized to the explicit eligible/already_donated/security_processing/unavailable union.',
     ),
   ),
   // User charity donation status labels use the finite status union.
@@ -814,6 +815,9 @@ dynamicCopyKeys.push(
     [
       'category',
       [
+        'configuration',
+        'connection',
+        'unavailable',
         'network',
         'policy',
         'tls',
@@ -833,6 +837,9 @@ dynamicCopyKeys.push(
     [
       'phase',
       [
+        'configuration',
+        'decode_catalogue',
+        'local_usage',
         'dispatch',
         'dns',
         'connect',
@@ -969,6 +976,7 @@ dynamicCopyKeys.push(
         'donations',
         'donation_keys',
         'donation_uses',
+        'donation_service_health',
         'donation_use_revisions',
         'donation_handling',
         'donation_quota_rules',
@@ -1221,6 +1229,15 @@ dynamicCopyKeys.push(
         'donation_id',
         'failure_disabled',
         'failure_streak',
+        'streak_generation',
+        'reset_result',
+        'source_name',
+        'key_name',
+        'donation_name',
+        'retry_after_until',
+        'backoff_retry_at',
+        'native_service',
+        'reset_skip_reason',
         'failure_disable_threshold',
         'token_reserve',
         'authorized_expires_at',
@@ -1547,6 +1564,72 @@ dynamicCopyKeys.push(
       'src/admin/features/managementHistory/ManagementHistory.tsx',
       '`admin.managementHistory.roles.${subject.role}`',
       'Retained executor identities show these administrator and steward role labels; unknown roles retain their value.',
+    ),
+  ),
+);
+
+dynamicCopyKeys.push(
+  ...[
+    [
+      'common.agent.quota.localFields.',
+      [
+        'requests',
+        'input_tokens',
+        'output_tokens',
+        'cached_input_tokens',
+        'cache_write_input_tokens',
+        'reasoning_tokens',
+        'unknown_count',
+      ],
+      'src/shared/agent/CodexUsage.tsx',
+      '`common.agent.quota.localFields.${name}`',
+    ],
+    [
+      'common.agent.diagnostic.reasons.',
+      [
+        'upstream_authentication',
+        'upstream_account_restricted',
+        'upstream_rate_limited',
+        'connection_changed',
+        'connection_disconnected',
+        'credential_expired',
+        'credential_unreadable',
+        'response_limit',
+        'invalid_json',
+        'json_type_mismatch',
+        'credential_reflected',
+        'driver_unconfigured',
+        'endpoint_invalid',
+        'timeout',
+        'network',
+        'unknown',
+      ],
+      'src/shared/agent/DriverFailure.tsx',
+      '`common.agent.diagnostic.reasons.${reason}`',
+    ],
+    [
+      'common.agent.diagnostic.operations.',
+      [
+        'device_code',
+        'device_poll',
+        'token_exchange',
+        'token_refresh',
+        'model_catalogue',
+        'codex_quota',
+        'codex_local_usage',
+      ],
+      'src/shared/agent/DriverFailure.tsx',
+      '`common.agent.diagnostic.operations.${failure.operation}`',
+    ],
+  ].flatMap(([prefix, names, source, anchor]) =>
+    names.map((name) =>
+      entry(
+        'common',
+        prefix + name,
+        source,
+        anchor,
+        'Administrator Codex quota metrics and operation diagnostics use these exact safe domains.',
+      ),
     ),
   ),
 );

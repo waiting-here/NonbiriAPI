@@ -1,3 +1,4 @@
+import { expandMomentView, momentReferenceSize, type MomentFrame } from '../moment-frame';
 import { blinkAt, PaintCadence, eyelidProfileWidth } from '@shared/animation/illustration';
 import { highResolutionArt } from '../art-resolution';
 import { amberEyelids } from './eyelids';
@@ -14,6 +15,7 @@ type Options = {
   dark?: boolean;
   highResolution?: boolean;
   characterOnly?: boolean;
+  momentFrame?: MomentFrame;
   backgroundOnly?: boolean;
   frozenTime?: number;
   paused?: () => boolean;
@@ -241,28 +243,45 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
   const resize = () => {
     const rect = canvas.getBoundingClientRect();
     const width = Math.max(1, rect.width || canvas.width),
-      height = options.landscape ? Math.max(1, rect.height || canvas.height) : width * 1.5;
+      height = options.landscape
+        ? Math.max(1, rect.height || canvas.height)
+        : width *
+          (options.characterOnly && options.momentFrame
+            ? options.momentFrame.canvas[1] / options.momentFrame.canvas[0]
+            : 1.5);
+    const momentFrame = options.characterOnly ? options.momentFrame : undefined;
+    const reference = momentReferenceSize(width, height, momentFrame);
     const density = options.exportSize
       ? 1
-      : Math.min(window.devicePixelRatio || 1, (options.landscape ? 3840 : 2560) / width);
+      : Math.min(
+          window.devicePixelRatio || 1,
+          (options.landscape
+            ? 3840
+            : momentFrame
+              ? (2560 * momentFrame.canvas[0]) / momentFrame.originalRegion.width
+              : 2560) / width,
+        );
     canvas.width = Math.round(width * density);
     canvas.height = Math.round(height * density);
-    const sampling = options.polished && !options.exportSize ? Math.min(2, 2048 / canvas.width) : 1;
+    const sampleCap =
+      2048 * (momentFrame ? momentFrame.canvas[0] / momentFrame.originalRegion.width : 1);
+    const sampling =
+      options.polished && !options.exportSize ? Math.min(2, sampleCap / canvas.width) : 1;
     layer.width = Math.round(canvas.width * sampling);
     layer.height = Math.round(canvas.height * sampling);
     gl.viewport(0, 0, layer.width, layer.height);
     const { view, heroBox } = options.characterPlate
       ? { view: [0, 0, 1, 1], heroBox: [0, 0, 1, 1516 / 1560] }
       : amberLayout(
-          width,
-          height,
+          reference.width,
+          reference.height,
           !!options.landscape,
           !!options.polished,
           options.variant === 'appearance',
         );
     for (const program of programs) {
       gl.useProgram(program);
-      gl.uniform4fv(gl.getUniformLocation(program, 'view'), view);
+      gl.uniform4fv(gl.getUniformLocation(program, 'view'), expandMomentView(view, momentFrame));
       gl.uniform4fv(gl.getUniformLocation(program, 'heroBox'), heroBox);
       gl.uniform1f(gl.getUniformLocation(program, 'aspect'), width / height);
     }

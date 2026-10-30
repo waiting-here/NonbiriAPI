@@ -2,6 +2,10 @@ import type { DiscoveryFormat, DiscoveryPreset } from '@shared/connections';
 
 const formats: Record<string, DiscoveryFormat> = {
   'openai-compatible': 'openai',
+  'openai-responses': 'openai',
+  'openai-chat-completions': 'openai',
+  'openai-decisions': 'openai',
+  'typesafe-systemone': 'openai',
   'anthropic-compatible': 'anthropic',
   'google-gemini': 'gemini',
   'ai-sdk-gateway-v3': 'ai-sdk-gateway-v3',

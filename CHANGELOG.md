@@ -4,7 +4,7 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## 1.3.2 — 2026-10-29
+## 1.3.2 — 2026-10-30
 
 ### Added
 
@@ -12,7 +12,7 @@ Each version entry describes its source and compatibility boundary; a release ta
   and individually assigned stewards. Keep credentials encrypted, serialize
   refresh and cancel related work on disconnect. No external CLI, automatic
   review, public model routing or inherited steward access is added. Real
-  Business-account authorization and inference remain unverified.
+  Business-account model access and inference remain unverified.
 - Record safe request-failure causes, phases, bounded correlation identifiers
   and observed stream progress. Separate actual client HTTP delivery from final
   outcome and confirmed upstream status across forwarding, assistant and image
@@ -24,11 +24,39 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Configure separate site-wide light and heavy concurrency defaults, initially
   15 and 5, in administrator settings. Preserve per-user overrides and apply
   updated defaults to new admissions without restarting the service.
+- Show official Codex quota windows and reset times when available, separately
+  from this instance's retained 24-hour usage across its Codex connections.
+  Preserve stale data after a failed refresh and link to the matching requests.
+- Retain administrator-only connection, model-catalogue and quota diagnostics
+  for up to 30 days and 1,000 records. Distinguish upstream status, transport,
+  authentication, parsing and local failures without exposing credentials.
 
 ### Fixed and improved
 
 - Require Go 1.26.10 for builds, including the standard-library fix for
   GO-2026-6809.
+- Reset current service failure counts and failure pauses consistently across
+  source, donation and individual-key actions. Preserve manual switches,
+  Retry-After and smart-backoff waits; isolate failures from earlier generations.
+  Report actual recovered, already-clear and skipped services with readable
+  names and management-history changes.
+- Assign OpenAI-compatible discovery when a new System One key has no explicit
+  discovery source, matching the edit path without requiring another save.
+- Exclude unavailable credentials from donation candidates and refresh candidate
+  caches after deletion. Reject stale submitted selections as client errors.
+  Removing one protocol binding preserves other uses of its shared credential.
+- Make navigation groups collapsible, use responsive field grids, and apply
+  select/switch filters immediately while keeping text search explicit. Preserve
+  filters across card tabs and retain local dates during credit-history queries.
+- Place Heartfelt moments beside wide-screen content and register expanded
+  character and scenery layers for consistent static and animated positioning.
+  Preserve the original card artwork and its content classification.
+- Read idle fishing cleanup and reward-delivery checks before acquiring the
+  writer, add covering indexes for leaderboard and recent-success queries, and
+  distinguish assistant event streams in bounded route telemetry.
+- Keep model-editor drafts and the last successful catalogue after a failed pull;
+  cancel obsolete requests when switching sources. Upstream authentication
+  failures no longer acquire the site's login-error semantics.
 - Avoid taking the writer for same-second session checks whose exact expiry is
   already stored. Recheck authority when renewal needs the writer, and move pure
   steward model and price-template queries to the existing reader pool. Keep
@@ -69,8 +97,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Compatibility
 
-- Storage advances from schema 41 to 42; account export remains format 31. The
-  explicit standalone upgrader accepts exact registered schema 16–26 and 33–41
+- Storage advances from schema 41 through 42 to 43; account export remains format 31. The
+  explicit standalone upgrader accepts exact registered schema 16–26 and 33–42
   sources. Startup never upgrades an existing database. Existing management
   records receive no invented historical names or values.
 - The version is identified by an exact source commit without a tag or GitHub

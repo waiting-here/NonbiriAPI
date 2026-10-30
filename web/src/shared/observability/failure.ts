@@ -1,4 +1,7 @@
 export const FAILURE_CATEGORIES = [
+  'configuration',
+  'connection',
+  'unavailable',
   'network',
   'policy',
   'tls',
@@ -14,6 +17,9 @@ export const FAILURE_CATEGORIES = [
 ] as const;
 
 export const FAILURE_PHASES = [
+  'configuration',
+  'decode_catalogue',
+  'local_usage',
   'dispatch',
   'dns',
   'connect',

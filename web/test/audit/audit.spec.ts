@@ -289,7 +289,7 @@ async function discoveryDiagnostics(page: Page, admin: boolean, redacted = false
   const region = page.getByRole('region', { name: 'Discovery and activity diagnostics' });
   await region.getByLabel('Category').selectOption('model_discovery');
   await region.getByLabel('Request, task or operation ID').fill(f.discovery_id);
-  await region.getByRole('button', { name: 'Search diagnostics' }).click();
+  await region.getByRole('button', { name: 'Search', exact: true }).click();
   const entry = region
     .locator('details')
     .filter({ has: page.locator('summary', { hasText: f.discovery_id }) })
@@ -336,7 +336,7 @@ async function discoveryDiagnostics(page: Page, admin: boolean, redacted = false
   await safeSink(page);
   await region.getByLabel('Category').selectOption('image_task');
   await region.getByLabel('Request, task or operation ID').fill(f.image_task_id);
-  await region.getByRole('button', { name: 'Search diagnostics' }).click();
+  await region.getByRole('button', { name: 'Search', exact: true }).click();
   const task = region
     .locator('details')
     .filter({ has: page.locator('summary', { hasText: f.image_task_id }) })
@@ -513,7 +513,6 @@ test.describe('administrator policy changes and subsequent steward review', () =
       for (const asset of Object.keys(names) as Asset[]) {
         const net = f.summaries[asset].inventory.net;
         await page.getByLabel('Asset').selectOption(asset);
-        await page.getByRole('button', { name: 'Apply', exact: true }).click();
         await expect(page.getByRole('heading', { name: names[asset], exact: true })).toBeVisible();
         const response = await api(
           context,

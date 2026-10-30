@@ -35,7 +35,7 @@ test('user browses current charity snapshots with search, pagination and committ
     const response = await loaded;
     expect(response.ok()).toBe(true);
     expect(response.headers()['cache-control']).toContain('no-store');
-    await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
+    await page.getByRole('button', { name: 'Reset', exact: true }).first().click();
     const search = page.getByRole('searchbox', {
       name: 'Search model name or public description',
     });
@@ -167,7 +167,7 @@ test('administrator submits endpoint search, resets it and pages actual shared m
     await search
       .getByLabel(commonEn.management.endpoints.searchAria)
       .fill('directory.example.test');
-    await search.getByRole('button', { name: commonEn.common.applyFilter, exact: true }).click();
+    await search.getByRole('button', { name: commonEn.common.search, exact: true }).click();
     await expect(endpointTable.locator(':scope > tbody > tr')).toHaveCount(1);
     expect(
       (
@@ -333,7 +333,7 @@ test('administrator submits user, blacklist and announcement list filters', asyn
     const page = await admin.newPage();
     await page.goto(state.admin_url + '/users');
     await page.getByLabel(commonEn.management.users.searchAria).fill(member.username);
-    await page.getByRole('button', { name: commonEn.common.applyFilter, exact: true }).click();
+    await page.getByRole('button', { name: commonEn.common.search, exact: true }).click();
     await expect(
       page.locator('.nb-table tbody').getByText(member.username, { exact: true }),
     ).toBeVisible();
@@ -350,9 +350,8 @@ test('administrator submits user, blacklist and announcement list filters', asyn
     ).toBe(true);
     await page.goto(state.admin_url + '/blacklist');
     await page.getByLabel(commonEn.common.blacklist.search).fill('Synthetic directory filter');
-    await page.getByText(commonEn.management.users.exactFilters, { exact: true }).click();
     await page.getByLabel(commonEn.common.blacklist.actorKind).selectOption('admin');
-    await page.getByRole('button', { name: commonEn.common.applyFilter, exact: true }).click();
+    await page.getByRole('button', { name: commonEn.common.search, exact: true }).click();
     await expect(
       page.locator('.nb-table tbody').getByText(discordID, { exact: true }),
     ).toBeVisible();
@@ -399,9 +398,7 @@ test('administrator filters donations and manages manual candidates', async ({ b
     const page = await admin.newPage();
     await page.goto(state.admin_url + '/charity');
     await page.getByLabel(copy.donationHandling.search).fill(donation.description);
-    await page
-      .getByRole('button', { name: copy.donationHandling.applySearch, exact: true })
-      .click();
+    await page.getByRole('button', { name: copy.search, exact: true }).click();
     const filterDisclosure = page.locator('.charity-donations .nb-filter__more summary');
     if (await filterDisclosure.isVisible()) await filterDisclosure.click();
     await page.getByLabel(copy.donationHandling.filter).selectOption('pending');
@@ -449,9 +446,7 @@ browser-manual-delete`);
       ]),
     );
     await candidates.getByLabel(copy.manualCandidates.search).fill('browser-manual-delete');
-    await candidates
-      .getByRole('button', { name: copy.manualCandidates.searchAction, exact: true })
-      .click();
+    await candidates.getByRole('button', { name: copy.search, exact: true }).click();
     await expect(candidates.locator('li')).toHaveCount(1);
     const removing = page.waitForResponse(
       (response) =>
@@ -636,7 +631,7 @@ test('administrator filters retained log origins by exact Discord ID and account
       });
     const apply = async (expected: Record<string, string>) => {
       const pending = waitForLogs(expected);
-      await filters.getByRole('button', { name: commonEn.common.applyFilter, exact: true }).click();
+      await filters.getByRole('button', { name: commonEn.common.search, exact: true }).click();
       const response = await pending;
       expect(response.status()).toBe(200);
       expect(response.headers()['cache-control']).toContain('no-store');
@@ -711,7 +706,7 @@ test('administrator applies log filters, exports them and downloads retained dia
     const filters = page.getByTestId('log-filters');
     await filters.locator('.nb-filter__more > summary').click();
     await filters.getByLabel(commonEn.common.status, { exact: true }).fill('503');
-    await filters.getByRole('button', { name: commonEn.common.applyFilter, exact: true }).click();
+    await filters.getByRole('button', { name: commonEn.common.search, exact: true }).click();
     await expect(page).toHaveURL(/status=503/);
     const logs = await read(
       admin,

@@ -592,8 +592,10 @@ test('reachable admin settings consumes the bilingual catalog and rejects a 345-
   });
   await page.goto(`${ADMIN_ORIGIN}/settings`);
   await page.getByRole('searchbox').fill('default');
+  await page.getByRole('searchbox').press('Enter');
   await expect(page.getByLabel('Default Anthropic max output tokens')).toBeVisible();
   await page.getByRole('searchbox').fill('Site timezone offset');
+  await page.getByRole('searchbox').press('Enter');
   const timezoneInput = page.getByLabel('Site timezone offset');
   await timezoneInput.fill('345');
   const timezoneForm = page.locator('.nb-setting').filter({ has: timezoneInput });
@@ -602,6 +604,7 @@ test('reachable admin settings consumes the bilingual catalog and rejects a 345-
   await timezoneForm.locator('summary').click();
   await expect(page.getByText(/Hard range -720–840 · step 30/)).toBeVisible();
   await page.getByRole('searchbox').fill('');
+  await page.getByRole('searchbox').press('Enter');
   await page
     .locator('.nb-setting')
     .filter({ has: page.getByLabel('RPM auto-ban duration') })
@@ -902,7 +905,7 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   const editor = page.locator('.card').filter({
     has: page.getByRole('heading', { name: '[公益]provider/charity-model' }),
   });
-  const flatten = editor.getByRole('checkbox', {
+  const flatten = editor.getByRole('switch', {
     name: 'Experimental: flatten tool calls (chat only)',
   });
   await flatten.focus();

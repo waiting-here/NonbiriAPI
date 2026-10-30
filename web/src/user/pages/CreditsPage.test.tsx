@@ -151,8 +151,9 @@ describe('credit history numbered page controls', () => {
           if (path === '/api/credits/history?asset_type=all&page=1&page_size=20')
             return jsonResponse(historyPage(all, '1', 20, all.length));
           if (
+            path === '/api/credits/history?asset_type=sketch_paper&page=1&page_size=20' ||
             path ===
-            '/api/credits/history?asset_type=sketch_paper&page=1&page_size=20&category=picture_book'
+              '/api/credits/history?asset_type=sketch_paper&page=1&page_size=20&category=picture_book'
           )
             return jsonResponse(historyPage([paper], '1', 20, 1));
           if (
@@ -188,7 +189,7 @@ describe('credit history numbered page controls', () => {
               decay: '低活跃积分衰减',
               asset: '积分类型',
               category: '变化原因',
-              apply: '筛选',
+              apply: '搜索',
             }
           : {
               general: 'General credits',
@@ -201,7 +202,7 @@ describe('credit history numbered page controls', () => {
               decay: 'Inactivity credit decay',
               asset: 'Credit type',
               category: 'Reason',
-              apply: 'Apply filters',
+              apply: 'Search',
             };
       for (const [delta, asset, reason] of [
         ['−2,000', labels.general, labels.exchange],
@@ -229,18 +230,16 @@ describe('credit history numbered page controls', () => {
         }),
       ).not.toBeInTheDocument();
       await view.user.click(assets.getByRole('radio', { name: labels.paper }));
-      await view.user.click(screen.getByText(locale === 'zh' ? '更多条件' : 'More filters'));
+      await view.user.click(screen.getByText(locale === 'zh' ? '更多筛选' : 'More filters'));
       await view.user.selectOptions(
         screen.getByRole('combobox', { name: labels.category }),
         'picture_book',
       );
-      await view.user.click(screen.getByRole('button', { name: labels.apply }));
       await waitFor(() =>
         expect(table.queryByRole('cell', { name: '−2,000' })).not.toBeInTheDocument(),
       );
       expect(table.getByRole('cell', { name: '+2' })).toBeVisible();
       await view.user.click(assets.getByRole('radio', { name: labels.brush }));
-      await view.user.click(screen.getByRole('button', { name: labels.apply }));
       await waitFor(() =>
         expect(table.queryByRole('cell', { name: '+2' })).not.toBeInTheDocument(),
       );
@@ -308,7 +307,7 @@ describe('credit history numbered page controls', () => {
         name: 'Game credits',
       }),
     );
-    await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() =>
       expect(requests).toContain('/api/credits/history?asset_type=game&page=1&page_size=20'),
     );
@@ -451,7 +450,7 @@ describe('credit history numbered page controls', () => {
       screen.getByRole('combobox', { name: 'Money in / out' }),
       'expense',
     );
-    await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
     expect(await screen.findByRole('cell', { name: '−1' })).toBeVisible();
     expect(requests).toContain(
       '/api/credits/history?asset_type=all&page=1&page_size=20&category=charity&direction=expense',

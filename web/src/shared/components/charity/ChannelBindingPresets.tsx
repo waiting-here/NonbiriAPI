@@ -117,7 +117,16 @@ export function ChannelBindingPresets({
           <>
             <FilterBar
               activeCount={q ? 1 : 0}
-              secondaryLabel={t('common.filter')}
+              onReset={() => {
+                setSearch('');
+                setParams((previous) => {
+                  const next = new URLSearchParams(previous);
+                  next.delete('q');
+                  next.delete('state');
+                  next.set('page', '1');
+                  return next;
+                });
+              }}
               onSubmit={() => {
                 if (validManagementSearch(search))
                   setParams((previous) => {
@@ -140,9 +149,6 @@ export function ChannelBindingPresets({
                       />
                     )}
                   </Field>
-                  <Button type="submit" disabled={!validManagementSearch(search)}>
-                    {t('common.search')}
-                  </Button>
                 </>
               }
               secondaryAlwaysVisible
@@ -619,7 +625,10 @@ function PresetTargetPicker({
       <h3>{t('common.bindingPresets.chooseTarget')}</h3>
       <FilterBar
         activeCount={q ? 1 : 0}
-        secondaryLabel={t('common.filter')}
+        onReset={() => {
+          setDraft('');
+          setQ('');
+        }}
         onSubmit={() => {
           if (validManagementSearch(draft)) setQ(draft.trim());
         }}
@@ -636,9 +645,6 @@ function PresetTargetPicker({
                 />
               )}
             </Field>
-            <Button type="submit" disabled={!validManagementSearch(draft)}>
-              {t('common.search')}
-            </Button>
           </>
         }
       />

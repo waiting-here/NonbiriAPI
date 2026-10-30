@@ -204,6 +204,8 @@ nginx/*.local.conf
 
 *.sql
 !internal/db/generation_two.sql
+!internal/db/agent_operation_diagnostics.sql
+!internal/db/management_service_health.sql
 !internal/db/migrations/**/*.sql
 !internal/db/testdata/*.sql
 !internal/upgrade/rc7/convert.sql

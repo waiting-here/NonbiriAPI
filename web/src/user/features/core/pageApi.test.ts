@@ -166,7 +166,12 @@ describe('numbered core resource API', () => {
     };
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetchMock);
-    for (const eligibility of ['eligible', 'already_donated', 'security_processing']) {
+    for (const eligibility of [
+      'eligible',
+      'already_donated',
+      'security_processing',
+      'unavailable',
+    ]) {
       fetchMock.mockResolvedValueOnce(
         jsonResponse(
           numbered([{ ...endpointKey, browse: { ...browse, donation_eligibility: eligibility } }]),

@@ -184,6 +184,11 @@ for (const width of [1440, 390]) {
         }
       });
       for (const [kind, label] of protocols) {
+        const supportsDiscovery = [
+          'google-gemini',
+          'openai-compatible',
+          'typesafe-systemone',
+        ].includes(kind);
         await page.goto(`${USER_ORIGIN}/endpoints?connection_id=1`);
         await page.getByRole('button', { name: c.addEntry, exact: true }).first().click();
         const wizard = page
@@ -197,7 +202,6 @@ for (const width of [1440, 390]) {
         await expect(choice.locator('option[value="openai-chat-completions"]')).toHaveCount(0);
         if (kind === 'google-gemini') await screenshot(page, `protocol-user-${width}-${theme}`);
         await wizard.getByLabel(serviceUI.serviceAddress, { exact: true }).fill(baseURL);
-        await wizard.locator('summary').filter({ hasText: workflow.serviceName }).click();
         await wizard.getByLabel(workflow.serviceName, { exact: true }).fill(label);
         await expect(
           wizard.getByRole('radio', { name: c.existingCredential, exact: true }),
@@ -215,7 +219,7 @@ for (const width of [1440, 390]) {
         await expect(save).toBeEnabled();
         await save.click();
         await expect(wizard.getByText(workflow.serviceReady, { exact: true })).toBeVisible();
-        if (['google-gemini', 'openai-compatible'].includes(kind))
+        if (supportsDiscovery)
           await expect(wizard.getByText(c.saved, { exact: true })).toBeVisible();
         const nativeServices = createOptions.native_service_options.find(
           (row) => row.connector_type === kind,
@@ -236,9 +240,7 @@ for (const width of [1440, 390]) {
         expect(grantWrite.body).toEqual({
           credential_id: credential.id,
           native_services: nativeServices,
-          ...(['google-gemini', 'openai-compatible'].includes(kind)
-            ? {}
-            : { discovery_source_id: null }),
+          ...(supportsDiscovery ? {} : { discovery_source_id: null }),
           note: '',
           enabled: true,
           ownership_confirmed: true,
@@ -254,7 +256,7 @@ for (const width of [1440, 390]) {
       expect(
         writes.filter((write) => write.path === '/api/connections/1/discovery-sources'),
       ).toHaveLength(0);
-      expect(writes.filter((write) => write.path.endsWith('/models/refresh'))).toHaveLength(2);
+      expect(writes.filter((write) => write.path.endsWith('/models/refresh'))).toHaveLength(3);
       expect(writes.filter((write) => !write.identity).map((write) => write.path)).toEqual([]);
 
       await mockPublicConfig(page, 'admin');

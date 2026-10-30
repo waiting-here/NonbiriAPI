@@ -17,7 +17,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/upgrade/v1"
 )
 
-var expectedSourceSchemaVersions = []int{16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 33, 34, 35, 36, 37, 38, 39, 40, 41}
+var expectedSourceSchemaVersions = []int{16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42}
 
 func TestArgumentErrorsDoNotReadOrExposeEnvironment(t *testing.T) {
 	t.Setenv("NONBIRI_MASTER_KEY", "private-key-value")
@@ -49,7 +49,7 @@ func TestSchemaInfoNeedsNoDatabaseOrSecretEnvironment(t *testing.T) {
 		}
 	}
 	last := descriptor.OfflineConversions[len(descriptor.OfflineConversions)-1]
-	if last.SourceManifestHash != db.Schema41ManifestHash || last.SourceCommit != "5c721cd00b1ebcc402f0b85ce02aa9014498aa97" {
+	if last.SourceManifestHash != db.Schema42ManifestHash || last.SourceCommit != "cd07f2ccde4d98b130c3c6c71e905bd4a6fd06d3" {
 		t.Fatal("published source identity changed", last)
 	}
 	if strings.Contains(output.String(), "private-") {

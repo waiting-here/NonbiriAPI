@@ -314,7 +314,7 @@ describe('CharitySourceBrowser', () => {
       ).toBe(true),
     );
     expect(currentSearch()).toContain('source_q=provider');
-    await view.user.click(view.getByRole('button', { name: 'Clear search' }));
+    await view.user.click(view.getByRole('button', { name: 'Reset' }));
     await waitFor(() => expect(currentSearch()).not.toContain('source_q=provider'));
     expect(
       requests.filter(

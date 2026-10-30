@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Field, Note, Toggle } from '@shared/components/ui';
+import { Field, Fields, FormActions, Note, Toggle } from '@shared/components/ui';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import {
@@ -43,9 +43,10 @@ function Parameters({
 }) {
   const t = useAIText();
   return (
-    <div className="ai-parameters">
+    <Fields>
       {(Object.keys(limits) as NumericParameter[]).map((key) => (
         <Field
+          size="short"
           key={key}
           label={label(key, t)}
           help={override ? t('留空沿用基础参数', 'Leave blank to inherit') : undefined}
@@ -111,7 +112,7 @@ function Parameters({
           onChange={(endgame_guard) => onChange({ ...value, endgame_guard })}
         />
       )}
-    </div>
+    </Fields>
   );
 }
 function RuleEditor({
@@ -165,101 +166,122 @@ function RuleEditor({
           {t('删除规则', 'Remove rule')}
         </button>
       </div>
-      <label>
-        {t('满足', 'Match')}{' '}
-        <select
-          value={rule.match}
-          onChange={(e) => onChange({ ...rule, match: e.target.value as AIRule['match'] })}
-        >
-          <option value="all">{t('全部条件', 'All conditions')}</option>
-          <option value="any">{t('任意条件', 'Any condition')}</option>
-        </select>
-      </label>
+      <Field size="short" label={t('满足', 'Match')}>
+        {(props) => (
+          <select
+            {...props}
+            value={rule.match}
+            onChange={(e) => onChange({ ...rule, match: e.target.value as AIRule['match'] })}
+          >
+            <option value="all">{t('全部条件', 'All conditions')}</option>
+            <option value="any">{t('任意条件', 'Any condition')}</option>
+          </select>
+        )}
+      </Field>
       {rule.conditions.map((condition, i) => (
-        <div className="ai-condition" key={i}>
-          <select
-            aria-label={t('条件字段', 'Condition field')}
-            value={condition.field}
-            onChange={(e) =>
-              onChange({
-                ...rule,
-                conditions: rule.conditions.map((c, n) =>
-                  n === i
-                    ? {
-                        ...c,
-                        field: e.target.value,
-                        ...(e.target.value === 'phase' ? { operator: 'eq', value: 0 } : {}),
-                      }
-                    : c,
-                ),
-              })
-            }
-          >
-            {Object.entries(fields).map(([key, name]) => (
-              <option key={key} value={key}>
-                {name}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label={t('比较方式', 'Comparison')}
-            disabled={condition.field === 'phase'}
-            value={condition.operator}
-            onChange={(e) =>
-              onChange({
-                ...rule,
-                conditions: rule.conditions.map((c, n) =>
-                  n === i ? { ...c, operator: e.target.value } : c,
-                ),
-              })
-            }
-          >
-            {Object.entries({ gte: '≥', gt: '>', lte: '≤', lt: '<', eq: '=' }).map(
-              ([key, name]) => (
-                <option key={key} value={key}>
-                  {name}
-                </option>
-              ),
+        <Fields key={i}>
+          <Field label={t('条件字段', 'Condition field')}>
+            {(props) => (
+              <select
+                {...props}
+                aria-label={t('条件字段', 'Condition field')}
+                value={condition.field}
+                onChange={(e) =>
+                  onChange({
+                    ...rule,
+                    conditions: rule.conditions.map((c, n) =>
+                      n === i
+                        ? {
+                            ...c,
+                            field: e.target.value,
+                            ...(e.target.value === 'phase' ? { operator: 'eq', value: 0 } : {}),
+                          }
+                        : c,
+                    ),
+                  })
+                }
+              >
+                {Object.entries(fields).map(([key, name]) => (
+                  <option key={key} value={key}>
+                    {name}
+                  </option>
+                ))}
+              </select>
             )}
-          </select>
-          <input
-            aria-label={t('条件数值', 'Condition value')}
-            type="number"
-            value={condition.value}
-            onChange={(e) =>
-              onChange({
-                ...rule,
-                conditions: rule.conditions.map((c, n) =>
-                  n === i ? { ...c, value: Number(e.target.value) } : c,
-                ),
-              })
-            }
-          />
-          <button
-            type="button"
-            className="nb-btn nb-btn--secondary"
-            disabled={rule.conditions.length === 1}
-            onClick={() =>
-              onChange({ ...rule, conditions: rule.conditions.filter((_, n) => n !== i) })
-            }
-          >
-            {t('移除', 'Remove')}
-          </button>
-        </div>
+          </Field>
+          <Field size="short" label={t('比较方式', 'Comparison')}>
+            {(props) => (
+              <select
+                {...props}
+                aria-label={t('比较方式', 'Comparison')}
+                disabled={condition.field === 'phase'}
+                value={condition.operator}
+                onChange={(e) =>
+                  onChange({
+                    ...rule,
+                    conditions: rule.conditions.map((c, n) =>
+                      n === i ? { ...c, operator: e.target.value } : c,
+                    ),
+                  })
+                }
+              >
+                {Object.entries({ gte: '≥', gt: '>', lte: '≤', lt: '<', eq: '=' }).map(
+                  ([key, name]) => (
+                    <option key={key} value={key}>
+                      {name}
+                    </option>
+                  ),
+                )}
+              </select>
+            )}
+          </Field>
+          <Field size="short" label={t('条件数值', 'Condition value')}>
+            {(props) => (
+              <input
+                {...props}
+                aria-label={t('条件数值', 'Condition value')}
+                type="number"
+                value={condition.value}
+                onChange={(e) =>
+                  onChange({
+                    ...rule,
+                    conditions: rule.conditions.map((c, n) =>
+                      n === i ? { ...c, value: Number(e.target.value) } : c,
+                    ),
+                  })
+                }
+              />
+            )}
+          </Field>
+          <FormActions>
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              disabled={rule.conditions.length === 1}
+              onClick={() =>
+                onChange({ ...rule, conditions: rule.conditions.filter((_, n) => n !== i) })
+              }
+            >
+              {t('移除', 'Remove')}
+            </button>
+          </FormActions>
+        </Fields>
       ))}
-      <button
-        type="button"
-        className="nb-btn nb-btn--secondary"
-        disabled={rule.conditions.length >= 4}
-        onClick={() =>
-          onChange({
-            ...rule,
-            conditions: [...rule.conditions, { field: 'round', operator: 'gte', value: 9 }],
-          })
-        }
-      >
-        {t('添加条件', 'Add condition')}
-      </button>
+      <FormActions>
+        <button
+          type="button"
+          className="nb-btn nb-btn--secondary"
+          disabled={rule.conditions.length >= 4}
+          onClick={() =>
+            onChange({
+              ...rule,
+              conditions: [...rule.conditions, { field: 'round', operator: 'gte', value: 9 }],
+            })
+          }
+        >
+          {t('添加条件', 'Add condition')}
+        </button>
+      </FormActions>
       <Field label={t('候选范围', 'Candidate filter')}>
         {(props) => (
           <select
@@ -591,36 +613,38 @@ function PolicyEditor({
   return (
     <fieldset disabled={disabled} className="ai-editor">
       <h3>{value.id ? t('编辑策略', 'Edit strategy') : t('新增策略', 'New strategy')}</h3>
-      <Field label={t('名称', 'Name')}>
-        {(props) => (
-          <input
-            {...props}
-            value={value.name}
-            maxLength={64}
-            required
-            onChange={(e) => onChange({ ...value, name: e.target.value })}
-          />
-        )}
-      </Field>
-      <Field label={t('简介', 'Description')}>
-        {(props) => (
-          <input
-            {...props}
-            value={value.description}
-            maxLength={512}
-            onChange={(e) => onChange({ ...value, description: e.target.value })}
-          />
-        )}
-      </Field>
-      <Toggle
-        label={t('启用策略', 'Enable strategy')}
-        description={t(
-          '停用后，绑定它的 AI 玩家不再接受新对局。',
-          'Disabled strategies stop their assigned AI players from accepting new matches.',
-        )}
-        checked={value.enabled}
-        onChange={(enabled) => onChange({ ...value, enabled })}
-      />
+      <Fields>
+        <Field label={t('名称', 'Name')}>
+          {(props) => (
+            <input
+              {...props}
+              value={value.name}
+              maxLength={64}
+              required
+              onChange={(e) => onChange({ ...value, name: e.target.value })}
+            />
+          )}
+        </Field>
+        <Field size="long" label={t('简介', 'Description')}>
+          {(props) => (
+            <input
+              {...props}
+              value={value.description}
+              maxLength={512}
+              onChange={(e) => onChange({ ...value, description: e.target.value })}
+            />
+          )}
+        </Field>
+        <Toggle
+          label={t('启用策略', 'Enable strategy')}
+          description={t(
+            '停用后，绑定它的 AI 玩家不再接受新对局。',
+            'Disabled strategies stop their assigned AI players from accepting new matches.',
+          )}
+          checked={value.enabled}
+          onChange={(enabled) => onChange({ ...value, enabled })}
+        />
+      </Fields>
       <div className="ai-toolbar">
         {data.presets.map((p) => (
           <button
@@ -778,14 +802,16 @@ function PolicyEditor({
           )}
         </small>
       </section>
-      <button
-        className="nb-btn nb-btn--primary"
-        type="button"
-        disabled={!value.name.trim()}
-        onClick={onSave}
-      >
-        {t('保存策略版本', 'Save strategy version')}
-      </button>
+      <FormActions>
+        <button
+          className="nb-btn nb-btn--primary"
+          type="button"
+          disabled={!value.name.trim()}
+          onClick={onSave}
+        >
+          {t('保存策略版本', 'Save strategy version')}
+        </button>
+      </FormActions>
     </fieldset>
   );
 }
@@ -808,57 +834,61 @@ function BotEditor({
   return (
     <fieldset disabled={disabled} className="ai-editor">
       <h3>{b.id ? t('编辑 AI 玩家', 'Edit AI player') : t('新增 AI 玩家', 'New AI player')}</h3>
-      <Field label={t('名称', 'Name')}>
-        {(props) => (
-          <input
-            {...props}
-            maxLength={64}
-            value={b.name}
-            required
-            onChange={(e) => edit({ name: e.target.value })}
-          />
-        )}
-      </Field>
-      <Field label={t('公开简介', 'Public description')}>
-        {(props) => (
-          <input
-            {...props}
-            maxLength={512}
-            value={b.description}
-            onChange={(e) => edit({ description: e.target.value })}
-          />
-        )}
-      </Field>
-      <Toggle
-        label={t('启用玩家', 'Enable player')}
-        checked={b.enabled}
-        onChange={(enabled) => edit({ enabled })}
-      />
-      <Field label={t('绑定策略版本', 'Assigned strategy version')}>
-        {(props) => (
-          <select
-            {...props}
-            value={`${b.policy_id}:${b.policy_version}`}
-            onChange={(e) => {
-              const [id, version] = e.target.value.split(':');
-              edit({ policy_id: id!, policy_version: Number(version) });
-            }}
-          >
-            {!data.policies.some((p) => p.id === b.policy_id && p.version === b.policy_version) && (
-              <option value={`${b.policy_id}:${b.policy_version}`}>
-                {data.policies.find((p) => p.id === b.policy_id)?.name} v{b.policy_version}
-              </option>
-            )}
-            {data.policies.map((p) => (
-              <option key={p.id} value={`${p.id}:${p.version}`}>
-                {p.name} v{p.version}
-                {p.enabled ? '' : ` · ${t('停用', 'Disabled')}`}
-              </option>
-            ))}
-          </select>
-        )}
-      </Field>
-      <div className="ai-parameters">
+      <Fields>
+        <Field label={t('名称', 'Name')}>
+          {(props) => (
+            <input
+              {...props}
+              maxLength={64}
+              value={b.name}
+              required
+              onChange={(e) => edit({ name: e.target.value })}
+            />
+          )}
+        </Field>
+        <Field size="long" label={t('公开简介', 'Public description')}>
+          {(props) => (
+            <input
+              {...props}
+              maxLength={512}
+              value={b.description}
+              onChange={(e) => edit({ description: e.target.value })}
+            />
+          )}
+        </Field>
+        <Toggle
+          label={t('启用玩家', 'Enable player')}
+          checked={b.enabled}
+          onChange={(enabled) => edit({ enabled })}
+        />
+        <Field label={t('绑定策略版本', 'Assigned strategy version')}>
+          {(props) => (
+            <select
+              {...props}
+              value={`${b.policy_id}:${b.policy_version}`}
+              onChange={(e) => {
+                const [id, version] = e.target.value.split(':');
+                edit({ policy_id: id!, policy_version: Number(version) });
+              }}
+            >
+              {!data.policies.some(
+                (p) => p.id === b.policy_id && p.version === b.policy_version,
+              ) && (
+                <option value={`${b.policy_id}:${b.policy_version}`}>
+                  {data.policies.find((p) => p.id === b.policy_id)?.name} v{b.policy_version}
+                </option>
+              )}
+              {data.policies.map((p) => (
+                <option key={p.id} value={`${p.id}:${p.version}`}>
+                  {p.name} v{p.version}
+                  {p.enabled ? '' : ` · ${t('停用', 'Disabled')}`}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+      </Fields>
+      <Fields>
         {(['ticket', 'first_reward'] as const).map((key) => (
           <Field
             key={key}
@@ -902,7 +932,7 @@ function BotEditor({
             />
           )}
         </Field>
-      </div>
+      </Fields>
       <Note>
         {t(
           '缩小记忆窗口会淘汰范围外的样本，之后扩大不会找回。价格、策略和名称的调整保留原有首通记录。',
@@ -920,14 +950,16 @@ function BotEditor({
           onChange={(newChallenge) => onChange({ ...draft, newChallenge })}
         />
       )}
-      <button
-        className="nb-btn nb-btn--primary"
-        type="button"
-        disabled={!b.name.trim()}
-        onClick={onSave}
-      >
-        {t('保存 AI 玩家', 'Save AI player')}
-      </button>
+      <FormActions>
+        <button
+          className="nb-btn nb-btn--primary"
+          type="button"
+          disabled={!b.name.trim()}
+          onClick={onSave}
+        >
+          {t('保存 AI 玩家', 'Save AI player')}
+        </button>
+      </FormActions>
     </fieldset>
   );
 }

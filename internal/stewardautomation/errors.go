@@ -38,6 +38,8 @@ func safeError(err error) (string, string) {
 		code, message = httperr.CodeForbidden, "an active steward account is required"
 	case errors.Is(err, resources.ErrNotFound), errors.Is(err, donation.ErrNotFound), errors.Is(err, charityrouting.ErrNotFound):
 		code, message = httperr.CodeNotFound, "resource is missing or unavailable to this steward"
+	case errors.Is(err, donation.ErrNoResetService):
+		code, message = httperr.CodeConflict, donation.NoResetServiceMessage
 	case errors.Is(err, resources.ErrConflict), errors.Is(err, donation.ErrConflict), errors.Is(err, charityrouting.ErrConflict), errors.Is(err, idempotency.ErrConflict), errors.Is(err, idempotency.ErrInProgress), errors.Is(err, donationquota.ErrConflict):
 		code, message = httperr.CodeConflict, "resource changed, or the idempotency key was reused with different input"
 	case errors.Is(err, resources.ErrResourceLimit), errors.Is(err, charityrouting.ErrResourceLimit), errors.Is(err, donationquota.ErrCapacity):

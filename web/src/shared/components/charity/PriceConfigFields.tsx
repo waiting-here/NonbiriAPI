@@ -4,7 +4,7 @@ import { useRef, useState, type ReactNode, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CharityRole, TokenPrices } from '@shared/operations/charity';
 import { halfPrice } from '@shared/operations/charityScope';
-import { Button, Field, Fold, Toggle } from '../ui';
+import { Button, Field, Fields, Fold, Toggle } from '../ui';
 import { TimeContextNotice } from '../TimeContext';
 import { TimeInput } from '../TimeInput';
 import { charityControlCopy } from '../charityControlCopy';
@@ -129,7 +129,7 @@ export function PriceConfigFields({
           {value.mode === 'per_request' ? <p>{t('common.workflow.reserveLater')}</p> : null}
         </Fold>
         {value.mode !== 'per_token' ? (
-          <div className="nb-grid nb-grid--2">
+          <Fields>
             <Field
               label={t(
                 value.mode === 'per_search_unit'
@@ -165,22 +165,18 @@ export function PriceConfigFields({
                 />
               )}
             </Field>
-          </div>
+          </Fields>
         ) : (
           <div className="charity-price-grid">
-            <div className="charity-price-headings" aria-hidden="true">
-              {(['userPrices', 'donorRewards'] as const).map((side) => (
-                <strong key={side}>
-                  {t(
-                    `common.operations.charity.${side === 'userPrices' ? 'userPrices' : 'donorRewards'}`,
-                  )}
-                </strong>
-              ))}
-            </div>
-            {(Object.keys(value.userPrices) as (keyof TokenPrices)[]).map((field) => (
-              <div className="charity-price-row" key={field}>
-                {(['userPrices', 'donorRewards'] as const).map((side) => (
-                  <Field key={side} label={t(tokenPriceCopyKey(role, side, field))}>
+            {(['userPrices', 'donorRewards'] as const).map((side) => (
+              <Fields
+                key={side}
+                legend={t(
+                  `common.operations.charity.${side === 'userPrices' ? 'userPrices' : 'donorRewards'}`,
+                )}
+              >
+                {(Object.keys(value[side]) as (keyof TokenPrices)[]).map((field) => (
+                  <Field size="short" key={field} label={t(tokenPriceCopyKey(role, side, field))}>
                     {(props) => (
                       <input
                         {...props}
@@ -196,7 +192,7 @@ export function PriceConfigFields({
                     )}
                   </Field>
                 ))}
-              </div>
+              </Fields>
             ))}
           </div>
         )}
@@ -226,7 +222,7 @@ export function PriceConfigFields({
         open={discountOpen || discountError}
         onOpenChange={setDiscountOpen}
       >
-        <div className="nb-grid nb-grid--2">
+        <Fields>
           <TimeContextNotice station={role === 'admin' ? 'admin' : 'steward'} />
           <Toggle
             label={t(charityCopyKey(role, 'discountEnabled'))}
@@ -259,7 +255,7 @@ export function PriceConfigFields({
             showZoneHint={false}
             onChange={(update) => set({ discountEnd: update(value.discountEnd) })}
           />
-        </div>
+        </Fields>
       </Fold>
       <Fold
         title={t('common.recurringDiscount.title')}

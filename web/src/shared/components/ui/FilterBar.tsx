@@ -1,5 +1,6 @@
 import { Button } from '@shared/components/ui/Button';
 import { useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FilterFieldLayoutContext } from './FieldLayoutContext';
 
 export function FilterBar({
@@ -15,20 +16,39 @@ export function FilterBar({
   onClearAll,
   clearAllLabel,
   onSubmit,
+  onReset,
+  submitLabel,
+  submitDisabled,
+  resetDisabled,
+  role,
 }: {
   search: ReactNode;
   as?: 'form' | 'div';
   persistKey?: string;
   ariaLabel?: string;
   secondary?: ReactNode;
-  secondaryLabel: string;
+  /** Defaults to “More filters”. */
+  secondaryLabel?: string;
   secondaryAlwaysVisible?: boolean;
   activeCount: number;
   chips?: readonly { key: string; label: ReactNode; onRemove: () => void; removeLabel: string }[];
   onClearAll?: () => void;
   clearAllLabel?: string;
   onSubmit: () => void;
+  /**
+   * When set, the bar renders its own Search and Reset buttons after the search slot, so
+   * pages share one wording. Selects and toggles should still apply on change.
+   */
+  onReset?: () => void;
+  /** Label of the built-in Search button. */
+  submitLabel?: string;
+  /** Disables Search while a request or input check runs. */
+  submitDisabled?: boolean;
+  /** Disables Reset during an in-flight request, independently of invalid input. */
+  resetDisabled?: boolean;
+  role?: 'search';
 }) {
+  const { t } = useTranslation();
   const storageKey = persistKey ? `nb.fold.${persistKey}` : null;
   const [open, setOpen] = useState(() => {
     try {
@@ -40,7 +60,7 @@ export function FilterBar({
   return (
     <FilterFieldLayoutContext value>
       <Tag
-        role={Tag === 'div' ? 'search' : undefined}
+        role={role ?? (Tag === 'div' ? 'search' : undefined)}
         onKeyDown={(event) => {
           if (
             Tag === 'div' &&
@@ -60,7 +80,28 @@ export function FilterBar({
         }}
       >
         <div className="nb-filter__row">
-          <div className="nb-filter__search">{search}</div>
+          <div className="nb-filter__search">
+            {search}
+            {onReset ? (
+              <>
+                <Button
+                  type={Tag === 'form' ? 'submit' : 'button'}
+                  disabled={submitDisabled}
+                  onClick={Tag === 'div' ? onSubmit : undefined}
+                >
+                  {submitLabel ?? t('common.search')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={resetDisabled}
+                  onClick={onReset}
+                >
+                  {t('common.resetFilter')}
+                </Button>
+              </>
+            ) : null}
+          </div>
           {secondary && !secondaryAlwaysVisible ? (
             <details
               className="nb-filter__more"
@@ -78,7 +119,7 @@ export function FilterBar({
               }}
             >
               <summary className="nb-btn nb-btn--secondary">
-                {secondaryLabel}
+                {secondaryLabel ?? t('common.moreFilters')}
                 {activeCount ? ` · ${activeCount}` : ''}
               </summary>
               <div className="nb-filter__fields">{secondary}</div>

@@ -1,5 +1,6 @@
 import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
+import { Field, Fields, FormActions } from '@shared/components/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { stationSessionWrite } from '@shared/charityManagement';
 import { Card, ErrorState, LoadingState } from '@shared/components/States';
@@ -20,7 +21,6 @@ function RecoveryAction({
   const operation = useImageOperation('admin', resumeUpstream);
   return (
     <form
-      className="picturebook-form"
       onSubmit={(event) => {
         event.preventDefault();
         const input = operation.input ?? {
@@ -39,27 +39,35 @@ function RecoveryAction({
         )}
       </p>
       <fieldset disabled={operation.locked}>
-        <label>
-          {t('恢复原因', 'Reason for resuming')}
-          <textarea
-            value={reason}
-            maxLength={1024}
-            required
-            onChange={(event) => setReason(event.target.value.replace(/\r\n?/g, '\n'))}
-          />
-        </label>
-        <label className="picturebook-checkbox">
-          <input
-            type="checkbox"
-            checked={confirmed}
-            required
-            onChange={(event) => setConfirmed(event.target.checked)}
-          />
-          {t(
-            '我已核实残留请求，确认恢复新任务派发',
-            'I checked outstanding requests and confirm resuming dispatch',
-          )}
-        </label>
+        <Fields>
+          <Field size="long" label={t('恢复原因', 'Reason for resuming')}>
+            {(props) => (
+              <textarea
+                {...props}
+                value={reason}
+                maxLength={1024}
+                required
+                onChange={(event) => setReason(event.target.value.replace(/\r\n?/g, '\n'))}
+              />
+            )}
+          </Field>
+          <Field
+            label={t(
+              '我已核实残留请求，确认恢复新任务派发',
+              'I checked outstanding requests and confirm resuming dispatch',
+            )}
+          >
+            {(props) => (
+              <input
+                {...props}
+                type="checkbox"
+                checked={confirmed}
+                required
+                onChange={(event) => setConfirmed(event.target.checked)}
+              />
+            )}
+          </Field>
+        </Fields>
       </fieldset>
       {operation.uncertain ? (
         <p role="status">
@@ -70,15 +78,17 @@ function RecoveryAction({
         </p>
       ) : null}
       {operation.error ? <ErrorState error={operation.error} /> : null}
-      <button
-        className="nb-btn nb-btn--primary"
-        type="submit"
-        disabled={operation.pending || (!operation.uncertain && (!confirmed || !reason.trim()))}
-      >
-        {operation.uncertain
-          ? t('重试同一次恢复', 'Retry the same resume')
-          : t('确认恢复', 'Confirm resume')}
-      </button>
+      <FormActions>
+        <button
+          className="nb-btn nb-btn--primary"
+          type="submit"
+          disabled={operation.pending || (!operation.uncertain && (!confirmed || !reason.trim()))}
+        >
+          {operation.uncertain
+            ? t('重试同一次恢复', 'Retry the same resume')
+            : t('确认恢复', 'Confirm resume')}
+        </button>
+      </FormActions>
     </form>
   );
 }

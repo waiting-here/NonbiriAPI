@@ -599,7 +599,7 @@ for (const scenario of scenarios) {
         url.searchParams.get('charity_model') === nameFragment
       );
     });
-    await filters.getByRole('button', { name: chinese ? '应用筛选' : 'Apply filter' }).click();
+    await filters.getByRole('button', { name: chinese ? '搜索' : 'Search', exact: true }).click();
     expect((await filtered).status()).toBe(200);
     await expect
       .poll(() => new URL(page.url()).searchParams.get('charity_model'))

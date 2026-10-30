@@ -9,9 +9,6 @@
       "groups": "汇总概览",
       "individual": "逐次操作",
       "all": "全部",
-      "moreFilters": "更多筛选",
-      "apply": "查询",
-      "clearFilters": "清除筛选",
       "searchHelp": "精确搜索对象名称、原名称、变更字段、操作者或记录编号。",
       "filterHelp": "时间使用当前浏览器时区，截止时间不包含在范围内。填写目标 ID 时需同时指定目标类型。操作和目标类型标识可在记录详情中查看。",
       "invalidRange": "截止时间应晚于开始时间。",
@@ -198,7 +195,8 @@
           "deleted": "已删除",
           "cleared": "已清空",
           "enabled": "已启用",
-          "disabled": "已停用"
+          "disabled": "已停用",
+          "retained": "保持不变"
         },
         "units": {
           "percent": "%",
@@ -305,7 +303,8 @@
           "model_catalog_entries": "模型目录",
           "image_model_refreshes": "图片模型发现任务",
           "image_upstream_revisions": "图片来源设置",
-          "fatfish_challenges": "关卡挑战"
+          "fatfish_challenges": "关卡挑战",
+          "donation_service_health": "公益服务健康"
         },
         "fields": {
           "state": "状态",
@@ -363,7 +362,7 @@
           "limit_mag": "限额",
           "effective_at": "生效时间",
           "retired_at": "停用时间",
-          "donation_key_id": "捐赠密钥",
+          "donation_key_id": "捐赠密钥编号",
           "display_name": "显示名称",
           "enabled": "启用",
           "duration_seconds": "时长",
@@ -499,7 +498,7 @@
           "discovery_enabled": "模型发现",
           "current_approved_revision_id": "已批准版本",
           "current_pending_revision_id": "待审核版本",
-          "use_id": "服务用途",
+          "use_id": "服务用途编号",
           "review_state": "审核状态",
           "processed_by_role": "处理者身份",
           "closed_reason": "关闭原因",
@@ -786,9 +785,22 @@
           "game_fishing_rtp_premium": "高级鱼饵目标返还率",
           "game_fishing_treasure_bottle_mult": "漂流瓶宝物倍率",
           "game_fishing_treasure_clover_mult": "四叶草宝物倍率",
-          "game_fishing_treasure_shell_mult": "贝壳宝物倍率"
+          "game_fishing_treasure_shell_mult": "贝壳宝物倍率",
+          "streak_generation": "失败计数代次",
+          "reset_result": "重置结果",
+          "source_name": "来源",
+          "key_name": "密钥",
+          "donation_name": "捐赠",
+          "retry_after_until": "限流等待至",
+          "backoff_retry_at": "智能退避至",
+          "native_service": "服务",
+          "reset_skip_reason": "跳过原因"
         },
-        "outcomeOnly": "本次仅记录操作结果，未保存字段快照。"
+        "outcomeOnly": "本次仅记录操作结果，未保存字段快照。",
+        "resetResults": {
+          "recovered": "已清除失败",
+          "already_clear": "原本无失败，已重置计数"
+        }
       },
       "roles": {
         "admin": "管理员",
@@ -810,7 +822,8 @@
       "overview": "概览",
       "users": "用户与权限",
       "operations": "运营",
-      "content": "内容与经济"
+      "services": "服务与公益",
+      "activities": "活动与内容"
     },
     "dashboard": {
       "nav": "仪表盘",
@@ -1973,8 +1986,6 @@
       "metricHelp": "每个抽卡结果计一次，含重复卡。抽到人数按本奖池去重；首次获得指抽中时玩家此前尚未拥有该卡。",
       "fullPoolData": "图表与 CSV／JSON 下载包含本奖池全部卡牌，不受下方表格搜索和分页影响。",
       "refresh": "刷新统计",
-      "search": "搜索",
-      "sort": "排序",
       "poolFilters": "奖池筛选",
       "cardFilters": "卡牌筛选",
       "searchPools": "搜索奖池",

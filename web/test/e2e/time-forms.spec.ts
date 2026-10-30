@@ -229,14 +229,13 @@ for (const scenario of cases) {
         });
       });
       await page.goto(`${USER_ORIGIN}/credits`);
-      await page
-        .locator('.nb-fold > summary')
-        .filter({ hasText: scenario.locale === 'en' ? 'More filters' : '更多条件' })
-        .click();
+      await expect(page.locator('.nb-filter')).toBeVisible();
+      const more = page.locator('.nb-filter__more > summary');
+      if (await more.isVisible()) await more.click();
       const from = page.locator('input[type="datetime-local"]').first();
       await from.fill(inputLocal.slice(0, 16));
       const apply = page.getByRole('button', {
-        name: scenario.locale === 'en' ? 'Apply filters' : '筛选',
+        name: scenario.locale === 'en' ? 'Search' : '搜索',
         exact: true,
       });
       await expect(apply).toBeDisabled();
@@ -257,7 +256,7 @@ for (const scenario of cases) {
       await expect.poll(() => queries.at(-1)?.get('from')).toBe(String(scenario.instant));
       await page
         .getByRole('button', {
-          name: scenario.locale === 'en' ? 'Clear filters' : '清除筛选',
+          name: scenario.locale === 'en' ? 'Reset' : '重置',
           exact: true,
         })
         .click();

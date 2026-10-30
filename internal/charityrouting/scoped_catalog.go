@@ -21,7 +21,7 @@ func catalogSupportQuery() string {
 
 // Scope both union branches before deduplication. Filtering the aggregate
 // catalog view outside its UNION/GROUP BY still reads unrelated members.
-const manualCatalogNamesSQL = `SELECT ac.normalized_model_id
+var manualCatalogNamesSQL = `SELECT ac.normalized_model_id
 FROM donation_keys dk CROSS JOIN model_catalog_entries ac INDEXED BY idx_catalog_run_model
 ON ac.discovery_run_id IN (` + candidateApprovedRuns + `) AND ac.source_type='automatic'
 WHERE dk.id=?

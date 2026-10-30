@@ -49,6 +49,15 @@ func (m *Manager) storeRefresh(ctx context.Context, c Credentials, revision int6
 	return nil
 }
 func (m *Manager) AccessTokenSnapshot(ctx context.Context) ([]byte, string, int64, error) {
+	return m.accessTokenSnapshot(ctx, 0, nil)
+}
+
+// RecoverAccessToken performs at most one serialized recovery for a rejected
+// token. A concurrent caller that already rotated it is reused.
+func (m *Manager) RecoverAccessToken(ctx context.Context, revision int64, rejected []byte) ([]byte, string, int64, error) {
+	return m.accessTokenSnapshot(ctx, revision, rejected)
+}
+func (m *Manager) accessTokenSnapshot(ctx context.Context, expected int64, rejected []byte) ([]byte, string, int64, error) {
 	select {
 	case m.refresh <- struct{}{}:
 	case <-ctx.Done():
@@ -88,12 +97,16 @@ func (m *Manager) AccessTokenSnapshot(ctx context.Context) ([]byte, string, int6
 		s.encrypted = sealed
 		m.rotated = nil
 	}
+	if expected != 0 && (s.revision != expected || s.encrypted == "") {
+		m.mu.Unlock()
+		return nil, "", 0, ErrConflict
+	}
 	c, err := m.open(s)
 	if err != nil {
 		m.mu.Unlock()
 		return nil, "", 0, err
 	}
-	if c.ExpiresAt > m.config.Now().Unix()+60 {
+	if c.ExpiresAt > m.config.Now().Unix()+60 && (len(rejected) == 0 || c.AccessToken != string(rejected)) {
 		m.mu.Unlock()
 		return []byte(c.AccessToken), c.AccountID, s.revision, nil
 	}
@@ -102,7 +115,7 @@ func (m *Manager) AccessTokenSnapshot(ctx context.Context) ([]byte, string, int6
 	m.refreshCancel = cancel
 	epoch := m.epoch
 	m.mu.Unlock()
-	next, err := m.client.refresh(refreshctx, c)
+	next, err := m.client.refresh(refreshctx, c, len(rejected) > 0)
 	stop()
 	cancel()
 	m.mu.Lock()
@@ -134,7 +147,7 @@ func (m *Manager) AccessTokenSnapshot(ctx context.Context) ([]byte, string, int6
 				return nil, "", 0, e
 			}
 			m.resetConnection()
-			return nil, "", 0, ErrDisconnected
+			return nil, "", 0, errors.Join(ErrDisconnected, err)
 		}
 		return nil, "", 0, err
 	}
@@ -166,6 +179,8 @@ func (m *Manager) RequestContext(ctx context.Context, revision int64) (context.C
 	return child, func() { stop(); cancel() }, nil
 }
 func (m *Manager) resetConnection() {
+	m.quotaCache = nil
+	m.quotaFlight = nil
 	m.epoch++
 	m.connectionCancel()
 	m.connection, m.connectionCancel = context.WithCancel(m.ctx)

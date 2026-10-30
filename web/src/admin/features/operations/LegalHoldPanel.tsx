@@ -10,6 +10,7 @@ import {
   type StationSessionSnapshot,
 } from '@shared/charityManagement';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { Field, Fields, FilterBar, FormActions } from '@shared/components/ui';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { elevateAdmin } from '@shared/operations/api';
@@ -577,28 +578,44 @@ function LegalHoldSessionPanel({
       <Card className="ops-danger">
         <h2>{t('admin.legalHolds.title')}</h2>
         <p>{t('admin.legalHolds.description')}</p>
-        <div className="ops-toolbar">
-          <label>
-            <span>{t('admin.legalHolds.filters.state')}</span>
-            <select value={state} onChange={(event) => setFilter(STATE_PARAM, event.target.value)}>
-              <option value="">{t('admin.legalHolds.filters.all')}</option>
-              <option value="active">{t(STATE_LABEL_KEYS.active)}</option>
-              <option value="released">{t(STATE_LABEL_KEYS.released)}</option>
-              <option value="expired">{t(STATE_LABEL_KEYS.expired)}</option>
-            </select>
-          </label>
-          <label>
-            <span>{t('admin.legalHolds.filters.objectKind')}</span>
-            <select value={kind} onChange={(event) => setFilter(KIND_PARAM, event.target.value)}>
-              <option value="">{t('admin.legalHolds.filters.all')}</option>
-              {KINDS.map((value) => (
-                <option key={value} value={value}>
-                  {t(KIND_LABEL_KEYS[value])}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <FilterBar
+          activeCount={Number(Boolean(state)) + Number(Boolean(kind))}
+          onSubmit={() => {}}
+          search={
+            <>
+              <Field size="short" label={t('admin.legalHolds.filters.state')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={state}
+                    onChange={(event) => setFilter(STATE_PARAM, event.target.value)}
+                  >
+                    <option value="">{t('admin.legalHolds.filters.all')}</option>
+                    <option value="active">{t(STATE_LABEL_KEYS.active)}</option>
+                    <option value="released">{t(STATE_LABEL_KEYS.released)}</option>
+                    <option value="expired">{t(STATE_LABEL_KEYS.expired)}</option>
+                  </select>
+                )}
+              </Field>
+              <Field label={t('admin.legalHolds.filters.objectKind')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={kind}
+                    onChange={(event) => setFilter(KIND_PARAM, event.target.value)}
+                  >
+                    <option value="">{t('admin.legalHolds.filters.all')}</option>
+                    {KINDS.map((value) => (
+                      <option key={value} value={value}>
+                        {t(KIND_LABEL_KEYS[value])}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+            </>
+          }
+        />
         {sessionError ? (
           <ErrorState error={sessionError} onRetry={() => void session.refetch()} />
         ) : !session.data || session.isPending ? (
@@ -721,45 +738,53 @@ function LegalHoldSessionPanel({
               </dl>
               {detail.data.state === 'active' ? (
                 <>
-                  <label className="ops-form-field">
-                    <span>{t('admin.legalHolds.release.reason')}</span>
-                    <input
-                      maxLength={1024}
-                      value={releaseDraft.reason}
-                      onChange={(event) =>
-                        setReleaseDraft({ ...releaseDraft, reason: event.target.value })
+                  <Fields>
+                    <Field size="long" label={t('admin.legalHolds.release.reason')}>
+                      {(props) => (
+                        <input
+                          {...props}
+                          maxLength={1024}
+                          value={releaseDraft.reason}
+                          onChange={(event) =>
+                            setReleaseDraft({ ...releaseDraft, reason: event.target.value })
+                          }
+                        />
+                      )}
+                    </Field>
+                    <Field label={t('admin.legalHolds.release.password')}>
+                      {(props) => (
+                        <input
+                          {...props}
+                          type="password"
+                          autoComplete="current-password"
+                          value={releaseDraft.password}
+                          onChange={(event) => {
+                            setReleaseDraft({ ...releaseDraft, password: event.target.value });
+                            setElevationError(null);
+                          }}
+                        />
+                      )}
+                    </Field>
+                  </Fields>
+                  <FormActions>
+                    <button
+                      className="nb-btn nb-btn--danger"
+                      type="button"
+                      disabled={
+                        !releaseDraft.reason.trim() ||
+                        !releaseDraft.password ||
+                        release.isPending ||
+                        create.isPending ||
+                        elevating ||
+                        busy ||
+                        detail.isFetching ||
+                        Boolean(list.error)
                       }
-                    />
-                  </label>
-                  <label className="ops-form-field">
-                    <span>{t('admin.legalHolds.release.password')}</span>
-                    <input
-                      type="password"
-                      autoComplete="current-password"
-                      value={releaseDraft.password}
-                      onChange={(event) => {
-                        setReleaseDraft({ ...releaseDraft, password: event.target.value });
-                        setElevationError(null);
-                      }}
-                    />
-                  </label>
-                  <button
-                    className="nb-btn nb-btn--danger"
-                    type="button"
-                    disabled={
-                      !releaseDraft.reason.trim() ||
-                      !releaseDraft.password ||
-                      release.isPending ||
-                      create.isPending ||
-                      elevating ||
-                      busy ||
-                      detail.isFetching ||
-                      Boolean(list.error)
-                    }
-                    onClick={() => setConfirmation('release')}
-                  >
-                    {t('admin.legalHolds.actions.release')}
-                  </button>
+                      onClick={() => setConfirmation('release')}
+                    >
+                      {t('admin.legalHolds.actions.release')}
+                    </button>
+                  </FormActions>
                 </>
               ) : null}
             </>
@@ -768,73 +793,83 @@ function LegalHoldSessionPanel({
       ) : null}
       <Card className="ops-danger">
         <h3>{t('admin.legalHolds.create.title')}</h3>
-        <div className="ops-field-grid">
-          <label>
-            <span>{t('admin.legalHolds.create.objectKind')}</span>
-            <select
-              value={createDraft.object_kind}
-              onChange={(event) => {
-                setCreateExpiry(null);
-                setCreateDraft({
-                  ...createDraft,
-                  object_kind: event.target.value as HeldObjectKind,
-                });
-              }}
-            >
-              {KINDS.map((value) => (
-                <option key={value} value={value}>
-                  {t(KIND_LABEL_KEYS[value])}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>{t('admin.legalHolds.create.objectReference')}</span>
-            <input
-              value={createDraft.object_ref}
-              onChange={(event) => {
-                setCreateExpiry(null);
-                setCreateDraft({ ...createDraft, object_ref: event.target.value });
-              }}
-            />
-          </label>
-          <label>
-            <span>{t('admin.legalHolds.create.days')}</span>
-            <input
-              type="number"
-              min="1"
-              max="365"
-              value={createDraft.days}
-              onChange={(event) => {
-                setCreateExpiry(null);
-                setCreateDraft({ ...createDraft, days: event.target.value });
-              }}
-            />
-          </label>
-          <label>
-            <span>{t('admin.legalHolds.create.password')}</span>
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={createDraft.password}
-              onChange={(event) => {
-                setCreateDraft({ ...createDraft, password: event.target.value });
-                setElevationError(null);
-              }}
-            />
-          </label>
-        </div>
-        <label className="ops-form-field">
-          <span>{t('admin.legalHolds.create.basis')}</span>
-          <textarea
-            maxLength={1024}
-            value={createDraft.basis}
-            onChange={(event) => {
-              setCreateExpiry(null);
-              setCreateDraft({ ...createDraft, basis: event.target.value });
-            }}
-          />
-        </label>
+        <Fields>
+          <Field label={t('admin.legalHolds.create.objectKind')}>
+            {(props) => (
+              <select
+                {...props}
+                value={createDraft.object_kind}
+                onChange={(event) => {
+                  setCreateExpiry(null);
+                  setCreateDraft({
+                    ...createDraft,
+                    object_kind: event.target.value as HeldObjectKind,
+                  });
+                }}
+              >
+                {KINDS.map((value) => (
+                  <option key={value} value={value}>
+                    {t(KIND_LABEL_KEYS[value])}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+          <Field label={t('admin.legalHolds.create.objectReference')}>
+            {(props) => (
+              <input
+                {...props}
+                value={createDraft.object_ref}
+                onChange={(event) => {
+                  setCreateExpiry(null);
+                  setCreateDraft({ ...createDraft, object_ref: event.target.value });
+                }}
+              />
+            )}
+          </Field>
+          <Field size="short" label={t('admin.legalHolds.create.days')}>
+            {(props) => (
+              <input
+                {...props}
+                type="number"
+                min="1"
+                max="365"
+                value={createDraft.days}
+                onChange={(event) => {
+                  setCreateExpiry(null);
+                  setCreateDraft({ ...createDraft, days: event.target.value });
+                }}
+              />
+            )}
+          </Field>
+          <Field label={t('admin.legalHolds.create.password')}>
+            {(props) => (
+              <input
+                {...props}
+                type="password"
+                autoComplete="current-password"
+                value={createDraft.password}
+                onChange={(event) => {
+                  setCreateDraft({ ...createDraft, password: event.target.value });
+                  setElevationError(null);
+                }}
+              />
+            )}
+          </Field>
+          <Field size="long" label={t('admin.legalHolds.create.basis')}>
+            {(props) => (
+              <textarea
+                {...props}
+                maxLength={1024}
+                value={createDraft.basis}
+                onChange={(event) => {
+                  setCreateExpiry(null);
+                  setCreateDraft({ ...createDraft, basis: event.target.value });
+                }}
+              />
+            )}
+          </Field>
+        </Fields>
         {create.error ? (
           <ErrorState error={create.error} />
         ) : release.error ? (
@@ -842,27 +877,29 @@ function LegalHoldSessionPanel({
         ) : elevationError ? (
           <ErrorState error={elevationError} />
         ) : null}
-        <button
-          className="nb-btn nb-btn--danger"
-          type="button"
-          disabled={
-            !createDraft.object_ref.trim() ||
-            !createDraft.basis.trim() ||
-            !createDraft.password ||
-            !validDays ||
-            create.isPending ||
-            release.isPending ||
-            busy ||
-            Boolean(list.error) ||
-            elevating
-          }
-          onClick={() => {
-            setCreateExpiry((value) => value ?? Math.floor(Date.now() / 1_000) + days * 86_400);
-            setConfirmation('create');
-          }}
-        >
-          {t('admin.legalHolds.actions.create')}
-        </button>
+        <FormActions>
+          <button
+            className="nb-btn nb-btn--danger"
+            type="button"
+            disabled={
+              !createDraft.object_ref.trim() ||
+              !createDraft.basis.trim() ||
+              !createDraft.password ||
+              !validDays ||
+              create.isPending ||
+              release.isPending ||
+              busy ||
+              Boolean(list.error) ||
+              elevating
+            }
+            onClick={() => {
+              setCreateExpiry((value) => value ?? Math.floor(Date.now() / 1_000) + days * 86_400);
+              setConfirmation('create');
+            }}
+          >
+            {t('admin.legalHolds.actions.create')}
+          </button>
+        </FormActions>
       </Card>
       {confirmation ? (
         <ConfirmDialog

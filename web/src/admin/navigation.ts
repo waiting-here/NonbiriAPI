@@ -11,11 +11,23 @@ export interface NavItem {
   group?: string;
 }
 
-export const ADMIN_NAV_GROUPS = ['overview', 'users', 'operations', 'content'] as const;
+export const ADMIN_NAV_GROUPS = [
+  'overview',
+  'users',
+  'operations',
+  'services',
+  'activities',
+] as const;
 
 export const ADMIN_PRIMARY_NAV: NavItem[] = ADMIN_ROUTE_DESCRIPTORS.filter(
-  (route): route is RouteDescriptor & { nav: true; labelKey: string; navGroup: string; registered: true } =>
-    Boolean(route.nav && route.labelKey && route.navGroup && route.registered),
+  (
+    route,
+  ): route is RouteDescriptor & {
+    nav: true;
+    labelKey: string;
+    navGroup: string;
+    registered: true;
+  } => Boolean(route.nav && route.labelKey && route.navGroup && route.registered),
 ).map((route) => ({
   to: route.path,
   key: route.id,

@@ -1,3 +1,6 @@
+import { FilterBar } from '@shared/components/ui/FilterBar';
+import { useTranslation } from 'react-i18next';
+import { Field } from '@shared/components/ui/Field';
 import { Button } from '@shared/components/ui/Button';
 import { Fold } from '@shared/components/ui/Fold';
 import { useState } from 'react';
@@ -407,6 +410,7 @@ function CaseHistory({
   );
 }
 function PenaltyList({ scope }: { scope: Scope }) {
+  const { t } = useTranslation();
   const text = useLoanText(),
     name = useName();
   const [filter, setFilter] = useState<PenaltyFilter>({}),
@@ -426,46 +430,59 @@ function PenaltyList({ scope }: { scope: Scope }) {
     );
   return (
     <>
-      <div className="filter-bar">
-        <label>
-          {text('处罚类型', 'Penalty type')}
-          <select
-            value={filter.type ?? ''}
-            onChange={(e) =>
-              setFilter((f) => ({
-                ...f,
-                type: (e.target.value as PenaltyFilter['type']) || undefined,
-              }))
-            }
-          >
-            <option value="">{text('全部', 'All')}</option>
-            {penaltyKinds.map((k) => (
-              <option key={k} value={k}>
-                {name(k)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {text('处罚状态', 'Penalty state')}
-          <select
-            value={filter.state ?? ''}
-            onChange={(e) =>
-              setFilter((f) => ({
-                ...f,
-                state: (e.target.value as PenaltyFilter['state']) || undefined,
-              }))
-            }
-          >
-            <option value="">{text('全部', 'All')}</option>
-            {penaltyStates.map((k) => (
-              <option key={k} value={k}>
-                {name(k)}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <FilterBar
+        activeCount={Object.values(filter).filter(Boolean).length}
+        onSubmit={() => {}}
+        search={
+          <>
+            <Field label={text('处罚类型', 'Penalty type')} size="short">
+              {(field) => (
+                <select
+                  {...field}
+                  value={filter.type ?? ''}
+                  onChange={(e) =>
+                    setFilter((f) => ({
+                      ...f,
+                      type: (e.target.value as PenaltyFilter['type']) || undefined,
+                    }))
+                  }
+                >
+                  <option value="">{text('全部', 'All')}</option>
+                  {penaltyKinds.map((k) => (
+                    <option key={k} value={k}>
+                      {name(k)}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+            <Field label={text('处罚状态', 'Penalty state')} size="short">
+              {(field) => (
+                <select
+                  {...field}
+                  value={filter.state ?? ''}
+                  onChange={(e) =>
+                    setFilter((f) => ({
+                      ...f,
+                      state: (e.target.value as PenaltyFilter['state']) || undefined,
+                    }))
+                  }
+                >
+                  <option value="">{text('全部', 'All')}</option>
+                  {penaltyStates.map((k) => (
+                    <option key={k} value={k}>
+                      {name(k)}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+            <Button type="button" variant="secondary" onClick={() => setFilter({})}>
+              {t('common.resetFilter')}
+            </Button>
+          </>
+        }
+      />
       {query.isPending ? (
         <LoadingState />
       ) : query.error ? (

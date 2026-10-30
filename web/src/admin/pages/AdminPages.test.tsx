@@ -298,13 +298,13 @@ describe('administrator paged operation pages', () => {
     );
     const listCount = () => requests.filter((url) => url.pathname === '/admin/api/users').length;
     const before = listCount();
-    await view.user.click(screen.getByText('Exact filters'));
+    await view.user.click(screen.getByText('More filters', { exact: false }));
     const input = screen.getByRole('textbox', { name: 'User ID' });
     await view.user.clear(input);
     await view.user.type(input, '9223372036854775808');
     expect(input).toHaveValue('9223372036854775808');
     expect(screen.getByRole('alert')).toHaveTextContent(/positive user ID/);
-    expect(screen.getByRole('button', { name: 'Apply filter' })).toBeDisabled();
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
     expect(listCount()).toBe(before);
     await view.user.click(screen.getByRole('button', { name: 'Overflow URL' }));
     await waitFor(() => expect(input).toHaveValue('9223372036854775808'));
@@ -419,7 +419,7 @@ describe('administrator paged operation pages', () => {
       expect(requests.some((url) => url.searchParams.get('tag') === tag)).toBe(true),
     );
     await view.user.type(screen.getByRole('textbox', { name: 'User ID' }), '42');
-    await view.user.click(screen.getByRole('button', { name: 'Apply filter' }));
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() =>
       expect(
         requests.some(

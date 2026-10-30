@@ -21,7 +21,7 @@ function response(value: unknown) {
 }
 
 function fieldRow(name: string) {
-  return within(screen.getByDisplayValue(name).closest('.core-field-grid') as HTMLElement);
+  return within(screen.getByDisplayValue(name).closest('.nb-fields') as HTMLElement);
 }
 
 afterEach(() => vi.unstubAllGlobals());

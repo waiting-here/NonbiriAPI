@@ -74,10 +74,20 @@ labels and model output cannot grant authority.
 | `agent_driver_profiles`; `agent_driver_bindings`; `agent_chatgpt_session` | Administrator-only model sources and inherited assignments. API keys, subscription credentials and transfer private keys are encrypted; responses expose connection status and safe account metadata only. Excluded from account export. | Shared configuration is independent of account deletion. Disconnect clears the subscription credentials and attempts upstream revocation. Per-person assignments do not grant management access. |
 | `agent_codex_session` | One administrator-owned connection with encrypted credentials, revision and safe account metadata. Administrator-only connection management; individual steward assignments permit model use, never credential access. Excluded from account export 31. | Independent of operator-account deletion. Pending device-code login exists only in bounded memory and expires or is canceled. Disconnect clears active credentials and invalidates active/queued work; version checks prevent late login/refresh from restoring a retired connection. Normal renewal keeps connection identity. Protected complete backups retain the stored connection with its encryption root. |
 | `agent_request_diagnostics` | Safe bounded failure facts in administrator assistant request detail; no authentication material. Excluded from personal export. | Cascades with the associated assistant request and follows its manual cleanup, without a separate expiry. Conversation originals, memory and usage totals remain independent. |
+| `agent_operation_diagnostics` | Administrator-only sanitized connection, credential, catalogue, quota and local-usage failure details; safe source name, operation, status and correlation ID. No raw OAuth response, device code or token; no synthetic inference request. Excluded from personal export. | Independent store bounded to the newest 1,000 records and 30 days, with bounded cleanup after writes and hourly maintenance. Details are at most 16 KiB. Failed persistence preserves the original error and local ID with `saved:false`. Request cleanup and disconnect do not directly delete these records. |
 | `agent_request_drivers` | Safe source, model and configuration snapshot for each model request, excluding credentials. Administrator-only, excluded from account export. | Follows the associated request's bounded manual cleanup. |
 | `management_operations`; `management_operation_items`; `management_operation_rollups`; `management_operation_cleanup_jobs`; `management_operation_terms` | Administrator-only management action history, safe target changes, executor/authorizer snapshots, summaries and cleanup receipts. Excluded from personal account export. Ordinary reads do not create actions. | Complete history is retained until administrator cleanup; no account/resource cascade or automatic expiry. Cleanup fixes its cutoff, deletes operation/item batches in resumable transactions and updates summaries. Accepted operations awaiting real task completion are skipped and counted in `skipped_active`; they do not block the remaining cleanup. A later cleanup may remove them after completion. Unknown submission outcomes are not treated as active tasks. New records and the current cleanup receipt are outside that cleanup's cutoff. It does not remove conversation, memory, ledger or business history. |
 | `ai_agent_conversations`; `ai_agent_messages`; chat/compact rows in `ai_agent_jobs`, `ai_agent_plans` and `ai_agent_model_results` | One current conversation per operator; current authorized access plus administrator archives. Original messages, summaries, tool results, decisions and execution receipts are excluded from account export. | No automatic expiry or operator-account cascade. Edit/clear archives the affected context and supersedes pending work without undoing executed operations. Actor snapshots remain; account deletion or revocation blocks subsequent protected work. Request cleanup does not remove these records. |
 | Automatic-review rows in `ai_agent_jobs`, `ai_agent_plans` and `ai_agent_model_results`; `ai_agent_review_events` | Review evidence needs the review grant and existing resource projections; no credential access is added. Excluded from account export. | Evidence follows its associated donation/approval lifecycle: deleting the donation cascades the job and its results/plans. Intake events are consumed when queued, cleared when automatic review is disabled, or removed with the donation. Request cleanup does not delete review evidence. |
+
+The Codex connection's official quota cache is held only in memory for 30 seconds,
+scoped to the connection revision and invalidated on disconnect/replacement.
+Late responses cannot restore an old connection's data. The separate retained
+Codex 24-hour summary reads usage events joined to retained request/provider
+snapshots across this instance's historical Codex connections. Request cleanup
+can reduce that summary while independent assistant usage events/totals remain
+retained. Neither counter is an account-wide official allowance; see
+[quota and usage scope](api-contract.md#codex-quota-and-retained-local-usage).
 
 Management actions begin with schema 41 operation recording; existing domain
 history is not backfilled. Web management, CallerKey automation, deterministic
@@ -97,6 +107,14 @@ names, identifiers and field names and are removed during operation cleanup. Old
 records keep their saved facts; absent names/values are not reconstructed.
 Large text and secret changes retain permitted change/length facts, never the
 text or secret. Existing administrator-only access and explicit cleanup apply.
+
+Schema 43 adds managed donation service-health snapshots under the same bounded
+capture and cleanup rules. They retain readable source/donation/key/service
+names, actual failure streak/pause and reset-generation changes, reset outcomes
+and retained waits. An already-clear reset advances its generation and is not
+mistaken for an unchanged write or a recovery from failure. Ineligible service
+skips can retain their bounded reason. Ordinary inference health writes outside
+a management operation are excluded; historical service changes are not backfilled.
 
 Management-history cleanup and model-request cleanup are separate operations.
 The former updates incremental rollups and may split a single large operation's
@@ -458,10 +476,10 @@ only addresses already retained by endpoints, donation keys or manual tags, and
 is removed when its final source address is removed. Neither rules nor the index
 add credentials or change account export format or donation-history retention.
 
-Normal startup initializes absent storage or opens only exact current schema 42.
+Normal startup initializes absent storage or opens only exact current schema 43.
 Older, newer, unknown and incomplete databases are rejected before migration,
 repair, WAL checkpoint or recovery writes. Exact registered schema 16–26 and
-33–41 sources require a deliberate standalone-converter invocation after the
+33–42 sources require a deliberate standalone-converter invocation after the
 matching recovery set is preserved; service startup and deployment helpers must
 not apply upgrades implicitly. Atomic conversion preserves the relevant indexes,
 authorization, steward policy/audit/tag data and assistant storage. Pending

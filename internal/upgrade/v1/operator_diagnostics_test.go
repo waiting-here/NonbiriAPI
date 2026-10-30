@@ -18,6 +18,7 @@ var operatorDiagnosticsTables = []string{"agent_codex_session", "request_attempt
 
 func restoreSchema41LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema42LayoutForTest(t, database)
 	rows, err := database.Query(`SELECT name FROM sqlite_schema WHERE type='trigger' AND name GLOB 'management_capture_*' ORDER BY name`)
 	if err != nil {
 		t.Fatal(err)
@@ -125,7 +126,7 @@ func TestOperatorDiagnosticsSchema41UpgradePreservesDataAndRollsBack(t *testing.
 		}
 	}
 	result, err := Run(t.Context(), path, vault, Options{})
-	if err != nil || result.Status != "ready" || result.SourceSchemaVersion != 41 || result.TargetSchemaVersion != 42 {
+	if err != nil || result.Status != "ready" || result.SourceSchemaVersion != 41 || result.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal("read-only inspection", result, err)
 	}
 	checkSource(t)
@@ -157,7 +158,7 @@ func TestOperatorDiagnosticsSchema41UpgradePreservesDataAndRollsBack(t *testing.
 		})
 	}
 	result, err = Run(t.Context(), path, vault, Options{Apply: true})
-	if err != nil || result.Status != "converted" || result.SourceSchemaVersion != 41 || result.TargetSchemaVersion != 42 {
+	if err != nil || result.Status != "converted" || result.SourceSchemaVersion != 41 || result.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal(result, err)
 	}
 	store, err = db.Open(path, vault)

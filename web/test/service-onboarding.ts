@@ -69,7 +69,6 @@ export async function fillService(
   const label = protocols[input.protocol ?? 'openai-compatible'];
   expect(label).toBeTruthy();
   await panel.getByLabel(services.serviceAddress, { exact: true }).fill(input.url);
-  await open(serviceCopy(locale).serviceName);
   await panel.getByLabel(serviceCopy(locale).serviceName, { exact: true }).fill(input.name);
   if (input.protocol !== undefined || input.discovery === false) {
     await open(services.advancedSetup);

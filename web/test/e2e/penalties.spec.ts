@@ -211,7 +211,6 @@ for (const { role, width } of logExportScenarios) {
     await page
       .getByRole('combobox', { name: 'Request stage', exact: true })
       .selectOption('pre_handler');
-    await page.getByRole('button', { name: 'Apply filter', exact: true }).click();
     await expect.poll(() => filters.some((q) => q.includes('phase=pre_handler'))).toBe(true);
     await page.locator('.log-export > summary').click();
     const exportLink = page.getByRole('link', { name: 'Export JSON (programs)' });

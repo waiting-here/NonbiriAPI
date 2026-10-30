@@ -380,37 +380,6 @@ func (s *Service) agentReceiptTx(ctx context.Context, tx *sql.Tx, access useAcce
 }
 
 func agentResetUseTx(ctx context.Context, tx *sql.Tx, id, expected, now int64) error {
-	var approved sql.NullInt64
-	if err := tx.QueryRowContext(ctx, `SELECT current_approved_revision_id FROM donation_uses WHERE id=? AND revision=?`, id, expected).Scan(&approved); errors.Is(err, sql.ErrNoRows) {
-		return ErrConflict
-	} else if err != nil {
-		return err
-	}
-	if !approved.Valid {
-		return ErrConflict
-	}
-	var generation []byte
-	var healthID int64
-	err := tx.QueryRowContext(ctx, `SELECT h.id,h.streak_generation FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donation_use_revisions r ON r.id=u.current_approved_revision_id JOIN endpoint_key_grant_revisions g ON g.id=r.grant_revision_id JOIN donation_service_health h ON h.use_id=u.id AND h.endpoint_key_id=dk.endpoint_key_id AND h.native_service_bit=u.native_service_bit AND h.credential_version_id=g.credential_version_id WHERE u.id=?`, id).Scan(&healthID, &generation)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-	if err == nil {
-		values, e := streakResetValues(generation)
-		if e != nil {
-			return e
-		}
-		r, e := tx.ExecContext(ctx, `UPDATE donation_service_health SET `+streakResetAssignments+`,updated_at=? WHERE id=?`, append(values, now, healthID)...)
-		if e != nil {
-			return e
-		}
-		if e = requireOne(r); e != nil {
-			return e
-		}
-	}
-	result, err := tx.ExecContext(ctx, `UPDATE donation_uses SET revision=revision+1,updated_at=? WHERE id=? AND revision=? AND revision<9223372036854775807`, now, id, expected)
-	if err != nil {
-		return err
-	}
-	return requireOne(result)
+	_, err := resetUseTx(ctx, tx, id, expected, now)
+	return err
 }

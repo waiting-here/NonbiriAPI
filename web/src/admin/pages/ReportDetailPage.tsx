@@ -1,3 +1,5 @@
+import { FormActions } from '@shared/components/ui/Fields';
+import { Field } from '@shared/components/ui/Field';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
@@ -642,16 +644,18 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
         <Card className="ops-danger">
           <h2>{t('admin.reports.detail.decisionTitle')}</h2>
           <p>{t('admin.reports.detail.decisionBody')}</p>
-          <label className="ops-form-field">
-            <span>{t('admin.reports.detail.reason')}</span>
-            <textarea
-              value={reason}
-              maxLength={1024}
-              onChange={(event) => setReason(event.target.value)}
-            />
-          </label>
+          <Field label={t('admin.reports.detail.reason')} size="long">
+            {(field) => (
+              <textarea
+                {...field}
+                value={reason}
+                maxLength={1024}
+                onChange={(event) => setReason(event.target.value)}
+              />
+            )}
+          </Field>
           {decide.error ? <ErrorState error={decide.error} /> : null}
-          <div className="ops-actions">
+          <FormActions>
             <button
               className="nb-btn nb-btn--danger"
               type="button"
@@ -670,7 +674,7 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
             >
               {t('admin.reports.detail.rejectReport')}
             </button>
-          </div>
+          </FormActions>
         </Card>
       ) : null}
       {!authorityBlocked && detail.data?.status === 'approved_processing' ? (

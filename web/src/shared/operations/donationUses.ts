@@ -1,4 +1,3 @@
-import { apiFetch } from '@shared/query/http';
 import { decoded, idempotentOptions, queryPath } from './api';
 import {
   array,
@@ -16,6 +15,7 @@ import { normalizePageMetadata, type PageMetadata, type PageSize } from './pageN
 import { normalizeNativeServices } from '@shared/connections';
 import type { NativeService } from '@shared/nativeServices';
 import { normalizeManagedDiscovery, type DiscoveryEvidence } from './donationDiscovery';
+import { serviceFailureReset, type ServiceFailureReset } from './failureReset';
 export type UseRole = 'owner' | 'admin' | 'steward';
 export interface UseVersion {
   credential_id: string;
@@ -33,6 +33,7 @@ export interface UseVersion {
   discovery: DiscoveryEvidence | null;
 }
 export interface DonationUse {
+  failure_reset?: ServiceFailureReset;
   id: string;
   donation_id: string;
   donation_key_id: string;
@@ -187,25 +188,22 @@ function version(value: unknown): UseVersion | null {
   };
 }
 export function normalizeDonationUse(value: unknown): DonationUse {
-  const row = record(
-    value,
-    [
-      'id',
-      'donation_id',
-      'donation_key_id',
-      'endpoint_key_id',
-      'native_service',
-      'enabled',
-      'discovery_enabled',
-      'revision',
-      'approved',
-      'pending',
-      'latest',
-      'health',
-      'capabilities',
-    ],
-    'donation use',
-  );
+  const required = [
+    'id',
+    'donation_id',
+    'donation_key_id',
+    'endpoint_key_id',
+    'native_service',
+    'enabled',
+    'discovery_enabled',
+    'revision',
+    'approved',
+    'pending',
+    'latest',
+    'health',
+    'capabilities',
+  ] as const;
+  const row = record(value, [...required, 'failure_reset'], 'donation use', required);
   const caps = record(
     row.capabilities,
     [
@@ -227,6 +225,7 @@ export function normalizeDonationUse(value: unknown): DonationUse {
           'use health',
         );
   return {
+    failure_reset: row.failure_reset == null ? undefined : serviceFailureReset(row.failure_reset),
     id: decimalID(row.id, 'use'),
     donation_id: decimalID(row.donation_id, 'donation'),
     donation_key_id: decimalID(row.donation_key_id, 'donation key'),
@@ -331,12 +330,19 @@ export function mutateDonationUse(
   input: Record<string, unknown>,
   key: string,
   signal?: AbortSignal,
-): Promise<void> {
-  return apiFetch<void>(
+): Promise<{ failure_reset?: ServiceFailureReset }> {
+  return decoded(
     path(role, donationId) +
       '/' +
       encodeURIComponent(useId) +
       (action === 'withdraw' ? '/pending' : action === 'reset' ? '/failure-streak-reset' : ''),
+    (value) => {
+      const row = record(value ?? {}, ['failure_reset'], 'use receipt', []);
+      return {
+        failure_reset:
+          row.failure_reset == null ? undefined : serviceFailureReset(row.failure_reset),
+      };
+    },
     idempotentOptions(key, {
       method: action === 'withdraw' ? 'DELETE' : action === 'reset' ? 'POST' : 'PATCH',
       json: input,

@@ -8,6 +8,7 @@ import { statisticsPage } from '../fixtures/gacha-statistics';
 import { shopStatisticsCards, shopStatisticsRarities } from '../fixtures/gacha-shop-statistics';
 import en from '../../src/admin/i18n/en.json' with { type: 'json' };
 import zh from '../../src/admin/i18n/zh.json' with { type: 'json' };
+import sharedEn from '../../src/shared/i18n/common/en.json' with { type: 'json' };
 
 const longEnglish =
   'Complete mystery-shop card name with Wide WWW lettering and every original word preserved '.repeat(
@@ -150,7 +151,7 @@ for (const theme of ['light', 'dark'])
       await panel.getByRole('searchbox', { name: common.searchCards, exact: true }).fill('silver');
       await panel
         .getByRole('form', { name: common.cardFilters, exact: true })
-        .getByRole('button', { name: common.search, exact: true })
+        .getByRole('button', { name: sharedEn.common.search, exact: true })
         .click();
       await expect(table.getByText('Limited silver moon', { exact: true })).toBeVisible();
       await panel.getByLabel(common.cardOrder, { exact: true }).selectOption('name');

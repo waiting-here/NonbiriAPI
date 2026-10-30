@@ -110,7 +110,7 @@ test('current service failures are visible to owner and managers and recover thr
       await context.close();
     }
   }
-  // A real service reset must refresh both the donation projection and binding availability.
+  // Batch reset must clear actual service health and retain a truthful audit.
   const context = await browser.newContext();
   try {
     const cookie = fixture.admin_cookie;
@@ -127,9 +127,68 @@ test('current service failures are visible to owner and managers and recover thr
     await context.addInitScript(() => localStorage.setItem('nb.lang', 'en'));
     const page = await context.newPage();
     await page.goto(`${fixture.admin_url}/charity?donation_id=${ids.donation_id}`);
-    await page
-      .getByRole('button', { name: 'Reset failures and resume services', exact: true })
-      .click();
+    const reset = page.locator('.failure-reset-control:visible').first();
+    await reset.getByText('Reset failure count', { exact: true }).click();
+    const completed = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/admin/api/donation-keys/failure-streak-reset') &&
+        response.request().method() === 'POST',
+    );
+    await reset.getByRole('button', { name: 'Reset all matching keys' }).click();
+    const response = await completed;
+    expect(response.ok()).toBe(true);
+    const receipt = await response.json();
+    expect(receipt.counts.recovered).toBe('1');
+    expect(receipt.results[0].services).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          native_service: 'chat_completions',
+          status: 'reset',
+          failure_streak_before: '10',
+          failure_disabled_before: true,
+        }),
+      ]),
+    );
+    await expect(reset).toContainText('Failures cleared: 1');
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate((value) => {
+          localStorage.setItem('nb.theme', value);
+          document.documentElement.dataset.theme = value;
+        }, theme);
+        await reset.scrollIntoViewIfNeeded();
+        expect(
+          await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
+        ).toBe(true);
+        if (process.env.NONBIRI_VISUAL_DIR)
+          await page.screenshot({
+            path: resolve(process.env.NONBIRI_VISUAL_DIR, `reset-receipt-${width}-${theme}.png`),
+          });
+      }
+    }
+    const history = await page.request.get(
+      fixture.admin_url +
+        '/admin/api/management-operations?view=operations&page=1&page_size=20&domain=donation-keys',
+    );
+    expect(history.ok()).toBe(true);
+    const operations = await history.json();
+    const operation = operations.operations.find(
+      (entry: { action: string }) => entry.action === 'failure-streak-reset',
+    );
+    expect(operation).toBeTruthy();
+    expect(operation.outcome).toBe('succeeded');
+    const audit = await page.request.get(
+      fixture.admin_url +
+        '/admin/api/management-operations/' +
+        operation.id +
+        '/items?page=1&page_size=20',
+    );
+    expect(audit.ok()).toBe(true);
+    const audited = await audit.json();
+    expect(JSON.stringify(audited)).toContain('donation_service_health');
+    expect(JSON.stringify(audited)).toContain('Service health example');
+    expect(JSON.stringify(audited)).toContain('recovered');
     await expect(page.getByRole('region', { name: 'Service health' }).first()).not.toContainText(
       'Paused after consecutive failures',
     );

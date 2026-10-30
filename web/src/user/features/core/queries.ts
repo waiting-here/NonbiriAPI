@@ -549,6 +549,9 @@ export async function invalidateResourceDependents(
       queryKey: [...coreKeys.account(accountId), 'binding-candidates'],
     }),
     queryClient.invalidateQueries({ queryKey: coreKeys.endpointRoutingAll(accountId) }),
+    queryClient.invalidateQueries({
+      queryKey: ['user', 'economy', 'endpoint-choices', accountId],
+    }),
   ];
 
   if (options.modelIds) {

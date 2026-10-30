@@ -112,6 +112,9 @@
     transparent
   );
 }
+.nb-moment-character[data-expanded='true'] {
+  mask-image: none;
+}
 .nb-moment-character > img,
 .nb-moment-character > canvas {
   position: absolute;
@@ -129,8 +132,42 @@
 .nb-moment-character > canvas[data-ready='true'] {
   opacity: 1;
 }
-.nb-moment-character:has(canvas[data-ready='true']) > img:not(.nb-moment-character__plate) {
+.nb-moment-character:has(canvas[data-ready='true'])
+  > img:not(.nb-moment-character__plate, .nb-moment-character__scene) {
   visibility: hidden;
+}
+/*
+ * Wide screens keep the character beside the content instead of behind it. The content
+ * gives up a right-hand column; the character fills that column at full height when the
+ * window is tall enough, otherwise it shrinks to the column width. Expanded margins use
+ * extra content reserve and move only the original anchor inward. Wide artwork shrinks
+ * as a whole to keep at least 40rem of usable content. Game pages keep their own layout.
+ */
+@media (width >= 80rem) {
+  html[data-appearance='heart-moment'] {
+    --nb-moment-gutter: var(
+      --nb-moment-scene-frame-width,
+      min(
+        calc((100dvh - 4.25rem) * 2 / 3 / var(--nb-moment-height-ratio, 1)),
+        max(20rem, calc(100vw - 64rem)),
+        calc((100vw - 45rem) / var(--nb-moment-width-ratio, 1))
+      )
+    );
+  }
+  html[data-appearance='heart-moment']
+    .nb-user-shell:not([data-layout='game'])
+    > :is(.nb-user-shell__main, .nb-user-shell__footer) {
+    padding-inline-end: calc(
+      var(--nb-moment-gutter) + var(--nb-moment-extra-reserve, 0px) + var(--nb-space-8)
+    );
+  }
+  html[data-appearance='heart-moment']:has(.nb-user-shell:not([data-layout='game']))
+    .nb-moment-character {
+    top: auto;
+    right: var(--nb-moment-right-reserve, 0px);
+    width: var(--nb-moment-gutter);
+    height: auto;
+  }
 }
 @media (width < 40rem) {
   .nb-moment-character {
@@ -138,6 +175,13 @@
     transform: translateX(50%);
     height: min(100%, 150vw);
   }
+}
+/* A registered landscape and its character share one cover scale and anchor. */
+.nb-moment-backdrop[data-expanded-scene='true'] .nb-moment-character {
+  right: 0;
+  width: var(--nb-moment-scene-frame-width);
+  height: auto;
+  transform: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .nb-moment-character > canvas {

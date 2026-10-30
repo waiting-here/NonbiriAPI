@@ -626,7 +626,7 @@ describe('CharityManagement corrective controls', () => {
         expect(editor.getByLabelText('Output donor reward')).toHaveValue('30');
         expect(editor.getByLabelText('Usage reserve (credits)')).toHaveValue('25.125');
         expect(editor.getByLabelText('Provider')).toHaveValue('provider');
-        expect(editor.getByRole('checkbox', { name: 'Enable charity model' })).not.toBeChecked();
+        expect(editor.getByRole('switch', { name: 'Enable charity model' })).not.toBeChecked();
         expect(writes).toHaveLength(0);
         await view.user.click(
           editor.getByRole('button', { name: 'Return to current price draft' }),
@@ -1168,7 +1168,7 @@ describe('CharityManagement corrective controls', () => {
     await screen.findByRole('heading', { name: 'Review pending submission' });
     await view.user.type(screen.getByLabelText('Reason'), 'Keep the affected member disabled');
     expect(screen.getByRole('button', { name: 'Approve donation' })).toBeDisabled();
-    await view.user.click(screen.getByRole('checkbox', { name: 'Enable for charity' }));
+    await view.user.click(screen.getByRole('switch', { name: 'Enable for charity' }));
     await view.user.click(screen.getByRole('button', { name: 'Approve donation' }));
     await waitFor(() => expect(requests.reviewBodies).toHaveLength(1));
     expect(requests.reviewBodies[0].key_settings).toEqual([

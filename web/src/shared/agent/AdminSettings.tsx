@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { LoadingState } from '@shared/components/States';
@@ -7,7 +7,18 @@ import {
   stationSessionMatches,
   StationSessionChangedError,
 } from '@shared/charityManagement';
-import { Button, Field, Fold, Note, Panel, PanelBody, PanelHead } from '@shared/components/ui';
+import {
+  Button,
+  Field,
+  Fields,
+  FormActions,
+  Fold,
+  Note,
+  Panel,
+  PanelBody,
+  PanelHead,
+  Toggle,
+} from '@shared/components/ui';
 import {
   AGENT_TOOLS,
   agentRoot,
@@ -344,151 +355,162 @@ function DriverForm({ initial, account }: { initial: DriverSettings; account: st
             save.mutate();
           }}
         >
-          <fieldset className="agent-form-fields" disabled={busy}>
-            <Field label={t('common.connections.entryURL')} help={t('common.agent.driverURLHelp')}>
-              {(props) => (
-                <input
-                  {...props}
-                  type="url"
-                  value={draft.base_url}
-                  onChange={(event) => patch({ base_url: event.target.value })}
-                />
-              )}
-            </Field>
-            <SecretField
-              hasKey={base.has_key}
-              value={key}
-              onChange={setKey}
-              label={t('common.connections.secret')}
-            />
-            <div className="agent-template-row">
-              <Field label={t('common.connections.model')}>
-                {(props) => (
-                  <input
-                    {...props}
-                    list="agent-driver-models"
-                    value={draft.model}
-                    onChange={(event) => patch({ model: event.target.value })}
-                  />
-                )}
-              </Field>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={busy || !draft.base_url || (!base.has_key && !key)}
-                onClick={() => void loadModels()}
+          <fieldset className="nb-stack" disabled={busy}>
+            <Fields>
+              <Field
+                size="long"
+                label={t('common.connections.entryURL')}
+                help={t('common.agent.driverURLHelp')}
               >
-                {t('common.agent.discoverModels')}
-              </Button>
-              <datalist id="agent-driver-models">
-                {models.map((model) => (
-                  <option key={model} value={model} />
-                ))}
-              </datalist>
-            </div>
-            <div className="agent-field-grid">
-              <Field label={t('common.agent.contextWindow')}>
                 {(props) => (
                   <input
                     {...props}
-                    type="number"
-                    min={1024}
-                    step={1}
-                    value={draft.context_window}
-                    onChange={(event) => patch({ context_window: Number(event.target.value) })}
+                    type="url"
+                    value={draft.base_url}
+                    onChange={(event) => patch({ base_url: event.target.value })}
                   />
                 )}
               </Field>
-              <Field label={t('common.agent.maxOutput')}>
-                {(props) => (
-                  <input
-                    {...props}
-                    type="number"
-                    min={1}
-                    value={draft.max_output_tokens}
-                    onChange={(event) => patch({ max_output_tokens: Number(event.target.value) })}
-                  />
-                )}
-              </Field>
-            </div>
-            <Fold title={t('common.agent.advanced')}>
-              <div className="agent-field-grid">
-                <Field label={t('common.agent.tokenParameter')}>
+              <SecretField
+                hasKey={base.has_key}
+                value={key}
+                onChange={setKey}
+                label={t('common.connections.secret')}
+              />
+              <div className="agent-template-row">
+                <Field label={t('common.connections.model')}>
                   {(props) => (
-                    <select
+                    <input
                       {...props}
-                      value={draft.output_token_parameter}
-                      onChange={(event) => patch({ output_token_parameter: event.target.value })}
-                    >
-                      <option value="max_tokens">max_tokens</option>
-                      <option value="max_completion_tokens">max_completion_tokens</option>
-                    </select>
+                      list="agent-driver-models"
+                      value={draft.model}
+                      onChange={(event) => patch({ model: event.target.value })}
+                    />
                   )}
                 </Field>
-                <Field label={t('common.agent.concurrency')}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={busy || !draft.base_url || (!base.has_key && !key)}
+                  onClick={() => void loadModels()}
+                >
+                  {t('common.agent.discoverModels')}
+                </Button>
+                <datalist id="agent-driver-models">
+                  {models.map((model) => (
+                    <option key={model} value={model} />
+                  ))}
+                </datalist>
+              </div>
+              <Fields>
+                <Field size="short" label={t('common.agent.contextWindow')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="number"
+                      min={1024}
+                      step={1}
+                      value={draft.context_window}
+                      onChange={(event) => patch({ context_window: Number(event.target.value) })}
+                    />
+                  )}
+                </Field>
+                <Field size="short" label={t('common.agent.maxOutput')}>
                   {(props) => (
                     <input
                       {...props}
                       type="number"
                       min={1}
-                      max={128}
-                      value={draft.concurrency}
-                      onChange={(event) => patch({ concurrency: Number(event.target.value) })}
+                      value={draft.max_output_tokens}
+                      onChange={(event) => patch({ max_output_tokens: Number(event.target.value) })}
                     />
                   )}
                 </Field>
-                <Field label={t('common.agent.timeout')}>
-                  {(props) => (
-                    <input
-                      {...props}
-                      type="number"
-                      min={1}
-                      max={1200}
-                      value={draft.timeout_seconds}
-                      onChange={(event) => patch({ timeout_seconds: Number(event.target.value) })}
-                    />
-                  )}
-                </Field>
-                {(['temperature', 'top_p'] as const).map((name) => (
-                  <Field
-                    key={name}
-                    label={t(
-                      name === 'temperature' ? 'common.agent.temperature' : 'common.agent.topP',
+              </Fields>
+              <Fold title={t('common.agent.advanced')}>
+                <Fields>
+                  <Field size="short" label={t('common.agent.tokenParameter')}>
+                    {(props) => (
+                      <select
+                        {...props}
+                        value={draft.output_token_parameter}
+                        onChange={(event) => patch({ output_token_parameter: event.target.value })}
+                      >
+                        <option value="max_tokens">max_tokens</option>
+                        <option value="max_completion_tokens">max_completion_tokens</option>
+                      </select>
                     )}
-                    optional
-                  >
+                  </Field>
+                  <Field size="short" label={t('common.agent.concurrency')}>
                     {(props) => (
                       <input
                         {...props}
                         type="number"
-                        min={0}
-                        max={name === 'temperature' ? 2 : 1}
-                        step="any"
-                        value={draft[name] ?? ''}
-                        onChange={(event) =>
-                          patch({
-                            [name]:
-                              event.target.value === '' ? undefined : Number(event.target.value),
-                          })
-                        }
+                        min={1}
+                        max={128}
+                        value={draft.concurrency}
+                        onChange={(event) => patch({ concurrency: Number(event.target.value) })}
                       />
                     )}
                   </Field>
-                ))}
-              </div>
-              <Field label={t('common.agent.extraParameters')} help={t('common.agent.extraHelp')}>
-                {(props) => (
-                  <textarea
-                    {...props}
-                    className="nb-mono"
-                    rows={5}
-                    value={extra}
-                    onChange={(event) => setExtra(event.target.value)}
-                  />
-                )}
-              </Field>
-            </Fold>
-            <div className="nb-actions">
+                  <Field size="short" label={t('common.agent.timeout')}>
+                    {(props) => (
+                      <input
+                        {...props}
+                        type="number"
+                        min={1}
+                        max={1200}
+                        value={draft.timeout_seconds}
+                        onChange={(event) => patch({ timeout_seconds: Number(event.target.value) })}
+                      />
+                    )}
+                  </Field>
+                  {(['temperature', 'top_p'] as const).map((name) => (
+                    <Field
+                      key={name}
+                      size="short"
+                      label={t(
+                        name === 'temperature' ? 'common.agent.temperature' : 'common.agent.topP',
+                      )}
+                      optional
+                    >
+                      {(props) => (
+                        <input
+                          {...props}
+                          type="number"
+                          min={0}
+                          max={name === 'temperature' ? 2 : 1}
+                          step="any"
+                          value={draft[name] ?? ''}
+                          onChange={(event) =>
+                            patch({
+                              [name]:
+                                event.target.value === '' ? undefined : Number(event.target.value),
+                            })
+                          }
+                        />
+                      )}
+                    </Field>
+                  ))}
+                </Fields>
+                <Field
+                  size="long"
+                  label={t('common.agent.extraParameters')}
+                  help={t('common.agent.extraHelp')}
+                >
+                  {(props) => (
+                    <textarea
+                      {...props}
+                      className="nb-mono"
+                      rows={5}
+                      value={extra}
+                      onChange={(event) => setExtra(event.target.value)}
+                    />
+                  )}
+                </Field>
+              </Fold>
+            </Fields>
+            <FormActions>
               <Button variant="primary" type="submit" disabled={busy || !dirty}>
                 {t('common.save')}
               </Button>
@@ -513,7 +535,7 @@ function DriverForm({ initial, account }: { initial: DriverSettings; account: st
               >
                 {t('common.agent.restoreSaved')}
               </Button>
-            </div>
+            </FormActions>
             {save.error ? <AgentError error={save.error} /> : null}
             {error ? <AgentError error={error} /> : null}
             {save.isSuccess ? <Note tone="ok">{t('common.outcome.saved')}</Note> : null}
@@ -526,7 +548,6 @@ function DriverForm({ initial, account }: { initial: DriverSettings; account: st
 }
 function AgentConfigForm({ initial, account }: { initial: AgentSettings; account: string }) {
   const { t } = useTranslation();
-  const chatHelpId = useId();
   const client = useQueryClient();
   const guard = useAdminRequestGuard();
   const [base, setBase] = useState(initial);
@@ -586,129 +607,129 @@ function AgentConfigForm({ initial, account }: { initial: AgentSettings; account
             save.mutate();
           }}
         >
-          <fieldset className="agent-form-fields" disabled={busy}>
-            <div>
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  aria-describedby={chatHelpId}
-                  checked={draft.chat_enabled}
-                  onChange={(event) => patch({ chat_enabled: event.target.checked })}
+          <fieldset className="nb-stack" disabled={busy}>
+            <Fields>
+              <Toggle
+                label={t('common.agent.chatEnabled')}
+                description={t('common.agent.chatEnabledHelp')}
+                checked={draft.chat_enabled}
+                onChange={(chat_enabled) => patch({ chat_enabled })}
+              />
+              <Field label={t('common.agent.autoMode')} help={t('common.agent.modeHelp')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={draft.mode}
+                    onChange={(event) =>
+                      patch({ mode: event.target.value as AgentSettings['mode'] })
+                    }
+                  >
+                    <option value="off">{t('common.agent.modes.off')}</option>
+                    <option value="preview">{t('common.agent.modes.preview')}</option>
+                    <option value="auto">{t('common.agent.modes.auto')}</option>
+                  </select>
+                )}
+              </Field>
+              <Fold title={t('common.agent.templates')}>
+                <h3>{t('common.agent.reviewTemplate')}</h3>
+                <TemplateEditor
+                  value={draft.auto_template}
+                  onChange={(auto_template) => patch({ auto_template })}
+                  chat={false}
                 />
-                <span>{t('common.agent.chatEnabled')}</span>
-              </label>
-              <p className="nb-small nb-muted" id={chatHelpId}>
-                {t('common.agent.chatEnabledHelp')}
-              </p>
-            </div>
-            <Field label={t('common.agent.autoMode')} help={t('common.agent.modeHelp')}>
-              {(props) => (
-                <select
-                  {...props}
-                  value={draft.mode}
-                  onChange={(event) => patch({ mode: event.target.value as AgentSettings['mode'] })}
+                <h3>{t('common.agent.chatTemplate')}</h3>
+                <TemplateEditor
+                  value={draft.chat_template}
+                  onChange={(chat_template) => patch({ chat_template })}
+                  chat
+                />
+                <Field
+                  label={t('common.agent.reviewPrefill')}
+                  size="long"
+                  help={t('common.agent.prefillHelp')}
+                  optional
                 >
-                  <option value="off">{t('common.agent.modes.off')}</option>
-                  <option value="preview">{t('common.agent.modes.preview')}</option>
-                  <option value="auto">{t('common.agent.modes.auto')}</option>
-                </select>
-              )}
-            </Field>
-            <Fold title={t('common.agent.templates')}>
-              <h3>{t('common.agent.reviewTemplate')}</h3>
-              <TemplateEditor
-                value={draft.auto_template}
-                onChange={(auto_template) => patch({ auto_template })}
-                chat={false}
-              />
-              <h3>{t('common.agent.chatTemplate')}</h3>
-              <TemplateEditor
-                value={draft.chat_template}
-                onChange={(chat_template) => patch({ chat_template })}
-                chat
-              />
-              <Field
-                label={t('common.agent.reviewPrefill')}
-                help={t('common.agent.prefillHelp')}
-                optional
-              >
-                {(props) => (
-                  <textarea
-                    {...props}
-                    value={draft.auto_prefill}
-                    onChange={(event) => patch({ auto_prefill: event.target.value })}
-                  />
-                )}
-              </Field>
-              <Field label={t('common.agent.chatPrefill')} optional>
-                {(props) => (
-                  <textarea
-                    {...props}
-                    value={draft.chat_prefill}
-                    onChange={(event) => patch({ chat_prefill: event.target.value })}
-                  />
-                )}
-              </Field>
-            </Fold>
-            <Fold title={t('common.agent.toolsTitle')}>
-              <p className="nb-small nb-muted">{t('common.agent.toolDescriptionHelp')}</p>
-              <div className="agent-field-grid">
-                {AGENT_TOOLS.map((name) => (
-                  <div key={name} className="nb-stack nb-stack--sm">
-                    <label className="checkbox-label">
-                      <input
-                        type="checkbox"
+                  {(props) => (
+                    <textarea
+                      {...props}
+                      value={draft.auto_prefill}
+                      onChange={(event) => patch({ auto_prefill: event.target.value })}
+                    />
+                  )}
+                </Field>
+                <Field size="long" label={t('common.agent.chatPrefill')} optional>
+                  {(props) => (
+                    <textarea
+                      {...props}
+                      value={draft.chat_prefill}
+                      onChange={(event) => patch({ chat_prefill: event.target.value })}
+                    />
+                  )}
+                </Field>
+              </Fold>
+              <Fold title={t('common.agent.toolsTitle')}>
+                <p className="nb-small nb-muted">{t('common.agent.toolDescriptionHelp')}</p>
+                <Fields>
+                  {AGENT_TOOLS.map((name) => (
+                    <div key={name} className="nb-stack nb-stack--sm">
+                      <Toggle
+                        label={t(toolLabels[name]!)}
                         checked={draft.tools[name] ?? true}
-                        onChange={(event) =>
-                          patch({ tools: { ...draft.tools, [name]: event.target.checked } })
+                        onChange={(checked) =>
+                          patch({ tools: { ...draft.tools, [name]: checked } })
                         }
                       />
-                      <span>{t(toolLabels[name]!)}</span>
-                    </label>
-                    <Fold title={t('common.agent.toolDescription')}>
-                      <Field
-                        label={t('common.agent.toolDescriptionFor', { tool: t(toolLabels[name]!) })}
-                      >
-                        {(props) => (
-                          <textarea
-                            {...props}
-                            rows={6}
-                            value={draft.tool_descriptions?.[name] ?? ''}
-                            onChange={(event) =>
-                              patch({
-                                tool_descriptions: {
-                                  ...draft.tool_descriptions,
-                                  [name]: event.target.value,
-                                },
-                              })
-                            }
-                          />
-                        )}
-                      </Field>
-                    </Fold>
-                  </div>
-                ))}
-              </div>
-            </Fold>
-            <Fold title={t('common.agent.webSearch')}>
-              <Field label={t('common.agent.searchURL')} help={t('common.agent.searchHelp')}>
-                {(props) => (
-                  <input
-                    {...props}
-                    type="url"
-                    value={draft.search_url}
-                    onChange={(event) => patch({ search_url: event.target.value })}
-                  />
-                )}
-              </Field>
-              <SecretField
-                hasKey={base.search_has_key}
-                value={key}
-                onChange={setKey}
-                label={t('common.agent.searchKey')}
-              />
-            </Fold>
-            <div className="nb-actions">
+                      <Fold title={t('common.agent.toolDescription')}>
+                        <Field
+                          label={t('common.agent.toolDescriptionFor', {
+                            tool: t(toolLabels[name]!),
+                          })}
+                        >
+                          {(props) => (
+                            <textarea
+                              {...props}
+                              rows={6}
+                              value={draft.tool_descriptions?.[name] ?? ''}
+                              onChange={(event) =>
+                                patch({
+                                  tool_descriptions: {
+                                    ...draft.tool_descriptions,
+                                    [name]: event.target.value,
+                                  },
+                                })
+                              }
+                            />
+                          )}
+                        </Field>
+                      </Fold>
+                    </div>
+                  ))}
+                </Fields>
+              </Fold>
+              <Fold title={t('common.agent.webSearch')}>
+                <Field
+                  size="long"
+                  label={t('common.agent.searchURL')}
+                  help={t('common.agent.searchHelp')}
+                >
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="url"
+                      value={draft.search_url}
+                      onChange={(event) => patch({ search_url: event.target.value })}
+                    />
+                  )}
+                </Field>
+                <SecretField
+                  hasKey={base.search_has_key}
+                  value={key}
+                  onChange={setKey}
+                  label={t('common.agent.searchKey')}
+                />
+              </Fold>
+            </Fields>
+            <FormActions>
               <Button
                 variant="primary"
                 type="submit"
@@ -739,7 +760,7 @@ function AgentConfigForm({ initial, account }: { initial: AgentSettings; account
               >
                 {t('common.agent.restoreSaved')}
               </Button>
-            </div>
+            </FormActions>
             {save.error ? <AgentError error={save.error} /> : null}
             {error ? <AgentError error={error} /> : null}
             {save.isSuccess ? <Note tone="ok">{t('common.outcome.saved')}</Note> : null}

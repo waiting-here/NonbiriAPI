@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { NavLink, Outlet } from 'react-router';
+import { NavLink, Outlet, useLocation } from 'react-router';
 import { Fragment } from 'react';
 import { DonationPendingBadge } from '@shared/components/DonationPendingBadge';
 import { useTranslation } from 'react-i18next';
@@ -20,12 +20,14 @@ import { useAdminSession } from '../data';
 import { useAdminBranding } from '../branding';
 import { clearManagementSession } from '@shared/charityManagement';
 import { ADMIN_NAV_GROUPS, ADMIN_PRIMARY_NAV } from '../navigation';
+import { activeAdminNavGroup, useCollapsedAdminNavGroups } from '../navigationGroups';
 
 const ADMIN_GROUP_LABEL_KEYS: Record<(typeof ADMIN_NAV_GROUPS)[number], string> = {
   overview: 'admin.navigation.overview',
   users: 'admin.navigation.users',
   operations: 'admin.navigation.operations',
-  content: 'admin.navigation.content',
+  services: 'admin.navigation.services',
+  activities: 'admin.navigation.activities',
 };
 
 function AdminLogin({
@@ -152,6 +154,9 @@ export function AdminLayout() {
   const siteName = config.data?.siteName || branding.data?.siteName || t('app.name');
   const siteLogoURL = config.data?.siteLogoURL ?? branding.data?.siteLogoURL;
   const [menuOpen, setMenuOpen] = useState(false);
+  const { pathname } = useLocation();
+  const currentGroup = activeAdminNavGroup(pathname);
+  const navGroups = useCollapsedAdminNavGroups();
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const [logoutError, setLogoutError] = useState<unknown>(null);
@@ -362,11 +367,11 @@ export function AdminLayout() {
           onClick={closeMenu}
         />
       ) : null}
-      <div className="admin-shell nb-admin-shell">
+      <div className="nb-admin-shell">
         <aside
           ref={sidebarRef}
           id="admin-navigation"
-          className={`admin-sidebar nb-admin-sidebar ${menuOpen ? 'is-open' : ''}`}
+          className={`nb-admin-sidebar${menuOpen ? ' is-open' : ''}`}
           aria-label={t('admin.shell.navLabel')}
         >
           <nav className="nb-admin-sidebar__nav">
@@ -376,19 +381,40 @@ export function AdminLayout() {
               const groupTitle = t(ADMIN_GROUP_LABEL_KEYS[group], {
                 defaultValue: t('admin.settings.nav'),
               });
+              // A one-item group would only repeat its own label as a heading.
+              const titled = items.length > 1;
+              const current = group === currentGroup;
+              const open = current || !navGroups.collapsed.includes(group);
+              const listID = `admin-nav-${group}`;
               return (
                 <section className="nb-admin-sidebar__group" key={group}>
-                  <h2 className="nb-admin-sidebar__group-title">{groupTitle}</h2>
-                  {items.map((item) => {
-                    const label = item.labelKey
-                      ? t(item.labelKey, {
-                          defaultValue: item.fallbackLabelKey
-                            ? t(item.fallbackLabelKey)
-                            : item.labelKey,
-                        })
-                      : t(`admin.${item.key}.nav`);
-                    return (
-                      <Fragment key={item.key}>
+                  {titled ? (
+                    <h2 className="nb-admin-sidebar__group-title">
+                      {current ? (
+                        <span>{groupTitle}</span>
+                      ) : (
+                        <button
+                          type="button"
+                          aria-expanded={open}
+                          aria-controls={listID}
+                          onClick={() => navGroups.toggle(group)}
+                        >
+                          <span>{groupTitle}</span>
+                          <Icon name="chevron-down" />
+                        </button>
+                      )}
+                    </h2>
+                  ) : null}
+                  <div className="nb-admin-sidebar__items" id={listID} hidden={titled && !open}>
+                    {items.map((item) => {
+                      const label = item.labelKey
+                        ? t(item.labelKey, {
+                            defaultValue: item.fallbackLabelKey
+                              ? t(item.fallbackLabelKey)
+                              : item.labelKey,
+                          })
+                        : t(`admin.${item.key}.nav`);
+                      const link = (
                         <NavLink
                           className="nb-admin-sidebar__link"
                           to={item.to}
@@ -398,23 +424,28 @@ export function AdminLayout() {
                           {item.icon ? <Icon name={item.icon} /> : null}
                           <span className="nb-admin-sidebar__label">{label}</span>
                         </NavLink>
-                        {item.to === '/charity' ? (
+                      );
+                      return item.to === '/charity' ? (
+                        <div className="nb-admin-sidebar__row" key={item.key}>
+                          {link}
                           <DonationPendingBadge
                             key={toastIdentity}
                             role="admin"
                             accountID={toastIdentity}
                             onNavigate={closeMenu}
                           />
-                        ) : null}
-                      </Fragment>
-                    );
-                  })}
+                        </div>
+                      ) : (
+                        <Fragment key={item.key}>{link}</Fragment>
+                      );
+                    })}
+                  </div>
                 </section>
               );
             })}
           </nav>
         </aside>
-        <main id="main" className="admin-content nb-admin-content" tabIndex={-1}>
+        <main id="main" className="nb-admin-content" tabIndex={-1}>
           {logoutError ? <ErrorState error={logoutError} /> : null}
           {/* Keep route-local mutation and form state scoped to one admin. */}
           <TimeContextProvider station="admin">

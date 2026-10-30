@@ -1,6 +1,7 @@
 import { usePictureBookText } from '@shared/picturebook/copy';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Field, Fields, FormActions } from '@shared/components/ui';
 import '@shared/operations/operations.css';
 import type { ImageModel } from '@shared/picturebook/publicTypes';
 import type { PriceDraft } from './prices';
@@ -38,49 +39,53 @@ export function PriceFields({
       ),
   );
   const currency = (label: string, amount: string, update: (next: string) => void) => (
-    <label>
-      {label}
-      <input
-        inputMode="numeric"
-        pattern="0|[1-9][0-9]*"
-        maxLength={39}
-        value={amount}
-        required
-        onChange={(event) => update(event.target.value)}
-      />
-    </label>
+    <Field size="short" label={label}>
+      {(props) => (
+        <input
+          {...props}
+          inputMode="numeric"
+          pattern="0|[1-9][0-9]*"
+          maxLength={39}
+          value={amount}
+          required
+          onChange={(event) => update(event.target.value)}
+        />
+      )}
+    </Field>
   );
   return (
     <>
-      <div className="picturebook-grid">
+      <Fields>
         {currency(t('每张草稿纸价格', 'Sketch paper per image'), value.paper, (paper) =>
           onChange({ ...value, paper }),
         )}
         {currency(t('每张画笔价格', 'Brushes per image'), value.brush, (brush) =>
           onChange({ ...value, brush }),
         )}
-      </div>
+      </Fields>
       <p className="picturebook-help">
         {t(
           '价格使用整数，两种活动币至少一种大于0。',
           'Prices are whole units; at least one activity currency must be greater than zero.',
         )}
       </p>
-      <label>
-        {t('未指定尺寸价格时', 'When no size price matches')}
-        <select
-          value={value.fallback}
-          onChange={(event) =>
-            onChange({
-              ...value,
-              fallback: event.target.value as PriceDraft['fallback'],
-            })
-          }
-        >
-          <option value="default">{t('使用默认价', 'Use default price')}</option>
-          <option value="unavailable">{t('该尺寸不可提交', 'Make that size unavailable')}</option>
-        </select>
-      </label>
+      <Field label={t('未指定尺寸价格时', 'When no size price matches')}>
+        {(props) => (
+          <select
+            {...props}
+            value={value.fallback}
+            onChange={(event) =>
+              onChange({
+                ...value,
+                fallback: event.target.value as PriceDraft['fallback'],
+              })
+            }
+          >
+            <option value="default">{t('使用默认价', 'Use default price')}</option>
+            <option value="unavailable">{t('该尺寸不可提交', 'Make that size unavailable')}</option>
+          </select>
+        )}
+      </Field>
       <details className="nb-fold" ref={disclosure}>
         <summary>
           <span className="nb-fold__title">
@@ -101,27 +106,35 @@ export function PriceFields({
                 <legend>
                   {t('档位价格', 'Tier price')} {index + 1}
                 </legend>
-                <div className="picturebook-price-row">
-                  <label>
-                    {t('价格档位', 'Price tier')} {index + 1}
-                    <select
-                      value={row.tier}
-                      onChange={(event) =>
-                        onChange({
-                          ...value,
-                          tiers: value.tiers.map((entry, i) =>
-                            i === index ? { ...entry, tier: event.target.value } : entry,
-                          ),
-                        })
-                      }
-                    >
-                      {tiers.map((tier) => (
-                        <option key={tier} value={tier}>
-                          {tier}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                <Fields>
+                  <Field
+                    label={
+                      <>
+                        {t('价格档位', 'Price tier')} {index + 1}
+                      </>
+                    }
+                  >
+                    {(props) => (
+                      <select
+                        {...props}
+                        value={row.tier}
+                        onChange={(event) =>
+                          onChange({
+                            ...value,
+                            tiers: value.tiers.map((entry, i) =>
+                              i === index ? { ...entry, tier: event.target.value } : entry,
+                            ),
+                          })
+                        }
+                      >
+                        {tiers.map((tier) => (
+                          <option key={tier} value={tier}>
+                            {tier}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
                   {currency(
                     t('档位草稿纸', 'Tier sketch paper') + ' ' + (index + 1),
                     row.paper,
@@ -141,38 +154,39 @@ export function PriceFields({
                       ),
                     }),
                   )}
-                </div>
-                <button
-                  className="nb-btn nb-btn--secondary"
-                  type="button"
-                  onClick={() =>
-                    onChange({
-                      ...value,
-                      tiers: value.tiers.filter((_, i) => i !== index),
-                    })
-                  }
-                >
-                  {t('移除档位价格', 'Remove tier price')} {index + 1}
-                </button>
+                </Fields>
+                <FormActions>
+                  <button
+                    className="nb-btn nb-btn--secondary"
+                    type="button"
+                    onClick={() =>
+                      onChange({ ...value, tiers: value.tiers.filter((_, i) => i !== index) })
+                    }
+                  >
+                    {t('移除档位价格', 'Remove tier price')} {index + 1}
+                  </button>
+                </FormActions>
               </fieldset>
             ))}
-            <button
-              className="nb-btn nb-btn--secondary"
-              type="button"
-              disabled={!nextTier || value.tiers.length >= 64}
-              onClick={() =>
-                nextTier &&
-                onChange({
-                  ...value,
-                  tiers: [
-                    ...value.tiers,
-                    { tier: nextTier, paper: value.paper, brush: value.brush },
-                  ],
-                })
-              }
-            >
-              {t('添加档位价格', 'Add tier price')}
-            </button>
+            <FormActions>
+              <button
+                className="nb-btn nb-btn--secondary"
+                type="button"
+                disabled={!nextTier || value.tiers.length >= 64}
+                onClick={() =>
+                  nextTier &&
+                  onChange({
+                    ...value,
+                    tiers: [
+                      ...value.tiers,
+                      { tier: nextTier, paper: value.paper, brush: value.brush },
+                    ],
+                  })
+                }
+              >
+                {t('添加档位价格', 'Add tier price')}
+              </button>
+            </FormActions>
           </section>
           <section
             aria-label={t('精确尺寸价格', 'Exact size prices')}
@@ -184,31 +198,41 @@ export function PriceFields({
                 <legend>
                   {t('尺寸价格', 'Size price')} {index + 1}
                 </legend>
-                <div className="picturebook-price-row">
+                <Fields>
                   {(['width', 'height'] as const).map((axis) => (
-                    <label key={axis}>
-                      {axis === 'width'
-                        ? t('价格宽度', 'Price width')
-                        : t('价格高度', 'Price height')}{' '}
-                      {index + 1}
-                      <input
-                        type="number"
-                        min={1}
-                        max={65536}
-                        step={1}
-                        inputMode="numeric"
-                        value={row[axis]}
-                        required
-                        onChange={(event) =>
-                          onChange({
-                            ...value,
-                            sizes: value.sizes.map((entry, i) =>
-                              i === index ? { ...entry, [axis]: event.target.value } : entry,
-                            ),
-                          })
-                        }
-                      />
-                    </label>
+                    <Field
+                      size="short"
+                      key={axis}
+                      label={
+                        <>
+                          {axis === 'width'
+                            ? t('价格宽度', 'Price width')
+                            : t('价格高度', 'Price height')}{' '}
+                          {index + 1}
+                        </>
+                      }
+                    >
+                      {(props) => (
+                        <input
+                          {...props}
+                          type="number"
+                          min={1}
+                          max={65536}
+                          step={1}
+                          inputMode="numeric"
+                          value={row[axis]}
+                          required
+                          onChange={(event) =>
+                            onChange({
+                              ...value,
+                              sizes: value.sizes.map((entry, i) =>
+                                i === index ? { ...entry, [axis]: event.target.value } : entry,
+                              ),
+                            })
+                          }
+                        />
+                      )}
+                    </Field>
                   ))}
                   {currency(
                     t('尺寸草稿纸', 'Size sketch paper') + ' ' + (index + 1),
@@ -229,42 +253,43 @@ export function PriceFields({
                       ),
                     }),
                   )}
-                </div>
-                <button
-                  className="nb-btn nb-btn--secondary"
-                  type="button"
-                  onClick={() =>
-                    onChange({
-                      ...value,
-                      sizes: value.sizes.filter((_, i) => i !== index),
-                    })
-                  }
-                >
-                  {t('移除尺寸价格', 'Remove size price')} {index + 1}
-                </button>
+                </Fields>
+                <FormActions>
+                  <button
+                    className="nb-btn nb-btn--secondary"
+                    type="button"
+                    onClick={() =>
+                      onChange({ ...value, sizes: value.sizes.filter((_, i) => i !== index) })
+                    }
+                  >
+                    {t('移除尺寸价格', 'Remove size price')} {index + 1}
+                  </button>
+                </FormActions>
               </fieldset>
             ))}
-            <button
-              className="nb-btn nb-btn--secondary"
-              type="button"
-              disabled={value.sizes.length >= 2048}
-              onClick={() =>
-                onChange({
-                  ...value,
-                  sizes: [
-                    ...value.sizes,
-                    {
-                      width: nextSize?.width ? String(nextSize.width) : '',
-                      height: nextSize?.height ? String(nextSize.height) : '',
-                      paper: value.paper,
-                      brush: value.brush,
-                    },
-                  ],
-                })
-              }
-            >
-              {t('添加尺寸价格', 'Add size price')}
-            </button>
+            <FormActions>
+              <button
+                className="nb-btn nb-btn--secondary"
+                type="button"
+                disabled={value.sizes.length >= 2048}
+                onClick={() =>
+                  onChange({
+                    ...value,
+                    sizes: [
+                      ...value.sizes,
+                      {
+                        width: nextSize?.width ? String(nextSize.width) : '',
+                        height: nextSize?.height ? String(nextSize.height) : '',
+                        paper: value.paper,
+                        brush: value.brush,
+                      },
+                    ],
+                  })
+                }
+              >
+                {t('添加尺寸价格', 'Add size price')}
+              </button>
+            </FormActions>
           </section>
         </div>
       </details>

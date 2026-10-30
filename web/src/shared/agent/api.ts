@@ -224,12 +224,18 @@ export interface ArchiveOwner {
   updated_at: number;
 }
 export interface RequestFilters {
+  provider?: string;
+  from?: string;
+  to?: string;
   source: string;
   kind: string;
   state: string;
   actor_id: string;
 }
 export interface CleanupInput {
+  provider?: string;
+  from?: string;
+  to?: string;
   through_id?: string;
   ids?: string[];
   source?: string;

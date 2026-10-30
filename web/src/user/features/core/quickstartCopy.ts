@@ -26,6 +26,7 @@ const keys = {
   newKey: 'user.quickstart.newKey',
   existingKey: 'user.quickstart.existingKey',
   secret: 'user.quickstart.secret',
+  secretMode: 'user.quickstart.secretMode',
   secretHelp: 'user.quickstart.secretHelp',
   keyNote: 'user.quickstart.keyNote',
   ownership: 'user.quickstart.ownership',

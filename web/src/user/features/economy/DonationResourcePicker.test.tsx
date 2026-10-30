@@ -87,7 +87,7 @@ function endpointWire(
 }
 
 function keyBrowse(
-  eligibility: 'eligible' | 'already_donated' | 'security_processing' = 'eligible',
+  eligibility: 'eligible' | 'already_donated' | 'security_processing' | 'unavailable' = 'eligible',
 ) {
   return {
     donation_eligibility: eligibility,
@@ -109,7 +109,7 @@ function keyBrowse(
 function keyWire(
   endpointId: string,
   id: string,
-  eligibility: 'eligible' | 'already_donated' | 'security_processing' = 'eligible',
+  eligibility: 'eligible' | 'already_donated' | 'security_processing' | 'unavailable' = 'eligible',
   overrides: Record<string, unknown> = {},
   withBrowse = true,
 ): Record<string, unknown> {
@@ -160,6 +160,7 @@ function endpointPath(page = '1', pageSize = 20, search = ''): string {
 function keyPath(endpointId: string, page = '1', pageSize = 20, search = ''): string {
   const params = new URLSearchParams({ page, page_size: String(pageSize) });
   if (search) params.set('q', search);
+  params.set('credential_available', 'true');
   return `/api/endpoints/${endpointId}/keys?${params.toString()}`;
 }
 
@@ -309,7 +310,7 @@ describe('DonationResourcePicker', () => {
       if (url.pathname === '/api/endpoints/1') {
         return jsonResponse(endpointWire('1'));
       }
-      if (url.pathname === '/api/endpoints/1/keys' && url.search === '?page=1&page_size=20') {
+      if (url.pathname + url.search === keyPath('1')) {
         return jsonResponse(numberedPage([], '1', 0));
       }
       throw new Error(`Unexpected picker request: ${url.pathname}${url.search}`);
@@ -603,7 +604,7 @@ describe('DonationResourcePicker', () => {
           503,
         );
       }
-      if (url.pathname === '/api/endpoints/1/keys' && url.search === '?page=1&page_size=20') {
+      if (url.pathname + url.search === keyPath('1')) {
         return jsonResponse(
           numberedPage([keyWire('1', '1', 'eligible', { note: 'detail-key' })], '1', 1),
         );
@@ -746,7 +747,7 @@ describe('DonationResourcePicker', () => {
       if (url.pathname === '/api/endpoints' && url.search === '?page=1&page_size=20') {
         return jsonResponse(numberedPage([endpointWire('1')], '1', 1));
       }
-      if (url.pathname === '/api/endpoints/1/keys' && url.search === '?page=1&page_size=20') {
+      if (url.pathname + url.search === keyPath('1')) {
         keyPageCalls += 1;
         return keyPageCalls === 1
           ? jsonResponse({ error: { code: 'service_unavailable', message: 'retry later' } }, 503)
@@ -758,7 +759,7 @@ describe('DonationResourcePicker', () => {
               ),
             );
       }
-      if (url.pathname === '/api/endpoints/1/keys' && url.search === '?page=2&page_size=20') {
+      if (url.pathname + url.search === keyPath('1', '2')) {
         return new Promise<Response>((resolve) => {
           releaseSecondPage = resolve;
         });

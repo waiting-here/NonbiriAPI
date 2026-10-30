@@ -46,6 +46,9 @@ export function useMetadataOperation<T extends object>(
           ? await read(context.signal)
           : undefined;
       await client.invalidateQueries({ queryKey: coreKeys.account(accountId) });
+      await client.invalidateQueries({
+        queryKey: ['user', 'economy', 'endpoint-choices', accountId],
+      });
       if (confirmed) {
         context.commit(() => {
           if (saved) onConfirmedRead?.(saved);

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Field, Note } from '@shared/components/ui';
+import { Field, Fields, FormActions, Note } from '@shared/components/ui';
 import { listEndpointsPage, listEndpointKeysPage } from '../pageApi';
 import type { Endpoint, EndpointKey } from '../types';
 import { ConnectionResourceList } from './ResourceList';
@@ -126,38 +126,42 @@ export function ManualCatalog({
           }}
         >
           <Note>{t('common.connections.manualTargetNote')}</Note>
-          <Field label={t('common.connections.upstreamModel')}>
-            {(props) => (
-              <input
-                {...props}
-                value={model}
-                required
-                disabled={locked}
-                onChange={(event) => setModel(event.target.value)}
-              />
-            )}
-          </Field>
-          <Field
-            label={t('common.connections.provider')}
-            optional={t('common.connections.optional')}
-          >
-            {(props) => (
-              <input
-                {...props}
-                value={provider}
-                disabled={locked}
-                onChange={(event) => setProvider(event.target.value)}
-              />
-            )}
-          </Field>
+          <Fields>
+            <Field label={t('common.connections.upstreamModel')}>
+              {(props) => (
+                <input
+                  {...props}
+                  value={model}
+                  required
+                  disabled={locked}
+                  onChange={(event) => setModel(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field
+              label={t('common.connections.provider')}
+              optional={t('common.connections.optional')}
+            >
+              {(props) => (
+                <input
+                  {...props}
+                  value={provider}
+                  disabled={locked}
+                  onChange={(event) => setProvider(event.target.value)}
+                />
+              )}
+            </Field>
+          </Fields>
           <ConnectionOperationNotice operation={operation} />
-          <button
-            type="submit"
-            className="nb-btn nb-btn--primary"
-            disabled={locked || !model.trim()}
-          >
-            {t('common.connections.saveCatalogModel')}
-          </button>
+          <FormActions>
+            <button
+              type="submit"
+              className="nb-btn nb-btn--primary"
+              disabled={locked || !model.trim()}
+            >
+              {t('common.connections.saveCatalogModel')}
+            </button>
+          </FormActions>
         </form>
       )}
     </div>

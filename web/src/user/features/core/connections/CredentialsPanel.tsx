@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
-import { Field, Fold, Note, Panel, PanelBody, PanelHead } from '@shared/components/ui';
+import { Field, FormActions, Fold, Note, Panel, PanelBody, PanelHead } from '@shared/components/ui';
 import { CoreErrorPanel, CoreLoading } from '../components';
 import { connectionAPI, resourcePath } from './api';
 import { ConnectionResourceList, connectionKeys } from './ResourceList';
@@ -378,9 +378,11 @@ function CredentialNoteForm({
           </button>
         </Note>
       ) : null}
-      <button type="submit" className="nb-btn nb-btn--primary" disabled={locked}>
-        {t('common.connections.save')}
-      </button>
+      <FormActions>
+        <button type="submit" className="nb-btn nb-btn--primary" disabled={locked}>
+          {t('common.connections.save')}
+        </button>
+      </FormActions>
     </form>
   );
 }

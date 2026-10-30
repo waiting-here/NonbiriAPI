@@ -1,3 +1,5 @@
+import { Field } from '@shared/components/ui/Field';
+import { Fields, FormActions } from '@shared/components/ui/Fields';
 import { Button } from '@shared/components/ui/Button';
 import { Fold } from '@shared/components/ui/Fold';
 import { managementRoot, type ManagementRole } from '@shared/operations/managedUsers';
@@ -324,86 +326,114 @@ export function AnnouncementEditor({
       </Card>
       <Card>
         <h2>{t('management.announcements.detail.editorTitle')}</h2>
-        <fieldset className="ops-field-grid" disabled={save.isPending || lifecycle.isPending}>
-          <label>
-            <span>{t('management.announcements.chineseTitle')}</span>
-            <input
-              value={draft.title_zh}
-              maxLength={160}
-              onChange={(event) => update('title_zh', event.target.value)}
-            />
-          </label>
-          <label>
-            <span>{t('management.announcements.englishTitle')}</span>
-            <input
-              value={draft.title_en}
-              maxLength={160}
-              onChange={(event) => update('title_en', event.target.value)}
-            />
-          </label>
+        <fieldset disabled={save.isPending || lifecycle.isPending}>
+          <Fields>
+            <Field label={t('management.announcements.chineseTitle')} size="medium">
+              {(field) => (
+                <input
+                  {...field}
+                  value={draft.title_zh}
+                  maxLength={160}
+                  onChange={(event) => update('title_zh', event.target.value)}
+                />
+              )}
+            </Field>
+            <Field label={t('management.announcements.englishTitle')} size="medium">
+              {(field) => (
+                <input
+                  {...field}
+                  value={draft.title_en}
+                  maxLength={160}
+                  onChange={(event) => update('title_en', event.target.value)}
+                />
+              )}
+            </Field>
+          </Fields>
         </fieldset>
-        <fieldset className="ops-field-grid" disabled={save.isPending || lifecycle.isPending}>
-          <label>
-            <span>{t('management.announcements.chineseMarkdown', { bytes: zhBodyBytes })}</span>
-            <textarea
-              value={draft.body_zh}
-              onChange={(event) => update('body_zh', event.target.value)}
-            />
-          </label>
-          <label>
-            <span>{t('management.announcements.englishMarkdown', { bytes: enBodyBytes })}</span>
-            <textarea
-              value={draft.body_en}
-              onChange={(event) => update('body_en', event.target.value)}
-            />
-          </label>
+        <fieldset disabled={save.isPending || lifecycle.isPending}>
+          <Fields>
+            <Field
+              label={t('management.announcements.chineseMarkdown', { bytes: zhBodyBytes })}
+              size="long"
+            >
+              {(field) => (
+                <textarea
+                  {...field}
+                  value={draft.body_zh}
+                  onChange={(event) => update('body_zh', event.target.value)}
+                />
+              )}
+            </Field>
+            <Field
+              label={t('management.announcements.englishMarkdown', { bytes: enBodyBytes })}
+              size="long"
+            >
+              {(field) => (
+                <textarea
+                  {...field}
+                  value={draft.body_en}
+                  onChange={(event) => update('body_en', event.target.value)}
+                />
+              )}
+            </Field>
+          </Fields>
         </fieldset>
         {!draftValid ? (
           <p className="field-error" role="alert">
             {t('management.announcements.validation')}
           </p>
         ) : null}
-        <fieldset className="ops-field-grid" disabled={save.isPending || lifecycle.isPending}>
-          <label>
-            <span>{t('management.announcements.severityLabel')}</span>
-            <select
-              value={draft.severity}
-              onChange={(event) => update('severity', event.target.value as DraftState['severity'])}
-            >
-              <option value="info">{severityLabels.info}</option>
-              <option value="warning">{severityLabels.warning}</option>
-              <option value="important">{severityLabels.important}</option>
-            </select>
-          </label>
-          <TimeInput
-            station={role === 'admin' ? 'admin' : 'steward'}
-            label={t('management.announcements.expiry')}
-            draft={draft.expires_at}
-            onChange={(updateTime) =>
-              setDraft((current) =>
-                current ? { ...current, expires_at: updateTime(current.expires_at) } : current,
-              )
-            }
-          />
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={draft.pinned}
-              onChange={(event) => update('pinned', event.target.checked)}
+        <fieldset disabled={save.isPending || lifecycle.isPending}>
+          <Fields>
+            <Field label={t('management.announcements.severityLabel')} size="short">
+              {(field) => (
+                <select
+                  {...field}
+                  value={draft.severity}
+                  onChange={(event) =>
+                    update('severity', event.target.value as DraftState['severity'])
+                  }
+                >
+                  <option value="info">{severityLabels.info}</option>
+                  <option value="warning">{severityLabels.warning}</option>
+                  <option value="important">{severityLabels.important}</option>
+                </select>
+              )}
+            </Field>
+            <TimeInput
+              station={role === 'admin' ? 'admin' : 'steward'}
+              label={t('management.announcements.expiry')}
+              draft={draft.expires_at}
+              onChange={(updateTime) =>
+                setDraft((current) =>
+                  current ? { ...current, expires_at: updateTime(current.expires_at) } : current,
+                )
+              }
             />
-            <span>{t('management.announcements.pinned')}</span>
-          </label>
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={draft.dismissible}
-              onChange={(event) => update('dismissible', event.target.checked)}
-            />
-            <span>{t('management.announcements.dismissible')}</span>
-          </label>
+            <Field label={t('management.announcements.pinned')} size="short">
+              {(field) => (
+                <input
+                  {...field}
+                  type="checkbox"
+                  checked={draft.pinned}
+                  onChange={(event) => update('pinned', event.target.checked)}
+                />
+              )}
+            </Field>
+            <Field label={t('management.announcements.dismissible')} size="short">
+              {(field) => (
+                <input
+                  {...field}
+                  type="checkbox"
+                  checked={draft.dismissible}
+                  onChange={(event) => update('dismissible', event.target.checked)}
+                />
+              )}
+            </Field>
+          </Fields>
         </fieldset>
         {save.error ? <ErrorState error={save.error} /> : null}
-        <div className="ops-actions">
+        <FormActions>
           <Button
             variant="primary"
             type="button"
@@ -445,7 +475,7 @@ export function AnnouncementEditor({
           >
             {t('management.announcements.detail.discard')}
           </Button>
-        </div>
+        </FormActions>
       </Card>
       {preview.error ? (
         <ErrorState error={preview.error} />
@@ -499,15 +529,17 @@ export function AnnouncementEditor({
       <Card className="ops-danger">
         <h2>{t('management.announcements.detail.lifecycleTitle')}</h2>
         {lifecycle.error ? <ErrorState error={lifecycle.error} /> : null}
-        <label className="ops-form-field">
-          <span>{t('management.announcements.detail.reason')}</span>
-          <input
-            value={reason}
-            maxLength={1024}
-            onChange={(event) => setReason(event.target.value)}
-          />
-        </label>
-        <div className="ops-actions">
+        <Field label={t('management.announcements.detail.reason')} size="long">
+          {(field) => (
+            <input
+              {...field}
+              value={reason}
+              maxLength={1024}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          )}
+        </Field>
+        <FormActions>
           <Button
             variant="primary"
             type="button"
@@ -540,7 +572,7 @@ export function AnnouncementEditor({
           >
             {t('management.announcements.detail.permanentlyDelete')}
           </Button>
-        </div>
+        </FormActions>
       </Card>
       {confirmation ? (
         <ConfirmDialog

@@ -79,6 +79,35 @@ afterEach(() => {
 });
 
 describe('credit history time filters', () => {
+  it('resets a failed time conversion without requiring the user to repair the input', async () => {
+    installJsonFetchFixtures([
+      { method: 'GET', path: '/api/time-zones', body: { version: 'fixture', zones: ['UTC'] } },
+      {
+        method: 'GET',
+        path: '/api/credits/history?asset_type=all&page=1&page_size=20',
+        body: page,
+      },
+      {
+        method: 'GET',
+        path: '/api/time/resolve?' + new URLSearchParams({ local: localFrom, time_zone: 'UTC' }),
+        status: 503,
+        body: { error: { code: 'unavailable', message: 'Synthetic time conversion failure' } },
+      },
+    ]);
+    const view = await renderWithProviders(<SessionCredits />, { station: 'user', role: 'user' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled());
+    await view.user.click(screen.getByText('More filters', { exact: true }));
+    const input = screen.getByLabelText('From');
+    fireEvent.change(input, { target: { value: localFrom.slice(0, 16) } });
+    await screen.findByRole('button', { name: 'Retry' });
+    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
+    await view.user.click(screen.getByRole('button', { name: 'Reset' }));
+    expect(input).toHaveValue('');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled());
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+  });
+
   it('rechecks the browser zone at submit before any focus notification', async () => {
     const fetchMock = installJsonFetchFixtures([
       {
@@ -93,12 +122,10 @@ describe('credit history time filters', () => {
       },
     ]);
     await renderWithProviders(<SessionCredits />, { station: 'user', role: 'user' });
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Apply filters' })).toBeEnabled(),
-    );
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled());
     const requests = fetchMock.mock.calls.length;
     currentZone = 'Asia/Tokyo';
-    fireEvent.submit(screen.getByRole('button', { name: 'Apply filters' }).closest('form')!);
+    fireEvent.submit(screen.getByRole('button', { name: 'Search' }).closest('form')!);
     expect(screen.getByRole('alert')).toBeVisible();
     expect(fetchMock.mock.calls).toHaveLength(requests);
   });
@@ -151,11 +178,9 @@ describe('credit history time filters', () => {
     const toInput = screen.getByLabelText('Before');
     fireEvent.change(fromInput, { target: { value: localFrom.slice(0, 16) } });
     fireEvent.change(toInput, { target: { value: localTo.slice(0, 16) } });
-    expect(screen.getByRole('button', { name: 'Apply filters' })).toBeDisabled();
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Apply filters' })).toBeEnabled(),
-    );
-    await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
+    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled());
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
         `/api/credits/history?asset_type=all&page=1&page_size=20&from=${from}&to=${to}`,

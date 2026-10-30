@@ -1,7 +1,7 @@
 import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Fold, DataTable, Tabs } from '@shared/components/ui';
+import { Fold, DataTable, Field, FilterBar, FormActions, Tabs } from '@shared/components/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { TimeInput } from '@shared/components/TimeInput';
@@ -111,11 +111,7 @@ function Coverage({
           )}
         </p>
       )}
-      <Fold
-        plain
-        title={copy('admin.economyAudit.presentation.coverage')}
-        defaultOpen={!compact}
-      >
+      <Fold plain title={copy('admin.economyAudit.presentation.coverage')} defaultOpen={!compact}>
         {meta.range_adjusted && (
           <p>
             {t('历史范围已对齐整点', 'Historical range aligned to whole hours')}:{' '}
@@ -511,17 +507,17 @@ export function EconomyAuditPage() {
     typeof to === 'number' &&
     offset !== null &&
     toInput.siteOffsetMinutes === offset;
-  function apply() {
+  function apply(next = draft) {
     if (!ready) return;
-    const step = draft.bucket === 'hour' ? 3600 : 86400;
+    const step = next.bucket === 'hour' ? 3600 : 86400;
     const count =
       Math.floor((to - 1 + offset * 60) / step) - Math.floor((from + offset * 60) / step) + 1;
-    if (to <= from || count > (draft.bucket === 'hour' ? 744 : 366)) {
+    if (to <= from || count > (next.bucket === 'hour' ? 744 : 366)) {
       setInvalid(true);
       return;
     }
     setInvalid(false);
-    setFilter({ ...draft, from, to, kind: undefined, channel: undefined });
+    setFilter({ ...next, from, to, kind: undefined, channel: undefined });
   }
   return (
     <div className="economy-audit">
@@ -534,63 +530,83 @@ export function EconomyAuditPage() {
       />
       <Card>
         <TimeContextNotice station="admin" />
-        <form
-          className="audit-filters"
-          onSubmit={(e) => {
-            e.preventDefault();
-            apply();
+        <FilterBar
+          activeCount={Number(filter.asset !== 'general') + Number(filter.bucket !== 'hour')}
+          onSubmit={() => apply()}
+          onReset={() => {
+            const to = Math.floor(Date.now() / 1000) + 1;
+            const next: AuditFilter = { asset: 'general', from: to - 86400, to, bucket: 'hour' };
+            setDraft(next);
+            setFilter(next);
+            setFromInput(createTimeDraft(next.from, 'second'));
+            setToInput(createTimeDraft(next.to, 'second'));
+            setInvalid(false);
           }}
-        >
-          <label>
-            {t('资产', 'Asset')}
-            <select
-              value={draft.asset}
-              onChange={(e) =>
-                setDraft((v) => ({ ...v, asset: e.target.value as AuditFilter['asset'] }))
-              }
-            >
-              {assets.map((a) => (
-                <option value={a} key={a}>
-                  {assetLabel(a, t)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {t('开始', 'From')}
-            <TimeInput
-              station="admin"
-              showZoneHint={false}
-              draft={fromInput}
-              onChange={setFromInput}
-              required
-            />
-          </label>
-          <label>
-            {t('结束（不含）', 'To (exclusive)')}
-            <TimeInput
-              station="admin"
-              showZoneHint={false}
-              draft={toInput}
-              onChange={setToInput}
-              required
-            />
-          </label>
-          <label>
-            {t('分时粒度', 'Bucket')}
-            <select
-              value={draft.bucket}
-              onChange={(e) =>
-                setDraft((v) => ({ ...v, bucket: e.target.value as AuditFilter['bucket'] }))
-              }
-            >
-              <option value="hour">{t('小时（最多744个）', 'Hour (up to 744)')}</option>
-              <option value="day">{t('日（最多366个）', 'Day (up to 366)')}</option>
-            </select>
-          </label>
-          <button className="nb-btn nb-btn--primary" type="submit" disabled={!ready}>
-            {t('应用', 'Apply')}
-          </button>
+          search={
+            <>
+              <Field size="short" label={t('资产', 'Asset')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={draft.asset}
+                    onChange={(e) => {
+                      const next = { ...draft, asset: e.target.value as AuditFilter['asset'] };
+                      setDraft(next);
+                      apply(next);
+                    }}
+                  >
+                    {assets.map((a) => (
+                      <option value={a} key={a}>
+                        {assetLabel(a, t)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              <Field label={t('开始', 'From')}>
+                {(props) => (
+                  <TimeInput
+                    {...props}
+                    station="admin"
+                    showZoneHint={false}
+                    draft={fromInput}
+                    onChange={setFromInput}
+                    required
+                  />
+                )}
+              </Field>
+              <Field label={t('结束（不含）', 'To (exclusive)')}>
+                {(props) => (
+                  <TimeInput
+                    {...props}
+                    station="admin"
+                    showZoneHint={false}
+                    draft={toInput}
+                    onChange={setToInput}
+                    required
+                  />
+                )}
+              </Field>
+              <Field size="short" label={t('分时粒度', 'Bucket')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={draft.bucket}
+                    onChange={(e) => {
+                      const next = { ...draft, bucket: e.target.value as AuditFilter['bucket'] };
+                      setDraft(next);
+                      apply(next);
+                    }}
+                  >
+                    <option value="hour">{t('小时（最多744个）', 'Hour (up to 744)')}</option>
+                    <option value="day">{t('日（最多366个）', 'Day (up to 366)')}</option>
+                  </select>
+                )}
+              </Field>
+            </>
+          }
+        />
+        <FormActions>
           <button
             className="nb-btn nb-btn--secondary"
             type="button"
@@ -598,7 +614,7 @@ export function EconomyAuditPage() {
           >
             {t('刷新库存', 'Refresh stock')}
           </button>
-        </form>
+        </FormActions>
         {invalid && (
           <p role="alert">
             {t(

@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Field, FormActions } from '@shared/components/ui';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { LoanFacts, LoanHistory } from '@shared/components/LoanDetails';
 import { loanReasons, useLoanText } from '@shared/components/loanCopy';
@@ -149,22 +150,24 @@ export function LoanCard({
             </p>
           ) : null}
           {available ? (
-            <label className="loan-promo__amount">
-              {text('借款额度', 'Loan amount')}{' '}
-              <select
-                value={tier}
-                disabled={!available || busy || quote !== null}
-                onChange={(event) => setTier(event.target.value as '1' | '2' | '3')}
-              >
-                {loan.tiers.map((value, index) => (
-                  <option value={String(index + 1)} key={value}>
-                    {formatCredits(value)} {text('悠哉积分', 'Nonbiri credits')}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <Field label={text('借款额度', 'Loan amount')} size="short">
+              {(field) => (
+                <select
+                  {...field}
+                  value={tier}
+                  disabled={!available || busy || quote !== null}
+                  onChange={(event) => setTier(event.target.value as '1' | '2' | '3')}
+                >
+                  {loan.tiers.map((value, index) => (
+                    <option value={String(index + 1)} key={value}>
+                      {formatCredits(value)} {text('悠哉积分', 'Nonbiri credits')}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
           ) : null}
-          <div className="loan-actions">
+          <FormActions>
             {available ? (
               <button
                 className="nb-btn nb-btn--primary"
@@ -185,7 +188,7 @@ export function LoanCard({
               </button>
             ) : null}
             <LoanHistory role="owner" account={account} userID={account} />
-          </div>
+          </FormActions>
         </div>
       </div>
       {request.error ? <ErrorState error={request.error} /> : null}

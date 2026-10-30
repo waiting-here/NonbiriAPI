@@ -686,8 +686,11 @@ test('native Chat services retain storage policy and combined platform support a
       common.common.modelTypes.images_generations,
       common.common.modelTypes.images_edits,
       common.common.modelTypes.systemone,
-    ])
+    ]) {
+      const more = choices.locator('details.model-types-field__more:not([open]) > summary');
+      if (await more.count()) await more.click();
       await choices.getByRole('checkbox', { name: label, exact: true }).check();
+    }
     await visuals(page, info, 'model-service-groups', choices);
     const saved = await save(
       page,

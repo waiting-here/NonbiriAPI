@@ -1,9 +1,3 @@
-.blacklist-management .ops-field-grid > .nb-fold {
-  grid-column: 1 / -1;
-}
-.blacklist-management .ops-field-grid > button {
-  width: fit-content;
-}
 .blacklist-identity {
   display: grid;
   gap: var(--nb-space-1);

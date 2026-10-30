@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -418,6 +419,8 @@ func agentDomainError(err error) error {
 		return nil
 	}
 	switch {
+	case errors.Is(err, donation.ErrNoResetService):
+		return fmt.Errorf("%w: %s", aiagent.ErrConflict, donation.NoResetServiceMessage)
 	case errors.Is(err, donation.ErrConflict), errors.Is(err, charityrouting.ErrConflict), errors.Is(err, adminusers.ErrConflict), errors.Is(err, lifecycle.ErrConflict):
 		return aiagent.ErrConflict
 	case errors.Is(err, managementlog.ErrNotFound), errors.Is(err, donation.ErrNotFound), errors.Is(err, charityrouting.ErrNotFound), errors.Is(err, adminusers.ErrNotFound), errors.Is(err, lifecycle.ErrNotFound):

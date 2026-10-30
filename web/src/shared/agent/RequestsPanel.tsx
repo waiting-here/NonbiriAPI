@@ -165,12 +165,20 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
   const client = useQueryClient();
   const [params, setParams] = useSearchState();
   const filters: RequestFilters = {
+    provider: params.get('ai_provider') || undefined,
+    from: params.get('ai_from') || undefined,
+    to: params.get('ai_to') || undefined,
     source: params.get('ai_source') ?? '',
     kind: params.get('ai_kind') ?? '',
     state: params.get('ai_state') ?? '',
     actor_id: params.get('ai_actor') ?? '',
   };
   const [filterDraft, setFilterDraft] = useState(filters);
+  const [actorSeed, setActorSeed] = useState(filters.actor_id);
+  if (actorSeed !== filters.actor_id) {
+    setActorSeed(filters.actor_id);
+    setFilterDraft((old) => ({ ...old, actor_id: filters.actor_id }));
+  }
   const [selected, setSelected] = useState(new Set<string>());
   const [cleanup, setCleanup] = useState<{ body: CleanupInput; count: string } | null>(null);
   const [usageOpen, setUsageOpen] = useState(false);
@@ -221,12 +229,12 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
   );
   const locked =
     operation.isPending || operation.outcome === 'unknown' || Boolean(operation.refreshError);
-  const commitFilters = () => {
+  const commitFilters = (nextFilters = { ...filters, actor_id: filterDraft.actor_id }) => {
     setSelected(new Set());
     pager.reset();
     setParams((previous) => {
       const next = new URLSearchParams(previous);
-      for (const [key, value] of Object.entries(filterDraft)) {
+      for (const [key, value] of Object.entries(nextFilters)) {
         const param = key === 'actor_id' ? 'ai_actor' : 'ai_' + key;
         if (value) next.set(param, value);
         else next.delete(param);
@@ -322,22 +330,34 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
           </div>
         ) : (
           <>
+            {filters.provider === 'codex' ? (
+              <Note>
+                {t('common.agent.quota.filteredRecords')} <AgentTime value={Number(filters.from)} />{' '}
+                – <AgentTime value={Number(filters.to)} />
+              </Note>
+            ) : null}
             <FilterBar
               ariaLabel={t('common.agent.requestFilters')}
               activeCount={Object.values(filters).filter(Boolean).length}
-              secondaryLabel={t('common.agent.moreFilters')}
-              onSubmit={commitFilters}
-              onClearAll={() => {
+              onSubmit={() => commitFilters()}
+              onReset={() => {
                 setFilterDraft({ source: '', kind: '', state: '', actor_id: '' });
                 setSelected(new Set());
                 setParams((previous) => {
                   const next = new URLSearchParams(previous);
-                  for (const key of ['ai_source', 'ai_kind', 'ai_state', 'ai_actor'])
+                  for (const key of [
+                    'ai_source',
+                    'ai_kind',
+                    'ai_state',
+                    'ai_actor',
+                    'ai_provider',
+                    'ai_from',
+                    'ai_to',
+                  ])
                     next.delete(key);
                   return next;
                 });
               }}
-              clearAllLabel={t('common.connections.all')}
               search={
                 <Field label={t('common.agent.actor')}>
                   {(props) => (
@@ -354,15 +374,16 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
                 </Field>
               }
               secondary={
-                <div className="agent-field-grid">
+                <>
                   <Field label={t('common.agent.source')}>
                     {(props) => (
                       <select
                         {...props}
-                        value={filterDraft.source}
-                        onChange={(event) =>
-                          setFilterDraft((old) => ({ ...old, source: event.target.value }))
-                        }
+                        value={filters.source}
+                        onChange={(event) => {
+                          setFilterDraft((old) => ({ ...old, source: event.target.value }));
+                          commitFilters({ ...filters, source: event.target.value });
+                        }}
                       >
                         <option value="">{t('common.connections.all')}</option>
                         {Object.entries(sourceLabels).map(([value, label]) => (
@@ -377,10 +398,11 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
                     {(props) => (
                       <select
                         {...props}
-                        value={filterDraft.state}
-                        onChange={(event) =>
-                          setFilterDraft((old) => ({ ...old, state: event.target.value }))
-                        }
+                        value={filters.state}
+                        onChange={(event) => {
+                          setFilterDraft((old) => ({ ...old, state: event.target.value }));
+                          commitFilters({ ...filters, state: event.target.value });
+                        }}
                       >
                         <option value="">{t('common.connections.all')}</option>
                         {[
@@ -413,10 +435,11 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
                     {(props) => (
                       <select
                         {...props}
-                        value={filterDraft.kind}
-                        onChange={(event) =>
-                          setFilterDraft((old) => ({ ...old, kind: event.target.value }))
-                        }
+                        value={filters.kind}
+                        onChange={(event) => {
+                          setFilterDraft((old) => ({ ...old, kind: event.target.value }));
+                          commitFilters({ ...filters, kind: event.target.value });
+                        }}
                       >
                         <option value="">{t('common.connections.all')}</option>
                         <option value="model">{t('common.agent.modelRequest')}</option>
@@ -424,7 +447,7 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
                       </select>
                     )}
                   </Field>
-                </div>
+                </>
               }
             />
             {query.isPending ? (

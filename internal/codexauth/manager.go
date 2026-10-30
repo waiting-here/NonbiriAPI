@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -20,12 +21,13 @@ type Config struct {
 	Now            func() time.Time
 }
 type LoginStatus struct {
-	ID              string `json:"id"`
-	State           string `json:"state"`
-	VerificationURL string `json:"verification_url,omitempty"`
-	UserCode        string `json:"user_code,omitempty"`
-	ExpiresAt       int64  `json:"expires_at"`
-	ErrorCode       string `json:"error_code,omitempty"`
+	ID              string                     `json:"id"`
+	State           string                     `json:"state"`
+	VerificationURL string                     `json:"verification_url,omitempty"`
+	UserCode        string                     `json:"user_code,omitempty"`
+	ExpiresAt       int64                      `json:"expires_at"`
+	Error           *diagnostic.OperationError `json:"error,omitempty"`
+	ErrorCode       string                     `json:"error_code,omitempty"`
 }
 type Status struct {
 	Connected    bool         `json:"connected"`
@@ -43,6 +45,8 @@ type pendingLogin struct {
 	cancel   context.CancelFunc
 }
 type Manager struct {
+	quotaCache       *QuotaResult
+	quotaFlight      *quotaFlight
 	epoch            uint64
 	config           Config
 	client           *client
@@ -77,7 +81,7 @@ func New(c Config) (*Manager, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	connection, connectionCancel := context.WithCancel(ctx)
-	return &Manager{connection: connection, connectionCancel: connectionCancel, config: c, client: &client{stack: c.Stack, issuer: Issuer, now: c.Now}, ctx: ctx, cancel: cancel, refresh: make(chan struct{}, 1)}, nil
+	return &Manager{connection: connection, connectionCancel: connectionCancel, config: c, client: &client{stack: c.Stack, issuer: Issuer, usageURL: UsageURL, db: c.DB, now: c.Now}, ctx: ctx, cancel: cancel, refresh: make(chan struct{}, 1)}, nil
 }
 func load(ctx context.Context, q sessionReader) (session, error) {
 	var s session
@@ -121,8 +125,11 @@ func (m *Manager) ValidateGeneration(ctx context.Context, revision int64) error 
 	if err != nil {
 		return err
 	}
-	if !ready || current != revision {
+	if !ready {
 		return ErrDisconnected
+	}
+	if current != revision {
+		return ErrConflict
 	}
 	return nil
 }

@@ -9,9 +9,6 @@
       "groups": "Grouped overview",
       "individual": "Individual operations",
       "all": "All",
-      "moreFilters": "More filters",
-      "apply": "Search",
-      "clearFilters": "Clear filters",
       "searchHelp": "Exact object name, previous name, changed field, operator or record number.",
       "filterHelp": "Dates use this browser's time zone; the end time is exclusive. A target ID needs its target type. Action and type identifiers are available in record details.",
       "invalidRange": "The end time must be later than the start time.",
@@ -198,7 +195,8 @@
           "deleted": "Deleted",
           "cleared": "Cleared",
           "enabled": "Enabled",
-          "disabled": "Disabled"
+          "disabled": "Disabled",
+          "retained": "Retained"
         },
         "units": {
           "percent": "%",
@@ -305,7 +303,8 @@
           "model_catalog_entries": "Model catalog entries",
           "image_model_refreshes": "Image model refreshes",
           "image_upstream_revisions": "Image upstream revisions",
-          "fatfish_challenges": "Fatfish challenges"
+          "fatfish_challenges": "Fatfish challenges",
+          "donation_service_health": "Donated service health"
         },
         "fields": {
           "state": "State",
@@ -363,7 +362,7 @@
           "limit_mag": "Limit mag",
           "effective_at": "Effective at",
           "retired_at": "Retired at",
-          "donation_key_id": "Donation key id",
+          "donation_key_id": "Donation key ID",
           "display_name": "Display name",
           "enabled": "Enabled",
           "duration_seconds": "Duration seconds",
@@ -499,7 +498,7 @@
           "discovery_enabled": "Discovery enabled",
           "current_approved_revision_id": "Current approved revision id",
           "current_pending_revision_id": "Current pending revision id",
-          "use_id": "Use id",
+          "use_id": "Service use ID",
           "review_state": "Review state",
           "processed_by_role": "Processed by role",
           "closed_reason": "Closed reason",
@@ -786,9 +785,22 @@
           "game_fishing_rtp_premium": "Premium bait target return",
           "game_fishing_treasure_bottle_mult": "Bottle treasure multiplier",
           "game_fishing_treasure_clover_mult": "Clover treasure multiplier",
-          "game_fishing_treasure_shell_mult": "Shell treasure multiplier"
+          "game_fishing_treasure_shell_mult": "Shell treasure multiplier",
+          "streak_generation": "Failure counter generation",
+          "reset_result": "Reset result",
+          "source_name": "Source",
+          "key_name": "Key",
+          "donation_name": "Donation",
+          "retry_after_until": "Rate-limit wait until",
+          "backoff_retry_at": "Smart backoff until",
+          "native_service": "Service",
+          "reset_skip_reason": "Skip reason"
         },
-        "outcomeOnly": "Only the operation outcome was recorded; no field snapshot was saved."
+        "outcomeOnly": "Only the operation outcome was recorded; no field snapshot was saved.",
+        "resetResults": {
+          "recovered": "Failures cleared",
+          "already_clear": "Already clear; counters reset"
+        }
       },
       "roles": {
         "admin": "Administrator",
@@ -810,7 +822,8 @@
       "overview": "Overview",
       "users": "Users & permissions",
       "operations": "Operations",
-      "content": "Content & economy"
+      "services": "Services & charity",
+      "activities": "Activities & content"
     },
     "dashboard": {
       "nav": "Dashboard",
@@ -1973,8 +1986,6 @@
       "metricHelp": "Each draw result counts, including repeats. Card participants are distinct within this pool. A first acquisition means the player did not already own the card when it was drawn.",
       "fullPoolData": "Charts and CSV/JSON downloads include every card in this pool, independently of the table search and page.",
       "refresh": "Refresh counts",
-      "search": "Search",
-      "sort": "Sort",
       "poolFilters": "Pool filters",
       "cardFilters": "Card filters",
       "searchPools": "Search pools",

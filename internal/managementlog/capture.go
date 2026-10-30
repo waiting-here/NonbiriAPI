@@ -109,6 +109,9 @@ func (r capturedRow) changes() ([]Change, bool) {
 		} else if after == nil && before != nil {
 			op = "cleared"
 		}
+		if r.facts[key] == "retained" {
+			op = "retained"
+		}
 		change := Change{Field: key, Operation: op, Before: before, After: after, Unit: fieldUnit(key)}
 		if r.kind == "site_config" && key == "value" {
 			change.Field, change.Unit = r.id, fieldUnit(r.id)
@@ -318,7 +321,7 @@ func enrichCaptureTx(ctx context.Context, tx *sql.Tx, eventID string, items []It
 			item.TargetName = snapshotName(row.name())
 			var dropped bool
 			item.Changes, dropped = row.changes()
-			item.Details = Details{Version: 1, PreviousName: snapshotName(row.previousName()), State: snapshotState(row), Truncated: dropped}
+			item.Details = Details{Version: 1, PreviousName: snapshotName(row.previousName()), State: snapshotState(row), Truncated: dropped, Related: item.Details.Related}
 			if allUnchanged && item.Outcome == Succeeded {
 				item.Outcome = NoChange
 			}
@@ -355,7 +358,11 @@ func enrichCaptureTx(ctx context.Context, tx *sql.Tx, eventID string, items []It
 		}
 	}
 	items[0].Details.Impacts = impacts
-	items[0].Details.Related = related
+	items[0].Details.Related = append(items[0].Details.Related, related...)
+	if len(items[0].Details.Related) > 32 {
+		items[0].Details.Related = items[0].Details.Related[:32]
+		truncated = true
+	}
 	items[0].Details.Truncated = items[0].Details.Truncated || truncated
 	items[0].Details = normalizeDetails(items[0].Details)
 	if len(impacts) > 0 {

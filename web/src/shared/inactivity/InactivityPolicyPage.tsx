@@ -1,3 +1,6 @@
+import { FormActions } from '@shared/components/ui/Fields';
+import { Fields } from '@shared/components/ui/Fields';
+import { Field } from '@shared/components/ui/Field';
 import { useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -17,7 +20,7 @@ import { PolicyAuditHistory } from './PolicyAuditHistory';
 import { PolicyRunHistory } from './PolicyRunHistory';
 import './inactivity.css';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
-import { Affix, DataTable, Fold, Toggle, PanelFoot } from '@shared/components/ui';
+import { Affix, DataTable, Fold, Toggle } from '@shared/components/ui';
 import { AmountInput } from './AmountInput';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useSiteTimeOffset } from '@shared/components/timeContextValue';
@@ -49,22 +52,24 @@ function AssetEditor({
       />
       {rule && (
         <>
-          <label>
-            {zh ? '计算方式' : 'Calculation'}
-            <select
-              value={rule.mode}
-              onChange={(e) =>
-                onChange({
-                  ...rule,
-                  mode: e.target.value === 'fixed' ? 'fixed' : 'percent',
-                  value: '',
-                })
-              }
-            >
-              <option value="percent">{zh ? '余额百分比' : 'Balance percentage'}</option>
-              <option value="fixed">{zh ? '固定数量' : 'Fixed amount'}</option>
-            </select>
-          </label>
+          <Field label={zh ? '计算方式' : 'Calculation'} size="short">
+            {(field) => (
+              <select
+                {...field}
+                value={rule.mode}
+                onChange={(e) =>
+                  onChange({
+                    ...rule,
+                    mode: e.target.value === 'fixed' ? 'fixed' : 'percent',
+                    value: '',
+                  })
+                }
+              >
+                <option value="percent">{zh ? '余额百分比' : 'Balance percentage'}</option>
+                <option value="fixed">{zh ? '固定数量' : 'Fixed amount'}</option>
+              </select>
+            )}
+          </Field>
           <AmountInput
             key={rule.mode}
             zh={zh}
@@ -96,20 +101,22 @@ function Days({
   onChange: (value: number | null) => void;
 }) {
   return (
-    <label>
-      {name}
-      <Affix
-        aria-label={name}
-        unit={zh ? '天' : 'days'}
-        type="number"
-        min={1}
-        max={36500}
-        step={1}
-        required
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
-      />
-    </label>
+    <Field label={name} size="short">
+      {(field) => (
+        <Affix
+          {...field}
+          aria-label={name}
+          unit={zh ? '天' : 'days'}
+          type="number"
+          min={1}
+          max={36500}
+          step={1}
+          required
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+        />
+      )}
+    </Field>
   );
 }
 function Editor({
@@ -259,31 +266,36 @@ function Editor({
       >
         <fieldset disabled={pending} aria-label={zh ? '政策配置' : 'Policy configuration'}>
           <h2 className="inactivity-config-title">{zh ? '政策配置' : 'Policy configuration'}</h2>
-          <label>
-            {zh ? '执行时刻（选填）' : 'Execution time (optional)'}
-            <input
-              type="time"
-              aria-label={zh ? '执行时刻（选填）' : 'Execution time (optional)'}
-              step={60}
-              value={policy.execution_time ?? ''}
-              disabled={siteOffset === null}
-              onChange={(event) =>
-                change({ ...policy, execution_time: event.target.value || undefined })
-              }
-            />
-            <small>
-              {siteOffset === null
-                ? zh
-                  ? '请先在站点设置中配置时区。'
-                  : 'Set the timezone in site settings first.'
-                : `${zh ? '站点时区' : 'Site timezone'}: ${fixedOffsetZone(siteOffset)}`}
-            </small>
-            <small>
-              {zh
-                ? '留空按账号到期时间执行。填写后，衰减和保护封禁在指定时刻到期，由分钟批次处理；周期为 1 天、时刻为 12:00 时，每天中午执行。更改时刻至少给予 7 天宽限。'
-                : 'Leave blank to use each account’s due time. When set, decay and protective bans become due at this time and run in minute batches. A one-day interval at 12:00 runs daily at noon. Changing the time grants at least seven days of grace.'}
-            </small>
-          </label>
+          <Field
+            label={zh ? '执行时刻（选填）' : 'Execution time (optional)'}
+            size="medium"
+            help={
+              <>
+                {siteOffset === null
+                  ? zh
+                    ? '请先在站点设置中配置时区。'
+                    : 'Set the timezone in site settings first.'
+                  : `${zh ? '站点时区' : 'Site timezone'}: ${fixedOffsetZone(siteOffset)}`}{' '}
+                {zh
+                  ? '留空按账号到期时间执行。填写后，衰减和保护封禁在指定时刻到期，由分钟批次处理；周期为 1 天、时刻为 12:00 时，每天中午执行。更改时刻至少给予 7 天宽限。'
+                  : 'Leave blank to use each account’s due time. When set, decay and protective bans become due at this time and run in minute batches. A one-day interval at 12:00 runs daily at noon. Changing the time grants at least seven days of grace.'}
+              </>
+            }
+          >
+            {(field) => (
+              <input
+                {...field}
+                type="time"
+                aria-label={zh ? '执行时刻（选填）' : 'Execution time (optional)'}
+                step={60}
+                value={policy.execution_time ?? ''}
+                disabled={siteOffset === null}
+                onChange={(event) =>
+                  change({ ...policy, execution_time: event.target.value || undefined })
+                }
+              />
+            )}
+          </Field>
           <section className="inactivity-section" aria-labelledby="inactivity-decay-heading">
             <h3 id="inactivity-decay-heading">{zh ? '积分衰减' : 'Credit decay'}</h3>
             <Toggle
@@ -293,7 +305,7 @@ function Editor({
             />
             {policy.decay.enabled && (
               <>
-                <div className="nb-grid nb-grid--2">
+                <Fields>
                   <Days
                     zh={zh}
                     name={zh ? '未活跃天数' : 'Inactive days'}
@@ -310,7 +322,7 @@ function Editor({
                       change({ ...policy, decay: { ...policy.decay, interval_days: value } })
                     }
                   />
-                </div>
+                </Fields>
                 <div className="inactivity-assets">
                   {(['general', 'game'] as const).map((asset) => (
                     <AssetEditor
@@ -363,7 +375,7 @@ function Editor({
               />
             )}
           </section>
-          <PanelFoot>
+          <FormActions>
             <button
               className="nb-btn nb-btn--secondary"
               type="button"
@@ -391,7 +403,7 @@ function Editor({
             >
               {zh ? '重新读取' : 'Reload'}
             </button>
-          </PanelFoot>
+          </FormActions>
         </fieldset>
       </form>
       {error && <p role="alert">{error}</p>}

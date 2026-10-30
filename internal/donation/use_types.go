@@ -39,6 +39,7 @@ type UseCapabilities struct {
 }
 
 type Use struct {
+	FailureReset     *ServiceFailureReset   `json:"failure_reset,omitempty"`
 	ID               string                 `json:"id"`
 	DonationID       string                 `json:"donation_id"`
 	DonationKeyID    string                 `json:"donation_key_id"`

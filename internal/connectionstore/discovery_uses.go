@@ -21,16 +21,14 @@ type DiscoveryUseAuthorization struct {
 // DiscoverySourceRevisionSQL selects the pinned catalog, the key's configured
 // catalog for this exact version, or this key's existing standard catalog.
 // A different key or credential version is never substituted.
-const DiscoverySourceRevisionSQL = `COALESCE(ur.discovery_source_revision_id,
+var DiscoverySourceRevisionSQL = `COALESCE(ur.discovery_source_revision_id,
  (SELECT sr.id FROM endpoint_key_discovery_sources ks JOIN discovery_source_revisions sr ON sr.source_id=ks.source_id
  WHERE ks.endpoint_key_id=dk.endpoint_key_id AND sr.owner_user_id=a.owner_user_id AND sr.credential_id=a.credential_id AND sr.credential_version_id=a.credential_version_id
  ORDER BY sr.source_revision DESC LIMIT 1),
  (SELECT sr.id FROM discovery_source_revisions sr JOIN discovery_sources ds ON ds.id=sr.source_id
  WHERE sr.owner_user_id=a.owner_user_id AND sr.credential_id=a.credential_id AND sr.credential_version_id=a.credential_version_id
  AND EXISTS(SELECT 1 FROM discovery_source_keys scope WHERE scope.source_id=ds.id AND scope.endpoint_key_id=dk.endpoint_key_id)
- AND sr.canonical_base_url=a.canonical_base_url AND sr.list_format=CASE a.configured_type
- WHEN 'openai-compatible' THEN 'openai' WHEN 'openai-responses' THEN 'openai' WHEN 'openai-chat-completions' THEN 'openai' WHEN 'openai-decisions' THEN 'openai' WHEN 'anthropic-compatible' THEN 'anthropic' WHEN 'google-gemini' THEN 'gemini'
- WHEN 'ai-sdk-gateway-v3' THEN 'ai-sdk-gateway-v3' WHEN 'ai-sdk-gateway-v4' THEN 'ai-sdk-gateway-v4' END
+ AND sr.canonical_base_url=a.canonical_base_url AND sr.list_format=CASE a.configured_type` + defaultDiscoveryCasesSQL() + ` END
  ORDER BY sr.id LIMIT 1),0)`
 
 // LoadDiscoveryUsesTx prefers a pending revision for review. approvedOnly is
@@ -123,21 +121,41 @@ func LoadDiscoveryUseTx(ctx context.Context, tx *sql.Tx, useID, revisionID int64
 	return DiscoveryUseAuthorization{}, ErrUnavailable
 }
 
+var defaultDiscoveryFormats = []struct {
+	format string
+	types  []contract.Type
+}{
+	{"openai", []contract.Type{contract.TypeOpenAICompatible, contract.TypeOpenAIResponses, contract.TypeOpenAIChatCompletions, contract.TypeOpenAIDecisions, contract.TypeTypeSafeSystemOne}},
+	{"anthropic", []contract.Type{contract.TypeAnthropicCompatible}},
+	{"gemini", []contract.Type{contract.TypeGoogleGemini}},
+	{"ai-sdk-gateway-v3", []contract.Type{contract.TypeAISDKGatewayV3}},
+	{"ai-sdk-gateway-v4", []contract.Type{contract.TypeAISDKGatewayV4}},
+}
+
 func DefaultDiscoveryFormat(kind contract.Type) string {
-	switch kind.ConfigurationType() {
-	case contract.TypeOpenAICompatible:
-		return "openai"
-	case contract.TypeAnthropicCompatible:
-		return "anthropic"
-	case contract.TypeGoogleGemini:
-		return "gemini"
-	case contract.TypeAISDKGatewayV3:
-		return "ai-sdk-gateway-v3"
-	case contract.TypeAISDKGatewayV4:
-		return "ai-sdk-gateway-v4"
-	default:
-		return ""
+	for _, group := range defaultDiscoveryFormats {
+		for _, configured := range group.types {
+			if kind == configured {
+				return group.format
+			}
+		}
 	}
+	return ""
+}
+
+// Both initial catalogs and donated catalog lookup use the same closed list.
+func defaultDiscoveryCasesSQL() string {
+	var cases strings.Builder
+	for _, group := range defaultDiscoveryFormats {
+		for _, kind := range group.types {
+			cases.WriteString(" WHEN '")
+			cases.WriteString(string(kind))
+			cases.WriteString("' THEN '")
+			cases.WriteString(group.format)
+			cases.WriteString("'")
+		}
+	}
+	return cases.String()
 }
 
 // EnsureDiscoverySourceTx creates only a standard catalog for the donated

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Affix, Field, Fold, Toggle } from '@shared/components/ui';
+import { Affix, Field, Fields, Fold, Toggle } from '@shared/components/ui';
 import type { GamesConfig, RPSModeConfig } from '../operations/economy';
 import { percentBP } from './config';
 import { fishingChanceFromPercent } from './fishing';
@@ -24,9 +24,9 @@ export function FishingFields({ draft, disabled, edit }: Props) {
     <>
       <fieldset className="nb-fieldset" disabled={disabled}>
         <legend>{text('鱼饵价格', 'Bait prices')}</legend>
-        <div className="nb-grid nb-grid--3">
+        <Fields>
           {(['worm', 'lure', 'premium'] as const).map((bait) => (
-            <Field key={bait} label={t(`admin.games.${bait}`)}>
+            <Field size="short" key={bait} label={t(`admin.games.${bait}`)}>
               {(props) => (
                 <Affix
                   {...props}
@@ -45,7 +45,7 @@ export function FishingFields({ draft, disabled, edit }: Props) {
               )}
             </Field>
           ))}
-        </div>
+        </Fields>
       </fieldset>
       <fieldset className="nb-fieldset" disabled={disabled}>
         <legend>{text('返还率与特别鱼种', 'Returns and special fish')}</legend>
@@ -55,9 +55,10 @@ export function FishingFields({ draft, disabled, edit }: Props) {
             'Average return for every 100 credits spent over time.',
           )}
         </p>
-        <div className="nb-grid nb-grid--2">
+        <Fields>
           {(['standard', 'premium'] as const).map((mode) => (
             <Field
+              size="short"
               key={mode}
               label={t(mode === 'standard' ? 'admin.games.standardRTP' : 'admin.games.premiumRTP')}
             >
@@ -84,7 +85,7 @@ export function FishingFields({ draft, disabled, edit }: Props) {
             </Field>
           ))}
           <Field
-            span
+            size="short"
             label={text('蓝色大肥鱼概率', 'Blue-fish probability')}
             help={text(
               '传奇鱼的彩蛋概率；与奶蟹互斥，合计不超过 100%，奖励不变。',
@@ -108,7 +109,7 @@ export function FishingFields({ draft, disabled, edit }: Props) {
               />
             )}
           </Field>
-          <Field span label={text('奶蟹概率', 'Milk-crab probability')}>
+          <Field size="short" label={text('奶蟹概率', 'Milk-crab probability')}>
             {(props) => (
               <Affix
                 {...props}
@@ -126,16 +127,16 @@ export function FishingFields({ draft, disabled, edit }: Props) {
               />
             )}
           </Field>
-        </div>
+        </Fields>
       </fieldset>
       <fieldset className="nb-fieldset" disabled={disabled}>
         <legend>{text('抽成去向', 'Fee destinations')}</legend>
         <p className="nb-fieldset__hint">
           {text('三项合计须小于 100%。', 'The total must be below 100%.')}
         </p>
-        <div className="nb-grid nb-grid--3">
+        <Fields>
           {pumps.map((pump) => (
-            <Field key={pump} label={t(`admin.games.rps.pumps.${pump}`)}>
+            <Field size="short" key={pump} label={t(`admin.games.rps.pumps.${pump}`)}>
               {(props) => (
                 <Affix
                   {...props}
@@ -153,7 +154,7 @@ export function FishingFields({ draft, disabled, edit }: Props) {
               )}
             </Field>
           ))}
-        </div>
+        </Fields>
       </fieldset>
       <Fold title={text('宝物倍率', 'Treasure multipliers')}>
         <p className="nb-field__help">
@@ -162,9 +163,9 @@ export function FishingFields({ draft, disabled, edit }: Props) {
             'A treasure pays the bait price multiplied by this value, before fees.',
           )}
         </p>
-        <div className="nb-grid nb-grid--3">
+        <Fields>
           {(['bottle', 'clover', 'shell'] as const).map((treasure) => (
-            <Field key={treasure} label={t(`admin.games.${treasure}`)}>
+            <Field size="short" key={treasure} label={t(`admin.games.${treasure}`)}>
               {(props) => (
                 <Affix
                   {...props}
@@ -188,7 +189,7 @@ export function FishingFields({ draft, disabled, edit }: Props) {
               )}
             </Field>
           ))}
-        </div>
+        </Fields>
       </Fold>
     </>
   );
@@ -223,7 +224,7 @@ export function LinklinkFields({ draft, disabled, edit }: Props) {
               disabled={disabled}
               onChange={(enabled) => update({ enabled })}
             />
-            <Field label={text('入场价格', 'Entry price')}>
+            <Field size="short" label={text('入场价格', 'Entry price')}>
               {(props) => (
                 <Affix
                   {...props}
@@ -270,7 +271,10 @@ export function RPSFields({ draft, disabled, edit }: Props) {
               disabled={disabled}
               onChange={(enabled) => update({ enabled })}
             />
-            <Field label={t('admin.games.rps.base', { mode: t(`admin.games.rps.modes.${mode}`) })}>
+            <Field
+              size="short"
+              label={t('admin.games.rps.base', { mode: t(`admin.games.rps.modes.${mode}`) })}
+            >
               {(props) => (
                 <Affix
                   {...props}
@@ -291,9 +295,9 @@ export function RPSFields({ draft, disabled, edit }: Props) {
               <p className="nb-fieldset__hint">
                 {text('三项合计须小于 100%。', 'The total must be below 100%.')}
               </p>
-              <div className="nb-grid nb-grid--3">
+              <Fields>
                 {pumps.map((pump) => (
-                  <Field key={pump} label={t(`admin.games.rps.pumps.${pump}`)}>
+                  <Field size="short" key={pump} label={t(`admin.games.rps.pumps.${pump}`)}>
                     {(props) => (
                       <Affix
                         {...props}
@@ -313,9 +317,9 @@ export function RPSFields({ draft, disabled, edit }: Props) {
                     )}
                   </Field>
                 ))}
-              </div>
+              </Fields>
             </fieldset>
-            <div className="nb-grid nb-grid--2">
+            <Fields>
               {(
                 ['queue_seconds', 'gesture_seconds', 'dealer_seconds', 'follower_seconds'] as const
               ).map((field) => {
@@ -339,6 +343,7 @@ export function RPSFields({ draft, disabled, edit }: Props) {
                       : [5, 15];
                 return (
                   <Field
+                    size="short"
                     key={labels[field]}
                     label={t(`admin.games.rps.deadlines.${deadlineKey[field]}`)}
                   >
@@ -360,7 +365,7 @@ export function RPSFields({ draft, disabled, edit }: Props) {
                   </Field>
                 );
               })}
-            </div>
+            </Fields>
           </fieldset>
         );
       })}
@@ -379,9 +384,10 @@ export function CatchFields({ draft, disabled, edit }: Props) {
           'Survive 90 seconds with 600 points to clear. Only the first clear awards game credits. Zero means free entry or no reward.',
         )}
       </p>
-      <div className="nb-grid nb-grid--2">
+      <Fields>
         {(['price', 'first_clear_reward'] as const).map((key) => (
           <Field
+            size="short"
             key={key}
             label={
               key === 'price'
@@ -408,7 +414,7 @@ export function CatchFields({ draft, disabled, edit }: Props) {
             )}
           </Field>
         ))}
-      </div>
+      </Fields>
     </fieldset>
   );
 }

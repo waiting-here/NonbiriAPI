@@ -272,7 +272,7 @@ WHERE d.id=? AND du.id IN (` + strings.TrimRight(strings.Repeat("?,", len(ids)),
 		}
 		value.Capabilities.CanManage = canManage && state.active
 		value.Capabilities.CanReview = canReview && access.role != recurringOwner && value.Pending != nil && state.active && value.Pending.Review.MaterialAvailable && value.Pending.available
-		value.Capabilities.CanResetFailures = canManage && state.active && value.Approved != nil
+		value.Capabilities.CanResetFailures = canManage && state.active && value.Approved != nil && !value.Approved.Review.Required
 		usable := state.active && state.eligible && state.available && state.healthy && value.Approved != nil && !value.Approved.Review.Required
 		value.Capabilities.CanBind = canBind && usable
 		useID, _ := strconv.ParseInt(value.ID, 10, 64)

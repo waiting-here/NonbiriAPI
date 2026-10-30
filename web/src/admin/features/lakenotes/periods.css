@@ -8,22 +8,6 @@
   padding: 0;
   border: 0;
 }
-.lake-period-form label {
-  display: grid;
-  gap: 0.4rem;
-}
-.lake-period-form input,
-.lake-period-form select {
-  width: 100%;
-}
-.lake-period-form .lake-period-check {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.lake-period-check input {
-  width: auto;
-}
 .lake-period-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));

@@ -81,8 +81,7 @@ function HeaderContent({ data }: { data: HeaderSnapshot | ResponseHeaders }) {
       ),
     [snapshots],
   );
-  if (data.save_state !== 'saved')
-    return <Note>{t(STATE_COPY[data.save_state])}</Note>;
+  if (data.save_state !== 'saved') return <Note>{t(STATE_COPY[data.save_state])}</Note>;
   return (
     <section
       className="log-headers"
@@ -118,7 +117,7 @@ function HeaderContent({ data }: { data: HeaderSnapshot | ResponseHeaders }) {
               </div>
             </dl>
             {snapshot.save_state !== 'saved' ? (
-                <Note>{t(STATE_COPY[snapshot.save_state])}</Note>
+              <Note>{t(STATE_COPY[snapshot.save_state])}</Note>
             ) : snapshot.headers.length === 0 ? (
               <p>{t('common.headers.empty')}</p>
             ) : null}
@@ -204,8 +203,11 @@ function HeaderList({ entries, responses }: { entries: HeaderRow[]; responses: b
     <>
       <FilterBar
         activeCount={search ? 1 : 0}
-        secondaryLabel={t('common.headers.search')}
         onSubmit={() => setPage('1')}
+        onReset={() => {
+          setSearch('');
+          setPage('1');
+        }}
         search={
           <Field label={t('common.headers.search')}>
             {(props) => (

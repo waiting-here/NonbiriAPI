@@ -1,7 +1,17 @@
+import { CodexUsageCard } from './CodexUsage';
+import { DriverFailure } from './DriverFailure';
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Button, Field, Note, Panel, PanelBody, PanelHead } from '@shared/components/ui';
+import {
+  Button,
+  Field,
+  FormActions,
+  Note,
+  Panel,
+  PanelBody,
+  PanelHead,
+} from '@shared/components/ui';
 import { LoadingState } from '@shared/components/States';
 import { useOperation } from '@shared/operations/useOperation';
 import { agentRoot } from './api';
@@ -51,7 +61,8 @@ export function CodexConnection({ account, active }: { account: string; active: 
             ? Boolean(value.login || value.connected)
             : intent.action === 'disconnect'
               ? !value.connected && value.revision !== intent.revision
-              : !value.login || value.login.id !== intent.id ||
+              : !value.login ||
+                value.login.id !== intent.id ||
                 !['pending', 'starting'].includes(value.login.state),
       };
     },
@@ -64,7 +75,7 @@ export function CodexConnection({ account, active }: { account: string; active: 
     <Panel aria-label={t('common.agent.codex.title')}>
       <PanelHead title={t('common.agent.codex.title')} description={t('common.agent.codex.help')} />
       <PanelBody>
-        <div className="agent-form-fields">
+        <div className="nb-stack">
           {query.isPending ? (
             <LoadingState />
           ) : query.error ? (
@@ -87,7 +98,7 @@ export function CodexConnection({ account, active }: { account: string; active: 
                     {t('common.agent.codex.openOfficial')}
                   </a>
                   {status.login.user_code ? (
-                    <Field label={t('common.agent.codex.code')}>
+                    <Field label={t('common.agent.codex.code')} size="short">
                       {(props) => (
                         <input
                           {...props}
@@ -118,10 +129,19 @@ export function CodexConnection({ account, active }: { account: string; active: 
                   )}
                 </Note>
               ) : null}
+              {status.login?.error ? <DriverFailure failure={status.login.error} /> : null}
+              {status.connected ? (
+                <CodexUsageCard
+                  key={status.revision}
+                  account={account}
+                  active={active}
+                  status={status}
+                />
+              ) : null}
               {status.connected ? (
                 <p className="nb-small nb-muted">{t('common.agent.codex.disconnectHelp')}</p>
               ) : null}
-              <div className="nb-actions">
+              <FormActions>
                 {pending && status.login ? (
                   <Button
                     type="button"
@@ -158,7 +178,7 @@ export function CodexConnection({ account, active }: { account: string; active: 
                     {t('common.agent.drivers.checkStatus')}
                   </Button>
                 ) : null}
-              </div>
+              </FormActions>
             </>
           ) : null}
           {operation.error ? <AgentError error={operation.error} /> : null}

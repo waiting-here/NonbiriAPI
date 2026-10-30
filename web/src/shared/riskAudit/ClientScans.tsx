@@ -1,3 +1,5 @@
+import { FormActions } from '@shared/components/ui/Fields';
+import { Field } from '@shared/components/ui/Field';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -104,7 +106,7 @@ export function ClientScans({
       <Card>
         <h2>{t('common.auditScans.scanClientEvidence')}</h2>
         <p>{t('common.auditScans.scanRequestsUsingTheCurrentFiltersAnd')}</p>
-        <div className="ops-actions">
+        <FormActions>
           <button
             type="button"
             className="nb-btn nb-btn--primary"
@@ -132,7 +134,11 @@ export function ClientScans({
             </button>
           )}
           {active && active.id !== id && (
-            <button type="button" className="nb-btn nb-btn--secondary" onClick={() => select(active)}>
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              onClick={() => select(active)}
+            >
               {t('common.auditScans.openActiveScan')}
             </button>
           )}
@@ -145,7 +151,7 @@ export function ClientScans({
           >
             {t('common.auditScans.refresh')}
           </button>
-        </div>
+        </FormActions>
         {start.error && (
           <ErrorState error={start.error} onRetry={() => start.mutate(start.variables ?? input)} />
         )}
@@ -160,24 +166,26 @@ export function ClientScans({
         ) : null}
         {recent.error && <ErrorState error={recent.error} onRetry={() => void recent.refetch()} />}
         {!!recent.data?.length && (
-          <label>
-            {t('common.auditScans.recentScans')}
-            <select
-              value={id}
-              onChange={(event) => {
-                const selected = recent.data?.find((item) => item.id === event.target.value);
-                if (selected) select(selected);
-              }}
-            >
-              <option value="">{t('common.auditScans.chooseAScan')}</option>
-              {recent.data.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {status[item.state]} · {formatDateTime(item.from)} — {formatDateTime(item.to)} ·{' '}
-                  {item.matched} {t('common.auditScans.matches')}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Field label={t('common.auditScans.recentScans')} size="short">
+            {(field) => (
+              <select
+                {...field}
+                value={id}
+                onChange={(event) => {
+                  const selected = recent.data?.find((item) => item.id === event.target.value);
+                  if (selected) select(selected);
+                }}
+              >
+                <option value="">{t('common.auditScans.chooseAScan')}</option>
+                {recent.data.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {status[item.state]} · {formatDateTime(item.from)} — {formatDateTime(item.to)} ·{' '}
+                    {item.matched} {t('common.auditScans.matches')}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
         )}
       </Card>
       {id &&

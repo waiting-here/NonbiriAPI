@@ -11,7 +11,7 @@ import (
 var aiManagementTables = []string{"management_operation_items", "management_operations", "management_operation_rollups", "management_operation_cleanup_jobs", "ai_agent_personal_memory_history", "ai_agent_personal_memories", "agent_request_drivers", "agent_driver_bindings", "agent_driver_profiles", "agent_chatgpt_session"}
 
 func isAIManagementTableForTest(table string) bool {
-	return slices.Contains(aiManagementTables, table) || slices.Contains(operatorDiagnosticsTables, table)
+	return slices.Contains(aiManagementTables, table) || slices.Contains(operatorDiagnosticsTables, table) || table == "agent_operation_diagnostics"
 }
 
 func restoreSchema40LayoutForTest(t *testing.T, database *sql.DB) {

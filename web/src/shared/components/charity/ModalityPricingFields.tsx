@@ -1,6 +1,6 @@
 import { modalityNameKeys, modalityRateKeys } from '@shared/operations/modalityCopy';
 import { useTranslation } from 'react-i18next';
-import { Field, Fold, Toggle } from '../ui';
+import { Field, Fields, Fold, Toggle } from '../ui';
 import { MODALITIES, type ModalityPricing, type TokenPrices } from '@shared/operations/charity';
 import { emptyPrices } from './priceDraft';
 
@@ -44,13 +44,13 @@ export function ModalityPricingFields({
                 }}
               />
               {value[modality] && (
-                <div className="nb-grid nb-grid--2">
+                <Fields>
                   {(Object.keys(value[modality]) as (keyof TokenPrices)[])
                     .filter((field) =>
                       field === 'output' ? value.output_enabled : value.input_enabled,
                     )
                     .map((field) => (
-                      <Field key={field} label={t(modalityRateKeys[field])}>
+                      <Field size="short" key={field} label={t(modalityRateKeys[field])}>
                         {(props) => (
                           <input
                             {...props}
@@ -66,7 +66,7 @@ export function ModalityPricingFields({
                         )}
                       </Field>
                     ))}
-                </div>
+                </Fields>
               )}
             </fieldset>
           ))}

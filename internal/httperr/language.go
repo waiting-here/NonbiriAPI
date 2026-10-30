@@ -124,6 +124,7 @@ var chineseCodes = map[string]string{
 }
 
 var chineseMessages = map[string]string{
+	"No approved services are eligible for failure reset; check approval and credential availability.":          "没有符合失败重置条件的已批准服务，请检查审批和凭据是否仍然有效。",
 	"tool thinking requires the original signed content blocks":                                                 "工具调用中的思考内容需要原始签名内容块",
 	"expected a supported thinking configuration":                                                               "需要受支持的思考配置",
 	"expected summarized, omitted, or updates":                                                                  "需要 summarized、omitted 或 updates",

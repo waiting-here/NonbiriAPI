@@ -146,7 +146,11 @@ function CustomPresetApply(props: {
       <p className="nb-small nb-muted">{t('common.bindingPresets.customHelp')}</p>
       <FilterBar
         activeCount={query ? 1 : 0}
-        secondaryLabel={t('common.filter')}
+        onReset={() => {
+          setSearch('');
+          setQuery('');
+          pager.reset();
+        }}
         onSubmit={() => {
           setQuery(search.trim());
           pager.reset();
@@ -164,7 +168,6 @@ function CustomPresetApply(props: {
                 />
               )}
             </Field>
-            <Button type="submit">{t('common.search')}</Button>
           </>
         }
       />

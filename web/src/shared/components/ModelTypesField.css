@@ -59,6 +59,20 @@
 .model-types-field__choices code {
   font-size: var(--nb-font-size-xs);
 }
+.model-types-field__more {
+  margin-top: var(--nb-space-3);
+}
+.model-types-field__more > summary {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  color: var(--nb-color-accent);
+  font-weight: var(--nb-font-weight-semibold);
+  cursor: pointer;
+}
+.model-types-field__more[open] > summary {
+  margin-bottom: var(--nb-space-2);
+}
 .model-types-summary {
   display: flex;
   flex-wrap: wrap;

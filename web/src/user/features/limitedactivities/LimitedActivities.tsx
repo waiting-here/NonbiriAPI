@@ -1,3 +1,4 @@
+import { Field, Fields, FormActions } from '@shared/components/ui';
 import { useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
@@ -211,28 +212,34 @@ function ExchangePanel({
         }}
       >
         <fieldset disabled={locked}>
-          <label>
-            {text('common.currency')}
-            <select
-              value={asset}
-              onChange={(event) => setAsset(event.target.value as ActivityAsset)}
-            >
-              <option value="sketch_paper">{currencyLabel('sketch_paper', text)}</option>
-              <option value="sketch_brush">{currencyLabel('sketch_brush', text)}</option>
-            </select>
-          </label>
-          <label>
-            {text('common.quantity')}
-            <input
-              className="limited-exchange-quantity"
-              value={quantity}
-              inputMode="numeric"
-              pattern="[1-9][0-9]*"
-              maxLength={39}
-              onChange={(event) => setQuantity(event.target.value)}
-              required
-            />
-          </label>
+          <Fields>
+            <Field label={text('common.currency')} size="short">
+              {(props) => (
+                <select
+                  {...props}
+                  value={asset}
+                  onChange={(event) => setAsset(event.target.value as ActivityAsset)}
+                >
+                  <option value="sketch_paper">{currencyLabel('sketch_paper', text)}</option>
+                  <option value="sketch_brush">{currencyLabel('sketch_brush', text)}</option>
+                </select>
+              )}
+            </Field>
+            <Field label={text('common.quantity')} size="short">
+              {(props) => (
+                <input
+                  {...props}
+                  className="limited-exchange-quantity"
+                  value={quantity}
+                  inputMode="numeric"
+                  pattern="[1-9][0-9]*"
+                  maxLength={39}
+                  onChange={(event) => setQuantity(event.target.value)}
+                  required
+                />
+              )}
+            </Field>
+          </Fields>
         </fieldset>
         <p>
           {text('common.generalCreditsCharged')}:{' '}
@@ -242,16 +249,18 @@ function ExchangePanel({
           <p role="status">{text('common.thePreviousResultIsUnconfirmedRetryThe')}</p>
         ) : null}
         {operation.error ? <ErrorState error={operation.error} /> : null}
-        <button
-          className="nb-btn nb-btn--primary"
-          type="submit"
-          disabled={
-            operation.isPending ||
-            (!uncertain && (detail.status !== 'open' || cost === null || !wallet.data))
-          }
-        >
-          {uncertain ? text('common.retryTheSameExchange') : text('common.confirmExchange')}
-        </button>
+        <FormActions>
+          <button
+            className="nb-btn nb-btn--primary"
+            type="submit"
+            disabled={
+              operation.isPending ||
+              (!uncertain && (detail.status !== 'open' || cost === null || !wallet.data))
+            }
+          >
+            {uncertain ? text('common.retryTheSameExchange') : text('common.confirmExchange')}
+          </button>
+        </FormActions>
       </form>
       {receipt ? (
         <p role="status">

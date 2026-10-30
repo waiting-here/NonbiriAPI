@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage services, endpoints and service-scoped API keys, maintain model lists per endpoint/key pair, and configure personal or shared charity routing. Revocable CallerKeys authenticate gateway calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.3.2** adds a Codex device-code source for the management assistant, clearer request failures and management history, and protocol continuation fixes. Existing databases require an explicit upgrade to schema 42; account export remains format 31. This version uses an exact source commit without a tag or GitHub Release. Build instructions are below; version history is in [CHANGELOG](CHANGELOG.md). Source availability does not establish instance deployment status.
+**v1.3.2** adds a Codex device-code source with quota information and operation diagnostics, clearer request failures and management history, protocol continuation fixes, and responsive management forms. It also repairs shared-key discovery, donation selection and service failure resets. Existing databases require an explicit upgrade to schema 43; account export remains format 31. This version uses an exact source commit without a tag or GitHub Release. Build instructions are below; version history is in [CHANGELOG](CHANGELOG.md). Source availability does not establish instance deployment status.
 
 ## Architecture
 
@@ -17,6 +17,9 @@ level, donation ownership and current quotas still affect the result. See
 [database access](docs/database-access.md) and [runtime metrics](docs/deployment.md).
 Availability counts each binding once and stops at its first eligible target,
 avoiding repeated permission and quota checks for equivalent targets.
+Recent-success queries use a covering time index. Idle fishing cleanup and reward
+delivery check the read pool first and acquire the writer only when work is due;
+the write transaction still rechecks and claims that work atomically.
 
 Lake Notes checkpoints reuse authoritative values within their transaction, and
 activity event snapshots use the existing read pool. Revision, replay and lease
@@ -186,8 +189,11 @@ reserve budgets are separate from an upstream output cap.
 
 For [Codex](docs/codex-agent.md), start device-code login in administrator AI
 settings and complete authorization on the displayed official page. The Go
-server handles polling and encrypted credentials without an external CLI. Bind
-this source to administrator chat or to each selected steward individually; it
+server handles polling and encrypted credentials without an external CLI.
+Administrators can inspect reported quota windows and reset times, retained local
+24-hour usage across Codex connections, and safe connection/catalogue/quota
+diagnostics. Missing quota is not zero; failed refreshes retain marked stale data.
+Bind this source to administrator chat or to each selected steward individually; it
 cannot be inherited through global/steward defaults, used for automatic review,
 or added to personal or charity model routes. Real Business-account authorization
 and inference have not yet been verified.
@@ -274,10 +280,10 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 42.
+Fresh databases start in maintenance with public features closed and use schema 43.
 The service opens only the exact current schema; older, newer, unknown or
 incomplete storage is rejected before migration, repair or recovery writes.
-For exact registered schema 16–26 and 33–41 sources, preserve a complete recovery
+For exact registered schema 16–26 and 33–42 sources, preserve a complete recovery
 set before deliberately running the matching standalone
 [upgrader](cmd/nonbiri-upgrade-v1/README.md) with `--check` or `--apply`.
 The service, startup scripts and deployment helpers must not apply upgrades
