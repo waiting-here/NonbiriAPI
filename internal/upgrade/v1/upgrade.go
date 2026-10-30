@@ -76,9 +76,12 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 	{from: 39, version: 40, manifest: db.Schema40ManifestHash, apply: isolateServiceKeys, impact: serviceScopeImpact},
 	{from: 40, version: 41, manifest: db.Schema41ManifestHash, sql: db.AgentDriversSQL + db.AgentPersonalMemorySQL + db.ManagementOperationsSQL, impact: &migrationImpact{
 		addedTables: []string{"agent_driver_profiles", "agent_driver_bindings", "agent_request_drivers", "agent_chatgpt_session", "ai_agent_personal_memories", "ai_agent_personal_memory_history", "management_operations", "management_operation_items", "management_operation_rollups", "management_operation_cleanup_jobs"}, credentials: credentialsUnchanged}},
-	{from: 41, version: 42, manifest: db.PinnedGenerationTwoManifestHash, apply: migrateOperatorDiagnostics, impact: &migrationImpact{
+	{from: 41, version: 42, manifest: db.Schema42ManifestHash, apply: migrateOperatorDiagnostics, impact: &migrationImpact{
 		addedTables:   []string{"agent_codex_session", "request_attempt_diagnostics", "request_delivery_facts", "agent_request_diagnostics", "request_error_diagnostics", "management_operation_terms", "management_capture_context", "management_capture_rows", "management_capture_totals"},
 		rebuiltTables: []string{"agent_request_drivers"}, controlTables: []string{"management_operations", "management_operation_items"}, credentials: credentialsUnchanged}},
+	{from: 42, version: 43, manifest: db.PinnedGenerationTwoManifestHash, sql: db.OperatorFollowupSQL, impact: &migrationImpact{
+		addedTables: []string{"agent_operation_diagnostics"}, indexedTables: []string{"charity_request_outcomes", "game_fishing_rank_facts"},
+		constraintTables: []string{"donation_service_health"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {
@@ -122,6 +125,7 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{39, db.Schema39ManifestHash, "31f18116afe12c50a48bca87fe48c1a7c01ba796"},
 		{40, db.Schema40ManifestHash, "753a64a8e375632759e452ad9f1a222c84417422"},
 		{41, db.Schema41ManifestHash, "5c721cd00b1ebcc402f0b85ce02aa9014498aa97"},
+		{42, db.Schema42ManifestHash, "cd07f2ccde4d98b130c3c6c71e905bd4a6fd06d3"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,

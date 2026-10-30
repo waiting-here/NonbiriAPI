@@ -9,6 +9,7 @@ import (
 
 func restoreSchema41LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema42LayoutForTest(t, database)
 	rows, err := database.Query(`SELECT name FROM sqlite_schema WHERE type='trigger' AND name GLOB 'management_capture_*' ORDER BY name`)
 	if err != nil {
 		t.Fatal(err)
