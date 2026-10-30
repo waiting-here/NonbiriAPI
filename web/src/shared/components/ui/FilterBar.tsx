@@ -18,6 +18,7 @@ export function FilterBar({
   onSubmit,
   onReset,
   submitLabel,
+  submitDisabled,
 }: {
   search: ReactNode;
   as?: 'form' | 'div';
@@ -39,6 +40,8 @@ export function FilterBar({
   onReset?: () => void;
   /** Label of the built-in Search button. */
   submitLabel?: string;
+  /** Disables the built-in Search and Reset buttons while a request or input check runs. */
+  submitDisabled?: boolean;
 }) {
   const { t } = useTranslation();
   const storageKey = persistKey ? `nb.fold.${persistKey}` : null;
@@ -78,11 +81,17 @@ export function FilterBar({
               <>
                 <Button
                   type={Tag === 'form' ? 'submit' : 'button'}
+                  disabled={submitDisabled}
                   onClick={Tag === 'div' ? onSubmit : undefined}
                 >
                   {submitLabel ?? t('common.search')}
                 </Button>
-                <Button type="button" variant="secondary" onClick={onReset}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={submitDisabled}
+                  onClick={onReset}
+                >
                   {t('common.resetFilter')}
                 </Button>
               </>
