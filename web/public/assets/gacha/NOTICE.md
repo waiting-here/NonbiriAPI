@@ -48,12 +48,12 @@ The retained portrait sources are 1024 × 1536; the group source is 1536 × 864 
 
 ## Moment-only expanded frames
 
-The adopted derivatives in moment/c-gemini/, moment/q-glm/, moment/n-gemini/ and
-moment/o-claude/, with matching hires/moment/ paths, retain the established
+The adopted derivatives in `moment/c-gemini/`, `moment/q-glm/`, `moment/n-gemini/` and
+`moment/o-claude/`, with matching `hires/moment/` paths, retain the established
 characters and original card and appearance inputs. Their separate
-composition.json registrations describe the expanded canvas and the unchanged
-original region. Current standard frames are1536 x1536;3840 x3840 derivatives
-use2.5x Lanczos resampling and do not add native detail.
+`composition.json` registrations describe the expanded canvas and the unchanged
+original region. Current standard frames are 1536 × 1536; 3840 × 3840 derivatives
+use 2.5× Lanczos resampling and do not add native detail.
 
 c-gemini's additional margins were generated from its retained project source
 using [BRIA Fibo-2.0-edit-turbo](https://huggingface.co/briaai/Fibo-2.0-edit-turbo/tree/177f2d4a06b6587144ef5c2b8452a4f1fe2ab4b7),
@@ -68,7 +68,7 @@ the original inputs.
 
 The authoring models and inference code are not bundled with these web assets.
 The retained Fibo model card identifies the model's
-[CC BY-NC4.0 terms](https://creativecommons.org/licenses/by-nc/4.0/deed.en)
+[CC BY-NC 4.0 terms](https://creativecommons.org/licenses/by-nc/4.0/deed.en)
 and links a separate
 [BRIA commercial agreement](https://platform.bria.ai/licensing/pricing?model=fibo-2).
 Those model terms are distinct from this project's artwork and code notices.

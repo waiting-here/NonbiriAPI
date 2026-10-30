@@ -17,14 +17,15 @@ const { cards } = JSON.parse(readFileSync(resolve('../internal/gacha/catalog.jso
 const { cards: compositions } = JSON.parse(
   readFileSync(resolve('public/assets/gacha/composition.json'), 'utf8'),
 ) as { cards: Record<string, { moment_layers?: MomentRegistration }> };
-// Newly adopted ordinary/Sweet entries join this matrix only after real product paths are registered.
+// Exercise each renderer and top-padding layout once; artwork review covers every adopted image.
+const expandedExamples = new Set(['c-gemini', 'g-claude', 'g-gemini', 's-chatgpt', 's-claude']);
 const targets = [
   ...new Set([
     ...Object.keys(specialCards),
     ...cards
       .filter((card) => {
         const layers = compositions[card.id]?.moment_layers;
-        return layers?.expansion?.hero || layers?.scene?.path;
+        return expandedExamples.has(card.id) && (layers?.expansion?.hero || layers?.scene?.path);
       })
       .map((card) => card.id),
   ]),

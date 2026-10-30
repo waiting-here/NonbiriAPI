@@ -61,11 +61,11 @@ waves, unsupported bouncing and extra particles cannot replace character motion.
 
 ### Moment-only expanded frames
 
-Keep adopted expanded derivatives under moment/<card-id>/ and
-hires/moment/<card-id>/, separate from existing cards, portrait crops and site
-appearances. composition.json is the display-registration source:
-moment_layers.expansion retains canvas, originalRegion and adopted hero/eye
-paths; an aligned scene has its own moment_layers.scene registration. Use the
+Keep adopted expanded derivatives under `moment/<card-id>/` and
+`hires/moment/<card-id>/`, separate from existing cards, portrait crops and site
+appearances. `composition.json` is the display-registration source:
+`moment_layers.expansion` retains `canvas`, `originalRegion` and adopted hero/eye
+paths; an aligned scene has its own `moment_layers.scene` registration. Use the
 actual recorded offsets and dimensions, including additional top or transparent
 padding. Keep the original character scale, bottom anchor, eye coordinates and
 motion rig. On ordinary wide pages, move the canonical box inward by its actual
