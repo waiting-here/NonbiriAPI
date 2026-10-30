@@ -165,7 +165,24 @@
         1536
       ],
       "backgroundFit": "center-cover",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1792,
+            1536
+          ],
+          "originalRegion": {
+            "x": 512,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 4480,
+          "hero": "moment/b-glm/hero.webp"
+        }
+      }
     },
     "b-deepseek": {
       "background": "backgrounds/b.webp",
@@ -402,7 +419,24 @@
         1536
       ],
       "backgroundFit": "center-cover",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1544,
+            1536
+          ],
+          "originalRegion": {
+            "x": 264,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3860,
+          "hero": "moment/f-gemini/hero.webp"
+        }
+      }
     },
     "g-chatgpt": {
       "source": "registered-motion-layers",
@@ -434,7 +468,24 @@
     "g-glm": {
       "source": "registered-motion-layers",
       "background": "motion/g-glm/background.webp",
-      "character": "motion/g-glm/hero.webp"
+      "character": "motion/g-glm/hero.webp",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1536,
+            1544
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 8,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3840,
+          "hero": "moment/g-glm/hero.webp"
+        }
+      }
     },
     "g-deepseek": {
       "source": "registered-motion-layers",
@@ -973,7 +1024,23 @@
         1536
       ],
       "backgroundFit": "full-canvas",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "canvas": [
+            2731,
+            1536
+          ],
+          "originalRegion": {
+            "x": 1707,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "path": "moment/s-claude/background.webp",
+          "highResolutionWidth": 3840
+        }
+      }
     }
   },
   "groups": {

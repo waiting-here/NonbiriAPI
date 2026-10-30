@@ -145,7 +145,10 @@
  */
 @media (width >= 80rem) {
   html[data-appearance='heart-moment'] {
-    --nb-moment-gutter: min(calc((100dvh - 4.25rem) * 2 / 3), max(20rem, calc(100vw - 64rem)));
+    --nb-moment-gutter: var(
+      --nb-moment-scene-frame-width,
+      min(calc((100dvh - 4.25rem) * 2 / 3), max(20rem, calc(100vw - 64rem)))
+    );
   }
   html[data-appearance='heart-moment']
     .nb-user-shell:not([data-layout='game'])
@@ -168,6 +171,13 @@
     transform: translateX(50%);
     height: min(100%, 150vw);
   }
+}
+/* A registered landscape and its character share one cover scale and anchor. */
+.nb-moment-backdrop[data-expanded-scene='true'] .nb-moment-character {
+  right: 0;
+  width: var(--nb-moment-scene-frame-width);
+  height: auto;
+  transform: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .nb-moment-character > canvas {

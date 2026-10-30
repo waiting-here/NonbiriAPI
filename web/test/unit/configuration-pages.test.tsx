@@ -435,11 +435,11 @@ describe('authoritative site-config frontend', () => {
       target: { value: 'Site name' },
     });
     expect(screen.getByLabelText('Endpoint limit')).toHaveValue(8);
-    await rendered.user.click(screen.getByRole('button', { name: 'Search', exact: true }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Search' }));
     expect(screen.queryByLabelText('Endpoint limit')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Site name')).toHaveValue('After');
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search' }), { target: { value: '' } });
-    await rendered.user.click(screen.getByRole('button', { name: 'Search', exact: true }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Search' }));
     await rendered.user.click(identityGroup);
     expect(identityGroup).toHaveAttribute('aria-current', 'page');
     expect(screen.getByLabelText('Site name')).toHaveValue('After');

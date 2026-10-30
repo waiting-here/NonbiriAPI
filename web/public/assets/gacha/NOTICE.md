@@ -49,15 +49,18 @@ The retained portrait sources are 1024 × 1536; the group source is 1536 × 864 
 ## Moment-only expanded frames
 
 The adopted derivatives in `moment/c-gemini/`, `moment/q-glm/`, `moment/n-gemini/`,
-`moment/o-claude/`, `moment/g-claude/`, `moment/l-chatgpt/` and `moment/g-gemini/`,
+`moment/o-claude/`, `moment/g-claude/`, `moment/l-chatgpt/`, `moment/g-gemini/`
+`moment/g-glm/`, `moment/b-glm/` and `moment/f-gemini/`,
 with matching `hires/moment/` paths, retain the established
 characters and original card and appearance inputs. Their separate
 `composition.json` registrations describe the expanded canvas and the unchanged
-original region. Current standard frames are 1536 pixels wide and 1536, 1544 or
-1664 pixels high. Their 3840-pixel-wide derivatives use 2.5× Lanczos resampling
-and do not add native detail.
+original region. Standard character frames are 1536 pixels wide, with an
+8-pixel transparent left extension for f-gemini and a 1792-pixel frame for
+b-glm's tables. Heights are 1536, 1544 or 1664 pixels. Their large derivatives
+use 2.5× Lanczos resampling and do not add native detail.
 
-The additional margins for c-gemini, g-claude, l-chatgpt and g-gemini were
+The additional margins for c-gemini, g-claude, l-chatgpt, g-gemini, g-glm,
+b-glm and f-gemini were
 generated from their retained project sources
 using [BRIA Fibo-2.0-edit-turbo](https://huggingface.co/briaai/Fibo-2.0-edit-turbo/tree/177f2d4a06b6587144ef5c2b8452a4f1fe2ab4b7),
 with foreground alpha prepared using
@@ -68,6 +71,13 @@ uncropped animation inputs through an expanded camera; no new character parts
 were generated. n-gemini's static original region was restored from the same
 native render baseline. Their native rigs, eye coordinates and motion remain
 the original inputs.
+
+The moment-only s-claude scene extends the retained doorway background to
+2731 × 1536, with the original 1024 × 1536 area unchanged at the right. The new
+left side continues the empty storefront and night street using the same Fibo
+workflow. Character and doorway share the original registration and contact
+points. Its 3840 × 2160 derivative is Lanczos resampling, and all related paths
+retain the Sweet Hide-and-Seek R-18 classification.
 
 The authoring models and inference code are not bundled with these web assets.
 The retained Fibo model card identifies the model's

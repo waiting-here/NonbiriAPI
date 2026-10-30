@@ -40,27 +40,37 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
         : '/assets/gacha/layers/' + card.id + '.webp'
       : undefined);
   const expandedBackground = expandedScene ? asset(expandedScene.path) : undefined;
+  const sceneFrameWidth = expandedScene
+    ? 'max(' +
+      (100 * expandedScene.originalRegion.width) / expandedScene.canvas[0] +
+      'vw, ' +
+      (100 * expandedScene.originalRegion.width) / expandedScene.canvas[1] +
+      'dvh)'
+    : undefined;
   const registeredScene =
     !expandedScene && card?.theme === 's'
       ? '/assets/gacha/motion/' + card.id + '/background.webp'
       : undefined;
   useEffect(() => {
-    if (!expansion) return;
     const root = document.documentElement;
-    const margins = momentHorizontalMargins(expansion);
-    root.style.setProperty(
-      '--nb-moment-extra-reserve',
-      'calc(var(--nb-moment-gutter) * ' + margins.total + ')',
-    );
-    root.style.setProperty(
-      '--nb-moment-right-reserve',
-      'calc(var(--nb-moment-gutter) * ' + margins.right + ')',
-    );
+    if (expansion) {
+      const margins = momentHorizontalMargins(expansion);
+      root.style.setProperty(
+        '--nb-moment-extra-reserve',
+        'calc(var(--nb-moment-gutter) * ' + margins.total + ')',
+      );
+      root.style.setProperty(
+        '--nb-moment-right-reserve',
+        'calc(var(--nb-moment-gutter) * ' + margins.right + ')',
+      );
+    }
+    if (sceneFrameWidth) root.style.setProperty('--nb-moment-scene-frame-width', sceneFrameWidth);
     return () => {
       root.style.removeProperty('--nb-moment-extra-reserve');
       root.style.removeProperty('--nb-moment-right-reserve');
+      root.style.removeProperty('--nb-moment-scene-frame-width');
     };
-  }, [expansion]);
+  }, [expansion, sceneFrameWidth]);
   useEffect(() => {
     const surface = canvas.current;
     if (!surface || !card || !rare || !registrationReady) return;
@@ -125,9 +135,10 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
       aria-hidden="true"
       data-moment={artwork.key}
       data-registered={!!registeredScene}
+      data-expanded-scene={!!expandedScene}
     >
       <img
-        ref={scene}
+        ref={expandedScene ? undefined : scene}
         className="nb-moment-backdrop__scene"
         src={background}
         srcSet={registeredScene ? artSourceSet(background, 1024, 2560) : artSourceSet(background)}
@@ -142,6 +153,7 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
         <div className="nb-moment-character" data-expanded={Boolean(expansion || expandedScene)}>
           {expandedScene && expandedBackground && (
             <img
+              ref={scene}
               className="nb-moment-character__scene"
               style={momentFrameStyle(expandedScene)}
               src={expandedBackground}
@@ -150,7 +162,9 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
                 expandedScene.canvas[0],
                 expandedScene.highResolutionWidth ?? expandedScene.canvas[0] * 2.5,
               )}
-              sizes={momentImageSizes(expandedScene)}
+              sizes={
+                'max(100vw, ' + (100 * expandedScene.canvas[0]) / expandedScene.canvas[1] + 'dvh)'
+              }
               alt=""
             />
           )}
@@ -171,7 +185,10 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
               expandedHero ? expansion!.canvas[0] : 1024,
               expandedHero ? (expansion!.highResolutionWidth ?? expansion!.canvas[0] * 2.5) : 2560,
             )}
-            sizes={expandedHero ? momentImageSizes(expansion!) : '(width < 40rem) 100vw, 66.67vh'}
+            sizes={
+              sceneFrameWidth ??
+              (expandedHero ? momentImageSizes(expansion!) : '(width < 40rem) 100vw, 66.67vh')
+            }
             alt=""
           />
           {rare && (

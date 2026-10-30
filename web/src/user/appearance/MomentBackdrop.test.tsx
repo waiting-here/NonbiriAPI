@@ -195,6 +195,11 @@ it('anchors an expanded scene to the original character instead of covering the 
   ).toHaveAttribute('src', '/assets/gacha/motion/s-claude/hero.webp');
   expect(vi.mocked(renderSSR).mock.calls[0][5]?.momentFrame).toBeUndefined();
   expect(document.documentElement.style.getPropertyValue('--nb-moment-extra-reserve')).toBe('');
+  expect(
+    document.documentElement.style.getPropertyValue('--nb-moment-scene-frame-width'),
+  ).toContain('dvh');
+  view.rerender(<MomentBackdrop moment="cover:permanent" />);
+  expect(document.documentElement.style.getPropertyValue('--nb-moment-scene-frame-width')).toBe('');
 });
 
 it('uses the adopted static moment source and expanded responsive widths without animating an R card', () => {

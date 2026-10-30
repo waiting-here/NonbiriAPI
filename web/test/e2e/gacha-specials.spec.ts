@@ -22,6 +22,10 @@ const expandedExamples = new Set([
   'g-claude',
   'g-gemini',
   'l-chatgpt',
+  'b-glm',
+  'g-glm',
+  'f-gemini',
+  'f-chatgpt',
   's-chatgpt',
   's-claude',
 ]);
@@ -268,10 +272,32 @@ for (const theme of ['light', 'dark'])
                 '/assets/gacha/' + layers.scene.path,
               );
               await registeredScene.evaluate((image: HTMLImageElement) => image.decode());
+              const background = (await registeredScene.boundingBox())!;
+              const viewport = page.viewportSize()!;
+              expect(background.x).toBeLessThanOrEqual(1);
+              expect(background.y).toBeLessThanOrEqual(1);
+              expect(background.x + background.width).toBeGreaterThanOrEqual(viewport.width - 1);
+              expect(background.y + background.height).toBeGreaterThanOrEqual(viewport.height - 1);
+              const original = layers.scene.originalRegion;
+              const character = (await hero.boundingBox())!;
+              expect(
+                Math.abs(
+                  background.x +
+                    (background.width * original.x) / layers.scene.canvas[0] -
+                    character.x,
+                ),
+              ).toBeLessThan(1);
+              expect(
+                Math.abs(
+                  background.y +
+                    (background.height * original.y) / layers.scene.canvas[1] -
+                    character.y,
+                ),
+              ).toBeLessThan(1);
             }
             const frame = await hero.boundingBox();
             expect(frame).not.toBeNull();
-            if (expansion && width >= 1280) {
+            if ((expansion || layers?.scene) && width >= 1280) {
               expect(frame!.x).toBeGreaterThanOrEqual(-1);
               expect(frame!.x + frame!.width).toBeLessThanOrEqual(width + 1);
               const main = await page.locator('main').evaluate((element) => {
