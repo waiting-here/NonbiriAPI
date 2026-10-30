@@ -45,3 +45,32 @@ Sweet Hide-and-Seek contains two adult characters, ChatGPT and Claude, with nudi
 Heartfelt moments keep each portrait's registered static scenery behind its character, preserving the door contact and foreground props. The group illustration's two paper price signs were cleaned within their paper interiors; the original clips, frames, counter and character layer remain unchanged.
 
 The retained portrait sources are 1024 × 1536; the group source is 1536 × 864 and the cover is 1920 × 1080. Their standard portraits, 320 × 480 thumbnails and 1672 × 941 landscapes keep the accepted framing. The 2560 × 3840 portrait and 3840 × 2160 group derivatives use resampling, not additional native detail. The cover's large foreground reuses its existing enhanced source with the current cleaned alpha and the same adopted background. Open, half-closed and closed eye inputs share the source coordinates; only the face region is retained in the two alternate product textures to avoid downloading duplicate body pixels. A localized face edit removes an unintended lash extension. The original background and character sources remain separate; the group and cover each retain a combined character-and-prop foreground.
+
+## Moment-only expanded frames
+
+The adopted derivatives in moment/c-gemini/, moment/q-glm/, moment/n-gemini/ and
+moment/o-claude/, with matching hires/moment/ paths, retain the established
+characters and original card and appearance inputs. Their separate
+composition.json registrations describe the expanded canvas and the unchanged
+original region. Current standard frames are1536 x1536;3840 x3840 derivatives
+use2.5x Lanczos resampling and do not add native detail.
+
+c-gemini's additional margins were generated from its retained project source
+using [BRIA Fibo-2.0-edit-turbo](https://huggingface.co/briaai/Fibo-2.0-edit-turbo/tree/177f2d4a06b6587144ef5c2b8452a4f1fe2ab4b7),
+with foreground alpha prepared using
+[ToonOut](https://huggingface.co/joelseytre/toonout/tree/cbf720eca394edcde66b861a8a8c20fbabe9c748).
+The complete original RGBA rectangle, including its forward hand, remains
+unchanged. The three native SP derivatives instead reveal the existing
+uncropped animation inputs through an expanded camera; no new character parts
+were generated. n-gemini's static original region was restored from the same
+native render baseline. Their native rigs, eye coordinates and motion remain
+the original inputs.
+
+The authoring models and inference code are not bundled with these web assets.
+The retained Fibo model card identifies the model's
+[CC BY-NC4.0 terms](https://creativecommons.org/licenses/by-nc/4.0/deed.en)
+and links a separate
+[BRIA commercial agreement](https://platform.bria.ai/licensing/pricing?model=fibo-2).
+Those model terms are distinct from this project's artwork and code notices.
+The pinned source and processing records retain model revisions, source and
+output hashes, alpha checks and adoption status.
