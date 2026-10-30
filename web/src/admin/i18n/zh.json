@@ -195,7 +195,8 @@
           "deleted": "已删除",
           "cleared": "已清空",
           "enabled": "已启用",
-          "disabled": "已停用"
+          "disabled": "已停用",
+          "retained": "保持不变"
         },
         "units": {
           "percent": "%",
@@ -302,7 +303,8 @@
           "model_catalog_entries": "模型目录",
           "image_model_refreshes": "图片模型发现任务",
           "image_upstream_revisions": "图片来源设置",
-          "fatfish_challenges": "关卡挑战"
+          "fatfish_challenges": "关卡挑战",
+          "donation_service_health": "公益服务健康"
         },
         "fields": {
           "state": "状态",
@@ -360,7 +362,7 @@
           "limit_mag": "限额",
           "effective_at": "生效时间",
           "retired_at": "停用时间",
-          "donation_key_id": "捐赠密钥",
+          "donation_key_id": "捐赠密钥编号",
           "display_name": "显示名称",
           "enabled": "启用",
           "duration_seconds": "时长",
@@ -496,7 +498,7 @@
           "discovery_enabled": "模型发现",
           "current_approved_revision_id": "已批准版本",
           "current_pending_revision_id": "待审核版本",
-          "use_id": "服务用途",
+          "use_id": "服务用途编号",
           "review_state": "审核状态",
           "processed_by_role": "处理者身份",
           "closed_reason": "关闭原因",
@@ -783,9 +785,22 @@
           "game_fishing_rtp_premium": "高级鱼饵目标返还率",
           "game_fishing_treasure_bottle_mult": "漂流瓶宝物倍率",
           "game_fishing_treasure_clover_mult": "四叶草宝物倍率",
-          "game_fishing_treasure_shell_mult": "贝壳宝物倍率"
+          "game_fishing_treasure_shell_mult": "贝壳宝物倍率",
+          "streak_generation": "失败计数代次",
+          "reset_result": "重置结果",
+          "source_name": "来源",
+          "key_name": "密钥",
+          "donation_name": "捐赠",
+          "retry_after_until": "限流等待至",
+          "backoff_retry_at": "智能退避至",
+          "native_service": "服务",
+          "reset_skip_reason": "跳过原因"
         },
-        "outcomeOnly": "本次仅记录操作结果，未保存字段快照。"
+        "outcomeOnly": "本次仅记录操作结果，未保存字段快照。",
+        "resetResults": {
+          "recovered": "已清除失败",
+          "already_clear": "原本无失败，已重置计数"
+        }
       },
       "roles": {
         "admin": "管理员",

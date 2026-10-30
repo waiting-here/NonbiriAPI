@@ -876,7 +876,7 @@
     },
     "failureReset": {
       "title": "Reset failure count",
-      "help": "Clears consecutive failures and the automatic failure stop. Enablement, limits and expiry stay as configured.",
+      "help": "Clear failure counts and failure pauses for currently approved services. Manual switches, rate-limit waits, smart backoff, quotas, and expiry stay unchanged.",
       "selectPage": "Select this page",
       "clear": "Clear selection",
       "selected": "Reset selected ({{count}})",
@@ -894,7 +894,23 @@
       "ineligible": "No longer eligible",
       "notFound": "Not found",
       "item": "Donation {{donation}} · key {{key}}",
-      "singleDone": "Failure count reset."
+      "singleDone": "Failure count reset.",
+      "recoveryCounts": "Failures cleared: {{recovered}} · Already clear: {{alreadyClear}}",
+      "alreadyClear": "Already clear; counters reset",
+      "noService": "No eligible approved service",
+      "serviceRecovered": "Cleared {{failures}} consecutive failures",
+      "manualRetained": "Manual pause retained",
+      "retryRetained": "Rate-limit wait retained until {{time}}",
+      "backoffRetained": "Smart backoff retained until {{time}}",
+      "reasons": {
+        "ineligible": "Ended or expired",
+        "not_approved": "Not approved",
+        "review_required": "Credential needs approval again",
+        "credential_unavailable": "Approved service or credential is unavailable"
+      },
+      "serviceSummary": "Services: {{reset}} cleared · {{clear}} already clear · {{skipped}} skipped",
+      "servicesTruncated": "See service health for further details",
+      "failurePauseCleared": "Failure pause cleared"
     },
     "keyModels": {
       "title": "Related charity models",

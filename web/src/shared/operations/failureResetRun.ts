@@ -6,10 +6,15 @@ import type {
   FailureSelection,
   FailureSelectionPage,
   FailureResetStatus,
+  FailureResetResult,
 } from './failureReset';
 
 interface Entry extends FailureResetRef {
   status?: FailureResetStatus;
+  outcome?: string;
+  services?: FailureResetResult['services'];
+  services_truncated?: boolean;
+  service_counts?: FailureResetResult['service_counts'];
 }
 interface Transport {
   select: (selection: FailureSelection, cursor: string | null) => Promise<FailureSelectionPage>;
@@ -34,6 +39,8 @@ export class FailureResetRun {
   private processed = 0;
   private resetCount = 0;
   private skipped = 0;
+  private recovered = 0;
+  private alreadyClear = 0;
   constructor(
     private readonly targets: FailureResetTarget[],
     private readonly io: Transport,
@@ -47,6 +54,8 @@ export class FailureResetRun {
       processed: this.processed,
       reset: this.resetCount,
       skipped: this.skipped,
+      recovered: this.recovered,
+      alreadyClear: this.alreadyClear,
     };
   }
   private mark(entry: Entry, status: FailureResetStatus) {
@@ -128,7 +137,16 @@ export class FailureResetRun {
         this.io.guard();
         // Only revisions returned by our successful resets advance later chunks.
         for (const result of batch.results) {
-          this.mark(this.entries.get(result.key_id)!, result.status);
+          const entry = this.entries.get(result.key_id)!;
+          if (!entry.status) {
+            entry.outcome = result.outcome;
+            entry.services = result.services;
+            entry.services_truncated = result.services_truncated;
+            entry.service_counts = result.service_counts;
+            if (result.outcome === 'recovered') this.recovered++;
+            if (result.outcome === 'already_clear') this.alreadyClear++;
+          }
+          this.mark(entry, result.status);
           const donation = this.donations.get(result.donation_id)!;
           if (result.status === 'reset') donation.revision = result.revision!;
           if (result.status === 'conflict') donation.conflict = true;

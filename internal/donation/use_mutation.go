@@ -89,6 +89,7 @@ func (s *Service) mutateUse(ctx context.Context, role reviewerRole, actorID, don
 		return empty, ErrConflict
 	}
 	var result sql.Result
+	var resetReceipt *ServiceFailureReset
 	switch action {
 	case "patch":
 		if input.DiscoveryEnabled != nil && *input.DiscoveryEnabled {
@@ -114,35 +115,21 @@ func (s *Service) mutateUse(ctx context.Context, role reviewerRole, actorID, don
 		}
 		result, err = tx.ExecContext(ctx, `UPDATE donation_uses SET current_pending_revision_id=NULL,revision=revision+1,updated_at=? WHERE id=? AND revision=? AND current_pending_revision_id=?`, now, useID, revision, pending.Int64)
 	case "reset":
-		if !approved.Valid {
-			return empty, ErrConflict
-		}
-		var generation []byte
-		var healthID int64
-		err = tx.QueryRowContext(ctx, `SELECT h.id,h.streak_generation FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donation_use_revisions r ON r.id=u.current_approved_revision_id JOIN endpoint_key_grant_revisions g ON g.id=r.grant_revision_id JOIN donation_service_health h ON h.use_id=u.id AND h.endpoint_key_id=dk.endpoint_key_id AND h.native_service_bit=u.native_service_bit AND h.credential_version_id=g.credential_version_id WHERE u.id=?`, useID).Scan(&healthID, &generation)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		receipt, err := resetUseTx(ctx, tx, useID, revision, now)
+		if err != nil {
 			return empty, err
 		}
-		if err == nil {
-			values, err := streakResetValues(generation)
-			if err != nil {
-				return empty, err
-			}
-			result, err = tx.ExecContext(ctx, `UPDATE donation_service_health SET `+streakResetAssignments+`,updated_at=? WHERE id=?`, append(values, now, healthID)...)
-			if err != nil {
-				return empty, err
-			}
-			if err := requireOne(result); err != nil {
-				return empty, err
-			}
-		}
-		result, err = tx.ExecContext(ctx, `UPDATE donation_uses SET revision=revision+1,updated_at=? WHERE id=? AND revision=?`, now, useID, revision)
+		resetReceipt = &receipt
+		// The shared reset already advanced this use revision.
+		result = nil
 	}
 	if err != nil {
 		return empty, err
 	}
-	if err := requireOne(result); err != nil {
-		return empty, err
+	if action != "reset" {
+		if err := requireOne(result); err != nil {
+			return empty, err
+		}
 	}
 	if action == "cancel" {
 		if err := retireUseRevisionVersionTx(ctx, tx, pending.Int64, now); err != nil {
@@ -153,6 +140,7 @@ func (s *Service) mutateUse(ctx context.Context, role reviewerRole, actorID, don
 	if err != nil {
 		return empty, err
 	}
+	value.FailureReset = resetReceipt
 	out, err := finishJSON(ctx, tx, decision, http.StatusOK, value)
 	if err != nil {
 		return empty, err

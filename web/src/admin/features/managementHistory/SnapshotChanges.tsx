@@ -9,6 +9,14 @@ function ChangeValue({ value, change }: { value?: string; change: Change }) {
   const { t } = useTranslation();
   if (value === undefined)
     return <span className="nb-muted">{t('admin.managementHistory.snapshot.notSet')}</span>;
+  if (change.field === 'reset_skip_reason')
+    return <span>{t('common.failureReset.reasons.' + value, { defaultValue: value })}</span>;
+  if (change.field === 'reset_result')
+    return (
+      <span>
+        {t('admin.managementHistory.snapshot.resetResults.' + value, { defaultValue: value })}
+      </span>
+    );
   if (change.unit === 'milli_credits') return <Amount value={value} />;
   if (change.unit === 'unix_seconds' && /^\d+$/.test(value))
     return <span>{formatDateTime(Number(value))}</span>;
@@ -68,7 +76,12 @@ export function SnapshotChanges({ item }: { item: Item }) {
             <div key={change.field}>
               <dt title={change.field}>{label(change.field)}</dt>
               <dd>
-                {change.before !== undefined || change.after !== undefined ? (
+                {change.operation === 'retained' ? (
+                  <>
+                    <ChangeValue value={change.after} change={change} /> ·{' '}
+                    {t('admin.managementHistory.snapshot.operations.retained')}
+                  </>
+                ) : change.before !== undefined || change.after !== undefined ? (
                   <>
                     <span className="nb-small nb-muted">
                       {t('admin.managementHistory.snapshot.before')}{' '}
@@ -145,7 +158,12 @@ export function SnapshotChanges({ item }: { item: Item }) {
                 {related.changes?.map((change) => (
                   <small key={change.field}>
                     {label(change.field)}:{' '}
-                    {change.before !== undefined || change.after !== undefined ? (
+                    {change.operation === 'retained' ? (
+                      <>
+                        <ChangeValue value={change.after} change={change} /> ·{' '}
+                        {t('admin.managementHistory.snapshot.operations.retained')}
+                      </>
+                    ) : change.before !== undefined || change.after !== undefined ? (
                       <>
                         <ChangeValue value={change.before} change={change} /> →{' '}
                         <ChangeValue value={change.after} change={change} />

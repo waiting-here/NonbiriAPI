@@ -876,7 +876,7 @@
     },
     "failureReset": {
       "title": "重置失败计数",
-      "help": "清空连续失败计数并解除因失败导致的自动停用，启停设置、额度和有效期保持原样。",
+      "help": "清空当前已批准服务的连续失败计数并解除失败暂停。人工停用、限流等待、智能退避、额度和有效期保持原样。",
       "selectPage": "勾选本页",
       "clear": "清空勾选",
       "selected": "重置勾选项（{{count}}）",
@@ -894,7 +894,23 @@
       "ineligible": "已不符合重置条件",
       "notFound": "不存在",
       "item": "捐赠 {{donation}} · 密钥 {{key}}",
-      "singleDone": "失败计数已重置。"
+      "singleDone": "失败计数已重置。",
+      "recoveryCounts": "清除失败 {{recovered}} 项 · 原本正常 {{alreadyClear}} 项",
+      "alreadyClear": "原本无失败，计数已重置",
+      "noService": "没有符合条件的已批准服务",
+      "serviceRecovered": "已清除 {{failures}} 次连续失败",
+      "manualRetained": "人工停用保持不变",
+      "retryRetained": "限流等待保留至 {{time}}",
+      "backoffRetained": "智能退避保留至 {{time}}",
+      "reasons": {
+        "ineligible": "已结束或到期",
+        "not_approved": "尚未批准",
+        "review_required": "凭据需要重新批准",
+        "credential_unavailable": "批准的服务或凭据已不可用"
+      },
+      "serviceSummary": "服务：清除失败 {{reset}} 项 · 原本正常 {{clear}} 项 · 跳过 {{skipped}} 项",
+      "servicesTruncated": "更多详情请查看服务健康",
+      "failurePauseCleared": "失败暂停已解除"
     },
     "keyModels": {
       "title": "关联公益模型",

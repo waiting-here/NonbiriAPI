@@ -1154,6 +1154,13 @@ AND EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dona
 	}
 	newGeneration := input.ResetFailureStreak || input.Enabled != nil && *input.Enabled && (currentEnabled == 0 || failureDisabled == 1)
 	if newGeneration {
+		services, err := resetServicesTx(ctx, tx, donationID, keyID, 0, now)
+		if err != nil {
+			return err
+		}
+		if input.ResetFailureStreak && serviceResetOutcome(services) == "no_service" {
+			return ErrNoResetService
+		}
 		values, err := streakResetValues(generationBlob)
 		if err != nil {
 			return err

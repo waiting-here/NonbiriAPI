@@ -71,7 +71,7 @@ func validateRecord(value Record) error {
 				return ErrInvalid
 			}
 			switch change.Operation {
-			case "updated", "cleared", "created", "deleted", "enabled", "disabled":
+			case "updated", "cleared", "created", "deleted", "enabled", "disabled", "retained":
 			default:
 				return ErrInvalid
 			}
