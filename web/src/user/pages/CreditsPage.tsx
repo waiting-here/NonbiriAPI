@@ -172,8 +172,8 @@ function CreditHistory({
         <FilterBar
           onSubmit={apply}
           onReset={reset}
-          submitLabel={copy.apply}
           submitDisabled={busy || !timeReady}
+          resetDisabled={busy}
           activeCount={[url.filter.from, url.filter.to].filter(Boolean).length}
           search={
             <>

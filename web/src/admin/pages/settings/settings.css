@@ -19,7 +19,7 @@
   gap: var(--nb-space-1);
 }
 .nb-settings__nav h2 {
-  font-size: 0.75rem;
+  font-size: var(--nb-font-size-xs);
   color: var(--nb-color-text-muted);
   margin: 0 0 var(--nb-space-2);
 }
@@ -56,96 +56,72 @@
   min-width: 0;
   gap: var(--nb-space-5);
 }
-.settings-content .nb-setting {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.8fr);
-  gap: var(--nb-space-4);
-  padding: var(--nb-space-2) 0;
-  border-top: 0;
-  border-bottom: 1px solid var(--nb-color-border);
-  min-width: 0;
+.settings-content .nb-panel__body {
+  padding: var(--nb-space-4);
 }
-.settings-content .nb-setting:last-child {
-  border-bottom: 0;
+.settings-content .nb-setting {
+  min-width: 0;
+  padding-block: var(--nb-space-1);
 }
 .settings-content .nb-setting.is-dirty {
-  border-left: 3px solid var(--nb-color-accent);
-  padding-left: var(--nb-space-3);
+  border-inline-start: 3px solid var(--nb-color-accent);
+  padding-inline-start: var(--nb-space-2);
 }
-.settings-content .nb-setting__text h3 {
-  margin: 0;
-  font-size: 0.95rem;
+.settings-content .nb-setting > .nb-field {
+  max-inline-size: none;
 }
-.settings-content .nb-setting__text > .nb-badge {
-  justify-self: start;
+.settings-content .nb-setting > .nb-toggle {
+  align-items: flex-start;
+  padding: 0;
 }
-.settings-content .nb-setting__text p,
-.settings-content .nb-setting__meta {
-  font-size: 0.8rem;
-  color: var(--nb-color-text-muted);
-  margin: var(--nb-space-2) 0 0;
-}
-.settings-content .nb-setting__control {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--nb-space-1);
-  min-width: 0;
-  align-content: start;
-}
-.settings-content
-  .nb-setting__control
-  :is(input:not([type='checkbox']):not([type='radio']), textarea, select) {
-  width: 100%;
-  min-width: 0;
-}
-.settings-content .nb-setting__control > .nb-btn {
-  min-width: 0;
-  max-width: 100%;
+.settings-content .nb-setting .nb-seg {
   flex-wrap: wrap;
-  white-space: normal;
 }
-.settings-content .nb-setting__control details {
-  font-size: 0.75rem;
+.nb-setting__metadata,
+.setting-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nb-space-1) var(--nb-space-2);
+}
+.nb-setting__metadata {
+  margin-top: var(--nb-space-1);
   color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
 }
-.settings-content .nb-setting__control details summary {
+.setting-meta-line {
+  flex: 1 1 auto;
+}
+.nb-setting__meta {
+  margin: 0;
+}
+.settings-content .setting-info {
+  min-width: var(--nb-space-10);
+}
+.settings-content .setting-info[open] {
+  flex-basis: 100%;
+}
+.settings-content .setting-info summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--nb-space-10);
+  min-width: var(--nb-space-10);
   cursor: pointer;
 }
-.setting-toggle .nb-toggle {
-  justify-content: flex-end;
-  padding: 0;
+.settings-content .setting-info p {
+  margin: var(--nb-space-2) 0;
 }
-.setting-toggle .nb-toggle__text {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
+.settings-content .nb-setting__metadata > .nb-btn {
+  max-width: 100%;
+  white-space: normal;
+  text-align: start;
+  font-size: var(--nb-font-size-sm);
 }
-.settings-paired {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--nb-space-3);
+.settings-content .nb-setting__metadata > .nb-toggle {
+  flex-basis: 100%;
 }
-.settings-level-names {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--nb-space-3);
-}
-.settings-composite > :is(.settings-paired, .settings-level-names) > .nb-setting {
-  display: block;
-  border: 0;
-  padding: 0;
-}
-.settings-composite .nb-setting__text h3 {
-  font-size: 0.75rem;
-  color: var(--nb-color-text-muted);
-  margin-bottom: var(--nb-space-2);
-}
-.settings-composite > :is(.settings-paired, .settings-level-names) .nb-setting__text p {
-  display: none;
-}
-.settings-level-names .nb-setting__control > .muted {
+.settings-composite .nb-field__help {
   display: none;
 }
 .settings-save-warning {
@@ -180,94 +156,5 @@
   .settings-other {
     display: flex;
     white-space: nowrap;
-  }
-}
-@media (width <= 48rem) {
-  .settings-content .nb-setting {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .settings-level-names {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .setting-toggle .nb-toggle {
-    justify-content: flex-start;
-  }
-}
-
-.settings-content .nb-panel__body {
-  gap: 0;
-  padding: var(--nb-space-4);
-}
-.settings-content .nb-setting__text {
-  align-content: start;
-  gap: var(--nb-space-1);
-}
-.settings-content .nb-setting__text p {
-  margin: 0;
-}
-.setting-meta-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--nb-space-2);
-}
-.settings-content .setting-meta-line > .nb-setting__meta {
-  flex: 1;
-  margin: 0;
-}
-.settings-content .setting-info {
-  min-width: 2rem;
-}
-.settings-content .setting-info[open] {
-  flex-basis: 100%;
-}
-.settings-content .setting-info summary {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2rem;
-  min-width: 2rem;
-  cursor: pointer;
-}
-.settings-content .setting-info p {
-  margin: var(--nb-space-2) 0;
-}
-@media (width <= 48rem), (pointer: coarse) {
-  .settings-content .setting-info summary {
-    min-height: 2.5rem;
-    min-width: 2.5rem;
-  }
-}
-
-@media (width > 48rem) {
-  .settings-content .nb-setting {
-    padding-block: var(--nb-space-1);
-  }
-  .settings-composite .nb-setting__text h3 {
-    margin-bottom: var(--nb-space-1);
-  }
-  .settings-content .settings-composite {
-    grid-template-columns: minmax(0, 0.5fr) minmax(0, 1fr);
-  }
-  .settings-content
-    .nb-setting__control
-    :is(input:not([type='checkbox']):not([type='radio']), select) {
-    min-height: 2rem;
-    padding: 0.25rem 0.625rem;
-  }
-  .settings-content .nb-setting__control .nb-affix__input {
-    padding: 0.25rem 0.625rem;
-  }
-  .settings-content .nb-setting__control .nb-seg span {
-    padding: 0.25rem 0.625rem;
-    font-size: 0.8125rem;
-  }
-}
-@media (pointer: coarse) {
-  .settings-content
-    .nb-setting__control
-    :is(input:not([type='checkbox']):not([type='radio']), select),
-  .setting-toggle .nb-toggle {
-    min-height: 2.5rem;
   }
 }

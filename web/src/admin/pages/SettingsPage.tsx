@@ -7,6 +7,9 @@ import { useTranslation } from 'react-i18next';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import {
   Affix,
+  Field,
+  Fields,
+  FilterBar,
   Panel,
   PanelHead,
   PanelBody,
@@ -267,7 +270,6 @@ function SettingField({
   const dirty = Boolean(drafts[entry.key]) && (parsed.error !== null || parsed.value !== value);
   const differsFromDefault = (parsed.error === null ? parsed.value : value) !== entry.raw_default;
   const locale = catalogLocale(language);
-  const inputID = 'site-setting-' + entry.key;
   const levelThreshold = /^level_threshold_([234])_milli$/.exec(entry.key);
   const title = levelThreshold
     ? t('admin.settings.levelThreshold', { level: levelThreshold[1] })
@@ -290,7 +292,6 @@ function SettingField({
     });
   }
   const inputProps = {
-    id: inputID,
     type: entry.type === 'integer' ? 'number' : 'text',
     inputMode:
       entry.type === 'integer'
@@ -305,19 +306,11 @@ function SettingField({
     disabled: busy || draft.isNull,
     onChange: (event: React.ChangeEvent<HTMLInputElement>) => change(event.target.value),
   };
-  const control =
-    entry.type === 'boolean' ? (
-      <div className="setting-toggle">
-        <Toggle
-          label={title}
-          checked={draft.text === 'true'}
-          disabled={busy || draft.isNull}
-          onChange={(checked) => change(String(checked))}
-        />
-      </div>
-    ) : entry.type === 'enum' && entry.allowed_values.length <= 4 ? (
+  const control = (props: { id: string; 'aria-describedby'?: string; 'aria-invalid'?: boolean }) =>
+    entry.type === 'enum' && entry.allowed_values.length <= 4 ? (
       <Segmented
         label={title}
+        describedBy={props['aria-describedby']}
         value={draft.text}
         disabled={busy || draft.isNull}
         options={entry.allowed_values.map((value) => ({ value, label: enumValueLabel(t, value) }))}
@@ -325,7 +318,7 @@ function SettingField({
       />
     ) : entry.type === 'enum' ? (
       <select
-        id={inputID}
+        {...props}
         value={draft.text}
         disabled={busy || draft.isNull}
         onChange={(event) => change(event.target.value)}
@@ -338,7 +331,7 @@ function SettingField({
       </select>
     ) : entry.type === 'text' ? (
       <textarea
-        id={inputID}
+        {...props}
         rows={MULTILINE_KEYS.has(entry.key) ? 8 : 4}
         spellCheck={false}
         value={draft.text}
@@ -346,28 +339,40 @@ function SettingField({
         onChange={(event) => change(event.target.value)}
       />
     ) : entry.type === 'amount' || (entry.type === 'integer' && entry.unit) ? (
-      <Affix {...inputProps} unit={entry.unit?.[locale] ?? ''} />
+      <Affix {...props} {...inputProps} unit={entry.unit?.[locale] ?? ''} />
     ) : (
-      <input {...inputProps} />
+      <input {...props} {...inputProps} />
     );
+  const size =
+    entry.type === 'text' || /url|origin/.test(entry.key)
+      ? 'long'
+      : entry.type === 'integer' || entry.type === 'amount' || entry.type === 'boolean'
+        ? 'short'
+        : 'medium';
   return (
-    <div className={`nb-setting${dirty ? ' is-dirty' : ''}`}>
-      <div className="nb-setting__text">
-        <h3>
-          {entry.type === 'boolean' ||
-          (entry.type === 'enum' && entry.allowed_values.length <= 4) ? (
-            title
-          ) : (
-            <label htmlFor={inputID}>{title}</label>
-          )}
-        </h3>
+    <div className={`nb-setting nb-field--${size}${dirty ? ' is-dirty' : ''}`}>
+      {entry.type === 'boolean' ? (
+        <Toggle
+          label={title}
+          description={entry.description[locale]}
+          checked={draft.text === 'true'}
+          disabled={busy || draft.isNull}
+          onChange={(checked) => change(String(checked))}
+        />
+      ) : (
+        <Field
+          label={title}
+          help={entry.description[locale]}
+          error={dirty ? parsed.error : null}
+          size={size}
+        >
+          {control}
+        </Field>
+      )}
+      <div className="nb-setting__metadata">
         {differsFromDefault ? (
           <span className="nb-badge nb-badge--warn">{t('admin.settings.modified')}</span>
         ) : null}
-        <p>{entry.description[locale]}</p>
-      </div>
-      <div className="nb-setting__control">
-        {control}
         <div className="setting-meta-line">
           <p className="nb-setting__meta">
             {t('admin.settings.catalogDefault')}{' '}
@@ -453,23 +458,15 @@ function SettingField({
         ) : null}
 
         {entry.null_writable ? (
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={draft.isNull}
-              disabled={busy}
-              onChange={(event) => onEdit(entry.key, { ...draft, isNull: event.target.checked })}
-            />
-            <span>{t('admin.settings.restoreFallback')}</span>
-          </label>
+          <Toggle
+            label={t('admin.settings.restoreFallback')}
+            checked={draft.isNull}
+            disabled={busy}
+            onChange={(checked) => onEdit(entry.key, { ...draft, isNull: checked })}
+          />
         ) : null}
         {entry.key === 'site_logo_url' ? (
           <p className="inline-notice">{t('admin.settings.remoteLogoWarning')}</p>
-        ) : null}
-        {dirty && parsed.error ? (
-          <p className="field-error" role="alert">
-            {parsed.error}
-          </p>
         ) : null}
         {dirty ? (
           <button
@@ -547,54 +544,43 @@ function Group({
         description={t('admin.settings.groupCount', { count: entries.length })}
       />
       <PanelBody>
-        {entries.map((entry) => {
-          if (used.has(entry.key)) return null;
-          const pair = pairs.find((keys) => keys.includes(entry.key as never));
-          if (pair) {
-            pair.forEach((key) => used.add(key));
-            return (
-              <div className="nb-setting settings-composite" key={pair[0]}>
-                <div className="nb-setting__text">
-                  <h3>
-                    {t(
-                      pair[0].startsWith('game_')
-                        ? 'admin.settings.gameRewardRange'
-                        : 'admin.settings.rewardRange',
-                      {
-                        defaultValue: pair[0].startsWith('game_')
-                          ? 'Game check-in reward'
-                          : 'Check-in reward',
-                      },
-                    )}
-                  </h3>
-                  <p>
-                    {t('admin.settings.rewardRangeHelp', {
-                      defaultValue: 'Each check-in awards an amount within this range.',
-                    })}
-                  </p>
-                </div>
-                <div className="settings-paired">{pair.map((key) => field(byKey.get(key)!))}</div>
-              </div>
-            );
-          }
-          if (names.length === 6 && LEVEL_NAMES.includes(entry.key)) {
-            names.forEach((name) => used.add(name.key));
-            return (
-              <div className="nb-setting settings-composite" key="level-names">
-                <div className="nb-setting__text">
-                  <h3>{t('admin.settings.levelNames', { defaultValue: 'Level display names' })}</h3>
-                  <p>
-                    {t('admin.settings.levelNamesHelp', {
-                      defaultValue: 'Leave a name empty to use its default.',
-                    })}
-                  </p>
-                </div>
-                <div className="settings-level-names">{names.map(field)}</div>
-              </div>
-            );
-          }
-          return field(entry);
-        })}
+        <Fields>
+          {entries.map((entry) => {
+            if (used.has(entry.key)) return null;
+            const pair = pairs.find((keys) => keys.includes(entry.key as never));
+            if (pair) {
+              pair.forEach((key) => used.add(key));
+              return (
+                <Fields
+                  className="settings-composite"
+                  key={pair[0]}
+                  legend={t(
+                    pair[0].startsWith('game_')
+                      ? 'admin.settings.gameRewardRange'
+                      : 'admin.settings.rewardRange',
+                  )}
+                  hint={t('admin.settings.rewardRangeHelp')}
+                >
+                  {pair.map((key) => field(byKey.get(key)!))}
+                </Fields>
+              );
+            }
+            if (names.length === 6 && LEVEL_NAMES.includes(entry.key)) {
+              names.forEach((name) => used.add(name.key));
+              return (
+                <Fields
+                  className="settings-composite"
+                  key="level-names"
+                  legend={t('admin.settings.levelNames')}
+                  hint={t('admin.settings.levelNamesHelp')}
+                >
+                  {names.map(field)}
+                </Fields>
+              );
+            }
+            return field(entry);
+          })}
+        </Fields>
       </PanelBody>
     </Panel>
   );
@@ -702,6 +688,7 @@ export function SettingsPage() {
     ),
   };
   const [search, setSearch] = useState('');
+  const [searchDraft, setSearchDraft] = useState('');
   const saveErrorMessage =
     save.error instanceof ApiError ? save.error.message.replace(/^\[NonbiriAPI\]\s*/, '') : '';
   const locale = catalogLocale(i18n.resolvedLanguage ?? i18n.language);
@@ -729,9 +716,12 @@ export function SettingsPage() {
       ...Object.fromEntries(
         (authority.data?.catalog ?? []).map((entry) => {
           const threshold = /^level_threshold_([234])_milli$/.exec(entry.key);
-          return [entry.key, threshold
-            ? t('admin.settings.levelThreshold', { level: threshold[1] })
-            : entry.title[locale]];
+          return [
+            entry.key,
+            threshold
+              ? t('admin.settings.levelThreshold', { level: threshold[1] })
+              : entry.title[locale],
+          ];
         }),
       ),
     }),
@@ -799,19 +789,32 @@ export function SettingsPage() {
         title={t('admin.settings.title')}
         description={t('admin.settings.description')}
         actions={
-          <form role="search" autoComplete="off" onSubmit={(event) => event.preventDefault()}>
-            <input
-              id="site-config-search"
-              name="site-config-search"
-              autoComplete="off"
-              className="settings-search"
-              type="search"
-              aria-label={t('common.search')}
-              value={search}
-              placeholder={t('admin.settings.searchHelp')}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </form>
+          <FilterBar
+            role="search"
+            ariaLabel={t('common.search')}
+            activeCount={search ? 1 : 0}
+            onSubmit={() => setSearch(searchDraft.trim())}
+            onReset={() => {
+              setSearch('');
+              setSearchDraft('');
+            }}
+            search={
+              <Field label={t('common.search')}>
+                {(props) => (
+                  <input
+                    {...props}
+                    name="site-config-search"
+                    autoComplete="off"
+                    className="settings-search"
+                    type="search"
+                    value={searchDraft}
+                    placeholder={t('admin.settings.searchHelp')}
+                    onChange={(event) => setSearchDraft(event.target.value)}
+                  />
+                )}
+              </Field>
+            }
+          />
         }
       />
       {authority.isPending ? (
@@ -850,6 +853,7 @@ export function SettingsPage() {
                         className={editedGroups.includes(name) ? 'is-dirty' : undefined}
                         onClick={() => {
                           setSearch('');
+                          setSearchDraft('');
                           setParams((current) => {
                             const next = new URLSearchParams(current);
                             next.set('group', name);

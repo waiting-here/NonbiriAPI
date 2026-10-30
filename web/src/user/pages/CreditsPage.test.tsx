@@ -189,7 +189,7 @@ describe('credit history numbered page controls', () => {
               decay: '低活跃积分衰减',
               asset: '积分类型',
               category: '变化原因',
-              apply: '筛选',
+              apply: '搜索',
             }
           : {
               general: 'General credits',
@@ -202,7 +202,7 @@ describe('credit history numbered page controls', () => {
               decay: 'Inactivity credit decay',
               asset: 'Credit type',
               category: 'Reason',
-              apply: 'Apply filters',
+              apply: 'Search',
             };
       for (const [delta, asset, reason] of [
         ['−2,000', labels.general, labels.exchange],
@@ -307,7 +307,7 @@ describe('credit history numbered page controls', () => {
         name: 'Game credits',
       }),
     );
-    await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() =>
       expect(requests).toContain('/api/credits/history?asset_type=game&page=1&page_size=20'),
     );
@@ -450,7 +450,7 @@ describe('credit history numbered page controls', () => {
       screen.getByRole('combobox', { name: 'Money in / out' }),
       'expense',
     );
-    await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
     expect(await screen.findByRole('cell', { name: '−1' })).toBeVisible();
     expect(requests).toContain(
       '/api/credits/history?asset_type=all&page=1&page_size=20&category=charity&direction=expense',

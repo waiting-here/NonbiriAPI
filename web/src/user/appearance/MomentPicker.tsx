@@ -30,6 +30,7 @@ export function MomentPicker() {
   const choice = choiceOverride ?? appearance?.state.moment ?? defaultMoment.key;
   const [kind, setKind] = useState('all');
   const [search, setSearch] = useState('');
+  const [searchDraft, setSearchDraft] = useState('');
   const [error, setError] = useState<unknown>(null);
   const refresh = appearance?.refresh;
   useEffect(() => {
@@ -112,18 +113,22 @@ export function MomentPicker() {
           }))}
         />
         <FilterBar
-          secondaryLabel={t('user.appearance.moments.filter')}
           activeCount={search ? 1 : 0}
           ariaLabel={t('user.appearance.moments.search')}
-          onSubmit={() => {}}
+          onSubmit={() => setSearch(searchDraft.trim())}
+          onReset={() => {
+            setSearch('');
+            setSearchDraft('');
+            setKind('all');
+          }}
           search={
             <Field label={t('user.appearance.moments.search')}>
               {(props) => (
                 <input
                   {...props}
-                  value={search}
+                  value={searchDraft}
                   placeholder={t('user.appearance.moments.searchHint')}
-                  onChange={(event) => setSearch(event.target.value)}
+                  onChange={(event) => setSearchDraft(event.target.value)}
                 />
               )}
             </Field>
