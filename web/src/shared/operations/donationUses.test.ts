@@ -6,6 +6,7 @@ import {
   reviewDonationUses,
   addDonationUses,
   getDonationUses,
+  mutateDonationUse,
 } from './donationUses';
 import { readDonationDiscovery, startDonationDiscovery } from './donationDiscovery';
 const version = (number: string, status: string) => ({
@@ -53,6 +54,29 @@ const use = {
 const response = (value: unknown) =>
   new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
 describe('versioned donation uses', () => {
+  it('preserves optional service recovery details through reads and reset receipts', async () => {
+    const details = {
+      use_id: '6',
+      native_service: 'responses',
+      status: 'reset',
+      failure_streak_before: '12',
+      failure_disabled_before: true,
+      retry_after_until: 2000000000,
+      backoff_retry_at: 2000000060,
+      manually_disabled: true,
+    };
+    expect(normalizeDonationUse({ ...use, failure_reset: details }).failure_reset).toEqual(details);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ ...use, failure_reset: details })));
+    const receipt = await mutateDonationUse(
+      'admin',
+      '3',
+      '6',
+      'reset',
+      { expected_revision: '9' },
+      'A'.repeat(22),
+    );
+    expect(receipt.failure_reset).toEqual(details);
+  });
   it('keeps approved and pending material distinct without borrowing a missing version', () => {
     const row = normalizeDonationUse(use);
     expect(row.approved?.display_head).toBe('head-1');

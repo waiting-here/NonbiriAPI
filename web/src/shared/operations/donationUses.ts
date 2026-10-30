@@ -188,25 +188,22 @@ function version(value: unknown): UseVersion | null {
   };
 }
 export function normalizeDonationUse(value: unknown): DonationUse {
-  const row = record(
-    value,
-    [
-      'id',
-      'donation_id',
-      'donation_key_id',
-      'endpoint_key_id',
-      'native_service',
-      'enabled',
-      'discovery_enabled',
-      'revision',
-      'approved',
-      'pending',
-      'latest',
-      'health',
-      'capabilities',
-    ],
-    'donation use',
-  );
+  const required = [
+    'id',
+    'donation_id',
+    'donation_key_id',
+    'endpoint_key_id',
+    'native_service',
+    'enabled',
+    'discovery_enabled',
+    'revision',
+    'approved',
+    'pending',
+    'latest',
+    'health',
+    'capabilities',
+  ] as const;
+  const row = record(value, [...required, 'failure_reset'], 'donation use', required);
   const caps = record(
     row.capabilities,
     [
@@ -340,7 +337,7 @@ export function mutateDonationUse(
       encodeURIComponent(useId) +
       (action === 'withdraw' ? '/pending' : action === 'reset' ? '/failure-streak-reset' : ''),
     (value) => {
-      const row = record(value ?? {}, [], 'use receipt');
+      const row = record(value ?? {}, ['failure_reset'], 'use receipt', []);
       return {
         failure_reset:
           row.failure_reset == null ? undefined : serviceFailureReset(row.failure_reset),

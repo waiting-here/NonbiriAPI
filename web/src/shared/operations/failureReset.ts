@@ -42,7 +42,22 @@ export interface ServiceFailureReset {
   manually_disabled: boolean;
 }
 export function serviceFailureReset(value: unknown): ServiceFailureReset {
-  const row = record(value, ['use_id', 'native_service', 'status'], 'service reset');
+  const row = record(
+    value,
+    [
+      'use_id',
+      'native_service',
+      'status',
+      'reason',
+      'failure_streak_before',
+      'failure_disabled_before',
+      'retry_after_until',
+      'backoff_retry_at',
+      'manually_disabled',
+    ],
+    'service reset',
+    ['use_id', 'native_service', 'status'],
+  );
   return {
     use_id: decimalID(row.use_id, 'use id'),
     native_service: oneOf(row.native_service, NATIVE_SERVICES, 'native service'),
@@ -125,7 +140,21 @@ export function resetFailures(
     (value) => {
       const batch = record(value, ['results', 'counts'], 'reset results');
       const results = array(batch.results, 'reset results', 100).map((value, index) => {
-        const item = record(value, ['donation_id', 'key_id', 'status', 'revision'], 'reset result');
+        const item = record(
+          value,
+          [
+            'donation_id',
+            'key_id',
+            'status',
+            'revision',
+            'outcome',
+            'services',
+            'services_truncated',
+            'service_counts',
+          ],
+          'reset result',
+          ['donation_id', 'key_id', 'status', 'revision'],
+        );
         if (item.donation_id !== items[index]?.donation_id || item.key_id !== items[index]?.key_id)
           invalidResponse('reset result identity');
         return {
@@ -184,8 +213,9 @@ export function resetOwnerFailure(
     (value) => {
       const result = record(
         value,
-        ['donation_id', 'key_id', 'revision', 'failure_streak'],
+        ['donation_id', 'key_id', 'revision', 'failure_streak', 'outcome', 'services'],
         'failure reset',
+        ['donation_id', 'key_id', 'revision', 'failure_streak'],
       );
       if (
         result.donation_id !== donationID ||
