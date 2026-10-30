@@ -152,9 +152,9 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 42. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts exact registered schema 16–26 and 33–41 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 43. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts 21 exact registered schema 16–26 and 33–42 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`, including for 42-to-43. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
 
-`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=42`, `minimum_schema_version=42`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
+`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=43`, `minimum_schema_version=43`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its 21 supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
 
 Current account export `schema_version=31` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v31.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
@@ -464,10 +464,10 @@ After verified Discord OAuth refuses sign-in for an active ban or blacklist, `GE
 | `GET /api/endpoints/{id}` | One owner endpoint. |
 | `PATCH /api/endpoints/{id}` | `{note?,enabled?,expected_revision}`; origin and Connector are immutable. |
 | `DELETE /api/endpoints/{id}` | `{expected_revision}`; 204. Report locks return `resource_locked`. |
-| `GET /api/endpoints/{id}/keys` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode optionally accepts `q,enabled,donated,suspension_state` and returns safe `EndpointKey` with `pagination`. |
+| `GET /api/endpoints/{id}/keys` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode optionally accepts `q,enabled,donated,suspension_state,credential_available` and returns safe `EndpointKey` with `pagination`. |
 | `POST /api/endpoints/{id}/keys` | `{secret,note,enabled,force_store_false,ownership_confirmed:true,max_concurrency?,max_rpm?}`; returns 201 safe metadata. |
 | `PATCH /api/endpoints/{id}/keys/{keyId}` | `{note?,enabled?,force_store_false?,max_concurrency?,max_rpm?,expected_revision}`. |
-| `DELETE /api/endpoints/{id}/keys/{keyId}` | `{expected_revision}`; claim-first deletion; 204. |
+| `DELETE /api/endpoints/{id}/keys/{keyId}` | `{expected_revision}`; removes this endpoint's key authorization and affected bindings, preserving the shared credential and other endpoints' uses; 204. |
 | `GET /api/endpoints/{id}/keys/{keyId}/bindings` | Numbered `page,page_size` only (default 1/20), with optional exact `upstream_model_id` (1–512 Unicode code points); returns the owner-safe binding page and `pagination`. |
 | `GET /api/endpoints/{id}/keys/{keyId}/models` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode optionally accepts `source=automatic|manual`; returns discovery `evidence`, automatic/manual entries and numbered `pagination`. |
 | `POST /api/endpoints/{id}/keys/{keyId}/models/refresh` | Idempotency key; 202 accepted operation and evidence. |
@@ -560,7 +560,35 @@ Provider/model parts are bounded opaque strings and form the external `provider/
 
 Deleting a binding compacts the remaining order positions. An order update uses the exact current binding-ID permutation, so each surviving binding keeps its identity while positions change.
 
-Numbered resource filters combine with AND, and counts and rows use the same bounded read snapshot. Endpoint `q` searches the base URL, note and mainstream channel name; `source=mainstream|custom`, `state=available|endpoint_disabled|no_keys|no_usable_key`, and a registered `connector_type` are optional. Key `q` searches only displayed fragments and notes; `enabled` and `donated` accept `true|false`, while `suspension_state=none|security_processing` is independent of donation membership. Model `q` searches the full model name and every binding's upstream ID without duplicate rows; `provider` is exact, `route_strategy=ordered|random|cache_balanced`, and `connection_state=available|unavailable|unconfigured`. Empty optional choices, unknown/repeated filters and unsupported combinations are rejected. Omit a filter to clear it. Sizes remain 10/20/50/100, default 20, with out-of-range pages clamped. Legacy cursor behavior remains unchanged and does not acquire these new filters.
+Numbered resource filters combine with AND, and counts and rows use the same bounded read snapshot. Endpoint `q` searches the base URL, note and mainstream channel name; `source=mainstream|custom`, `state=available|endpoint_disabled|no_keys|no_usable_key`, and a registered `connector_type` are optional. Key `q` searches only displayed fragments and notes; `enabled`, `donated` and `credential_available` accept `true|false`, while `suspension_state=none|security_processing` is independent of donation membership. Model `q` searches the full model name and every binding's upstream ID without duplicate rows; `provider` is exact, `route_strategy=ordered|random|cache_balanced`, and `connection_state=available|unavailable|unconfigured`. Empty optional choices, unknown/repeated filters and unsupported combinations are rejected. Omit a filter to clear it. Sizes remain 10/20/50/100, default 20, with out-of-range pages clamped. Legacy cursor behavior remains unchanged and does not acquire these new filters.
+
+`EndpointKey.credential_available` reports whether the referenced credential is
+undeleted and enabled, its exact referenced version is enabled, and its secret
+material remains available. It does not replace the endpoint/key enablement,
+security-processing or donation-authorization checks. The numbered key filter
+uses this same predicate for both rows and counts. A generic list can retain
+association metadata with `credential_available:false`; that row is not proof
+that a usable credential still exists.
+
+`browse.donation_eligibility` is
+`eligible|already_donated|security_processing|unavailable`. Unavailable credential
+material takes precedence; otherwise security processing precedes existing
+donation membership. The donation picker requests `credential_available=true`
+and rejects other ineligible choices. Credential and endpoint-key mutations
+invalidate its cached candidates; reopening the picker does not restore a
+deleted key. Submission still rechecks current ownership, material and grant
+versions, so a stale selected item fails with a client error rather than
+recreating a credential or being accepted from browser state.
+
+`DELETE /api/credentials/{id}` with `{expected_revision}` and `Idempotency-Key`
+returns 204 and removes the entire credential from its service. All uses of that
+credential, including discovery and approved/pending donation authorization,
+are affected. This is distinct from removing one endpoint's key authorization:
+the latter preserves the shared credential, other protocol entries and their
+model discovery. Existing resource locks, ownership and stale-revision checks
+still apply. Retained association/history metadata and references needed for
+accepted work are not restored as selectable credentials. See
+[service connections](service-connections.md) for the UI scope and lifecycle.
 
 ### 3.3 Credit history
 
@@ -996,13 +1024,73 @@ Each key's `failure_disable_threshold` is a canonical decimal U128 string, defau
 
 Saving retains the current count and generation and atomically recalculates error-disablement: `0` clears it; a positive threshold disables when the count reaches that threshold. Zero still records failures. Upstream HTTP 200 or a protocol-complete success clears the count, regardless of later errors. Without either, a non-200 response with a valid retry hint, an error recognized by its smart-backoff policy, or a narrowly verified caller-parameter error leaves the count unchanged without clearing it; other upstream response/protocol/DNS/connect/timeout failures increase it; caller cancellation, downstream failure, Debug stop, platform rejection and internal failure leave it unchanged. A confirmed upstream failure still counts after a later cancellation. Recovery uses a persisted HTTP 200 acceptance checkpoint when available; an unknown outcome is neutral. Fees and quotas follow the billing rules above. Ordered in-flight results use the latest saved threshold; old-generation completions cannot change current state. Manual disablement, expiry, withdrawal, bans, quotas and ownership checks continue to apply. Pages warn when zero is entered or saved, without extra confirmation. Each real save has a no-secret review audit; replay repeats no write or alarm. Only a transition into error-disablement alerts; clearing and later disabling can alert again.
 
-Owners can `POST /api/donations/{id}/keys/{keyId}/failure-streak-reset` with `{expected_revision}` and `Idempotency-Key`. Only their own approved, unexpired, active donated key is eligible. The response is `{donation_id,key_id,revision,failure_streak:"0"}`. Missing ownership returns 404; stale or ineligible state returns 409.
+Owners can `POST /api/donations/{id}/keys/{keyId}/failure-streak-reset` with
+`{expected_revision}` and `Idempotency-Key`. The key must remain their own,
+unexpired, unterminated donation membership, with at least one eligible approved
+service using available authorized credential material. A pending replacement
+does not displace an existing eligible approved version. Manual disabling does
+not prevent counter maintenance and is not undone. The response is
+`{donation_id,key_id,revision,failure_streak:"0",outcome,services}`. Successful
+`outcome` is `recovered|already_clear`. Missing ownership returns 404; stale or
+ineligible state returns 409. No eligible approved service returns `409 conflict`
+with a localized explanation to check approval and credential availability;
+the English message is "No approved services are eligible for failure reset;
+check approval and credential availability."
 
-Administrators and current stewards can `POST {prefix}/donation-keys/failure-streak-reset`, where the prefix is `/admin/api` or `/api/steward`. The strict body is `{items:[{donation_id,key_id,expected_revision}]}`, with 1–100 unique keys and one expected revision per donation. The response is `{results:[{donation_id,key_id,status,revision}],counts:{processed,reset,skipped}}` in input order. Status is `reset|conflict|ineligible|not_found`; counts are decimal strings and revision is a string or null. A donation's revision advances once per reset key; every result in that donation reports the final revision from the batch. A stale donation skips all its submitted keys; an ineligible key does not prevent eligible keys in other donations from succeeding. Replays require current authority. These control requests have the shared 256 KiB body limit.
+Administrators and current stewards can
+`POST {prefix}/donation-keys/failure-streak-reset`, where the prefix is
+`/admin/api` or `/api/steward`. The strict body is
+`{items:[{donation_id,key_id,expected_revision}]}`, with 1–100 unique keys and one
+expected revision per donation. The response contains input-ordered `results`
+and `counts:{processed,reset,skipped,recovered,already_clear}`. These batch counts
+are decimal strings and count keys: `reset` includes both recovered and already
+clear keys; `recovered` counts keys with at least one previously nonzero or
+failure-disabled service. `skipped` is processed minus reset.
 
-Reset clears only the consecutive-failure disabling state and starts a new failure generation. It preserves usage, quotas, expiry, bindings, manual disablement, header cooldown and smart backoff. Late callbacks from the previous generation cannot rebuild the cleared streak. Each actual reset records a no-secret review audit.
+Each result has `donation_id,key_id,status,revision`, with optional
+`outcome,service_counts,services_truncated,services`. Status is
+`reset|conflict|ineligible|not_found|no_service`; outcome, when services were
+examined, is `recovered|already_clear|no_service`. Revision is a decimal string
+or null when unavailable or outside scope. Each successful key reset advances
+the donation revision once; results permitted to expose that donation's revision
+report its final revision. A stale donation skips all its submitted keys.
+Skipped keys do not block eligible keys in the batch. `no_service` is a skip,
+not a recovered key. Current steward grants/resource scope are enforced,
+including on replay. The request body limit remains 256 KiB.
 
-Before processing all matching results, `POST {prefix}/donation-keys/failure-streak-reset/selection` accepts `{selection:{view,...filters},cursor:null|string}`. The cursor is required; start with null. Views are `donations|donation_keys|sources|source_keys`. Donation filters are `q,status,review_status,handling`; `donation_keys` requires only `donation_id`; source filters are `q,scope,handling`; source-key filters additionally require `source_key` and accept `idle`. These match the corresponding list filters, with no pagination fields. Each call has a five-second budget, scans at most 100 saved key IDs and returns `{items:[{donation_id,key_id,expected_revision}],next_cursor}`; an empty item page may still have a next cursor. The signed cursor fixes the upper key-ID boundary, role, actor and filters for one hour. This read-only operation writes no selection, job or replay record. The browser gathers the fixed selection before sending batches of at most 100, yields between steps, supports interruption and retains the exact batch and idempotency key when a response is uncertain.
+`service_counts:{reset,already_clear,skipped}` contains integer counts for all
+examined services of that key. Detailed `services` are sampled to at most 64
+entries across the entire batch; `services_truncated:true` marks a shortened
+key result while its counts remain exact. The idempotent response remains bounded
+to 64 KiB. A service receipt has `use_id,native_service,status,reason?,
+failure_streak_before,failure_disabled_before,retry_after_until,backoff_retry_at,
+manually_disabled`. IDs and failure streaks are decimal strings; wait deadlines
+are nullable Unix seconds; the two disabled fields are booleans. Service status
+is `reset|already_clear|ineligible`. Ineligible reasons are
+`ineligible|not_approved|review_required|credential_unavailable`. The wait and
+manual-state fields describe restrictions retained after reset.
+
+All key reset entry points, including the key editor's `reset_failure_streak`,
+clear eligible service-health streaks and failure pauses for the approved exact
+credential version, then advance the legacy key counter generation. Resetting
+an already-clear service still advances its generation; it is not reported as
+recovery from a failure. Usage, quotas, expiry, approval, bindings, manual
+disablement, header cooldown, smart-backoff state and trial ownership remain
+unchanged. Late callbacks from the previous generation cannot rebuild the cleared
+streak. A reset does not promise that the service is immediately routable.
+
+The single-use route
+`POST {prefix}/donations/{id}/uses/{useId}/failure-streak-reset` uses `/api`,
+`/admin/api` or `/api/steward`, with `{expected_revision}` for that use and the
+existing authorization/idempotency checks. It returns the updated use, including
+current `health` and an optional `failure_reset` service receipt with the fields
+above. It resets only that use's approved service state and advances its use
+revision. A missing eligible approved service has the same explicit 409 reason.
+Successful changes and bounded skip details are reflected in management history
+when performed within a management operation, in addition to the existing
+no-secret review audit for key resets.
+
+Before processing all matching results, `POST {prefix}/donation-keys/failure-streak-reset/selection` accepts `{selection:{view,...filters},cursor:null|string}`. The cursor is required; start with null. Views are `donations|donation_keys|sources|source_keys`. Donation filters are `q,status,review_status,handling,user_id,discord_id`; donor filters use the exact nonempty identifiers in §6.2. `donation_keys` requires only `donation_id`. Source filters are `q,scope,handling,key_state`; source-key filters additionally require `source_key` and accept `idle`. They use the corresponding list values, including §7.4.3 key states; supplied source `scope,handling,idle,key_state` must be nonempty. Pagination and fields belonging to another view are rejected. Each call has a five-second budget, scans at most 100 saved key IDs and returns `{items:[{donation_id,key_id,expected_revision}],next_cursor}`; an empty item page may still have a next cursor. The signed cursor fixes the upper key-ID boundary, role, actor and filters for one hour. This read-only operation writes no selection, job or replay record. The browser gathers the fixed selection before sending batches of at most 100, yields between steps, supports interruption and retains the exact batch and idempotency key when a response is uncertain.
 
 #### Managed model discovery
 
@@ -2189,6 +2277,18 @@ writes, not distinct objects or inferred downstream effects. Up to 32 related
 objects are sampled; omissions remain explicit. Each change collection is
 bounded to 64 fields and 16 KiB, each before/after value to 512 characters;
 details are bounded to 64 KiB.
+
+Managed donation service-health changes appear as related objects of kind
+`donation_service_health`, with operation-time source, donation, key and native
+service names. Allowlisted facts include `failure_streak,streak_generation,
+failure_disabled,retry_after_until,backoff_retry_at` and
+`reset_result=recovered|already_clear`. Advancing a reset generation is a real
+change even if the visible streak was already zero. Retained wait deadlines are
+shown as retained restrictions, not cleared pauses. Batch skips can include
+`donation_uses` related objects with `reset_skip_reason`. Existing bounded
+sampling/impact counts and administrator-only access apply. Only changes within
+an active management operation are captured here; ordinary inference health
+updates do not create management actions, and old health changes are not backfilled.
 
 Names and changes come from the operation transaction and survive later
 rename/deletion. Same-value submissions are not reported as new values. Large
