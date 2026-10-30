@@ -19,14 +19,9 @@
 .log-origin-compact .nb-badge {
   margin-left: var(--nb-space-2);
 }
-.log-filters label,
-.log-filters .nb-field {
+.log-filters {
   display: grid;
-  gap: var(--nb-space-1);
-  min-width: 0;
-}
-.log-filters .nb-filter__row > .nb-field {
-  flex: 1 1 10rem;
+  gap: var(--nb-space-3);
 }
 .log-filters .quick-ranges {
   display: flex;
@@ -96,12 +91,6 @@
   }
   .log-table .nb-table td[data-cell='action'] button {
     width: 100%;
-    min-height: 2.5rem;
-  }
-  .log-filters .nb-filter__row > .nb-field {
-    flex-basis: 100%;
-  }
-  .log-filters .nb-filter__row > button {
     min-height: 2.5rem;
   }
 }

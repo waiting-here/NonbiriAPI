@@ -1,7 +1,7 @@
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Field, Fold, Note } from '@shared/components/ui';
+import { Field, FormActions, Fold, Note } from '@shared/components/ui';
 import { NativeServicesSummary } from '@shared/components/ServiceRoutesSummary';
 import { connectionAPI } from './api';
 import { ConnectionResourceList } from './ResourceList';
@@ -121,9 +121,11 @@ export function SourceModelMapping({
               />
             )}
           </Field>
-          <button type="submit" className="nb-btn nb-btn--secondary" disabled={!manual.trim()}>
-            {t('common.connections.configureModel')}
-          </button>
+          <FormActions>
+            <button type="submit" className="nb-btn nb-btn--secondary" disabled={!manual.trim()}>
+              {t('common.connections.configureModel')}
+            </button>
+          </FormActions>
         </form>
       </Fold>
       {selected.length ? (

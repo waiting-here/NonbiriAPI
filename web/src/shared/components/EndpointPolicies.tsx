@@ -40,6 +40,8 @@ import {
   DataTable,
   Field,
   FilterBar,
+  Fields,
+  FormActions,
   Note,
   OutcomeNote,
   Panel,
@@ -224,8 +226,16 @@ function EndpointPoliciesContent({
             <>
               <div hidden={Boolean(selection)} ref={listRef} tabIndex={-1} className="nb-form">
                 <FilterBar
-                  secondaryLabel={t('common.filter')}
                   activeCount={q ? 1 : 0}
+                  onReset={() => {
+                    setSearch('');
+                    setParams((previous) => {
+                      const next = new URLSearchParams(previous);
+                      next.delete('q');
+                      next.set('page', '1');
+                      return next;
+                    });
+                  }}
                   onSubmit={() => {
                     if (validManagementSearch(search))
                       setParams((previous) => {
@@ -249,9 +259,6 @@ function EndpointPoliciesContent({
                           />
                         )}
                       </Field>
-                      <Button type="submit" disabled={!validManagementSearch(search)}>
-                        {t('common.search')}
-                      </Button>
                     </>
                   }
                 />
@@ -482,48 +489,53 @@ function NewEndpoint({
             <ErrorState error={options.error} onRetry={() => void options.refetch()} />
           ) : (
             <>
-              <Field label={t('common.endpointPolicies.connector')}>
-                {(props) => (
-                  <select
-                    {...props}
-                    value={connector}
-                    required
-                    disabled={reading}
-                    onChange={(event) => setConnector(event.target.value)}
-                  >
-                    <option value="">{t('common.endpointPolicies.chooseConnector')}</option>
-                    {options.data.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </Field>
-              <Field
-                label={t('common.endpointPolicies.baseURL')}
-                help={t('common.endpointPolicies.baseHelp')}
-              >
-                {(props) => (
-                  <input
-                    {...props}
-                    type="url"
-                    required
-                    maxLength={4096}
-                    value={url}
-                    disabled={reading}
-                    placeholder="https://provider.example/v1"
-                    onChange={(event) => setURL(event.target.value)}
-                  />
-                )}
-              </Field>
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={reading || !connector || !url.trim()}
-              >
-                {t('common.endpointPolicies.openRules')}
-              </Button>
+              <Fields>
+                <Field label={t('common.endpointPolicies.connector')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={connector}
+                      required
+                      disabled={reading}
+                      onChange={(event) => setConnector(event.target.value)}
+                    >
+                      <option value="">{t('common.endpointPolicies.chooseConnector')}</option>
+                      {options.data.map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+                <Field
+                  label={t('common.endpointPolicies.baseURL')}
+                  size="long"
+                  help={t('common.endpointPolicies.baseHelp')}
+                >
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="url"
+                      required
+                      maxLength={4096}
+                      value={url}
+                      disabled={reading}
+                      placeholder="https://provider.example/v1"
+                      onChange={(event) => setURL(event.target.value)}
+                    />
+                  )}
+                </Field>
+              </Fields>
+              <FormActions>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={reading || !connector || !url.trim()}
+                >
+                  {t('common.endpointPolicies.openRules')}
+                </Button>
+              </FormActions>
             </>
           )}
           {error ? <ErrorState error={error} /> : null}
@@ -677,8 +689,11 @@ function PolicyEditor({
             draft.map((rule, index) => (
               <fieldset key={index} className="endpoint-policy-rule" disabled={disabled}>
                 <legend>{t('common.endpointPolicies.ruleNumber', { number: index + 1 })}</legend>
-                <div className="endpoint-policy-rule__fields">
-                  <Field label={t('common.endpointPolicies.kindLabel', { number: index + 1 })}>
+                <Fields>
+                  <Field
+                    size="short"
+                    label={t('common.endpointPolicies.kindLabel', { number: index + 1 })}
+                  >
                     {(props) => (
                       <select
                         {...props}
@@ -703,7 +718,10 @@ function PolicyEditor({
                       />
                     )}
                   </Field>
-                  <Field label={t('common.endpointPolicies.periodLabel', { number: index + 1 })}>
+                  <Field
+                    size="short"
+                    label={t('common.endpointPolicies.periodLabel', { number: index + 1 })}
+                  >
                     {(props) => (
                       <select
                         {...props}
@@ -722,8 +740,8 @@ function PolicyEditor({
                       </select>
                     )}
                   </Field>
-                </div>
-                <div className="nb-actions endpoint-policy-rule__actions">
+                </Fields>
+                <FormActions>
                   <Button
                     type="button"
                     disabled={index === 0 || disabled}
@@ -751,7 +769,7 @@ function PolicyEditor({
                   >
                     {t('common.operations.charity.remove')}
                   </Button>
-                </div>
+                </FormActions>
               </fieldset>
             ))
           ) : (

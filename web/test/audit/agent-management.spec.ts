@@ -107,7 +107,6 @@ test('administrator configures a source, edits personal memory and cleans retain
 
     await page.goto(state.admin_url + '/management-operations');
     await page.getByLabel(history.fields.domain, { exact: true }).selectOption('ai');
-    await page.getByRole('button', { name: history.apply, exact: true }).click();
     await expect(page.getByRole('table', { name: history.groups, exact: true })).toBeVisible();
     await page.getByRole('heading', { name: history.title, exact: true }).scrollIntoViewIfNeeded();
     await inspectLayouts(page, 'management-history');
@@ -282,7 +281,7 @@ test('administrator assigns Codex individually and retains readable changes afte
     );
     const search = page.getByRole('searchbox', { name: history.fields.search, exact: true });
     await search.fill(originalName);
-    await page.getByRole('button', { name: history.apply, exact: true }).click();
+    await page.getByRole('button', { name: common.common.search, exact: true }).click();
     await page
       .getByRole('button', { name: `${history.details} · ${renamed.id}`, exact: true })
       .click();
@@ -304,7 +303,7 @@ test('administrator assigns Codex individually and retains readable changes afte
     await inspectLayouts(page, 'management-renamed-snapshot', nameChange);
     await page.getByRole('button', { name: history.closeDetails, exact: true }).click();
     await search.fill(revisedName);
-    await page.getByRole('button', { name: history.apply, exact: true }).click();
+    await page.getByRole('button', { name: common.common.search, exact: true }).click();
     await page
       .getByRole('button', { name: `${history.details} · ${deleted.id}`, exact: true })
       .click();

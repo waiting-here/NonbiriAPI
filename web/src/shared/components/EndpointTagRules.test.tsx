@@ -93,7 +93,7 @@ describe('endpoint wildcard tag rules', () => {
     expect(screen.queryByRole('button', { name: 'Edit rule' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete rule' })).not.toBeInTheDocument();
     await view.user.type(screen.getByRole('searchbox', { name: 'Find a domain rule' }), 'missing');
-    await view.user.click(screen.getByRole('button', { name: 'Apply filter' }));
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
     await screen.findByText('No matching rules');
     expect(writes).toEqual([]);
   });

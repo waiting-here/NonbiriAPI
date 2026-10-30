@@ -7,7 +7,7 @@ import { connectionKeys } from './ResourceList';
 import type { DiscoverySource } from './types';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Field, Fold, Note } from '@shared/components/ui';
+import { Field, Fields, FormActions, Fold, Note } from '@shared/components/ui';
 import { ProtocolRerankField } from '@shared/components/ProtocolRerankField';
 import { useEndpointCreateOptions } from '../queries';
 import { getEndpoint } from '../api';
@@ -87,17 +87,19 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
             .catch(() => undefined);
         }}
       >
-        <Field label={t('user.services.endpointName')}>
-          {(props) => (
-            <input
-              {...props}
-              value={note}
-              maxLength={2048}
-              disabled={locked}
-              onChange={(event) => setNote(event.target.value)}
-            />
-          )}
-        </Field>
+        <Fields>
+          <Field label={t('user.services.endpointName')}>
+            {(props) => (
+              <input
+                {...props}
+                value={note}
+                maxLength={2048}
+                disabled={locked}
+                onChange={(event) => setNote(event.target.value)}
+              />
+            )}
+          </Field>
+        </Fields>
         {endpoint.connection_id ? (
           <Link to={'/endpoints?connection_id=' + encodeURIComponent(endpoint.connection_id)}>
             {t('common.connections.backToConnection')}
@@ -123,13 +125,15 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
             {t('common.connections.useCurrentRevision')}
           </button>
         ) : null}
-        <button
-          type="submit"
-          className="nb-btn nb-btn--primary"
-          disabled={locked || !dirty || !services.length || operation.outcome === 'conflict'}
-        >
-          {t('common.connections.save')}
-        </button>
+        <FormActions>
+          <button
+            type="submit"
+            className="nb-btn nb-btn--primary"
+            disabled={locked || !dirty || !services.length || operation.outcome === 'conflict'}
+          >
+            {t('common.connections.save')}
+          </button>
+        </FormActions>
       </form>
     </div>
   );
@@ -315,13 +319,15 @@ function KeyProtocolAccess({
           {t('common.connections.useCurrentRevision')}
         </button>
       ) : null}
-      <button
-        type="submit"
-        className="nb-btn nb-btn--primary"
-        disabled={locked || !services.length || operation.outcome === 'conflict'}
-      >
-        {t('common.connections.save')}
-      </button>
+      <FormActions>
+        <button
+          type="submit"
+          className="nb-btn nb-btn--primary"
+          disabled={locked || !services.length || operation.outcome === 'conflict'}
+        >
+          {t('common.connections.save')}
+        </button>
+      </FormActions>
     </form>
   );
 }

@@ -11,7 +11,6 @@ const pageCopyKeys = {
   'user.services.searchPlaceholder': 'user.services.searchPlaceholder',
   'user.models.searchPlaceholder': 'user.models.searchPlaceholder',
   'user.models.providerPlaceholder': 'user.models.providerPlaceholder',
-  'user.services.filters': 'user.services.filters',
   'user.services.removeFilter': 'user.services.removeFilter',
 } as const;
 
@@ -149,7 +148,6 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
         <FilterBar
           ariaLabel={t('filters.title')}
           persistKey={`user-resource-filters:${control.kind}:${control.scope}`}
-          secondaryLabel={ui('user.services.filters')}
           activeCount={chips.length}
           search={
             <>
@@ -165,7 +163,6 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
                   />
                 )}
               </Field>
-              <Button type="submit">{t('common.search')}</Button>
             </>
           }
           secondary={
@@ -201,8 +198,7 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
             )
           }
           chips={chips}
-          onClearAll={control.clear}
-          clearAllLabel={t('filters.clear')}
+          onReset={control.clear}
           onSubmit={() => {
             try {
               control.update((current) => ({ ...current, q: query }));
@@ -244,11 +240,14 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
       <FilterBar
         ariaLabel={t('filters.title')}
         persistKey={`user-resource-filters:models:${control.scope}`}
-        secondaryLabel={ui('user.services.filters')}
         activeCount={chips.length}
         chips={chips}
-        onClearAll={control.clear}
-        clearAllLabel={t('filters.clear')}
+        onReset={() => {
+          setQuery('');
+          setProvider('');
+          setInvalid(false);
+          control.clear();
+        }}
         search={
           <>
             <Field label={t('common.search')} error={error}>
@@ -262,7 +261,6 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
                 />
               )}
             </Field>
-            <Button type="submit">{t('common.search')}</Button>
           </>
         }
         secondary={

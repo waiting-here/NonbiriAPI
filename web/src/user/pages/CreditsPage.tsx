@@ -1,11 +1,10 @@
 import { CreditChange } from '../features/credits/CreditChange';
-import { useTranslation } from 'react-i18next';
-import { Segmented, Fold } from '@shared/components/ui';
+import { Field, FilterBar, Segmented } from '@shared/components/ui';
 import { RecordsHeader } from '../components/RecordsHeader';
 import { getWallet } from '@shared/limitedactivities/api';
 import { limitedActivityKeys } from '../features/limitedactivities/queries';
 import { economySessionRequest } from '../features/economy/queries';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { CancelledError, keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
@@ -23,7 +22,6 @@ import {
   MAX_HISTORY_PAGE,
   loadHistory,
   type HistoryPage,
-  type HistoryFilter,
 } from '../features/credits/data';
 import { useCreditCopy } from '../features/credits/copy';
 import { useCreditHistoryUrl } from '../features/credits/url';
@@ -37,14 +35,8 @@ function CreditHistory({
   scopeReset?: boolean;
 }) {
   const { copy, reason } = useCreditCopy();
-  const { t } = useTranslation();
   const client = useQueryClient();
   const url = useCreditHistoryUrl(scopeReset);
-  const [draft, setDraft] = useState({
-    asset_type: url.filter.asset_type ?? 'all',
-    category: url.filter.category ?? '',
-    direction: url.filter.direction ?? '',
-  });
   const [fromTimeDraft, setFromTimeDraft] = useState<TimeDraft>(() =>
     createTimeDraft(url.filter.from ?? null),
   );
@@ -56,24 +48,13 @@ function CreditHistory({
     let active = true;
     queueMicrotask(() => {
       if (!active) return;
-      setDraft({
-        asset_type: url.filter.asset_type ?? 'all',
-        category: url.filter.category ?? '',
-        direction: url.filter.direction ?? '',
-      });
       setFromTimeDraft(createTimeDraft(url.filter.from ?? null));
       setToTimeDraft(createTimeDraft(url.filter.to ?? null));
     });
     return () => {
       active = false;
     };
-  }, [
-    url.filter.asset_type,
-    url.filter.category,
-    url.filter.direction,
-    url.filter.from,
-    url.filter.to,
-  ]);
+  }, [url.filter.from, url.filter.to]);
   const history = useQuery<HistoryPage, Error>({
     queryKey: ['user', 'credit-history', accountID, url.filter, url.refreshRevision],
     queryFn: async ({ signal }) => {
@@ -96,15 +77,15 @@ function CreditHistory({
   });
   const data = history.data;
   const busy = history.isFetching;
-  const fromValue = timeDraftValue(fromTimeDraft);
-  const toValue = timeDraftValue(toTimeDraft);
-  const timeReady = fromValue !== undefined && toValue !== undefined;
+  const timeReady =
+    timeDraftValue(fromTimeDraft) !== undefined && timeDraftValue(toTimeDraft) !== undefined;
   const reset = () => {
     setValidation(null);
+    setFromTimeDraft(createTimeDraft(null));
+    setToTimeDraft(createTimeDraft(null));
     url.reset();
   };
-  const apply = (event: FormEvent) => {
-    event.preventDefault();
+  const apply = () => {
     const fromValue = timeDraftValue(fromTimeDraft);
     const toValue = timeDraftValue(toTimeDraft);
     if (fromValue === undefined || toValue === undefined) {
@@ -126,9 +107,9 @@ function CreditHistory({
     }
     setValidation(null);
     url.apply({
-      asset_type: draft.asset_type as HistoryFilter['asset_type'],
-      category: draft.category || undefined,
-      direction: draft.direction || undefined,
+      asset_type: url.filter.asset_type ?? 'all',
+      category: url.filter.category,
+      direction: url.filter.direction,
       from,
       to,
     });
@@ -138,7 +119,12 @@ function CreditHistory({
       <RecordsHeader
         description={copy.description}
         actions={
-          <button type="button" className="nb-btn nb-btn--secondary" disabled={busy} onClick={url.refresh}>
+          <button
+            type="button"
+            className="nb-btn nb-btn--secondary"
+            disabled={busy}
+            onClick={url.refresh}
+          >
             {copy.refresh}
           </button>
         }
@@ -172,45 +158,62 @@ function CreditHistory({
           <ErrorState error={wallet.error} onRetry={() => void wallet.refetch()} />
         ) : null}
         <p className="credit-history__time-note">{copy.note}</p>
-        <form className="credit-history__filters" onSubmit={apply}>
-          <Segmented
-            label={copy.asset}
-            value={draft.asset_type}
-            options={['all', ...HISTORY_ASSET_FILTERS.filter((asset) => asset !== 'all')].map(
-              (value) => ({
-                value: value as (typeof HISTORY_ASSET_FILTERS)[number],
-                label: copy[value as (typeof HISTORY_ASSET_FILTERS)[number]],
-              }),
-            )}
-            onChange={(asset_type) => setDraft({ ...draft, asset_type })}
-          />
-          <Fold title={t('user.records.moreConditions')} plain>
-            <div className="credit-history__advanced">
-              <label>
-                {copy.category}
-                <select
-                  value={draft.category}
-                  onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-                >
-                  <option value="">{copy.all}</option>
-                  {HISTORY_CATEGORIES.map((key) => (
-                    <option key={key} value={key}>
-                      {copy[key]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                {copy.direction}
-                <select
-                  value={draft.direction}
-                  onChange={(e) => setDraft({ ...draft, direction: e.target.value })}
-                >
-                  <option value="">{copy.all}</option>
-                  <option value="income">{copy.income}</option>
-                  <option value="expense">{copy.expense}</option>
-                </select>
-              </label>
+        <Segmented
+          label={copy.asset}
+          value={url.filter.asset_type ?? 'all'}
+          options={['all', ...HISTORY_ASSET_FILTERS.filter((asset) => asset !== 'all')].map(
+            (value) => ({
+              value: value as (typeof HISTORY_ASSET_FILTERS)[number],
+              label: copy[value as (typeof HISTORY_ASSET_FILTERS)[number]],
+            }),
+          )}
+          onChange={(asset_type) => url.apply({ ...url.filter, asset_type })}
+        />
+        <FilterBar
+          onSubmit={apply}
+          onReset={reset}
+          submitLabel={copy.apply}
+          submitDisabled={busy || !timeReady}
+          activeCount={[url.filter.from, url.filter.to].filter(Boolean).length}
+          search={
+            <>
+              <Field label={copy.category} size="short">
+                {(props) => (
+                  <select
+                    {...props}
+                    value={url.filter.category ?? ''}
+                    onChange={(event) =>
+                      url.apply({ ...url.filter, category: event.target.value || undefined })
+                    }
+                  >
+                    <option value="">{copy.all}</option>
+                    {HISTORY_CATEGORIES.map((key) => (
+                      <option key={key} value={key}>
+                        {copy[key]}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              <Field label={copy.direction} size="short">
+                {(props) => (
+                  <select
+                    {...props}
+                    value={url.filter.direction ?? ''}
+                    onChange={(event) =>
+                      url.apply({ ...url.filter, direction: event.target.value || undefined })
+                    }
+                  >
+                    <option value="">{copy.all}</option>
+                    <option value="income">{copy.income}</option>
+                    <option value="expense">{copy.expense}</option>
+                  </select>
+                )}
+              </Field>
+            </>
+          }
+          secondary={
+            <>
               <TimeInput
                 station="user"
                 label={copy.from}
@@ -221,21 +224,13 @@ function CreditHistory({
               <TimeInput
                 station="user"
                 label={copy.to}
+                showZoneHint={false}
                 draft={toTimeDraft}
                 onChange={setToTimeDraft}
-                showZoneHint={false}
               />
-            </div>
-          </Fold>
-          <div className="credit-history__filter-actions">
-            <button className="nb-btn nb-btn--primary" disabled={busy || !timeReady}>
-              {copy.apply}
-            </button>
-            <button className="nb-btn nb-btn--secondary" type="button" disabled={busy} onClick={reset}>
-              {copy.reset}
-            </button>
-          </div>
-        </form>
+            </>
+          }
+        />
         <p className="credit-history__time-note">{copy.localTime}</p>
         {validation ? (
           <p className="field-error" role="alert">
@@ -274,10 +269,7 @@ function CreditHistory({
                             </time>
                           </td>
                           <td data-label={copy.asset}>{copy[entry.asset_type]}</td>
-                          <td
-                            data-label={copy.change}
-                            className="credit-history__amount"
-                          >
+                          <td data-label={copy.change} className="credit-history__amount">
                             <CreditChange value={entry.delta} />
                           </td>
                           <td data-label={copy.category}>{reason(entry)}</td>

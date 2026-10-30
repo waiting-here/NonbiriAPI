@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -19,10 +19,7 @@ import { formatCount } from '@shared/utils/formatNumber';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { listPoolCardStatistics, listPoolStatistics, poolStatisticsExportURL } from './api';
 import { GachaStatisticsChart } from './GachaStatisticsChart';
-import {
-  StatisticsCount as Count,
-  StatisticsSearchField as SearchField,
-} from './StatisticsControls';
+import { StatisticsCount as Count } from './StatisticsControls';
 import type { CardSort, PoolSort, PoolStatistics } from './types';
 import './gacha-statistics.css';
 
@@ -33,6 +30,18 @@ export function GachaPoolStatistics({ accountKey }: { accountKey: string }) {
   const detailRef = useRef<HTMLDivElement>(null);
   const poolQuery = params.get('stats_pool_q') ?? '';
   const cardQuery = params.get('stats_card_q') ?? '';
+  const [poolDraft, setPoolDraft] = useState(poolQuery);
+  const [seededPool, setSeededPool] = useState(poolQuery);
+  if (seededPool !== poolQuery) {
+    setSeededPool(poolQuery);
+    setPoolDraft(poolQuery);
+  }
+  const [cardDraft, setCardDraft] = useState(cardQuery);
+  const [seededCard, setSeededCard] = useState(cardQuery);
+  if (seededCard !== cardQuery) {
+    setSeededCard(cardQuery);
+    setCardDraft(cardQuery);
+  }
   const poolSort: PoolSort = params.get('stats_pool_sort') === 'draws' ? 'draws' : 'recent';
   const rawCardSort = params.get('stats_card_sort');
   const cardSort: CardSort =
@@ -190,17 +199,24 @@ export function GachaPoolStatistics({ accountKey }: { accountKey: string }) {
           <FilterBar
             ariaLabel={t('admin.gachaStats.poolFilters')}
             activeCount={poolQuery || poolSort !== 'recent' ? 1 : 0}
-            secondaryLabel={t('admin.gachaStats.sort')}
             secondaryAlwaysVisible
-            onSubmit={() => undefined}
+            onSubmit={() => change('stats_pool_q', poolDraft.trim())}
+            onReset={() => {
+              change('stats_pool_q', '');
+              change('stats_pool_sort', '');
+            }}
             search={
-              <SearchField
-                key={poolQuery}
-                label={t('admin.gachaStats.searchPools')}
-                placeholder={t('admin.gachaStats.searchPoolsPlaceholder')}
-                value={poolQuery}
-                onSearch={(value) => change('stats_pool_q', value)}
-              />
+              <Field label={t('admin.gachaStats.searchPools')}>
+                {(props) => (
+                  <input
+                    {...props}
+                    type="search"
+                    placeholder={t('admin.gachaStats.searchPoolsPlaceholder')}
+                    value={poolDraft}
+                    onChange={(event) => setPoolDraft(event.target.value)}
+                  />
+                )}
+              </Field>
             }
             secondary={
               <Field label={t('admin.gachaStats.poolOrder')}>
@@ -403,17 +419,24 @@ export function GachaPoolStatistics({ accountKey }: { accountKey: string }) {
                   <FilterBar
                     ariaLabel={t('admin.gachaStats.cardFilters')}
                     activeCount={cardQuery || cardSort !== 'count' ? 1 : 0}
-                    secondaryLabel={t('admin.gachaStats.sort')}
                     secondaryAlwaysVisible
-                    onSubmit={() => undefined}
+                    onSubmit={() => change('stats_card_q', cardDraft.trim())}
+                    onReset={() => {
+                      change('stats_card_q', '');
+                      change('stats_card_sort', '');
+                    }}
                     search={
-                      <SearchField
-                        key={selectedId + ':' + cardQuery}
-                        label={t('admin.gachaStats.searchCards')}
-                        placeholder={t('admin.gachaStats.searchCardsPlaceholder')}
-                        value={cardQuery}
-                        onSearch={(value) => change('stats_card_q', value)}
-                      />
+                      <Field label={t('admin.gachaStats.searchCards')}>
+                        {(props) => (
+                          <input
+                            {...props}
+                            type="search"
+                            placeholder={t('admin.gachaStats.searchCardsPlaceholder')}
+                            value={cardDraft}
+                            onChange={(event) => setCardDraft(event.target.value)}
+                          />
+                        )}
+                      </Field>
                     }
                     secondary={
                       <Field label={t('admin.gachaStats.cardOrder')}>

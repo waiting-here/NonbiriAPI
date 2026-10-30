@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Field, Note } from '@shared/components/ui';
+import { Field, Fields, FormActions, Note } from '@shared/components/ui';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ConnectionOperationNotice } from './OperationNotice';
 import { connectionAPI, resourcePath } from './api';
@@ -43,29 +43,35 @@ export function ConnectionEditor({
             .catch(() => undefined);
         }}
       >
-        <Field label={t('common.connections.name')}>
-          {(props) => (
-            <input
-              {...props}
-              value={name}
-              maxLength={128}
-              required
-              disabled={locked}
-              onChange={(event) => setName(event.target.value)}
-            />
-          )}
-        </Field>
-        <Field label={t('common.connections.note')} optional={t('common.connections.optional')}>
-          {(props) => (
-            <input
-              {...props}
-              value={note}
-              maxLength={1024}
-              disabled={locked}
-              onChange={(event) => setNote(event.target.value)}
-            />
-          )}
-        </Field>
+        <Fields>
+          <Field label={t('common.connections.name')}>
+            {(props) => (
+              <input
+                {...props}
+                value={name}
+                maxLength={128}
+                required
+                disabled={locked}
+                onChange={(event) => setName(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field
+            size="long"
+            label={t('common.connections.note')}
+            optional={t('common.connections.optional')}
+          >
+            {(props) => (
+              <input
+                {...props}
+                value={note}
+                maxLength={1024}
+                disabled={locked}
+                onChange={(event) => setNote(event.target.value)}
+              />
+            )}
+          </Field>
+        </Fields>
         <ConnectionOperationNotice operation={save} />
         {save.outcome === 'conflict' ? (
           <Note tone="warn">
@@ -84,7 +90,7 @@ export function ConnectionEditor({
             </button>
           </Note>
         ) : null}
-        <div className="nb-actions">
+        <FormActions>
           <button
             type="submit"
             className="nb-btn nb-btn--primary"
@@ -103,7 +109,7 @@ export function ConnectionEditor({
           >
             {t('common.connections.deleteConnection')}
           </button>
-        </div>
+        </FormActions>
       </form>
       <ConfirmDialog
         open={deleting !== null}

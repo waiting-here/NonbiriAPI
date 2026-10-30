@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DISCOVERY_FORMATS, type DiscoveryPreset } from '@shared/connections';
-import { Field, Note } from '@shared/components/ui';
+import { Field, Fields, FormActions, Note } from '@shared/components/ui';
 import { credentialLabel, CredentialPicker } from './CredentialPicker';
 import { ConnectionOperationNotice } from './OperationNotice';
 import { connectionAPI, resourcePath } from './api';
@@ -80,50 +80,53 @@ export function SourceForm({
             .catch(() => undefined);
       }}
     >
-      {!pairSettings ? (
-        <Field label={t('common.connections.name')} optional={t('common.connections.optional')}>
+      <Fields>
+        {!pairSettings ? (
+          <Field label={t('common.connections.name')} optional={t('common.connections.optional')}>
+            {(props) => (
+              <input
+                {...props}
+                value={name}
+                maxLength={128}
+                disabled={locked}
+                onChange={(event) => setName(event.target.value)}
+              />
+            )}
+          </Field>
+        ) : null}
+        <Field
+          label={t('common.connections.discoveryBaseURL')}
+          size="long"
+          help={t('common.connections.independentDiscovery')}
+        >
           {(props) => (
             <input
               {...props}
-              value={name}
-              maxLength={128}
+              type="url"
+              required
+              value={baseURL}
               disabled={locked}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => setBaseURL(event.target.value)}
             />
           )}
         </Field>
-      ) : null}
-      <Field
-        label={t('common.connections.discoveryBaseURL')}
-        help={t('common.connections.independentDiscovery')}
-      >
-        {(props) => (
-          <input
-            {...props}
-            type="url"
-            required
-            value={baseURL}
-            disabled={locked}
-            onChange={(event) => setBaseURL(event.target.value)}
-          />
-        )}
-      </Field>
-      <Field label={t('common.connections.listFormat')}>
-        {(props) => (
-          <select
-            {...props}
-            value={format}
-            disabled={locked}
-            onChange={(event) => setFormat(event.target.value as typeof format)}
-          >
-            {DISCOVERY_FORMATS.map((value) => (
-              <option key={value} value={value}>
-                {t(`common.connections.discoveryFormats.${value}`)}
-              </option>
-            ))}
-          </select>
-        )}
-      </Field>
+        <Field label={t('common.connections.listFormat')}>
+          {(props) => (
+            <select
+              {...props}
+              value={format}
+              disabled={locked}
+              onChange={(event) => setFormat(event.target.value as typeof format)}
+            >
+              {DISCOVERY_FORMATS.map((value) => (
+                <option key={value} value={value}>
+                  {t(`common.connections.discoveryFormats.${value}`)}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+      </Fields>
       {!pairSettings && credential ? (
         <Note>
           <p>
@@ -168,13 +171,15 @@ export function SourceForm({
           </button>
         </Note>
       ) : null}
-      <button
-        type="submit"
-        className="nb-btn nb-btn--primary"
-        disabled={locked || !baseURL.trim() || (!credential && !source && !fixedCredentialId)}
-      >
-        {t(pairSettings ? 'user.services.saveListSettings' : 'common.connections.saveSource')}
-      </button>
+      <FormActions>
+        <button
+          type="submit"
+          className="nb-btn nb-btn--primary"
+          disabled={locked || !baseURL.trim() || (!credential && !source && !fixedCredentialId)}
+        >
+          {t(pairSettings ? 'user.services.saveListSettings' : 'common.connections.saveSource')}
+        </button>
+      </FormActions>
     </form>
   );
 }

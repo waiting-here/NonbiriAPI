@@ -13,6 +13,7 @@ import {
 } from '../fixtures/gacha-statistics';
 import en from '../../src/admin/i18n/en.json' with { type: 'json' };
 import zh from '../../src/admin/i18n/zh.json' with { type: 'json' };
+import sharedEn from '../../src/shared/i18n/common/en.json' with { type: 'json' };
 
 const longCardEnglish =
   'A complete long card name with Wide WWW lettering and every original word preserved '.repeat(2);
@@ -165,7 +166,7 @@ for (const theme of ['light', 'dark'])
         await search.fill('silver');
         await details
           .getByRole('form', { name: copy.cardFilters, exact: true })
-          .getByRole('button', { name: copy.search, exact: true })
+          .getByRole('button', { name: sharedEn.common.search, exact: true })
           .click();
         await expect(
           details

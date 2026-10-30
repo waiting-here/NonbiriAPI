@@ -1,58 +1,70 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  installJsonFetchFixtures,
-  renderWithProviders,
-  type JsonFetchFixture,
-} from '../../../../test/unit/support';
+import { installJsonFetchFixtures, renderWithProviders } from '../../../../test/unit/support';
 import { LogFilters, type LogFilterField } from './LogFilters';
+import type { LogUrlState } from './useLogUrlState';
 
 const nativeOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
 const fields: readonly LogFilterField[] = [
   { name: 'model', label: 'Model', ariaLabel: 'Model', maxLength: 133 },
-];
-const statusFields: readonly LogFilterField[] = [
-  ...fields,
   { name: 'status', label: 'Status', ariaLabel: 'Status', inputType: 'number', maxLength: 3 },
+  {
+    name: 'category',
+    label: 'Category',
+    ariaLabel: 'Category',
+    options: [
+      { value: '', label: 'All' },
+      { value: 'network', label: 'Network' },
+    ],
+  },
 ];
-
-function installTimeZoneFixture(station: 'user' | 'admin') {
-  const prefix = station === 'admin' ? '/admin/api' : '/api';
-  const fixtures: JsonFetchFixture[] = [
-    {
-      method: 'GET',
-      path: `${prefix}/time-zones`,
-      body: { version: 'go1.26.6-zoneinfo', zones: ['UTC'] },
-    },
-  ];
-  if (station === 'admin') {
-    fixtures.push({
-      method: 'GET',
-      path: '/admin/api/time-context',
-      body: { mode: 'site', offset_minutes: 0 },
-    });
-  }
-  return installJsonFetchFixtures(fixtures);
-}
-
 beforeEach(() => {
   vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function (
     this: Intl.DateTimeFormat,
   ) {
     return { ...nativeOptions.call(this), timeZone: 'UTC' };
   });
+  installJsonFetchFixtures([
+    {
+      method: 'GET',
+      path: '/api/time-zones',
+      body: { version: 'go1.26.6-zoneinfo', zones: ['UTC'] },
+    },
+  ]);
 });
-
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
-describe('shared log time filters', () => {
-  it('keeps a reversed range visible and does not apply it', async () => {
-    installTimeZoneFixture('user');
+describe('shared log filters', () => {
+  it('keeps epoch zero and original seconds when applying a seeded range', async () => {
     const onApply = vi.fn();
-    await renderWithProviders(
+    const view = await renderWithProviders(
+      <LogFilters
+        station="user"
+        fields={fields}
+        state={{ filters: { model: 'seeded' }, fromUnix: 0, toUnix: 75 }}
+        onApply={onApply}
+      />,
+      { station: 'user' },
+    );
+    expect(screen.getByLabelText('Filter by start time')).toHaveValue('1970-01-01T00:00');
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
+    expect(onApply).toHaveBeenCalledWith({ filters: { model: 'seeded' }, fromUnix: 0, toUnix: 75 });
+    fireEvent.change(screen.getByLabelText('Filter by start time'), { target: { value: '' } });
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
+    expect(onApply).toHaveBeenLastCalledWith({
+      filters: { model: 'seeded' },
+      fromUnix: undefined,
+      toUnix: 75,
+    });
+  });
+
+  it('preserves a reversed time draft, reports it, and ignores the invalid range', async () => {
+    const onApply = vi.fn();
+    const view = await renderWithProviders(
       <LogFilters
         station="user"
         fields={fields}
@@ -61,46 +73,78 @@ describe('shared log time filters', () => {
       />,
       { station: 'user' },
     );
-    fireEvent.submit(screen.getByTestId('log-filters'));
-    expect(onApply).not.toHaveBeenCalled();
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
+    expect(onApply).toHaveBeenCalledWith({ filters: {}, fromUnix: 75, toUnix: 0 });
     expect(screen.getByRole('alert')).toBeVisible();
     expect(screen.getByLabelText('Filter by start time')).toHaveValue('1970-01-01T00:01');
   });
 
-  it('keeps epoch zero and original seconds when applying a seeded range', async () => {
-    installTimeZoneFixture('user');
+  it('does not disable search for an unresolved time or send an invalid status', async () => {
     const onApply = vi.fn();
-    const end = 75;
-    await renderWithProviders(
-      <LogFilters
-        station="user"
-        fields={fields}
-        state={{ filters: { model: 'gpt-test' }, fromUnix: 0, toUnix: end }}
-        onApply={onApply}
-      />,
+    const view = await renderWithProviders(
+      <LogFilters station="user" fields={fields} state={{ filters: {} }} onApply={onApply} />,
       { station: 'user' },
     );
+    await view.user.click(screen.getByText('More filters', { exact: true }));
+    fireEvent.change(screen.getByLabelText('Filter by start time'), {
+      target: { value: '2026-09-08T12:34' },
+    });
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: '99' } });
+    const search = screen.getByRole('button', { name: 'Search' });
+    expect(search).toBeEnabled();
+    await view.user.click(search);
+    expect(onApply).toHaveBeenCalledWith({ filters: {}, fromUnix: undefined, toUnix: undefined });
+    expect(screen.getByRole('alert')).toBeVisible();
+  });
 
-    expect(screen.getByLabelText('Filter by start time')).toHaveValue('1970-01-01T00:00');
-    fireEvent.submit(screen.getByTestId('log-filters'));
-    expect(onApply).toHaveBeenCalledWith({
-      filters: { model: 'gpt-test' },
-      fromUnix: 0,
-      toUnix: end,
+  it('applies selects immediately without submitting or discarding unfinished text', async () => {
+    const onApply = vi.fn();
+    function Harness() {
+      const [state, setState] = useState<Pick<LogUrlState, 'filters' | 'fromUnix' | 'toUnix'>>({
+        filters: {},
+      });
+      return (
+        <LogFilters
+          station="user"
+          fields={fields}
+          state={state}
+          onApply={(value) => {
+            onApply(value);
+            setState(value);
+          }}
+        />
+      );
+    }
+    const view = await renderWithProviders(<Harness />, { station: 'user' });
+    await view.user.type(screen.getByLabelText('Model'), 'draft');
+    expect(onApply).not.toHaveBeenCalled();
+    await view.user.click(screen.getByText('More filters', { exact: true }));
+    await view.user.selectOptions(screen.getByLabelText('Category'), 'network');
+    expect(onApply).toHaveBeenLastCalledWith({ filters: { category: 'network' } });
+    expect(screen.getByLabelText('Model')).toHaveValue('draft');
+    await view.user.type(screen.getByLabelText('Model'), '{Enter}');
+    expect(onApply).toHaveBeenLastCalledWith({
+      filters: { category: 'network', model: 'draft' },
+      fromUnix: undefined,
+      toUnix: undefined,
+    });
+    await view.user.click(screen.getByRole('button', { name: 'Reset' }));
+    expect(screen.getByLabelText('Model')).toHaveValue('');
+    expect(onApply).toHaveBeenLastCalledWith({
+      filters: {},
+      fromUnix: undefined,
+      toUnix: undefined,
     });
   });
 
-  it('rebuilds drafts when the applied URL seed changes', async () => {
-    installTimeZoneFixture('user');
+  it('rebuilds drafts when navigation changes the applied URL', async () => {
     const onApply = vi.fn();
     const view = await renderWithProviders(
       <LogFilters station="user" fields={fields} state={{ filters: {} }} onApply={onApply} />,
       { station: 'user' },
     );
     const from = screen.getByLabelText('Filter by start time');
-    expect(from).toHaveValue('');
-
-    const epoch = Date.parse('2026-09-08T12:00:45Z') / 1_000;
+    const epoch = Date.parse('2026-09-08T12:00:45Z') / 1000;
     view.rerender(
       <LogFilters
         station="user"
@@ -113,82 +157,34 @@ describe('shared log time filters', () => {
     expect(screen.getByLabelText('Model')).toHaveValue('seeded');
   });
 
-  it('maps an explicitly cleared field to an unset wire value', async () => {
-    installTimeZoneFixture('user');
+  it('keeps quick ranges exact and leaves an unfinished text search alone', async () => {
+    const now = 1800000000;
+    vi.spyOn(Date, 'now').mockReturnValue(now * 1000);
     const onApply = vi.fn();
-    await renderWithProviders(
-      <LogFilters
-        station="user"
-        fields={fields}
-        state={{ filters: {}, fromUnix: 0, toUnix: 75 }}
-        onApply={onApply}
-      />,
-      { station: 'user' },
-    );
-
-    fireEvent.change(screen.getByLabelText('Filter by start time'), { target: { value: '' } });
-    fireEvent.submit(screen.getByTestId('log-filters'));
-    expect(onApply).toHaveBeenCalledWith({
-      filters: {},
-      fromUnix: undefined,
-      toUnix: 75,
-    });
-  });
-
-  it('uses the explicit station path and keeps quick ranges exact', async () => {
-    const fetchMock = installTimeZoneFixture('admin');
-    const onApply = vi.fn();
-    const now = 1_800_000_000;
-    vi.spyOn(Date, 'now').mockReturnValue(now * 1_000);
-    const view = await renderWithProviders(
-      <LogFilters
-        station="admin"
-        fields={fields}
-        state={{ filters: { model: 'admin-model' } }}
-        onApply={onApply}
-      />,
-      { station: 'admin' },
-    );
-
-    await waitFor(() =>
-      expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
-        '/admin/api/time-context',
-      ),
-    );
-    expect(fetchMock.mock.calls.map(([path]) => String(path))).not.toContain('/api/time-zones');
+    function Harness() {
+      const [state, setState] = useState<Pick<LogUrlState, 'filters' | 'fromUnix' | 'toUnix'>>({
+        filters: { model: 'applied' },
+      });
+      return (
+        <LogFilters
+          station="user"
+          fields={fields}
+          state={state}
+          onApply={(value) => {
+            onApply(value);
+            setState(value);
+          }}
+        />
+      );
+    }
+    const view = await renderWithProviders(<Harness />, { station: 'user' });
+    fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'draft' } });
     await view.user.click(screen.getByRole('button', { name: 'Last hour' }));
     expect(onApply).toHaveBeenCalledWith({
-      filters: { model: 'admin-model' },
-      fromUnix: now - 3_600,
+      filters: { model: 'applied' },
+      fromUnix: now - 3600,
       toUnix: now,
     });
-  });
-
-  it('disables and rechecks submit while an edited time is unresolved', async () => {
-    installTimeZoneFixture('user');
-    const onApply = vi.fn();
-    await renderWithProviders(
-      <LogFilters station="user" fields={fields} state={{ filters: {} }} onApply={onApply} />,
-      { station: 'user' },
-    );
-    const from = screen.getByLabelText('Filter by start time');
-    fireEvent.change(from, { target: { value: '2026-09-08T12:34' } });
-    expect(screen.getByRole('button', { name: 'Apply filter' })).toBeDisabled();
-    fireEvent.submit(screen.getByTestId('log-filters'));
-    expect(onApply).not.toHaveBeenCalled();
-    expect(from).toHaveValue('2026-09-08T12:34');
-  });
-
-  it('rejects a status filter outside the caller status range', async () => {
-    installTimeZoneFixture('user');
-    const onApply = vi.fn();
-    await renderWithProviders(
-      <LogFilters station="user" fields={statusFields} state={{ filters: {} }} onApply={onApply} />,
-      { station: 'user' },
-    );
-    fireEvent.change(screen.getByLabelText('Status'), { target: { value: '99' } });
-    fireEvent.submit(screen.getByTestId('log-filters'));
-    expect(onApply).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent('status code or time range is invalid');
+    expect(screen.getByLabelText('Model')).toHaveValue('draft');
   });
 });

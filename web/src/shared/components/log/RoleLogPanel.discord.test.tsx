@@ -134,7 +134,7 @@ it('rejects an invalid Discord draft without applying a broader query', async ()
     station: 'user',
     role: 'level5',
   });
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Apply filter' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled());
   fireEvent.change(screen.getByLabelText('Discord ID'), { target: { value: '01' } });
   fireEvent.submit(screen.getByTestId('log-filters'));
   expect(screen.getByRole('alert')).toHaveTextContent('Discord ID filter is invalid');

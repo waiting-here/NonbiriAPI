@@ -1,3 +1,4 @@
+import { Field, Fields as FormFields, FormActions } from '@shared/components/ui';
 import { ResourceCost } from './ResourceCost';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -171,17 +172,19 @@ function Fields({
       ) : null}
       {quoteError ? <ErrorState error={quoteError} /> : null}
       {error ? <ErrorState error={error} /> : null}
-      <button
-        className="nb-btn nb-btn--primary"
-        type="submit"
-        disabled={pending || quoting || (!uncertain && (!permitted || !wallet || !enough))}
-      >
-        {uncertain
-          ? t('重试同一次提交', 'Retry the same submission')
-          : pending || quoting
-            ? t('正在提交', 'Submitting')
-            : t('确认预扣并加入队列', 'Reserve currency and join queue')}
-      </button>
+      <FormActions>
+        <button
+          className="nb-btn nb-btn--primary"
+          type="submit"
+          disabled={pending || quoting || (!uncertain && (!permitted || !wallet || !enough))}
+        >
+          {uncertain
+            ? t('重试同一次提交', 'Retry the same submission')
+            : pending || quoting
+              ? t('正在提交', 'Submitting')
+              : t('确认预扣并加入队列', 'Reserve currency and join queue')}
+        </button>
+      </FormActions>
     </form>
   );
 }
@@ -213,34 +216,36 @@ export function ModelForm({
   return (
     <Card>
       <h2>{t('创作图片', 'Create images')}</h2>
-      <div className="picturebook-form">
-        <label>
-          {t('图像模型', 'Image model')}
-          <select
-            disabled={operation.locked}
-            value={snapshot?.id ?? ''}
-            onChange={(event) => {
-              const next = models.find((model) => model.id === event.target.value);
-              if (next && snapshot && !drafts[next.id]) {
-                const previous = drafts[snapshot.id] ?? initialValues(snapshot);
-                setDrafts((old) => ({ ...old, [next.id]: retainModelValues(next, previous) }));
-              }
-              setSnapshot(next);
-            }}
-          >
-            {!snapshot || !latest ? (
-              <option value={snapshot?.id ?? ''}>
-                {t('请选择可用模型', 'Select an available model')}
-              </option>
-            ) : null}
-            {models.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.display_name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <FormFields>
+        <Field label={t('图像模型', 'Image model')}>
+          {(props) => (
+            <select
+              {...props}
+              disabled={operation.locked}
+              value={snapshot?.id ?? ''}
+              onChange={(event) => {
+                const next = models.find((model) => model.id === event.target.value);
+                if (next && snapshot && !drafts[next.id]) {
+                  const previous = drafts[snapshot.id] ?? initialValues(snapshot);
+                  setDrafts((old) => ({ ...old, [next.id]: retainModelValues(next, previous) }));
+                }
+                setSnapshot(next);
+              }}
+            >
+              {!snapshot || !latest ? (
+                <option value={snapshot?.id ?? ''}>
+                  {t('请选择可用模型', 'Select an available model')}
+                </option>
+              ) : null}
+              {models.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.display_name}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+      </FormFields>
       {snapshot ? (
         <>
           <p className="picturebook-prewrap">{snapshot.description}</p>

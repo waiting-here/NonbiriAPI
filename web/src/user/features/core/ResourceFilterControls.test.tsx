@@ -63,7 +63,7 @@ describe('resource search navigation', () => {
     expect(screen.getByTestId('page')).toHaveTextContent('1');
     await view.user.click(screen.getByRole('button', { name: 'Second page' }));
     expect(screen.getByTestId('page')).toHaveTextContent('2');
-    await view.user.click(screen.getByRole('button', { name: 'Clear filters' }));
+    await view.user.click(screen.getByRole('button', { name: 'Reset' }));
     expect(screen.getByTestId('filters')).toBeEmptyDOMElement();
     await view.user.click(screen.getByRole('button', { name: 'Back' }));
     expect(screen.getByTestId('filters')).toHaveTextContent('q=Needle');

@@ -419,7 +419,7 @@ describe('administrator paged operation pages', () => {
       expect(requests.some((url) => url.searchParams.get('tag') === tag)).toBe(true),
     );
     await view.user.type(screen.getByRole('textbox', { name: 'User ID' }), '42');
-    await view.user.click(screen.getByRole('button', { name: 'Apply filter' }));
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() =>
       expect(
         requests.some(

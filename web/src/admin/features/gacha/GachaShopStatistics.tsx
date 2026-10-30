@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -18,10 +18,7 @@ import { PagePagination } from '@shared/operations/PagePagination';
 import { formatCount } from '@shared/utils/formatNumber';
 import { listShopCardStatistics, shopStatisticsExportURL } from './api';
 import { GachaStatisticsChart } from './GachaStatisticsChart';
-import {
-  StatisticsCount as Count,
-  StatisticsSearchField as SearchField,
-} from './StatisticsControls';
+import { StatisticsCount as Count } from './StatisticsControls';
 import type { CardSort, CardStatistics } from './types';
 import './gacha-statistics.css';
 
@@ -29,6 +26,12 @@ export function GachaShopStatistics({ accountKey }: { accountKey: string }) {
   const { t, i18n } = useTranslation();
   const [params, setParams] = useSearchState();
   const q = params.get('stats_shop_q') ?? '';
+  const [draft, setDraft] = useState(q);
+  const [seeded, setSeeded] = useState(q);
+  if (seeded !== q) {
+    setSeeded(q);
+    setDraft(q);
+  }
   const rawSort = params.get('stats_shop_sort');
   const sort: CardSort = rawSort === 'rarity' || rawSort === 'name' ? rawSort : 'count';
   const pager = useUrlPagePager({
@@ -169,17 +172,24 @@ export function GachaShopStatistics({ accountKey }: { accountKey: string }) {
               <FilterBar
                 ariaLabel={t('admin.gachaStats.cardFilters')}
                 activeCount={q || sort !== 'count' ? 1 : 0}
-                secondaryLabel={t('admin.gachaStats.sort')}
                 secondaryAlwaysVisible
-                onSubmit={() => undefined}
+                onSubmit={() => change('stats_shop_q', draft.trim())}
+                onReset={() => {
+                  change('stats_shop_q', '');
+                  change('stats_shop_sort', '');
+                }}
                 search={
-                  <SearchField
-                    key={q}
-                    label={t('admin.gachaStats.searchCards')}
-                    placeholder={t('admin.gachaStats.searchCardsPlaceholder')}
-                    value={q}
-                    onSearch={(value) => change('stats_shop_q', value)}
-                  />
+                  <Field label={t('admin.gachaStats.searchCards')}>
+                    {(props) => (
+                      <input
+                        {...props}
+                        type="search"
+                        placeholder={t('admin.gachaStats.searchCardsPlaceholder')}
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                      />
+                    )}
+                  </Field>
                 }
                 secondary={
                   <Field label={t('admin.gachaStats.cardOrder')}>

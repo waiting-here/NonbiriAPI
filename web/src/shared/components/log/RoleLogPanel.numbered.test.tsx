@@ -444,7 +444,7 @@ describe('numbered role log panel', () => {
       ),
     );
     await view.user.type(screen.getByLabelText('User ID'), '7');
-    await view.user.click(screen.getByRole('button', { name: 'Apply filter' }));
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
         '/admin/api/logs?user_id=7&page=1&page_size=20',
@@ -503,7 +503,6 @@ describe('numbered role log panel', () => {
     ).toBe(false);
 
     await view.user.selectOptions(mismatchFilter, 'true');
-    await view.user.click(screen.getByRole('button', { name: 'Apply filter' }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
         '/admin/api/logs?usage_total_mismatch=true&page=1&page_size=20',
@@ -514,7 +513,6 @@ describe('numbered role log panel', () => {
     expect(queryFromProbe(view.container).get('anchor')).toBe('keep');
 
     await view.user.selectOptions(mismatchFilter, '');
-    await view.user.click(screen.getByRole('button', { name: 'Apply filter' }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
         '/admin/api/logs?page=1&page_size=20',
@@ -613,7 +611,7 @@ describe('numbered role log panel', () => {
       ),
     );
     await view.user.type(screen.getByLabelText('User ID'), '8');
-    await view.user.click(screen.getByRole('button', { name: 'Apply filter' }));
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
         '/api/steward/logs?user_id=8&page=1&page_size=20',

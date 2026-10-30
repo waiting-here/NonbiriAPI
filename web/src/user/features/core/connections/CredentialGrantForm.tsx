@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Field, Fold, Note, Segmented } from '@shared/components/ui';
+import { Field, Fields, FormActions, Fold, Note, Segmented, Toggle } from '@shared/components/ui';
 import type { DiscoveryPreset } from '@shared/connections';
 import { supportsChatStoragePolicy } from '@shared/operations/connectorPolicy';
 import { KeyLimitFields } from '@shared/components/KeyRoutingLimits';
@@ -113,70 +113,73 @@ export function CredentialGrantForm({
             .catch(() => undefined);
         }}
       >
-        {mode === 'new' ? (
-          <>
-            <Field label={t('common.connections.secret')} help={t('common.connections.secretHelp')}>
+        <Fields>
+          {mode === 'new' ? (
+            <>
+              <Field
+                size="long"
+                label={t('common.connections.secret')}
+                help={t('common.connections.secretHelp')}
+              >
+                {(props) => (
+                  <input
+                    {...props}
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    value={secret}
+                    disabled={locked}
+                    onChange={(event) => setSecret(event.target.value)}
+                  />
+                )}
+              </Field>
+              <p className="nb-small nb-muted">{t('user.services.keyOwnership')}</p>
+            </>
+          ) : null}
+          <Fold title={t('user.services.keySettings')}>
+            <Field
+              label={t('common.connections.credentialName')}
+              optional={t('common.connections.optional')}
+            >
               {(props) => (
                 <input
                   {...props}
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  value={secret}
+                  value={note}
                   disabled={locked}
-                  onChange={(event) => setSecret(event.target.value)}
+                  onChange={(event) => setNote(event.target.value)}
                 />
               )}
             </Field>
-            <p className="nb-small nb-muted">{t('user.services.keyOwnership')}</p>
-          </>
-        ) : null}
-        <Fold title={t('user.services.keySettings')}>
-          <Field
-            label={t('common.connections.credentialName')}
-            optional={t('common.connections.optional')}
-          >
-            {(props) => (
-              <input
-                {...props}
-                value={note}
+            <KeyLimitFields
+              concurrency={concurrency}
+              rpm={rpm}
+              onConcurrency={setConcurrency}
+              onRPM={setRPM}
+              disabled={locked}
+            />
+            {supportsChatStoragePolicy(endpoint.connector_type) ? (
+              <Toggle
+                label={t('user.core.endpoints.storePolicy')}
+                checked={forceStoreFalse}
                 disabled={locked}
-                onChange={(event) => setNote(event.target.value)}
+                onChange={setForceStoreFalse}
               />
-            )}
-          </Field>
-          <KeyLimitFields
-            concurrency={concurrency}
-            rpm={rpm}
-            onConcurrency={setConcurrency}
-            onRPM={setRPM}
-            disabled={locked}
-          />
-          {supportsChatStoragePolicy(endpoint.connector_type) ? (
-            <Field label={t('user.core.endpoints.storePolicy')}>
-              {(props) => (
-                <input
-                  {...props}
-                  type="checkbox"
-                  checked={forceStoreFalse}
-                  disabled={locked}
-                  onChange={(event) => setForceStoreFalse(event.target.checked)}
-                />
-              )}
-            </Field>
-          ) : null}
-          {discoveryPreset ? (
-            <p className="nb-small nb-muted">{t('user.services.listSettingsAfterSave')}</p>
-          ) : null}
-        </Fold>
+            ) : null}
+            {discoveryPreset ? (
+              <p className="nb-small nb-muted">{t('user.services.listSettingsAfterSave')}</p>
+            ) : null}
+          </Fold>
+        </Fields>
         <ConnectionOperationNotice operation={operation} />
-        <button
-          type="submit"
-          className="nb-btn nb-btn--primary"
-          disabled={locked || (mode === 'new' ? !secret.trim() : !credential)}
-        >
-          {t('user.services.addKeyAndFetch')}
-        </button>
+        <FormActions>
+          <button
+            type="submit"
+            className="nb-btn nb-btn--primary"
+            disabled={locked || (mode === 'new' ? !secret.trim() : !credential)}
+          >
+            {t('user.services.addKeyAndFetch')}
+          </button>
+        </FormActions>
       </form>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Field } from '@shared/components/ui';
+import { Field, Fields, FormActions } from '@shared/components/ui';
 import { ConnectionOperationNotice } from './OperationNotice';
 import { useConnectionOperation } from './useConnectionOperation';
 import type { Connection } from './types';
@@ -29,36 +29,42 @@ export function ConnectionCreateForm({
           .catch(() => undefined);
       }}
     >
-      <Field label={t('common.connections.name')}>
-        {(props) => (
-          <input
-            {...props}
-            value={name}
-            maxLength={128}
-            required
-            disabled={locked}
-            placeholder={t('common.connections.nameExample')}
-            onChange={(event) => setName(event.target.value)}
-          />
-        )}
-      </Field>
-      <Field label={t('common.connections.note')} optional={t('common.connections.optional')}>
-        {(props) => (
-          <input
-            {...props}
-            value={note}
-            maxLength={1024}
-            disabled={locked}
-            onChange={(event) => setNote(event.target.value)}
-          />
-        )}
-      </Field>
+      <Fields>
+        <Field label={t('common.connections.name')}>
+          {(props) => (
+            <input
+              {...props}
+              value={name}
+              maxLength={128}
+              required
+              disabled={locked}
+              placeholder={t('common.connections.nameExample')}
+              onChange={(event) => setName(event.target.value)}
+            />
+          )}
+        </Field>
+        <Field
+          size="long"
+          label={t('common.connections.note')}
+          optional={t('common.connections.optional')}
+        >
+          {(props) => (
+            <input
+              {...props}
+              value={note}
+              maxLength={1024}
+              disabled={locked}
+              onChange={(event) => setNote(event.target.value)}
+            />
+          )}
+        </Field>
+      </Fields>
       <ConnectionOperationNotice operation={operation} />
-      <div className="nb-actions">
+      <FormActions>
         <button type="submit" className="nb-btn nb-btn--primary" disabled={locked || !name.trim()}>
           {t('common.connections.create')}
         </button>
-      </div>
+      </FormActions>
     </form>
   );
 }

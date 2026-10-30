@@ -64,13 +64,11 @@ test('credit history filters, jumps between stable pages and fits a mobile viewp
   await expect(page.locator('.credit-history__table tbody tr')).toHaveCount(15);
   await page.getByRole('combobox', { name: 'Items per page', exact: true }).selectOption('50');
   await expect(page.locator('.credit-history__table tbody tr')).toHaveCount(50);
-  await page.getByText('More filters', { exact: true }).click();
   await page.getByRole('combobox', { name: 'Reason', exact: true }).selectOption('charity');
   await page.getByRole('combobox', { name: 'Money in / out' }).selectOption('expense');
-  await page.getByRole('button', { name: 'Apply filters' }).click();
+  await expect.poll(() => queries.at(-1)?.get('direction')).toBe('expense');
   await expect(page.locator('.credit-history__table tbody tr')).toHaveCount(1);
   expect(queries.at(-1)?.has('anchor')).toBe(false);
-  expect(queries.at(-1)?.get('direction')).toBe('expense');
   await expect(page.getByRole('link', { name: 'View request' })).toHaveAttribute(
     'href',
     `/logs?request_id=${requestID}`,
@@ -120,7 +118,7 @@ test('credit history filters, jumps between stable pages and fits a mobile viewp
         .evaluate((table) => table.scrollWidth <= table.clientWidth),
     )
     .toBe(true);
-  await page.getByRole('button', { name: 'Clear filters' }).click();
+  await page.getByRole('button', { name: 'Reset', exact: true }).click();
   await expect(page.locator('.credit-history__table tbody tr')).toHaveCount(50);
   await expect(page.getByRole('link', { name: 'View request' })).toHaveCount(0);
   consoleErrors.assertNone();

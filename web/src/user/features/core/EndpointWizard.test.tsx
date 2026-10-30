@@ -165,10 +165,7 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
       ),
     );
 
-    expect(await screen.findByRole('button', { name: 'Common services' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(await screen.findByRole('radio', { name: 'Common services' })).toBeChecked();
     await rendered.user.click(screen.getByRole('button', { name: 'Next' }));
     const url = screen.getByLabelText('Service address');
     expect(url).toHaveAttribute('readonly');

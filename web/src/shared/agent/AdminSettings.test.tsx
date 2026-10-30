@@ -135,7 +135,7 @@ describe('Agent administrator settings', () => {
   });
   it('offers chat closed by default and saves its explicit switch', async () => {
     const view = await mount();
-    const toggle = await screen.findByRole('checkbox', { name: 'Enable Agent chat' });
+    const toggle = await screen.findByRole('switch', { name: 'Enable Agent chat' });
     expect(toggle).not.toBeChecked();
     await view.user.click(toggle);
     await view.user.click(
@@ -151,7 +151,7 @@ describe('Agent administrator settings', () => {
     await screen.findByLabelText('Automatic review mode');
     await view.user.click(screen.getByText(common.common.agent.toolsTitle, { selector: 'strong' }));
     expect(
-      screen.getByRole('checkbox', { name: common.common.agent.tools.charity_binding_presets }),
+      screen.getByRole('switch', { name: common.common.agent.tools.charity_binding_presets }),
     ).toBeChecked();
     await view.user.click(
       screen.getAllByText(common.common.agent.toolDescription, { selector: 'strong' })[0]!,
@@ -199,7 +199,7 @@ describe('Agent administrator settings', () => {
       }),
     );
     const view = await mount();
-    await view.user.click(await screen.findByRole('checkbox', { name: 'Enable Agent chat' }));
+    await view.user.click(await screen.findByRole('switch', { name: 'Enable Agent chat' }));
     await view.user.click(
       screen
         .getAllByRole('button', { name: 'Save' })

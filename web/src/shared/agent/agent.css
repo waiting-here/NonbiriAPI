@@ -211,8 +211,7 @@
   background: var(--nb-color-surface-muted);
   border-radius: var(--nb-radius-sm);
 }
-.agent-before-after,
-.agent-field-grid {
+.agent-before-after {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--nb-space-4);
@@ -268,19 +267,11 @@
   font-size: var(--nb-font-size-sm);
 }
 @media (width < 48rem) {
-  .agent-before-after,
-  .agent-field-grid {
+  .agent-before-after {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-.agent-form-fields {
-  border: 0;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: var(--nb-space-4);
-}
 .agent-login-steps {
   margin: 0;
   padding-inline-start: var(--nb-space-6);

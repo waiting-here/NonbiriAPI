@@ -297,28 +297,6 @@
   gap: var(--nb-space-4);
 }
 
-.core-field-grid {
-  display: grid;
-  grid-template-columns: minmax(9rem, 0.75fr) minmax(0, 1.5fr);
-  gap: var(--nb-space-3) var(--nb-space-5);
-  align-items: start;
-}
-
-.core-field-grid > label,
-.core-field {
-  display: contents;
-}
-
-.core-field-grid > label > span:first-child,
-.core-field > span:first-child {
-  padding-block-start: 0.7rem;
-  color: var(--nb-color-text-muted);
-  font-weight: var(--nb-font-weight-medium);
-}
-
-.core-field-grid input,
-.core-field-grid select,
-.core-field-grid textarea,
 .core-control {
   inline-size: min(100%, 34rem);
 }
@@ -615,21 +593,9 @@
 }
 
 @media (width <= 48rem) {
-  .core-field-grid,
   .core-detail-list > div,
   .core-selector__sources {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .core-field-grid > label,
-  .core-field {
-    display: grid;
-    gap: var(--nb-space-2);
-  }
-
-  .core-field-grid > label > span:first-child,
-  .core-field > span:first-child {
-    padding-block-start: 0;
   }
 
   .core-steps {
@@ -1051,17 +1017,6 @@
   gap: var(--nb-space-5);
   min-width: 0;
 }
-.models-workspace .model-editor .core-field-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.models-workspace .model-editor .core-field-grid > label {
-  display: grid;
-  min-width: 0;
-  gap: var(--nb-space-2);
-}
-.models-workspace .model-editor .core-field-grid > label > span:first-child {
-  padding-block-start: 0;
-}
 .models-workspace .model-name-link {
   display: block;
   max-width: min(32rem, 100%);
@@ -1166,9 +1121,6 @@
   flex-wrap: wrap;
 }
 @media (width < 48rem) {
-  .models-workspace .model-editor .core-field-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .models-workspace .core-binding-row {
     grid-template-columns: auto minmax(0, 1fr) auto;
   }

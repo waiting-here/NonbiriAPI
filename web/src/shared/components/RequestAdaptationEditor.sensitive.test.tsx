@@ -73,7 +73,7 @@ it('preserves hidden values while marking, editing nested selectors, and explici
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Save request rewriting' })).toBeEnabled(),
   );
-  const field = header.closest('.core-field-grid') as HTMLElement;
+  const field = header.closest('.nb-fields') as HTMLElement;
   await view.user.selectOptions(within(field).getByLabelText('Edit'), 'clear');
   expect(header).toBeDisabled();
   await view.user.click(screen.getByRole('button', { name: 'Save request rewriting' }));

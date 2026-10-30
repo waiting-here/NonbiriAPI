@@ -151,8 +151,9 @@ describe('credit history numbered page controls', () => {
           if (path === '/api/credits/history?asset_type=all&page=1&page_size=20')
             return jsonResponse(historyPage(all, '1', 20, all.length));
           if (
+            path === '/api/credits/history?asset_type=sketch_paper&page=1&page_size=20' ||
             path ===
-            '/api/credits/history?asset_type=sketch_paper&page=1&page_size=20&category=picture_book'
+              '/api/credits/history?asset_type=sketch_paper&page=1&page_size=20&category=picture_book'
           )
             return jsonResponse(historyPage([paper], '1', 20, 1));
           if (
@@ -229,18 +230,16 @@ describe('credit history numbered page controls', () => {
         }),
       ).not.toBeInTheDocument();
       await view.user.click(assets.getByRole('radio', { name: labels.paper }));
-      await view.user.click(screen.getByText(locale === 'zh' ? '更多条件' : 'More filters'));
+      await view.user.click(screen.getByText(locale === 'zh' ? '更多筛选' : 'More filters'));
       await view.user.selectOptions(
         screen.getByRole('combobox', { name: labels.category }),
         'picture_book',
       );
-      await view.user.click(screen.getByRole('button', { name: labels.apply }));
       await waitFor(() =>
         expect(table.queryByRole('cell', { name: '−2,000' })).not.toBeInTheDocument(),
       );
       expect(table.getByRole('cell', { name: '+2' })).toBeVisible();
       await view.user.click(assets.getByRole('radio', { name: labels.brush }));
-      await view.user.click(screen.getByRole('button', { name: labels.apply }));
       await waitFor(() =>
         expect(table.queryByRole('cell', { name: '+2' })).not.toBeInTheDocument(),
       );
