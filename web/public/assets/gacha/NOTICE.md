@@ -48,19 +48,22 @@ The retained portrait sources are 1024 × 1536; the group source is 1536 × 864 
 
 ## Moment-only expanded frames
 
-The adopted derivatives in `moment/c-gemini/`, `moment/q-glm/`, `moment/n-gemini/` and
-`moment/o-claude/`, with matching `hires/moment/` paths, retain the established
+The adopted derivatives in `moment/c-gemini/`, `moment/q-glm/`, `moment/n-gemini/`,
+`moment/o-claude/`, `moment/g-claude/`, `moment/l-chatgpt/` and `moment/g-gemini/`,
+with matching `hires/moment/` paths, retain the established
 characters and original card and appearance inputs. Their separate
 `composition.json` registrations describe the expanded canvas and the unchanged
-original region. Current standard frames are 1536 × 1536; 3840 × 3840 derivatives
-use 2.5× Lanczos resampling and do not add native detail.
+original region. Current standard frames are 1536 pixels wide and 1536, 1544 or
+1664 pixels high. Their 3840-pixel-wide derivatives use 2.5× Lanczos resampling
+and do not add native detail.
 
-c-gemini's additional margins were generated from its retained project source
+The additional margins for c-gemini, g-claude, l-chatgpt and g-gemini were
+generated from their retained project sources
 using [BRIA Fibo-2.0-edit-turbo](https://huggingface.co/briaai/Fibo-2.0-edit-turbo/tree/177f2d4a06b6587144ef5c2b8452a4f1fe2ab4b7),
 with foreground alpha prepared using
 [ToonOut](https://huggingface.co/joelseytre/toonout/tree/cbf720eca394edcde66b861a8a8c20fbabe9c748).
-The complete original RGBA rectangle, including its forward hand, remains
-unchanged. The three native SP derivatives instead reveal the existing
+Each complete original RGBA rectangle, including c-gemini's forward hand,
+remains unchanged. The three native SP derivatives reveal the existing
 uncropped animation inputs through an expanded camera; no new character parts
 were generated. n-gemini's static original region was restored from the same
 native render baseline. Their native rigs, eye coordinates and motion remain

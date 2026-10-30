@@ -412,7 +412,24 @@
     "g-claude": {
       "source": "registered-motion-layers",
       "background": "motion/g-claude/background.webp",
-      "character": "motion/g-claude/hero.webp"
+      "character": "motion/g-claude/hero.webp",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1536,
+            1544
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 8,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3840,
+          "hero": "moment/g-claude/hero.webp"
+        }
+      }
     },
     "g-glm": {
       "source": "registered-motion-layers",
@@ -427,7 +444,24 @@
     "g-gemini": {
       "source": "registered-motion-layers",
       "background": "motion/g-gemini/background.webp",
-      "character": "motion/g-gemini/hero.webp"
+      "character": "motion/g-gemini/hero.webp",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1536,
+            1664
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 128,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3840,
+          "hero": "moment/g-gemini/hero.webp"
+        }
+      }
     },
     "h-chatgpt": {
       "background": "backgrounds/h.webp",
@@ -582,7 +616,24 @@
     "l-chatgpt": {
       "source": "registered-motion-layers",
       "background": "motion/l-chatgpt/background.webp",
-      "character": "motion/l-chatgpt/hero.webp"
+      "character": "motion/l-chatgpt/hero.webp",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1536,
+            1536
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3840,
+          "hero": "moment/l-chatgpt/hero.webp"
+        }
+      }
     },
     "m-deepseek": {
       "source": "registered-motion-layers",
