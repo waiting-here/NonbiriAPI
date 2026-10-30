@@ -174,4 +174,61 @@ describe('failure reset controls', () => {
     expect(fetch).toHaveBeenCalledOnce();
     expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
   });
+  it('distinguishes cleared failures from already-clear counters and preserves service waits', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_input, options) => {
+        const { items } = JSON.parse(options.body);
+        return json({
+          results: items.map((item: FailureResetRef, index: number) => ({
+            donation_id: item.donation_id,
+            key_id: item.key_id,
+            revision: '10',
+            status: index === 2 ? 'no_service' : 'reset',
+            outcome: index === 0 ? 'recovered' : index === 1 ? 'already_clear' : 'no_service',
+            services:
+              index === 0
+                ? [
+                    {
+                      use_id: '8',
+                      native_service: 'chat_completions',
+                      status: 'reset',
+                      failure_streak_before: '10',
+                      failure_disabled_before: true,
+                      retry_after_until: 2000000000,
+                      backoff_retry_at: 2000000060,
+                      manually_disabled: true,
+                    },
+                  ]
+                : [],
+          })),
+          counts: { processed: '3', reset: '2', skipped: '1' },
+        });
+      }),
+    );
+    const choices = Array.from({ length: 3 }, (_, i) => ({
+      id: String(i + 1),
+      label: 'Key ' + (i + 1),
+      target: { donation_id: '1', key_id: String(i + 1), expected_revision: '7' },
+    }));
+    const view = await renderWithProviders(
+      <FailureResetControl
+        role="admin"
+        selection={{ view: 'donation_keys', donation_id: '1' }}
+        choices={choices}
+      />,
+      { station: 'admin', locale: 'en' },
+    );
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture' } });
+    await view.user.click(screen.getByText('Reset failure count'));
+    await view.user.click(screen.getByRole('button', { name: 'Select this page' }));
+    await view.user.click(screen.getByRole('button', { name: 'Reset selected (3)' }));
+    await screen.findByText('Failures cleared: 1 · Already clear: 1');
+    expect(screen.getByText(/Already clear; counters reset/)).toBeVisible();
+    expect(screen.getByText('No eligible approved service', { exact: false })).toBeVisible();
+    expect(screen.getByText(/Cleared 10 consecutive failures/)).toBeVisible();
+    expect(screen.getByText(/Manual pause retained/)).toBeVisible();
+    expect(screen.getByText(/Rate-limit wait retained until/)).toBeVisible();
+    expect(screen.getByText(/Smart backoff retained until/)).toBeVisible();
+  });
 });

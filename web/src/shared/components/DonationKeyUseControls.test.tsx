@@ -53,7 +53,7 @@ async function setup(rows: DonationUse[]) {
     data: rows,
     pagination: { page: '1', page_size: 100, total_items: String(rows.length), total_pages: '1' },
   }));
-  mocks.mutate.mockReset();
+  mocks.mutate.mockReset().mockResolvedValue({});
   const view = await renderWithProviders(
     <DonationKeyUseControls role="owner" accountId="1" donationId="3" donationKeyId="4" />,
     { station: 'user', role: 'user' },
@@ -79,6 +79,7 @@ describe('key-wide sharing controls', () => {
         throw new ApiError('network_error', 'Response lost', 0);
       }
       rows.find((entry) => entry.id === id)!.enabled = false;
+      return {};
     });
     await view.user.click(screen.getByRole('button', { name: 'Pause sharing' }));
     await screen.findByText('Saved.');
@@ -95,6 +96,7 @@ describe('key-wide sharing controls', () => {
     let attempts = 0;
     mocks.mutate.mockImplementation(async () => {
       if (++attempts < 3) throw new ApiError('network_error', 'Response lost', 0);
+      return {};
     });
     await view.user.click(screen.getByRole('button', { name: 'Withdraw pending content' }));
     const dialog = await screen.findByRole('alertdialog');

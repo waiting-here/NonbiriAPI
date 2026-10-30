@@ -484,6 +484,7 @@ function DonationKeySettings({
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const modelID = useCharityModelScope();
+  const client = useQueryClient();
   const copy = charityControlCopy(useTranslation().i18n.language);
   const [draft, setDraft] = useState(() => keyManagementDraft(item));
   const [reset, setReset] = useState(false);
@@ -516,7 +517,14 @@ function DonationKeySettings({
         },
         key,
       ),
-    refresh,
+    () =>
+      Promise.all([
+        refresh(),
+        client.invalidateQueries({
+          queryKey:
+            role === 'admin' ? ['admin', 'operations', 'donation-uses'] : ['user', 'donation-uses'],
+        }),
+      ]),
     charityKeys.root(role),
   );
   const validationError = keySettingsError(draft, item.authorized_expires_at);

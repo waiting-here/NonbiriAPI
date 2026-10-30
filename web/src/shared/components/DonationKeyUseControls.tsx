@@ -17,6 +17,8 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { ErrorState, LoadingState } from './States';
 import { Note } from './ui';
 import './DonationKeyUseControls.css';
+import { FailureResetDetails } from './FailureResetDetails';
+import type { ServiceFailureReset } from '@shared/operations/failureReset';
 
 type Write = {
   id: string;
@@ -50,6 +52,7 @@ export function DonationKeyUseControls({
     enabled: uses === undefined,
   });
   const receipts = useRef(new Set<string>());
+  const [resets, setResets] = useState<ServiceFailureReset[]>([]);
   const [confirm, setConfirm] = useState<Write[] | null>(null);
   const refresh = async () => {
     const keys =
@@ -67,7 +70,7 @@ export function DonationKeyUseControls({
     for (const write of writes) {
       context.assertCurrent();
       if (receipts.current.has(write.key)) continue;
-      await mutateDonationUse(
+      const result = await mutateDonationUse(
         role,
         donationId,
         write.id,
@@ -76,7 +79,10 @@ export function DonationKeyUseControls({
         write.key,
         context.signal,
       );
-      context.commit(() => receipts.current.add(write.key));
+      context.commit(() => {
+        receipts.current.add(write.key);
+        if (result.failure_reset) setResets((previous) => [...previous, result.failure_reset!]);
+      });
     }
   };
   const operation = useRetainedOperation<Write[], void>(
@@ -109,6 +115,7 @@ export function DonationKeyUseControls({
   const begin = (action: Action) => {
     operation.reset();
     receipts.current.clear();
+    setResets([]);
     const writes = applicable(action).map((row): Write => ({
       id: row.id,
       key: operationKey(),
@@ -179,6 +186,7 @@ export function DonationKeyUseControls({
         {button('reset', 'common.connections.resetKeyFailures')}
       </div>
       {operation.isSuccess ? <Note tone="ok">{t('common.outcome.saved')}</Note> : null}
+      <FailureResetDetails services={resets} />
       {!confirm ? feedback : null}
       <ConfirmDialog
         open={Boolean(confirm)}

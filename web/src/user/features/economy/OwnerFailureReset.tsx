@@ -5,6 +5,7 @@ import { resetOwnerFailure } from '@shared/operations/failureReset';
 import { responseOutcomeUnknown } from '@shared/operations/api';
 import { ErrorState } from '@shared/components/States';
 import { economyKeys } from './queries';
+import { FailureResetDetails } from '@shared/components/FailureResetDetails';
 
 export function OwnerFailureReset({
   donationID,
@@ -21,7 +22,11 @@ export function OwnerFailureReset({
   const client = useQueryClient();
   const reset = useRetainedOperation(
     (input: { revision: string }, key) => resetOwnerFailure(donationID, keyID, input.revision, key),
-    () => client.invalidateQueries({ queryKey: economyKeys.donations }),
+    () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: economyKeys.donations }),
+        client.invalidateQueries({ queryKey: ['user', 'donation-uses'] }),
+      ]),
     economyKeys.donations,
   );
   const unknown = responseOutcomeUnknown(reset.error);
@@ -37,7 +42,16 @@ export function OwnerFailureReset({
         {unknown ? t('common.failureReset.resume') : t('common.failureReset.title')}
       </button>
       {reset.error ? <ErrorState error={reset.error} /> : null}
-      {reset.isSuccess ? <p role="status">{t('common.failureReset.singleDone')}</p> : null}
+      {reset.isSuccess ? <FailureResetDetails services={reset.data?.services ?? []} /> : null}
+      {reset.isSuccess ? (
+        <p role="status">
+          {t(
+            reset.data?.outcome === 'already_clear'
+              ? 'common.failureReset.alreadyClear'
+              : 'common.failureReset.singleDone',
+          )}
+        </p>
+      ) : null}
     </div>
   );
 }

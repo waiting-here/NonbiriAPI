@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -29,23 +30,31 @@ type FailureResetRef struct {
 	ExpectedRevision string `json:"expected_revision"`
 }
 type FailureResetReceipt struct {
-	DonationID    string `json:"donation_id"`
-	KeyID         string `json:"key_id"`
-	Revision      string `json:"revision"`
-	FailureStreak string `json:"failure_streak"`
+	DonationID    string                `json:"donation_id"`
+	KeyID         string                `json:"key_id"`
+	Revision      string                `json:"revision"`
+	FailureStreak string                `json:"failure_streak"`
+	Outcome       string                `json:"outcome"`
+	Services      []ServiceFailureReset `json:"services"`
 }
 type FailureResetResult struct {
-	DonationID string  `json:"donation_id"`
-	KeyID      string  `json:"key_id"`
-	Status     string  `json:"status"`
-	Revision   *string `json:"revision"`
+	DonationID        string                `json:"donation_id"`
+	KeyID             string                `json:"key_id"`
+	Status            string                `json:"status"`
+	Revision          *string               `json:"revision"`
+	Outcome           string                `json:"outcome,omitempty"`
+	ServiceCounts     *ServiceResetCounts   `json:"service_counts,omitempty"`
+	ServicesTruncated bool                  `json:"services_truncated,omitempty"`
+	Services          []ServiceFailureReset `json:"services,omitempty"`
 }
 type FailureResetBatch struct {
 	Results []FailureResetResult `json:"results"`
 	Counts  struct {
-		Processed string `json:"processed"`
-		Reset     string `json:"reset"`
-		Skipped   string `json:"skipped"`
+		Processed    string `json:"processed"`
+		Reset        string `json:"reset"`
+		Skipped      string `json:"skipped"`
+		Recovered    string `json:"recovered"`
+		AlreadyClear string `json:"already_clear"`
 	} `json:"counts"`
 }
 type failureResetItem struct{ donationID, keyID, expected int64 }
@@ -72,6 +81,7 @@ func streakResetValues(blob []byte) ([]any, error) {
 type resetKeyState struct {
 	generation []byte
 	eligible   bool
+	services   []ServiceFailureReset
 }
 
 // A disabled key remains eligible for a counter reset. Membership, approval
@@ -90,6 +100,20 @@ func readResetKeyTx(ctx context.Context, tx *sql.Tx, donationID, keyID, now int6
 func resetDonationKeyTx(ctx context.Context, tx *sql.Tx, item failureResetItem, state resetKeyState, actorID int64, role string, now int64) error {
 	if item.expected == math.MaxInt64 {
 		return ErrInvariant
+	}
+	services := state.services
+	if services == nil {
+		var err error
+		services, err = resetServicesTx(ctx, tx, item.donationID, item.keyID, 0, now)
+		if err != nil {
+			return err
+		}
+	}
+	if !state.eligible {
+		return ErrConflict
+	}
+	if serviceResetOutcome(services) == "no_service" {
+		return ErrNoResetService
 	}
 	values, err := streakResetValues(state.generation)
 	if err != nil {
@@ -158,11 +182,15 @@ func (s *Service) resetFailureOwner(ctx context.Context, userID, donationID, key
 	if revision != expected {
 		return empty, ErrConflict
 	}
+	state.services, err = resetServicesTx(ctx, tx, donationID, keyID, 0, now)
+	if err != nil {
+		return empty, err
+	}
 	if err := resetDonationKeyTx(ctx, tx, failureResetItem{donationID, keyID, expected}, state, userID, "", now); err != nil {
 		return empty, err
 	}
 	ref := failureResetRef(donationID, keyID, revision+1)
-	value := FailureResetReceipt{ref.DonationID, ref.KeyID, ref.ExpectedRevision, "0"}
+	value := FailureResetReceipt{ref.DonationID, ref.KeyID, ref.ExpectedRevision, "0", serviceResetOutcome(state.services), state.services}
 	out, err := finishJSON(ctx, tx, decision, http.StatusOK, value)
 	if err != nil {
 		return empty, err
@@ -232,7 +260,7 @@ func (s *Service) resetFailureBatch(ctx context.Context, role reviewerRole, user
 		ref := failureResetRef(item.donationID, item.keyID, item.expected)
 		value.Results[index] = FailureResetResult{DonationID: ref.DonationID, KeyID: ref.KeyID}
 	}
-	reset := 0
+	reset, recovered := 0, 0
 	for _, donationID := range order {
 		indices := groups[donationID]
 		var status string
@@ -273,6 +301,20 @@ func (s *Service) resetFailureBatch(ctx context.Context, role reviewerRole, user
 				result.Status = "ineligible"
 				continue
 			}
+			state.services, err = resetServicesTx(ctx, tx, donationID, item.keyID, 0, now)
+			if err != nil {
+				return empty, err
+			}
+			result.Services = state.services
+			result.ServiceCounts = serviceResetCounts(state.services)
+			result.Outcome = serviceResetOutcome(state.services)
+			if result.Outcome == "no_service" {
+				result.Status = "no_service"
+				continue
+			}
+			if result.Outcome == "recovered" {
+				recovered++
+			}
 			item.expected = revision
 			if err := resetDonationKeyTx(ctx, tx, item, state, actorID, auditRole, now); err != nil {
 				return empty, err
@@ -296,12 +338,34 @@ func (s *Service) resetFailureBatch(ctx context.Context, role reviewerRole, user
 		if item.Status == "reset" {
 			outcome = managementlog.Succeeded
 		}
-		auditItems = append(auditItems, managementlog.Item{Action: "failure_streak.reset", TargetKind: "donation_key", TargetID: item.KeyID, Outcome: outcome, Code: item.Status, Changes: []managementlog.Change{{Field: "failure_streak", Operation: "cleared"}}})
+		details := managementlog.Details{}
+		for _, service := range item.Services {
+			if service.Status != "ineligible" {
+				continue
+			}
+			reason := service.Reason
+			details.Version = 1
+			details.Related = append(details.Related, managementlog.RelatedObject{Kind: "donation_uses", ID: service.UseID, Name: strings.ReplaceAll(string(service.NativeService), "_", " "), State: "unchanged", Changes: []managementlog.Change{{Field: "reset_skip_reason", Operation: "retained", After: &reason}}})
+		}
+		auditItems = append(auditItems, managementlog.Item{Details: details, Action: "failure_streak.reset", TargetKind: "donation_key", TargetID: item.KeyID, Outcome: outcome, Code: item.Status})
 	}
 	managementlog.SetItemsResult(ctx, auditItems)
+	// The persisted idempotent response has a 64 KiB budget. Keep exact per-key
+	// counts while sampling detailed service receipts across large batches.
+	remaining := 64
+	for i := range value.Results {
+		item := &value.Results[i]
+		if len(item.Services) > remaining {
+			item.Services = item.Services[:remaining]
+			item.ServicesTruncated = true
+		}
+		remaining -= len(item.Services)
+	}
 	value.Counts.Processed = strconv.Itoa(len(items))
 	value.Counts.Reset = strconv.Itoa(reset)
 	value.Counts.Skipped = strconv.Itoa(len(items) - reset)
+	value.Counts.Recovered = strconv.Itoa(recovered)
+	value.Counts.AlreadyClear = strconv.Itoa(reset - recovered)
 	out, err := finishJSON(ctx, tx, decision, http.StatusOK, value)
 	if err != nil {
 		return empty, err
