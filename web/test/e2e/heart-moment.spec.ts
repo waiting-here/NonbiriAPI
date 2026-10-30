@@ -193,8 +193,11 @@ for (const mode of ['light', 'dark'])
       await picker.getByRole('tab', { name: '卡牌', exact: true }).click();
       await expect(picker.getByRole('radio')).toHaveCount(ownedCards.length);
       await picker.getByRole('textbox').fill('不存在的素材');
+      await expect(picker.getByRole('radio')).toHaveCount(ownedCards.length);
+      await picker.getByRole('button', { name: '搜索', exact: true }).click();
       await expect(picker.getByRole('radio')).toHaveCount(0);
       await picker.getByRole('textbox').fill('ChatGPT');
+      await picker.getByRole('button', { name: '搜索', exact: true }).click();
       await expect(picker.getByRole('radio')).toHaveCount(3);
       await page.goto(USER_ORIGIN + '/activities');
       await expect(page.locator('.nb-moment-backdrop')).toHaveAttribute(

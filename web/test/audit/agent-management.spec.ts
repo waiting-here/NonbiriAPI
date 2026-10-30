@@ -334,6 +334,10 @@ test('administrator assigns Codex individually and retains readable changes afte
 test('connected Codex retains its catalogue, saves a model and recovers quota after upstream refusal', async ({
   browser,
 }) => {
+  test.skip(
+    process.env.NONBIRI_MANAGEMENT_BROWSER !== '1',
+    'Requires the management fixture with a synthetic Codex upstream',
+  );
   const state = JSON.parse(
     readFileSync(process.env.NONBIRI_AUDIT_BROWSER_STATE!, 'utf8'),
   ) as Fixture;
