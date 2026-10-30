@@ -145,7 +145,24 @@
         1536
       ],
       "backgroundFit": "center-cover",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1664,
+            1536
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 4160,
+          "hero": "moment/b-chatgpt/hero.webp"
+        }
+      }
     },
     "b-claude": {
       "background": "backgrounds/b.webp",
@@ -249,7 +266,24 @@
         1536
       ],
       "backgroundFit": "center-cover",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1792,
+            1792
+          ],
+          "originalRegion": {
+            "x": 256,
+            "y": 256,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 4480,
+          "hero": "moment/c-glm/hero.webp"
+        }
+      }
     },
     "c-deepseek": {
       "background": "backgrounds/c.webp",
@@ -1116,7 +1150,26 @@
         1536
       ],
       "backgroundFit": "full-canvas",
-      "characterFit": "full-canvas"
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "expansion": {
+          "mode": "expanded-layer",
+          "canvas": [
+            1792,
+            1792
+          ],
+          "originalRegion": {
+            "x": 384,
+            "y": 256,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 4480,
+          "hero": "moment/s-chatgpt/hero.webp",
+          "half": "moment/s-chatgpt/half.webp",
+          "closed": "moment/s-chatgpt/closed.webp"
+        }
+      }
     },
     "s-claude": {
       "background": "motion/s-claude/background.webp",

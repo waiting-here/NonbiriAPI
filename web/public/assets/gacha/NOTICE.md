@@ -52,7 +52,8 @@ The adopted derivatives in `moment/c-gemini/`, `moment/q-glm/`, `moment/n-gemini
 `moment/o-claude/`, `moment/g-claude/`, `moment/l-chatgpt/`, `moment/g-gemini/`,
 `moment/g-glm/`, `moment/b-glm/`, `moment/f-gemini/`, `moment/e-gemini/`,
 `moment/b-deepseek/`, `moment/d-gemini/`, `moment/f-chatgpt/`,
-`moment/e-claude/` and `moment/d-glm/`,
+`moment/e-claude/`, `moment/d-glm/`, `moment/s-chatgpt/`, `moment/c-glm/`
+and `moment/b-chatgpt/`,
 with matching `hires/moment/` paths, retain the established
 characters and original card and appearance inputs. Their separate
 `composition.json` registrations describe the expanded canvas and the unchanged
@@ -62,7 +63,8 @@ original region. Standard character frames are 1536–2048 pixels wide, with an
 use 2.5× Lanczos resampling and do not add native detail.
 
 The additional margins for c-gemini, g-claude, l-chatgpt, g-gemini, g-glm,
-b-glm, f-gemini, e-gemini, b-deepseek, d-gemini, f-chatgpt, e-claude and d-glm were
+b-glm, f-gemini, e-gemini, b-deepseek, d-gemini, f-chatgpt, e-claude, d-glm,
+s-chatgpt, c-glm and b-chatgpt were
 generated from their retained project sources
 using [BRIA Fibo-2.0-edit-turbo](https://huggingface.co/briaai/Fibo-2.0-edit-turbo/tree/177f2d4a06b6587144ef5c2b8452a4f1fe2ab4b7),
 with foreground alpha prepared using
@@ -73,6 +75,10 @@ uncropped animation inputs through an expanded camera; no new character parts
 were generated. n-gemini's static original region was restored from the same
 native render baseline. Their native rigs, eye coordinates and motion remain
 the original inputs.
+
+s-chatgpt's additional areas complete the existing hat, hair and candy only.
+Its half-closed and closed textures retain the same face-only content on the
+expanded canvas. All three layers keep the Sweet Hide-and-Seek R-18 classification.
 
 The moment-only s-claude scene extends the retained doorway background to
 2731 × 1536, with the original 1024 × 1536 area unchanged at the right. The new
