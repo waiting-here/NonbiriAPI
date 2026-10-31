@@ -359,6 +359,7 @@ func claimed(ctx context.Context, tx *sql.Tx, user int64, kind, id string) (bool
 	return yes, err
 }
 func redeem(ctx context.Context, tx *sql.Tx, user, at int64, product string, shop ShopSettings, p *profile) error {
+	product, unlimited := unlimitedTicketProduct(product)
 	spend := [4]int64{}
 	wallet, quantity, cap := 0, int64(0), shop.PermanentCap
 	switch product {
@@ -426,7 +427,13 @@ func redeem(ctx context.Context, tx *sql.Tx, user, at int64, product string, sho
 			}
 		}
 	}
-	if quantity > 0 && (quantity > cap || p.Used[wallet] > cap-quantity) {
+	if unlimited {
+		// Configured prices are at most maxBalance, so doubling fits int64.
+		for i := range spend {
+			spend[i] *= 2
+		}
+	}
+	if quantity > 0 && !unlimited && (quantity > cap || p.Used[wallet] > cap-quantity) {
 		return ErrMonthly
 	}
 	for i, n := range spend {
@@ -439,7 +446,9 @@ func redeem(ctx context.Context, tx *sql.Tx, user, at int64, product string, sho
 	}
 	if quantity > 0 {
 		p.Balance[wallet] += quantity
-		p.Used[wallet] += quantity
+		if !unlimited {
+			p.Used[wallet] += quantity
+		}
 		return nil
 	}
 	if _, err := tx.ExecContext(ctx, "INSERT INTO gacha_owned(user_id,card_id,obtained_at,source) VALUES(?,?,?,'shop')", user, product, at); err != nil {

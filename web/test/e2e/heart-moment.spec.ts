@@ -258,6 +258,7 @@ for (const mode of ['light', 'dark'])
         });
       await page.goto(USER_ORIGIN + '/activities/gacha');
       await page.getByRole('tab', { name: '神秘商店', exact: true }).click();
+      await page.getByRole('tab', { name: '卡牌收藏', exact: true }).click();
       await expect(
         page.getByText('兑换需要：30 N 碎片 和 15 R 碎片', { exact: true }).first(),
       ).toBeVisible();

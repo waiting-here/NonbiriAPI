@@ -17,7 +17,7 @@ vi.mock('@shared/charityManagement', async (original) => ({
   ) => request(),
 }));
 
-it.each(['bulk-permanent', 'bulk-limited', 'ticket-n'])(
+it.each(['bulk-permanent', 'bulk-limited', 'ticket-n', 'ticket-ssr-unlimited'])(
   'refreshes site wallets only for credit-funded redemption: %s',
   async (product) => {
     const client = new QueryClient();

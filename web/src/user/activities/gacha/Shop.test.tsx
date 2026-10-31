@@ -106,6 +106,7 @@ it.each([false, true])('offers permanent SSR without limited pools, English=%s',
   state.owned['g-chatgpt'] = { at: state.server_time, source: 'draw' };
   const act = vi.fn();
   render(<Shop state={state} english={english} busy={false} act={act} inspect={vi.fn()} />);
+  fireEvent.click(screen.getByRole('tab', { name: english ? 'Card collection' : '卡牌收藏' }));
   const section = within(
     screen
       .getByRole('heading', { name: english ? 'Permanent SSR' : '常驻 SSR' })
@@ -125,21 +126,95 @@ it.each([false, true])('offers permanent SSR without limited pools, English=%s',
   expect(screen.queryByRole('button', { name: /花庭来信/ })).not.toBeInTheDocument();
 });
 
-it('shows shard costs and shared monthly ticket room with matching units', () => {
+it.each([false, true])(
+  'compares monthly and unlimited prices without blocking the latter, English=%s',
+  (english) => {
+    const state = gachaSnapshot();
+    state.month_used = { permanent: 19, limited: 9 };
+    state.shop.n_ticket = 1000;
+    state.fragments = { N: 2000, R: 20, SR: 10, SSR: 2 };
+    const act = vi.fn();
+    render(<Shop state={state} english={english} busy={false} act={act} inspect={vi.fn()} />);
+    const offers = [
+      { rarity: 'N', cost: '1,000', unlimited: '2,000', product: 'ticket-n' },
+      { rarity: 'R', cost: '10', unlimited: '20', product: 'ticket-r' },
+      { rarity: 'SR', cost: '5', unlimited: '10', product: 'ticket-sr' },
+      { rarity: 'SSR', cost: '1', unlimited: '2', product: 'ticket-ssr' },
+    ];
+    for (const offer of offers) {
+      const row = within(
+        screen.getByRole('region', {
+          name: offer.rarity + (english ? ' shard exchange' : ' 碎片兑换'),
+        }),
+      );
+      expect(
+        row.getByTitle(offer.cost + ' ' + offer.rarity + (english ? ' shards' : ' 碎片')),
+      ).toBeVisible();
+      expect(
+        row.getByTitle(offer.unlimited + ' ' + offer.rarity + (english ? ' shards' : ' 碎片')),
+      ).toBeVisible();
+      if (offer.rarity === 'SSR') {
+        expect(
+          row.getByRole('button', { name: english ? 'Monthly limit reached' : '本月额度不足' }),
+        ).toBeDisabled();
+        expect(
+          row.queryByText(english ? /The monthly offer still has/ : /月限量还可兑换/),
+        ).not.toBeInTheDocument();
+      } else {
+        expect(
+          row.getByText(english ? /The monthly offer still has/ : /月限量还可兑换/),
+        ).toBeVisible();
+      }
+      const unlimited = row.getByRole('button', {
+        name: english ? 'Exchange unlimited' : '不限量兑换',
+      });
+      expect(unlimited).toBeEnabled();
+      fireEvent.click(unlimited);
+      expect(act).toHaveBeenLastCalledWith(
+        { action: 'redeem', product: offer.product + '-unlimited', revision: 1 },
+        expect.any(String),
+      );
+    }
+    expect(act).toHaveBeenCalledTimes(4);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  },
+);
+
+it('refreshes prices and revision, preserves monthly purchase and explains insufficient shards', () => {
   const state = gachaSnapshot();
-  state.month_used = { permanent: 19, limited: 9 };
-  state.shop.n_ticket = 1000;
-  state.fragments = { N: 1000, R: 10, SR: 5, SSR: 1 };
+  state.fragments.N = 60;
   const act = vi.fn();
-  render(<Shop state={state} english={false} busy={false} act={act} inspect={vi.fn()} />);
-  const shop = within(screen.getByRole('region', { name: '再一次相遇' }));
-  expect(shop.getByText('需要：1,000 N 卡牌碎片')).toBeVisible();
-  expect(shop.getAllByText('本月剩余：1/20 张')).toHaveLength(2);
-  expect(shop.getAllByText('本月剩余：1/10 张')).toHaveLength(2);
-  expect(shop.getByRole('button', { name: '本月额度不足' })).toBeDisabled();
-  fireEvent.click(shop.getAllByRole('button', { name: '兑换' })[0]);
-  expect(act).toHaveBeenCalledWith(
-    { action: 'redeem', product: 'ticket-n', revision: 1 },
-    '兑换成功，抽奖券已到账',
+  const view = render(
+    <Shop state={state} english={false} busy={false} act={act} inspect={vi.fn()} />,
   );
+  const row = within(screen.getByRole('region', { name: 'N 碎片兑换' }));
+  fireEvent.click(row.getByRole('button', { name: '月限量兑换' }));
+  expect(act).toHaveBeenLastCalledWith(
+    { action: 'redeem', product: 'ticket-n', revision: 1 },
+    expect.any(String),
+  );
+  state.shop.n_ticket = 31;
+  state.shop.revision = 2;
+  view.rerender(<Shop state={state} english={false} busy={false} act={act} inspect={vi.fn()} />);
+  expect(row.getByTitle('62 N 碎片')).toBeVisible();
+  expect(row.getByRole('button', { name: '碎片不足' })).toBeDisabled();
+  state.fragments.N = 62;
+  state.month_used.permanent = state.shop.permanent_cap;
+  view.rerender(<Shop state={state} english={false} busy={false} act={act} inspect={vi.fn()} />);
+  expect(row.getByRole('button', { name: '本月额度不足' })).toBeDisabled();
+  fireEvent.click(row.getByRole('button', { name: '不限量兑换' }));
+  expect(act).toHaveBeenLastCalledWith(
+    { action: 'redeem', product: 'ticket-n-unlimited', revision: 2 },
+    expect.any(String),
+  );
+});
+
+it('keeps doubled prices exact beyond safe JSON-number balance limits', () => {
+  const state = gachaSnapshot();
+  state.shop.n_ticket = Number.MAX_SAFE_INTEGER;
+  state.fragments.N = Number.MAX_SAFE_INTEGER;
+  render(<Shop state={state} english={false} busy={false} act={vi.fn()} inspect={vi.fn()} />);
+  const row = within(screen.getByRole('region', { name: 'N 碎片兑换' }));
+  expect(row.getByTitle('18,014,398,509,481,982 N 碎片')).toBeVisible();
+  expect(row.getByRole('button', { name: '碎片不足' })).toBeDisabled();
 });
