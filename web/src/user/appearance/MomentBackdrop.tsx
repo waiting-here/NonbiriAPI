@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { artSourceSet } from '../activities/gacha/art-resolution';
 import { isRare } from '../activities/gacha/catalog';
 import {
@@ -40,25 +40,20 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
         : '/assets/gacha/layers/' + card.id + '.webp'
       : undefined);
   const expandedBackground = expandedScene ? asset(expandedScene.path) : undefined;
-  const sceneFrameWidth = expandedScene
-    ? 'max(' +
-      (100 * expandedScene.originalRegion.width) / expandedScene.canvas[0] +
-      'vw, ' +
-      (100 * expandedScene.originalRegion.width) / expandedScene.canvas[1] +
-      'dvh)'
-    : undefined;
   const registeredScene =
     !expandedScene && card?.theme === 's'
       ? '/assets/gacha/motion/' + card.id + '/background.webp'
       : undefined;
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement;
     if (expansion) {
       const margins = momentHorizontalMargins(expansion);
       root.style.setProperty('--nb-moment-width-ratio', String(1 + margins.total));
       root.style.setProperty(
         '--nb-moment-height-ratio',
-        String(expansion.canvas[1] / expansion.originalRegion.height),
+        String(
+          (expansion.canvas[1] - (expansion.contentTop ?? 0)) / expansion.originalRegion.height,
+        ),
       );
       root.style.setProperty(
         '--nb-moment-extra-reserve',
@@ -69,15 +64,13 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
         'calc(var(--nb-moment-gutter) * ' + margins.right + ')',
       );
     }
-    if (sceneFrameWidth) root.style.setProperty('--nb-moment-scene-frame-width', sceneFrameWidth);
     return () => {
       root.style.removeProperty('--nb-moment-width-ratio');
       root.style.removeProperty('--nb-moment-height-ratio');
       root.style.removeProperty('--nb-moment-extra-reserve');
       root.style.removeProperty('--nb-moment-right-reserve');
-      root.style.removeProperty('--nb-moment-scene-frame-width');
     };
-  }, [expansion, sceneFrameWidth]);
+  }, [expansion]);
   useEffect(() => {
     const surface = canvas.current;
     if (!surface || !card || !rare || !registrationReady) return;
@@ -135,20 +128,28 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
     };
   }, [card, rare, expansion, registrationReady]);
   const background =
-    registeredScene ?? (card ? '/assets/gacha/backgrounds/' + card.theme + '.webp' : artwork.art);
+    expandedBackground ??
+    registeredScene ??
+    (card ? '/assets/gacha/backgrounds/' + card.theme + '.webp' : artwork.art);
   return (
     <div
       className="nb-moment-backdrop"
       aria-hidden="true"
       data-moment={artwork.key}
-      data-registered={!!registeredScene}
+      data-registered={!!(registeredScene || expandedScene)}
       data-expanded-scene={!!expandedScene}
     >
       <img
         ref={expandedScene ? undefined : scene}
         className="nb-moment-backdrop__scene"
         src={background}
-        srcSet={registeredScene ? artSourceSet(background, 1024, 2560) : artSourceSet(background)}
+        srcSet={
+          expandedScene
+            ? artSourceSet(background, expandedScene.canvas[0], expandedScene.highResolutionWidth)
+            : registeredScene
+              ? artSourceSet(background, 1024, 2560)
+              : artSourceSet(background)
+        }
         sizes={
           registeredScene
             ? '(max-aspect-ratio: 2/3) 66.67vh, 100vw'
@@ -192,10 +193,7 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
               expandedHero ? expansion!.canvas[0] : 1024,
               expandedHero ? (expansion!.highResolutionWidth ?? expansion!.canvas[0] * 2.5) : 2560,
             )}
-            sizes={
-              sceneFrameWidth ??
-              (expandedHero ? momentImageSizes(expansion!) : '(width < 40rem) 100vw, 66.67vh')
-            }
+            sizes={expandedHero ? momentImageSizes(expansion!) : '(width < 40rem) 100vw, 66.67vh'}
             alt=""
           />
           {rare && (

@@ -182,11 +182,11 @@ it('anchors an expanded scene to the original character instead of covering the 
   await waitFor(() => expect(renderSSR).toHaveBeenCalledOnce());
   expect(view.container.querySelector('.nb-moment-backdrop__scene')).toHaveAttribute(
     'src',
-    '/assets/gacha/backgrounds/s.webp',
+    '/assets/gacha/moment/s-claude/background.webp',
   );
   expect(view.container.querySelector('.nb-moment-backdrop')).toHaveAttribute(
     'data-registered',
-    'false',
+    'true',
   );
   const scene = view.container.querySelector<HTMLImageElement>('.nb-moment-character__scene')!;
   expect(scene.src).toContain('/assets/gacha/moment/s-claude/background.webp');
@@ -199,11 +199,7 @@ it('anchors an expanded scene to the original character instead of covering the 
   ).toHaveAttribute('src', '/assets/gacha/motion/s-claude/hero.webp');
   expect(vi.mocked(renderSSR).mock.calls[0][5]?.momentFrame).toBeUndefined();
   expect(document.documentElement.style.getPropertyValue('--nb-moment-extra-reserve')).toBe('');
-  expect(
-    document.documentElement.style.getPropertyValue('--nb-moment-scene-frame-width'),
-  ).toContain('dvh');
-  view.rerender(<MomentBackdrop moment="cover:permanent" />);
-  expect(document.documentElement.style.getPropertyValue('--nb-moment-scene-frame-width')).toBe('');
+  expect(document.documentElement.style.getPropertyValue('--nb-moment-height-ratio')).toBe('');
 });
 
 it('uses the adopted static moment source and expanded responsive widths without animating an R card', () => {
