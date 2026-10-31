@@ -279,11 +279,12 @@ for (const theme of ['light', 'dark'])
               );
               await registeredScene.evaluate((image: HTMLImageElement) => image.decode());
               const background = (await registeredScene.boundingBox())!;
+              const backdrop = (await page.locator('.nb-moment-backdrop__scene').boundingBox())!;
               const viewport = page.viewportSize()!;
-              expect(background.x).toBeLessThanOrEqual(1);
-              expect(background.y).toBeLessThanOrEqual(1);
-              expect(background.x + background.width).toBeGreaterThanOrEqual(viewport.width - 1);
-              expect(background.y + background.height).toBeGreaterThanOrEqual(viewport.height - 1);
+              expect(backdrop.x).toBeLessThanOrEqual(1);
+              expect(backdrop.y).toBeLessThanOrEqual(1);
+              expect(backdrop.x + backdrop.width).toBeGreaterThanOrEqual(viewport.width - 1);
+              expect(backdrop.y + backdrop.height).toBeGreaterThanOrEqual(viewport.height - 1);
               const original = layers.scene.originalRegion;
               const character = (await hero.boundingBox())!;
               expect(
@@ -307,7 +308,9 @@ for (const theme of ['light', 'dark'])
               expect(frame!.x).toBeGreaterThanOrEqual(-1);
               expect(frame!.x + frame!.width).toBeLessThanOrEqual(width + 1);
               if (expansion) {
-                expect(frame!.y).toBeGreaterThanOrEqual(67);
+                const transparentTop =
+                  (frame!.height * (expansion.contentTop ?? 0)) / expansion.canvas[1];
+                expect(frame!.y + transparentTop).toBeGreaterThanOrEqual(67);
                 expect(frame!.y + frame!.height).toBeLessThanOrEqual(
                   page.viewportSize()!.height + 1,
                 );

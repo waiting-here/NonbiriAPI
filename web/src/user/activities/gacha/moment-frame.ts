@@ -12,6 +12,8 @@ export type MomentRegistration = {
 };
 export type MomentExpansion = MomentFrame & {
   mode: 'native-camera' | 'expanded-layer';
+  /** Empty top margin, after reserving room for character motion. */
+  contentTop?: number;
   hero?: string;
   closed?: string;
   half?: string;
