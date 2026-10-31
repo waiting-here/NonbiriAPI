@@ -27,6 +27,11 @@ for (const width of [1440, 768, 390])
       );
       await mockRoleSession(page, 'user', 'user');
       await mockPublicConfig(page, 'user');
+      await page.route('**/api/appearance', (route) =>
+        route.fulfill({
+          json: { selected: 'celestial', unlocked: ['default', 'celestial'], updated_at: null },
+        }),
+      );
       await page.route('**/api/events', (route) =>
         route.fulfill({
           contentType: 'text/event-stream',
@@ -44,10 +49,22 @@ for (const width of [1440, 768, 390])
       }
       snapshot.blackjack.enabled = true;
       let active = false;
+      const blackjackQueues: unknown[] = [];
       await page.route('**/api/games**', (route) => {
         const url = new URL(route.request().url()),
           path = url.pathname;
         if (path === '/api/games') return route.fulfill({ json: snapshot });
+        if (path === '/api/games/blackjack/queue') {
+          blackjackQueues.push(route.request().postDataJSON());
+          return route.fulfill({
+            status: 201,
+            json: {
+              id: 'bjq_AAAAAAAAAAAAAAAAAAAAAA',
+              position: '1',
+              state: 'waiting',
+            },
+          });
+        }
         if (path.includes('/randomness/')) return route.fulfill({ json: { proof: null } });
         if (path.endsWith('/catalog')) return route.fulfill({ json: catalogWire() });
         if (path === '/api/games/likes/loadouts')
@@ -170,9 +187,62 @@ for (const width of [1440, 768, 390])
           ).toBeLessThan(2500);
         }
         if (width === 390 && game) {
-          const box = await page.locator('.game-actionbar button').boundingBox();
+          const bar = page.locator('.game-actionbar');
+          await expect(page.locator('html')).toHaveAttribute('data-appearance', 'celestial');
+          const box = await bar.locator('button').boundingBox();
           expect(box!.y).toBeGreaterThan(0);
           expect(box!.y + box!.height).toBeLessThanOrEqual(900);
+          const containingBlocks = await bar.evaluate((bar) => {
+            const barriers: string[] = [];
+            for (let element = bar.parentElement; element; element = element.parentElement) {
+              const style = getComputedStyle(element);
+              if (
+                style.transform !== 'none' ||
+                style.filter !== 'none' ||
+                style.backdropFilter !== 'none' ||
+                style.perspective !== 'none' ||
+                /layout|paint|strict|content/.test(style.contain) ||
+                /transform|filter|perspective/.test(style.willChange)
+              )
+                barriers.push(element.className);
+            }
+            return barriers;
+          });
+          expect(containingBlocks, game).toEqual([]);
+          await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+          const scrolled = (await bar.boundingBox())!;
+          expect(scrolled.x, game).toBe(0);
+          expect(scrolled.width, game).toBe(width);
+          expect(scrolled.y + scrolled.height, game).toBeCloseTo(900, 0);
+          if (evidence)
+            await page.screenshot({ path: `${evidence}/${game}-${locale}-${width}-scrolled.png` });
+          const selectors: Record<string, string> = {
+            fishing: '.fishing-count button',
+            linklink: '.linklink-specs button',
+            rps: '.rps-modes button',
+            bidding: '.bid-modes button',
+            blackjack: '.bj-quick-stakes button',
+            likes: '.likes-loadout-step > summary',
+          };
+          const control = page.locator(selectors[game]).last();
+          await control.focus();
+          await expect(control).toBeFocused();
+          const focused = (await control.boundingBox())!;
+          expect(focused.y + focused.height, game).toBeLessThanOrEqual(
+            (await bar.boundingBox())!.y,
+          );
+          if (evidence)
+            await page.screenshot({ path: `${evidence}/${game}-${locale}-${width}-focus.png` });
+          if (game === 'blackjack') {
+            const stake = page.locator('.blackjack-game form input');
+            await stake.focus();
+            await stake.press('Enter');
+            await expect.poll(() => blackjackQueues.length).toBe(1);
+            await expect(bar.locator('button')).toBeEnabled();
+            await bar.locator('button').focus();
+            await bar.locator('button').press('Enter');
+            await expect.poll(() => blackjackQueues.length).toBe(2);
+          }
         }
         await expect(page.locator('.progression-ranking .loading-dot')).toHaveCount(0);
         await expect(page.locator('.progression-ranking [role=alert]')).toHaveCount(0);
