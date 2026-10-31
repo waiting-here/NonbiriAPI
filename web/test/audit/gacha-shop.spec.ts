@@ -236,6 +236,7 @@ test('code duplicates fund a permanent SSR exchange without an open limited pool
     const page = await user.newPage();
     await page.goto(f.user_url + '/activities/gacha');
     await page.getByRole('tab', { name: 'Mystery shop', exact: true }).click();
+    await page.getByRole('tab', { name: 'Card collection', exact: true }).click();
     const beforeResponse = await api(user, f.user_url, '/api/gacha/state');
     expect(beforeResponse.status()).toBe(200);
     const before = (await beforeResponse.json()) as Snapshot;
@@ -260,12 +261,136 @@ test('code duplicates fund a permanent SSR exchange without an open limited pool
     await expect(offer.getByRole('button', { name: 'Collected', exact: true })).toBeDisabled();
     await page.reload();
     await page.getByRole('tab', { name: 'Mystery shop', exact: true }).click();
+    await page.getByRole('tab', { name: 'Card collection', exact: true }).click();
     await expect(offer.getByRole('button', { name: 'Collected', exact: true })).toBeDisabled();
     const persisted = await api(user, f.user_url, '/api/gacha/state');
     expect(persisted.status()).toBe(200);
     const state = (await persisted.json()) as Snapshot;
     expect(state.fragments.SSR).toBe(0);
     expect(state.owned['g-claude']).toEqual(outcome.snapshot.owned['g-claude']);
+  } finally {
+    await user.close();
+    await admin.close();
+  }
+});
+
+test('unlimited shard exchanges preserve monthly allowance and persist each ticket wallet', async ({
+  browser,
+}) => {
+  const f = fixture();
+  const player = f.users.filter((user) => user.level === 1)[1]!;
+  const user = await session(browser, f.user_url, player.cookie);
+  const admin = await session(browser, f.admin_url, f.admin_cookie, true);
+  try {
+    const created = await api(admin, f.admin_url, '/admin/api/rewards/create', 'POST', {
+      kind: 'code',
+      title: 'Synthetic shard exchange',
+      enabled: true,
+      conditions: { op: 'all' },
+      rewards: ['N', 'R', 'SR', 'SSR'].map((rarity) => ({
+        asset: 'gacha:shard:' + rarity,
+        quantity: '100',
+      })),
+    });
+    expect(created.status()).toBe(200);
+    const campaign = (await created.json()) as Campaign;
+    const granted = await api(user, f.user_url, '/api/rewards/redeem', 'POST', {
+      code: campaign.code,
+    });
+    expect(granted.status()).toBe(200);
+    const page = await user.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.goto(f.user_url + '/activities/gacha');
+    await page.getByRole('tab', { name: 'Mystery shop', exact: true }).click();
+    const readState = async (): Promise<Snapshot> => {
+      const response = await api(user, f.user_url, '/api/gacha/state');
+      expect(response.status()).toBe(200);
+      return response.json();
+    };
+    let before = await readState();
+    const originalMonth = before.month_used;
+    const offers = [
+      {
+        rarity: 'N',
+        product: 'ticket-n-unlimited',
+        cost: before.shop.n_ticket * 2,
+        ticket: 'permanent',
+        grant: 1,
+      },
+      {
+        rarity: 'R',
+        product: 'ticket-r-unlimited',
+        cost: before.shop.r_ticket * 2,
+        ticket: 'permanent',
+        grant: 1,
+      },
+      {
+        rarity: 'SR',
+        product: 'ticket-sr-unlimited',
+        cost: before.shop.sr_ticket * 2,
+        ticket: 'limited',
+        grant: 1,
+      },
+      {
+        rarity: 'SSR',
+        product: 'ticket-ssr-unlimited',
+        cost: before.shop.ssr_tickets * 2,
+        ticket: 'limited',
+        grant: 2,
+      },
+    ] as const;
+    async function exchange(product: string, button: ReturnType<typeof page.getByRole>) {
+      const completed = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === '/api/gacha/actions' &&
+          response.request().method() === 'POST' &&
+          response.request().postDataJSON()?.product === product,
+      );
+      await button.click();
+      const response = await completed;
+      expect(response.status()).toBe(200);
+      return ((await response.json()) as Outcome).snapshot;
+    }
+    for (const offer of offers) {
+      const row = page.getByRole('region', { name: offer.rarity + ' shard exchange', exact: true });
+      await expect(row.getByText(/The monthly offer still has/)).toBeVisible();
+      const after = await exchange(
+        offer.product,
+        row.getByRole('button', { name: 'Exchange unlimited', exact: true }),
+      );
+      expect(after.fragments).toEqual({
+        ...before.fragments,
+        [offer.rarity]: before.fragments[offer.rarity] - offer.cost,
+      });
+      expect(after.tickets).toEqual({
+        ...before.tickets,
+        [offer.ticket]: before.tickets[offer.ticket] + offer.grant,
+      });
+      expect(after.month_used).toEqual(originalMonth);
+      expect(after.credits).toEqual(before.credits);
+      expect(after.redeemed).toEqual(before.redeemed);
+      expect(after.owned).toEqual(before.owned);
+      before = after;
+    }
+    const n = page.getByRole('region', { name: 'N shard exchange', exact: true });
+    const monthly = await exchange(
+      'ticket-n',
+      n.getByRole('button', { name: 'Exchange monthly', exact: true }),
+    );
+    expect(monthly.fragments.N).toBe(before.fragments.N - before.shop.n_ticket);
+    expect(monthly.tickets.permanent).toBe(before.tickets.permanent + 1);
+    expect(monthly.month_used).toEqual({
+      ...originalMonth,
+      permanent: originalMonth.permanent + 1,
+    });
+    await page.reload();
+    await page.getByRole('tab', { name: 'Mystery shop', exact: true }).click();
+    const persisted = await readState();
+    expect(persisted.fragments).toEqual(monthly.fragments);
+    expect(persisted.tickets).toEqual(monthly.tickets);
+    expect(persisted.month_used).toEqual(monthly.month_used);
+    expect(errors).toEqual([]);
   } finally {
     await user.close();
     await admin.close();

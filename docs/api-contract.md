@@ -2789,6 +2789,18 @@ shard-to-ticket exchanges, draws, codes and site-wide rewards do not contribute.
 Shop and pool counters are separate, with the same atomic-write, exact-count,
 administrator-only and lifetime aggregate semantics.
 
+Shard-to-ticket `redeem` accepts `ticket-n`, `ticket-r`, `ticket-sr` and
+`ticket-ssr`, plus the exact unlimited IDs `ticket-n-unlimited`,
+`ticket-r-unlimited`, `ticket-sr-unlimited` and `ticket-ssr-unlimited`.
+The respective grants are one standard, one standard, one limited and two
+limited tickets. Each unlimited price is twice the current corresponding
+monthly price; unlimited exchanges neither require nor consume monthly
+allowance. They require the current shop `revision` and sufficient shards
+and ticket capacity. Debit, grant and idempotency receipt commit atomically.
+Unknown product IDs are rejected. Account exports retain these exchanges as
+`redeem` operations with signed ticket/shard deltas and resulting balances;
+they create no card claim, credit operation or shop/pool statistic.
+
 `redeem` accepts `product=bulk-permanent|bulk-limited` with the current shop
 `revision`. Each grants ten tickets for 10,000 credits total, using game credits
 first, once per product per user per site-calendar day. Debit, grant and purchase
