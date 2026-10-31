@@ -162,3 +162,68 @@ func TestFishingLeaderboardCanceledReadReleasesPool(t *testing.T) {
 		})
 	}
 }
+
+func TestFishingRankExpirySkipsWriterUntilFactsAreDue(t *testing.T) {
+	f := newGameFixture(t, &scriptedSource{})
+	user := f.seedUser("expiry-reader", fixtureFunding)
+	result, _, err := f.service.startLegacy(t.Context(), StartInput{UserID: user, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(480)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := f.service.FishingLeaderboard(t.Context(), user, "total")
+	if err != nil || len(want.Entries) != 1 {
+		t.Fatal(want, err)
+	}
+	held, err := f.database.Conn(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	before := f.database.Stats().WaitCount
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	// Both worker polls and the total leaderboard may read an idle queue while
+	// another transaction owns the writer, including after the work budget.
+	for range 16 {
+		if err := f.service.expireRankFacts(ctx, fixtureNow, time.Time{}); err != nil {
+			t.Fatal("idle expiry", err)
+		}
+	}
+	got, err := f.service.FishingLeaderboard(ctx, user, "total")
+	if err != nil || !equalJSONValue(t, got, want) {
+		t.Fatal("idle leaderboard changed or waited for writer", got, err)
+	}
+	if f.database.Stats().WaitCount != before || f.service.readDatabase.Stats().InUse != 0 {
+		t.Fatal("idle expiry waited for a writer or retained a reader")
+	}
+
+	f.clock.Store(result.SettledAt + int64(rankWindow.Seconds()))
+	done := make(chan error, 1)
+	go func() {
+		_, err := f.service.FishingLeaderboard(ctx, user, "total")
+		done <- err
+	}()
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
+	for f.database.Stats().WaitCount == before {
+		select {
+		case err := <-done:
+			t.Fatal("due expiry returned without acquiring writer", err)
+		case <-ctx.Done():
+			t.Fatal("due expiry did not acquire writer", ctx.Err())
+		case <-tick.C:
+		}
+	}
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatal("due expiry ignored cancellation", err)
+	}
+	if f.service.readDatabase.Stats().InUse != 0 {
+		t.Fatal("expiry retained reader while waiting for writer")
+	}
+	held.Close()
+	got, err = f.service.FishingLeaderboard(t.Context(), user, "total")
+	if err != nil || len(got.Entries) != 0 || f.scalar(`SELECT COUNT(*) FROM game_fishing_rank_facts`) != 0 {
+		t.Fatal("due expiry did not complete after writer release", got, err)
+	}
+}
