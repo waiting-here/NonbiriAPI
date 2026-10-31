@@ -2,7 +2,7 @@ import { GameToolbar } from '../common/GameToolbar';
 import { GameMoney } from '../common/GameMoney';
 import { GameBackLink } from '../common/GameBackLink';
 import { GameActionBar } from '../common/GameActionBar';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BLACKJACK_ACTIONS,
@@ -216,6 +216,7 @@ function QueueForm({
   readonly accepting: boolean;
   readonly onQueue: (stake: string) => void;
 }) {
+  const formID = useId();
   const text = useDuelText();
   const [stake, setStake] = useState(config.default_stake);
   const [editingStake, setEditingStake] = useState(false);
@@ -236,6 +237,7 @@ function QueueForm({
   const current = config.quick_stakes !== undefined;
   return (
     <form
+      id={formID}
       onSubmit={(e) => {
         e.preventDefault();
         if (!blocked && valid && accepting && current) onQueue(stake);
@@ -258,6 +260,7 @@ function QueueForm({
         <button
           className="nb-btn nb-btn--primary"
           type="submit"
+          form={formID}
           disabled={blocked || !accepting || !valid || !current}
         >
           {accepting ? text('blackjack.joinQueue') : text('blackjack.gameClosed')}

@@ -567,7 +567,7 @@
     top: 5rem;
   }
 }
-@media (max-width: 39.999rem) {
+@media (width < 40rem) {
   html:has(.game-actionbar) {
     scroll-padding-bottom: calc(var(--game-actionbar-h, 4.5rem) + var(--nb-space-8));
   }

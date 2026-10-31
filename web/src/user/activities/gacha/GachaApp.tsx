@@ -1,7 +1,7 @@
 import { artSourceSet } from './art-resolution';
 import { ArtworkImage, ArtworkBadge, ArtworkUnavailable } from '@shared/artwork/ArtworkImage';
 import { useArtworkPolicy } from '@shared/artwork/context';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@shared/components/ui/Button';
 import { Tabs } from '@shared/components/ui/Tabs';
 import { Field } from '@shared/components/ui/Field';
@@ -94,6 +94,19 @@ export function GachaApp({
 }) {
   const appearance = useOptionalAppearance();
   const artwork = useArtworkPolicy();
+  const measureDrawActions = useCallback((bar: HTMLDivElement | null) => {
+    if (!bar || typeof ResizeObserver === 'undefined') return;
+    const root = bar.ownerDocument.documentElement;
+    const measure = () =>
+      root.style.setProperty('--gacha-drawbar-h', `${bar.getBoundingClientRect().height}px`);
+    const observer = new ResizeObserver(measure);
+    measure();
+    observer.observe(bar);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty('--gacha-drawbar-h');
+    };
+  }, []);
   const t = (zh: string, en: string) => (english ? en : zh);
   const [state, setState] = useState<Snapshot | null>(null),
     [page, setPage] = useState<Page>('pools');
@@ -714,6 +727,7 @@ export function GachaApp({
                 )}
               </div>
               <div
+                ref={measureDrawActions}
                 className={'gacha-draw-actions' + (upcoming ? ' gacha-draw-actions--upcoming' : '')}
               >
                 {upcoming && (

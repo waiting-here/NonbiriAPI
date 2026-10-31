@@ -506,6 +506,22 @@ for (const language of ['zh', 'en'] as const)
             animations: 'disabled',
           });
         }
+        if (width === 390) {
+          const collection = page.locator('.gacha-collection-summary button');
+          await collection.evaluate((element) => element.scrollIntoView({ block: 'end' }));
+          await collection.focus();
+          await expect(collection).toBeFocused();
+          if (process.env.NONBIRI_VISUAL_DIR)
+            await page.screenshot({
+              path: resolve(
+                process.env.NONBIRI_VISUAL_DIR,
+                `gacha-upcoming-${language}-${theme}-${width}-focus.png`,
+              ),
+            });
+          const target = (await collection.boundingBox())!;
+          const actions = (await page.locator('.gacha-draw-actions').boundingBox())!;
+          expect(target.y + target.height).toBeLessThanOrEqual(actions.y);
+        }
         guard.assertNone();
       });
     }

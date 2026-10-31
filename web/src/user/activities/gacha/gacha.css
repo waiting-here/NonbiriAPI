@@ -1600,18 +1600,13 @@
     font-size: var(--nb-font-size-sm);
   }
   .gacha-app:has(.gacha-draw-actions) {
-    padding-bottom: 96px;
-    scroll-padding-bottom: 96px;
+    padding-bottom: calc(var(--gacha-drawbar-h, 6rem) + var(--nb-space-4));
   }
-  .gacha-app:has(.gacha-draw-actions--upcoming) {
-    padding-bottom: calc(var(--nb-space-16) + var(--nb-space-16) + var(--nb-space-4));
-    scroll-padding-bottom: calc(var(--nb-space-16) + var(--nb-space-16) + var(--nb-space-4));
+  html:has(.gacha-draw-actions) {
+    scroll-padding-bottom: calc(var(--gacha-drawbar-h, 6rem) + var(--nb-space-4));
   }
   .gacha-toast {
-    bottom: 110px;
-  }
-  .gacha-app:has(.gacha-draw-actions--upcoming) .gacha-toast {
-    bottom: calc(var(--nb-space-16) + var(--nb-space-16) + var(--nb-space-8));
+    bottom: calc(var(--gacha-drawbar-h, 6rem) + var(--nb-space-4));
   }
   .gacha-underbar {
     padding: 0 var(--nb-space-4) var(--nb-space-4);
