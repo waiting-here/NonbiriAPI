@@ -80,7 +80,7 @@ func TestCodexCatalogueIdentityEmptyAndAdditionalFields(t *testing.T) {
 				t.Error("incorrect native catalogue identity")
 			}
 			w.Write([]byte(body))
-		})
+		}, withCodexForwarding(t))
 		original, _ := f.runtime.Settings(t.Context())
 		p := attachCodex(t, f)
 		p.Settings.BaseURL = original.BaseURL

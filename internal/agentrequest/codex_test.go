@@ -5,15 +5,40 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/codexauth"
+	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
+
+type localOnlyCodexDialer struct{}
+
+func (localOnlyCodexDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil || host != "127.0.0.1" {
+		return nil, errors.New("forwarded connection is unavailable")
+	}
+	return (&net.Dialer{}).DialContext(ctx, network, address)
+}
+
+func withCodexForwarding(t *testing.T) func(string, *egress.StackOptions) {
+	t.Helper()
+	return func(_ string, options *egress.StackOptions) {
+		worker, err := config.ParseCloudflareWorker("https://worker.example.invalid/proxy", strings.Repeat("w", 32))
+		if err != nil {
+			t.Fatal(err)
+		}
+		options.CloudflareWorker = worker
+		options.Dialer = localOnlyCodexDialer{}
+	}
+}
 
 func attachCodex(t *testing.T, f *fixture) DriverProfile {
 	t.Helper()
@@ -145,7 +170,7 @@ func TestCodexHTTPToolsAndText(t *testing.T) {
 			t.Error("native tool history missing")
 		}
 		_, _ = io.WriteString(w, "data: "+`{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done"}]}}`+"\n\n"+"data: "+`{"type":"response.completed","response":{"usage":{"input_tokens":8,"output_tokens":1}}}`+"\n\n")
-	})
+	}, withCodexForwarding(t))
 	p := attachCodex(t, f)
 	original, _ := f.runtime.Settings(context.Background())
 	// Only this local fixture replaces the otherwise fixed service origin.

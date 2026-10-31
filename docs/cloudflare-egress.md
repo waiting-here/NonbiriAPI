@@ -58,6 +58,11 @@ Cloudflare forwarding is configured. Model discovery and key probes have no
 model switch and use the configured Worker, then legacy mappings when no Worker
 is configured.
 
+The Codex assistant source uses protected direct connections for its fixed
+official authentication, model, quota and inference endpoints. Worker and legacy
+gateway settings do not apply to these requests; other model routes retain the
+behavior described above.
+
 After upgrading, manually enable forwarding for charity models that use Google
 official endpoints and need the Cloudflare route.
 

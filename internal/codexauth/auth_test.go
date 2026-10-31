@@ -47,7 +47,7 @@ func jwt(value any) string {
 func (f *fixture) tokens(w http.ResponseWriter, access, refresh string) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"id_token": jwt(map[string]any{"sub": "subject", "email": "operator@example.invalid", "https://api.openai.com/auth": map[string]string{"chatgpt_account_id": "workspace"}}), "access_token": jwt(map[string]any{"exp": f.now.Load() + 3600, "jti": access}), "refresh_token": refresh})
 }
-func newFixture(t *testing.T) *fixture {
+func newFixture(t *testing.T, configure ...func(string, *egress.StackOptions)) *fixture {
 	t.Helper()
 	f := &fixture{}
 	f.now.Store(1800000000)
@@ -97,7 +97,11 @@ func newFixture(t *testing.T) *fixture {
 		}
 	}))
 	t.Cleanup(server.Close)
-	stack, err := egress.NewStack(egress.StackOptions{AllowedOrigins: []string{server.URL}, Resolver: resolver{}})
+	options := egress.StackOptions{AllowedOrigins: []string{server.URL}, Resolver: resolver{}}
+	for _, apply := range configure {
+		apply(server.URL, &options)
+	}
+	stack, err := egress.NewStack(options)
 	if err != nil {
 		t.Fatal(err)
 	}
