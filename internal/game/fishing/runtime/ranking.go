@@ -27,15 +27,17 @@ type expiringFact struct {
 // exact-once and deterministic even when the worker runs late.
 func (service *Service) expireRankFacts(ctx context.Context, queryNow int64, deadline time.Time) error {
 	for {
-		if !service.budgetNow().Before(deadline) {
-			var due int
-			if err := service.readDatabase.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM game_fishing_rank_facts WHERE aggregate_applied=1 AND expires_at<=?)`, queryNow).Scan(&due); err != nil {
-				return classifyDB(err)
-			}
-			if due == 1 {
-				return ErrServiceUnavailable
-			}
+		// The worker polls every second; an empty expiry queue needs no writer.
+		// Due facts are selected again in the authoritative write transaction.
+		var due bool
+		if err := service.readDatabase.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM game_fishing_rank_facts WHERE aggregate_applied=1 AND expires_at<=?)`, queryNow).Scan(&due); err != nil {
+			return classifyDB(err)
+		}
+		if !due {
 			return nil
+		}
+		if !service.budgetNow().Before(deadline) {
+			return ErrServiceUnavailable
 		}
 		tx, err := service.database.BeginTx(ctx, nil)
 		if err != nil {
