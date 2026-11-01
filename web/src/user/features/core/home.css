@@ -181,9 +181,22 @@
 .home-intro > .nb-btn {
   justify-self: center;
 }
-.api-access-page {
-  max-width: var(--nb-content-readable);
-  margin-inline: auto;
+/* The key stays in a narrow column beside the client instructions and guides. */
+.api-access-layout,
+.api-access-main {
+  display: grid;
+  gap: var(--nb-space-5);
+  align-items: start;
+  min-width: 0;
+}
+@media (width > 64rem) {
+  .api-access-layout {
+    grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
+  }
+  .api-access-key {
+    position: sticky;
+    top: calc(4.25rem + var(--nb-space-4));
+  }
 }
 .api-access-page .nb-panel > .nb-facts,
 .api-access-page .nb-panel > .nb-note,
