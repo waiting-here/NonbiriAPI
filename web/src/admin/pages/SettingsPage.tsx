@@ -713,7 +713,7 @@ export function SettingsPage() {
     }
     return result;
   }, [authority.data, search]);
-  const catalogLabels = useMemo(
+  const catalogLabels = useMemo<Readonly<Record<string, string>>>(
     () => ({
       charity_model_pricing: t('admin.settings.charityModelPricing'),
       ...Object.fromEntries(

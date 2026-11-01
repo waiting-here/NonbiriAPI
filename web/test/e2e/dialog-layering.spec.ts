@@ -327,13 +327,13 @@ for (const theme of ['light', 'dark'] as const)
       await expect(rules).toBeFocused();
 
       await page.locator('[data-mode="deathmatch"]').click();
-      const join = page.getByRole('button', { name: 'Join Deathmatch queue', exact: true });
-      await join.click();
+      const joinQueue = page.getByRole('button', { name: 'Join Deathmatch queue', exact: true });
+      await joinQueue.click();
       await inspect('.nb-dialog-backdrop', 'rps-deathmatch');
       await cycleFocus(page.getByRole('alertdialog', { name: 'Deathmatch' }));
       await page.keyboard.press('Escape');
       await expect(page.getByRole('alertdialog')).toHaveCount(0);
-      await expect(join).toBeFocused();
+      await expect(joinQueue).toBeFocused();
 
       await page.goto(USER_ORIGIN + '/games/linklink');
       const abandon = page.locator('.linklink-abandon');

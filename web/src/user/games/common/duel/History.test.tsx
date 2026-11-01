@@ -37,8 +37,8 @@ it('returns from the third history page through each visited page', async () => 
     <DuelHistory codec={biddingCodec} onClose={vi.fn()} renderRound={() => null} />,
     { station: 'user', role: 'user' },
   );
-  const next = () => screen.getByRole('button', { name: 'Next page', exact: true });
-  const previous = () => screen.getByRole('button', { name: 'Previous page', exact: true });
+  const next = () => screen.getByRole('button', { name: 'Next page' });
+  const previous = () => screen.getByRole('button', { name: 'Previous page' });
   await screen.findByRole('button', { name: /1 : 0/ });
   expect(previous()).toBeDisabled();
   await view.user.click(next());
@@ -73,7 +73,7 @@ it('returns through round log pages and refreshes the first page', async () => {
     />,
     { station: 'user', role: 'user' },
   );
-  const next = () => screen.getByRole('button', { name: 'Next page', exact: true });
+  const next = () => screen.getByRole('button', { name: 'Next page' });
   await screen.findByText('Log item 1');
   await view.user.click(next());
   await screen.findByText('Log item 2');
