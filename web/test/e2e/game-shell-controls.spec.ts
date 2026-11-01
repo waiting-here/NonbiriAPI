@@ -168,6 +168,24 @@ for (const width of [1440, 768, 390])
             }
           }
         }
+        if (['fishing', 'linklink', 'rps'].includes(game)) {
+          const rules = page.getByRole('button', {
+            name: locale === 'en' ? 'How to play' : '玩法说明',
+            exact: true,
+          });
+          await rules.click();
+          const dialog = page.getByRole('dialog');
+          await expect(dialog).toBeVisible();
+          for (const key of ['Tab', 'Tab', 'Shift+Tab', 'Tab', 'Shift+Tab']) {
+            await page.keyboard.press(key);
+            expect(
+              await dialog.evaluate((element) => element.contains(document.activeElement)),
+            ).toBe(true);
+          }
+          await page.keyboard.press('Escape');
+          await expect(dialog).not.toBeVisible();
+          await expect(rules).toBeFocused();
+        }
         if (game === 'likes' && width === 390) {
           const steps = page.locator('.likes-loadout-step');
           await expect(steps).toHaveCount(4);
@@ -387,7 +405,9 @@ for (const width of [1440, 768, 390])
               { exact: true },
             ),
           ).toBeVisible();
-          await expect(slots.first().locator('.economy-welfare-card .nb-btn--primary')).toBeDisabled();
+          await expect(
+            slots.first().locator('.economy-welfare-card .nb-btn--primary'),
+          ).toBeDisabled();
           await slots.first().locator(':scope > summary').click();
         }
         expect(
@@ -465,7 +485,10 @@ for (const scenario of [
     await page.goto(`${USER_ORIGIN}/games/likes`);
     const header = page.locator('.likes-heading');
     await expect(header.locator('.game-toolbar__button')).toHaveCount(5);
-    const sound = header.getByRole('button', {name: scenario.locale === 'zh' ? '声音' : 'Sound', exact: true});
+    const sound = header.getByRole('button', {
+      name: scenario.locale === 'zh' ? '声音' : 'Sound',
+      exact: true,
+    });
     await sound.focus();
     await sound.press('Space');
     const toggle = page.getByRole('menuitemcheckbox').first();
@@ -474,7 +497,10 @@ for (const scenario of [
     await toggle.press('Space');
     await expect(sound).toBeFocused();
     await sound.press('Space');
-    await expect(page.getByRole('menuitemcheckbox').first()).toHaveAttribute('aria-checked', checked === 'true' ? 'false' : 'true');
+    await expect(page.getByRole('menuitemcheckbox').first()).toHaveAttribute(
+      'aria-checked',
+      checked === 'true' ? 'false' : 'true',
+    );
     await page.keyboard.press('Escape');
     await expect(sound).toBeFocused();
     const rules = header.getByRole('button', {

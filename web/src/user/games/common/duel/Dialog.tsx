@@ -1,3 +1,4 @@
+import './duel.css';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 export function DuelDialog({
@@ -5,19 +6,25 @@ export function DuelDialog({
   onClose,
   children,
   className = '',
+  closeLabel,
+  closeOnBackdrop = false,
 }: {
   readonly title: string;
   readonly onClose: () => void;
   readonly children: ReactNode;
   readonly className?: string;
+  readonly closeLabel?: string;
+  readonly closeOnBackdrop?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
   const titleID = useId();
   const { t } = useTranslation();
   useEffect(() => {
     const previous = document.activeElement;
     const node = dialog.current;
     node?.showModal();
+    closeButton.current?.focus();
     return () => {
       node?.close();
       if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
@@ -28,6 +35,17 @@ export function DuelDialog({
       ref={dialog}
       className={`duel-dialog ${className}`}
       aria-labelledby={titleID}
+      onClick={(event) => {
+        if (!closeOnBackdrop || event.target !== event.currentTarget) return;
+        const bounds = event.currentTarget.getBoundingClientRect();
+        if (
+          event.clientX < bounds.left ||
+          event.clientX > bounds.right ||
+          event.clientY < bounds.top ||
+          event.clientY > bounds.bottom
+        )
+          onClose();
+      }}
       onKeyDown={(event) => {
         if (event.key !== 'Tab') return;
         const items = Array.from(
@@ -52,8 +70,13 @@ export function DuelDialog({
     >
       <header>
         <h2 id={titleID}>{title}</h2>
-        <button type="button" className="nb-btn nb-btn--secondary" onClick={onClose} autoFocus>
-          {t('common.close')}
+        <button
+          ref={closeButton}
+          type="button"
+          className="nb-btn nb-btn--secondary"
+          onClick={onClose}
+        >
+          {closeLabel ?? t('common.close')}
         </button>
       </header>
       <div className="duel-dialog__body">{children}</div>

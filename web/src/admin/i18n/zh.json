@@ -1049,6 +1049,7 @@
       "shell": "珍珠贝",
       "saved": "游戏设置已保存。",
       "save": "保存游戏配置",
+      "saveAllChanges": "保存全部更改",
       "controls": {
         "settings": "游戏设置",
         "revisionTerms": "可同时调整多项，保存后生效；已经开始的游戏继续使用开始时的设置。"

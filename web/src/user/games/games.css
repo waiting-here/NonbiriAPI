@@ -774,3 +774,8 @@
     padding-inline: var(--nb-space-3);
   }
 }
+
+.duel-dialog.game-rules-dialog {
+  width: min(44rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+}

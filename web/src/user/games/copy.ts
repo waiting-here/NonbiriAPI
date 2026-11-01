@@ -85,6 +85,7 @@ const keys = {
   'center.specs': 'user.games.copy.center.specs',
   'center.modes': 'user.games.copy.center.modes',
   'center.modesAll': 'user.games.copy.center.modesAll',
+  'center.reviewCosts': 'user.games.copy.center.reviewCosts',
   'center.firstClearReward': 'user.games.copy.center.firstClearReward',
   'center.winCredits': 'user.games.copy.center.winCredits',
   'center.learn': 'user.games.copy.center.learn',

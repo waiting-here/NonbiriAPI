@@ -1,4 +1,3 @@
-import { OverlayPortal } from '@shared/components/OverlayPortal';
 import { Fold } from '@shared/components/ui/Fold';
 import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -694,45 +693,25 @@ export function LinkLinkGame() {
           {spec ? <GameMoney value={spec.price} /> : null}
         </p>
       </ConfirmDialog>
-      {abandonReview && state ? (
-        <OverlayPortal>
-          <div
-            className="linklink-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="linklink-abandon-title"
-          >
-            <Card>
-              <h2 id="linklink-abandon-title">{text('linklink.abandonTitle')}</h2>
-              <p>{text('linklink.abandonBody')}</p>
-              <div className="game-state-actions">
-                <button
-                  type="button"
-                  className="nb-btn nb-btn--secondary"
-                  onClick={() => setAbandonReview(false)}
-                >
-                  {text('linklink.keep')}
-                </button>
-                <button
-                  type="button"
-                  className="nb-btn nb-btn--danger"
-                  disabled={mutationState !== 'idle' || lease !== 'active'}
-                  onClick={() =>
-                    void execute({
-                      kind: 'abandon',
-                      sessionID: state.sessionID,
-                      revision: state.revision,
-                      key: createIdempotencyKey(),
-                    })
-                  }
-                >
-                  {text('linklink.confirmAbandon')}
-                </button>
-              </div>
-            </Card>
-          </div>
-        </OverlayPortal>
-      ) : null}
+      <ConfirmDialog
+        open={abandonReview && Boolean(state)}
+        title={text('linklink.abandonTitle')}
+        description={text('linklink.abandonBody')}
+        confirmLabel={text('linklink.confirmAbandon')}
+        cancelLabel={text('linklink.keep')}
+        danger
+        confirmDisabled={mutationState !== 'idle' || lease !== 'active'}
+        onCancel={() => setAbandonReview(false)}
+        onConfirm={() => {
+          if (state)
+            void execute({
+              kind: 'abandon',
+              sessionID: state.sessionID,
+              revision: state.revision,
+              key: createIdempotencyKey(),
+            });
+        }}
+      />
       {mutationState === 'unknown' ? (
         <div className="game-inline-notice game-inline-notice--warning" role="alert">
           <p>{text('common.responseUnknown')}</p>

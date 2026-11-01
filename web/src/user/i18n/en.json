@@ -1,5 +1,18 @@
 {
   "user": {
+    "fatFish": {
+      "states": {
+        "prepared": "Ready to start",
+        "active": "Playing",
+        "verifying": "Checking result",
+        "settled_pass": "Passed",
+        "settled_fail": "Not passed",
+        "abandoned": "Abandoned",
+        "expired": "Timed out",
+        "cancelled_refunded": "Cancelled and refunded"
+      },
+      "recordReference": "Record reference"
+    },
     "keys": {
       "nav": "API access"
     },
@@ -204,6 +217,8 @@
           "nextPage": "Next page",
           "yourCompleteGamesFromTheLast30": "Your complete games from the last 30 days.",
           "firstPage": "First page",
+          "previousPage": "Previous page",
+          "pagePosition": "Page {{page}}",
           "verifyRandomness": "Verify randomness",
           "seedDisclosed": "Seed disclosed",
           "openingCommitmentLocked": "Opening commitment locked",
@@ -1280,6 +1295,7 @@
             "body": "Collect fish across four waters, upgrade your gear, and fill your fishing journal."
           },
           "modesAll": "Modes: {{count}}",
+          "reviewCosts": "View play options and costs",
           "firstClearReward": "First-clear reward",
           "winCredits": "Win credits"
         },

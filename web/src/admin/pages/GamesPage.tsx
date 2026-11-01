@@ -568,9 +568,7 @@ function GamesEditor({
               disabled={save.isPending || !changed || !!formError || stale}
               onClick={submit}
             >
-              {text('保存', 'Save ')}
-              {active ? label(active) : ''}
-              {text('设置', ' settings')}
+              {t('admin.games.saveAllChanges')}
             </button>
           </>
         }
