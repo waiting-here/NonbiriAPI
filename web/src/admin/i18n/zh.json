@@ -850,6 +850,10 @@
       "pendingReview": "待审核",
       "approvedProcessing": "正在处理",
       "openReportInbox": "打开举报收件箱",
+      "attentionTitle": "待处理",
+      "donationsPending": "待处理捐赠",
+      "openDonations": "前往处理",
+      "nothingPending": "暂无待处理",
       "generalCheckins": "通用积分签到次数",
       "gameCheckins": "游戏积分签到次数"
     },

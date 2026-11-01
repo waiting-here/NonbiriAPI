@@ -850,6 +850,10 @@
       "pendingReview": "Review",
       "approvedProcessing": "Processing",
       "openReportInbox": "Open report inbox",
+      "attentionTitle": "Needs attention",
+      "donationsPending": "Donations to handle",
+      "openDonations": "Handle donations",
+      "nothingPending": "Nothing to handle",
       "generalCheckins": "General-credit check-ins",
       "gameCheckins": "Game-credit check-ins"
     },

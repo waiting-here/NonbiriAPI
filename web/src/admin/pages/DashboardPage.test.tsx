@@ -14,6 +14,10 @@ vi.mock('../features/operations/reports', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/operations/reports')>()),
   getReportBadge: async () => null,
 }));
+vi.mock('@shared/operations/charity', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@shared/operations/charity')>()),
+  getDonationBadge: async () => ({ pending_count: '4', server_now: 1_800_000_000 }),
+}));
 
 function response(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {

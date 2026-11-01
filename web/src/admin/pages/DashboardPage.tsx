@@ -10,10 +10,36 @@ import {
 } from '../features/operations/core';
 import { adminPageKeys, getAdminEndpointsPage } from '../features/operations/adminPages';
 import { adminReportKeys, getReportBadge } from '../features/operations/reports';
+import { charityKeys, getDonationBadge } from '@shared/operations/charity';
 import { useAdminSession } from '../data';
 import '@shared/operations/operations.css';
 import { Fold } from '@shared/components/ui';
 import './dashboard.css';
+
+/** One queue that may need an administrator, with its count and where to handle it. */
+function AttentionCard({
+  label,
+  count,
+  to,
+  action,
+}: {
+  label: string;
+  count: string | undefined;
+  to: string;
+  action: string;
+}) {
+  const { t } = useTranslation();
+  const waiting = count !== undefined && count !== '0';
+  return (
+    <Link className={`overview-attention__card${waiting ? ' is-waiting' : ''}`} to={to}>
+      <span className="overview-attention__label">{label}</span>
+      <strong className="overview-attention__count">{count ?? '—'}</strong>
+      <span className="overview-attention__action">
+        {count === '0' ? t('admin.dashboard.nothingPending') : action} →
+      </span>
+    </Link>
+  );
+}
 
 function formatSiteDay(day: number | undefined, offsetMinutes: number | undefined): string {
   if (day === undefined || offsetMinutes === undefined) return '—';
@@ -49,6 +75,13 @@ export function DashboardPage() {
     queryFn: ({ signal }) => getReportBadge(signal),
     retry: false,
   });
+  // Shares the sidebar badge's cache entry, so the count needs no extra request.
+  const donations = useQuery({
+    queryKey: charityKeys.badge('admin', account),
+    queryFn: ({ signal }) => getDonationBadge('admin', signal),
+    enabled: Boolean(account) && !session.error,
+    retry: false,
+  });
   const endpointError = session.error ?? endpoints.error;
   const stats = [
     { label: t('admin.dashboard.requests'), value: usage.data?.total_requests },
@@ -59,7 +92,6 @@ export function DashboardPage() {
       value: endpoints.data?.pagination.total_items,
       to: '/endpoints',
     },
-    { label: t('admin.dashboard.nonTerminalReports'), value: reports.data?.total, to: '/reports' },
   ];
   return (
     <div className="page ops-page admin-overview">
@@ -67,6 +99,23 @@ export function DashboardPage() {
         title={t('admin.dashboard.title')}
         description={t('admin.dashboard.description')}
       />
+      <section className="overview-attention" aria-labelledby="overview-attention-title">
+        <h2 id="overview-attention-title">{t('admin.dashboard.attentionTitle')}</h2>
+        <div className="overview-attention__grid">
+          <AttentionCard
+            label={t('admin.dashboard.donationsPending')}
+            count={donations.error ? undefined : donations.data?.pending_count}
+            to="/charity?handling=pending"
+            action={t('admin.dashboard.openDonations')}
+          />
+          <AttentionCard
+            label={t('admin.dashboard.nonTerminalReports')}
+            count={reports.error ? undefined : reports.data?.total}
+            to="/reports"
+            action={t('admin.dashboard.openReportInbox')}
+          />
+        </div>
+      </section>
       <section aria-label={t('admin.dashboard.usageTitle')}>
         <div className="nb-stats">
           {stats.map((stat) => (
