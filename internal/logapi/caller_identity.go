@@ -58,4 +58,6 @@ func scanManagementCommon(scanner rowScanner, extra ...any) (commonLogRecord, *C
 }
 
 // Match the call-time platform name; instr treats SQL wildcard characters literally.
+// Append after scalar and time bounds so index scans skip text normalization
+// for rows outside the requested range.
 const charityModelPredicate = " AND l.route_kind IN " + charityRouteKindsSQL + " AND instr(lower(l.model),lower(?))>0"

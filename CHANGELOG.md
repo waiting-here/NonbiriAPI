@@ -4,6 +4,17 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.3.4 — 2026-11-01
+
+### Improved
+
+- Apply scalar and date bounds before charity-model text matching in administrator
+  and steward request-log lists and exports, reducing work for narrow time windows.
+  Permissions, complete result counts, ordering and query budgets are unchanged.
+- Add management-read regressions and performance cases combining model, date
+  and status filters. Database schema remains 44 and account export remains 31;
+  upgrading from 1.3.3 does not require a database conversion.
+
 ## 1.3.3 — 2026-11-01
 
 ### Added

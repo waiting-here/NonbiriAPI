@@ -213,10 +213,6 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 		query += endpointURLPredicate
 		args = append(args, *filter.EndpointBaseURL)
 	}
-	if filter.CharityModel != nil {
-		query += charityModelPredicate
-		args = append(args, *filter.CharityModel)
-	}
 	if filter.UpstreamModel != nil {
 		query += upstreamModelPredicate
 		args = append(args, *filter.UpstreamModel)
@@ -240,6 +236,10 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 	if filter.To != nil {
 		query += ` AND l.started_at<?`
 		args = append(args, *filter.To)
+	}
+	if filter.CharityModel != nil {
+		query += charityModelPredicate
+		args = append(args, *filter.CharityModel)
 	}
 	if cursor.rowID != 0 {
 		query += ` AND (l.started_at<? OR (l.started_at=? AND l.id<?))`
@@ -359,10 +359,6 @@ func (repository *Repository) ListSteward(
 		query += endpointURLPredicate
 		args = append(args, *filter.EndpointBaseURL)
 	}
-	if filter.CharityModel != nil {
-		query += charityModelPredicate
-		args = append(args, *filter.CharityModel)
-	}
 	if filter.UpstreamModel != nil {
 		query += upstreamModelPredicate
 		args = append(args, *filter.UpstreamModel)
@@ -386,6 +382,10 @@ func (repository *Repository) ListSteward(
 	if filter.To != nil {
 		query += ` AND l.started_at<?`
 		args = append(args, *filter.To)
+	}
+	if filter.CharityModel != nil {
+		query += charityModelPredicate
+		args = append(args, *filter.CharityModel)
 	}
 	if cursor.rowID != 0 {
 		query += ` AND (l.started_at<? OR (l.started_at=? AND l.id<?))`

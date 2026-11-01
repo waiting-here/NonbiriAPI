@@ -76,6 +76,61 @@ func TestCharityModelFilterUsesLiteralHistoricalNameAcrossManagementReads(t *tes
 	}
 }
 
+func TestCharityModelDateAndStatusIntersectionAcrossManagementReads(t *testing.T) {
+	f := newNumberedLogFixture(t)
+	query := "MODEL_%"
+	f.mustExec("UPDATE request_logs SET model='model_%'")
+	f.mustExec("UPDATE request_logs SET route_kind='charity_embeddings' WHERE logical_request_id=?", f.otherID)
+	for _, tc := range []struct {
+		name     string
+		from, to int64
+		status   int
+		want     []string
+	}{
+		{"exclusive end", 200, 400, 0, []string{f.charityID}},
+		{"inclusive start", 400, 401, 0, []string{f.otherID}},
+		{"matching status", 200, 401, 200, []string{f.charityID}},
+		{"status intersection", 200, 401, 201, nil},
+		{"outside range", 600, 700, 200, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			filter := ListFilter{CharityModel: &query, From: &tc.from, To: &tc.to,
+				Page: &pagination.Request{Page: 1, Size: 20}}
+			if tc.status != 0 {
+				filter.Status = &tc.status
+			}
+			admin, err := f.repo.ListAdmin(t.Context(), filter)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ids := make([]string, 0, len(admin.Data))
+			for _, row := range admin.Data {
+				ids = append(ids, row.ID)
+			}
+			if !slices.Equal(ids, tc.want) {
+				t.Fatalf("filtered ids=%v want=%v", ids, tc.want)
+			}
+			requireLogPagination(t, admin.Pagination, 1, 20, int64(len(tc.want)))
+			steward, err := f.repo.ListSteward(t.Context(), 999, filter, allowLogStewardRead{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			requireManagementLogEqual(t, admin, steward)
+			filter.Page = nil
+			exported, err := f.repo.ExportAdmin(t.Context(), filter)
+			if err != nil {
+				t.Fatal(err)
+			}
+			requireManagementLogEqual(t, admin.Data, exported)
+			stewardExport, err := f.repo.ExportSteward(t.Context(), 999, filter, allowLogStewardRead{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			requireManagementLogEqual(t, exported, stewardExport)
+		})
+	}
+}
+
 func TestCharityModelFilterHTTPListExportAndValidation(t *testing.T) {
 	f := newLogFixture(t)
 	f.mustExec("UPDATE request_logs SET model='[Public] Opus_5% test' WHERE logical_request_id=?", f.charityID)

@@ -63,8 +63,8 @@ CREATE INDEX idx_request_logs_retention ON request_logs(completed_at,id);`)
 }
 
 func charityQueryWhere(pattern string, from, to int64) (string, []any) {
-	where := `WHERE (l.completed_at IS NULL OR l.completed_at>?)` + charityModelPredicate
-	args := []any{int64(1_799_000_000), pattern}
+	where := `WHERE (l.completed_at IS NULL OR l.completed_at>?)`
+	args := []any{int64(1_799_000_000)}
 	if from != 0 {
 		where += " AND l.started_at>=?"
 		args = append(args, from)
@@ -73,7 +73,7 @@ func charityQueryWhere(pattern string, from, to int64) (string, []any) {
 		where += " AND l.started_at<?"
 		args = append(args, to)
 	}
-	return where, args
+	return where + charityModelPredicate, append(args, pattern)
 }
 
 func consumeCharityQueryPage(tb testing.TB, database *sql.DB, query string, args []any) []int64 {
@@ -110,13 +110,15 @@ func BenchmarkLogCharityModelFilter(b *testing.B) {
 		}
 		b.Run(mode, func(b *testing.B) {
 			for _, tc := range []struct {
-				name, pattern string
-				total         int64
+				name, pattern   string
+				total, from, to int64
 			}{
-				{"common", "model-001", 800}, {"broad", "provider/", 80_000}, {"absent", "not-present", 0},
+				{"common", "model-001", 800, 0, 0}, {"broad", "provider/", 80_000, 0, 0}, {"absent", "not-present", 0, 0, 0},
+				{"recent_common", "model-001", 16, 1_800_004_900, 1_800_004_950},
+				{"recent_broad", "provider/", 800, 1_800_004_900, 1_800_004_950},
 			} {
 				b.Run(tc.name, func(b *testing.B) {
-					where, args := charityQueryWhere(tc.pattern, 0, 0)
+					where, args := charityQueryWhere(tc.pattern, tc.from, tc.to)
 					countSQL := "SELECT COUNT(*) FROM request_logs l " + where
 					b.Run("count", func(b *testing.B) {
 						for b.Loop() {
