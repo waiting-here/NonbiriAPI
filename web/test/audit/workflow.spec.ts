@@ -1652,7 +1652,7 @@ test('level 5 reviews independent pending sources, retains receipts after refres
           name: decision === 'approve' ? connections.approveAllUses : connections.rejectAllUses,
           exact: true,
         }),
-      ).toBeEnabled();
+      ).toHaveCount(0);
       expect(detailStatuses.every((status) => status === 200)).toBe(true);
       expect(writes).toBe(decision === 'approve' ? 1 : 2);
       const current = await read(admin, state.admin_url, `/admin/api/donations/${donation.id}`);
