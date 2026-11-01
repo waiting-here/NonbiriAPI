@@ -153,7 +153,7 @@
   padding: clamp(1rem, 2.5vw, 1.35rem);
   background: var(--nb-color-surface);
   border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-md);
+  border-radius: var(--nb-radius-card);
   box-shadow: var(--nb-shadow-1);
 }
 
@@ -360,7 +360,7 @@
   display: inline-flex;
   overflow: hidden;
   border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-sm);
+  border-radius: var(--nb-radius-control);
   background: var(--nb-color-surface-raised);
 }
 
@@ -422,7 +422,12 @@
 }
 
 .state-panel,
-.auth-panel,
+.auth-panel {
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-card);
+  background: var(--nb-color-surface);
+}
+
 .inline-notice {
   border: 1px solid var(--nb-color-border);
   border-radius: var(--nb-radius-md);
