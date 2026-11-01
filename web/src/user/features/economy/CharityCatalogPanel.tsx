@@ -452,6 +452,7 @@ export function CharityCatalogPanel({
                   render: (model) => (
                     <CopyValue
                       showValue={false}
+                      variant="secondary"
                       value={model.fullName}
                       label={t('user.charity.modelName')}
                     />
