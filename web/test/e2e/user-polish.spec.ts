@@ -297,9 +297,19 @@ for (const scenario of [
         }
         if (name === 'account') {
           for (const label of await page.locator('.nb-seg label').all()) {
-            expect(await label.evaluate((node) => getComputedStyle(node).whiteSpace)).toBe(
-              'nowrap',
-            );
+            const bounds = await label.boundingBox();
+            expect(bounds).not.toBeNull();
+            expect(bounds!.x).toBeGreaterThanOrEqual(0);
+            expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(scenario.width);
+            expect(
+              await label
+                .locator('span')
+                .evaluate(
+                  (node) =>
+                    node.scrollWidth <= node.clientWidth + 1 &&
+                    node.scrollHeight <= node.clientHeight + 1,
+                ),
+            ).toBe(true);
           }
         }
         expect(

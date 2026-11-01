@@ -82,7 +82,19 @@ test('credit history filters, jumps between stable pages and fits a mobile viewp
       );
       await page.evaluate(() => window.scrollTo(0, 0));
       for (const label of await page.locator('.nb-seg label').all()) {
-        expect(await label.evaluate((node) => getComputedStyle(node).whiteSpace)).toBe('nowrap');
+        const bounds = await label.boundingBox();
+        expect(bounds).not.toBeNull();
+        expect(bounds!.x).toBeGreaterThanOrEqual(0);
+        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+        expect(
+          await label
+            .locator('span')
+            .evaluate(
+              (node) =>
+                node.scrollWidth <= node.clientWidth + 1 &&
+                node.scrollHeight <= node.clientHeight + 1,
+            ),
+        ).toBe(true);
       }
       await page.screenshot({
         path:
