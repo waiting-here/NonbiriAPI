@@ -22,14 +22,16 @@ export function Stepper({
   steps,
   label,
   doneLabel,
+  className = '',
 }: {
   steps: StepperStep[];
   label: string;
   /** Accessible text for the check mark on finished steps. */
   doneLabel: string;
+  className?: string;
 }) {
   return (
-    <ol className="nb-stepper" aria-label={label}>
+    <ol className={`nb-stepper${className ? ` ${className}` : ''}`} aria-label={label}>
       {steps.map((step, index) => (
         <li
           key={step.id}

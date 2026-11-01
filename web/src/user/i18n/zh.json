@@ -48,6 +48,7 @@
       "clientHelp": "模型名填上一步复制的调用名。",
       "clientGuide": "查看填写方法",
       "setupDone": "已完成设置",
+      "stepDone": "已完成",
       "apiAccess": "查看 API 接入",
       "hide": "隐藏",
       "collapseHelp": "完成后清单会自动收起。",

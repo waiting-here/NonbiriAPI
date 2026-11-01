@@ -48,6 +48,7 @@
       "clientHelp": "Use the model name copied in the previous step.",
       "clientGuide": "See client instructions",
       "setupDone": "Setup complete",
+      "stepDone": "Done",
       "apiAccess": "View API access",
       "hide": "Hide",
       "collapseHelp": "This checklist collapses when setup is complete.",

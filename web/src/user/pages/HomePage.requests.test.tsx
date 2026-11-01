@@ -96,8 +96,8 @@ describe('home onboarding requests', () => {
       else
         await waitFor(() =>
           expect(document.querySelectorAll('.home-checklist li')[1]).toHaveAttribute(
-            'data-done',
-            'true',
+            'data-state',
+            'done',
           ),
         );
       expect(calls.filter((path) => path === '/api/charity/models')).toHaveLength(
