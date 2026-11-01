@@ -22,14 +22,16 @@ func (r *InferenceRequest) compileChatResponse(model string, policy contract.Att
 
 func (r *InferenceRequest) compileChatResponseMode(model string, policy contract.AttemptPolicy, gateway bool) ([]byte, error) {
 	object := fieldsByName(r.fields)
-	bad := func() ([]byte, error) {
-		return nil, invalidField("request", "Responses fields cannot be represented by the selected Chat protocol")
+	bad := func(field string) ([]byte, error) {
+		return nil, invalidField(field, "Responses fields cannot be represented by the selected Chat protocol")
 	}
 	for key := range object {
 		switch key {
 		case "model", "input", "instructions", "stream", "store", "background", "tools", "tool_choice", "parallel_tool_calls", "max_output_tokens", "temperature", "top_p", "text":
+		case "reasoning", "include", "truncation", "metadata":
+			return bad(key)
 		default:
-			return bad()
+			return bad("request")
 		}
 	}
 	messages, err := responseChatMessagesMode(object["input"], object["instructions"], gateway)
@@ -46,21 +48,21 @@ func (r *InferenceRequest) compileChatResponseMode(model string, policy contract
 	if raw := object["max_output_tokens"]; raw != nil && !isJSONNull(raw) {
 		var n int64
 		if !decodeNonNegativeInt(raw, &n) || n < 1 || n > math.MaxInt32 {
-			return bad()
+			return bad("max_output_tokens")
 		}
 		out["max_completion_tokens"] = n
 	}
 	for key, max := range map[string]float64{"temperature": 2, "top_p": 1} {
 		if raw := object[key]; raw != nil && !isJSONNull(raw) {
 			if !systemOneNumber(raw, max) {
-				return bad()
+				return bad(key)
 			}
 			out[key] = raw
 		}
 	}
 	if raw := object["parallel_tool_calls"]; raw != nil && !isJSONNull(raw) {
 		if !bytes.Equal(raw, []byte("true")) && !bytes.Equal(raw, []byte("false")) {
-			return bad()
+			return bad("parallel_tool_calls")
 		}
 		out["parallel_tool_calls"] = raw
 	}
@@ -68,14 +70,14 @@ func (r *InferenceRequest) compileChatResponseMode(model string, policy contract
 	if raw := object["tools"]; raw != nil && !isJSONNull(raw) {
 		var tools []json.RawMessage
 		if json.Unmarshal(raw, &tools) != nil || tools == nil || len(tools) > 128 {
-			return bad()
+			return bad("tools")
 		}
 		mapped := []any{}
 		for _, raw := range tools {
 			tool, ok := decisionObject(raw, "type", "name", "description", "parameters", "strict")
 			name, valid := decisionString(tool["name"], 1, 64)
 			if !ok || !valid || !responseFunctionName.MatchString(name) || names[name] || !bytes.Equal(tool["type"], []byte(`"function"`)) || !optionalDecisionString(tool["description"], 0, int(r.RequestBodyLimit()), true) {
-				return bad()
+				return bad("tools")
 			}
 			names[name] = true
 			function := map[string]any{"name": name}
@@ -85,7 +87,7 @@ func (r *InferenceRequest) compileChatResponseMode(model string, policy contract
 			strict := true
 			if raw := tool["strict"]; raw != nil && !isJSONNull(raw) {
 				if json.Unmarshal(raw, &strict) != nil {
-					return bad()
+					return bad("tools")
 				}
 			}
 			params := tool["parameters"]
@@ -94,12 +96,12 @@ func (r *InferenceRequest) compileChatResponseMode(model string, policy contract
 			}
 			schema, ok := systemOneMap(params)
 			if !ok {
-				return bad()
+				return bad("tools")
 			}
 			if tool["strict"] == nil || isJSONNull(tool["strict"]) {
 				schema, ok = strictResponseSchema(schema, 0)
 				if !ok {
-					return bad()
+					return bad("tools")
 				}
 			}
 			function["parameters"] = schema
@@ -111,14 +113,14 @@ func (r *InferenceRequest) compileChatResponseMode(model string, policy contract
 	if raw := object["tool_choice"]; raw != nil && !isJSONNull(raw) {
 		if choice, ok := decisionString(raw, 0, 32); ok {
 			if choice != "auto" && choice != "none" && choice != "required" || choice == "required" && len(names) == 0 {
-				return bad()
+				return bad("tool_choice")
 			}
 			out["tool_choice"] = choice
 		} else {
 			choice, ok := decisionObject(raw, "type", "name")
 			name, _ := decisionString(choice["name"], 1, 64)
 			if !ok || !bytes.Equal(choice["type"], []byte(`"function"`)) || !names[name] {
-				return bad()
+				return bad("tool_choice")
 			}
 			out["tool_choice"] = map[string]any{"type": "function", "function": map[string]string{"name": name}}
 		}
@@ -126,45 +128,45 @@ func (r *InferenceRequest) compileChatResponseMode(model string, policy contract
 	if raw := object["text"]; raw != nil && !isJSONNull(raw) {
 		text, ok := decisionObject(raw, "format")
 		if !ok {
-			return bad()
+			return bad("text")
 		}
 		if format := text["format"]; format != nil && !isJSONNull(format) {
 			value, ok := decisionObject(format, "type", "name", "description", "schema", "strict")
 			if !ok {
-				return bad()
+				return bad("text.format")
 			}
 			kind, _ := decisionString(value["type"], 1, 32)
 			switch kind {
 			case "text", "json_object":
 				if len(value) != 1 {
-					return bad()
+					return bad("text.format")
 				}
 				out["response_format"] = map[string]string{"type": kind}
 			case "json_schema":
 				name, ok := decisionString(value["name"], 1, 64)
 				if !ok || !responseFunctionName.MatchString(name) {
-					return bad()
+					return bad("text.format")
 				}
 				schema, ok := systemOneMap(value["schema"])
 				if !ok {
-					return bad()
+					return bad("text.format")
 				}
 				wrapped := map[string]any{"name": name, "schema": schema}
 				if raw := value["strict"]; raw != nil {
 					if !isJSONNull(raw) && !bytes.Equal(raw, []byte("true")) && !bytes.Equal(raw, []byte("false")) {
-						return bad()
+						return bad("text.format")
 					}
 					wrapped["strict"] = raw
 				}
 				if raw := value["description"]; raw != nil {
 					if !optionalDecisionString(raw, 0, int(r.RequestBodyLimit()), true) {
-						return bad()
+						return bad("text.format")
 					}
 					wrapped["description"] = raw
 				}
 				out["response_format"] = map[string]any{"type": "json_schema", "json_schema": wrapped}
 			default:
-				return bad()
+				return bad("text.format")
 			}
 		}
 	}
@@ -322,7 +324,7 @@ func responseChatMessagesMode(input, instructions []byte, gateway bool) ([]any, 
 	if instructions != nil && !isJSONNull(instructions) {
 		text, ok := decisionString(instructions, 0, int(DefaultMaxJSONResponseBytes))
 		if !ok {
-			return bad()
+			return nil, invalidField("instructions", "Responses fields cannot be represented by the selected Chat protocol")
 		}
 		messages = append(messages, map[string]any{"role": "system", "content": text})
 	}

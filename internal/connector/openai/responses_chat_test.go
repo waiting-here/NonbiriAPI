@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -41,10 +42,30 @@ func TestResponsesChatFiniteCompilation(t *testing.T) {
 }
 
 func TestResponsesChatRejectsUnrepresentableRequests(t *testing.T) {
-	for _, extra := range []string{`"reasoning":{"effort":"low"}`, `"include":["reasoning.encrypted_content"]`, `"truncation":"auto"`, `"metadata":{"x":"y"}`, `"tools":[{"type":"web_search"}]`, `"text":{"verbosity":"low"}`, `"tool_choice":{"type":"allowed_tools","mode":"auto","tools":[]}`} {
-		request := inferenceRequestForTest(t, contract.OperationResponses, `{"model":"m","input":"hi",`+extra+`}`)
-		if request.CheckTarget(contract.TypeOpenAIChatCompletions, contract.AttemptPolicy{}) == nil {
-			t.Fatalf("accepted %s", extra)
+	for _, tc := range []struct{ extra, field string }{
+		{`"reasoning":{"effort":"low"}`, "reasoning"},
+		{`"include":["reasoning.encrypted_content"]`, "include"},
+		{`"truncation":"auto"`, "truncation"},
+		{`"metadata":{"PRIVATE_NAME":"PRIVATE_VALUE"}`, "metadata"},
+		{`"tools":[{"type":"web_search"}]`, "tools"},
+		{`"text":{"verbosity":"low"}`, "text"},
+		{`"text":{"format":{"type":"PRIVATE_FORMAT"}}`, "text.format"},
+		{`"tool_choice":{"type":"allowed_tools","mode":"auto","tools":[]}`, "tool_choice"},
+		{`"max_output_tokens":0`, "max_output_tokens"},
+		{`"temperature":3`, "temperature"},
+		{`"top_p":2`, "top_p"},
+		{`"parallel_tool_calls":"PRIVATE_VALUE"`, "parallel_tool_calls"},
+		{`"instructions":{}`, "instructions"},
+		{`"PRIVATE_OPTION":"PRIVATE_VALUE"`, "request"},
+	} {
+		request := inferenceRequestForTest(t, contract.OperationResponses, `{"model":"m","input":"hi",`+tc.extra+`}`)
+		err := request.CheckTarget(contract.TypeOpenAIChatCompletions, contract.AttemptPolicy{})
+		var validation *ValidationError
+		if !errors.As(err, &validation) || validation.Detail == nil || validation.Detail.Field != tc.field || validation.Detail.Reason != "Responses fields cannot be represented by the selected Chat protocol" {
+			t.Fatalf("wrong conversion detail for %s: %#v, %v", tc.field, validation, err)
+		}
+		if strings.Contains(fmt.Sprint(validation.Detail), "PRIVATE") {
+			t.Fatal("caller values entered conversion detail")
 		}
 		if request.CheckTarget(contract.TypeOpenAICompatible, contract.AttemptPolicy{}) != nil {
 			t.Fatal("native capability restricted by conversion")

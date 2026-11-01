@@ -239,7 +239,7 @@ func compileRequestWithDefaultResolver(request *openai.ChatRequest, upstreamMode
 		clear(temperature)
 		clear(topP)
 		clearTools(tools)
-		return nil, ErrInvalidRequest
+		return nil, describeInvalid(err, "parallel_tool_calls", "expected a boolean or null")
 	}
 	if parallelPresent && !parallel && len(tools) > 0 && !omitTools {
 		if choice == nil {
