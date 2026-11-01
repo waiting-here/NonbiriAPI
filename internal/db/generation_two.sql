@@ -544,7 +544,7 @@ CREATE INDEX idx_request_attempts_log_seq ON request_attempts(request_log_id,att
 CREATE INDEX idx_request_attempts_key_log ON request_attempts(endpoint_key_id_snapshot,request_log_id);
 CREATE INDEX idx_request_attempts_endpoint_log ON request_attempts(canonical_base_url,request_log_id);
 CREATE INDEX idx_request_attempts_model_log ON request_attempts(upstream_model_id,request_log_id);
-CREATE INDEX idx_request_logs_charity_model ON request_logs(route_kind,model,completed_at,id) WHERE route_kind IN ('charity_chat_completions','charity_embeddings','charity_images_generations','charity_decisions','charity_responses','charity_responses_compact','charity_responses_input_tokens','charity_completions','charity_images_edits','charity_images_variations','charity_audio_speech','charity_audio_transcriptions','charity_audio_translations','charity_moderations','charity_rerank','charity_systemone');
+CREATE INDEX idx_request_logs_charity_model ON request_logs(route_kind,model,completed_at,id,started_at) WHERE route_kind IN ('charity_chat_completions','charity_embeddings','charity_images_generations','charity_decisions','charity_responses','charity_responses_compact','charity_responses_input_tokens','charity_completions','charity_images_edits','charity_images_variations','charity_audio_speech','charity_audio_transcriptions','charity_audio_translations','charity_moderations','charity_rerank','charity_systemone');
 CREATE INDEX idx_request_attempts_started ON request_attempts(started_at);
 CREATE INDEX idx_request_attempts_retention ON request_attempts(completed_at,request_log_id,attempt_seq) WHERE completed_at IS NOT NULL;
 CREATE TABLE worker_checkpoints (worker_key TEXT NOT NULL PRIMARY KEY, cursor_text TEXT NOT NULL DEFAULT '', generation INTEGER NOT NULL CHECK(generation BETWEEN 0 AND 9223372036854775807), attempt_count INTEGER NOT NULL CHECK(attempt_count BETWEEN 0 AND 2147483647), next_attempt_at INTEGER NOT NULL CHECK(next_attempt_at BETWEEN 0 AND 253402300799), last_error_class TEXT NOT NULL DEFAULT '' CHECK(last_error_class IN ('','db_busy','internal_retryable','invariant_violation')), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799), last_success_at INTEGER CHECK(last_success_at IS NULL OR (typeof(last_success_at)='integer' AND last_success_at BETWEEN 0 AND 253402300799 AND last_success_at<=updated_at)));
@@ -6491,7 +6491,7 @@ CREATE TABLE schema_state (
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,43);
+INSERT INTO schema_state(id,version) VALUES(1,44);
 
 CREATE TABLE game_ai_settings (
  game_key TEXT PRIMARY KEY NOT NULL,

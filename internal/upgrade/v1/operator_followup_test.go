@@ -12,6 +12,7 @@ import (
 
 func restoreSchema42LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema43LayoutForTest(t, database)
 	hostileMustExec(t, database, `DROP TABLE agent_operation_diagnostics;
 DROP TRIGGER management_capture_donation_service_health_insert;
 DROP TRIGGER management_capture_donation_service_health_update;
@@ -49,7 +50,7 @@ func TestOperatorFollowupSchema42UpgradeIsAdditiveAndAtomic(t *testing.T) {
 		t.Fatal("schema42 started without explicit upgrade")
 	}
 	checked, err := Run(t.Context(), path, vault, Options{})
-	if err != nil || checked.Status != "ready" || checked.SourceSchemaVersion != 42 || checked.TargetSchemaVersion != 43 {
+	if err != nil || checked.Status != "ready" || checked.SourceSchemaVersion != 42 || checked.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal("check", checked, err)
 	}
 	checkSource()
@@ -80,7 +81,7 @@ func TestOperatorFollowupSchema42UpgradeIsAdditiveAndAtomic(t *testing.T) {
 		checkSource()
 	}
 	result, err := Run(t.Context(), path, vault, Options{Apply: true})
-	if err != nil || result.Status != "converted" || result.SourceSchemaVersion != 42 || result.TargetSchemaVersion != 43 {
+	if err != nil || result.Status != "converted" || result.SourceSchemaVersion != 42 || result.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal("apply", result, err)
 	}
 	store, err = db.Open(path, vault)
