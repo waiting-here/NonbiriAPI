@@ -11,7 +11,7 @@ export function LogsPage() {
   return (
     <div className="page ops-stack">
       <PageHeader
-        eyebrow={t('admin.navigation.operations')}
+        eyebrow={t('admin.navigation.records')}
         title={t('admin.logs.logsTitle')}
         description={t('admin.logs.description')}
       />

@@ -33,7 +33,7 @@ export function serviceCopy(locale: ServiceLocale = 'en') {
 }
 export function servicePanel(page: Page, locale: ServiceLocale = 'en', addingEntry = false) {
   const copy = (locale === 'zh' ? commonZh : commonEn).common.connections;
-  return page.getByRole('region', {
+  return page.getByRole('dialog', {
     name: addingEntry ? copy.addEntry : serviceCopy(locale).addService,
     exact: true,
   });

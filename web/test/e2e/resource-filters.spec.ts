@@ -145,19 +145,20 @@ for (const locale of ['en', 'zh'] as const) {
     ).toBeVisible();
     expect(new URL(page.url()).searchParams.get('connection_id')).toBe('19');
     expect(new URL(page.url()).searchParams.get('connection_view')).toBe('entries');
-    const endpointPicker = page.getByRole('combobox', {
-      name: locale === 'en' ? 'Endpoint' : '端点',
+    const endpointPicker = page.getByRole('group', {
+      name: locale === 'en' ? 'Endpoints' : '端点',
       exact: true,
     });
     const endpointPagination = endpointPicker.locator(
-      'xpath=../following-sibling::nav[contains(@class,"page-pagination")]',
+      'xpath=following-sibling::nav[contains(@class,"page-pagination")]',
     );
+    const chosenEntry = endpointPicker.locator('[aria-pressed="true"]');
     await endpointPagination
       .getByRole('combobox', {
         name: locale === 'en' ? 'Items per page' : '每页条数',
       })
       .selectOption('10');
-    await expect(endpointPicker).toHaveValue('1');
+    await expect(chosenEntry).toHaveAttribute('data-entry-id', '1');
     await endpointPagination
       .getByRole('button', {
         name: locale === 'en' ? 'Next' : '下一页',
@@ -167,7 +168,7 @@ for (const locale of ['en', 'zh'] as const) {
     await expect
       .poll(() => new URL(page.url()).searchParams.get('service-endpoint-switch_page'))
       .toBe('2');
-    await endpointPicker.selectOption('19');
+    await endpointPicker.locator('[data-entry-id="19"]').click();
     await expect(
       page.getByRole('heading', { name: 'Needle resource 19', exact: true }),
     ).toBeVisible();
@@ -218,10 +219,10 @@ for (const locale of ['en', 'zh'] as const) {
       .toBeLessThan(100);
     await page.goBack();
     await expect(page).toHaveURL(filteredURL);
-    await expect(endpointPicker).toHaveValue('19');
+    await expect(chosenEntry).toHaveAttribute('data-entry-id', '19');
     await expect(keyFilters.getByRole('searchbox')).toHaveValue('masked-tail');
     await page.reload();
-    await expect(endpointPicker).toHaveValue('19');
+    await expect(chosenEntry).toHaveAttribute('data-entry-id', '19');
     await expect(
       endpointPagination.getByRole('combobox', {
         name: locale === 'en' ? 'Items per page' : '每页条数',
@@ -230,8 +231,8 @@ for (const locale of ['en', 'zh'] as const) {
     await expect(keyFilters.getByRole('searchbox')).toHaveValue('masked-tail');
     expect(new URL(page.url()).searchParams.get('service-endpoint-switch_page')).toBe('2');
     expect(new URL(page.url()).searchParams.get('service-endpoint-switch_page_size')).toBe('10');
-    await endpointPicker.selectOption('20');
-    await expect(endpointPicker).toHaveValue('20');
+    await endpointPicker.locator('[data-entry-id="20"]').click();
+    await expect(chosenEntry).toHaveAttribute('data-entry-id', '20');
     await expect(
       page.getByRole('heading', { name: 'Needle resource 20', exact: true }),
     ).toBeVisible();
@@ -241,7 +242,7 @@ for (const locale of ['en', 'zh'] as const) {
     ).toBe(false);
     await page.goBack();
     await expect(page).toHaveURL(filteredURL);
-    await expect(endpointPicker).toHaveValue('19');
+    await expect(chosenEntry).toHaveAttribute('data-entry-id', '19');
     await expect(keyFilters.getByRole('searchbox')).toHaveValue('masked-tail');
     await backToServices.click();
     await expect(connectionList.getByRole('searchbox')).toHaveValue('Needle');

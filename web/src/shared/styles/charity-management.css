@@ -120,6 +120,22 @@
   grid-template-columns: minmax(24rem, 1fr) minmax(0, 1.2fr);
   align-items: start;
 }
+/* The review decision stays reachable at the bottom of the screen inside its card. */
+.charity-review-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--nb-z-sticky);
+  margin-inline: calc(-1 * var(--nb-space-3));
+  padding: var(--nb-space-3);
+  border-top: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-control);
+  background: color-mix(in srgb, var(--nb-color-surface) 94%, transparent);
+  backdrop-filter: blur(8px);
+}
+.charity-review-actions .nb-form-actions,
+.charity-review-actions > * {
+  margin: 0;
+}
 .charity-donation-summary {
   display: grid;
   gap: var(--nb-space-1);

@@ -7,6 +7,7 @@ import { CharityCatalogPanel } from './CharityCatalogPanel';
 afterEach(() => {
   vi.unstubAllGlobals();
   window.localStorage.removeItem('nonbiri:user:charity-catalog-page-size:v1');
+  window.sessionStorage.removeItem('nb.fold.charity-catalog-filters');
 });
 
 const SERVER_NOW = 1_800_000_000;
@@ -143,8 +144,14 @@ describe('charity catalog panel', () => {
       },
     );
     await screen.findByText('22 items');
-    expect(screen.getByLabelText('Currently available')).toBeVisible();
-    expect(screen.queryByText(/^Filters/, { selector: 'summary' })).not.toBeInTheDocument();
+    // Filters start folded; the summary counts the applied ones, which also stay as chips.
+    const more = screen.getByText(/^More filters · 1$/, { selector: 'summary' });
+    expect(screen.getByLabelText('Currently available')).not.toBeVisible();
+    expect(screen.getByRole('button', { name: /Remove/ })).toBeVisible();
+    act(() => {
+      fireEvent.click(more);
+    });
+    await waitFor(() => expect(screen.getByLabelText('Currently available')).toBeVisible());
 
     act(() => {
       fireEvent.change(screen.getByLabelText('Currently available'), { target: { value: 'all' } });

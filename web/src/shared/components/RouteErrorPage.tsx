@@ -4,9 +4,7 @@ import { Link, useRouteError } from 'react-router';
 import { isApiError, isForbidden, isNotFoundError } from '@shared/query/http';
 import { usePublicConfig } from '@shared/query/publicConfig';
 import { routePath } from '@shared/routing/routeRegistry';
-import errorStateURL from '@shared/assets/state-error.svg';
-import emptyStateURL from '@shared/assets/state-empty.svg';
-import maintenanceStateURL from '@shared/assets/state-maintenance.svg';
+import { Illustration } from './Illustration';
 import { PublicShell } from './PublicShell';
 import { LoginRestrictions } from './AutomaticRestrictions';
 
@@ -95,17 +93,9 @@ export function RouteErrorPage({
   const body = (
     <section className="page nb-standalone-state" data-error-kind={kind}>
       <div className="nb-state nb-state--error">
-        <span className="nb-state__icon">
-          <img
-            className="nb-state__illustration"
-            src={
-              kind === '404'
-                ? emptyStateURL
-                : kind === 'maintenance'
-                  ? maintenanceStateURL
-                  : errorStateURL
-            }
-            alt=""
+        <span className="nb-state__icon nb-state__art" aria-hidden="true">
+          <Illustration
+            name={kind === '404' ? 'search' : kind === 'maintenance' ? 'maintenance' : 'error'}
           />
         </span>
         <div>

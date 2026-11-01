@@ -1,9 +1,11 @@
 # Local visual assets
 
-`nonbiri-mark.svg`, `state-empty.svg`, `state-error.svg`,
-`state-maintenance.svg`, the inline SVG paths in
-`web/src/shared/components/Icon.tsx`, and the six WebP illustrations in
+`nonbiri-mark.svg`, the cloud state illustrations in
+`web/src/shared/components/Illustration.tsx`, the game icon paths in
+`web/src/shared/components/iconPaths.ts`, and the six WebP illustrations in
 `game-heroes/` are original, project-created visual assets for NonbiriAPI.
+The station icons in `web/src/shared/components/Icon.tsx` adapt Lucide path
+data; their licence is recorded in [icons/NOTICE.md](icons/NOTICE.md).
 The game illustrations were generated with assistance from ChatGPT, then
 selected and prepared for this project. They contain no embedded third-party
 artwork, fonts, or runtime network dependency and are distributed under the

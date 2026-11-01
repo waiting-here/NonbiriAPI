@@ -1,58 +1,110 @@
 /*
  * NonbiriAPI design tokens
  *
- * This file is the only CSS source of truth for visual primitives. Keep the
- * legacy aliases at the bottom of each group while the existing alpha pages
- * migrate to the `.nb-*` component vocabulary.
+ * This file is the only CSS source of truth for visual primitives. It has three layers:
+ *
+ * 1. Palette (--nb-palette-*): raw warm-neutral, teal, apricot and leaf steps. Components
+ *    never read the palette directly.
+ * 2. Roles (--nb-color-*): what a colour is for. The default light and dark themes map roles
+ *    to the palette. Account appearances may override only the "appearance contract" roles:
+ *      bg, surface, surface-raised, surface-muted, surface-emphasis, surface-alt,
+ *      text, text-muted, text-subtle, border, border-strong,
+ *      accent, accent-hover, accent-soft, accent-quiet, accent-contrast, elevation-1.
+ *    Semantic status colours, highlight, radii, type and spacing stay fixed so meaning and
+ *    readability do not depend on the selected artwork.
+ * 3. Derived (focus ring, brand gradient, navigation, table and scrim colours): computed with
+ *    color-mix() from contract roles, so every appearance follows automatically.
+ *
+ * Adding a colour: derive it from contract roles, or add it to the contract and provide
+ * light and dark values for the default theme and every appearance, then rerun the strict
+ * appearance contrast audit. Canvas charts read role tokens, so roles stay plain colours.
+ *
+ * Legacy aliases at the end of the first block remain for pages that have not migrated.
  */
 :root {
   color-scheme: light;
 
-  /* Surfaces and ink */
-  --nb-color-bg: #f3f7fb;
-  --nb-color-surface: #ffffff;
-  --nb-color-surface-raised: #ffffff;
-  --nb-color-surface-muted: #edf3f8;
-  --nb-color-surface-emphasis: #e3edf8;
-  --nb-color-border: #d8e2ec;
-  --nb-color-border-strong: #b9c9d9;
-  --nb-color-text: #172536;
-  --nb-color-text-muted: #607084;
-  --nb-color-text-subtle: #7c8a9a;
+  /* Palette: warm neutrals ("sand"), teal accent, apricot highlight, leaf success. */
+  --nb-palette-sand-0: #ffffff;
+  --nb-palette-sand-25: #fffefb;
+  --nb-palette-sand-50: #faf8f4;
+  --nb-palette-sand-100: #f6f4ef;
+  --nb-palette-sand-150: #f0ede6;
+  --nb-palette-sand-200: #e9e4da;
+  --nb-palette-sand-250: #e4ded3;
+  --nb-palette-sand-300: #cbc2b3;
+  --nb-palette-sand-500: #7a7164;
+  --nb-palette-sand-600: #5c554a;
+  --nb-palette-sand-900: #26231e;
+  --nb-palette-ink-100: #f1ede5;
+  --nb-palette-ink-300: #bdb4a6;
+  --nb-palette-ink-400: #9d9486;
+  --nb-palette-ink-600: #57514a;
+  --nb-palette-ink-700: #37332d;
+  --nb-palette-ink-750: #302d28;
+  --nb-palette-ink-800: #282622;
+  --nb-palette-ink-850: #24221e;
+  --nb-palette-ink-875: #22201c;
+  --nb-palette-ink-900: #1f1d1a;
+  --nb-palette-ink-950: #161513;
+  --nb-palette-teal-50: #eff6f3;
+  --nb-palette-teal-100: #dfeee9;
+  --nb-palette-teal-300: #a6e0d5;
+  --nb-palette-teal-400: #7fcfc1;
+  --nb-palette-teal-700: #1d6b62;
+  --nb-palette-teal-800: #165850;
+  --nb-palette-teal-900: #1f3b37;
+  --nb-palette-teal-950: #192c29;
+  --nb-palette-teal-ink: #0e2b27;
+  --nb-palette-apricot-100: #f9eadb;
+  --nb-palette-apricot-300: #f0b27c;
+  --nb-palette-apricot-700: #8a4512;
+  --nb-palette-apricot-900: #44301d;
+  --nb-palette-leaf-100: #e6f1dc;
+  --nb-palette-leaf-300: #8fd18a;
+  --nb-palette-leaf-700: #2a5e1e;
+  --nb-palette-leaf-900: #22401f;
+
+  /* Surfaces and ink (appearance contract roles) */
+  --nb-color-bg: var(--nb-palette-sand-100);
+  --nb-color-surface: var(--nb-palette-sand-25);
+  --nb-color-surface-raised: var(--nb-palette-sand-0);
+  --nb-color-surface-muted: var(--nb-palette-sand-150);
+  --nb-color-surface-emphasis: var(--nb-palette-sand-200);
+  --nb-color-border: var(--nb-palette-sand-250);
+  --nb-color-border-strong: var(--nb-palette-sand-300);
+  --nb-color-text: var(--nb-palette-sand-900);
+  --nb-color-text-muted: var(--nb-palette-sand-600);
+  --nb-color-text-subtle: var(--nb-palette-sand-500);
   --nb-color-on-accent: #ffffff;
   --nb-color-on-danger: #ffffff;
   --nb-color-accent-contrast: #ffffff;
-  --nb-color-surface-alt: #f8fafc;
+  --nb-color-surface-alt: var(--nb-palette-sand-50);
 
-  /* Brand and semantic accents */
-  --nb-color-accent: #215cdf;
-  --nb-color-accent-hover: #1d4ed8;
-  --nb-color-accent-soft: #e7efff;
-  --nb-color-accent-quiet: #f1f5ff;
-  --nb-color-brand-start: #2563eb;
-  --nb-color-brand-end: #7c3aed;
-  --nb-brand-gradient: linear-gradient(
-    135deg,
-    var(--nb-color-brand-start),
-    var(--nb-color-brand-end)
-  );
+  /* Accent (appearance contract roles) and fixed highlight */
+  --nb-color-accent: var(--nb-palette-teal-700);
+  --nb-color-accent-hover: var(--nb-palette-teal-800);
+  --nb-color-accent-soft: var(--nb-palette-teal-100);
+  --nb-color-accent-quiet: var(--nb-palette-teal-50);
+  /* Highlight marks credits, rewards and new content; it is not a second action colour. */
+  --nb-color-highlight: var(--nb-palette-apricot-700);
+  --nb-color-highlight-soft: var(--nb-palette-apricot-100);
   /* Semantic ink holds 4.5:1 on its soft fill, plain white and the weakest cosmetic glass. */
-  --nb-color-success: #0a6140;
-  --nb-color-success-soft: #e5f7ee;
+  --nb-color-success: var(--nb-palette-leaf-700);
+  --nb-color-success-soft: var(--nb-palette-leaf-100);
   --nb-color-warning: #7d4b00;
-  --nb-color-warning-soft: #fff2d9;
+  --nb-color-warning-soft: #fdf0d8;
   --nb-color-danger: #a32a3b;
   --nb-color-danger-hover: #8c2232;
-  --nb-color-danger-soft: #ffeaee;
+  --nb-color-danger-soft: #fdeae8;
   --nb-color-info: #0e5a8f;
-  --nb-color-info-soft: #e5f3fc;
+  --nb-color-info-soft: #e6f1f9;
   --nb-color-violet: #694095;
   --nb-color-violet-soft: #f1eafb;
   --nb-color-teal: #08676b;
   --nb-color-teal-soft: #e0f4f1;
   --nb-color-rose: #973760;
   --nb-color-rose-soft: #fbe8f1;
-  --nb-color-focus: #7c3aed;
 
   /* Four-point spacing scale */
   --nb-space-0: 0;
@@ -68,10 +120,15 @@
   --nb-space-12: 3rem;
   --nb-space-16: 4rem;
 
-  /* Typography */
+  /*
+   * Typography. Inter (self-hosted, Latin subsets) sets Latin text and figures; Chinese uses
+   * the platform's CJK UI font. base.css keeps CJK punctuation on the CJK font.
+   */
   --nb-font-sans:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --nb-font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+    'Inter Variable', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei',
+    'Noto Sans CJK SC', 'Source Han Sans SC', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --nb-font-mono:
+    ui-monospace, 'SFMono-Regular', 'Cascadia Mono', Consolas, 'Liberation Mono', monospace;
   --nb-font-size-xs: 0.75rem;
   --nb-font-size-sm: 0.875rem;
   --nb-font-size-md: 1rem;
@@ -79,9 +136,9 @@
   --nb-font-size-xl: 1.25rem;
   --nb-font-size-2xl: 1.75rem;
   --nb-font-size-hero: clamp(2rem, 4vw, 3rem);
-  --nb-line-tight: 1.2;
-  --nb-line-normal: 1.5;
-  --nb-line-relaxed: 1.7;
+  --nb-line-tight: 1.25;
+  --nb-line-normal: 1.6;
+  --nb-line-relaxed: 1.75;
   --nb-font-weight-regular: 400;
   --nb-font-weight-medium: 500;
   --nb-font-weight-semibold: 600;
@@ -93,16 +150,19 @@
   --nb-radius-md: 0.75rem;
   --nb-radius-lg: 1rem;
   --nb-radius-xl: 1.25rem;
+  --nb-radius-2xl: 1.5rem;
   --nb-radius-pill: 999px;
+  /* Controls (buttons, inputs, selects) and cards use these two shapes everywhere. */
+  --nb-radius-control: 0.625rem;
+  --nb-radius-card: 1rem;
   --nb-elevation-0: none;
-  --nb-elevation-1: 0 1px 2px rgb(31 52 73 / 0.08), 0 4px 12px rgb(31 52 73 / 0.04);
-  --nb-elevation-2: 0 10px 30px rgb(31 52 73 / 0.12), 0 2px 8px rgb(31 52 73 / 0.06);
-  --nb-elevation-overlay: 0 18px 48px rgb(31 52 73 / 0.18);
+  --nb-elevation-1: 0 1px 2px rgb(60 46 26 / 0.05), 0 6px 18px rgb(60 46 26 / 0.05);
+  --nb-elevation-2: 0 14px 34px rgb(60 46 26 / 0.1), 0 2px 8px rgb(60 46 26 / 0.05);
+  --nb-elevation-overlay: 0 24px 60px rgb(40 30 16 / 0.2);
   --nb-motion-micro: 120ms;
   --nb-motion-standard: 200ms;
   --nb-motion-scene: 400ms;
   --nb-motion-ease: cubic-bezier(0.2, 0.65, 0.3, 1);
-  --nb-focus-ring: 0 0 0 3px rgb(124 58 237 / 0.28);
 
   /* Layout and layering */
   --nb-content-readable: 62rem;
@@ -114,6 +174,10 @@
   --nb-z-overlay: 60;
   --nb-z-dialog: 80;
   --nb-z-toast: 100;
+
+  /* Fixed scrims: a warm dark veil in both themes. */
+  --nb-color-scrim: rgb(24 20 14 / 0.52);
+  --nb-color-scrim-soft: rgb(24 20 14 / 0.32);
 
   /* Local preferences are changed by ThemeProvider data attributes. */
   --nb-density-factor: 1;
@@ -143,35 +207,63 @@
   --nb-content-width: var(--nb-content-readable);
 }
 
+/*
+ * Derived tokens. Every value here is computed from appearance contract roles, so account
+ * appearances and dark mode follow without their own entries. Do not override these in an
+ * appearance; change the contract roles instead.
+ */
+:root {
+  --nb-color-focus: var(--nb-color-accent);
+  --nb-focus-ring: 0 0 0 3px color-mix(in srgb, var(--nb-color-accent) 34%, transparent);
+  --nb-color-brand-start: var(--nb-color-accent);
+  --nb-color-brand-end: color-mix(in oklab, var(--nb-color-accent) 70%, var(--nb-color-text));
+  --nb-brand-gradient: linear-gradient(
+    135deg,
+    var(--nb-color-brand-start),
+    var(--nb-color-brand-end)
+  );
+  --nb-color-nav-hover: color-mix(in srgb, var(--nb-color-accent-soft) 55%, transparent);
+  --nb-color-nav-active: var(--nb-color-accent-soft);
+  --nb-color-sidebar: color-mix(in srgb, var(--nb-color-surface-muted) 55%, var(--nb-color-bg));
+  --nb-color-table-head: color-mix(in srgb, var(--nb-color-surface-muted) 70%, transparent);
+  --nb-color-row-hover: color-mix(in srgb, var(--nb-color-accent-quiet) 80%, transparent);
+  --nb-color-skeleton: var(--nb-color-surface-muted);
+  --nb-color-skeleton-shine: var(--nb-color-surface-emphasis);
+  --nb-color-shell-glow: color-mix(in srgb, var(--nb-color-accent) 9%, transparent);
+  --nb-color-control-border: var(--nb-color-border-strong);
+  --nb-color-disabled-bg: var(--nb-color-surface-muted);
+  --nb-color-disabled-text: color-mix(in srgb, var(--nb-color-text-muted) 80%, transparent);
+}
+
 [data-theme='dark'] {
   color-scheme: dark;
-  --nb-color-bg: #101923;
-  --nb-color-surface: #172330;
-  --nb-color-surface-raised: #1d2c3c;
-  --nb-color-surface-muted: #1b2938;
-  --nb-color-surface-emphasis: #23374c;
-  --nb-color-border: #2d4052;
-  --nb-color-border-strong: #486075;
-  --nb-color-text: #eef5fb;
-  --nb-color-text-muted: #b2c1d0;
-  --nb-color-text-subtle: #8fa2b5;
+  --nb-color-bg: var(--nb-palette-ink-950);
+  --nb-color-surface: var(--nb-palette-ink-900);
+  --nb-color-surface-raised: var(--nb-palette-ink-800);
+  --nb-color-surface-muted: var(--nb-palette-ink-850);
+  --nb-color-surface-emphasis: var(--nb-palette-ink-750);
+  --nb-color-border: var(--nb-palette-ink-700);
+  --nb-color-border-strong: var(--nb-palette-ink-600);
+  --nb-color-text: var(--nb-palette-ink-100);
+  --nb-color-text-muted: var(--nb-palette-ink-300);
+  --nb-color-text-subtle: var(--nb-palette-ink-400);
   --nb-color-on-accent: #ffffff;
-  --nb-color-on-danger: #111827;
+  --nb-color-on-danger: #1a1310;
   /*
    * Dark mode separates the link accent from filled-control colors. The
    * former is deliberately light enough to read on dark surfaces; the
-   * latter is dark ink for the light-blue primary control background.
+   * latter is dark ink for the light primary control background.
    */
-  --nb-color-accent-contrast: #111827;
-  --nb-color-surface-alt: #1d2a38;
-  --nb-color-accent: #8bb5ff;
-  --nb-color-accent-hover: #b4cdff;
-  --nb-color-accent-soft: #233a65;
-  --nb-color-accent-quiet: #1b2b49;
-  --nb-color-brand-start: #3f6fd8;
-  --nb-color-brand-end: #7049b8;
-  --nb-color-success: #64d19e;
-  --nb-color-success-soft: #1c4637;
+  --nb-color-accent-contrast: var(--nb-palette-teal-ink);
+  --nb-color-surface-alt: var(--nb-palette-ink-875);
+  --nb-color-accent: var(--nb-palette-teal-400);
+  --nb-color-accent-hover: var(--nb-palette-teal-300);
+  --nb-color-accent-soft: var(--nb-palette-teal-900);
+  --nb-color-accent-quiet: var(--nb-palette-teal-950);
+  --nb-color-highlight: var(--nb-palette-apricot-300);
+  --nb-color-highlight-soft: var(--nb-palette-apricot-900);
+  --nb-color-success: var(--nb-palette-leaf-300);
+  --nb-color-success-soft: var(--nb-palette-leaf-900);
   --nb-color-warning: #ffca68;
   --nb-color-warning-soft: #4a371d;
   --nb-color-danger: #ff9aa8;
@@ -185,11 +277,11 @@
   --nb-color-teal-soft: #1d4446;
   --nb-color-rose: #ffacd0;
   --nb-color-rose-soft: #4e2c40;
-  --nb-color-focus: #c1a6ff;
-  --nb-elevation-1: 0 1px 2px rgb(0 0 0 / 0.28), 0 4px 12px rgb(0 0 0 / 0.18);
-  --nb-elevation-2: 0 12px 32px rgb(0 0 0 / 0.32), 0 2px 8px rgb(0 0 0 / 0.2);
-  --nb-elevation-overlay: 0 18px 48px rgb(0 0 0 / 0.45);
-  --nb-focus-ring: 0 0 0 3px rgb(193 166 255 / 0.34);
+  --nb-elevation-1: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 18px rgb(0 0 0 / 0.2);
+  --nb-elevation-2: 0 14px 34px rgb(0 0 0 / 0.34), 0 2px 8px rgb(0 0 0 / 0.22);
+  --nb-elevation-overlay: 0 24px 60px rgb(0 0 0 / 0.5);
+  --nb-color-scrim: rgb(0 0 0 / 0.6);
+  --nb-color-scrim-soft: rgb(0 0 0 / 0.4);
 }
 
 [data-density='compact'] {

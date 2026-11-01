@@ -1,0 +1,93 @@
+.nb-illustration {
+  display: block;
+  width: 7.5rem;
+  height: auto;
+  overflow: visible;
+}
+
+.nb-illustration__shadow {
+  fill: color-mix(in srgb, var(--nb-color-accent) 12%, transparent);
+}
+
+.nb-illustration__cloud {
+  fill: var(--nb-color-surface-raised);
+  stroke: var(--nb-color-accent);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+
+.nb-illustration__blush {
+  fill: color-mix(in srgb, var(--nb-color-highlight) 22%, transparent);
+}
+
+.nb-illustration__ink,
+.nb-illustration__soft-ink,
+.nb-illustration__tool,
+.nb-illustration__ok,
+.nb-illustration__warn,
+.nb-illustration__sun path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.4;
+}
+
+.nb-illustration__ink {
+  stroke: var(--nb-color-text);
+}
+
+.nb-illustration__ink-fill {
+  fill: var(--nb-color-text);
+}
+
+.nb-illustration__soft-ink {
+  stroke: var(--nb-color-text-subtle);
+  stroke-width: 2;
+}
+
+.nb-illustration__tool {
+  stroke: var(--nb-color-accent);
+  stroke-width: 3;
+}
+
+.nb-illustration__tool circle {
+  fill: var(--nb-color-accent-quiet);
+  stroke: var(--nb-color-accent);
+  stroke-width: 3;
+}
+
+.nb-illustration__glyph path {
+  fill: var(--nb-color-accent-soft);
+  stroke: var(--nb-color-accent);
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+
+.nb-illustration__ok-fill {
+  fill: var(--nb-color-success-soft);
+}
+
+.nb-illustration__ok {
+  stroke: var(--nb-color-success);
+  stroke-width: 2.6;
+}
+
+.nb-illustration__warn-fill {
+  fill: var(--nb-color-warning-soft);
+}
+
+.nb-illustration__warn {
+  stroke: var(--nb-color-warning);
+  stroke-width: 2.8;
+}
+
+.nb-illustration__sun circle {
+  fill: var(--nb-color-highlight-soft);
+  stroke: var(--nb-color-highlight);
+  stroke-width: 2;
+}
+
+.nb-illustration__sun path {
+  stroke: var(--nb-color-highlight);
+  stroke-width: 2;
+}

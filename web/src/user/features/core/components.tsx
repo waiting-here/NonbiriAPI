@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useState, type ReactNode } from 'react';
 import { AuthRequired } from '@shared/components/States';
 import { Icon, type IconName } from '@shared/components/Icon';
+import { Illustration, type IllustrationName } from '@shared/components/Illustration';
 import { copyText } from '@shared/utils/clipboard';
 import { isApiError, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { CONNECTOR_COPY_KEYS, useCoreCopy } from './copy';
@@ -81,14 +82,19 @@ export function CoreEmpty({
   title,
   body,
   action,
+  illustration = 'empty',
 }: {
   title: string;
   body: string;
   action?: ReactNode;
+  /** `search` suits "no results for these filters". */
+  illustration?: IllustrationName;
 }) {
   return (
     <div className="core-state core-state--empty">
-      <Icon name="spark" />
+      <span className="core-state__art" aria-hidden="true">
+        <Illustration name={illustration} />
+      </span>
       <div>
         <strong>{title}</strong>
         <p>{body}</p>

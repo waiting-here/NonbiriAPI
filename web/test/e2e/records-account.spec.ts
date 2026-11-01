@@ -52,8 +52,9 @@ for (const state of states)
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
+    // Length budget for the phone account page; body text uses a 1.6 line height.
     if (state.width === 390)
-      expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(2300);
+      expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(2400);
     if (process.env.NONBIRI_SCREENSHOT_DIR)
       await page.screenshot({
         path: `${process.env.NONBIRI_SCREENSHOT_DIR}/account-${state.locale}-${state.theme}-${state.width}.png`,

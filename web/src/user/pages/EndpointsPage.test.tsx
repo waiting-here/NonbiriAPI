@@ -158,7 +158,7 @@ describe('connection entry list', () => {
     const createButtons = screen.getAllByRole('button', { name: 'Add service' });
     expect(createButtons).toHaveLength(2);
     await view.user.click(createButtons[1]);
-    const form = screen.getByRole('region', { name: 'Add service' });
+    const form = screen.getByRole('dialog', { name: 'Add service' });
     expect(await within(form).findByRole('textbox', { name: 'Service address' })).toBeVisible();
     expect(await within(form).findByRole('textbox', { name: 'Service name' })).toBeVisible();
   });

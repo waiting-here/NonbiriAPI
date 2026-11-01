@@ -6,6 +6,7 @@ import { USER_ORIGIN } from './ports';
 import { gamesSnapshotWire } from '../../src/user/games/common/testFixtures';
 import { gachaSnapshot } from '../fixtures/gacha';
 import { loanActivity } from '../fixtures/loans';
+import { mockConnectionResources } from './connection-fixtures';
 
 for (const theme of ['light', 'dark'])
   for (const width of [1440, 390]) {
@@ -189,8 +190,10 @@ test('a missing deployed page chunk has loading feedback and one explicit reload
   await mockRoleSession(page, 'user', 'user');
   await mockPublicConfig(page, 'user');
   await page.addInitScript(() => localStorage.setItem('nb.lang', 'en'));
-  await page.route('**/api/gacha/actions', (route) =>
-    route.fulfill({ json: { snapshot: gachaSnapshot() } }),
+  await mockConnectionResources(
+    page,
+    () => [],
+    () => [],
   );
   await page.route('**/api/models**', (route) =>
     route.fulfill({
@@ -201,8 +204,9 @@ test('a missing deployed page chunk has loading feedback and one explicit reload
       },
     }),
   );
-  await page.goto(USER_ORIGIN + '/activities/gacha');
-  await expect(page.getByRole('button', { name: /Check in.*standard/i })).toBeVisible();
+  await page.goto(USER_ORIGIN + '/endpoints');
+  const modelsLink = page.locator('.nb-section-tabs a[href="/models"]');
+  await expect(modelsLink).toBeVisible();
   let release!: () => void;
   const held = new Promise<void>((resolve) => {
     release = resolve;
@@ -218,7 +222,7 @@ test('a missing deployed page chunk has loading feedback and one explicit reload
   page.on('request', (request) => {
     if (request.isNavigationRequest()) documents++;
   });
-  await page.locator('a[href="/models"]').first().click();
+  await modelsLink.click();
   await expect(page.getByRole('progressbar')).toBeVisible();
   release();
   await expect(page.getByRole('heading', { name: 'This page needs to be reloaded' })).toBeVisible();

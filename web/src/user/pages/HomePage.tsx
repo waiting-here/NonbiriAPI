@@ -12,6 +12,7 @@ import { ApiAddressCopy, markOnboarding, useOnboardingFlag } from '../features/c
 import { useNumberedModels } from '../features/core/modelNumberedQueries';
 import { useCharityCatalog } from '../features/economy/catalog';
 import { PageHeader } from '@shared/components/States';
+import { Stepper, type StepState, type StepperStep } from '@shared/components/ui/Stepper';
 import { isNotFoundError, isUnauthorized } from '@shared/query/http';
 import {
   CoreErrorPanel,
@@ -69,6 +70,7 @@ const pageCopyKeys = {
   'user.home.progress': 'user.home.progress',
   'user.home.services': 'user.home.services',
   'user.home.setupDone': 'user.home.setupDone',
+  'user.home.stepDone': 'user.home.stepDone',
   'user.home.usage': 'user.home.usage',
   'user.home.view': 'user.home.view',
 } as const;
@@ -260,83 +262,105 @@ function OnboardingChecklist({
   const modelDone = Boolean(models.data?.data.length || charity.data?.models.length);
   const complete = keyDone && modelDone && clientDone;
   if (hidden) return null;
+  const done = [keyDone, modelDone, clientDone];
+  // The first unfinished step is the suggested next one; later steps stay usable.
+  const stateOf = (index: number): StepState =>
+    done[index] ? 'done' : index === done.indexOf(false) ? 'current' : 'todo';
+  const button = (index: number) =>
+    `nb-btn nb-btn--sm ${stateOf(index) === 'current' ? 'nb-btn--primary' : 'nb-btn--secondary'}`;
+  const quiet = 'nb-btn nb-btn--ghost nb-btn--sm';
+  const modelLinks = (primary: string, secondary: string) => (
+    <>
+      <Link className={primary} to="/charity">
+        {t('user.home.charity')}
+      </Link>
+      <Link className={secondary} to="/endpoints?quickstart=1">
+        {t('user.home.services')}
+      </Link>
+    </>
+  );
+  const guide = (className: string) => (
+    <Link className={className} to="/keys#client">
+      {t('user.home.clientGuide')}
+    </Link>
+  );
+  const steps: StepperStep[] = [
+    {
+      id: 'key',
+      state: stateOf(0),
+      title: t('user.home.keyStep'),
+      description: t('user.home.keyHelp'),
+      action: (
+        <Link className={button(0)} to="/keys">
+          {t('user.home.create')}
+        </Link>
+      ),
+      doneAction: (
+        <Link className={quiet} to="/keys">
+          {t('user.home.view')}
+        </Link>
+      ),
+    },
+    {
+      id: 'model',
+      state: stateOf(1),
+      title: t('user.home.modelStep'),
+      description: t('user.home.modelHelp'),
+      action: modelLinks(button(1), 'nb-btn nb-btn--secondary nb-btn--sm'),
+      doneAction: modelLinks(quiet, quiet),
+    },
+    {
+      id: 'client',
+      state: stateOf(2),
+      title: t('user.home.clientStep'),
+      children: (
+        <>
+          <ApiAddressCopy />
+          <p className="nb-stepper__description">{t('user.home.clientHelp')}</p>
+        </>
+      ),
+      action: guide(button(2)),
+      doneAction: guide(quiet),
+    },
+  ];
+  const hide = (
+    <button className={quiet} type="button" onClick={() => markOnboarding('hidden')}>
+      {t('user.home.hide')}
+    </button>
+  );
   return (
     <section
       className={`nb-panel home-start${complete ? ' home-start--complete' : ''}`}
       aria-labelledby="home-start-title"
     >
-      <div className="nb-between">
-        <h2 id="home-start-title">
-          {complete ? t('user.home.setupDone') : t('user.home.getStarted')}
-        </h2>
-        {!complete ? (
-          <span className="nb-muted nb-small">
-            {t('user.home.progress', {
-              count: Number(keyDone) + Number(modelDone) + Number(clientDone),
-            })}
-          </span>
-        ) : null}
-        {complete ? <Link to="/keys">{t('user.home.apiAccess')}</Link> : null}
+      <div className="home-start__head">
+        <div className="home-start__title">
+          <h2 id="home-start-title">
+            {complete ? t('user.home.setupDone') : t('user.home.getStarted')}
+          </h2>
+          {!complete ? <p className="nb-small nb-muted">{t('user.home.collapseHelp')}</p> : null}
+        </div>
+        <div className="home-start__side">
+          {complete ? (
+            <Link to="/keys">{t('user.home.apiAccess')}</Link>
+          ) : (
+            <span className="nb-muted nb-small">
+              {t('user.home.progress', {
+                count: Number(keyDone) + Number(modelDone) + Number(clientDone),
+              })}
+            </span>
+          )}
+          {hide}
+        </div>
       </div>
       {!complete ? (
-        <ol className="home-checklist">
-          <li data-done={keyDone || undefined}>
-            <span className="home-step-dot" aria-hidden="true">
-              {keyDone ? '✓' : '1'}
-            </span>
-            <div>
-              <strong>{t('user.home.keyStep')}</strong>
-              <p>{t('user.home.keyHelp')}</p>
-            </div>
-            <Link
-              className={`nb-btn nb-btn--sm ${keyDone ? 'nb-btn--ghost' : 'nb-btn--primary'}`}
-              to="/keys"
-            >
-              {keyDone ? t('user.home.view') : t('user.home.create')}
-            </Link>
-          </li>
-          <li data-done={modelDone || undefined}>
-            <span className="home-step-dot" aria-hidden="true">
-              {modelDone ? '✓' : '2'}
-            </span>
-            <div>
-              <strong>{t('user.home.modelStep')}</strong>
-              <p>{t('user.home.modelHelp')}</p>
-            </div>
-            <span className="nb-inline">
-              <Link className="nb-btn nb-btn--secondary nb-btn--sm" to="/charity">
-                {t('user.home.charity')}
-              </Link>
-              <Link className="nb-btn nb-btn--secondary nb-btn--sm" to="/endpoints?quickstart=1">
-                {t('user.home.services')}
-              </Link>
-            </span>
-          </li>
-          <li data-done={clientDone || undefined}>
-            <span className="home-step-dot" aria-hidden="true">
-              {clientDone ? '✓' : '3'}
-            </span>
-            <div>
-              <strong>{t('user.home.clientStep')}</strong>
-              <ApiAddressCopy />
-              <p>{t('user.home.clientHelp')}</p>
-            </div>
-            <Link className="nb-btn nb-btn--secondary nb-btn--sm" to="/keys#client">
-              {t('user.home.clientGuide')}
-            </Link>
-          </li>
-        </ol>
+        <Stepper
+          className="home-checklist"
+          label={t('user.home.getStarted')}
+          doneLabel={t('user.home.stepDone')}
+          steps={steps}
+        />
       ) : null}
-      <p className="nb-small nb-muted home-checklist-footer">
-        {!complete ? <span>{t('user.home.collapseHelp')}</span> : null}
-        <button
-          className="nb-btn nb-btn--ghost nb-btn--sm"
-          type="button"
-          onClick={() => markOnboarding('hidden')}
-        >
-          {t('user.home.hide')}
-        </button>
-      </p>
     </section>
   );
 }
@@ -551,25 +575,10 @@ function CheckinCard({
   );
 }
 
-function CapabilitySections({
-  accountId,
-  adapters,
-}: {
-  accountId: string;
-  adapters: HomeAdapters;
-}) {
+/** Both daily check-ins, shown beside the wallet they add to. */
+function CheckinSection({ accountId, adapters }: { accountId: string; adapters: HomeAdapters }) {
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
-  const gamesLoader = adapters.games.state === 'available' ? adapters.games.load : null;
-  const games = useQuery({
-    queryKey: coreKeys.home(accountId, 'games'),
-    queryFn: ({ signal }) => {
-      if (!gamesLoader) throw new CapabilityUnavailableError();
-      return accountScopedHomeLoad(queryClient, accountId, gamesLoader, signal);
-    },
-    enabled: adapters.games.state === 'available',
-    retry: false,
-  });
   const generalLoader = adapters.checkin.state === 'available' ? adapters.checkin.load : null;
   const gameLoader = adapters.gameCheckin.state === 'available' ? adapters.gameCheckin.load : null;
   const generalStatus = useQuery({
@@ -593,7 +602,7 @@ function CapabilitySections({
   const mutuallyExclusive =
     generalStatus.data?.mutually_exclusive || gameStatus.data?.mutually_exclusive;
   return (
-    <>
+    <div className="home-checkins">
       {mutuallyExclusive ? (
         <p className="core-checkin-choice-note" role="note">
           {t('home.checkin.exclusiveNotice')}
@@ -613,7 +622,25 @@ function CapabilitySections({
           capability={adapters.gameCheckin}
         />
       </div>
+    </div>
+  );
+}
 
+function GamesSection({ accountId, adapters }: { accountId: string; adapters: HomeAdapters }) {
+  const { t } = useCoreCopy();
+  const queryClient = useQueryClient();
+  const gamesLoader = adapters.games.state === 'available' ? adapters.games.load : null;
+  const games = useQuery({
+    queryKey: coreKeys.home(accountId, 'games'),
+    queryFn: ({ signal }) => {
+      if (!gamesLoader) throw new CapabilityUnavailableError();
+      return accountScopedHomeLoad(queryClient, accountId, gamesLoader, signal);
+    },
+    enabled: adapters.games.state === 'available',
+    retry: false,
+  });
+  return (
+    <>
       {adapters.games.state === 'unavailable' ? (
         <section className="core-card">
           <div className="core-card__header">
@@ -667,11 +694,12 @@ export function HomeDashboard({
         title={t('home.title', { name: user.guild_nick || user.username })}
         description={t('home.description')}
       />
-      <div className="home-hero">
-        <OnboardingChecklist key={user.id} accountId={user.id} sessionReady={sessionReady} />
+      <OnboardingChecklist key={user.id} accountId={user.id} sessionReady={sessionReady} />
+      <div className="home-overview">
         <EconomyCard accountId={user.id} />
+        <CheckinSection accountId={user.id} adapters={adapters} />
       </div>
-      <CapabilitySections accountId={user.id} adapters={adapters} />
+      <GamesSection accountId={user.id} adapters={adapters} />
       <HomeAnnouncements
         accountId={user.id}
         language={user.lang}

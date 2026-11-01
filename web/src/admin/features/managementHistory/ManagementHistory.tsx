@@ -476,7 +476,7 @@ export function ManagementHistory({ account }: { account: string }) {
   return (
     <div className="page nb-stack management-history">
       <PageHeader
-        eyebrow={t('admin.navigation.operations')}
+        eyebrow={t('admin.navigation.records')}
         title={t('admin.managementHistory.title')}
         description={t('admin.managementHistory.description')}
       />

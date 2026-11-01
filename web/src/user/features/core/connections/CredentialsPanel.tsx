@@ -30,6 +30,7 @@ export function CredentialsPanel({
   const select = (value: string | null) =>
     setParams((previous) => {
       const next = new URLSearchParams(previous);
+      next.set('connection_view', 'credentials');
       if (value) next.set('credential_id', value);
       else next.delete('credential_id');
       return next;

@@ -1,3 +1,55 @@
+/* Queues that may need an administrator come first; each card opens its queue. */
+.overview-attention {
+  display: grid;
+  gap: var(--nb-space-3);
+  margin-bottom: var(--nb-space-6);
+}
+.overview-attention > h2 {
+  margin: 0;
+  font-size: var(--nb-font-size-lg);
+}
+.overview-attention__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+  gap: var(--nb-space-3);
+}
+.overview-attention__card {
+  display: grid;
+  gap: var(--nb-space-1);
+  min-width: 0;
+  padding: var(--nb-space-4) var(--nb-space-5);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-card);
+  background: var(--nb-color-surface);
+  color: var(--nb-color-text);
+  text-decoration: none;
+  transition: border-color var(--nb-motion-micro) var(--nb-motion-ease);
+}
+.overview-attention__card:hover {
+  border-color: color-mix(in srgb, var(--nb-color-accent) 45%, var(--nb-color-border-strong));
+}
+.overview-attention__card.is-waiting {
+  border-color: color-mix(in srgb, var(--nb-color-highlight) 45%, var(--nb-color-border));
+  background: var(--nb-color-highlight-soft);
+}
+.overview-attention__label {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+  font-weight: var(--nb-font-weight-semibold);
+}
+.overview-attention__count {
+  font-size: var(--nb-font-size-2xl);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.overview-attention__card.is-waiting .overview-attention__count {
+  color: var(--nb-color-highlight);
+}
+.overview-attention__action {
+  color: var(--nb-color-accent);
+  font-size: var(--nb-font-size-sm);
+  font-weight: var(--nb-font-weight-semibold);
+}
 .admin-overview .nb-stats {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
 }

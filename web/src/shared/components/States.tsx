@@ -9,9 +9,8 @@ import {
 } from '@shared/query/http';
 import { usePublicConfig } from '@shared/query/publicConfig';
 import { Icon, type IconName } from './Icon';
+import { Illustration, type IllustrationName } from './Illustration';
 import '../operations/pagePagination.css';
-import emptyStateURL from '@shared/assets/state-empty.svg';
-import maintenanceStateURL from '@shared/assets/state-maintenance.svg';
 
 interface PageHeaderProps {
   eyebrow?: string;
@@ -99,13 +98,15 @@ interface EmptyStateProps {
   title: string;
   body: string;
   action?: ReactNode;
+  /** `search` suits "no results for these filters"; `done` suits "nothing left to do". */
+  illustration?: IllustrationName;
 }
 
-export function EmptyState({ title, body, action }: EmptyStateProps) {
+export function EmptyState({ title, body, action, illustration = 'empty' }: EmptyStateProps) {
   return (
     <div className="state-panel empty-state nb-state">
-      <span className="state-icon nb-state__icon" aria-hidden="true">
-        <img className="nb-state__illustration" src={emptyStateURL} alt="" />
+      <span className="state-icon nb-state__icon nb-state__art" aria-hidden="true">
+        <Illustration name={illustration} />
       </span>
       <div>
         <h2>{title}</h2>
@@ -259,13 +260,15 @@ export function NoticePage({
   const { t } = useTranslation();
   return (
     <div className="state-panel notice-page nb-state nb-state--warning" role="status">
-      <span className="state-icon nb-state__icon" aria-hidden="true">
-        {icon === 'maintenance' ? (
-          <img className="nb-state__illustration" src={maintenanceStateURL} alt="" />
-        ) : (
+      {icon === 'maintenance' ? (
+        <span className="state-icon nb-state__icon nb-state__art" aria-hidden="true">
+          <Illustration name="maintenance" />
+        </span>
+      ) : (
+        <span className="state-icon nb-state__icon" aria-hidden="true">
           <Icon name={icon} />
-        )}
-      </span>
+        </span>
+      )}
       <div>
         <h1>{t(titleKey)}</h1>
         <p>{t(bodyKey)}</p>

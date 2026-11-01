@@ -22,6 +22,12 @@
     "diagnostics": {
       "nav": "Records"
     },
+    "navigation": {
+      "own": "My services",
+      "ownSections": "My services",
+      "services": "Services",
+      "models": "Models"
+    },
     "shell": {
       "navLabel": "Main navigation",
       "title": "User console"
@@ -42,6 +48,7 @@
       "clientHelp": "Use the model name copied in the previous step.",
       "clientGuide": "See client instructions",
       "setupDone": "Setup complete",
+      "stepDone": "Done",
       "apiAccess": "View API access",
       "hide": "Hide",
       "collapseHelp": "This checklist collapses when setup is complete.",
@@ -3651,15 +3658,16 @@
       "retryDiscovery": "Retry loading models",
       "manualName": "Enter a model name manually",
       "searchPlaceholder": "Name, address, or note",
-      "advancedSetup": "Protocol and channel presets",
+      "advancedSetup": "Protocol and model list",
       "serviceAddress": "Service address",
+      "customBody": "Enter a service address and key.",
+      "mainstreamBody": "Pick a common service set up by the site, with the address and protocol filled in.",
       "keyOwnership": "By adding this key, you confirm that you are authorized to use it.",
       "addAndFetch": "Add and fetch models",
       "addKeyAndFetch": "Add key and fetch models",
       "addAnotherKey": "Add another key",
       "additionalKey": "API key {{number}}",
       "keyAdded": "Key added. Manage its model lists for this endpoint.",
-      "manageServiceKeys": "Manage service keys",
       "serviceKeysHelp": "Keys belong to this service. View their endpoints, replace or disable them, or reuse them on another endpoint with “Use existing key”.",
       "currentKey": "Current key",
       "noEndpoints": "This service has no endpoints yet. Add one to manage keys and models.",

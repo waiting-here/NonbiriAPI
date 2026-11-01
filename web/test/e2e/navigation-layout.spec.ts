@@ -138,7 +138,7 @@ for (const locale of ['en', 'zh'] as const) {
       const toggle = page.locator('.nb-menu-button');
       const account = page.locator('.nb-account-trigger');
       await expect(account).toBeVisible();
-      for (const width of [1440, 1280, 1152, 1151, 1024, 768, 390]) {
+      for (const width of [1920, 1440, 1280, 1152, 1120, 1119, 1024, 768, 390]) {
         await page.setViewportSize({ width, height: width < 1024 ? 1024 : 900 });
         await expect
           .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
@@ -147,7 +147,8 @@ for (const locale of ['en', 'zh'] as const) {
           await page.screenshot({
             path: `${process.env.NONBIRI_VISUAL_DIR}/shell-${role}-${locale}-${width}.png`,
           });
-        if (width >= 1024) {
+        // The user station switches to the drawer below the 70rem shell breakpoint.
+        if (width >= 1120) {
           await expect(toggle).toBeHidden();
           await expect(nav).toBeVisible();
           const boxes = await nav.locator('li').evaluateAll((nodes) =>
@@ -195,7 +196,7 @@ for (const locale of ['en', 'zh'] as const) {
       }
       await toggle.click();
       await expect(nav).toBeVisible();
-      await page.setViewportSize({ width: 1024, height: 900 });
+      await page.setViewportSize({ width: 1120, height: 900 });
       await expect(toggle).toBeHidden();
       await expect(toggle).toHaveAttribute('aria-expanded', 'false');
       expect(await page.evaluate(() => document.documentElement.style.overflow)).not.toBe('hidden');

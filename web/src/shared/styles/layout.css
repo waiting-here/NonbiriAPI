@@ -153,7 +153,7 @@
   padding: clamp(1rem, 2.5vw, 1.35rem);
   background: var(--nb-color-surface);
   border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-md);
+  border-radius: var(--nb-radius-card);
   box-shadow: var(--nb-shadow-1);
 }
 
@@ -360,7 +360,7 @@
   display: inline-flex;
   overflow: hidden;
   border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-sm);
+  border-radius: var(--nb-radius-control);
   background: var(--nb-color-surface-raised);
 }
 
@@ -386,9 +386,9 @@
   align-items: center;
   gap: 0.35rem;
   border-radius: 999px;
-  padding: 0.25rem 0.55rem;
-  font-size: 0.76rem;
-  font-weight: 750;
+  padding: 0.15rem 0.6rem;
+  font-size: var(--nb-font-size-xs);
+  font-weight: var(--nb-font-weight-semibold);
   overflow-wrap: anywhere;
   white-space: nowrap;
 }
@@ -422,7 +422,12 @@
 }
 
 .state-panel,
-.auth-panel,
+.auth-panel {
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-card);
+  background: var(--nb-color-surface);
+}
+
 .inline-notice {
   border: 1px solid var(--nb-color-border);
   border-radius: var(--nb-radius-md);
@@ -650,7 +655,7 @@ tr:first-child td {
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: rgb(8 14 25 / 0.58);
+  background: var(--nb-color-scrim);
 }
 
 .dialog {
@@ -833,7 +838,7 @@ tr:first-child td {
   inset: 4.25rem 0 0;
   z-index: 14;
   border: 0;
-  background: rgb(8 14 25 / 0.34);
+  background: var(--nb-color-scrim-soft);
 }
 
 .checkbox-label {

@@ -22,6 +22,12 @@
     "diagnostics": {
       "nav": "记录"
     },
+    "navigation": {
+      "own": "自有服务",
+      "ownSections": "自有服务",
+      "services": "服务",
+      "models": "模型"
+    },
     "shell": {
       "navLabel": "主导航",
       "title": "用户中心"
@@ -42,6 +48,7 @@
       "clientHelp": "模型名填上一步复制的调用名。",
       "clientGuide": "查看填写方法",
       "setupDone": "已完成设置",
+      "stepDone": "已完成",
       "apiAccess": "查看 API 接入",
       "hide": "隐藏",
       "collapseHelp": "完成后清单会自动收起。",
@@ -3651,15 +3658,16 @@
       "retryDiscovery": "重试读取",
       "manualName": "手动输入模型名",
       "searchPlaceholder": "名称、地址或备注",
-      "advancedSetup": "协议与渠道预设",
+      "advancedSetup": "协议与模型目录",
       "serviceAddress": "服务地址",
+      "customBody": "填写服务地址和密钥。",
+      "mainstreamBody": "从站点整理的常用服务中选择，地址和协议已填好。",
       "keyOwnership": "添加即确认你有权使用此密钥。",
       "addAndFetch": "添加并获取模型",
       "addKeyAndFetch": "添加密钥并获取模型",
       "addAnotherKey": "再加一把密钥",
       "additionalKey": "API 密钥 {{number}}",
       "keyAdded": "密钥已添加，可维护此端点下的模型列表。",
-      "manageServiceKeys": "管理本服务的密钥",
       "serviceKeysHelp": "密钥仅供本服务使用。可查看使用端点、替换或停用；在其他端点通过“使用已有密钥”复用。",
       "currentKey": "当前密钥",
       "noEndpoints": "此服务还没有端点，添加端点后即可维护密钥和模型。",

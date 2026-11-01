@@ -6,8 +6,46 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## 1.3.4 — 2026-11-01
 
+### Interface
+
+- Refresh both stations with warm neutral surfaces, a teal accent and an apricot
+  highlight, self-hosted Inter for Latin text and figures, and one shape for
+  controls and one for cards. Dark mode and account appearances keep their
+  contrast limits; appearances may change only a fixed set of surface, text,
+  border, accent and shadow values.
+- Replace the default mark with a symmetric N.
+- Put activities, games and redemption codes directly in the user station's top
+  bar and group the administrator sidebar into six sections. URLs are unchanged.
+- With a non-default appearance on wide screens, keep user pages in a centered
+  column so the artwork stays visible at both sides.
+- Show the home start steps as one sequence with the next action highlighted,
+  and place the wallet beside both check-ins.
+- Show the API access key beside the client setup instructions on wide screens.
+- Add services and endpoints in a side sheet. Mainstream presets come first, and
+  matching mainstream services appear under the address field.
+- Split service details into endpoint, key and settings tabs, with endpoints as
+  selectable cards. Preserve visited drafts and unfinished writes across tab
+  changes and side-sheet dismissal; completed setup opens the created endpoint.
+- Hide unused model filters on empty lists while keeping active filters
+  available after a failed search. Show model details in two columns and give
+  empty lists a small cloud illustration.
+- Make copying a charity model name a bordered row action. The four charity
+  catalog filters now open from More filters, which shows how many are
+  applied; applied filters stay visible as removable chips, and the opened
+  state is kept for the browser session. Give donation steps and status badges
+  the same spacing and hierarchy as the shared controls.
+- Lead the administrator overview with pending donations and open reports,
+  each linked to its queue, and keep the donation review decision on screen
+  while a long key list is reviewed. Failed pending-count reads expose a retry.
+- Line up search buttons with their inputs, keep labels level with copyable
+  values and keep announcement actions at their natural width. Headings that a
+  page or side sheet focuses when it opens no longer show a focus ring.
+
 ### Fixed and improved
 
+- Keep side-sheet keyboard navigation within visible, enabled controls, including
+  collapsed advanced fields. Ship font and icon license notices with both
+  embedded stations.
 - Apply scalar and date bounds before charity-model text matching in administrator
   and steward request-log lists and exports, reducing work for narrow time windows.
   Permissions, complete result counts, ordering and query budgets are unchanged.
@@ -37,6 +75,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Database schema remains 44 and account export remains 31; upgrading from
   1.3.3 does not require a database conversion. Existing prices, accounting,
   permissions and game rules are unchanged.
+- The interface changes use the existing APIs and keep URLs and query
+  parameters. Ported games, in-game displays and card or appearance artwork
+  keep their original design.
 
 ## 1.3.3 — 2026-11-01
 

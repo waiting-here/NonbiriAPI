@@ -403,15 +403,15 @@ test('mainstream resources retain their channel name and protocol when switching
     return route.fallback();
   });
   await page.goto(`${USER_ORIGIN}/endpoints?connection_id=1`);
-  const selector = page.getByRole('combobox', {
-    name: commonCopy.common.connections.entry,
+  const selector = page.getByRole('group', {
+    name: commonCopy.common.connections.entries,
     exact: true,
   });
-  await expect(selector.locator('option')).toHaveCount(2);
+  await expect(selector.getByRole('button')).toHaveCount(2);
   const detail = page.locator('.services-detail--enabled');
   await expect(detail.locator('.nb-facts')).toContainText('Example Gateway');
   await expect(detail.locator('.nb-facts')).toContainText('OpenAI-compatible');
-  await selector.selectOption('2');
+  await selector.locator('[data-entry-id="2"]').click();
   await expect(detail.getByRole('heading', { name: endpoint(2).note, exact: true })).toBeVisible();
   await expect(detail.locator('.nb-facts')).toContainText('OpenAI-compatible');
   for (const width of [320, 390, 1935]) {
@@ -698,7 +698,7 @@ for (const locale of ['en', 'zh'] as const) {
       .getByRole('button', { name: locale === 'zh' ? '搜索' : 'Search', exact: true })
       .click();
     await expect(cards).toHaveCount(12);
-    await expect(page.locator('.economy-catalog-filters .nb-filter__more')).toHaveCount(0);
+    await page.locator('.economy-catalog-filters .nb-filter__more > summary').click();
     await page
       .getByRole('combobox', {
         name: locale === 'zh' ? '本人访问权限' : 'Your access',
