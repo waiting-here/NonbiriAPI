@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -169,6 +170,7 @@ func writeDonationError(writer http.ResponseWriter, err error) {
 		return
 	}
 	httperr.WriteMapped(writer, err,
+		httperr.Mapping{Err: donationquota.ErrFirstResetNotFuture, Code: httperr.CodeInvalidRequest, Message: FirstResetNotFutureMessage},
 		httperr.Mapping{Err: ErrInvalidRequest, Code: httperr.CodeInvalidRequest, Message: "invalid request"},
 		httperr.Mapping{Err: ErrUnauthorized, Code: httperr.CodeUnauthorized, Message: "authentication required"},
 		httperr.Mapping{Err: ErrForbidden, Code: httperr.CodeForbidden, Message: "access denied"},

@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	routeOwnerRecurring                = "/api/donations/{id}/keys/{keyId}/recurring-limits"
-	routeAdminRecurring                = "/admin/api/donations/{id}/keys/{keyId}/recurring-limits"
-	routeStewardRecurring              = "/api/steward/donations/{id}/keys/{keyId}/recurring-limits"
-	recurringOwner        reviewerRole = "owner"
+	FirstResetNotFutureMessage              = "The first reset must be in the future when creating a recurring rule or switching to a specified reset time. Choose a later date and time in the rule's time zone."
+	routeOwnerRecurring                     = "/api/donations/{id}/keys/{keyId}/recurring-limits"
+	routeAdminRecurring                     = "/admin/api/donations/{id}/keys/{keyId}/recurring-limits"
+	routeStewardRecurring                   = "/api/steward/donations/{id}/keys/{keyId}/recurring-limits"
+	recurringOwner             reviewerRole = "owner"
 )
 
 type RecurringReceipt struct {
@@ -209,6 +210,8 @@ func (s *Service) replaceRecurring(ctx context.Context, role reviewerRole, userI
 
 func quotaError(err error) error {
 	switch {
+	case errors.Is(err, donationquota.ErrFirstResetNotFuture):
+		return errors.Join(ErrInvalidRequest, err)
 	case errors.Is(err, donationquota.ErrInvalid):
 		return ErrInvalidRequest
 	case errors.Is(err, donationquota.ErrConflict):

@@ -182,8 +182,11 @@ func Replace(ctx context.Context, tx *sql.Tx, keyID, now int64, input []RuleInpu
 				previous := byID[id].rule.Alignment
 				if previous == nil || *previous != "exact_time" {
 					first, err := calendar.Resolve(*rule.AnchorLocal, rule.TimeZone)
-					if err != nil || first.Instant <= effective {
+					if err != nil {
 						return ErrInvalid
+					}
+					if first.Instant <= effective {
+						return ErrFirstResetNotFuture
 					}
 				}
 				if _, err := calendar.RecurrencePeriod(effective, effective, *rule.AnchorLocal, rule.Interval, rule.TimeZone); err != nil {

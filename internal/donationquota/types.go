@@ -19,11 +19,12 @@ const MaxRows = 5_000_000
 const CleanupBatch = 1_000
 
 var (
-	ErrInvalid   = errors.New("donation quota: invalid rule")
-	ErrConflict  = errors.New("donation quota: conflicting state")
-	ErrLimited   = errors.New("donation quota: recurring limit reached")
-	ErrCapacity  = errors.New("donation quota: storage capacity unavailable")
-	ErrInvariant = errors.New("donation quota: inconsistent state")
+	ErrInvalid             = errors.New("donation quota: invalid rule")
+	ErrFirstResetNotFuture = fmt.Errorf("%w: first reset must be in the future", ErrInvalid)
+	ErrConflict            = errors.New("donation quota: conflicting state")
+	ErrLimited             = errors.New("donation quota: recurring limit reached")
+	ErrCapacity            = errors.New("donation quota: storage capacity unavailable")
+	ErrInvariant           = errors.New("donation quota: inconsistent state")
 )
 
 type Reader interface {

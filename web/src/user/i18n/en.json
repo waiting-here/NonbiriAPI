@@ -3748,7 +3748,7 @@
     "exact": {
       "alignment": "Exact reset time",
       "anchor": "Reset date and time",
-      "help": "Enter the reset time in {{zone}}. Until a future first reset, usage counts from this save. Short months use their last day, then return to the original day.",
+      "help": "Enter the reset time in {{zone}}. For a new rule or when switching to this option, the first reset must be in the future; usage counts from this save. An existing rule may keep its original date. Short months use their last day, then return to the original day.",
       "preview": "Next three resets",
       "loading": "Calculating reset times…",
       "unavailable": "Check the reset date and time, then try again.",
