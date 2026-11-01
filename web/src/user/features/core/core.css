@@ -964,6 +964,9 @@
   .services-detail .nb-facts {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+  .services-detail .services-summary-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .services-detail .connection-match-facts {
     grid-template-columns: minmax(0, 1fr);
   }

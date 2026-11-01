@@ -17,11 +17,14 @@ vi.mock('react-i18next', async () => {
   return {
     useTranslation: () => ({
       i18n: { resolvedLanguage: 'en' },
-      t: (key: string) =>
-        key
+      t: (key: string, values?: Record<string, unknown>) => {
+        const text = key
           .split('.')
-          .reduce<unknown>((value, part) => (value as Record<string, unknown>)?.[part], copy) ??
-        key,
+          .reduce<unknown>((value, part) => (value as Record<string, unknown>)?.[part], copy);
+        return typeof text === 'string'
+          ? text.replace(/{{([a-z]+)}}/g, (_, name: string) => String(values?.[name] ?? ''))
+          : key;
+      },
     }),
   };
 });
@@ -130,23 +133,137 @@ describe('independent management diagnostics', () => {
     expect(screen.queryByRole('button', { name: 'Download original' })).toBeNull();
     expect(String(request.apiFetch.mock.calls[0][0])).toContain('/api/steward/diagnostics?');
   });
-  it('keeps applied filters and replaces each bounded page', async () => {
+  it('returns through visited pages with the applied filter and time window', async () => {
     request.apiFetch
-      .mockResolvedValueOnce(page([entry('3')], '3'))
-      .mockResolvedValueOnce(page([entry('2')]));
+      .mockResolvedValueOnce(page([entry('5')], '5'))
+      .mockResolvedValueOnce(page([entry('4')], '4'))
+      .mockResolvedValueOnce(page([entry('3')]))
+      .mockResolvedValueOnce(page([entry('4')], '4'))
+      .mockResolvedValueOnce(page([entry('5')], '5'));
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1_800_000_001_000);
     render(<IndependentDiagnostics role="admin" accountId="a" scopeReady />);
     fireEvent.change(screen.getByLabelText('User ID'), { target: { value: '17' } });
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-    await screen.findByRole('button', { name: 'Next diagnostics' });
+    await screen.findByText('Page 1');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
     const first = new URL(String(request.apiFetch.mock.calls[0][0]), 'https://example.invalid');
-    expect(first.searchParams.get('user_id')).toBe('17');
+    clock.mockReturnValue(1_800_000_061_000);
     fireEvent.change(screen.getByLabelText('User ID'), { target: { value: '99' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Next diagnostics' }));
-    await waitFor(() => expect(request.apiFetch).toHaveBeenCalledTimes(2));
-    const target = new URL(String(request.apiFetch.mock.calls[1][0]), 'https://example.invalid');
-    expect(target.searchParams.get('user_id')).toBe('17');
-    expect(target.searchParams.get('before')).toBe('3');
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+    expect(screen.getByText('Page 2')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Previous' })).toBeEnabled());
+    expect(screen.getByText('Page 3')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Previous' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+    expect(screen.getByText('Page 2')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Previous' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+    expect(screen.getByText('Page 1')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
     expect(screen.getAllByText(/img_AAAAA.*Attempt 3/)).toHaveLength(1);
+    expect(request.apiFetch).toHaveBeenCalledTimes(5);
+    const queries = request.apiFetch.mock.calls.map(
+      ([url]) => new URL(String(url), 'https://example.invalid').searchParams,
+    );
+    expect(queries.map((query) => query.get('before'))).toEqual([null, '5', '4', '5', null]);
+    for (const query of queries) {
+      expect(query.get('user_id')).toBe('17');
+      expect(query.get('from')).toBe(first.searchParams.get('from'));
+      expect(query.get('to')).toBe(first.searchParams.get('to'));
+    }
+  });
+  it('resets visited pages when category, period or submitted filters change', async () => {
+    request.apiFetch.mockResolvedValue(page([entry('3')], '3'));
+    render(<IndependentDiagnostics role="admin" accountId="a" scopeReady />);
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+    const openNext = async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+      expect(screen.getByText('Page 2')).toBeVisible();
+    };
+    const expectFirst = async () => {
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+      expect(screen.getByText('Page 1')).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+      return new URL(String(request.apiFetch.mock.calls.at(-1)![0]), 'https://example.invalid')
+        .searchParams;
+    };
+    await openNext();
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'model_discovery' } });
+    expect((await expectFirst()).get('kind')).toBe('model_discovery');
+    await openNext();
+    fireEvent.change(screen.getByLabelText('Period'), { target: { value: '168' } });
+    const period = await expectFirst();
+    expect(period.get('before')).toBeNull();
+    expect(Number(period.get('to')) - Number(period.get('from'))).toBe(7 * 86400);
+    await openNext();
+    fireEvent.change(screen.getByLabelText('User ID'), { target: { value: '99' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    expect((await expectFirst()).get('user_id')).toBe('99');
+    await openNext();
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+    const reset = await expectFirst();
+    expect(reset.get('kind')).toBe('all');
+    expect(reset.get('user_id')).toBeNull();
+    expect(reset.get('before')).toBeNull();
+  });
+  it('can retry the same failed page or return from a later failed page', async () => {
+    let resolve!: (value: unknown) => void;
+    const pending = new Promise((done) => {
+      resolve = done;
+    });
+    request.apiFetch
+      .mockResolvedValueOnce(page([entry('5')], '5'))
+      .mockRejectedValueOnce(new ApiError('service_unavailable', 'Try again', 503))
+      .mockReturnValueOnce(pending)
+      .mockRejectedValueOnce(new ApiError('service_unavailable', 'Try again', 503))
+      .mockResolvedValueOnce(page([entry('4')], '4'));
+    render(<IndependentDiagnostics role="admin" accountId="a" scopeReady />);
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await screen.findByRole('alert');
+    expect(screen.getByText('Page 2')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeEnabled();
+    expect(screen.queryByText(/img_AAAAA.*Attempt 3/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+    resolve(page([entry('4')], '4'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+    expect(request.apiFetch.mock.calls[2][0]).toBe(request.apiFetch.mock.calls[1][0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await screen.findByRole('alert');
+    expect(screen.getByText('Page 3')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Previous' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+    expect(screen.getByText('Page 2')).toBeVisible();
+    const returned = new URL(String(request.apiFetch.mock.calls[4][0]), 'https://example.invalid');
+    expect(returned.searchParams.get('before')).toBe('5');
+  });
+  it('drops visited cursors when list permissions are lost', async () => {
+    request.apiFetch
+      .mockResolvedValueOnce(page([entry('5')], '5'))
+      .mockResolvedValueOnce(page([entry('4')], '4'))
+      .mockRejectedValueOnce(new ApiError('forbidden', 'Access changed', 403))
+      .mockResolvedValueOnce(page());
+    render(<IndependentDiagnostics role="steward" accountId={6} scopeReady />);
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await screen.findByRole('alert');
+    expect(screen.queryByRole('navigation')).toBeNull();
+    expect(screen.queryByText(/img_AAAAA.*Attempt 3/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByText(/img_AAAAA.*Attempt 3/);
+    const restarted = new URL(String(request.apiFetch.mock.calls[3][0]), 'https://example.invalid');
+    expect(restarted.searchParams.get('before')).toBeNull();
   });
   it('removes previously loaded sensitive text after a rejected list refresh', async () => {
     const metadata = entry();

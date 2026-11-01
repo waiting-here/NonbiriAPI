@@ -3,7 +3,9 @@ import { FailureDetails } from './FailureDiagnostics';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CopyValue } from '@shared/components/CopyValue';
-import { ErrorState } from '@shared/components/States';
+import { ErrorState, LoadingState } from '@shared/components/States';
+import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { SimplePager } from '@shared/operations/SimplePager';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { RawErrorViewer } from './RequestDiagnostics';
 import type { DiagnosticRole } from './api';
@@ -22,6 +24,14 @@ interface Props {
   scopeReady: boolean;
   enabled?: boolean;
   storage?: boolean;
+}
+interface DiagnosticPosition {
+  page: number;
+  cursors: (string | undefined)[];
+}
+interface DiagnosticQuery {
+  filter: IndependentFilter;
+  position: DiagnosticPosition;
 }
 export function IndependentDiagnostics(props: Props) {
   if (!props.scopeReady || props.enabled === false || props.accountId === undefined) return null;
@@ -47,6 +57,8 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
   const [reason, setReason] = useState('missing');
   const [page, setPage] = useState<IndependentPage>();
   const [applied, setApplied] = useState<IndependentFilter>();
+  const [position, setPosition] = useState<DiagnosticPosition>({ page: 1, cursors: [undefined] });
+  const lastQuery = useRef<DiagnosticQuery | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<unknown>();
   const controller = useRef<AbortController | null>(null);
@@ -58,41 +70,68 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
     image_task: words('Image generation and polling', '绘本生成与查询'),
     image_discovery: words('Image model discovery', '绘本模型拉取'),
   };
-  async function load(next = false, selection?: Partial<IndependentFilter>) {
+  function fail(error: unknown) {
+    setFailure(error);
+    setPage(undefined);
+    if (isUnauthorized(error) || isForbidden(error)) {
+      setApplied(undefined);
+      setPosition({ page: 1, cursors: [undefined] });
+      lastQuery.current = null;
+    }
+  }
+  async function load(
+    filter: IndependentFilter,
+    target: DiagnosticPosition = { page: 1, cursors: [undefined] },
+  ) {
     controller.current?.abort();
     const request = new AbortController();
     controller.current = request;
+    lastQuery.current = { filter, position: target };
     // Unmount all detail readers before a refresh can reuse the same row IDs.
     setPage(undefined);
+    setApplied(filter);
+    setPosition(target);
     setBusy(true);
     setFailure(undefined);
-    const to = Math.floor(Date.now() / 1000);
-    const filter: IndependentFilter =
-      next && applied && page?.next_before
-        ? { ...applied, before: page.next_before }
-        : {
-            kind,
-            ...(storage ? { storage: reason } : {}),
-            user_id: selection ? applied?.user_id : user.trim() || undefined,
-            subject_id: selection ? applied?.subject_id : subject.trim() || undefined,
-            from: to - Number(hours) * 3600,
-            to,
-            ...selection,
-          };
     try {
       const result = await getIndependentDiagnostics(role, filter, request.signal);
-      if (!request.signal.aborted) {
-        setPage(result);
-        setApplied(filter);
-      }
+      if (!request.signal.aborted) setPage(result);
     } catch (error) {
-      if (!request.signal.aborted) {
-        setFailure(error);
-        setPage(undefined);
-      }
+      if (!request.signal.aborted) fail(error);
     } finally {
       if (!request.signal.aborted) setBusy(false);
     }
+  }
+  function search(selection?: Partial<IndependentFilter>) {
+    const to = Math.floor(Date.now() / 1000);
+    void load({
+      kind,
+      ...(storage ? { storage: reason } : {}),
+      user_id: selection ? applied?.user_id : user.trim() || undefined,
+      subject_id: selection ? applied?.subject_id : subject.trim() || undefined,
+      from: to - Number(hours) * 3600,
+      to,
+      ...selection,
+    });
+  }
+  function retry() {
+    const query = lastQuery.current;
+    if (query) void load(query.filter, query.position);
+    else search();
+  }
+  function previous() {
+    if (busy || !applied || position.page <= 1) return;
+    const target = { ...position, page: position.page - 1 };
+    void load({ ...applied, before: target.cursors[target.page - 1] }, target);
+  }
+  function next() {
+    const cursor = page?.next_before;
+    if (busy || !applied || !cursor) return;
+    const target = {
+      page: position.page + 1,
+      cursors: [...position.cursors.slice(0, position.page), cursor],
+    };
+    void load({ ...applied, before: cursor }, target);
   }
   return (
     <section
@@ -116,7 +155,7 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
       </p>
       <FilterBar
         activeCount={0}
-        onSubmit={() => void load()}
+        onSubmit={() => search()}
         onReset={() => {
           setKind('all');
           setReason('missing');
@@ -124,7 +163,7 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
           setSubject('');
           setHours(storage ? '720' : '24');
           const to = Math.floor(Date.now() / 1000);
-          void load(false, {
+          search({
             kind: 'all',
             storage: storage ? 'missing' : undefined,
             user_id: undefined,
@@ -143,7 +182,7 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
                   onChange={(event) => {
                     const kind = event.target.value as IndependentKind;
                     setKind(kind);
-                    void load(false, { kind });
+                    search({ kind });
                   }}
                 >
                   {(Object.keys(labels) as IndependentKind[])
@@ -164,7 +203,7 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
                     value={reason}
                     onChange={(event) => {
                       setReason(event.target.value);
-                      void load(false, { storage: event.target.value });
+                      search({ storage: event.target.value });
                     }}
                   >
                     <option value="missing">{words('All missing bodies', '全部未保存')}</option>
@@ -215,7 +254,7 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
                   onChange={(event) => {
                     setHours(event.target.value);
                     const to = Math.floor(Date.now() / 1000);
-                    void load(false, { from: to - Number(event.target.value) * 3600, to });
+                    search({ from: to - Number(event.target.value) * 3600, to });
                   }}
                 >
                   <option value="24">{words('Last 24 hours', '最近24小时')}</option>
@@ -227,7 +266,8 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
           </>
         }
       />
-      {failure != null && <ErrorState error={failure} onRetry={() => void load()} />}
+      {busy && <LoadingState />}
+      {failure != null && <ErrorState error={failure} onRetry={retry} />}
       {page?.data.length === 0 && (
         <p>{words('No matching diagnostics.', '没有符合条件的诊断。')}</p>
       )}
@@ -246,27 +286,18 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
             {entry.save_state !== 'saved' && (
               <OmittedBody state={entry.save_state} reason={entry.failure_reason} />
             )}
-            <Detail
-              role={role}
-              id={entry.id}
-              synthetic={entry.synthetic}
-              onReadFailure={(error) => {
-                setPage(undefined);
-                setFailure(error);
-              }}
-            />
+            <Detail role={role} id={entry.id} synthetic={entry.synthetic} onReadFailure={fail} />
           </details>
         ))}
       </div>
-      {page?.next_before && (
-        <button
-          className="nb-btn nb-btn--secondary"
-          type="button"
+      {applied && (
+        <SimplePager
+          page={position.page}
+          hasMore={Boolean(page?.next_before)}
           disabled={busy}
-          onClick={() => void load(true)}
-        >
-          {words('Next diagnostics', '下一页诊断')}
-        </button>
+          onPrev={previous}
+          onNext={next}
+        />
       )}
     </section>
   );
