@@ -144,6 +144,7 @@ func TestHTTPConnectorRejectionDetailsPersistForOwner(t *testing.T) {
 		{"openai-responses", "n", "\"n\":2", "expected the integer 1"},
 		{"google-gemini", "n", "\"n\":2", "expected the integer 1"},
 		{"anthropic-compatible", "temperature", "\"temperature\":2", "configured provider requires a value from 0 to 1"},
+		{"anthropic-compatible", "parallel_tool_calls", `"parallel_tool_calls":"PRIVATE_VALUE"`, "expected a boolean or null"},
 	} {
 		t.Run(tc.connector, func(t *testing.T) {
 			f := newModelHTTPFixture(t, nil, tc.connector)
@@ -185,5 +186,76 @@ func TestHTTPConnectorRejectionDetailsPersistForOwner(t *testing.T) {
 				t.Fatal("owner detail missing", string(own))
 			}
 		})
+	}
+}
+
+func TestHTTPInferencePreflightDetailsPersistForAuthorizedReaders(t *testing.T) {
+	f := newModelHTTPFixture(t, nil, "openai-chat-completions")
+	f.exec(t, "UPDATE site_config SET value='0' WHERE key='charity_min_chars'")
+	f.exec(t, "UPDATE models SET model_types=16,flatten_tool_calls=0,cloudflare_proxy_enabled=0")
+	f.exec(t, "UPDATE charity_models SET model_types=16,flatten_tool_calls=0,cloudflare_proxy_enabled=0")
+	login := testApplicationRequest(t, f.app.handler, "POST", auditAdminHost, "/admin/api/login", `{"username":"operator","password":"correct horse battery staple"}`, nil, map[string]string{"Content-Type": "application/json"})
+	if login.Code != 200 {
+		t.Fatal(login.Code, login.Body)
+	}
+	cookies := []*http.Cookie{responseCookieNamed(t, login, auth.AdminSessionCookieName)}
+	for _, model := range []string{"provider/self", "[公益]provider/per_request"} {
+		for _, stream := range []string{"false", "true"} {
+			t.Run(model+"/"+stream, func(t *testing.T) {
+				raw := `{"model":"` + model + `","input":"PRIVATE_INPUT","reasoning":{"effort":"PRIVATE_VALUE"},"stream":` + stream + `}`
+				r, err := http.NewRequest(http.MethodPost, f.server.URL+"/v1/responses", strings.NewReader(raw))
+				if err != nil {
+					t.Fatal(err)
+				}
+				r.Host = auditUserHost
+				r.Header.Set("Authorization", "Bearer "+f.caller)
+				r.Header.Set("Content-Type", "application/json")
+				response, err := f.server.Client().Do(r)
+				if err != nil {
+					t.Fatal(err)
+				}
+				body, err := io.ReadAll(response.Body)
+				response.Body.Close()
+				const reason = "Responses fields cannot be represented by the selected Chat protocol"
+				if err != nil || response.StatusCode != http.StatusBadRequest || !strings.Contains(string(body), "invalid_request") || !strings.Contains(string(body), "reasoning: "+reason) || strings.Contains(string(body), "PRIVATE") {
+					t.Fatalf("unsafe or nonspecific HTTP rejection: %d %s %v", response.StatusCode, body, err)
+				}
+				id := response.Header.Get("X-Request-ID")
+				var diag string
+				var attempts, claims, charges int
+				err = f.store.DB().QueryRow(`SELECT error_diag,attempt_count,
+(SELECT count(*) FROM dispatch_claims WHERE logical_request_id=request_logs.logical_request_id),
+(SELECT count(*) FROM credit_operations WHERE source_type='logical_request' AND source_id=request_logs.logical_request_id)
+FROM request_logs WHERE logical_request_id=?`, id).Scan(&diag, &attempts, &claims, &charges)
+				if err != nil {
+					t.Fatal(err)
+				}
+				detail := requestattempt.DecodeDetail(diag)
+				if detail == nil || detail.Field != "reasoning" || detail.Reason != reason || attempts != 0 || claims != 0 || charges != 0 || strings.Contains(diag, "PRIVATE") || strings.Contains(diag, f.caller) {
+					t.Fatalf("lost or unsafe preflight detail: %#v attempts=%d claims=%d charges=%d", detail, attempts, claims, charges)
+				}
+				read := testApplicationRequest(t, f.app.handler, "GET", auditAdminHost, "/admin/api/logs/"+id, "", cookies, nil)
+				var admin logapi.AdminLogDetail
+				if read.Code != 200 || json.Unmarshal(read.Body.Bytes(), &admin) != nil || admin.Request.RejectionDetail == nil || *admin.Request.RejectionDetail != *detail {
+					t.Fatal("administrator detail did not retain the persisted check", read.Code, read.Body)
+				}
+				steward, err := f.app.logs.GetSteward(context.Background(), f.userID, id, logapi.AttemptFilter{}, rejectionStewardReader{})
+				if err != nil || steward.Request.RejectionDetail == nil || *steward.Request.RejectionDetail != *detail {
+					t.Fatal("steward detail did not retain the persisted check", err)
+				}
+				if _, err := f.app.logs.GetSteward(context.Background(), f.userID, id, logapi.AttemptFilter{}, rejectionStewardReader{denied: true}); !errors.Is(err, logapi.ErrForbidden) {
+					t.Fatal("unauthorized steward received detail", err)
+				}
+				own := f.ownLogJSON(t, id)
+				if !strings.Contains(string(own), reason) || !strings.Contains(string(own), "reasoning") || strings.Contains(string(own), "PRIVATE") {
+					t.Fatal("owner safe detail missing or unsafe", string(own))
+				}
+			})
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.upstreamRequests) != 0 {
+		t.Fatal("preflight rejection reached upstream")
 	}
 }

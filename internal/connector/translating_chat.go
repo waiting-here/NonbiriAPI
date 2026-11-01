@@ -92,49 +92,56 @@ func (c *translatingConnector) Attempt(ctx context.Context, input AttemptInput) 
 
 // A continuation is scoped to its source protocol even in mixed bindings.
 func continuationCompatible(kind contract.Type, request *openai.ChatRequest) bool {
+	return checkContinuation(kind, request) == nil
+}
+
+func checkContinuation(kind contract.Type, request *openai.ChatRequest) error {
+	reject := func(field, reason string) error {
+		return &contract.RequestRejection{Stage: "protocol preflight", Field: field, Reason: reason}
+	}
 	raw, ok := request.RawField("messages")
 	if !ok {
-		return false
+		return reject("messages", "required field is missing")
 	}
 	defer clear(raw)
 	var messages []map[string]json.RawMessage
 	if json.Unmarshal(raw, &messages) != nil {
-		return false
+		return reject("messages", "expected an array of message objects")
 	}
-	compatible := func(raw json.RawMessage) bool {
+	check := func(raw json.RawMessage) error {
 		var extra map[string]json.RawMessage
 		if json.Unmarshal(raw, &extra) != nil {
-			return true
+			return nil
 		}
 		if _, ok := extra["google"]; ok && kind != contract.TypeGoogleGemini {
-			return false
+			return reject("extra_content.google", "field cannot be represented by this connector")
 		}
 		if _, ok := extra["anthropic"]; ok && kind != contract.TypeAnthropicCompatible {
-			return false
+			return reject("extra_content.anthropic", "field cannot be represented by this connector")
 		}
 		if _, ok := extra["gateway"]; ok && !kind.AISDKGateway() {
-			return false
+			return reject("extra_content.gateway", "field cannot be represented by this connector")
 		}
 		var openai map[string]json.RawMessage
 		if json.Unmarshal(extra["openai"], &openai) == nil {
 			if _, ok := openai["reasoning"]; ok && kind != contract.TypeOpenAIResponses {
-				return false
+				return reject("extra_content.openai", "field cannot be represented by this connector")
 			}
 		}
-		return true
+		return nil
 	}
 	for _, message := range messages {
-		if !compatible(message["extra_content"]) {
-			return false
+		if err := check(message["extra_content"]); err != nil {
+			return err
 		}
 		var calls []map[string]json.RawMessage
 		if json.Unmarshal(message["tool_calls"], &calls) == nil {
 			for _, call := range calls {
-				if !compatible(call["extra_content"]) {
-					return false
+				if err := check(call["extra_content"]); err != nil {
+					return err
 				}
 			}
 		}
 	}
-	return true
+	return nil
 }

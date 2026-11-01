@@ -103,13 +103,19 @@ func (r *Registry) SupportsInferenceRequest(kind contract.Type, request *openai.
 }
 
 func (r *Registry) CheckInferenceTarget(target contract.Target, request *openai.InferenceRequest, policy contract.AttemptPolicy) error {
-	if request != nil {
-		if descriptor, ok := r.Descriptor(target.Type()); ok && descriptor.Capabilities.Has(contract.OperationCapability(request.Operation())) && descriptor.CheckInferenceTarget != nil {
-			return normalizePreflightError(descriptor.CheckInferenceTarget(target, request, policy))
+	descriptor, ok := r.Descriptor(target.Type())
+	if request == nil || !ok || !descriptor.Capabilities.Has(contract.OperationCapability(request.Operation())) {
+		return &contract.RequestRejection{Stage: "capability preflight", Field: "request", Reason: "unsupported operation"}
+	}
+	if descriptor.CheckInferenceTarget != nil {
+		return normalizePreflightError(descriptor.CheckInferenceTarget(target, request, policy))
+	}
+	if descriptor.SupportsInference != nil {
+		if !descriptor.SupportsInference(request) {
+			return &contract.RequestRejection{Stage: "protocol preflight", Field: "request", Reason: "request cannot be represented by this connector"}
 		}
+	} else if err := request.CheckTarget(target.Type(), contract.AttemptPolicy{}); err != nil {
+		return normalizePreflightError(err)
 	}
-	if !r.SupportsInferenceRequest(target.Type(), request) {
-		return &contract.RequestRejection{Stage: "protocol preflight", Field: "request", Reason: "request cannot be represented by this connector"}
-	}
-	return request.CheckTarget(target.Type(), policy)
+	return normalizePreflightError(request.CheckTarget(target.Type(), policy))
 }
