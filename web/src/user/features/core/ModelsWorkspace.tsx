@@ -598,7 +598,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
         />
       ) : null}
       {/* Filters are hidden until there is something to filter. */}
-      {models.data && (models.data.pagination.total_items !== '0' || filters.active) ? (
+      {filters.active || (models.data && models.data.pagination.total_items !== '0') ? (
         <ResourceFilterBar control={filters} />
       ) : null}
       {models.isPending && !models.data ? (

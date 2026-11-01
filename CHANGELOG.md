@@ -24,22 +24,28 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Add services and endpoints in a side sheet. Mainstream presets come first, and
   matching mainstream services appear under the address field.
 - Split service details into endpoint, key and settings tabs, with endpoints as
-  selectable cards.
-- Hide model filters until the list has models, show model details in two
-  columns and give empty lists a small cloud illustration.
+  selectable cards. Preserve visited drafts and unfinished writes across tab
+  changes and side-sheet dismissal; completed setup opens the created endpoint.
+- Hide unused model filters on empty lists while keeping active filters
+  available after a failed search. Show model details in two columns and give
+  empty lists a small cloud illustration.
 - Make copying a charity model name a bordered row action. The four charity
   catalog filters now open from More filters, which shows how many are
   applied; applied filters stay visible as removable chips, and the opened
-  state is kept for the browser session.
+  state is kept for the browser session. Give donation steps and status badges
+  the same spacing and hierarchy as the shared controls.
 - Lead the administrator overview with pending donations and open reports,
   each linked to its queue, and keep the donation review decision on screen
-  while a long key list is reviewed.
+  while a long key list is reviewed. Failed pending-count reads expose a retry.
 - Line up search buttons with their inputs, keep labels level with copyable
   values and keep announcement actions at their natural width. Headings that a
   page or side sheet focuses when it opens no longer show a focus ring.
 
 ### Fixed and improved
 
+- Keep side-sheet keyboard navigation within visible, enabled controls, including
+  collapsed advanced fields. Ship font and icon license notices with both
+  embedded stations.
 - Apply scalar and date bounds before charity-model text matching in administrator
   and steward request-log lists and exports, reducing work for narrow time windows.
   Permissions, complete result counts, ordering and query budgets are unchanged.

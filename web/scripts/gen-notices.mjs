@@ -157,6 +157,10 @@ const runtimeTable = await markdownTable(runtimeClosure);
 const buildTable = await markdownTable(buildOnly);
 const fishAssetNotice = await readFile(join(webDir, 'public/assets/fatfish/NOTICE.md'), 'utf8');
 const iconNotice = await readFile(join(webDir, 'src/shared/assets/icons/NOTICE.md'), 'utf8');
+const fontLicense = await readFile(
+  join(webDir, 'node_modules/@fontsource-variable/inter/LICENSE'),
+  'utf8',
+);
 
 const output = `# Third-Party Notices
 
@@ -187,9 +191,21 @@ ${fishAssetNotice.trimEnd().replace(/^# /, '### ').replace(/^## /gm, '#### ')}
 ## Adapted interface icons
 
 ${iconNotice.trimEnd().replace(/^# /, '### ').replace(/^## /gm, '#### ')}
+## Inter font
+
+${fontLicense.trimEnd()}
 `;
 
 await writeFile(join(webDir, 'THIRD_PARTY_NOTICES.md'), output);
+// Keep attribution with the embedded applications, including standalone binary releases.
+for (const station of ['admin', 'user']) {
+  try {
+    await writeFile(join(webDir, 'dist', station, 'THIRD_PARTY_NOTICES.md'), output);
+  } catch (error) {
+    // Notice generation also works before a station has been built.
+    if (error.code !== 'ENOENT') throw error;
+  }
+}
 console.log(
   `THIRD_PARTY_NOTICES.md written (${runtimeClosure.size} runtime, ${buildOnly.size} build-only packages)`,
 );

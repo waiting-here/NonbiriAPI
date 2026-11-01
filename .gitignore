@@ -47,6 +47,9 @@ $RECYCLE.BIN/
 # Pi Coding Agent
 .pi/
 
+# Local IDE settings and planning
+.kiro/
+
 # Generic editor backups
 *.swp
 *.swo

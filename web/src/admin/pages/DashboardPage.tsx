@@ -14,6 +14,7 @@ import { charityKeys, getDonationBadge } from '@shared/operations/charity';
 import { useAdminSession } from '../data';
 import '@shared/operations/operations.css';
 import { Fold } from '@shared/components/ui';
+import { formatCount } from '@shared/utils/formatNumber';
 import './dashboard.css';
 
 /** One queue that may need an administrator, with its count and where to handle it. */
@@ -33,7 +34,9 @@ function AttentionCard({
   return (
     <Link className={`overview-attention__card${waiting ? ' is-waiting' : ''}`} to={to}>
       <span className="overview-attention__label">{label}</span>
-      <strong className="overview-attention__count">{count ?? '—'}</strong>
+      <strong className="overview-attention__count">
+        {count === undefined ? '—' : formatCount(count).display}
+      </strong>
       <span className="overview-attention__action">
         {count === '0' ? t('admin.dashboard.nothingPending') : action} →
       </span>
@@ -115,6 +118,9 @@ export function DashboardPage() {
             action={t('admin.dashboard.openReportInbox')}
           />
         </div>
+        {donations.error ? (
+          <ErrorState error={donations.error} onRetry={() => void donations.refetch()} />
+        ) : null}
       </section>
       <section aria-label={t('admin.dashboard.usageTitle')}>
         <div className="nb-stats">

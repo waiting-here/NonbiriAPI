@@ -319,7 +319,7 @@ function OnboardingChecklist({
           <p className="nb-stepper__description">{t('user.home.clientHelp')}</p>
         </>
       ),
-      action: guide('nb-btn nb-btn--secondary nb-btn--sm'),
+      action: guide(button(2)),
       doneAction: guide(quiet),
     },
   ];
