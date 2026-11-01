@@ -1047,6 +1047,7 @@
       "shell": "Pearl shell",
       "saved": "Game settings saved.",
       "save": "Save game configuration",
+      "saveAllChanges": "Save all changes",
       "controls": {
         "settings": "Game settings",
         "revisionTerms": "Edit multiple settings and save them together. Games already in progress keep their starting settings."

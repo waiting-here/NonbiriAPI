@@ -1,3 +1,5 @@
+import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { DuelDialog } from '../common/duel/Dialog';
 import { OverlayPortal } from '@shared/components/OverlayPortal';
 import { Fold } from '@shared/components/ui/Fold';
 import { GameActionBar } from '../common/GameActionBar';
@@ -163,15 +165,13 @@ function Tutorial({
   const { text } = useGameCopy();
   return (
     <OverlayPortal>
-      <div
-        className="rps-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="rps-tutorial-title"
+      <DuelDialog
+        title={text('rps.tutorial.title')}
+        onClose={onSkip}
+        className="rps-tutorial-dialog"
       >
-        <Card className="rps-tutorial">
+        <div className="rps-tutorial">
           <p className="eyebrow">{page + 1} / 3</p>
-          <h2 id="rps-tutorial-title">{text('rps.tutorial.title')}</h2>
           <div className="rps-tutorial__art">
             <GestureArt gesture={GESTURES[page]} />
           </div>
@@ -194,8 +194,8 @@ function Tutorial({
               </button>
             )}
           </div>
-        </Card>
-      </div>
+        </div>
+      </DuelDialog>
     </OverlayPortal>
   );
 }
@@ -1363,52 +1363,32 @@ export function RPSGame() {
           </Fold>
         </div>
       ) : null}
-      {deathmatchReview ? (
-        <OverlayPortal>
-          <div
-            className="rps-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="rps-deathmatch-title"
-          >
-            <Card>
-              <h2 id="rps-deathmatch-title">{text('rps.mode.deathmatch')}</h2>
-              <p>{text('rps.deathmatchReview')}</p>
-              {available ? <GamePayment payment={available} /> : null}
-              {deathmatchCommitment ? (
-                <p>
-                  <strong>{text('rps.entry')}:</strong> <GameMoney value={deathmatchCommitment} />
-                </p>
-              ) : null}
-              <div className="game-state-actions">
-                <button
-                  type="button"
-                  className="nb-btn nb-btn--secondary"
-                  onClick={() => setDeathmatchReview(false)}
-                >
-                  {text('linklink.keep')}
-                </button>
-                <button
-                  type="button"
-                  className="nb-btn nb-btn--danger"
-                  disabled={!canQueueDeathmatch || operationState !== 'idle'}
-                  onClick={() =>
-                    void execute({
-                      kind: 'queue',
-                      mode: 'deathmatch',
-                      token: rpsDeviceToken(),
-                      confirmed: true,
-                      key: createIdempotencyKey(),
-                    })
-                  }
-                >
-                  {text('rps.deathmatchConfirm')}
-                </button>
-              </div>
-            </Card>
-          </div>
-        </OverlayPortal>
-      ) : null}
+      <ConfirmDialog
+        open={deathmatchReview}
+        title={text('rps.mode.deathmatch')}
+        description={text('rps.deathmatchReview')}
+        confirmLabel={text('rps.deathmatchConfirm')}
+        cancelLabel={text('linklink.keep')}
+        danger
+        confirmDisabled={!canQueueDeathmatch || operationState !== 'idle'}
+        onCancel={() => setDeathmatchReview(false)}
+        onConfirm={() =>
+          void execute({
+            kind: 'queue',
+            mode: 'deathmatch',
+            token: rpsDeviceToken(),
+            confirmed: true,
+            key: createIdempotencyKey(),
+          })
+        }
+      >
+        {available ? <GamePayment payment={available} /> : null}
+        {deathmatchCommitment ? (
+          <p>
+            <strong>{text('rps.entry')}:</strong> <GameMoney value={deathmatchCommitment} />
+          </p>
+        ) : null}
+      </ConfirmDialog>
       {tutorialOpen ? (
         <Tutorial
           page={tutorialPage}

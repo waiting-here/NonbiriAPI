@@ -237,7 +237,7 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   const chance = page.getByLabel('Blue-fish probability', { exact: true });
   await expect(chance).toHaveValue('10');
   await chance.fill('37.5');
-  const save = page.getByRole('button', { name: 'Save Fishing settings', exact: true });
+  const save = page.getByRole('button', { name: 'Save all changes', exact: true });
   const milkChance = page.getByLabel('Milk-crab probability', { exact: true });
   await expect(milkChance).toHaveValue('10');
   await milkChance.fill('70');
@@ -329,7 +329,7 @@ test('admin validates quick amount count, duplicates and limits before saving th
   await page.goto(`${ADMIN_ORIGIN}/games`);
   await page.getByRole('button', { name: 'Blackjack Game settings', exact: true }).click();
   const group = page.getByRole('group', { name: 'Quick stake amounts (0–8)' });
-  const save = page.getByRole('button', { name: 'Save Blackjack settings', exact: true });
+  const save = page.getByRole('button', { name: 'Save all changes', exact: true });
   await expect(group.getByRole('textbox')).toHaveCount(4);
   for (let i = 0; i < 4; i++)
     await group

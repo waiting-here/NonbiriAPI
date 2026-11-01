@@ -63,9 +63,15 @@ describe('fat fish user service projection', () => {
       if (path.includes('/periods?page=')) return reply({ items: [{ ...period, nodes: undefined }], page: 1, page_size: 20, has_more: false });
       if (path.includes('/history')) {
         const page = Number(new URL(path, 'http://test').searchParams.get('page'));
-        return reply({ items: [{ id: `ffc_${page}`, state: 'settled_pass', ticket_price: '2',
-          result: { passed: true, stars: page, score_units: '3', ticket_charge: '2', ticket_refund: '0', rewards: '5' } }],
-        page, page_size: 20, has_more: page < 3 });
+        return reply({ items: [
+          { id: `ffc_${page}`, state: 'settled_pass', ticket_price: '2',
+            prepared_at_ms: 1800000000000, start_at_ms: 1800000001000, end_at_ms: 1800000002000,
+            result: { passed: true, stars: page, score_units: '3', ticket_charge: '2', ticket_refund: '0', rewards: '5' } },
+          ...(page === 1 ? [{
+            id: 'ffc_cancelled', state: 'cancelled_refunded', ticket_price: '2',
+            prepared_at_ms: 1800000000000, start_at_ms: null, end_at_ms: 1800000002000,
+          }] : []),
+        ], page, page_size: 20, has_more: page < 3 });
       }
       throw new Error(`Unexpected request ${path}`);
     }));
@@ -77,7 +83,15 @@ describe('fat fish user service projection', () => {
     expect(screen.getByText('Complete a hidden prerequisite')).toBeInTheDocument();
     expect(screen.queryByText('Secret tank')).not.toBeInTheDocument();
     expect(screen.getByText('90071992547409.93')).toBeInTheDocument();
-    expect(screen.getByText('ffc_1')).toBeInTheDocument();
+    const history = screen.getByRole('heading', { name: 'Challenge history' }).closest('section')!;
+    expect(within(history).getByText('Passed')).toBeVisible();
+    expect(within(history).getByText('Cancelled and refunded')).toBeVisible();
+    const reference = screen.getByText('ffc_1');
+    expect(reference).not.toBeVisible();
+    await view.user.click(within(history).getAllByText('Record reference', { selector: 'summary' })[0]);
+    expect(reference).toBeVisible();
+    expect(within(reference.closest('details')!).getByRole('button', { name: 'Copy Record reference' })).toBeVisible();
+    expect(history.querySelector('time')).toHaveAttribute('datetime', '2027-01-15T08:00:02.000Z');
     await view.user.click(within(screen.getByRole('heading', { name: 'Challenge history' }).closest('section')!).getByRole('button', { name: 'Next' }));
     await waitFor(() => expect(screen.getByText('ffc_2')).toBeInTheDocument());
   });

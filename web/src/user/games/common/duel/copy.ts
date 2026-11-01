@@ -321,6 +321,8 @@ export const duelCopyKeys = {
   'common.nextPage': 'user.games.duel.common.nextPage',
   'common.yourCompleteGamesFromTheLast30': 'user.games.duel.common.yourCompleteGamesFromTheLast30',
   'common.firstPage': 'user.games.duel.common.firstPage',
+  'common.previousPage': 'user.games.duel.common.previousPage',
+  'common.pagePosition': 'user.games.duel.common.pagePosition',
   'common.verifyRandomness': 'user.games.duel.common.verifyRandomness',
   'common.seedDisclosed': 'user.games.duel.common.seedDisclosed',
   'common.openingCommitmentLocked': 'user.games.duel.common.openingCommitmentLocked',

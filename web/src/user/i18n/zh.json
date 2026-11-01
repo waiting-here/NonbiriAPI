@@ -1,5 +1,18 @@
 {
   "user": {
+    "fatFish": {
+      "states": {
+        "prepared": "准备就绪",
+        "active": "挑战中",
+        "verifying": "成绩核验中",
+        "settled_pass": "已通关",
+        "settled_fail": "未通关",
+        "abandoned": "已放弃",
+        "expired": "已超时",
+        "cancelled_refunded": "已取消并退款"
+      },
+      "recordReference": "记录编号"
+    },
     "keys": {
       "nav": "API 接入"
     },
@@ -204,6 +217,8 @@
           "nextPage": "下一页",
           "yourCompleteGamesFromTheLast30": "保留最近30天本人的完整对局。",
           "firstPage": "首页",
+          "previousPage": "上一页",
+          "pagePosition": "第 {{page}} 页",
           "verifyRandomness": "随机性核验",
           "seedDisclosed": "种子已公开",
           "openingCommitmentLocked": "开局承诺已锁定",
@@ -1280,6 +1295,7 @@
             "body": "在四处水域收集渔获、升级装备，写下你的垂钓故事。"
           },
           "modesAll": "{{count}} 种模式",
+          "reviewCosts": "查看玩法与费用",
           "firstClearReward": "首通奖励",
           "winCredits": "可赢积分"
         },

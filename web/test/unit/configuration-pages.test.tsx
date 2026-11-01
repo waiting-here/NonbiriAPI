@@ -1155,7 +1155,7 @@ describe('standalone Admin Games feature', () => {
     await rendered.user.click(within(treasures).getByText('Treasure multipliers', { exact: true }));
     fireEvent.change(within(fishing).getByLabelText('Platform'), { target: { value: '98' } });
     expect(within(fishing).getByText(/Fishing fees must total less than 100%/)).toBeVisible();
-    expect(within(fishing).getByRole('button', { name: 'Save Fishing settings' })).toBeDisabled();
+    expect(within(fishing).getByRole('button', { name: 'Save all changes' })).toBeDisabled();
     expect(server.patches).toHaveLength(0);
     fireEvent.change(within(fishing).getByLabelText('Platform'), { target: { value: '1' } });
     expect(
@@ -1179,7 +1179,7 @@ describe('standalone Admin Games feature', () => {
     );
     await rendered.user.click(await screen.findByRole('button', { name: 'Fishing Game settings' }));
     const fishing = screen.getByRole('region', { name: 'Fishing' });
-    const save = within(fishing).getByRole('button', { name: 'Save Fishing settings' });
+    const save = within(fishing).getByRole('button', { name: 'Save all changes' });
     const platform = within(fishing).getByLabelText('Platform');
     fireEvent.change(platform, { target: { value: '98' } });
     await rendered.user.click(save);
@@ -1194,7 +1194,7 @@ describe('standalone Admin Games feature', () => {
     });
   });
 
-  test('sends the frozen full mutable PATCH, excludes queue capacity, and renders exact active counts', async () => {
+  test('saves other game drafts from the drawer, excludes queue capacity, and renders exact active counts', async () => {
     const server = installGameServer();
     const rendered = await renderWithProviders(
       <AdminSessionFixture>
@@ -1206,8 +1206,9 @@ describe('standalone Admin Games feature', () => {
         role: 'admin',
       },
     );
+    await rendered.user.click(await screen.findByRole('switch', { name: 'Enable Blackjack' }));
     await rendered.user.click(await screen.findByRole('button', { name: 'Fishing Game settings' }));
-    const save = screen.getByRole('button', { name: 'Save Fishing settings' });
+    const save = screen.getByRole('button', { name: 'Save all changes' });
     expect(screen.getByText(/Phase: Unknown value \(casting\) · 9007199254740993/)).toBeVisible();
     expect(
       screen.getByText(/Specification: 10×10 · Phase: Unknown value \(playing\) · 2/),
@@ -1230,7 +1231,7 @@ describe('standalone Admin Games feature', () => {
       bidding: initialGameConfig.bidding,
       likes: initialGameConfig.likes,
       gwent: initialGameConfig.gwent,
-      blackjack: initialGameConfig.blackjack,
+      blackjack: { ...initialGameConfig.blackjack, enabled: true },
       fishing: {
         ...initialGameConfig.fishing,
         bait_prices: { ...initialGameConfig.fishing.bait_prices, worm: '3' },
@@ -1300,7 +1301,7 @@ describe('standalone Admin Games feature', () => {
     const quick = within(rps).getByRole('group', { name: 'Quick' });
     const quickPlatform = within(quick).getByLabelText('Platform');
     fireEvent.change(quickPlatform, { target: { value: '99' } });
-    const rpsSave = within(rps).getByRole('button', { name: 'Save Three-player RPS settings' });
+    const rpsSave = within(rps).getByRole('button', { name: 'Save all changes' });
     expect(rpsSave).toBeDisabled();
     await rendered.user.click(rpsSave);
     expect(within(rps).getByRole('alert')).toHaveTextContent(/must total less than 100%/i);
@@ -1309,7 +1310,7 @@ describe('standalone Admin Games feature', () => {
     await rendered.user.click(within(rps).getByRole('button', { name: 'Cancel' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Fishing Game settings' }));
     const fishing = screen.getByRole('region', { name: 'Fishing' });
-    const save = within(fishing).getByRole('button', { name: 'Save Fishing settings' });
+    const save = within(fishing).getByRole('button', { name: 'Save all changes' });
     const input = within(fishing).getByLabelText('Standard bait RTP');
     fireEvent.change(input, { target: { value: '100' } });
     await rendered.user.click(save);
@@ -1365,9 +1366,7 @@ describe('standalone Admin Games feature', () => {
     const fishing = screen.getByRole('region', { name: 'Fishing' });
     const worm = within(fishing).getByLabelText('Worm bait');
     fireEvent.change(worm, { target: { value: '3' } });
-    await rendered.user.click(
-      within(fishing).getByRole('button', { name: 'Save Fishing settings' }),
-    );
+    await rendered.user.click(within(fishing).getByRole('button', { name: 'Save all changes' }));
     expect(worm).toBeDisabled();
     expect(screen.getByLabelText('Games master switch')).toBeDisabled();
     expect(screen.getByRole('button', { name: 'LinkLink Game settings' })).toBeDisabled();
@@ -1375,7 +1374,7 @@ describe('standalone Admin Games feature', () => {
     for (const input of within(fishing).getAllByRole('spinbutton')) expect(input).toBeDisabled();
     expect(within(fishing).getByRole('button', { name: 'Close' })).toBeDisabled();
     expect(within(fishing).getByRole('button', { name: 'Cancel' })).toBeDisabled();
-    expect(within(fishing).getByRole('button', { name: 'Save Fishing settings' })).toBeDisabled();
+    expect(within(fishing).getByRole('button', { name: 'Save all changes' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Save game configuration' })).toBeDisabled();
     expect(
       screen.getByRole('button', { name: rendered.i18n.t('admin.games.restoreAuthorityValues') }),
