@@ -624,7 +624,7 @@ test('matching presets remain suggestions until an entry is explicitly selected'
     const beginCustom = async () => {
       await page.goto(url);
       await page.getByRole('button', { name: c.addEntry, exact: true }).first().click();
-      const panel = page.getByRole('region', { name: c.addEntry, exact: true });
+      const panel = page.getByRole('dialog', { name: c.addEntry, exact: true });
       await panel.getByLabel(user.user.services.serviceAddress, { exact: true }).fill(address);
       await panel
         .locator('summary')

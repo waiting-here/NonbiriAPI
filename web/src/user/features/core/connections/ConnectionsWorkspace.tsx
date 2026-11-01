@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { PageHeader } from '@shared/components/States';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
+import { Sheet } from '@shared/components/ui/Sheet';
 import { Field, Fold, Note } from '@shared/components/ui';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
@@ -75,6 +76,9 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
         }
       />
     );
+  // Opening a service from the finished form ends the create task, so returning to the
+  // list does not reopen the sheet.
+  if (selected && creating) setCreating(false);
   if (selected)
     return <ConnectionDetail key={user.id + ':' + selected} accountId={user.id} id={selected} />;
   const createButton = (
@@ -91,16 +95,15 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
         actions={createButton}
       />
       <SectionTabs group="own" />
-      {creating ? (
-        <ExpandablePanel
-          open
-          onClose={close}
-          title={t('user.workflows.addService')}
-          closeLabel={t('common.connections.close')}
-        >
-          <ServiceCreateForm accountId={user.id} />
-        </ExpandablePanel>
-      ) : null}
+      <Sheet
+        open={creating}
+        size="lg"
+        onClose={close}
+        title={t('user.workflows.addService')}
+        closeLabel={t('common.connections.close')}
+      >
+        <ServiceCreateForm accountId={user.id} />
+      </Sheet>
       <ConnectionResourceList
         restoreScroll
         accountId={user.id}
@@ -228,16 +231,15 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
           {t('common.connections.addEntry')}
         </button>
       </div>
-      {adding ? (
-        <ExpandablePanel
-          open
-          onClose={() => setAdding(false)}
-          title={t('common.connections.addEntry')}
-          closeLabel={t('common.connections.close')}
-        >
-          <ServiceCreateForm accountId={accountId} connection={connection.data} />
-        </ExpandablePanel>
-      ) : null}
+      <Sheet
+        open={adding}
+        size="lg"
+        onClose={() => setAdding(false)}
+        title={t('common.connections.addEntry')}
+        closeLabel={t('common.connections.close')}
+      >
+        <ServiceCreateForm accountId={accountId} connection={connection.data} />
+      </Sheet>
       <ConnectionEndpoints accountId={accountId} connectionId={id} />
       <Fold
         lazy

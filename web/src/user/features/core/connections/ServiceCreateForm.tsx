@@ -2,6 +2,7 @@ import { useId, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Field, Fold, Note, Segmented } from '@shared/components/ui';
+import { OptionCards } from '@shared/components/ui/OptionCards';
 import { ProtocolRerankField } from '@shared/components/ProtocolRerankField';
 import type { NativeService, RerankFormat } from '@shared/nativeServices';
 import { DISCOVERY_FORMATS, type DiscoveryPreset } from '@shared/connections';
@@ -96,7 +97,8 @@ export function ServiceCreateForm({
     setSecret('');
     setExtraSecrets((previous) => previous.map(() => ''));
   });
-  const channel = options.data?.mainstream_channels.find((row) => row.id === channelId);
+  const channels = options.data?.mainstream_channels ?? [];
+  const channel = channels.find((row) => row.id === channelId);
   const nativeOptions = options.data?.native_service_options ?? [];
   const chosenProtocol = nativeOptions.find((row) => row.connector_type === connector);
   const services = chosenProtocol?.native_services ?? [];
@@ -371,22 +373,136 @@ export function ServiceCreateForm({
   return (
     <div className="nb-stack">
       <div className="nb-form">
-        {mode === 'custom' ? (
-          <Field label={t('user.services.serviceAddress')}>
-            {(props) => (
-              <input
-                {...props}
-                form={formID}
-                type="url"
-                required
-                value={address}
-                disabled={locked || started}
-                placeholder="https://api.example.com/v1"
-                onChange={(event) => setAddress(event.target.value)}
-              />
-            )}
-          </Field>
+        {channels.length ? (
+          <OptionCards
+            legend={t('common.connections.entrySource')}
+            value={mode}
+            onChange={setMode}
+            options={[
+              {
+                value: 'custom',
+                title: t('common.connections.custom'),
+                body: t('user.services.customBody'),
+                disabled: locked || started,
+              },
+              {
+                value: 'mainstream',
+                title: t('common.connections.mainstream'),
+                body: t('user.services.mainstreamBody'),
+                disabled: locked || started,
+              },
+            ]}
+          />
         ) : null}
+        {mode === 'custom' ? (
+          <>
+            <Field label={t('user.services.serviceAddress')}>
+              {(props) => (
+                <input
+                  {...props}
+                  form={formID}
+                  type="url"
+                  required
+                  value={address}
+                  disabled={locked || started}
+                  placeholder="https://api.example.com/v1"
+                  onChange={(event) => setAddress(event.target.value)}
+                />
+              )}
+            </Field>
+            <MainstreamMatches
+              options={suggestions}
+              disabled={locked || started}
+              onAdopt={(snapshot, matchingChannel, entry) => {
+                client.setQueryData(coreKeys.endpointCreateOptions(accountId), snapshot);
+                setChannelId(matchingChannel.id);
+                setSelected({ [entry.id!]: protocolServices(entry.connector_type) });
+                setSkipCatalog({});
+                setMode('mainstream');
+              }}
+            />
+          </>
+        ) : (
+          <>
+            <Field label={t('common.connections.mainstream')}>
+              {(props) => (
+                <select
+                  {...props}
+                  form={formID}
+                  value={channelId}
+                  disabled={locked || started}
+                  required
+                  onChange={(event) => {
+                    const value = channels.find((row) => row.id === event.target.value);
+                    setChannelId(event.target.value);
+                    setSkipCatalog({});
+                    setSelected(
+                      Object.fromEntries(
+                        (value?.entries ?? [])
+                          .filter((row) => row.id && row.enabled)
+                          .map((row) => [row.id!, protocolServices(row.connector_type)]),
+                      ),
+                    );
+                  }}
+                >
+                  <option value="">{t('common.connections.select')}</option>
+                  {channels.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+            {channel ? (
+              <Fold title={t('common.connections.entries')}>
+                {channel.entries
+                  ?.filter((entry) => entry.enabled && entry.id)
+                  .map((entry) => (
+                    <div key={entry.id} className="nb-stack nb-stack--sm">
+                      <Field label={entry.name}>
+                        {(props) => (
+                          <input
+                            {...props}
+                            type="checkbox"
+                            checked={Boolean(selected[entry.id!])}
+                            disabled={locked || started}
+                            onChange={(event) =>
+                              setSelected((previous) => {
+                                const next = { ...previous };
+                                if (event.target.checked)
+                                  next[entry.id!] = protocolServices(entry.connector_type);
+                                else delete next[entry.id!];
+                                return next;
+                              })
+                            }
+                          />
+                        )}
+                      </Field>
+                      {selected[entry.id!] && channel.discovery_source ? (
+                        <Field label={t('common.connections.useSuggestedCatalog')}>
+                          {(props) => (
+                            <input
+                              {...props}
+                              type="checkbox"
+                              checked={!skipCatalog[entry.id!]}
+                              disabled={locked || started}
+                              onChange={(event) =>
+                                setSkipCatalog((previous) => ({
+                                  ...previous,
+                                  [entry.id!]: !event.target.checked,
+                                }))
+                              }
+                            />
+                          )}
+                        </Field>
+                      ) : null}
+                    </div>
+                  ))}
+              </Fold>
+            ) : null}
+          </>
+        )}
         <Field label={t('user.workflows.serviceName')}>
           {(props) => (
             <input
@@ -460,219 +576,114 @@ export function ServiceCreateForm({
             <p className="nb-small nb-muted">{t('user.services.keyOwnership')}</p>
           </>
         )}
-        <Fold title={t('user.services.advancedSetup')} lazy>
-          <Segmented
-            label={t('common.connections.entrySource')}
-            value={mode}
-            options={[
-              { value: 'custom', label: t('common.connections.custom') },
-              { value: 'mainstream', label: t('common.connections.mainstream') },
-            ]}
-            onChange={setMode}
-            disabled={locked || started}
-          />
-          {mode === 'mainstream' ? (
-            <>
-              <Field label={t('common.connections.mainstream')}>
-                {(props) => (
-                  <select
-                    {...props}
-                    form={formID}
-                    value={channelId}
-                    disabled={locked || started}
-                    required
-                    onChange={(event) => {
-                      const value = options.data?.mainstream_channels.find(
-                        (row) => row.id === event.target.value,
-                      );
-                      setChannelId(event.target.value);
-                      setSkipCatalog({});
-                      setSelected(
-                        Object.fromEntries(
-                          (value?.entries ?? [])
-                            .filter((row) => row.id && row.enabled)
-                            .map((row) => [row.id!, protocolServices(row.connector_type)]),
-                        ),
-                      );
-                    }}
-                  >
-                    <option value="">{t('common.connections.select')}</option>
-                    {options.data?.mainstream_channels.map((row) => (
-                      <option key={row.id} value={row.id}>
-                        {row.name}
+        {mode === 'custom' ? (
+          <Fold title={t('user.services.advancedSetup')} lazy>
+            <Field label={t('common.connections.protocol')}>
+              {(props) => (
+                <select
+                  {...props}
+                  form={formID}
+                  value={connector}
+                  disabled={locked || started}
+                  required
+                  onChange={(event) => {
+                    setConnector(event.target.value);
+                    setFormat(null);
+                    setDiscoveryOverride(undefined);
+                  }}
+                >
+                  <option value="">{t('common.connections.selectProtocol')}</option>
+                  {nativeOptions
+                    .filter(
+                      (row, index, rows) =>
+                        rows.findIndex(
+                          (other) => other.configuration_type === row.configuration_type,
+                        ) === index,
+                    )
+                    .map((row) => (
+                      <option key={row.connector_type} value={row.connector_type}>
+                        {coreText(CONNECTOR_COPY_KEYS[row.configuration_type as ConnectorType])}
                       </option>
                     ))}
-                  </select>
-                )}
-              </Field>
-              {channel ? (
-                <Fold title={t('common.connections.entries')}>
-                  {channel.entries
-                    ?.filter((entry) => entry.enabled && entry.id)
-                    .map((entry) => (
-                      <div key={entry.id} className="nb-stack nb-stack--sm">
-                        <Field label={entry.name}>
-                          {(props) => (
-                            <input
-                              {...props}
-                              type="checkbox"
-                              checked={Boolean(selected[entry.id!])}
-                              disabled={locked || started}
-                              onChange={(event) =>
-                                setSelected((previous) => {
-                                  const next = { ...previous };
-                                  if (event.target.checked)
-                                    next[entry.id!] = protocolServices(entry.connector_type);
-                                  else delete next[entry.id!];
-                                  return next;
-                                })
-                              }
-                            />
-                          )}
-                        </Field>
-                        {selected[entry.id!] && channel.discovery_source ? (
-                          <Field label={t('common.connections.useSuggestedCatalog')}>
-                            {(props) => (
-                              <input
-                                {...props}
-                                type="checkbox"
-                                checked={!skipCatalog[entry.id!]}
-                                disabled={locked || started}
-                                onChange={(event) =>
-                                  setSkipCatalog((previous) => ({
-                                    ...previous,
-                                    [entry.id!]: !event.target.checked,
-                                  }))
-                                }
-                              />
-                            )}
-                          </Field>
-                        ) : null}
-                      </div>
-                    ))}
-                </Fold>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <Field label={t('common.connections.protocol')}>
+                </select>
+              )}
+            </Field>
+            <ProtocolRerankField
+              formats={chosenProtocol?.rerank_formats}
+              value={format}
+              onChange={setFormat}
+              disabled={locked || started}
+            />
+            <Fold title={t('common.connections.discoveryOptional')}>
+              <Field label={t('user.workflows.discoverModels')}>
                 {(props) => (
-                  <select
+                  <input
                     {...props}
-                    form={formID}
-                    value={connector}
+                    type="checkbox"
+                    checked={Boolean(customDiscovery)}
                     disabled={locked || started}
-                    required
-                    onChange={(event) => {
-                      setConnector(event.target.value);
-                      setFormat(null);
-                      setDiscoveryOverride(undefined);
-                    }}
-                  >
-                    <option value="">{t('common.connections.selectProtocol')}</option>
-                    {nativeOptions
-                      .filter(
-                        (row, index, rows) =>
-                          rows.findIndex(
-                            (other) => other.configuration_type === row.configuration_type,
-                          ) === index,
+                    onChange={(event) =>
+                      setDiscoveryOverride(
+                        event.target.checked
+                          ? (defaultDiscovery(chosenProtocol?.configuration_type, address) ?? {
+                              base_url: address.trim(),
+                              list_format: 'openai',
+                            })
+                          : null,
                       )
-                      .map((row) => (
-                        <option key={row.connector_type} value={row.connector_type}>
-                          {coreText(CONNECTOR_COPY_KEYS[row.configuration_type as ConnectorType])}
-                        </option>
-                      ))}
-                  </select>
+                    }
+                  />
                 )}
               </Field>
-              <ProtocolRerankField
-                formats={chosenProtocol?.rerank_formats}
-                value={format}
-                onChange={setFormat}
-                disabled={locked || started}
-              />
-              <MainstreamMatches
-                options={suggestions}
-                disabled={locked || started}
-                onAdopt={(snapshot, matchingChannel, entry) => {
-                  client.setQueryData(coreKeys.endpointCreateOptions(accountId), snapshot);
-                  setChannelId(matchingChannel.id);
-                  setSelected({ [entry.id!]: protocolServices(entry.connector_type) });
-                  setSkipCatalog({});
-                  setMode('mainstream');
-                }}
-              />
-              <Fold title={t('common.connections.discoveryOptional')}>
-                <Field label={t('user.workflows.discoverModels')}>
-                  {(props) => (
-                    <input
-                      {...props}
-                      type="checkbox"
-                      checked={Boolean(customDiscovery)}
-                      disabled={locked || started}
-                      onChange={(event) =>
-                        setDiscoveryOverride(
-                          event.target.checked
-                            ? (defaultDiscovery(chosenProtocol?.configuration_type, address) ?? {
-                                base_url: address.trim(),
-                                list_format: 'openai',
-                              })
-                            : null,
-                        )
-                      }
-                    />
-                  )}
-                </Field>
-                {customDiscovery ? (
-                  <>
-                    <Field
-                      label={t('common.connections.discoveryBaseURL')}
-                      help={t('common.connections.independentDiscovery')}
-                    >
-                      {(props) => (
-                        <input
-                          {...props}
-                          form={formID}
-                          type="url"
-                          required
-                          value={customDiscovery.base_url}
-                          disabled={locked || started}
-                          onChange={(event) =>
-                            setDiscoveryOverride({
-                              ...customDiscovery,
-                              base_url: event.target.value,
-                            })
-                          }
-                        />
-                      )}
-                    </Field>
-                    <Field label={t('common.connections.listFormat')}>
-                      {(props) => (
-                        <select
-                          {...props}
-                          value={customDiscovery.list_format}
-                          disabled={locked || started}
-                          onChange={(event) =>
-                            setDiscoveryOverride({
-                              ...customDiscovery,
-                              list_format: event.target.value as DiscoveryPreset['list_format'],
-                            })
-                          }
-                        >
-                          {DISCOVERY_FORMATS.map((value) => (
-                            <option key={value} value={value}>
-                              {t(`common.connections.discoveryFormats.${value}`)}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </Field>
-                  </>
-                ) : null}
-              </Fold>
-            </>
-          )}
-        </Fold>
+              {customDiscovery ? (
+                <>
+                  <Field
+                    label={t('common.connections.discoveryBaseURL')}
+                    help={t('common.connections.independentDiscovery')}
+                  >
+                    {(props) => (
+                      <input
+                        {...props}
+                        form={formID}
+                        type="url"
+                        required
+                        value={customDiscovery.base_url}
+                        disabled={locked || started}
+                        onChange={(event) =>
+                          setDiscoveryOverride({
+                            ...customDiscovery,
+                            base_url: event.target.value,
+                          })
+                        }
+                      />
+                    )}
+                  </Field>
+                  <Field label={t('common.connections.listFormat')}>
+                    {(props) => (
+                      <select
+                        {...props}
+                        value={customDiscovery.list_format}
+                        disabled={locked || started}
+                        onChange={(event) =>
+                          setDiscoveryOverride({
+                            ...customDiscovery,
+                            list_format: event.target.value as DiscoveryPreset['list_format'],
+                          })
+                        }
+                      >
+                        {DISCOVERY_FORMATS.map((value) => (
+                          <option key={value} value={value}>
+                            {t(`common.connections.discoveryFormats.${value}`)}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
+                </>
+              ) : null}
+            </Fold>
+          </Fold>
+        ) : null}
         {credentialMode === 'new' ? (
           <div className="nb-stack">
             {extraSecrets.map((value, index) =>

@@ -326,9 +326,6 @@ describe('service setup as one task', () => {
       user: { id: '7', username: 'fixture-user', effective_level: 1 },
     });
     await view.user.click(
-      screen.getByText(userEn.user.services.advancedSetup, { selector: 'strong' }),
-    );
-    await view.user.click(
       screen.getByRole('radio', { name: common.common.connections.mainstream }),
     );
     await view.user.selectOptions(
