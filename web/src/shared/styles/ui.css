@@ -987,6 +987,19 @@
   flex: 1 1 11rem;
   max-inline-size: 20rem;
 }
+/*
+ * A search field without help or error ends at its input, so the buttons beside it line up
+ * with the input instead of sitting one row gap lower.
+ */
+.nb-filter__search .nb-field--filter > .nb-field__messages:empty {
+  display: none;
+}
+@supports (grid-template-rows: subgrid) {
+  .nb-filter__search > .nb-field--filter:has(> .nb-field__messages:empty),
+  .nb-filter__search > .nb-actions > .nb-field--filter:has(> .nb-field__messages:empty) {
+    grid-row: 1 / span 2;
+  }
+}
 .nb-chips {
   display: flex;
   gap: var(--nb-space-2);
@@ -1321,6 +1334,8 @@ button.nb-row:hover {
 .nb-facts--inline {
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 0.4rem var(--nb-space-5);
+  /* A label stays level with its value when the value row also holds a copy button. */
+  align-items: baseline;
 }
 .nb-facts--inline > div {
   display: contents;
