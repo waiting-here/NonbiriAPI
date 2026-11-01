@@ -5,7 +5,7 @@
   min-height: 100dvh;
   flex-direction: column;
   background:
-    radial-gradient(circle at 10% -10%, rgb(37 99 235 / 0.08), transparent 34rem),
+    radial-gradient(circle at 10% -10%, var(--nb-color-shell-glow), transparent 34rem),
     var(--nb-color-bg);
 }
 
@@ -134,7 +134,7 @@
   inset: 0;
   z-index: calc(var(--nb-z-drawer) - 1);
   border: 0;
-  background: rgb(12 23 35 / 0.35);
+  background: var(--nb-color-scrim-soft);
 }
 
 .nb-user-shell__footer {

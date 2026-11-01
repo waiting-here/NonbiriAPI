@@ -134,7 +134,7 @@
   display: grid;
   place-items: center;
   padding: var(--nb-space-4);
-  background: rgb(12 23 35 / 0.58);
+  background: var(--nb-color-scrim);
 }
 
 .nb-dialog {

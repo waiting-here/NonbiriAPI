@@ -1,5 +1,25 @@
 /* Base reset, typography and accessibility primitives. */
 
+/*
+ * Inter covers general punctuation, whose quotes, dashes and ellipsis are narrow Latin forms.
+ * In Chinese text these few characters come from the platform CJK font instead.
+ */
+@font-face {
+  font-family: 'Nonbiri CJK Punctuation';
+  src:
+    local('PingFang SC'), local('PingFangSC-Regular'), local('Hiragino Sans GB'),
+    local('Microsoft YaHei UI'), local('Microsoft YaHei'), local('Noto Sans CJK SC'),
+    local('NotoSansCJKsc-Regular'), local('Source Han Sans SC');
+  unicode-range: U+00B7, U+2014-2015, U+2018-2019, U+201C-201D, U+2026, U+2E3A;
+}
+
+html:lang(zh) {
+  --nb-font-sans:
+    'Nonbiri CJK Punctuation', 'Inter Variable', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', system-ui,
+    -apple-system, 'Segoe UI', sans-serif;
+}
+
 *,
 *::before,
 *::after {
@@ -27,6 +47,9 @@ body {
   background: var(--nb-color-bg);
   color: var(--nb-color-text);
   -webkit-font-smoothing: antialiased;
+  /* Inter's single-storey "a" reads softer at UI sizes. */
+  font-feature-settings: 'cv11';
+  font-optical-sizing: auto;
   transition:
     background-color var(--nb-transition),
     color var(--nb-transition);
@@ -43,17 +66,24 @@ h1,
 h2,
 h3 {
   line-height: var(--nb-line-tight);
-  letter-spacing: -0.02em;
+  font-weight: var(--nb-font-weight-semibold);
+  letter-spacing: 0;
+}
+
+/* Tight tracking only suits Latin headings; Chinese keeps its natural spacing. */
+:lang(en) :is(h1, h2) {
+  letter-spacing: -0.015em;
 }
 
 h1 {
   margin-bottom: 0.55rem;
-  font-size: clamp(1.8rem, 3vw, 2.55rem);
+  font-size: clamp(1.75rem, 2.6vw, 2.25rem);
+  font-weight: var(--nb-font-weight-bold);
 }
 
 h2 {
   margin-bottom: 0.65rem;
-  font-size: 1.15rem;
+  font-size: 1.125rem;
 }
 
 h3 {
@@ -63,10 +93,16 @@ h3 {
 
 a {
   color: var(--nb-color-accent);
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 1px;
 }
 
 a:hover {
   text-decoration-thickness: 2px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--nb-color-accent) 24%, transparent);
 }
 
 button,
@@ -92,8 +128,8 @@ input,
 select,
 textarea {
   width: 100%;
-  border: 1px solid var(--nb-color-border-strong);
-  border-radius: var(--nb-radius-sm);
+  border: 1px solid var(--nb-color-control-border);
+  border-radius: var(--nb-radius-control);
   background: var(--nb-color-surface-raised);
   color: var(--nb-color-text);
   padding: 0.62rem 0.72rem;

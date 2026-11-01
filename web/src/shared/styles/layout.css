@@ -650,7 +650,7 @@ tr:first-child td {
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: rgb(8 14 25 / 0.58);
+  background: var(--nb-color-scrim);
 }
 
 .dialog {
@@ -833,7 +833,7 @@ tr:first-child td {
   inset: 4.25rem 0 0;
   z-index: 14;
   border: 0;
-  background: rgb(8 14 25 / 0.34);
+  background: var(--nb-color-scrim-soft);
 }
 
 .checkbox-label {

@@ -27,6 +27,8 @@ export const designTokens = {
     danger: '--nb-color-danger',
     onDanger: '--nb-color-on-danger',
     info: '--nb-color-info',
+    highlight: '--nb-color-highlight',
+    highlightSoft: '--nb-color-highlight-soft',
   },
   spacing: {
     zero: '--nb-space-0',
@@ -42,6 +44,8 @@ export const designTokens = {
     md: '--nb-radius-md',
     lg: '--nb-radius-lg',
     pill: '--nb-radius-pill',
+    control: '--nb-radius-control',
+    card: '--nb-radius-card',
   },
   elevation: {
     none: '--nb-elevation-0',
