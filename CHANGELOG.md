@@ -13,6 +13,8 @@ Each version entry describes its source and compatibility boundary; a release ta
   Permissions, complete result counts, ordering and query budgets are unchanged.
 - Add management-read regressions and performance cases combining model, date
   and status filters.
+- Reuse the client-rule authority query within each transaction when multiple
+  rules match, preserving fresh permission checks and the five-second budget.
 - Keep model-binding source labels beside their checkboxes, group charity model
   settings by task and allow segmented options to wrap without clipping.
   Explain when a recurring quota's first reset must be in the future, preserving

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
@@ -355,7 +356,9 @@ func TestHundredRuleEvidenceFitsManagementReasonBudget(t *testing.T) {
 		f.rule(fmt.Sprintf("%03d-%s", i, strings.Repeat("名称", 58)), "Client/", true, nil)
 	}
 	ctx := f.context("charity", "Client/1")
+	started := time.Now()
 	decision, err := f.service.CheckCall(ctx, f.user, "[公益]provider/model", testNow)
+	t.Logf("100-rule check duration: %s", time.Since(started))
 	if err != nil || !decision.Banned {
 		t.Fatalf("maximum evidence %+v %v", decision, err)
 	}

@@ -142,6 +142,13 @@ func candidates(ctx context.Context, q *sql.Tx, source riskaudit.Source, now, ta
 	if len(matches) == 0 {
 		return nil, nil, nil
 	}
+	// Reuse compilation within this transaction, without caching authority across
+	// the precheck and the effects transaction.
+	authority, err := q.PrepareContext(ctx, ruleAuthorityQuery)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer authority.Close()
 	byID := make(map[string]riskaudit.AutoBan, len(rules))
 	for _, rule := range rules {
 		if rule.AutoBan == nil {
@@ -157,7 +164,7 @@ func candidates(ctx context.Context, q *sql.Tx, source riskaudit.Source, now, ta
 		if !ok || !action.Enabled || len(refs) >= riskaudit.MaxAutoBanRules {
 			return nil, nil, ErrInvariant
 		}
-		allowed, err := ruleActionAllowed(ctx, q, match.RuleID, targetID, now, action)
+		allowed, err := ruleActionAllowed(ctx, q, authority, match.RuleID, targetID, now, action)
 		if err != nil {
 			return nil, nil, err
 		}

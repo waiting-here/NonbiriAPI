@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage services, endpoints and service-scoped API keys, maintain model lists per endpoint/key pair, and configure personal or shared charity routing. Revocable CallerKeys authenticate gateway calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.3.4** improves time-filtered request-log queries, configuration forms and error recovery across both stations. It preserves configuration drafts when switching editors and improves mobile layouts, history navigation and game dialog keyboard controls. Database schema remains 44 and account export remains format 31; upgrading from v1.3.3 needs no database conversion. Build instructions are below; version history is in [CHANGELOG](CHANGELOG.md). Source availability does not establish instance deployment status.
+**v1.3.4** improves time-filtered request-log queries, reduces repeated work when checking client rules, and improves configuration forms and error recovery across both stations. It preserves configuration drafts when switching editors and improves mobile layouts, history navigation and game dialog keyboard controls. Database schema remains 44 and account export remains format 31; upgrading from v1.3.3 needs no database conversion. Build instructions are below; version history is in [CHANGELOG](CHANGELOG.md). Source availability does not establish instance deployment status.
 
 ## Architecture
 
