@@ -74,6 +74,24 @@ async function setup(extra?: React.ReactNode) {
   return view;
 }
 describe('normal donation review details', () => {
+  it('keeps historical materials accessible without offering a new review', async () => {
+    mocks.get.mockResolvedValue(page([]));
+    const view = await renderWithProviders(
+      <DonationUsesPanel
+        role="admin"
+        accountId="1"
+        donationId="3"
+        donationRevision="2"
+        reviewable={false}
+      />,
+      { station: 'admin', role: 'admin' },
+    );
+    expect(screen.queryByRole('button', { name: 'Approve pending content' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Return pending content' })).toBeNull();
+    await view.user.click(screen.getByText('Review material'));
+    await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(1));
+    expect(mocks.review).not.toHaveBeenCalled();
+  });
   it('does not read closed materials and loads every page when they are opened', async () => {
     const rows = Array.from({ length: 180 }, (_, index) => ({
       ...row(String(index + 100), '9'),

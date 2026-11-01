@@ -108,7 +108,7 @@ func TestShopStatisticsRealRedemptionReplayRollbackAndLifecycle(t *testing.T) {
 	// Ticket purchases, shard exchanges, daily bundles, draws and reward grants
 	// use their existing paths and never add card-redemption facts.
 	f.fund(t, ledger.Game, 50_000_000)
-	for _, action := range []Action{{Action: "buy", Ticket: "permanent", Quantity: 1, Revision: 1}, {Action: "redeem", Product: "ticket-n", Revision: 1}, {Action: "redeem", Product: "ticket-r", Revision: 1}, {Action: "redeem", Product: "ticket-sr", Revision: 1}, {Action: "redeem", Product: "ticket-ssr", Revision: 1}, {Action: "redeem", Product: "bulk-permanent", Revision: 1}, {Action: "redeem", Product: "bulk-limited", Revision: 1}, {Action: "draw", PoolID: "permanent", Quantity: 1}} {
+	for _, action := range []Action{{Action: "buy", Ticket: "permanent", Quantity: 1, Revision: 1}, {Action: "redeem", Product: "ticket-n", Revision: 1}, {Action: "redeem", Product: "ticket-r", Revision: 1}, {Action: "redeem", Product: "ticket-sr", Revision: 1}, {Action: "redeem", Product: "ticket-ssr", Revision: 1}, {Action: "redeem", Product: "ticket-n-unlimited", Revision: 1}, {Action: "redeem", Product: "ticket-r-unlimited", Revision: 1}, {Action: "redeem", Product: "ticket-sr-unlimited", Revision: 1}, {Action: "redeem", Product: "ticket-ssr-unlimited", Revision: 1}, {Action: "redeem", Product: "bulk-permanent", Revision: 1}, {Action: "redeem", Product: "bulk-limited", Revision: 1}, {Action: "draw", PoolID: "permanent", Quantity: 1}} {
 		if _, err := f.act(f.user, action.Action+action.Product, action); err != nil {
 			t.Fatal(action, err)
 		}

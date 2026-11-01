@@ -498,7 +498,7 @@ describe('donation page operations', () => {
     expect(result.data[0]?.key_count).toBe(U128_MAX);
   });
 
-  it('accepts the logical expiry handling shape only in the new summary pages', () => {
+  it('accepts closed handling without a recorded closing time', () => {
     const expired = approved({
       status: 'expired',
       handling: logicalExpiryHandling(),
@@ -517,15 +517,25 @@ describe('donation page operations', () => {
     const key = keySummary({ charity_state: 'expired', handling: logicalExpiryHandling() });
     const keyResult = normalizeManagedDonationKeysPage(page([key]), '7', '1', 20);
     expect(keyResult.data[0]?.handling.closed_at).toBeNull();
-    expect(() =>
-      normalizeManagedDonationsPage(
-        { ...page([expired]), data: [{ ...expired, status: 'approved' }] },
+    for (const [status, reason] of [
+      ['rejected', 'rejected'],
+      ['deleted', null],
+    ]) {
+      const historical = normalizeManagedDonationsPage(
+        page([
+          { ...expired, status, handling: handling({ state: 'closed', closed_reason: reason }) },
+        ]),
         'admin',
         {},
         '1',
         20,
-      ),
-    ).toThrow(ApiError);
+      );
+      expect(historical.data[0]?.handling).toMatchObject({
+        state: 'closed',
+        closed_at: null,
+        closed_reason: reason,
+      });
+    }
   });
 
   it('keeps rule_count above the visible three-rule cap and retains limited priority', () => {

@@ -363,7 +363,8 @@
             "height": 1536
           },
           "highResolutionWidth": 3840,
-          "hero": "moment/c-chatgpt/hero.webp"
+          "hero": "moment/c-chatgpt/hero.webp",
+          "contentTop": 224
         }
       }
     },
@@ -700,7 +701,8 @@
             "height": 1536
           },
           "highResolutionWidth": 4480,
-          "hero": "moment/f-chatgpt/hero.webp"
+          "hero": "moment/f-chatgpt/hero.webp",
+          "contentTop": 233
         }
       }
     },
@@ -901,7 +903,8 @@
             "height": 1536
           },
           "highResolutionWidth": 3840,
-          "hero": "moment/g-gemini/hero.webp"
+          "hero": "moment/g-gemini/hero.webp",
+          "contentTop": 104
         }
       }
     },
@@ -928,7 +931,8 @@
             "height": 1536
           },
           "highResolutionWidth": 3840,
-          "hero": "moment/h-chatgpt/hero.webp"
+          "hero": "moment/h-chatgpt/hero.webp",
+          "contentTop": 104
         }
       }
     },

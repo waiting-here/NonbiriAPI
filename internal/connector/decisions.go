@@ -59,8 +59,17 @@ func (r *Registry) SupportsDecisionRequest(kind contract.Type, request *openai.D
 	return request != nil && ok && descriptor.Capabilities.Has(contract.CapabilityDecisions)
 }
 func (r *Registry) CheckDecisionTarget(target contract.Target, request *openai.DecisionRequest, policy contract.AttemptPolicy) error {
-	if !r.SupportsDecisionRequest(target.Type(), request) || len(policy.NativeExtensions) != 0 || policy.FlattenToolCalls || policy.ForceStoreFalse {
-		return &contract.RequestRejection{Stage: "protocol preflight", Field: "request", Reason: "request cannot be represented by this connector"}
+	if !r.SupportsDecisionRequest(target.Type(), request) {
+		return &contract.RequestRejection{Stage: "capability preflight", Field: "request", Reason: "unsupported operation"}
+	}
+	if len(policy.NativeExtensions) != 0 {
+		return &contract.RequestRejection{Stage: "protocol preflight", Field: "native_extensions", Reason: "field cannot be represented by this connector"}
+	}
+	if policy.FlattenToolCalls {
+		return &contract.RequestRejection{Stage: "protocol preflight", Field: "flatten_tool_calls", Reason: "field cannot be represented by this connector"}
+	}
+	if policy.ForceStoreFalse {
+		return &contract.RequestRejection{Stage: "protocol preflight", Field: "store", Reason: "OpenAI key storage policy is incompatible with this connector"}
 	}
 	return nil
 }

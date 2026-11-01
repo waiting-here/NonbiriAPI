@@ -563,9 +563,7 @@ export function normalizeDonationHandling(value: unknown): DonationHandling {
         );
   if (
     (state === 'processed') !== (processedAt !== null && processedBy !== null) ||
-    (state !== 'processed' && (processedAt !== null || processedBy !== null)) ||
-    (state === 'closed') !== (closedAt !== null && reason !== null) ||
-    (state !== 'closed' && (closedAt !== null || reason !== null))
+    (state !== 'processed' && (processedAt !== null || processedBy !== null))
   )
     invalidResponse('handling state fields');
   return {

@@ -1,0 +1,132 @@
+.gacha-shop > .nb-tabs {
+  margin-bottom: var(--nb-space-5);
+}
+
+.gacha-shop .gacha-shard-shop {
+  margin-bottom: var(--nb-space-6);
+}
+
+.gacha-ticket-comparisons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+  gap: var(--nb-space-5);
+}
+
+.gacha-ticket-exchange {
+  min-width: 0;
+  padding: var(--nb-space-4);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-muted);
+}
+
+.gacha-ticket-exchange__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--nb-space-3);
+  margin-bottom: var(--nb-space-4);
+}
+
+.gacha-ticket-exchange__heading .gacha-ticket {
+  flex: 0 0 auto;
+  width: var(--nb-space-12);
+  height: var(--nb-space-10);
+}
+
+.gacha-ticket-exchange__heading span {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+
+.gacha-ticket-exchange__heading h3 {
+  margin: 0;
+  color: var(--nb-color-text);
+  font-size: var(--nb-font-size-md);
+  white-space: nowrap;
+}
+
+.gacha-ticket-exchange__options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.gacha-ticket-option {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--nb-space-2);
+  padding-right: var(--nb-space-3);
+}
+
+.gacha-ticket-option + .gacha-ticket-option {
+  border-left: 1px solid var(--nb-color-border);
+  padding-right: 0;
+  padding-left: var(--nb-space-3);
+}
+
+.gacha-ticket-option > strong,
+.gacha-ticket-option__price {
+  color: var(--nb-color-text);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.gacha-ticket-option__price {
+  font-size: var(--nb-font-size-md);
+  font-weight: var(--nb-font-weight-semibold);
+  white-space: normal;
+}
+
+.gacha-ticket-option__availability {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-xs);
+  min-height: var(--nb-space-10);
+  font-variant-numeric: tabular-nums;
+}
+
+.gacha-shop .gacha-ticket-option .nb-btn {
+  width: 100%;
+  min-height: var(--nb-space-12);
+  margin-top: auto;
+  padding-inline: var(--nb-space-2);
+  white-space: normal;
+  line-height: 1.25;
+}
+
+.gacha-ticket-option__amount {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.gacha-ticket-exchange__hint {
+  margin: var(--nb-space-4) 0 0;
+  padding-top: var(--nb-space-3);
+  border-top: 1px solid var(--nb-color-border);
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+
+.gacha-ticket-exchange__hint span {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.gacha-shop .gacha-fragments {
+  gap: var(--nb-space-3);
+}
+
+.gacha-shop .gacha-fragment {
+  min-width: 0;
+  background: var(--nb-color-surface);
+}
+
+@media (width < 40rem) {
+  .gacha-shop .gacha-fragments {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .gacha-ticket-exchange {
+    padding: var(--nb-space-3);
+  }
+}

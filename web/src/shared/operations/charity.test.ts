@@ -61,6 +61,31 @@ const common = {
   updated_at: 1,
 };
 
+describe('historical terminal donation handling', () => {
+  it('keeps closed details readable without inventing a timestamp or reason', () => {
+    for (const [status, reason] of [
+      ['rejected', 'rejected'],
+      ['expired', 'expired'],
+      ['deleted', null],
+    ]) {
+      const value = {
+        ...common,
+        status,
+        owner: null,
+        handling: { ...common.handling, state: 'closed', closed_reason: reason },
+      };
+      for (const normalize of [normalizeAdminDonation, normalizeStewardDonation]) {
+        expect(normalize(value).handling).toMatchObject({
+          state: 'closed',
+          revision: '1',
+          closed_at: null,
+          closed_reason: reason,
+        });
+      }
+    }
+  });
+});
+
 const bindingSourceFixture = {
   connector_type: 'openai-compatible',
   canonical_base_url: 'https://example.test/v1',

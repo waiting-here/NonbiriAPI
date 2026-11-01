@@ -38,7 +38,7 @@ type fixture struct {
 	clock    atomic.Int64
 }
 
-func newFixture(t *testing.T, handler http.HandlerFunc) *fixture {
+func newFixture(t *testing.T, handler http.HandlerFunc, configure ...func(string, *egress.StackOptions)) *fixture {
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
@@ -69,7 +69,11 @@ func newFixture(t *testing.T, handler http.HandlerFunc) *fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { vault.Close() })
-	stack, err := egress.NewStack(egress.StackOptions{AllowedOrigins: []string{server.URL}, Resolver: fixtureResolver{}})
+	options := egress.StackOptions{AllowedOrigins: []string{server.URL}, Resolver: fixtureResolver{}}
+	for _, apply := range configure {
+		apply(server.URL, &options)
+	}
+	stack, err := egress.NewStack(options)
 	if err != nil {
 		t.Fatal(err)
 	}

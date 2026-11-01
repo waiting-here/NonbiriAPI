@@ -954,6 +954,7 @@ func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.De
 				return roleDonationMutation{}, err
 			}
 		}
+		result.steward.Handling = effectiveHandling(result.steward.Handling, result.steward.Status)
 		for index := range result.steward.Keys {
 			key := &result.steward.Keys[index]
 			normalizeLegacyReceiptUsage(&key.Usage)
@@ -1004,6 +1005,9 @@ func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.De
 		}
 		changed = true
 	}
+	previousState := result.admin.Handling.State
+	result.admin.Handling = effectiveHandling(result.admin.Handling, result.admin.Status)
+	changed = changed || previousState != result.admin.Handling.State
 	for index := range result.admin.Keys {
 		key := &result.admin.Keys[index]
 		changed = normalizeLegacyReceiptUsage(&key.Usage) || changed

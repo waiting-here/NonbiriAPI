@@ -18,6 +18,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
 // ResponseSink is the existing caller response boundary. Connectors may write
@@ -572,12 +573,7 @@ func (r *Registry) CheckTargetRequest(target connectorcontract.Target, operation
 			return reject("capability preflight", "unsupported request feature or unknown field")
 		}
 		if descriptor.CheckTarget != nil {
-			err := descriptor.CheckTarget(target, chat, policy)
-			var rejected *connectorcontract.RequestRejection
-			if err == nil || errors.As(err, &rejected) {
-				return err
-			}
-			return reject("protocol preflight", "request cannot be represented by this connector")
+			return normalizePreflightError(descriptor.CheckTarget(target, chat, policy))
 		}
 	}
 	var targetError error
@@ -598,6 +594,17 @@ func (r *Registry) CheckTargetRequest(target connectorcontract.Target, operation
 		return normalizePreflightError(targetError)
 	}
 	if !r.SupportsOperationRequest(target.Type(), operation, chat, embedding, images...) {
+		if !descriptor.Capabilities.Has(connectorcontract.OperationCapability(operation)) {
+			return reject("capability preflight", "unsupported operation")
+		}
+		if operation == connectorcontract.OperationChatCompletions {
+			if err := checkContinuation(target.Type(), chat); err != nil {
+				return err
+			}
+			if (target.Type() == connectorcontract.TypeOpenAICompatible || target.Type() == connectorcontract.TypeOpenAIChatCompletions) && !openai.SupportsOpenAICompatible(chat) {
+				return &connectorcontract.RequestRejection{Stage: "protocol preflight", Field: "stream", Reason: "expected a boolean"}
+			}
+		}
 		return reject("protocol preflight", "request cannot be represented by this connector")
 	}
 	return nil
@@ -607,6 +614,12 @@ func normalizePreflightError(err error) error {
 	var rejected *connectorcontract.RequestRejection
 	if err == nil || errors.As(err, &rejected) {
 		return err
+	}
+	var validation *openai.ValidationError
+	if errors.As(err, &validation) && validation.Detail != nil {
+		if detail := requestattempt.NewDetail(validation.Detail.Field, validation.Detail.Reason); detail != nil {
+			return &connectorcontract.RequestRejection{Stage: "protocol preflight", Field: detail.Field, Reason: detail.Reason}
+		}
 	}
 	return &connectorcontract.RequestRejection{Stage: "protocol preflight", Field: "request", Reason: "request cannot be represented by this connector"}
 }

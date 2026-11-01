@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 )
 
 func (m *Manager) seal(c Credentials) (string, error) {
@@ -165,6 +167,8 @@ func (m *Manager) accessTokenSnapshot(ctx context.Context, expected int64, rejec
 
 // RequestContext binds a network operation to the live connection. Disconnect
 // cancels requests waiting inside the shared egress gate as well as active IO.
+// Fixed Codex endpoints use the protected direct route, independent of model
+// forwarding settings, because intermediary routes may be rejected upstream.
 func (m *Manager) RequestContext(ctx context.Context, revision int64) (context.Context, context.CancelFunc, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -174,7 +178,7 @@ func (m *Manager) RequestContext(ctx context.Context, revision int64) (context.C
 	if err := m.ValidateGeneration(ctx, revision); err != nil {
 		return nil, nil, err
 	}
-	child, cancel := context.WithCancel(ctx)
+	child, cancel := context.WithCancel(egress.WithCloudflareProxy(ctx, false))
 	stop := context.AfterFunc(m.connection, cancel)
 	return child, func() { stop(); cancel() }, nil
 }

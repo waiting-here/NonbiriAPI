@@ -5,6 +5,11 @@ conversations and individually selected stewards. This is a separate source from
 the [ChatGPT connection](chatgpt-agent.md). The Go server performs device-code
 login and HTTP/SSE inference itself; no external CLI or helper process is needed.
 
+Codex login, credential refresh, model discovery, quota reads and inference use
+direct connections to the fixed official endpoints. Deployment-wide Cloudflare
+Worker and legacy gateway settings do not apply to this source. These requests
+retain the shared outbound policy, concurrency limits, deadlines and cancellation.
+
 ## Connect and assign
 
 1. Open administrator AI settings and start Codex device-code login.
@@ -28,9 +33,8 @@ saved connection persists encrypted. The browser reads local status and never
 receives access or refresh tokens. The one-time device code belongs only on the
 official authorization page.
 
-Account/workspace eligibility and model access are determined upstream. Real
-Business-account authorization and inference have not yet been verified; local
-fixtures do not establish that access. A successful local status is not evidence
+Account/workspace eligibility and model access are determined upstream.
+A successful local status is not evidence
 of a recent successful upstream authentication, model discovery or quota read.
 
 ## Usage and limits

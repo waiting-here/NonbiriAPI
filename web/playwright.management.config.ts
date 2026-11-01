@@ -4,6 +4,7 @@ import audit from './playwright.audit.config';
 
 process.env.NONBIRI_MANAGEMENT_BROWSER = '1';
 process.env.NONBIRI_DONATION_CONTEXT_BROWSER = '1';
+process.env.NONBIRI_DONATION_HANDLING_BROWSER = '1';
 process.env.NONBIRI_AUDIT_BROWSER_STATE = resolve('test-results/management/state.json');
 
 export default defineConfig({

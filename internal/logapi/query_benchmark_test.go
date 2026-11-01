@@ -133,27 +133,6 @@ func BenchmarkLogAttemptFilters(b *testing.B) {
 	}
 }
 
-func BenchmarkLogCharityContainsCount(b *testing.B) {
-	database := newLogQueryBenchmarkDatabase(b, 200_000)
-	for _, mode := range []string{"table", "covering_partial"} {
-		if mode == "covering_partial" {
-			_, err := database.Exec(`CREATE INDEX idx_charity_model_count ON request_logs(route_kind,model,completed_at,id) WHERE route_kind IN ('charity_chat_completions','charity_embeddings','charity_images_generations','charity_decisions')`)
-			if err != nil {
-				b.Fatal(err)
-			}
-		}
-		b.Run(mode, func(b *testing.B) {
-			query := `SELECT COUNT(*) FROM request_logs l WHERE (l.completed_at IS NULL OR l.completed_at>?)` + charityModelPredicate
-			for b.Loop() {
-				var count int
-				if err := database.QueryRow(query, 1_799_000_000, "model-001").Scan(&count); err != nil || count != 2000 {
-					b.Fatalf("count = %d, %v", count, err)
-				}
-			}
-		})
-	}
-}
-
 func TestLogAttemptFilterPlanUsesIndependentIndexedSets(t *testing.T) {
 	database := newLogQueryBenchmarkDatabase(t, 10_000)
 	addLogAttemptBenchmarkIndexes(t, database)

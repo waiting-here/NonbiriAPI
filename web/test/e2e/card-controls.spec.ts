@@ -88,7 +88,9 @@ for (const [lang, width, theme] of [
       fullPage: true,
     });
     errors.assertNone();
-    await page.locator('.bj-queue button[type=submit]').click();
+    await page
+      .getByRole('button', { name: lang === 'zh' ? '加入队列' : 'Join queue', exact: true })
+      .click();
     await expect.poll(() => writes.length).toBe(1);
     expect(writes[0]).toEqual({ stake: '2000', config_hash: 'c'.repeat(64) });
     await expect(quick.getByRole('button')).toHaveCount(1);

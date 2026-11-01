@@ -24,6 +24,7 @@ interface Fixture {
     owner: User;
     stewards: { five: User; six: User };
     donations: Sample[];
+    handling_donations?: Record<'admin' | 'five' | 'six' | 'legacy', Sample>;
   };
 }
 interface Source {
@@ -285,3 +286,176 @@ test('owner donation APIs keep management source metadata private', async ({ bro
     await context.close();
   }
 });
+
+for (const actor of ['admin', 'five', 'six'] as const) {
+  test(`${actor} returns a donation and updates follow-up within current access`, async ({
+    browser,
+  }, info) => {
+    test.skip(
+      process.env.NONBIRI_DONATION_HANDLING_BROWSER !== '1',
+      'Requires isolated handling donations.',
+    );
+    const state = fixture();
+    const sample = state.donation_context.handling_donations![actor];
+    const legacy = state.donation_context.handling_donations!.legacy;
+    const context = await session(browser, state, actor);
+    const origin = actor === 'admin' ? state.admin_url : state.user_url;
+    const api = actor === 'admin' ? '/admin/api' : '/api/steward';
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    const path = actor === 'admin' ? '/charity?' : '/steward?tab=charity&';
+    const capture = async () => {
+      const name = `donation-handling-${actor}.png`;
+      if (process.env.NONBIRI_VISUAL_DIR)
+        mkdirSync(process.env.NONBIRI_VISUAL_DIR, { recursive: true });
+      await page.screenshot({
+        path: process.env.NONBIRI_VISUAL_DIR
+          ? resolve(process.env.NONBIRI_VISUAL_DIR, name)
+          : info.outputPath(name),
+        animations: 'disabled',
+      });
+    };
+    try {
+      const before = await read<{ pending_count: string }>(
+        context,
+        origin,
+        api + '/donations/badge',
+      );
+      const manageName = copy.common.operations.charity.sourceBrowser.manageDonation.replace(
+        '{{id}}',
+        sample.donation_id,
+      );
+      const manage = page.getByRole('button', { name: manageName, exact: true });
+      const sourceCard = page.locator('article').filter({ has: manage });
+      const donationRow = page.getByRole('row').filter({ hasText: sample.description });
+      if (actor === 'five') {
+        await page.goto(
+          origin +
+            path +
+            new URLSearchParams({ charity_section: 'donations', q: sample.description }),
+        );
+        await donationRow.getByRole('button', { name: 'Review', exact: true }).click();
+      } else {
+        await page.goto(
+          origin +
+            path +
+            new URLSearchParams({
+              charity_section: 'sources',
+              source_scope: 'all',
+              source_q: sample.base_url,
+            }),
+        );
+        await page
+          .locator('.charity-source-browser__source-button')
+          .filter({ hasText: sample.base_url })
+          .click();
+        await expect(
+          sourceCard.getByText(copy.common.donationHandling.states.pending, { exact: true }),
+        ).toBeVisible();
+        await manage.click();
+      }
+      const handling = page.getByRole('region', {
+        name: copy.common.donationHandling.title,
+        exact: true,
+      });
+      await expect(
+        handling.getByRole('button', { name: copy.common.donationHandling.process, exact: true }),
+      ).toBeVisible();
+      await page
+        .getByLabel(copy.common.connections.reviewReason, { exact: true })
+        .fill('Please correct this submission.');
+      const [review, badge] = await Promise.all([
+        page.waitForResponse(
+          (response) =>
+            response.request().method() === 'POST' &&
+            new URL(response.url()).pathname ===
+              api + '/donations/' + sample.donation_id + '/pending-review',
+        ),
+        page.waitForResponse(
+          (response) =>
+            response.request().method() === 'GET' &&
+            new URL(response.url()).pathname === api + '/donations/badge',
+        ),
+        page
+          .getByRole('button', { name: copy.common.connections.rejectAllUses, exact: true })
+          .click(),
+      ]);
+      expect(review.status()).toBe(200);
+      expect((await review.json()).handling).toMatchObject({
+        state: 'closed',
+        revision: '2',
+        closed_reason: 'rejected',
+      });
+      expect(badge.status()).toBe(200);
+      expect((await badge.json()).pending_count).toBe(
+        (BigInt(before.pending_count) - 1n).toString(),
+      );
+      if (actor === 'five') {
+        await expect(page.getByText(copy.common.pendingReviews.noLongerPending)).toBeVisible();
+        await expect(handling).toHaveCount(0);
+        // Standard scope requires an active eligible key. The saved review
+        // receipt remains available, while terminal resources leave the queue.
+        for (const id of [sample.donation_id, legacy.donation_id]) {
+          const response = await context.request.get(origin + api + '/donations/' + id, {
+            headers: { Origin: origin },
+          });
+          expect(response.status()).toBe(404);
+        }
+        await page.goBack();
+        await expect(donationRow).toHaveCount(0);
+        expect(errors).toEqual([]);
+        await capture();
+        return;
+      }
+      await expect(
+        handling.getByText(copy.common.donationHandling.states.closed, { exact: true }),
+      ).toBeVisible();
+      await expect(
+        handling.getByRole('button', { name: copy.common.donationHandling.process, exact: true }),
+      ).toHaveCount(0);
+      await page.goBack();
+      const returned = sourceCard;
+      await expect(
+        returned.getByText(copy.common.donationHandling.states.closed, { exact: true }),
+      ).toBeVisible();
+      await expect(
+        returned.getByText(copy.common.donationHandling.states.pending, { exact: true }),
+      ).toHaveCount(0);
+
+      const historical = await read<{ handling: unknown }>(
+        context,
+        origin,
+        api + '/donations/' + legacy.donation_id,
+      );
+      expect(historical.handling).toMatchObject({
+        state: 'closed',
+        revision: '1',
+        closed_at: null,
+        closed_reason: 'rejected',
+      });
+      await page.goto(
+        origin +
+          path +
+          new URLSearchParams({ charity_section: 'donations', donation_id: legacy.donation_id }),
+      );
+      await expect(
+        handling.getByText(copy.common.donationHandling.states.closed, { exact: true }),
+      ).toBeVisible();
+      await expect(
+        handling.getByRole('button', { name: copy.common.donationHandling.process, exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole('button', { name: copy.common.connections.approveAllUses, exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole('button', { name: copy.common.connections.rejectAllUses, exact: true }),
+      ).toHaveCount(0);
+      await handling.scrollIntoViewIfNeeded();
+      await capture();
+      expect(errors).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+}

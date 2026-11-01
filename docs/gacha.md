@@ -221,13 +221,18 @@ Appearance POST accepts `selected` (`default`, `heart-moment`, `celestial` or `w
 
 The state `redeemed` array contains redeemed product IDs: card IDs remain for the lifetime of the account; `bulk-permanent` and `bulk-limited` appear only when bought on the current site-calendar day. Another purchase of that bundle on the same day returns `{"rejection":"daily-limit"}`. Replaying a successful request after midnight returns the current state without purchasing again or consuming the new day's allowance. Exports include each bundle's latest claim timestamp and retained purchase operations; deletion follows the existing activity lifecycle.
 
+The shard-to-ticket products `ticket-n`, `ticket-r`, `ticket-sr` and `ticket-ssr` grant one standard ticket, one standard ticket, one limited ticket and two limited tickets respectively. Their `-unlimited` counterparts grant the same quantities for twice the current corresponding monthly price, without consuming monthly exchange allowance. Both use the current shop revision; shard debit and ticket grant commit atomically. Unlimited exchanges remain available when the monthly allowance is exhausted.
+
+Ticket exchanges appear in account exports as `redeem` operations with exact signed ticket/shard movements and resulting balances, without a card claim or credit operation. They do not add collection cards, shop-card statistics or pool-draw statistics. The shop shows the cheaper monthly alternative while enough allowance remains, without requiring another confirmation to choose unlimited.
+
 Example action bodies:
 
 | Action | Body |
 | --- | --- |
 | Draw | `{"action":"draw","pool_id":"permanent","quantity":10}` |
 | Buy tickets | `{"action":"buy","ticket":"permanent","quantity":10,"revision":1}` |
-| Redeem | `{"action":"redeem","product":"ticket-n","revision":1}` |
+| Redeem monthly | `{"action":"redeem","product":"ticket-n","revision":1}` |
+| Redeem unlimited | `{"action":"redeem","product":"ticket-n-unlimited","revision":1}` |
 | Buy a daily bundle | `{"action":"redeem","product":"bulk-permanent","revision":1}` or `{"action":"redeem","product":"bulk-limited","revision":1}` |
 | Claim a theme reward | `{"action":"claim","theme":"a"}` |
 

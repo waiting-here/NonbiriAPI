@@ -11,6 +11,22 @@ import (
 const bulkTicketPriceMilli = int64(10_000_000)
 const bulkTicketQuantity = 10
 
+// Unlimited exchanges share the current monthly offer price and ticket grant.
+func unlimitedTicketProduct(product string) (string, bool) {
+	switch product {
+	case "ticket-n-unlimited":
+		return "ticket-n", true
+	case "ticket-r-unlimited":
+		return "ticket-r", true
+	case "ticket-sr-unlimited":
+		return "ticket-sr", true
+	case "ticket-ssr-unlimited":
+		return "ticket-ssr", true
+	default:
+		return product, false
+	}
+}
+
 func bulkTicket(product string) (int, bool) {
 	switch product {
 	case "bulk-permanent":

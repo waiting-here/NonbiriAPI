@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { expect, test } from './test';
 import {
   assertNoSensitiveBrowserPersistence,
@@ -258,6 +260,80 @@ async function installUserShell(
   await mockPublicConfig(page, 'user');
   await mockRoleSession(page, 'user', 'level4');
 }
+
+for (const appearance of ['default', 'celestial'])
+  for (const theme of ['light', 'dark'])
+    for (const width of [390, 1440])
+      test(`Fishing balance remains reachable ${appearance} ${theme} ${width}`, async ({
+        page,
+      }) => {
+        const guard = collectConsoleViolations(page);
+        const height = width === 390 ? 844 : 900;
+        await page.setViewportSize({ width, height });
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await installUserShell(page, 'zh');
+        await page.addInitScript((theme) => localStorage.setItem('nb.theme', theme), theme);
+        await page.route('**/api/appearance', (route) =>
+          route.fulfill({
+            json: { selected: appearance, unlocked: ['default', 'celestial'], updated_at: null },
+          }),
+        );
+        await installFishingRoutes(page, fixtureWith());
+        await page.goto(`${USER_ORIGIN}/games/fishing`);
+        await expect(page.locator('html')).toHaveAttribute('data-appearance', appearance);
+        const bar = page.locator('.game-actionbar');
+        const start = bar.getByRole('button', { name: '开始垂钓', exact: true });
+        const balance = page.locator('.fishing-controls .fishing-totals > div').last();
+        await expect(balance).toContainText('5,000,000');
+        const evidence = process.env.NONBIRI_FISHING_LAYOUT_EVIDENCE;
+        const capture = async (state: string) => {
+          if (!evidence) return;
+          mkdirSync(evidence, { recursive: true });
+          await page.screenshot({
+            path: resolve(evidence, `${appearance}-${theme}-${width}-${state}.png`),
+          });
+        };
+        const initialStart = (await start.boundingBox())!;
+        await capture('top');
+        await balance.evaluate((element) => element.scrollIntoView({ block: 'end' }));
+        await expect(balance).toBeInViewport();
+        const balanceBox = (await balance.boundingBox())!;
+        const barBox = (await bar.boundingBox())!;
+        await capture('balance');
+        expect(balanceBox.y + balanceBox.height).toBeLessThanOrEqual(barBox.y);
+        if (width === 390) {
+          expect(barBox.x).toBe(0);
+          expect(barBox.width).toBe(width);
+          expect(barBox.y + barBox.height).toBeCloseTo(height, 0);
+          expect(initialStart.y).toBeGreaterThanOrEqual(0);
+          expect(initialStart.y + initialStart.height).toBeLessThanOrEqual(height);
+        }
+        const count = page.locator('.fishing-count button').last();
+        await count.focus();
+        await expect(count).toBeFocused();
+        const countBox = (await count.boundingBox())!;
+        expect(countBox.y + countBox.height).toBeLessThanOrEqual((await bar.boundingBox())!.y);
+        await capture('focus');
+        await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+        await expect(page.locator('#game-rankings')).toBeInViewport();
+        if (width === 390) {
+          const scrolledBar = (await bar.boundingBox())!;
+          expect(scrolledBar.y + scrolledBar.height).toBeCloseTo(height, 0);
+        }
+        await capture('bottom');
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        if (appearance !== 'default') {
+          await page.getByRole('button', { name: '欣赏背景', exact: true }).click();
+          const view = page.getByRole('dialog', { name: '欣赏背景', exact: true });
+          await expect(view).toBeVisible();
+          await expect(bar).not.toBeVisible();
+          await view.getByRole('button', { name: '返回页面', exact: true }).click();
+          await expect(bar).toBeVisible();
+        }
+        guard.assertNone();
+      });
 
 test('fishing uses desktop space, fits mobile results, and retains the anonymity preference', async ({
   page,

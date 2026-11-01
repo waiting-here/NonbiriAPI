@@ -230,6 +230,13 @@ func (s *Service) agentValidateTx(ctx context.Context, tx *sql.Tx, access useAcc
 		if h.Revision != in.ref.ExpectedRevision || h.State != "pending" {
 			return ErrConflict
 		}
+		var active bool
+		if err := tx.QueryRowContext(ctx, `SELECT `+logicallyActiveDonationSQL+` FROM donations d WHERE d.id=?`, now, in.id).Scan(&active); err != nil {
+			return err
+		}
+		if !active {
+			return ErrConflict
+		}
 		return nil
 	}
 	var rev int64

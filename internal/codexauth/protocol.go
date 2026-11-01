@@ -72,7 +72,7 @@ type authorization struct {
 }
 
 func (c *client) request(ctx context.Context, path, contentType string, body []byte, out any) (status int, resultErr error) {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(egress.WithCloudflareProxy(ctx, false), 30*time.Second)
 	defer cancel()
 	ctx = diagnostic.WithRecorder(ctx)
 	operation := "token_exchange"

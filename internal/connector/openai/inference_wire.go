@@ -28,8 +28,14 @@ func InferenceSupported(kind contract.Type, operation contract.Operation) bool {
 }
 
 func (r *InferenceRequest) CheckTarget(kind contract.Type, policy contract.AttemptPolicy) error {
-	if r == nil || !InferenceSupported(kind, r.operation) || len(policy.NativeExtensions) != 0 || policy.FlattenToolCalls {
-		return &contract.RequestRejection{Stage: "protocol preflight", Field: "request", Reason: "request cannot be represented by this connector"}
+	if r == nil || !InferenceSupported(kind, r.operation) {
+		return &contract.RequestRejection{Stage: "capability preflight", Field: "request", Reason: "unsupported operation"}
+	}
+	if len(policy.NativeExtensions) != 0 {
+		return &contract.RequestRejection{Stage: "protocol preflight", Field: "native_extensions", Reason: "field cannot be represented by this connector"}
+	}
+	if policy.FlattenToolCalls {
+		return &contract.RequestRejection{Stage: "protocol preflight", Field: "flatten_tool_calls", Reason: "field cannot be represented by this connector"}
 	}
 	if r.operation == contract.OperationRerank {
 		body, _, err := r.marshalInference("model", kind, contract.AttemptPolicy{})

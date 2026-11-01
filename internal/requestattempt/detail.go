@@ -14,6 +14,17 @@ type RejectionDetail struct {
 }
 
 var rejectionFieldsAllowed = map[string]bool{
+	"headers":                 true,
+	"reasoning":               true,
+	"include":                 true,
+	"truncation":              true,
+	"metadata":                true,
+	"max_output_tokens":       true,
+	"text":                    true,
+	"text.format":             true,
+	"instructions":            true,
+	"extra_content.google":    true,
+	"extra_content.openai":    true,
 	"thinking":                true,
 	"thinking.type":           true,
 	"thinking.display":        true,

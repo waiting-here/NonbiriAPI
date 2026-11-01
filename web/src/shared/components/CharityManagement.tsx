@@ -909,6 +909,10 @@ function DonationReview({
             accountId={accountId}
             donationId={item.id}
             donationRevision={item.revision}
+            reviewable={
+              (item.status === 'pending' || item.status === 'approved') &&
+              item.use_summary.pending !== '0'
+            }
             onReviewed={onUsesReviewed}
             onPendingChange={setUseReviewPending}
           />

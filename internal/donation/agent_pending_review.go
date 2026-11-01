@@ -118,9 +118,6 @@ func (s *Service) reviewPendingSubmissionTx(ctx context.Context, tx *sql.Tx, acc
 		if err = clearDonationMembershipsTx(ctx, tx, id, "terminated", now); err != nil {
 			return err
 		}
-		if err = closePendingHandlingTx(ctx, tx, id, now, "rejected"); err != nil {
-			return err
-		}
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE donations SET status=?,revision=revision+1,first_approval_origin=CASE WHEN ?='approve' AND first_approval_origin='unknown' THEN 'manual' ELSE first_approval_origin END,
  review_note=?,reviewed_by_user_id=?,reviewed_by_role=?,reviewed_at=?,updated_at=?,terminal_at=? WHERE id=? AND revision=? AND revision<9223372036854775807`, next, input.Decision, input.Reason, access.actorID, string(access.role), now, now, terminal, id, input.ExpectedRevision)
@@ -129,6 +126,11 @@ func (s *Service) reviewPendingSubmissionTx(ctx context.Context, tx *sql.Tx, acc
 	}
 	if err = requireOne(result); err != nil {
 		return err
+	}
+	if !approved {
+		if err = closePendingHandlingTx(ctx, tx, id, now, "rejected"); err != nil {
+			return err
+		}
 	}
 	revision, _ := parseID(input.ExpectedRevision)
 	_, err = tx.ExecContext(ctx, `INSERT INTO donation_reviews(donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at) VALUES(?,?,?,?,?,?,?)`, id, revision+1, access.actorID, string(access.role), input.Decision, input.Reason, now)

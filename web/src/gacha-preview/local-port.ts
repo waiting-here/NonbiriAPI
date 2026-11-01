@@ -1,3 +1,4 @@
+import { shardTicketOffers } from '../user/activities/gacha/ticketOffers';
 import { appearances, type AppearancePort } from '../user/appearance/context';
 import { cards, cardById, themes, tierOf, themeById } from '../user/activities/gacha/catalog';
 import {
@@ -241,21 +242,16 @@ function run(input: Action, key: string): Outcome {
     }
     case 'redeem': {
       if (input.revision !== state.shop.revision) fail('price-changed');
-      const offers: Record<
-        string,
-        {
-          spend: Partial<typeof state.fragments>;
-          ticket: 'permanent' | 'limited';
-          quantity: number;
-        }
-      > = {
-        'ticket-n': { spend: { N: state.shop.n_ticket }, ticket: 'permanent', quantity: 1 },
-        'ticket-r': { spend: { R: state.shop.r_ticket }, ticket: 'permanent', quantity: 1 },
-        'ticket-sr': { spend: { SR: state.shop.sr_ticket }, ticket: 'limited', quantity: 1 },
-        'ticket-ssr': { spend: { SSR: state.shop.ssr_tickets }, ticket: 'limited', quantity: 2 },
+      const ticketOffer = shardTicketOffers(state.shop).find(
+        (offer) => input.product === offer.id || input.product === offer.id + '-unlimited',
+      );
+      const unlimited = ticketOffer && input.product === ticketOffer.id + '-unlimited';
+      const offer = ticketOffer && {
+        spend: { [ticketOffer.rarity]: ticketOffer.cost * (unlimited ? 2n : 1n) },
+        ticket: ticketOffer.ticket,
+        quantity: ticketOffer.quantity,
       };
-      const offer = offers[input.product],
-        card = cardById[input.product];
+      const card = cardById[input.product];
       if (!offer && (!card || card.source === 'permanent')) fail('invalid');
       if (card && (state.owned[card.id] || state.redeemed.includes(card.id))) fail('already-owned');
       if (
@@ -266,32 +262,37 @@ function run(input: Action, key: string): Outcome {
       const spend =
         offer?.spend ??
         (card.source === 'shop'
-          ? { N: state.shop.chibi_n, R: state.shop.chibi_r }
+          ? { N: BigInt(state.shop.chibi_n), R: BigInt(state.shop.chibi_r) }
           : {
-              [tierOf(card.rarity)]:
+              [tierOf(card.rarity)]: BigInt(
                 card.rarity === 'SR'
                   ? state.shop.sr_card
                   : card.rarity === 'SP'
                     ? state.shop.sp_card
                     : state.shop.ssr_card,
+              ),
             });
       if (
         Object.entries(spend).some(
-          ([rarity, count]) => state.fragments[rarity as keyof typeof state.fragments] < count,
+          ([rarity, count]) =>
+            BigInt(state.fragments[rarity as keyof typeof state.fragments]) < count,
         )
       )
         fail('fragments-insufficient');
       if (
         offer &&
+        !unlimited &&
         state.month_used[offer.ticket] + offer.quantity >
           state.shop[offer.ticket === 'permanent' ? 'permanent_cap' : 'limited_cap']
       )
         fail('monthly-limit');
       for (const [rarity, count] of Object.entries(spend))
-        state.fragments[rarity as keyof typeof state.fragments] -= count;
+        state.fragments[rarity as keyof typeof state.fragments] = Number(
+          BigInt(state.fragments[rarity as keyof typeof state.fragments]) - count,
+        );
       if (offer) {
         state.tickets[offer.ticket] += offer.quantity;
-        state.month_used[offer.ticket] += offer.quantity;
+        if (!unlimited) state.month_used[offer.ticket] += offer.quantity;
       } else {
         state.owned[card.id] = { at: now(), source: 'shop' };
         state.redeemed.push(card.id);

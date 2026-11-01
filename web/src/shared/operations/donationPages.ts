@@ -356,31 +356,8 @@ function sharedSource(value: unknown, label: string): DonationPageSafeSource {
   return normalizeManagedSource(value, label, 'steward');
 }
 
-export function normalizeDonationPageHandling(
-  value: unknown,
-  label: string,
-  status?: DonationStatus,
-): DonationHandling {
-  const root = record(value, HANDLING_FIELDS, label);
-  if (
-    root.state === 'closed' &&
-    root.closed_reason === 'expired' &&
-    root.closed_at === null &&
-    root.processed_at === null &&
-    root.processed_by_role === null
-  ) {
-    if (status !== undefined && status !== 'expired')
-      invalidResponse(`${label} logical expiration`);
-    return {
-      state: 'closed',
-      revision: decimal(root.revision, `${label} revision`, { positive: true }),
-      processed_at: null,
-      processed_by_role: null,
-      closed_at: null,
-      closed_reason: 'expired',
-    };
-  }
-  return normalizeDonationHandling(value);
+export function normalizeDonationPageHandling(value: unknown, label: string): DonationHandling {
+  return normalizeDonationHandling(record(value, HANDLING_FIELDS, label));
 }
 
 function pageReview(value: unknown, label: string): DonationPageReviewResult | null {
@@ -425,7 +402,7 @@ function donationCommon(root: ReturnType<typeof record>, label: string): Donatio
   const review = pageReview(root.review_result, `${label} review`);
   const reviewer = pageReviewer(root.reviewer, `${label} reviewer`);
   const keyCount = decimal(root.key_count, `${label} key count`);
-  const handling = normalizeDonationPageHandling(root.handling, `${label} handling`, status);
+  const handling = normalizeDonationPageHandling(root.handling, `${label} handling`);
   const sourceCount = decimal(root.source_count, `${label} source count`);
   const sources = array(root.sources, `${label} sources`).map((entry, index) =>
     sharedSource(entry, `${label} source ${index + 1}`),
