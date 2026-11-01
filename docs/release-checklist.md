@@ -20,8 +20,8 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh/exact-current schema 43 startup and explicit offline conversion
-  of registered schema 16–26 and 33–42 sources: target equality,
+- Validate fresh/exact-current schema 44 startup and explicit offline conversion
+  of registered schema 16–26 and 33–43 sources: target equality,
   rollback/cancellation, re-entry and upgrade-then-start. Verify older, newer,
   unknown and incomplete storage is rejected by the service before migration,
   repair, checkpoint or recovery writes. Check descriptor source coverage and
@@ -116,7 +116,7 @@ has passed.
    inputs without rewriting shared history.
 2. Compare the merged tree with the tested candidate and reuse valid evidence.
    Verify the independently triggered master security checks. Build the trusted
-   final artifact from the exact merge commit; a tag is not required.
+   final artifact from the exact merge commit and the selected release tag.
 3. Follow the [deployment procedure](deployment.md): validate source compatibility,
    rehearse changed storage behavior on a consistent copy, close admission, stop,
    take one complete recovery snapshot, explicitly invoke the matching offline
@@ -130,8 +130,8 @@ has passed.
 
 Deployment, tags, GitHub releases and publishing instance legal text are separate
 actions. A deployment may use an exact commit without a tag or GitHub Release.
-For v1.3.2, use the exact reviewed merge commit and version string without
-creating either release object; report pending checks and deployment separately.
+For v1.3.3, create the annotated tag and source release from the reviewed merge
+commit; report release and production deployment results separately.
 Apply instance security prerequisites before deployment when needed. Revise the
 maintained legal draft for the intended behavior and distinguish it from the
 currently effective text; publication follows the administrator workflow.

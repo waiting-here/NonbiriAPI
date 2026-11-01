@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage services, endpoints and service-scoped API keys, maintain model lists per endpoint/key pair, and configure personal or shared charity routing. Revocable CallerKeys authenticate gateway calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.3.2** adds a Codex device-code source with quota information and operation diagnostics, clearer request failures and management history, protocol continuation fixes, and responsive management forms. It also repairs shared-key discovery, donation selection and service failure resets. Existing databases require an explicit upgrade to schema 43; account export remains format 31. This version uses an exact source commit without a tag or GitHub Release. Build instructions are below; version history is in [CHANGELOG](CHANGELOG.md). Source availability does not establish instance deployment status.
+**v1.3.3** repairs Codex connectivity, mobile game controls, theme framing and donation handling after rejection. The mystery shop adds unlimited shard-to-ticket exchanges alongside monthly offers, with clearer categories and price guidance. Connector preflight failures retain specific safe reasons. Database schema is 44 and account export remains format 31; existing databases require an explicit upgrade. Build instructions are below; version history is in [CHANGELOG](CHANGELOG.md). Source availability does not establish instance deployment status.
 
 ## Architecture
 
@@ -195,8 +195,10 @@ Administrators can inspect reported quota windows and reset times, retained loca
 diagnostics. Missing quota is not zero; failed refreshes retain marked stale data.
 Bind this source to administrator chat or to each selected steward individually; it
 cannot be inherited through global/steward defaults, used for automatic review,
-or added to personal or charity model routes. Real Business-account authorization
-and inference have not yet been verified.
+or added to personal or charity model routes. Fixed official Codex requests use
+protected direct egress. Catalogue, quota and a minimal inference request have
+been verified with an existing connection; fresh device authorization and access
+across all account plans have not been verified.
 
 To connect ChatGPT, download an instance target in administrator AI settings,
 then run this repository's helper on the computer with your browser:
@@ -280,10 +282,10 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 43.
+Fresh databases start in maintenance with public features closed and use schema 44.
 The service opens only the exact current schema; older, newer, unknown or
 incomplete storage is rejected before migration, repair or recovery writes.
-For exact registered schema 16–26 and 33–42 sources, preserve a complete recovery
+For exact registered schema 16–26 and 33–43 sources, preserve a complete recovery
 set before deliberately running the matching standalone
 [upgrader](cmd/nonbiri-upgrade-v1/README.md) with `--check` or `--apply`.
 The service, startup scripts and deployment helpers must not apply upgrades

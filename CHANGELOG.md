@@ -4,6 +4,46 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.3.3 — 2026-11-01
+
+### Added
+
+- Add four unlimited shard-to-ticket offers at twice the corresponding monthly
+  price, with the same ticket quantities and no monthly allowance consumption.
+  Group the mystery shop by offer type and highlight remaining discounted
+  exchanges while keeping unlimited purchases available.
+
+### Fixed and improved
+
+- Send fixed official Codex authentication, catalogue, quota and inference
+  requests through protected direct egress. Site-configured Worker and legacy
+  gateway mappings no longer interfere with these connections; existing outbound
+  limits and credential protections remain in force.
+- Keep mobile game action bars outside transformed theme containers and reserve
+  their measured height. Fishing, related game pages and gacha controls remain
+  reachable when scrolling, with correct form submission and safe-area spacing.
+- Fit theme characters to the visible area below the header across desktop,
+  short and mobile viewports, preserving registered image alignment and scale.
+- Close pending donation follow-up atomically when a submission is rejected.
+  Normalize older inconsistent records and receipts, refresh pending counts and
+  source views, and reject ineligible handling previews. Previously approved
+  services and processed donations retain their existing behavior.
+- Preserve specific safe fields and reasons through connector preflight checks,
+  including Responses-to-Chat conversion, continuation and System One options.
+  Historical generic errors remain unchanged; request contents and option values
+  are not added to logs.
+- Cover charity-model log filtering and page ordering with the existing index,
+  reducing table reads for broad searches. Keep pagination, permissions, retention
+  and query budgets intact, and expose fixed anonymous log-query route metrics.
+- Avoid taking the fishing writer connection for idle rank-expiry checks; due
+  work remains rechecked and claimed inside its transaction.
+
+### Compatibility
+
+- Existing databases require the explicit offline upgrade to schema 44 before
+  starting the new server. The 43-to-44 step rebuilds one request-log index and
+  preserves business data. Account export remains format 31.
+
 ## 1.3.2 — 2026-10-30
 
 ### Added
