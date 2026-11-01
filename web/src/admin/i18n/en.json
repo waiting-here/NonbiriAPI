@@ -937,6 +937,8 @@
       "subjectUser": "User #{{id}}"
     },
     "settings": {
+      "searchResults": "Search results",
+      "correctErrors": "Correct these settings before saving.",
       "nav": "Site settings",
       "title": "Site settings",
       "description": "Edit multiple settings, review your changes, and save them together.",

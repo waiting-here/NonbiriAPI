@@ -1,13 +1,15 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { OperationFeedback } from '@shared/components/OperationFeedback';
-import { Field, Fields, FormActions } from '@shared/components/ui';
+import { Field, Fields, Fold, FormActions } from '@shared/components/ui';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { GatewayCapabilitySummary } from '@shared/gateway/GatewayCapabilitySummary';
 import { gatewayAdapterLabels, gatewayEffortLabels } from '@shared/gateway/copy';
+import './gateway-capabilities.css';
+import { useAdminSession } from '../../data';
 import {
   GATEWAY_ADAPTERS,
   gatewayAdapterEfforts,
@@ -36,6 +38,11 @@ function entryFor(row?: GatewayCapabilityRecord): GatewayCapabilityEntry {
 }
 
 export default function GatewayCapabilitiesSection() {
+  const session = useAdminSession(false);
+  return session.data ? <GatewayCapabilitiesEditor key={session.data.admin.username} /> : null;
+}
+
+function GatewayCapabilitiesEditor() {
   const { t } = useTranslation();
   const client = useQueryClient();
   const prefix = useId();
@@ -43,17 +50,32 @@ export default function GatewayCapabilitiesSection() {
   const [draft, setDraft] = useState<GatewayCapabilityEntry>(() => entryFor());
   const [outputText, setOutputText] = useState('0');
   const [deleteTarget, setDeleteTarget] = useState<GatewayCapabilityRecord | null>(null);
-  const advanced = useRef<HTMLDetailsElement>(null);
+  const retainedDrafts = useRef(
+    new Map<
+      string,
+      {
+        editor: GatewayCapabilityRecord | null;
+        draft: GatewayCapabilityEntry;
+        outputText: string;
+      }
+    >(),
+  );
   const hasAdvanced = draft.storage !== 'reject' || draft.cache !== 'reject';
-  useEffect(() => {
-    if (hasAdvanced && advanced.current) advanced.current.open = true;
-  }, [hasAdvanced, editor]);
+  const dirty =
+    JSON.stringify(draft) !== JSON.stringify(entryFor(editor ?? undefined)) ||
+    outputText !== String(editor?.max_output_tokens ?? 0);
 
   const list = useQuery({
     queryKey: gatewayCapabilityKeys.root,
     queryFn: ({ signal }) => getGatewayCapabilities(signal),
     retry: false,
   });
+  const refreshed = editor && list.data?.find((row) => row.id === editor.id);
+  if (refreshed && editor && BigInt(refreshed.revision) > BigInt(editor.revision) && !dirty) {
+    setEditor(refreshed);
+    setDraft(entryFor(refreshed));
+    setOutputText(String(refreshed.max_output_tokens));
+  }
   const operation = useRetainedOperation(
     (intent: GatewayCapabilityIntent, key, context) =>
       writeGatewayCapability(intent, key, context.signal),
@@ -68,17 +90,29 @@ export default function GatewayCapabilitiesSection() {
     setDraft((value) => ({ ...value, ...patch }));
   };
   const open = (row: GatewayCapabilityRecord | null) => {
+    const target = row?.id ?? 'new';
+    if (editor !== undefined) {
+      const current = editor?.id ?? 'new';
+      if (current === target) return;
+      if (dirty) retainedDrafts.current.set(current, { editor, draft, outputText });
+      else retainedDrafts.current.delete(current);
+    }
+    const retained = retainedDrafts.current.get(target);
+    retainedDrafts.current.delete(target);
     operation.reset();
-    setEditor(row);
-    setDraft(entryFor(row ?? undefined));
-    setOutputText(String(row?.max_output_tokens ?? 0));
+    setEditor(retained ? retained.editor : row);
+    setDraft(retained?.draft ?? entryFor(row ?? undefined));
+    setOutputText(retained?.outputText ?? String(row?.max_output_tokens ?? 0));
   };
   const complete = (result: GatewayCapabilityRecord | GatewayCapabilityDeleted) => {
     if ('deleted' in result) {
+      retainedDrafts.current.delete(result.id);
       setDeleteTarget(null);
       if (editor?.id === result.id) setEditor(undefined);
       return;
     }
+    retainedDrafts.current.delete(editor?.id ?? 'new');
+    retainedDrafts.current.delete(result.id);
     setEditor(result);
     setDraft(entryFor(result));
     setOutputText(String(result.max_output_tokens));
@@ -172,17 +206,17 @@ export default function GatewayCapabilitiesSection() {
       )}
       {editor !== undefined ? (
         <form
-          className="ops-subcard"
+          className="gateway-capability-editor"
           onSubmit={(event) => {
             event.preventDefault();
             save();
           }}
         >
           <h3>{t(editor ? 'gatewayCapabilities.edit' : 'gatewayCapabilities.add')}</h3>
-          <Fields>
-            <fieldset disabled={operation.isPending}>
+          <Fields columns={1}>
+            <fieldset className="gateway-capability-group" disabled={operation.isPending}>
               <legend>{t('gatewayCapabilities.target')}</legend>
-              <Fields>
+              <Fields columns={2}>
                 <Field size="long" label={t('gatewayCapabilities.baseUrl')}>
                   {(props) => (
                     <input
@@ -213,97 +247,106 @@ export default function GatewayCapabilitiesSection() {
             <p className="muted" id={`${prefix}-target-hint`}>
               {t('gatewayCapabilities.targetHint')}
             </p>
-            <Field
-              label={t('gatewayCapabilities.adapter')}
-              help={t('gatewayCapabilities.adapterHint')}
-            >
-              {(props) => (
-                <select
-                  {...props}
-                  value={draft.adapter}
-                  aria-label={t('gatewayCapabilities.adapter')}
-                  disabled={operation.isPending}
-                  onChange={(event) => {
-                    const adapter = event.target.value as GatewayAdapter;
-                    const efforts = draft.efforts.filter((value) =>
-                      gatewayAdapterEfforts(adapter).includes(value),
-                    );
-                    change({
-                      adapter,
-                      efforts,
-                      storage:
-                        adapter.startsWith('anthropic_') && draft.storage === 'openai'
-                          ? 'reject'
-                          : draft.storage,
-                      cache: adapter.startsWith('openai_') ? 'reject' : draft.cache,
-                    });
-                  }}
-                >
-                  {GATEWAY_ADAPTERS.map((adapter) => (
-                    <option key={adapter} value={adapter}>
-                      {t(gatewayAdapterLabels[adapter])}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </Field>
-            <fieldset disabled={operation.isPending} aria-describedby={`${prefix}-effort-hint`}>
-              <legend>{t('gatewayCapabilities.efforts')}</legend>
-              <Fields>
-                {gatewayAdapterEfforts(draft.adapter).map((effort) => (
-                  <Field size="short" label={t(gatewayEffortLabels[effort])} key={effort}>
-                    {(props) => (
-                      <input
-                        {...props}
-                        type="checkbox"
-                        checked={draft.efforts.includes(effort)}
-                        onChange={(event) =>
-                          change({
-                            efforts: event.target.checked
-                              ? [...draft.efforts, effort]
-                              : draft.efforts.filter((value) => value !== effort),
-                          })
-                        }
-                      />
-                    )}
-                  </Field>
-                ))}
-              </Fields>
-            </fieldset>
-            <p className="muted" id={`${prefix}-effort-hint`}>
-              {t('gatewayCapabilities.effortsHint')}
-            </p>
-            <Field
-              size="short"
-              label={t('gatewayCapabilities.output')}
-              help={t(
-                anthropic
-                  ? 'gatewayCapabilities.outputAnthropicHint'
-                  : 'gatewayCapabilities.outputHint',
-              )}
-            >
-              {(props) => (
-                <input
-                  {...props}
-                  required
-                  type="number"
-                  min={anthropic ? 1 : 0}
-                  max={2147483647}
-                  step={1}
-                  value={outputText}
-                  aria-label={t('gatewayCapabilities.output')}
-                  disabled={operation.isPending}
-                  onChange={(event) => {
-                    operation.reset();
-                    setOutputText(event.target.value);
-                  }}
-                />
-              )}
-            </Field>
-            <details className="ops-advanced" ref={advanced}>
-              <summary>{t('gatewayCapabilities.advanced')}</summary>
-              <fieldset disabled={operation.isPending}>
+            <Fields columns={1} legend={t('gatewayCapabilities.capabilities')}>
+              <Field
+                label={t('gatewayCapabilities.adapter')}
+                help={t('gatewayCapabilities.adapterHint')}
+              >
+                {(props) => (
+                  <select
+                    {...props}
+                    value={draft.adapter}
+                    aria-label={t('gatewayCapabilities.adapter')}
+                    disabled={operation.isPending}
+                    onChange={(event) => {
+                      const adapter = event.target.value as GatewayAdapter;
+                      const efforts = draft.efforts.filter((value) =>
+                        gatewayAdapterEfforts(adapter).includes(value),
+                      );
+                      change({
+                        adapter,
+                        efforts,
+                        storage:
+                          adapter.startsWith('anthropic_') && draft.storage === 'openai'
+                            ? 'reject'
+                            : draft.storage,
+                        cache: adapter.startsWith('openai_') ? 'reject' : draft.cache,
+                      });
+                    }}
+                  >
+                    {GATEWAY_ADAPTERS.map((adapter) => (
+                      <option key={adapter} value={adapter}>
+                        {t(gatewayAdapterLabels[adapter])}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              <fieldset
+                className="gateway-capability-group"
+                disabled={operation.isPending}
+                aria-describedby={`${prefix}-effort-hint`}
+              >
+                <legend>{t('gatewayCapabilities.efforts')}</legend>
                 <Fields>
+                  {gatewayAdapterEfforts(draft.adapter).map((effort) => (
+                    <Field size="short" label={t(gatewayEffortLabels[effort])} key={effort}>
+                      {(props) => (
+                        <input
+                          {...props}
+                          type="checkbox"
+                          checked={draft.efforts.includes(effort)}
+                          onChange={(event) =>
+                            change({
+                              efforts: event.target.checked
+                                ? [...draft.efforts, effort]
+                                : draft.efforts.filter((value) => value !== effort),
+                            })
+                          }
+                        />
+                      )}
+                    </Field>
+                  ))}
+                </Fields>
+              </fieldset>
+              <p className="muted" id={`${prefix}-effort-hint`}>
+                {t('gatewayCapabilities.effortsHint')}
+              </p>
+              <Field
+                size="short"
+                label={t('gatewayCapabilities.output')}
+                help={t(
+                  anthropic
+                    ? 'gatewayCapabilities.outputAnthropicHint'
+                    : 'gatewayCapabilities.outputHint',
+                )}
+              >
+                {(props) => (
+                  <input
+                    {...props}
+                    required
+                    type="number"
+                    min={anthropic ? 1 : 0}
+                    max={2147483647}
+                    step={1}
+                    value={outputText}
+                    aria-label={t('gatewayCapabilities.output')}
+                    disabled={operation.isPending}
+                    onChange={(event) => {
+                      operation.reset();
+                      setOutputText(event.target.value);
+                    }}
+                  />
+                )}
+              </Field>
+            </Fields>
+            <Fold
+              key={`${editor?.id ?? 'new'}:${editor?.revision ?? '0'}`}
+              title={t('gatewayCapabilities.advanced')}
+              defaultOpen={hasAdvanced}
+            >
+              <fieldset className="gateway-capability-group" disabled={operation.isPending}>
+                <Fields columns={2}>
                   <Field
                     label={t('gatewayCapabilities.storage')}
                     help={t('gatewayCapabilities.storageHint')}
@@ -334,7 +377,9 @@ export default function GatewayCapabilitiesSection() {
                     )}
                   </Field>
                   {draft.storage === 'omit_false' ? (
-                    <p className="inline-notice">{t('gatewayCapabilities.omitWarning')}</p>
+                    <p className="inline-notice nb-field--span">
+                      {t('gatewayCapabilities.omitWarning')}
+                    </p>
                   ) : null}
                   <Field
                     label={t('gatewayCapabilities.cache')}
@@ -367,7 +412,7 @@ export default function GatewayCapabilitiesSection() {
                   </Field>
                 </Fields>
               </fieldset>
-            </details>
+            </Fold>
           </Fields>
           {!deleteTarget ? feedback : null}
           <FormActions>
@@ -379,6 +424,7 @@ export default function GatewayCapabilitiesSection() {
               type="button"
               disabled={operation.isPending}
               onClick={() => {
+                retainedDrafts.current.delete(editor?.id ?? 'new');
                 setEditor(undefined);
                 operation.reset();
               }}

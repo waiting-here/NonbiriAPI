@@ -363,3 +363,53 @@ it('edits the catalog-driven redemption ban policy including a zero threshold', 
     values: { redemption_ban_threshold: 0 },
   });
 });
+
+describe('setting error navigation', () => {
+  it.each(['en', 'zh'] as const)(
+    'locates a hidden error once and retains category drafts (%s)',
+    async (locale) => {
+      bundle.catalog.push(entry('identity_wait', 'identity', pair('Identity wait', '标识等待')));
+      bundle.values.identity_wait = 120;
+      const view = await renderWithProviders(<SettingsPage />, {
+        station: 'admin',
+        role: 'admin',
+        locale,
+        route: '/settings?group=limits',
+      });
+      const fieldLabel = locale === 'en' ? 'Response wait' : '响应等待';
+      const field = await screen.findByLabelText(fieldLabel);
+      await view.user.clear(field);
+      const category = screen.getByRole('combobox', {
+        name: view.i18n.t('admin.settings.navigation'),
+      });
+      await view.user.selectOptions(category, 'identity');
+      expect(screen.queryByLabelText(fieldLabel)).not.toBeInTheDocument();
+      const summary = screen.getByRole('alert');
+      expect(summary).toHaveTextContent(view.i18n.t('admin.settings.correctErrors'));
+      expect(
+        screen.getByRole('button', { name: locale === 'en' ? 'Save all changes' : '保存所有修改' }),
+      ).toBeDisabled();
+      await view.user.click(within(summary).getByRole('button', { name: new RegExp(fieldLabel) }));
+      const returned = await screen.findByLabelText(fieldLabel);
+      await waitFor(() => expect(returned).toHaveFocus());
+      await view.user.type(returned, '150');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      await view.user.selectOptions(category, 'identity');
+      await view.user.selectOptions(category, 'limits');
+      expect(screen.getByLabelText(fieldLabel)).toHaveValue(150);
+      expect(category).toHaveFocus();
+      expect(screen.getByLabelText(fieldLabel)).not.toHaveFocus();
+      const search = screen.getByRole('searchbox');
+      await view.user.clear(screen.getByLabelText(fieldLabel));
+      await view.user.type(search, 'Identity wait');
+      await view.user.keyboard('{Enter}');
+      expect(screen.queryByLabelText(fieldLabel)).not.toBeInTheDocument();
+      await view.user.click(
+        within(screen.getByRole('alert')).getByRole('button', { name: new RegExp(fieldLabel) }),
+      );
+      await waitFor(() => expect(screen.getByLabelText(fieldLabel)).toHaveFocus());
+      expect(search).toHaveValue('');
+      expect(api.patchSiteSettings).not.toHaveBeenCalled();
+    },
+  );
+});

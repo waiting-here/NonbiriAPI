@@ -3681,6 +3681,7 @@
     }
   },
   "gatewayCapabilities": {
+    "capabilities": "Model capabilities",
     "title": "Gateway model capabilities",
     "description": "Declare verified capabilities for an exact Gateway URL and upstream model. Changes apply to new requests immediately, including normal and flattened calls.",
     "add": "Add model capabilities",

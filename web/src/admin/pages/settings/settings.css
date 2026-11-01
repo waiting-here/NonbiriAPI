@@ -1,3 +1,27 @@
+.settings-search-bar {
+  width: 100%;
+  max-width: 48rem;
+}
+.settings-mobile-selector {
+  display: none;
+}
+.settings-errors {
+  color: var(--nb-color-danger);
+}
+.settings-errors ul {
+  display: grid;
+  gap: var(--nb-space-3);
+  padding-inline-start: var(--nb-space-5);
+}
+.settings-errors li > span {
+  display: block;
+}
+.settings-errors .nb-btn {
+  justify-content: flex-start;
+  white-space: normal;
+  text-align: start;
+  color: inherit;
+}
 .settings-search {
   width: min(100%, 22rem);
 }
@@ -60,6 +84,8 @@
   padding: var(--nb-space-4);
 }
 .settings-content .nb-setting {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
   min-width: 0;
   padding-block: var(--nb-space-1);
 }
@@ -137,24 +163,23 @@
   }
   .nb-settings__nav {
     position: static;
-    display: flex;
-    overflow-x: auto;
+    display: grid;
+    overflow: visible;
     gap: var(--nb-space-3);
-    padding-bottom: var(--nb-space-2);
+  }
+  .settings-mobile-selector {
+    display: block;
   }
   .settings-nav-group {
-    display: contents;
-  }
-  .nb-settings__nav h2 {
     display: none;
-  }
-  .nb-settings__nav button {
-    white-space: nowrap;
-    flex-shrink: 0;
-    border: 1px solid var(--nb-color-border);
   }
   .settings-other {
     display: flex;
-    white-space: nowrap;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--nb-space-2);
+  }
+  .settings-other h2 {
+    margin: 0;
   }
 }
