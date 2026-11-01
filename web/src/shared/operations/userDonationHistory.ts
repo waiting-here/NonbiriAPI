@@ -88,7 +88,7 @@ export function normalizeUserDonationHistoryPage(
         updated_at: unixSecond(row.updated_at, 'history update time'),
         key_count: decimal(row.key_count, 'history key count'),
         source_count: decimal(row.source_count, 'history source count'),
-        handling: normalizeDonationPageHandling(row.handling, 'history handling', status),
+        handling: normalizeDonationPageHandling(row.handling, 'history handling'),
         ...(row.use_summary == null ? {} : { use_summary: normalizeUseSummary(row.use_summary) }),
         owner_hidden_at: nullableUnixSecond(row.owner_hidden_at, 'owner hidden time'),
       };

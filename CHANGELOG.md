@@ -26,8 +26,9 @@ Each version entry describes its source and compatibility boundary; a release ta
   short and mobile viewports, preserving registered image alignment and scale.
 - Close pending donation follow-up atomically when a submission is rejected.
   Normalize older inconsistent records and receipts, refresh pending counts and
-  source views, and reject ineligible handling previews. Previously approved
-  services and processed donations retain their existing behavior.
+  source views, hide unavailable review actions, and reject ineligible handling
+  previews. Previously approved services and processed donations retain their
+  existing behavior.
 - Preserve specific safe fields and reasons through connector preflight checks,
   including Responses-to-Chat conversion, continuation and System One options.
   Historical generic errors remain unchanged; request contents and option values

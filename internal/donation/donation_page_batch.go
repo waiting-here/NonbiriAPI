@@ -97,12 +97,8 @@ FROM donations d JOIN donation_handling h ON h.donation_id=d.id WHERE d.id IN (`
 		item.header.Handling = projectHandling(handling, revision, role, reason)
 		if (item.header.Status == "pending" || item.header.Status == "approved") && !active {
 			item.header.Status = "expired"
-			if item.header.Handling.State == "pending" {
-				item.header.Handling.State = "closed"
-				expired := "expired"
-				item.header.Handling.ClosedReason = &expired
-			}
 		}
+		item.header.Handling = effectiveHandling(item.header.Handling, item.header.Status)
 		item.summary = donationSummaryHeader(item.header)
 		item.summary.KeyCount, item.summary.SourceCount = "0", "0"
 		handlingCount++

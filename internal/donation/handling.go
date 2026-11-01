@@ -100,16 +100,32 @@ func appendManagementFilter(query string, args []any, filter ManagementFilter, n
 func readHandlingTx(ctx context.Context, tx *sql.Tx, donationID int64) (DonationHandling, error) {
 	var out DonationHandling
 	var revision int64
-	var role, reason string
-	err := tx.QueryRowContext(ctx, `SELECT state,revision,processed_at,processed_by_role,closed_at,closed_reason
-FROM donation_handling WHERE donation_id=?`, donationID).Scan(&out.State, &revision, &out.ProcessedAt, &role, &out.ClosedAt, &reason)
+	var role, reason, status string
+	err := tx.QueryRowContext(ctx, `SELECT h.state,h.revision,h.processed_at,h.processed_by_role,h.closed_at,h.closed_reason,d.status
+FROM donation_handling h JOIN donations d ON d.id=h.donation_id WHERE h.donation_id=?`, donationID).Scan(&out.State, &revision, &out.ProcessedAt, &role, &out.ClosedAt, &reason, &status)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, ErrInvariant
 	}
 	if err != nil {
 		return out, fmt.Errorf("donation: read handling: %w", err)
 	}
-	return projectHandling(out, revision, role, reason), nil
+	return effectiveHandling(projectHandling(out, revision, role, reason), status), nil
+}
+
+// Older terminal donations may still have pending handling. Match the queue's
+// effective state without inventing a recorded close time or a new revision.
+func effectiveHandling(out DonationHandling, status string) DonationHandling {
+	if out.State != "pending" {
+		return out
+	}
+	switch status {
+	case "rejected", "expired":
+		out.State = "closed"
+		out.ClosedReason = &status
+	case "deleted":
+		out.State = "closed"
+	}
+	return out
 }
 
 func projectHandling(out DonationHandling, revision int64, role, reason string) DonationHandling {

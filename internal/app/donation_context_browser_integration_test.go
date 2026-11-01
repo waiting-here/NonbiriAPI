@@ -2,6 +2,7 @@ package app
 
 import (
 	"net/http"
+	"os"
 	"reflect"
 	"testing"
 
@@ -28,7 +29,7 @@ func seedDonationContextBrowser(t *testing.T, f *imageBrowserFixture, now int64)
 	}
 	owner := f.seedUser(120, 1, adminID)
 	five, six := f.seedUser(121, 5, adminID), f.seedUser(122, 6, adminID)
-	if _, err := f.store.DB().Exec(`UPDATE site_config SET value='1' WHERE key='donation_accept_enabled'`); err != nil {
+	if _, err := f.store.DB().Exec(`UPDATE site_config SET value='1' WHERE key IN ('charity_enabled','donation_accept_enabled')`); err != nil {
 		t.Fatal(err)
 	}
 	seed := func(category, name, base string, tags []string) donationContextBrowserSample {
@@ -45,7 +46,7 @@ func seedDonationContextBrowser(t *testing.T, f *imageBrowserFixture, now int64)
 		donate := func(description string) map[string]any {
 			t.Helper()
 			key := f.call(http.MethodPost, "/api/endpoints/"+endpoint+"/keys", map[string]any{
-				"secret": "synthetic-source-context-" + category, "note": name, "enabled": true, "force_store_false": false, "ownership_confirmed": true,
+				"secret": "synthetic-source-context-" + name, "note": name, "enabled": true, "force_store_false": false, "ownership_confirmed": true,
 			}, owner.Cookie, false)["id"].(string)
 			return f.call(http.MethodPost, "/api/donations", map[string]any{
 				"description": description, "discord_public_thanks": false, "ownership_authorized": true,
@@ -56,7 +57,7 @@ func seedDonationContextBrowser(t *testing.T, f *imageBrowserFixture, now int64)
 		f.call(http.MethodPost, "/admin/api/donations/"+prior["id"].(string)+"/review", map[string]any{
 			"decision": "force_reject", "expected_revision": prior["revision"], "reason": "Synthetic source-context review requirement",
 		}, f.adminCookie, true)
-		description := "Source context " + category + " pending submission"
+		description := name + " pending submission"
 		pending := donate(description)
 		if pending["status"] != "pending" {
 			t.Fatalf("source-context donation is not pending: %v", pending["status"])
@@ -89,5 +90,21 @@ func seedDonationContextBrowser(t *testing.T, f *imageBrowserFixture, now int64)
 			t.Fatalf("source-context projection: %v", source)
 		}
 	}
-	return map[string]any{"owner": owner, "stewards": map[string]imageBrowserUser{"five": five, "six": six}, "donations": samples}
+	out := map[string]any{"owner": owner, "stewards": map[string]imageBrowserUser{"five": five, "six": six}, "donations": samples}
+	if os.Getenv("NONBIRI_DONATION_HANDLING_BROWSER") == "1" {
+		handling := map[string]donationContextBrowserSample{}
+		for _, actor := range []string{"admin", "five", "six", "legacy"} {
+			handling[actor] = seed("subscription", "Handling "+actor, "https://"+actor+".handling.example.test/v1", nil)
+		}
+		legacy := handling["legacy"]
+		current := f.call(http.MethodGet, "/admin/api/donations/"+legacy.ID, nil, f.adminCookie, true)
+		f.call(http.MethodPost, "/admin/api/donations/"+legacy.ID+"/review", map[string]any{
+			"decision": "reject", "expected_revision": current["revision"], "reason": "Historical rejected submission",
+		}, f.adminCookie, true)
+		if _, err := f.store.DB().Exec(`UPDATE donation_handling SET state='pending',revision=1,closed_at=NULL,closed_reason='' WHERE donation_id=?`, legacy.ID); err != nil {
+			t.Fatal(err)
+		}
+		out["handling_donations"] = handling
+	}
+	return out
 }

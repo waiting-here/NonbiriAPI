@@ -24,6 +24,7 @@ export function DonationUsesPanel({
   donationId,
   donationKeyId,
   donationRevision,
+  reviewable = true,
   onReviewed,
   onPendingChange,
 }: {
@@ -31,6 +32,7 @@ export function DonationUsesPanel({
   accountId: string;
   donationId: string;
   donationKeyId?: string;
+  reviewable?: boolean;
   onReviewed?: (results: UseReviewResult[], labels: ReviewedUseLabel[]) => void;
   onPendingChange?: (pending: boolean) => void;
 } & (
@@ -103,8 +105,10 @@ export function DonationUsesPanel({
         : [
             [...root, 'donation-uses', accountId, donationId],
             charityKeys.donation(role, donationId),
+            charityKeys.badge(role, accountId),
             [...charityKeys.root(role), 'key-pages', accountId, donationId],
             [...charityKeys.root(role), 'donation-pages', accountId],
+            [...charityKeys.root(role), 'source-browser', accountId],
           ];
     await Promise.all(
       keys.map((queryKey) => client.invalidateQueries({ queryKey }, { throwOnError: true })),
@@ -116,7 +120,7 @@ export function DonationUsesPanel({
   }, [locked, onPendingChange]);
   return (
     <div className="nb-stack">
-      {role !== 'owner' && !donationKeyId ? (
+      {role !== 'owner' && !donationKeyId && (reviewable || locked) ? (
         <DonationUsesReviewAll
           role={role}
           donationId={donationId}

@@ -272,6 +272,13 @@ func TestPendingReviewHTTPCompleteSetRollbackAndReplay(t *testing.T) {
 	if pendingCount(t, e, d.ID) != 0 {
 		t.Fatal("whole rejection left pending")
 	}
+	view, err := e.service.GetAdmin(ctx, parseTestID(t, d.ID))
+	if err != nil || view.Status != "rejected" || view.Handling.State != "closed" || view.Handling.Revision != "2" || view.Handling.ClosedAt == nil || view.Handling.ClosedReason == nil || *view.Handling.ClosedReason != "rejected" {
+		t.Fatalf("rejected submission handling=%+v, err=%v", view, err)
+	}
+	if badge, err := e.service.BadgeAdmin(ctx); err != nil || badge.PendingCount != "0" {
+		t.Fatalf("rejected submission badge=%+v, err=%v", badge, err)
+	}
 }
 func TestAgentDonationReadAndSchemas(t *testing.T) {
 	e, actor, d := agentReviewFixture(t)
@@ -341,7 +348,7 @@ func TestAgentPendingRejectionPreservesApprovedVersionsAndSettings(t *testing.T)
 		t.Fatal("prior approval or settings changed", status, after, enabled, reserve)
 	}
 	projected, err := e.service.GetAdmin(ctx, parseTestID(t, d.ID))
-	if err != nil || projected.FirstApprovalOrigin != "manual" {
+	if err != nil || projected.FirstApprovalOrigin != "manual" || projected.Handling.State != "pending" || projected.Handling.Revision != "1" {
 		t.Fatalf("prior approval origin changed: %s, err=%v", projected.FirstApprovalOrigin, err)
 	}
 }

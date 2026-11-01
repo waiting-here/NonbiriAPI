@@ -102,13 +102,9 @@ func logicalHeaderTx(ctx context.Context, tx *sql.Tx, donationID, now int64) (Ad
 		}
 		if !active {
 			out.Status = "expired"
-			if out.Handling.State == "pending" {
-				out.Handling.State = "closed"
-				reason := "expired"
-				out.Handling.ClosedReason = &reason
-			}
 		}
 	}
+	out.Handling = effectiveHandling(out.Handling, out.Status)
 	return out, nil
 }
 
