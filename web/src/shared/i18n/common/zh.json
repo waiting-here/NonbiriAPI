@@ -3681,6 +3681,7 @@
     }
   },
   "gatewayCapabilities": {
+    "capabilities": "模型能力",
     "title": "Gateway 模型能力",
     "description": "为精确的 Gateway 地址和上游模型声明已验证能力。保存后立即用于新请求，普通调用和工具压平调用共用。",
     "add": "添加模型能力",

@@ -152,6 +152,8 @@ function validDraft(draft: ChannelDraft): boolean {
 function ChannelForm({
   mode,
   channel,
+  draft,
+  onChange,
   busy,
   error,
   canWrite = true,
@@ -160,6 +162,8 @@ function ChannelForm({
 }: {
   mode: 'create' | 'edit';
   channel?: AdminMainstreamChannel;
+  draft: ChannelDraft;
+  onChange: (draft: ChannelDraft) => void;
   busy: boolean;
   error: unknown;
   canWrite?: boolean;
@@ -177,7 +181,6 @@ function ChannelForm({
     queryFn: ({ signal }) => getAdminNativeServiceOptions(signal),
     enabled: Boolean(session.data),
   });
-  const [draft, setDraft] = useState<ChannelDraft>(() => draftFor(channel));
   const [invalid, setInvalid] = useState(false);
   const canEdit = canWrite && (mode === 'create' || channel?.state === 'active');
 
@@ -201,7 +204,7 @@ function ChannelForm({
               maxLength={128}
               autoComplete="off"
               disabled={!canEdit || busy}
-              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+              onChange={(event) => onChange({ ...draft, name: event.target.value })}
             />
           )}
         </Field>
@@ -212,7 +215,7 @@ function ChannelForm({
               value={draft.category}
               disabled={!canEdit || busy}
               onChange={(event) =>
-                setDraft({ ...draft, category: event.target.value as MainstreamChannelCategory })
+                onChange({ ...draft, category: event.target.value as MainstreamChannelCategory })
               }
             >
               {MAINSTREAM_CHANNEL_CATEGORIES.map((value) => (
@@ -238,7 +241,7 @@ function ChannelForm({
         }}
         onChange={(layout) => {
           const first = layout.entries[0];
-          setDraft({
+          onChange({
             ...draft,
             ...layout,
             ...(first
@@ -254,7 +257,7 @@ function ChannelForm({
         label={t('admin.mainstreamChannels.form.enabled')}
         checked={draft.enabled}
         disabled={!canEdit || busy}
-        onChange={(enabled) => setDraft({ ...draft, enabled })}
+        onChange={(enabled) => onChange({ ...draft, enabled })}
       />
       {invalid ? (
         <p className="inline-notice">{t('admin.mainstreamChannels.validation.invalid')}</p>
@@ -375,6 +378,25 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
       { replace: true },
     );
   }, [searchParams, setSearchParams]);
+  const [createDraft, setCreateDraft] = useState<ChannelDraft>(() => draftFor());
+  const [channelDrafts, setChannelDrafts] = useState<
+    Record<
+      string,
+      {
+        base: AdminMainstreamChannel;
+        value: ChannelDraft;
+      }
+    >
+  >({});
+  const discardChannelDraft = (id: string) => {
+    setChannelDrafts((current) =>
+      Object.fromEntries(Object.entries(current).filter(([key]) => key !== id)),
+    );
+  };
+  const rememberChannelDraft = (base: AdminMainstreamChannel, value: ChannelDraft) => {
+    if (Object.keys(changedPatch(base, value)).length === 1) discardChannelDraft(base.id);
+    else setChannelDrafts((current) => ({ ...current, [base.id]: { base, value } }));
+  };
   const [selected, setSelected] = useState('');
   const [creating, setCreating] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -487,6 +509,8 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
     // The account transition must synchronously close old-account controls.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setAccountScope(accountID);
+    setCreateDraft(draftFor());
+    setChannelDrafts({});
     setSelected('');
     setPanelOpen(false);
     setCreating(false);
@@ -519,6 +543,8 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
   useEffect(() => {
     if (isAuthorityLoss(authorityError)) {
       setAuthorityLoss(authorityError);
+      setCreateDraft(draftFor());
+      setChannelDrafts({});
       setSelected('');
       setPanelOpen(false);
       setCreating(false);
@@ -528,6 +554,9 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
       retire.reset();
       if (isUnauthorized(authorityError)) clearStationSession(client, 'admin');
     } else if (isNotFoundError(detail.error)) {
+      setChannelDrafts((current) =>
+        Object.fromEntries(Object.entries(current).filter(([key]) => key !== selected)),
+      );
       setSelected('');
       setPanelOpen(false);
       setCreating(false);
@@ -543,12 +572,15 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
     retire,
     session.data,
     session.error,
+    selected,
   ]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const mutationError = createError ?? patchError ?? retireError;
   const conflictNotice = conflictOrUnknown(mutationError);
   const selectedChannel = detail.data;
+  const editingChannel =
+    (selectedChannel && channelDrafts[selectedChannel.id]?.base) ?? selectedChannel;
   const pageData = channels.data;
   const busy = channels.isFetching;
 
@@ -792,6 +824,13 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
             <ChannelForm
               key={`create:${accountID ?? 'anonymous'}`}
               mode="create"
+              draft={createDraft}
+              onChange={setCreateDraft}
+              onCancel={() => {
+                setCreateDraft(draftFor());
+                create.reset();
+                setPanelOpen(false);
+              }}
               busy={create.isPending}
               error={createError}
               canWrite={canWrite}
@@ -803,6 +842,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                   {
                     onSuccess: (channel) => {
                       if (isCurrentAccount(submittedAccountID)) {
+                        setCreateDraft(draftFor());
                         setCreating(false);
                         setSelected(channel.id);
                       }
@@ -823,26 +863,48 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
             ) : selectedChannel ? (
               <>
                 <ChannelDetails channel={selectedChannel} />
-                {selectedChannel.state === 'active' ? (
+                {selectedChannel.state === 'active' && editingChannel ? (
                   <>
                     <h3>{t('admin.mainstreamChannels.edit.title')}</h3>
                     <ChannelForm
                       key={`${accountID ?? 'anonymous'}:${selectedChannel.id}:${selectedChannel.revision}`}
                       mode="edit"
-                      channel={selectedChannel}
+                      channel={editingChannel}
+                      draft={channelDrafts[selectedChannel.id]?.value ?? draftFor(selectedChannel)}
+                      onChange={(draft) => rememberChannelDraft(editingChannel, draft)}
                       busy={patch.isPending}
                       error={patchError}
                       canWrite={canWrite}
-                      onCancel={() => setPanelOpen(false)}
+                      onCancel={() => {
+                        discardChannelDraft(selectedChannel.id);
+                        patch.reset();
+                        setPanelOpen(false);
+                      }}
                       onSubmit={(draft) => {
                         if (!canWrite || !accountID) return;
-                        const input = changedPatch(selectedChannel, draft);
+                        const input = changedPatch(editingChannel, draft);
                         if (Object.keys(input).length === 1) return;
-                        patch.mutate({
-                          accountID,
-                          id: selectedChannel.id,
-                          patch: input,
-                        });
+                        const submittedAccountID = accountID;
+                        patch.mutate(
+                          {
+                            accountID,
+                            id: selectedChannel.id,
+                            patch: input,
+                          },
+                          {
+                            onSuccess: (updated) => {
+                              if (!isCurrentAccount(submittedAccountID)) return;
+                              discardChannelDraft(updated.id);
+                              client.setQueryData(
+                                channelDetailKey(submittedAccountID, updated.id),
+                                (current: AdminMainstreamChannel | undefined) =>
+                                  current && BigInt(current.revision) > BigInt(updated.revision)
+                                    ? current
+                                    : updated,
+                              );
+                            },
+                          },
+                        );
                       }}
                     />
                     <div className="ops-danger">
@@ -883,7 +945,15 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
               const target = retireTarget;
               setRetireTarget(null);
               if (!accountID || !canWrite) return;
-              retire.mutate({ accountID, id: target.id, revision: target.revision });
+              const submittedAccountID = accountID;
+              retire.mutate(
+                { accountID, id: target.id, revision: target.revision },
+                {
+                  onSuccess: () => {
+                    if (isCurrentAccount(submittedAccountID)) discardChannelDraft(target.id);
+                  },
+                },
+              );
             }}
           />
         ) : null}

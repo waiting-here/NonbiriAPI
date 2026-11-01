@@ -7,7 +7,11 @@ import {
 import { GatewayCapabilitySummary } from '@shared/gateway/GatewayCapabilitySummary';
 import { renderWithProviders } from '../../../../test/unit/support';
 import GatewayCapabilitiesSection from './GatewayCapabilitiesSection';
-import type { GatewayCapabilityEntry, GatewayCapabilityRecord } from './api';
+import {
+  gatewayCapabilityKeys,
+  type GatewayCapabilityEntry,
+  type GatewayCapabilityRecord,
+} from './api';
 
 const entry: GatewayCapabilityEntry = {
   base_url: 'https://gateway.example/v3',
@@ -229,5 +233,172 @@ describe('Gateway capability management', () => {
     expect(screen.getByText(i18n.t('gatewayCapabilities.absent'))).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+});
+
+it('retains new and per-record Gateway drafts and cancels only the current draft', async () => {
+  const other = { ...row, id: '13', model: 'provider/other' };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => json({ data: [row, other] })),
+  );
+  const { user, i18n } = await renderSection();
+  const add = () => screen.getByRole('button', { name: i18n.t('gatewayCapabilities.add') });
+  const edit = (index: number) =>
+    screen.getByRole('button', {
+      name: i18n.t('gatewayCapabilities.editTarget', { model: [row, other][index].model }),
+    });
+  const model = () => screen.getByLabelText(i18n.t('gatewayCapabilities.model'));
+  await user.click(add());
+  await user.type(
+    screen.getByLabelText(i18n.t('gatewayCapabilities.baseUrl')),
+    'https://draft.example/v1',
+  );
+  await user.type(model(), 'new-model');
+  await user.click(add());
+  expect(model()).toHaveValue('new-model');
+  await user.click(edit(0));
+  await user.type(model(), '-edited');
+  await user.click(edit(1));
+  await user.type(model(), '-edited');
+  await user.click(edit(0));
+  expect(model()).toHaveValue('provider/model-edited');
+  await user.click(edit(0));
+  expect(model()).toHaveValue('provider/model-edited');
+  await user.click(screen.getByRole('button', { name: i18n.t('common.cancel') }));
+  await user.click(edit(0));
+  expect(model()).toHaveValue('provider/model');
+  await user.click(edit(1));
+  expect(model()).toHaveValue('provider/other-edited');
+  await user.click(add());
+  expect(model()).toHaveValue('new-model');
+  expect(screen.getByLabelText(i18n.t('gatewayCapabilities.baseUrl'))).toHaveValue(
+    'https://draft.example/v1',
+  );
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+});
+
+it('refreshes clean Gateway records while keeping dirty revisions and advanced disclosure state', async () => {
+  let current: GatewayCapabilityRecord = { ...row, cache: 'reject' };
+  const writes: unknown[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_input: unknown, init?: RequestInit) => {
+      if (!init?.method || init.method === 'GET') return json({ data: [current] });
+      writes.push(JSON.parse(String(init.body)));
+      return json({ error: { code: 'conflict', message: 'The record changed.' } }, 409);
+    }),
+  );
+  const { user, i18n, queryClient } = await renderSection();
+  await user.click(
+    screen.getByRole('button', {
+      name: i18n.t('gatewayCapabilities.editTarget', { model: row.model }),
+    }),
+  );
+  const advanced = () =>
+    screen.getByText(i18n.t('gatewayCapabilities.advanced')).closest('details');
+  expect(advanced()).not.toHaveAttribute('open');
+  current = { ...current, revision: '4', model: 'refreshed-model', cache: 'anthropic' };
+  await act(async () => {
+    queryClient.setQueryData(gatewayCapabilityKeys.root, [current]);
+  });
+  await waitFor(() =>
+    expect(screen.getByLabelText(i18n.t('gatewayCapabilities.model'))).toHaveValue(
+      'refreshed-model',
+    ),
+  );
+  expect(advanced()).toHaveAttribute('open');
+  await user.click(screen.getByText(i18n.t('gatewayCapabilities.advanced')));
+  await user.type(screen.getByLabelText(i18n.t('gatewayCapabilities.model')), '-edited');
+  expect(advanced()).not.toHaveAttribute('open');
+  current = { ...current, revision: '5', model: 'server-model' };
+  await act(async () => {
+    queryClient.setQueryData(gatewayCapabilityKeys.root, [current]);
+  });
+  await user.click(screen.getByRole('button', { name: i18n.t('common.save') }));
+  await waitFor(() => expect(writes).toHaveLength(1));
+  expect(writes[0]).toMatchObject({
+    expected_revision: '4',
+    entry: { model: 'refreshed-model-edited' },
+  });
+  expect(screen.getByLabelText(i18n.t('gatewayCapabilities.model'))).toHaveValue(
+    'refreshed-model-edited',
+  );
+});
+
+it('drops Gateway drafts when the cached administrator changes', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => json({ data: [row] })),
+  );
+  const view = await renderSection();
+  await view.user.click(
+    screen.getByRole('button', { name: view.i18n.t('gatewayCapabilities.add') }),
+  );
+  await view.user.type(
+    screen.getByLabelText(view.i18n.t('gatewayCapabilities.model')),
+    'private-draft',
+  );
+  await view.user.click(
+    screen.getByRole('button', {
+      name: view.i18n.t('gatewayCapabilities.editTarget', { model: row.model }),
+    }),
+  );
+  await act(async () => {
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'another-admin' } });
+  });
+  await waitFor(() =>
+    expect(
+      screen.queryByLabelText(view.i18n.t('gatewayCapabilities.model')),
+    ).not.toBeInTheDocument(),
+  );
+  await view.user.click(
+    screen.getByRole('button', { name: view.i18n.t('gatewayCapabilities.add') }),
+  );
+  expect(screen.getByLabelText(view.i18n.t('gatewayCapabilities.model'))).toHaveValue('');
+});
+
+it('keeps the confirmed Gateway revision when the following list refresh fails', async () => {
+  const writes: Record<string, unknown>[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_input: unknown, init?: RequestInit) => {
+      if (!init?.method || init.method === 'GET') {
+        if (writes.length) throw new Error('List refresh unavailable');
+        return json({ data: [row] });
+      }
+      const body = JSON.parse(String(init.body));
+      writes.push(body);
+      return json({ ...row, ...body.entry, revision: String(3 + writes.length) });
+    }),
+  );
+  const { user, i18n } = await renderSection();
+  await user.click(
+    screen.getByRole('button', {
+      name: i18n.t('gatewayCapabilities.editTarget', { model: row.model }),
+    }),
+  );
+  await user.type(screen.getByLabelText(i18n.t('gatewayCapabilities.model')), '-saved');
+  await user.click(screen.getByRole('button', { name: i18n.t('common.save') }));
+  await waitFor(() =>
+    expect(document.querySelector('.nb-operation-feedback--refresh-failed')).toBeInTheDocument(),
+  );
+  expect(screen.getByLabelText(i18n.t('gatewayCapabilities.model'))).toHaveValue(
+    row.model + '-saved',
+  );
+  await user.click(
+    screen.getByRole('button', {
+      name: i18n.t('gatewayCapabilities.editTarget', { model: row.model }),
+    }),
+  );
+  expect(screen.getByLabelText(i18n.t('gatewayCapabilities.model'))).toHaveValue(
+    row.model + '-saved',
+  );
+  await user.type(screen.getByLabelText(i18n.t('gatewayCapabilities.model')), '-again');
+  await user.click(screen.getByRole('button', { name: i18n.t('common.save') }));
+  await waitFor(() => expect(writes).toHaveLength(2));
+  expect(writes[1]).toMatchObject({
+    expected_revision: '4',
+    entry: { model: row.model + '-saved-again' },
   });
 });

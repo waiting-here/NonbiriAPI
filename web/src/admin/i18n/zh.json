@@ -937,6 +937,8 @@
       "subjectUser": "用户 #{{id}}"
     },
     "settings": {
+      "searchResults": "搜索结果",
+      "correctErrors": "请修正以下设置后保存。",
       "nav": "站点参数",
       "title": "站点参数",
       "description": "调整站点参数。可同时编辑多项，检查后统一保存。",
