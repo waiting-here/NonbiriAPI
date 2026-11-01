@@ -457,7 +457,9 @@ test('workbench edits survive save and reload, and library deletion preserves pu
     await page.getByRole('button', { name: 'Fit screen', exact: true }).click();
     await expect
       .poll(async () =>
-        Math.abs((await stage.evaluate((node) => node.getBoundingClientRect().width)) - fittedWidth),
+        Math.abs(
+          (await stage.evaluate((node) => node.getBoundingClientRect().width)) - fittedWidth,
+        ),
       )
       .toBeLessThan(1);
     await capture(page, '15-workbench-saved-layout');
@@ -1017,7 +1019,7 @@ test('a local season publishes explicitly and the original user tab resumes, set
     await capture(page, '13-results-ranking-and-history');
     await expect(page.locator('.fatfish-board')).toContainText('#1');
     expect(await page.locator('.fatfish-history').innerText()).toContain(
-      'Ticket: 1 · Refund: 0 · Rewards:',
+      'Ticket: 1 credits · Refund: 0 credits · Rewards:',
     );
     const response = await participant.request.get(
       fixture().user_url +
@@ -1043,7 +1045,9 @@ test('a local season publishes explicitly and the original user tab resumes, set
   }
 });
 
-test('editor exposes invalid geometry, collision ghosts, and touch zoom with property editing', async ({ browser }) => {
+test('editor exposes invalid geometry, collision ghosts, and touch zoom with property editing', async ({
+  browser,
+}) => {
   for (const mobile of [false, true]) {
     const context = await session(browser, 'admin', mobile);
     const page = await context.newPage();
@@ -1058,15 +1062,20 @@ test('editor exposes invalid geometry, collision ghosts, and touch zoom with pro
         await map.scrollIntoViewIfNeeded();
         const box = await map.boundingBox();
         if (!box) throw new Error('Missing editor canvas');
-        return { x: box.x + (x + 128) * box.width / 736, y: box.y + (y + 128) * box.height / 816 };
+        return {
+          x: box.x + ((x + 128) * box.width) / 736,
+          y: box.y + ((y + 128) * box.height) / 816,
+        };
       };
       if (!mobile) {
         await page.getByRole('button', { name: 'Add Fixed obstacle', exact: true }).click();
         await page.getByRole('button', { name: 'Edit vertices', exact: true }).click();
         const x = Number(await page.getByLabel('X', { exact: true }).first().inputValue());
         const y = Number(await page.getByLabel('Y', { exact: true }).first().inputValue());
-        const a = await point(x, y), b = await point(x + 65, y + 30);
-        await page.mouse.move(a.x, a.y); await page.mouse.down();
+        const a = await point(x, y),
+          b = await point(x + 65, y + 30);
+        await page.mouse.move(a.x, a.y);
+        await page.mouse.down();
         await page.mouse.move(b.x, b.y, { steps: 5 });
         await expect(map.locator('[data-invalid="true"]')).not.toHaveCount(0);
         await page.mouse.up();
@@ -1076,30 +1085,55 @@ test('editor exposes invalid geometry, collision ghosts, and touch zoom with pro
         await page.getByRole('button', { name: 'Add Fish', exact: true }).click();
         const collision = await point(x + 24, y + 20);
         await page.mouse.move(collision.x, collision.y);
-        await expect(map.locator('.fatfish-placement-ghost')).toHaveAttribute('data-invalid', 'true');
+        await expect(map.locator('.fatfish-placement-ghost')).toHaveAttribute(
+          'data-invalid',
+          'true',
+        );
         await page.mouse.click(collision.x, collision.y);
-        await expect(page.getByRole('status').filter({ hasText: 'This position hits an obstacle' })).toBeVisible();
+        await expect(
+          page.getByRole('status').filter({ hasText: 'This position hits an obstacle' }),
+        ).toBeVisible();
         await map.press('Escape');
       } else {
         const at = await point(88, 400);
         await page.touchscreen.tap(at.x, at.y);
         await expect(page.getByRole('heading', { name: 'Fish #1', exact: true })).toBeVisible();
-        const heading = page.locator('.fatfish-inspector').getByLabel('Angle (clockwise, 0° points right)');
-        await heading.fill('90'); await heading.press('Enter');
-        await expect(page.locator('.fatfish-inspector').getByRole('button', { name: 'Down', exact: true })).toHaveAttribute('aria-pressed', 'true');
+        const heading = page
+          .locator('.fatfish-inspector')
+          .getByLabel('Angle (clockwise, 0° points right)');
+        await heading.fill('90');
+        await heading.press('Enter');
+        await expect(
+          page.locator('.fatfish-inspector').getByRole('button', { name: 'Down', exact: true }),
+        ).toHaveAttribute('aria-pressed', 'true');
         await map.scrollIntoViewIfNeeded();
         const box = await map.boundingBox();
         if (!box) throw new Error('Missing touch canvas');
-        const x = box.x + box.width / 2, y = box.y + box.height / 2;
+        const x = box.x + box.width / 2,
+          y = box.y + box.height / 2;
         const cdp = await context.newCDPSession(page);
-        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x - 25, y, id: 1 }, { x: x + 25, y, id: 2 }] });
-        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x - 45, y, id: 1 }, { x: x + 45, y, id: 2 }] });
+        await cdp.send('Input.dispatchTouchEvent', {
+          type: 'touchStart',
+          touchPoints: [
+            { x: x - 25, y, id: 1 },
+            { x: x + 25, y, id: 2 },
+          ],
+        });
+        await cdp.send('Input.dispatchTouchEvent', {
+          type: 'touchMove',
+          touchPoints: [
+            { x: x - 45, y, id: 1 },
+            { x: x + 45, y, id: 2 },
+          ],
+        });
         await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
         await expect
           .poll(() => map.evaluate((node) => node.getBoundingClientRect().width))
           .toBeGreaterThan(box.width * 1.2);
         await cdp.detach();
       }
-    } finally { await context.close(); }
+    } finally {
+      await context.close();
+    }
   }
 });
