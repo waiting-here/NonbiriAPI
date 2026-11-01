@@ -698,7 +698,7 @@ for (const locale of ['en', 'zh'] as const) {
       .getByRole('button', { name: locale === 'zh' ? '搜索' : 'Search', exact: true })
       .click();
     await expect(cards).toHaveCount(12);
-    await expect(page.locator('.economy-catalog-filters .nb-filter__more')).toHaveCount(0);
+    await page.locator('.economy-catalog-filters .nb-filter__more > summary').click();
     await page
       .getByRole('combobox', {
         name: locale === 'zh' ? '本人访问权限' : 'Your access',

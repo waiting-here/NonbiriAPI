@@ -145,7 +145,7 @@ function CatalogFilters({
   return (
     <div className="economy-catalog-filters">
       <FilterBar
-        secondaryAlwaysVisible
+        persistKey="charity-catalog-filters"
         search={
           <>
             <Field label={t('user.charity.catalog.search')}>

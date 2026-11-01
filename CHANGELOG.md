@@ -27,8 +27,10 @@ Each version entry describes its source and compatibility boundary; a release ta
   selectable cards.
 - Hide model filters until the list has models, show model details in two
   columns and give empty lists a small cloud illustration.
-- Make copying a charity model name a bordered row action and place charity
-  filters two per row on phones.
+- Make copying a charity model name a bordered row action. The four charity
+  catalog filters now open from More filters, which shows how many are
+  applied; applied filters stay visible as removable chips, and the opened
+  state is kept for the browser session.
 - Lead the administrator overview with pending donations and open reports,
   each linked to its queue, and keep the donation review decision on screen
   while a long key list is reviewed.

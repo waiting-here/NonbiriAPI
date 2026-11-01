@@ -37,7 +37,8 @@
   min-width: 2.5rem;
   min-height: 2.5rem;
 }
-/* All four filters stay visible; on phones they share rows so the models start sooner. */
+/* The four filters open from More filters; applied ones stay visible as chips. On phones the
+ * opened filters share rows so the models start sooner. */
 @media (22rem <= width <= 32rem) {
   .economy-catalog-filters .nb-filter__fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
