@@ -59,14 +59,13 @@ describe('central route and navigation wiring', () => {
 
     expect(userNav.map(({ to, key }) => `${to}:${key}`)).toEqual([
       '/:home',
-      '/rewards:rewards',
       '/keys:caller-key',
-      '/endpoints:endpoints',
-      '/models:models',
       '/charity:charity',
+      '/endpoints:own',
+      '/logs:logs',
       '/activities:activities',
       '/games:games',
-      '/logs:logs',
+      '/rewards:rewards',
     ]);
     expect(adminNav.map(({ to, key }) => `${to}:${key}`)).toEqual([
       '/rewards:admin-rewards',

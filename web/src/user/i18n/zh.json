@@ -22,6 +22,12 @@
     "diagnostics": {
       "nav": "记录"
     },
+    "navigation": {
+      "own": "自有服务",
+      "ownSections": "自有服务",
+      "services": "服务",
+      "models": "模型"
+    },
     "shell": {
       "navLabel": "主导航",
       "title": "用户中心"

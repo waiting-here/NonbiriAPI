@@ -22,6 +22,12 @@
     "diagnostics": {
       "nav": "Records"
     },
+    "navigation": {
+      "own": "My services",
+      "ownSections": "My services",
+      "services": "Services",
+      "models": "Models"
+    },
     "shell": {
       "navLabel": "Main navigation",
       "title": "User console"

@@ -5,6 +5,7 @@ import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { PageHeader } from '@shared/components/States';
 import { TransportRuleSummary } from '@shared/components/TransportRuleField';
+import { SectionTabs } from '../../components/SectionTabs';
 import {
   DataTable,
   FormActions,
@@ -578,6 +579,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
           </button>
         }
       />
+      <SectionTabs group="own" />
       {creating ? (
         <ModelEditor
           key={user.id}

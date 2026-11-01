@@ -110,6 +110,7 @@ export const cssVar = (token: DesignToken): `var(${string})` => `var(${token})`;
  * drawer before its trigger becomes hidden.
  */
 export const SHELL_DRAWER_MEDIA_QUERY = {
-  user: '(max-width: 63.999rem)',
+  // Matches --nb-shell-breakpoint: below 70rem the user station uses the drawer.
+  user: '(max-width: 69.999rem)',
   admin: '(max-width: 64rem)',
 } as const;

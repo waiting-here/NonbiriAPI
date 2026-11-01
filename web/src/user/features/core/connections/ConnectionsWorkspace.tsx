@@ -21,6 +21,7 @@ import { ConnectionEditor } from './ConnectionEditor';
 import { ConnectionSummary } from './ConnectionSummary';
 import { CredentialsPanel } from './CredentialsPanel';
 import { DiscoverySourceDetail } from './DiscoverySourceDetail';
+import { SectionTabs } from '../../../components/SectionTabs';
 
 function clearDetailScope(params: URLSearchParams) {
   for (const field of [
@@ -89,6 +90,7 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
         description={t('common.connections.intro')}
         actions={createButton}
       />
+      <SectionTabs group="own" />
       {creating ? (
         <ExpandablePanel
           open

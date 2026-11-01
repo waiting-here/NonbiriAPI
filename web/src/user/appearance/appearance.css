@@ -174,7 +174,8 @@ html:is(
   padding: var(--nb-space-4);
 }
 
-@media (width < 64rem) {
+/* Matches the user station drawer breakpoint (--nb-shell-breakpoint). */
+@media (width < 70rem) {
   .nb-user-header__actions > .nb-appearance-control {
     display: none;
   }
