@@ -1785,7 +1785,7 @@ export function EndpointDetail({
       )}
       <section className="nb-panel">
         <div className="nb-panel__body">
-          <dl className="nb-facts">
+          <dl className="nb-facts services-summary-facts">
             <div>
               <dt>{t('endpoints.baseUrl')}</dt>
               <dd>

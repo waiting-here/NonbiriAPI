@@ -24,34 +24,37 @@ export function AnnouncementDetailPage() {
   const backTo = listReturnPath(location.state, '/announcements');
   const { t } = useTranslation();
   const announcement = useAnnouncement(announcementId);
-  if (announcement.isPending) return <LoadingState />;
-  if (announcement.error)
-    return <ErrorState error={announcement.error} onRetry={() => void announcement.refetch()} />;
   return (
     <div className="page ops-stack">
       <PageHeader
-        eyebrow={t('user.announcements.eyebrow')}
-        title={announcement.data.title}
+        eyebrow={announcement.data ? t('user.announcements.eyebrow') : undefined}
+        title={announcement.data?.title ?? t('user.announcements.title')}
         back={<Link to={backTo}>{t('user.announcements.backToList')}</Link>}
       />
-      <Card className="ops-stack">
-        <div className="ops-actions">
-          <StatusBadge
-            active={announcement.data.severity === 'info'}
-            danger={announcement.data.severity === 'important'}
-            label={t(SEVERITY_LABEL_KEYS[announcement.data.severity])}
-          />
-          <span>{formatDateTime(announcement.data.published_at)}</span>
-        </div>
-        {announcement.data.fallback_from ? (
-          <p className="inline-notice">
-            {t('user.announcements.fallbackNotice', {
-              language: t(LANGUAGE_LABEL_KEYS[announcement.data.effective_language]),
-            })}
-          </p>
-        ) : null}
-        <SafeAnnouncementBody html={announcement.data.rendered_body} />
-      </Card>
+      {announcement.isPending ? (
+        <LoadingState />
+      ) : announcement.error ? (
+        <ErrorState error={announcement.error} onRetry={() => void announcement.refetch()} />
+      ) : (
+        <Card className="ops-stack">
+          <div className="ops-actions">
+            <StatusBadge
+              active={announcement.data.severity === 'info'}
+              danger={announcement.data.severity === 'important'}
+              label={t(SEVERITY_LABEL_KEYS[announcement.data.severity])}
+            />
+            <span>{formatDateTime(announcement.data.published_at)}</span>
+          </div>
+          {announcement.data.fallback_from ? (
+            <p className="inline-notice">
+              {t('user.announcements.fallbackNotice', {
+                language: t(LANGUAGE_LABEL_KEYS[announcement.data.effective_language]),
+              })}
+            </p>
+          ) : null}
+          <SafeAnnouncementBody html={announcement.data.rendered_body} />
+        </Card>
+      )}
     </div>
   );
 }

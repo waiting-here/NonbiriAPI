@@ -270,6 +270,7 @@ function StewardPageContent() {
                   : listReturnPath(location.state, '/steward')
               }
               onAuthorityLoss={authorityLoss}
+              embedded
             />
           ) : (
             <AnnouncementManagement
