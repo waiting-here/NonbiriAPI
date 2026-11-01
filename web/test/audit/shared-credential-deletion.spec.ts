@@ -93,14 +93,6 @@ function responseFor(page: Page, method: string, path: string) {
       response.request().method() === method && new URL(response.url()).pathname === path,
   );
 }
-async function openFold(page: Page, name: string) {
-  const fold = page
-    .locator('details')
-    .filter({ has: page.getByText(name, { exact: true }) })
-    .last();
-  if ((await fold.getAttribute('open')) === null) await fold.locator(':scope > summary').click();
-  return fold;
-}
 async function navigate(page: Page, path: '/endpoints' | '/charity') {
   // Click the application's Link: goto/reload would discard the query cache under test.
   await page.locator(`a[href="${path}"]:visible`).first().click();
@@ -264,7 +256,10 @@ test('protocol unlink preserves a shared credential and deletion refreshes donat
     );
     const snapshot = currentKeys.data.find((key) => key.id === kept.id)!;
     expect(snapshot).toMatchObject({ credential_available: true, enabled: true });
-    await page.getByRole('combobox', { name: c.entry, exact: true }).selectOption(anthropic.id);
+    await page
+      .getByRole('group', { name: c.entries, exact: true })
+      .locator(`[data-entry-id="${anthropic.id}"]`)
+      .click();
     await page
       .getByRole('combobox', { name: services.currentKey, exact: true })
       .selectOption(kept.id);
@@ -315,7 +310,8 @@ test('protocol unlink preserves a shared credential and deletion refreshes donat
       .getByRole('button', { name: charity.presentation.selectionDone, exact: true })
       .click();
     await openService(page, tag);
-    const credentials = await openFold(page, services.manageServiceKeys);
+    await page.getByRole('tab', { name: c.credentials, exact: true }).click();
+    const credentials = page.getByRole('tabpanel', { name: c.credentials, exact: true });
     await credentials
       .getByRole('table', { name: c.credentials, exact: true })
       .getByRole('row')

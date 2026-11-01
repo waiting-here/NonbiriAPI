@@ -3668,7 +3668,6 @@
       "addAnotherKey": "Add another key",
       "additionalKey": "API key {{number}}",
       "keyAdded": "Key added. Manage its model lists for this endpoint.",
-      "manageServiceKeys": "Manage service keys",
       "serviceKeysHelp": "Keys belong to this service. View their endpoints, replace or disable them, or reuse them on another endpoint with “Use existing key”.",
       "currentKey": "Current key",
       "noEndpoints": "This service has no endpoints yet. Add one to manage keys and models.",

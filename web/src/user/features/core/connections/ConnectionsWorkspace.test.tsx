@@ -123,7 +123,7 @@ describe('connection identification', () => {
     );
     await view.user.click(await screen.findByRole('link', { name: 'My API provider' }));
     await screen.findByRole('heading', { level: 1, name: 'My API provider' });
-    await view.user.click(screen.getByRole('button', { name: 'Service settings' }));
+    await view.user.click(screen.getByRole('tab', { name: 'Service settings' }));
     expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue(connection.name);
     const back = screen.getByRole('link', { name: 'Back to my services' });
     expect(back.getAttribute('href')).toContain('connections_q=api.example');

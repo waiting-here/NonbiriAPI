@@ -200,12 +200,14 @@ test('entry detail keeps connection list return state through nested paging, ref
   await expect(
     page.getByRole('heading', { name: 'Return connection 11', exact: true }),
   ).toBeVisible();
-  const endpointPicker = page.getByRole('combobox', { name: 'Endpoint', exact: true });
+  const endpointPicker = page.getByRole('group', { name: 'Endpoints', exact: true });
   const endpointPagination = endpointPicker.locator(
-    'xpath=../following-sibling::nav[contains(@class,"page-pagination")]',
+    'xpath=following-sibling::nav[contains(@class,"page-pagination")]',
   );
-  await endpointPicker.selectOption('2');
-  await endpointPicker.selectOption('1');
+  const entry = (id: string) => endpointPicker.locator(`[data-entry-id="${id}"]`);
+  const chosen = endpointPicker.locator('[aria-pressed="true"]');
+  await entry('2').click();
+  await entry('1').click();
   await endpointPagination.getByRole('combobox', { name: 'Items per page' }).selectOption('10');
   await expect
     .poll(() => new URL(page.url()).searchParams.get('service-endpoint-switch_page_size'))
@@ -215,17 +217,17 @@ test('entry detail keeps connection list return state through nested paging, ref
   await expect
     .poll(() => new URL(page.url()).searchParams.get('service-endpoint-switch_page'))
     .toBe('2');
-  await expect(endpointPicker.locator('option[value="11"]')).toHaveCount(1);
+  await expect(entry('11')).toHaveCount(1);
   const secondEndpointPageURL = page.url();
   await page.goBack();
   await expect(page).toHaveURL(firstEndpointPageURL);
-  await expect(endpointPicker).toHaveValue('1');
-  await expect(endpointPicker.locator('option[value="11"]')).toHaveCount(0);
+  await expect(chosen).toHaveAttribute('data-entry-id', '1');
+  await expect(entry('11')).toHaveCount(0);
   await page.goForward();
   await expect(page).toHaveURL(secondEndpointPageURL);
-  await expect(endpointPicker.locator('option[value="11"]')).toHaveCount(1);
+  await expect(entry('11')).toHaveCount(1);
   const beforeSelectionURL = page.url();
-  await endpointPicker.selectOption('11');
+  await entry('11').click();
   await expect(page.getByRole('heading', { name: endpoint.note, exact: true })).toBeVisible();
   const entryURL = page.url();
   expect(new URL(entryURL).searchParams.get('endpoint_id')).toBe('11');
@@ -234,12 +236,12 @@ test('entry detail keeps connection list return state through nested paging, ref
 
   await page.goBack();
   await expect(page).toHaveURL(beforeSelectionURL);
-  await expect(endpointPicker).toHaveValue('1');
+  await expect(chosen).toHaveAttribute('data-entry-id', '1');
   await page.goForward();
   await expect(page).toHaveURL(entryURL);
-  await expect(endpointPicker).toHaveValue('11');
+  await expect(chosen).toHaveAttribute('data-entry-id', '11');
   await page.reload();
-  await expect(endpointPicker).toHaveValue('11');
+  await expect(chosen).toHaveAttribute('data-entry-id', '11');
   await expect(endpointPagination.getByRole('combobox', { name: 'Items per page' })).toHaveValue(
     '10',
   );
@@ -284,7 +286,7 @@ test('entry detail keeps connection list return state through nested paging, ref
   await page.reload();
   await expect(page.getByRole('heading', { name: endpoint.note, exact: true })).toBeVisible();
   await expect(page.getByText('Vendor/Model-11', { exact: true })).toBeVisible();
-  await expect(endpointPicker).toHaveValue('11');
+  await expect(chosen).toHaveAttribute('data-entry-id', '11');
   expect(new URL(page.url()).searchParams.get('service-endpoint-switch_page')).toBe('2');
   expect(new URL(page.url()).searchParams.get('routes_2_page_size')).toBe('10');
   await page

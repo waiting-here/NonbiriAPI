@@ -304,12 +304,9 @@ test('connection search exposes entry context and separate System One setup', as
     }
     await row.getByRole('link', { name, exact: true }).click();
     await expect(page.getByRole('heading', { name, level: 1, exact: true })).toBeVisible();
-    await page.getByRole('button', { name: c.editConnection, exact: true }).click();
+    await page.getByRole('tab', { name: c.editConnection, exact: true }).click();
     await expect(page.getByRole('textbox', { name: c.name, exact: true })).toHaveValue(name);
-    await page
-      .getByRole('region', { name: c.editConnection, exact: true })
-      .getByRole('button', { name: c.close, exact: true })
-      .click();
+    await page.getByRole('tab', { name: c.entries, exact: true }).click();
     await page.getByRole('button', { name: c.addEntry, exact: true }).click();
     const form = page.getByRole('dialog', { name: c.addEntry, exact: true });
     await openFold(form, services.advancedSetup);
@@ -743,7 +740,8 @@ test('service keys reject cross-service reuse while shared versions preserve cha
       .toBe('failed');
     await page.reload();
     await expect(page.getByText(services.retainedCatalog, { exact: true })).toBeVisible();
-    const serviceKeys = await openFold(page, services.manageServiceKeys);
+    await page.getByRole('tab', { name: c.credentials, exact: true }).click();
+    const serviceKeys = page.getByRole('tabpanel', { name: c.credentials, exact: true });
     await serviceKeys
       .getByRole('row')
       .filter({ hasText: tag })
@@ -842,7 +840,7 @@ test('service keys reject cross-service reuse while shared versions preserve cha
     });
     await page.getByRole('button', { name: c.backToCredentials, exact: true }).click();
     await expect(page.getByPlaceholder(c.credentialSearch)).toBeVisible();
-    await page.getByRole('button', { name: c.editConnection, exact: true }).click();
+    await page.getByRole('tab', { name: c.editConnection, exact: true }).click();
     await page.getByRole('button', { name: c.deleteConnection, exact: true }).click();
     const deleted = responseFor(page, 'DELETE', '/api/connections/' + first.id);
     await page

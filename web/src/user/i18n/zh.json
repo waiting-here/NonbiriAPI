@@ -3668,7 +3668,6 @@
       "addAnotherKey": "再加一把密钥",
       "additionalKey": "API 密钥 {{number}}",
       "keyAdded": "密钥已添加，可维护此端点下的模型列表。",
-      "manageServiceKeys": "管理本服务的密钥",
       "serviceKeysHelp": "密钥仅供本服务使用。可查看使用端点、替换或停用；在其他端点通过“使用已有密钥”复用。",
       "currentKey": "当前密钥",
       "noEndpoints": "此服务还没有端点，添加端点后即可维护密钥和模型。",
