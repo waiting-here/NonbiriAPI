@@ -108,7 +108,7 @@ jobs:
           ARTIFACT_ID: ${{ needs.plan.outputs.template_artifact_id }}
         run: test -n "$ARTIFACT_ID"
       - name: Download the shared empty database
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.plan.outputs.template_artifact_id }}
           path: .ci-template
@@ -182,7 +182,7 @@ jobs:
           ARTIFACT_ID: ${{ needs.plan.outputs.template_artifact_id }}
         run: test -n "$ARTIFACT_ID"
       - name: Download the shared empty database
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.plan.outputs.template_artifact_id }}
           path: .ci-template
@@ -239,7 +239,7 @@ jobs:
           ARTIFACT_ID: ${{ needs.race_prepare.outputs.artifact_id }}
         run: test -n "$ARTIFACT_ID"
       - name: Download this run's race catalog and template
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.race_prepare.outputs.artifact_id }}
           path: .ci-race
@@ -391,7 +391,7 @@ jobs:
           ARTIFACT_ID: ${{ needs.web_build.outputs.artifact_id }}
         run: test -n "$ARTIFACT_ID"
       - name: Download verified station build
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.web_build.outputs.artifact_id }}
           path: .cache/ci/station-build
@@ -445,7 +445,7 @@ jobs:
           ARTIFACT_ID: ${{ needs.web_build.outputs.artifact_id }}
         run: test -n "$ARTIFACT_ID"
       - name: Download verified station build
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.web_build.outputs.artifact_id }}
           path: .cache/ci/station-build
@@ -525,7 +525,7 @@ jobs:
           ARTIFACT_ID: ${{ needs.web_fixture.outputs.artifact_id }}
         run: test -n "$ARTIFACT_ID"
       - name: Download browser fixture
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.web_fixture.outputs.artifact_id }}
           path: .cache/ci
