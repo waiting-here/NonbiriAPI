@@ -261,6 +261,14 @@ fieldset {
   border-radius: var(--nb-radius-sm);
 }
 
+/*
+ * Headings receive focus only so a new view or sheet is announced; they are not controls,
+ * so they show no ring when a page opens with one already focused.
+ */
+:is(h1, h2, h3)[tabindex='-1']:focus-visible {
+  box-shadow: none;
+}
+
 .skip-link {
   position: absolute;
   left: -9999px;
