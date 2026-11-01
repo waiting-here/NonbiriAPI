@@ -147,6 +147,7 @@ export function ConnectionResourceList<T>({
                 title={t('common.connections.emptyTitle')}
                 body={q ? t('common.connections.noMatches') : t('common.connections.emptyBody')}
                 action={emptyAction}
+                illustration={q ? 'search' : 'empty'}
               />
             )}
             <PagePagination

@@ -223,6 +223,51 @@
   padding: var(--nb-space-3);
 }
 
+/* Empty lists match the shared empty state: centred cloud, title, short help and actions. */
+.core-state--empty {
+  flex-direction: column;
+  align-items: center;
+  gap: var(--nb-space-3);
+  padding: var(--nb-space-8) var(--nb-space-5);
+  border-style: dashed;
+  border-color: var(--nb-color-border-strong);
+  border-radius: var(--nb-radius-card);
+  background: var(--nb-color-surface-alt);
+  text-align: center;
+}
+.core-state--empty > div {
+  display: grid;
+  justify-items: center;
+  gap: var(--nb-space-2);
+  max-width: 36rem;
+}
+.core-state--empty strong {
+  font-size: var(--nb-font-size-lg);
+}
+.core-state--empty p {
+  margin: 0;
+  color: var(--nb-color-text-muted);
+}
+.core-state--empty .core-state__art svg {
+  inline-size: 6.5rem;
+  block-size: auto;
+}
+.core-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--nb-space-2);
+  margin-top: var(--nb-space-2);
+}
+@media (width < 40rem) {
+  .core-state--empty {
+    padding: var(--nb-space-6) var(--nb-space-4);
+  }
+  .core-state--empty .core-state__art svg {
+    inline-size: 5.5rem;
+  }
+}
+
 .core-state--error {
   border-color: color-mix(in srgb, var(--nb-color-danger) 42%, var(--nb-color-border));
   background: var(--nb-color-danger-soft);
@@ -1065,6 +1110,21 @@
   }
 }
 
+/* Model detail: the call name and settings summary sit beside the sources on wide pages. */
+.models-workspace .model-detail-layout,
+.models-workspace .model-detail-aside,
+.models-workspace .model-detail-main {
+  display: grid;
+  gap: var(--nb-space-5);
+  align-content: start;
+  min-width: 0;
+}
+@media (width > 64rem) {
+  .models-workspace .model-detail-layout {
+    grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+    align-items: start;
+  }
+}
 .models-workspace .model-editor,
 .models-workspace .model-detail-body {
   display: grid;

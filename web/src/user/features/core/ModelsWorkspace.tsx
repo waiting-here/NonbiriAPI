@@ -248,69 +248,73 @@ function ModelDetail({
             )}
           />
         ) : (
-          <>
-            <Panel>
-              <PanelHead title={textModel('callName')} />
-              <PanelBody>
-                <SafeCopyValue value={model.data.full_name} label={textModel('callName')} />
-                <ModelTypesSummary value={model.data.model_types} />
+          <div className="model-detail-layout">
+            <div className="model-detail-aside">
+              <Panel>
+                <PanelHead title={textModel('callName')} />
+                <PanelBody>
+                  <SafeCopyValue value={model.data.full_name} label={textModel('callName')} />
+                  <ModelTypesSummary value={model.data.model_types} />
+                  <dl className="core-detail-list">
+                    <CloudflareProxySummary
+                      enabled={model.data.cloudflare_proxy_enabled}
+                      mode={model.data.cloudflare_proxy_mode}
+                    />
+                  </dl>
+                </PanelBody>
+              </Panel>
+              <Fold lazy title={textModel('advanced')} summary={textModel('advancedHelp')}>
                 <dl className="core-detail-list">
-                  <CloudflareProxySummary
-                    enabled={model.data.cloudflare_proxy_enabled}
-                    mode={model.data.cloudflare_proxy_mode}
-                  />
+                  <div>
+                    <dt>{t('models.silentRetry')}</dt>
+                    <dd>{model.data.silent_retry ? t('common.yes') : t('common.no')}</dd>
+                  </div>
+                  {model.data.model_types.includes('chat_completions') ||
+                  model.data.model_types.includes('responses') ? (
+                    <>
+                      <TransportRuleSummary value={model.data.transport_rule} />
+                      <div>
+                        <dt>{t('models.flattenTools')}</dt>
+                        <dd>{model.data.flatten_tool_calls ? t('common.yes') : t('common.no')}</dd>
+                      </div>
+                    </>
+                  ) : null}
                 </dl>
-              </PanelBody>
-            </Panel>
-            <ModelSources
-              accountId={accountId}
-              model={model.data}
-              focusSearch={sourceFocusPending}
-              onSearchFocused={() => setSourceFocusPending(false)}
-              strategy={model.data.route_strategy}
-              locked={reconciliationRequired || Boolean(replayAttempt)}
-              onStrategy={(strategy) => {
-                setRequestedStrategy(strategy);
-                setEditing(model.data ?? null);
-              }}
-            />
-            <Fold lazy title={textModel('advanced')} summary={textModel('advancedHelp')}>
-              <dl className="core-detail-list">
-                <div>
-                  <dt>{t('models.silentRetry')}</dt>
-                  <dd>{model.data.silent_retry ? t('common.yes') : t('common.no')}</dd>
-                </div>
                 {model.data.model_types.includes('chat_completions') ||
                 model.data.model_types.includes('responses') ? (
-                  <>
-                    <TransportRuleSummary value={model.data.transport_rule} />
-                    <div>
-                      <dt>{t('models.flattenTools')}</dt>
-                      <dd>{model.data.flatten_tool_calls ? t('common.yes') : t('common.no')}</dd>
-                    </div>
-                  </>
+                  <ModelRoleSummary policy={model.data.role_policy} />
                 ) : null}
-              </dl>
-              {model.data.model_types.includes('chat_completions') ||
-              model.data.model_types.includes('responses') ? (
-                <ModelRoleSummary policy={model.data.role_policy} />
-              ) : null}
-            </Fold>
-            <Fold
-              lazy
-              title={sharedText('requestAdaptation.model.title')}
-              summary={sharedText('requestAdaptation.model.saveHelp')}
-            >
-              <RequestAdaptationEditor
-                key={`${accountId}:${model.data.id}`}
-                url={'/api/models/' + model.data.id + '/request-adaptation'}
-                scope="personal-model"
-                connectorType={adaptationConnectorType}
-                gatewayCacheDefaults={gatewayCacheDefaults}
-                editable={!reconciliationRequired && !replayAttempt}
+              </Fold>
+            </div>
+            <div className="model-detail-main">
+              <ModelSources
+                accountId={accountId}
+                model={model.data}
+                focusSearch={sourceFocusPending}
+                onSearchFocused={() => setSourceFocusPending(false)}
+                strategy={model.data.route_strategy}
+                locked={reconciliationRequired || Boolean(replayAttempt)}
+                onStrategy={(strategy) => {
+                  setRequestedStrategy(strategy);
+                  setEditing(model.data ?? null);
+                }}
               />
-            </Fold>
-          </>
+              <Fold
+                lazy
+                title={sharedText('requestAdaptation.model.title')}
+                summary={sharedText('requestAdaptation.model.saveHelp')}
+              >
+                <RequestAdaptationEditor
+                  key={`${accountId}:${model.data.id}`}
+                  url={'/api/models/' + model.data.id + '/request-adaptation'}
+                  scope="personal-model"
+                  connectorType={adaptationConnectorType}
+                  gatewayCacheDefaults={gatewayCacheDefaults}
+                  editable={!reconciliationRequired && !replayAttempt}
+                />
+              </Fold>
+            </div>
+          </div>
         )}
       </div>
       <section className="core-card core-danger-zone">
@@ -593,7 +597,10 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
           }}
         />
       ) : null}
-      <ResourceFilterBar control={filters} />
+      {/* Filters are hidden until there is something to filter. */}
+      {models.data && (models.data.pagination.total_items !== '0' || filters.active) ? (
+        <ResourceFilterBar control={filters} />
+      ) : null}
       {models.isPending && !models.data ? (
         <CoreLoading />
       ) : models.error && !models.data ? (
