@@ -6,14 +6,35 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## 1.3.4 — 2026-11-01
 
-### Improved
+### Fixed and improved
 
 - Apply scalar and date bounds before charity-model text matching in administrator
   and steward request-log lists and exports, reducing work for narrow time windows.
   Permissions, complete result counts, ordering and query budgets are unchanged.
 - Add management-read regressions and performance cases combining model, date
-  and status filters. Database schema remains 44 and account export remains 31;
-  upgrading from 1.3.3 does not require a database conversion.
+  and status filters.
+- Keep model-binding source labels beside their checkboxes, group charity model
+  settings by task and allow segmented options to wrap without clipping.
+  Explain when a recurring quota's first reset must be in the future, preserving
+  the existing rule for historical anchors on unchanged schedules.
+- Give site settings and date filters enough space, expose settings categories
+  on small screens and make invalid drafts in other groups directly reachable.
+  Preserve Gateway capability and mainstream-channel drafts when switching
+  editors, group capability fields and state the full scope of game-config saves.
+- Keep one page heading in embedded announcement editors and retain the return
+  link while user announcements load or fail. Improve mobile service summaries.
+- Add previous-page navigation and current-page indicators to independent
+  diagnostics and duel histories while retaining their existing cursor APIs.
+- Keep keyboard focus inside game rules, tutorials and confirmation dialogs,
+  restoring it to the trigger when closed. Clear both the visible search and
+  applied filters in the gacha collection. Show readable Fat Fish states and
+  history summaries, and clearer game-hall cost information.
+
+### Compatibility
+
+- Database schema remains 44 and account export remains 31; upgrading from
+  1.3.3 does not require a database conversion. Existing prices, accounting,
+  permissions and game rules are unchanged.
 
 ## 1.3.3 — 2026-11-01
 
