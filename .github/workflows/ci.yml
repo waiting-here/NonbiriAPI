@@ -75,7 +75,7 @@ jobs:
       - name: Share immutable empty database
         id: template_artifact
         if: steps.scope.outputs.go == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: database-template-${{ github.sha }}-${{ github.run_attempt }}
           path: .ci-template
@@ -143,7 +143,7 @@ jobs:
 
       - name: Save ordinary Go measurements
         if: ${{ always() && !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: go-measurements-${{ github.sha }}-${{ github.run_attempt }}
           path: .cache/ci/go-checks.log
@@ -199,7 +199,7 @@ jobs:
           bash scripts/race-check.sh --prepare .ci-race -template .ci-template -github-output "$GITHUB_OUTPUT" "${selected[@]}"
       - name: Share immutable race preparation
         id: prepared
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: race-preparation-${{ github.sha }}-${{ github.run_attempt }}
           path: .ci-race
@@ -252,7 +252,7 @@ jobs:
           bash scripts/race-check.sh --shard "$SHARD" --workers 4 --prepared .ci-race | tee ".cache/ci/race-${SHARD//\//-}.log"
       - name: Save race measurements
         if: ${{ always() && !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: race-measurements-${{ strategy.job-index }}-${{ github.run_attempt }}
           path: .cache/ci/race-*.log
@@ -360,7 +360,7 @@ jobs:
         run: node scripts/ci-station-build.mjs pack .cache/ci/station-build
       - name: Share verified station build
         id: station_build
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: station-build-${{ github.sha }}-${{ github.run_attempt }}
           path: .cache/ci/station-build
@@ -406,7 +406,7 @@ jobs:
           go test -c -tags dist -o .cache/ci/browser-fixture ./internal/app
       - name: Share this run's browser fixture
         id: fixture
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-fixture-${{ github.sha }}-${{ github.run_attempt }}
           path: .cache/ci/browser-fixture
@@ -469,7 +469,7 @@ jobs:
         run: bash ../scripts/check-web.sh browser "$GROUP" "$SHARD"
       - name: Save browser measurements
         if: ${{ always() && !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-measurements-${{ matrix.name }}-${{ github.run_attempt }}
           path: .cache/ci/browser-*.json
@@ -477,7 +477,7 @@ jobs:
           retention-days: 3
       - name: Save failed browser diagnostics
         if: ${{ failure() && !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-failures-${{ matrix.name }}-${{ github.run_attempt }}
           path: |
@@ -543,7 +543,7 @@ jobs:
         run: bash ../scripts/check-web.sh browser "$GROUP" "$SHARD"
       - name: Save browser measurements
         if: ${{ always() && !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-measurements-${{ matrix.name }}-${{ github.run_attempt }}
           path: .cache/ci/browser-*.json
@@ -551,7 +551,7 @@ jobs:
           retention-days: 3
       - name: Save failed browser diagnostics
         if: ${{ failure() && !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-failures-${{ matrix.name }}-${{ github.run_attempt }}
           path: |
@@ -613,7 +613,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/ci-metrics.mjs
       - name: Save timing metadata
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: verification-timing-${{ github.sha }}-${{ github.run_attempt }}
           path: .cache/ci/metrics.json
