@@ -221,3 +221,39 @@ func TestPerformanceSeparatesEventStreamsAndLeaderboards(t *testing.T) {
 		}
 	}
 }
+
+func TestLogQueryPerformanceUsesBoundedRouteTemplates(t *testing.T) {
+	p := NewPerformance()
+	handler := p.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
+	for _, root := range []string{"/api/logs", "/api/steward/logs", "/admin/api/logs"} {
+		for _, suffix := range []string{"", "/export.csv", "/export.json", "/private-request"} {
+			for i := range 10 {
+				path := root + suffix
+				if suffix == "/private-request" {
+					path += fmt.Sprint(i)
+				}
+				request := httptest.NewRequest(http.MethodGet, path+"?charity_model=private-model&page=2", nil)
+				request.Header.Set("Authorization", "private-token")
+				handler.ServeHTTP(httptest.NewRecorder(), request)
+			}
+		}
+	}
+	rows := p.Drain()
+	if len(rows) != 12 {
+		t.Fatalf("unexpected log route cardinality: %d", len(rows))
+	}
+	for _, row := range rows {
+		if row.Completed != 10 {
+			t.Fatalf("split aggregate: %+v", row)
+		}
+	}
+	encoded, err := json.Marshal(rows)
+	if err != nil || strings.Contains(string(encoded), "private") || strings.Contains(string(encoded), "charity_model") {
+		t.Fatalf("log request values entered telemetry: %s %v", encoded, err)
+	}
+	for _, path := range []string{"/api/logs/", "/api/logs/private/extra", "/api/steward/logs-private", "/api/steward/logs//"} {
+		if got := performanceRoute(path); got != "/api/other" {
+			t.Fatalf("unexpected route: %s", got)
+		}
+	}
+}

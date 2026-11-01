@@ -79,9 +79,12 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 	{from: 41, version: 42, manifest: db.Schema42ManifestHash, apply: migrateOperatorDiagnostics, impact: &migrationImpact{
 		addedTables:   []string{"agent_codex_session", "request_attempt_diagnostics", "request_delivery_facts", "agent_request_diagnostics", "request_error_diagnostics", "management_operation_terms", "management_capture_context", "management_capture_rows", "management_capture_totals"},
 		rebuiltTables: []string{"agent_request_drivers"}, controlTables: []string{"management_operations", "management_operation_items"}, credentials: credentialsUnchanged}},
-	{from: 42, version: 43, manifest: db.PinnedGenerationTwoManifestHash, sql: db.OperatorFollowupSQL, impact: &migrationImpact{
+	{from: 42, version: 43, manifest: db.Schema43ManifestHash, sql: db.OperatorFollowupSQL, impact: &migrationImpact{
 		addedTables: []string{"agent_operation_diagnostics"}, indexedTables: []string{"charity_request_outcomes", "game_fishing_rank_facts"},
 		constraintTables: []string{"donation_service_health"}, credentials: credentialsUnchanged}},
+	{from: 43, version: 44, manifest: db.PinnedGenerationTwoManifestHash,
+		sql:    "DROP INDEX idx_request_logs_charity_model;" + db.CharityLogCoveringIndexSQL,
+		impact: &migrationImpact{indexedTables: []string{"request_logs"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {
@@ -126,6 +129,7 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{40, db.Schema40ManifestHash, "753a64a8e375632759e452ad9f1a222c84417422"},
 		{41, db.Schema41ManifestHash, "5c721cd00b1ebcc402f0b85ce02aa9014498aa97"},
 		{42, db.Schema42ManifestHash, "cd07f2ccde4d98b130c3c6c71e905bd4a6fd06d3"},
+		{43, db.Schema43ManifestHash, "3462a3832de64d6066cb5db567987ea4ec6c10cf"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,

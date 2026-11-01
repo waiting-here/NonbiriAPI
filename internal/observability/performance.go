@@ -318,6 +318,9 @@ func performanceMethod(method string) string {
 }
 
 func performanceRoute(path string) string {
+	if route := logQueryRoute(path); route != "" {
+		return route
+	}
 	if route := charityManagementRoute(path); route != "" {
 		return route
 	}
@@ -387,6 +390,26 @@ func charityManagementRoute(path string) string {
 					return root + "/{id}/bindings/{id}"
 				}
 			}
+		}
+	}
+	return ""
+}
+
+// Log metrics use fixed templates; filters and request identifiers are excluded.
+func logQueryRoute(path string) string {
+	for _, root := range []string{"/api/logs", "/api/steward/logs", "/admin/api/logs"} {
+		if path == root {
+			return root
+		}
+		tail, ok := strings.CutPrefix(path, root+"/")
+		if !ok || tail == "" || strings.Contains(tail, "/") {
+			continue
+		}
+		switch tail {
+		case "export.csv", "export.json":
+			return root + "/" + tail
+		default:
+			return root + "/{id}"
 		}
 	}
 	return ""

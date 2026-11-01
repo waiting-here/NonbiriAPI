@@ -74,6 +74,11 @@ func logPageQuery(ctx context.Context, reader logReadQueryer, selection, countSe
 	if err != nil {
 		return "", nil, nil, ErrInvalid
 	}
+	// Count and rows share the authorized snapshot. LIMIT 0 keeps the
+	// existing projection and empty-array envelope without scanning it again.
+	if total == 0 {
+		return selection + order + ` LIMIT 0`, args, &metadata, nil
+	}
 	return selection + order + ` LIMIT ? OFFSET ?`, append(args, requested.Size, offset), &metadata, nil
 }
 
