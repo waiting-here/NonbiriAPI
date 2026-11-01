@@ -1138,63 +1138,66 @@ function DonationReview({
           {review.refreshError ? (
             <ErrorState error={review.refreshError} onRetry={() => void review.refresh()} />
           ) : null}
-          <FormActions>
-            <button
-              className={
-                decision !== 'approve' ? 'nb-btn nb-btn--danger' : 'nb-btn nb-btn--primary'
-              }
-              type="button"
-              disabled={
-                !reason.trim() ||
-                review.isPending ||
-                review.outcome === 'unknown' ||
-                Boolean(validationError)
-              }
-              onClick={() => {
-                if (decision === 'force_reject') {
-                  setForceConfirmation(true);
-                  return;
+          {/* Stays at the bottom of the screen while a long key list is reviewed. */}
+          <div className="charity-review-actions">
+            <FormActions>
+              <button
+                className={
+                  decision !== 'approve' ? 'nb-btn nb-btn--danger' : 'nb-btn nb-btn--primary'
                 }
-                if (
-                  !validText(reason.trim(), 1024, true) ||
-                  (decision === 'approve' &&
-                    item.keys.some(
-                      (entry) =>
-                        !keys[entry.id] ||
-                        keySettingsError(keys[entry.id], entry.authorized_expires_at),
-                    ))
-                )
-                  return;
-                review.mutate({
-                  revision: item.revision,
-                  decision,
-                  reason: reason.trim(),
-                  settings:
-                    decision === 'approve'
-                      ? Object.fromEntries(
-                          item.keys.map((entry) => [
-                            entry.id,
-                            {
-                              ...keySettingsBody(keys[entry.id]),
-                              ...(keys[entry.id].enabled &&
-                              entry.review?.required &&
-                              entry.review.revision
-                                ? { expected_review_revision: entry.review.revision }
-                                : {}),
-                            },
-                          ]),
-                        )
-                      : {},
-                });
-              }}
-            >
-              {t(
-                decision === 'force_reject'
-                  ? 'common.donationReview.forceTitle'
-                  : charityCopyKey(role, decision === 'approve' ? 'approve' : 'reject'),
-              )}
-            </button>
-          </FormActions>
+                type="button"
+                disabled={
+                  !reason.trim() ||
+                  review.isPending ||
+                  review.outcome === 'unknown' ||
+                  Boolean(validationError)
+                }
+                onClick={() => {
+                  if (decision === 'force_reject') {
+                    setForceConfirmation(true);
+                    return;
+                  }
+                  if (
+                    !validText(reason.trim(), 1024, true) ||
+                    (decision === 'approve' &&
+                      item.keys.some(
+                        (entry) =>
+                          !keys[entry.id] ||
+                          keySettingsError(keys[entry.id], entry.authorized_expires_at),
+                      ))
+                  )
+                    return;
+                  review.mutate({
+                    revision: item.revision,
+                    decision,
+                    reason: reason.trim(),
+                    settings:
+                      decision === 'approve'
+                        ? Object.fromEntries(
+                            item.keys.map((entry) => [
+                              entry.id,
+                              {
+                                ...keySettingsBody(keys[entry.id]),
+                                ...(keys[entry.id].enabled &&
+                                entry.review?.required &&
+                                entry.review.revision
+                                  ? { expected_review_revision: entry.review.revision }
+                                  : {}),
+                              },
+                            ]),
+                          )
+                        : {},
+                  });
+                }}
+              >
+                {t(
+                  decision === 'force_reject'
+                    ? 'common.donationReview.forceTitle'
+                    : charityCopyKey(role, decision === 'approve' ? 'approve' : 'reject'),
+                )}
+              </button>
+            </FormActions>
+          </div>
           <ConfirmDialog
             open={forceConfirmation}
             title={t('common.donationReview.forceTitle')}
