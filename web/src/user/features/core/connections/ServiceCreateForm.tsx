@@ -36,9 +36,11 @@ function setupProgress(connection?: Connection) {
 export function ServiceCreateForm({
   accountId,
   connection,
+  onManage,
 }: {
   accountId: string;
   connection?: Connection;
+  onManage?: () => void;
 }) {
   const { t } = useTranslation();
   const { t: coreText } = useCoreCopy();
@@ -330,7 +332,13 @@ export function ServiceCreateForm({
           </Link>
           <Link
             className="nb-btn nb-btn--ghost"
-            to={'/endpoints?connection_id=' + saved.connection!.id}
+            to={
+              '/endpoints?connection_id=' +
+              saved.connection!.id +
+              '&connection_view=entries&endpoint_id=' +
+              Object.values(saved.entries)[0]!.id
+            }
+            onClick={onManage}
           >
             {t('common.connections.manage')}
           </Link>

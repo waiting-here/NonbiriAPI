@@ -3,9 +3,16 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { Fold } from './Fold';
 import { Sheet } from './Sheet';
 
-function Harness({ onClose = () => undefined }: { onClose?: () => void }) {
+function Harness({
+  onClose = () => undefined,
+  keepMounted = false,
+}: {
+  onClose?: () => void;
+  keepMounted?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   return (
@@ -16,6 +23,7 @@ function Harness({ onClose = () => undefined }: { onClose?: () => void }) {
       <button type="button">Background</button>
       <Sheet
         open={open}
+        keepMounted={keepMounted}
         title="Add service"
         closeLabel="Close"
         onClose={() => {
@@ -89,5 +97,52 @@ describe('Sheet', () => {
     expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
     await user.keyboard('{Escape}');
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('wraps around visible controls after a visited disclosure is collapsed', async () => {
+    const user = userEvent.setup();
+    render(
+      <Sheet open title="Setup" closeLabel="Close" onClose={vi.fn()}>
+        <button type="button">Visible action</button>
+        <Fold title="Advanced" lazy>
+          <button type="button">Collapsed action</button>
+        </Fold>
+        <fieldset disabled>
+          <button type="button">Disabled by fieldset</button>
+        </fieldset>
+        <div style={{ display: 'none' }}>
+          <button type="button">Hidden by CSS</button>
+        </div>
+        <div style={{ visibility: 'hidden' }}>
+          <button type="button">Invisible action</button>
+        </div>
+        <div inert>
+          <button type="button">Inert action</button>
+        </div>
+      </Sheet>,
+    );
+    const summary = screen.getByText('Advanced').closest('summary')!;
+    await user.click(summary);
+    await user.click(summary);
+    screen.getByRole('heading', { name: 'Setup' }).focus();
+    await user.tab({ shift: true });
+    expect(summary).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+  });
+
+  it('mounts a retained task on first open and preserves it while dismissed', async () => {
+    const user = userEvent.setup();
+    render(<Harness keepMounted />);
+    expect(screen.queryByLabelText('Address')).not.toBeInTheDocument();
+    const trigger = screen.getByRole('button', { name: 'Add service' });
+    await user.click(trigger);
+    await user.type(screen.getByLabelText('Address'), 'https://draft.example/v1');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(document.body.style.overflow).not.toBe('hidden');
+    expect(trigger).toHaveFocus();
+    await user.click(trigger);
+    expect(screen.getByLabelText('Address')).toHaveValue('https://draft.example/v1');
   });
 });
