@@ -989,6 +989,11 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+@container nb-filter (width >= 32rem) {
+  .nb-filter__fields > .nb-field:has(input[type='datetime-local']) {
+    grid-column: span 2;
+  }
+}
 @container nb-filter (width < 32rem) {
   .nb-filter__search {
     display: flex;
