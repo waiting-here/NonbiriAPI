@@ -222,6 +222,27 @@ html:is(
   border-radius: var(--nb-radius-sm);
 }
 
+/*
+ * A decorated appearance keeps the content in a centred column of at most 60% of the window,
+ * so wide screens show the artwork on both sides. The column stays at least 72rem wide, the
+ * same content width as a 1152px window, so it has no effect on narrower windows. Heart
+ * moment reserves its own character column (moments.css), and game pages keep their layout.
+ */
+html:is(
+    [data-appearance='celestial'],
+    [data-appearance='wandering'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
+  )
+  .nb-user-shell:not([data-layout='game'])
+  > :is(.nb-user-shell__main, .nb-shell-status) {
+  max-width: clamp(72rem, 60vw, 76rem);
+  margin-inline: auto;
+}
+
 .nb-appearance-backdrop {
   position: fixed;
   inset: 0;
