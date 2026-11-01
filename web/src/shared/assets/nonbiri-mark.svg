@@ -2,10 +2,10 @@
   <title>NonbiriAPI</title>
   <defs>
     <linearGradient id="nb-mark-gradient" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0" stop-color="#2563eb"/>
-      <stop offset="1" stop-color="#7c3aed"/>
+      <stop offset="0" stop-color="#2b8576"/>
+      <stop offset="1" stop-color="#175a52"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="16" fill="url(#nb-mark-gradient)"/>
-  <path d="M19 45V19h7l19 16V19h7v26h-7L26 29v16z" fill="#fff"/>
+  <rect width="64" height="64" rx="18" fill="url(#nb-mark-gradient)"/>
+  <path d="M20.5 45.5V18.5L43.5 45.5V18.5" fill="none" stroke="#fffdf8" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

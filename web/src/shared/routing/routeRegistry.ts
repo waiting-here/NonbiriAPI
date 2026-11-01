@@ -53,7 +53,7 @@ export const USER_ROUTE_DESCRIPTORS = [
     layout: 'readable',
     nav: true,
     registered: true,
-    icon: 'activities',
+    icon: 'rewards',
     labelKey: 'common.rewards.navTitle',
   }),
   user({
@@ -331,7 +331,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     nav: true,
     navGroup: 'activities',
     registered: true,
-    icon: 'activities',
+    icon: 'rewards',
     labelKey: 'common.rewards.adminTitle',
   }),
   admin({
@@ -342,7 +342,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     nav: true,
     registered: true,
     navGroup: 'users',
-    icon: 'users',
+    icon: 'inactivity',
     labelKey: 'common.activities.inactivity',
   }),
   admin({
@@ -353,7 +353,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     nav: true,
     registered: true,
     navGroup: 'activities',
-    icon: 'activities',
+    icon: 'limited',
     labelKey: 'common.activities.limited',
   }),
   admin({
@@ -385,7 +385,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     nav: true,
     registered: true,
     navGroup: 'operations',
-    icon: 'logs',
+    icon: 'risk',
     labelKey: 'common.audit.risk',
   }),
   admin({
@@ -396,7 +396,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     nav: true,
     registered: true,
     navGroup: 'activities',
-    icon: 'activities',
+    icon: 'economy',
     labelKey: 'common.audit.economy',
   }),
   admin({
@@ -419,7 +419,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     layout: 'wide',
     nav: true,
     navGroup: 'users',
-    icon: 'users',
+    icon: 'blacklist',
     labelKey: 'admin.blacklist.title',
     registered: true,
   }),
@@ -454,7 +454,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     nav: true,
     registered: true,
     navGroup: 'operations',
-    icon: 'logs',
+    icon: 'audit-trail',
     labelKey: 'admin.managementHistory.title',
   }),
   admin({
@@ -509,7 +509,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     nav: true,
     registered: true,
     navGroup: 'services',
-    icon: 'endpoints',
+    icon: 'mainstream',
     labelKey: 'admin.mainstreamChannels.nav',
   }),
   admin({
@@ -531,7 +531,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     registered: true,
     nav: true,
     navGroup: 'services',
-    icon: 'endpoints',
+    icon: 'policies',
     labelKey: 'common.endpointPolicies.title',
   }),
   admin({

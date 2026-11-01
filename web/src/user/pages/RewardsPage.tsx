@@ -94,7 +94,7 @@ function RewardsContent({ account }: { account: string }) {
   return (
     <div className="reward-stack">
       <PageHeader
-        icon="activities"
+        icon="rewards"
         title={t('common.rewards.userTitle')}
         description={t('common.rewards.userIntro')}
       />
