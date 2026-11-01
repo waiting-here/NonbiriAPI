@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@shared/query/http';
+import { Sheet } from '@shared/components/ui/Sheet';
 import { renderWithProviders } from '../../../../../test/unit/support';
 import { ServiceCreateForm } from './ServiceCreateForm';
 import type { ConnectionIntent } from './resourceOperation';
@@ -144,9 +146,36 @@ beforeEach(() => {
     throw new Error('Unexpected stage');
   });
 });
-async function fillCustom(connection?: Connection) {
+function SetupSheet({ connection }: { connection?: Connection }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        Resume service setup
+      </button>
+      <Sheet
+        open={open}
+        keepMounted
+        title="Service setup"
+        closeLabel="Close"
+        onClose={() => setOpen(false)}
+      >
+        <ServiceCreateForm accountId="7" connection={connection} />
+      </Sheet>
+    </>
+  );
+}
+
+async function fillCustom(
+  connection?: Connection,
+  { retained = false, onManage }: { retained?: boolean; onManage?: () => void } = {},
+) {
   const view = await renderWithProviders(
-    <ServiceCreateForm accountId="7" connection={connection} />,
+    retained ? (
+      <SetupSheet connection={connection} />
+    ) : (
+      <ServiceCreateForm accountId="7" connection={connection} onManage={onManage} />
+    ),
     {
       station: 'user',
       role: 'user',
@@ -241,7 +270,8 @@ describe('service setup as one task', () => {
     ).toBe('41');
   });
   it('creates a custom service, credential and grant with one main submission', async () => {
-    const view = await fillCustom();
+    const onManage = vi.fn();
+    const view = await fillCustom(undefined, { onManage });
     expect(screen.getByLabelText(userEn.user.workflows.serviceName)).toHaveValue('service.example');
     await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
     await screen.findByText(userEn.user.workflows.serviceReady);
@@ -262,6 +292,13 @@ describe('service setup as one task', () => {
       'href',
       '/charity?tab=donate&endpoint_id=11',
     );
+    const manage = screen.getByRole('link', { name: common.common.connections.manage });
+    expect(manage).toHaveAttribute(
+      'href',
+      '/endpoints?connection_id=1&connection_view=entries&endpoint_id=11',
+    );
+    await view.user.click(manage);
+    expect(onManage).toHaveBeenCalledTimes(1);
   });
   it('adds multiple secrets in one task without sharing their internal catalogs', async () => {
     const original = mocks.execute.getMockImplementation()!;
@@ -397,11 +434,14 @@ describe('service setup as one task', () => {
       'key',
     ]);
   });
-  it('checks an unknown credential receipt and continues without recreating completed resources', async () => {
+  it('retains a dismissed in-flight task and checks its unknown receipt without recreating resources', async () => {
     const original = mocks.execute.getMockImplementation()!;
+    let rejectCredential!: (error: Error) => void;
     mocks.execute.mockImplementation(async (...args) => {
       if (args[0].kind === 'credential')
-        throw new ApiError('network_error', 'Synthetic lost response', 0);
+        return new Promise((_resolve, reject) => {
+          rejectCredential = reject;
+        });
       return original(...args);
     });
     mocks.status.mockResolvedValueOnce({ status: 'not_recorded' }).mockResolvedValueOnce({
@@ -412,8 +452,24 @@ describe('service setup as one task', () => {
     mocks.read
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ kind: 'credential', credential });
-    const view = await fillCustom();
+    const view = await fillCustom(undefined, { retained: true });
     await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
+    await waitFor(() =>
+      expect(mocks.execute.mock.calls.map(([intent]) => intent.kind)).toEqual([
+        'connection',
+        'endpoint',
+        'credential',
+      ]),
+    );
+    const signal = mocks.execute.mock.calls[2]![3] as AbortSignal;
+    await view.user.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(signal.aborted).toBe(false);
+    await act(async () => {
+      rejectCredential(new ApiError('network_error', 'Synthetic lost response', 0));
+    });
+    await waitFor(() => expect(mocks.status).toHaveBeenCalledTimes(1));
+    await view.user.click(screen.getByRole('button', { name: 'Resume service setup' }));
     const check = await screen.findByRole('button', {
       name: common.common.connections.checkResult,
     });

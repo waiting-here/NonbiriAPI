@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installNativeDialog } from '../../../../../test/unit/nativeDialog';
 import { renderWithProviders } from '../../../../../test/unit/support';
@@ -72,6 +72,39 @@ const page = (data: unknown[]) => ({
 });
 const json = (value: unknown) =>
   new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
+const credential = {
+  id: '7',
+  connection_id: connection.id,
+  note: 'Project credential',
+  enabled: true,
+  revision: '1',
+  credential_version: '1',
+  display_head: 'head',
+  display_tail: 'tail',
+  created_at: 1700000000,
+  updated_at: 1700000000,
+};
+
+function connectionReads() {
+  const paths: string[] = [];
+  const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+    const path = new URL(String(input), 'https://fixture.example').pathname;
+    paths.push(path);
+    if (path === '/api/connections/2') return json(connection);
+    if (path === '/api/connections/2/entries') return json(page([]));
+    if (path === '/api/connections/2/credentials') return json(page([credential]));
+    if (path === '/api/credentials/7') return json(credential);
+    if (path === '/api/credentials/7/impact')
+      return json({
+        ...page([]),
+        kind: 'personal',
+        summary: { endpoint_keys: '0', donation_keys: '0', discovery_sources: '0' },
+      });
+    throw new Error('Unexpected request: ' + path);
+  });
+  vi.stubGlobal('fetch', fetch);
+  return { paths, fetch };
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -147,5 +180,104 @@ describe('connection identification', () => {
     await screen.findByRole('heading', { name: 'Choose a service key' });
     await waitFor(() => expect(paths).toEqual(['/api/connections/2/credentials']));
     expect(screen.queryByText('Choose from another connection')).not.toBeInTheDocument();
+  });
+
+  it('loads tabs on demand and preserves settings and new-key drafts when switching', async () => {
+    const { paths } = connectionReads();
+    const view = await renderWithProviders(<ConnectionsWorkspace user={account} />, {
+      station: 'user',
+      role: 'user',
+      route: '/endpoints?connection_id=2',
+    });
+    await screen.findByText(
+      'This service has no endpoints yet. Add one to manage keys and models.',
+    );
+    expect(paths).toEqual(['/api/connections/2', '/api/connections/2/entries']);
+    await view.user.click(screen.getByRole('tab', { name: 'Service settings' }));
+    const name = screen.getByRole('textbox', { name: 'Name' });
+    await view.user.clear(name);
+    await view.user.type(name, 'Unfinished name');
+    await view.user.click(screen.getByRole('tab', { name: 'Keys' }));
+    await view.user.click(await screen.findByRole('button', { name: 'Add new key' }));
+    await view.user.type(screen.getByLabelText('API key', { exact: true }), 'synthetic-tab-draft');
+    await view.user.click(screen.getByRole('tab', { name: 'Endpoints' }));
+    await view.user.click(screen.getByRole('tab', { name: 'Service settings' }));
+    expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Unfinished name');
+    await view.user.click(screen.getByRole('tab', { name: 'Keys' }));
+    expect(screen.getByLabelText('API key', { exact: true })).toHaveValue('synthetic-tab-draft');
+  });
+
+  it('keeps a legacy credential detail selected across tabs and returns to the key list', async () => {
+    const { paths } = connectionReads();
+    const view = await renderWithProviders(<ConnectionsWorkspace user={account} />, {
+      station: 'user',
+      role: 'user',
+      route: '/endpoints?connection_id=2&credential_id=7',
+    });
+    await screen.findByRole('heading', { name: credential.note });
+    const back = screen.getByRole('button', { name: 'Back to service keys' });
+    expect(screen.getByRole('tab', { name: 'Keys' })).toHaveAttribute('aria-selected', 'true');
+    expect(paths).not.toContain('/api/connections/2/entries');
+    await view.user.click(screen.getByRole('tab', { name: 'Endpoints' }));
+    expect(back).not.toBeVisible();
+    expect(screen.getByRole('tab', { name: 'Endpoints' })).toHaveAttribute('aria-selected', 'true');
+    await view.user.click(screen.getByRole('tab', { name: 'Keys' }));
+    expect(back).toBeVisible();
+    expect(screen.getByRole('heading', { name: credential.note })).toBeVisible();
+    await view.user.click(back);
+    await screen.findByRole('table', { name: 'Keys' });
+    expect(screen.getByRole('tab', { name: 'Keys' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('finishes an in-flight settings save after switching tabs without losing the request', async () => {
+    const reads = connectionReads();
+    const originalRead = reads.fetch.getMockImplementation()!;
+    let finish!: () => void;
+    const signals: (AbortSignal | null | undefined)[] = [];
+    const expectedRevisions: unknown[] = [];
+    let revision = 1;
+    reads.fetch.mockImplementation(async (input, init) => {
+      if (init?.method === 'PATCH') {
+        signals.push(init.signal);
+        expectedRevisions.push(JSON.parse(String(init.body)).expected_revision);
+        if (expectedRevisions.length === 1)
+          await new Promise<void>((resolve) => {
+            finish = resolve;
+          });
+        revision++;
+        return json({});
+      }
+      if (
+        revision > 1 &&
+        new URL(String(input), 'https://fixture.example').pathname === '/api/connections/2'
+      )
+        return json({ ...connection, name: 'Saved name', revision: String(revision) });
+      return originalRead(input, init);
+    });
+    const view = await renderWithProviders(<ConnectionsWorkspace user={account} />, {
+      station: 'user',
+      role: 'user',
+      route: '/endpoints?connection_id=2&connection_view=settings',
+    });
+    view.queryClient.setQueryData(['user', 'session'], {
+      user: { id: account.id, username: account.username, effective_level: 2 },
+    });
+    const name = await screen.findByRole('textbox', { name: 'Name' });
+    await view.user.clear(name);
+    await view.user.type(name, 'Saved name');
+    await view.user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(signals).toHaveLength(1));
+    await view.user.click(screen.getByRole('tab', { name: 'Keys' }));
+    expect(signals[0]?.aborted).toBe(false);
+    await act(async () => finish());
+    await waitFor(() => expect(view.queryClient.isMutating()).toBe(0));
+    expect(screen.getByRole('tab', { name: 'Keys' })).toHaveAttribute('aria-selected', 'true');
+    await view.user.click(screen.getByRole('tab', { name: 'Service settings' }));
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Saved name'),
+    );
+    await view.user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(expectedRevisions).toEqual(['1', '2']));
+    await waitFor(() => expect(view.queryClient.isMutating()).toBe(0));
   });
 });

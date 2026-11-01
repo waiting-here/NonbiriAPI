@@ -98,13 +98,15 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
       />
       <SectionTabs group="own" />
       <Sheet
+        key={user.id}
         open={creating}
+        keepMounted
         size="lg"
         onClose={close}
         title={t('user.workflows.addService')}
         closeLabel={t('common.connections.close')}
       >
-        <ServiceCreateForm accountId={user.id} />
+        <ServiceCreateForm accountId={user.id} onManage={close} />
       </Sheet>
       <ConnectionResourceList
         restoreScroll
@@ -168,20 +170,23 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
   const { t } = useTranslation();
   const [params, setParams] = useSearchState();
   const [adding, setAdding] = useState(false);
+  const [addTask, setAddTask] = useState(0);
+  const [settingsVersion, setSettingsVersion] = useState(0);
   const tabsID = useId();
   const requestedView = params.get('connection_view');
-  // An open key detail (credential_id) keeps the key tab selected unless settings were chosen.
+  // Explicit tabs take precedence; old key detail links still infer the credentials tab.
   const view: ConnectionView =
-    requestedView === 'settings'
-      ? 'settings'
-      : requestedView === 'credentials' || params.get('credential_id')
+    requestedView === 'entries' || requestedView === 'credentials' || requestedView === 'settings'
+      ? requestedView
+      : params.get('credential_id')
         ? 'credentials'
         : 'entries';
+  const [visitedViews, setVisitedViews] = useState<ConnectionView[]>([view]);
+  if (!visitedViews.includes(view)) setVisitedViews([...visitedViews, view]);
   const setView = (next: ConnectionView) =>
     setParams((previous) => {
       const updated = new URLSearchParams(previous);
       updated.set('connection_view', next);
-      if (next !== 'credentials') updated.delete('credential_id');
       return updated;
     });
   const connection = useQuery({
@@ -239,38 +244,62 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
           panelId: tabsID + '-' + tab.value + '-panel',
         }))}
       />
-      <div
-        className="services-detail__panel"
-        role="tabpanel"
-        id={tabsID + '-' + view + '-panel'}
-        aria-labelledby={tabsID + '-' + view}
-      >
-        {view === 'settings' ? (
-          <section className="nb-panel services-settings">
-            <ConnectionEditor
-              accountId={accountId}
-              connection={connection.data}
-              onSaved={() => setView('entries')}
-              onDeleted={() => setParams(backParams)}
-            />
-          </section>
-        ) : view === 'credentials' ? (
-          <div className="nb-stack">
-            <Note>{t('user.services.serviceKeysHelp')}</Note>
-            <CredentialsPanel accountId={accountId} connectionId={id} />
+      {tabs.map((tab) =>
+        visitedViews.includes(tab.value) ? (
+          <div
+            key={tab.value}
+            className="services-detail__panel"
+            role="tabpanel"
+            id={tabsID + '-' + tab.value + '-panel'}
+            aria-labelledby={tabsID + '-' + tab.value}
+            hidden={view !== tab.value}
+          >
+            {tab.value === 'settings' ? (
+              <section className="nb-panel services-settings">
+                <ConnectionEditor
+                  key={settingsVersion}
+                  accountId={accountId}
+                  connection={connection.data}
+                  onSaved={() => {
+                    setSettingsVersion((version) => version + 1);
+                    setParams((previous) => {
+                      if (previous.get('connection_view') !== 'settings') return previous;
+                      const next = new URLSearchParams(previous);
+                      next.set('connection_view', 'entries');
+                      return next;
+                    });
+                  }}
+                  onDeleted={() => setParams(backParams)}
+                />
+              </section>
+            ) : tab.value === 'credentials' ? (
+              <div className="nb-stack">
+                <Note>{t('user.services.serviceKeysHelp')}</Note>
+                <CredentialsPanel accountId={accountId} connectionId={id} />
+              </div>
+            ) : (
+              <ConnectionEndpoints accountId={accountId} connectionId={id} />
+            )}
           </div>
-        ) : (
-          <ConnectionEndpoints accountId={accountId} connectionId={id} />
-        )}
-      </div>
+        ) : null,
+      )}
       <Sheet
+        key={addTask}
         open={adding}
+        keepMounted
         size="lg"
         onClose={() => setAdding(false)}
         title={t('common.connections.addEntry')}
         closeLabel={t('common.connections.close')}
       >
-        <ServiceCreateForm accountId={accountId} connection={connection.data} />
+        <ServiceCreateForm
+          accountId={accountId}
+          connection={connection.data}
+          onManage={() => {
+            setAdding(false);
+            setAddTask((task) => task + 1);
+          }}
+        />
       </Sheet>
     </div>
   );
