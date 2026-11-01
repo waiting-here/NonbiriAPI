@@ -17,14 +17,16 @@ import {
   Note,
   OutcomeNote,
   Segmented,
+  StatusBadge,
 } from '@shared/components/ui';
+import type { StatusTone } from '@shared/components/ui/StatusBadge';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import { DonationConnectorLabel } from './DonationConnectorLabel';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { CopyValue } from '@shared/components/CopyValue';
 import { MarkdownText } from '@shared/components/MarkdownText';
 import { CharityPriceTable, type CharityPriceRow } from '@shared/components/CharityPriceTable';
-import { Card, EmptyState, ErrorState, StatusBadge } from '@shared/components/States';
+import { Card, EmptyState, ErrorState } from '@shared/components/States';
 import { formatDateTime } from '@shared/utils/datetime';
 import { TimeInput } from '@shared/components/TimeInput';
 import { RecurringLimitsDisclosure } from '@shared/components/RecurringLimitsDisclosure';
@@ -68,6 +70,36 @@ const keyStateLabels: Record<DonationKey['charityState'], string> = {
   ended: 'user.charity.keyState.ended',
   available: 'user.charity.keyState.available',
   rate_limited: 'user.charity.keyState.rate_limited',
+};
+const capabilityTones: Record<CharityCapability['state'], StatusTone> = {
+  feature_disabled: 'bad',
+  no_models: 'neutral',
+  no_candidates: 'warn',
+  available: 'ok',
+};
+type DonationKeyDisplayState =
+  | DonationKey['charityState']
+  | 'physical_disabled'
+  | 'failure_disabled'
+  | 'charity_paused'
+  | 'price_exhausted'
+  | 'calls_exhausted'
+  | 'tokens_exhausted';
+const keyStateTones: Record<DonationKeyDisplayState, StatusTone> = {
+  pending: 'warn',
+  disabled: 'neutral',
+  suspended: 'warn',
+  exhausted: 'warn',
+  expired: 'bad',
+  ended: 'bad',
+  available: 'ok',
+  rate_limited: 'warn',
+  physical_disabled: 'bad',
+  failure_disabled: 'bad',
+  charity_paused: 'neutral',
+  price_exhausted: 'warn',
+  calls_exhausted: 'warn',
+  tokens_exhausted: 'warn',
 };
 
 export type DonationOverviewFilter = 'all' | 'available' | 'blocked' | 'ended';
@@ -143,11 +175,9 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
         <div>
           <h2>{t('user.charity.callCapabilityTitle')}</h2>
         </div>
-        <StatusBadge
-          active={available}
-          danger={capability.state === 'feature_disabled'}
-          label={t(`user.charity.capabilityState.${capability.state}`)}
-        />
+        <StatusBadge tone={capabilityTones[capability.state]}>
+          {t(`user.charity.capabilityState.${capability.state}`)}
+        </StatusBadge>
       </div>
       <p>{t(`user.charity.capabilityBody.${capability.state}`)}</p>
       {available &&
@@ -410,7 +440,7 @@ export function DonationComposer({
     <Card className="economy-donation-composer">
       <div className="card-title-row">
         <h2>{t('user.charity.submitDonation')}</h2>
-        <StatusBadge active label={t('user.charity.intakeState.open')} />
+        <StatusBadge tone="ok">{t('user.charity.intakeState.open')}</StatusBadge>
       </div>
       <div className="economy-donation-form">
         <section className="donate-step" aria-labelledby={formID + '-keys'}>
@@ -657,11 +687,11 @@ export function DonationComposer({
   );
 }
 
-function keyStateKeys(key: DonationKey): string[] {
+function keyStateKeys(key: DonationKey): DonationKeyDisplayState[] {
   if (key.charityState === 'expired') return ['expired'];
   if (key.charityState === 'ended') return ['ended'];
   if (key.charityState === 'pending') return ['pending'];
-  const states: string[] = [];
+  const states: DonationKeyDisplayState[] = [];
   if (!key.physicalEnabled) states.push('physical_disabled');
   if (key.charityState === 'suspended') states.push('suspended');
   if (key.streak.failureDisabled) states.push('failure_disabled');
@@ -790,31 +820,20 @@ export function DonationKeyPanel({
           {donationStatus ? (
             <DonationStatusBadge status={donationStatus} summary={donationSummary} />
           ) : null}
-          <StatusBadge
-            active={donationKey.physicalEnabled}
-            danger={!donationKey.physicalEnabled}
-            label={
-              donationKey.physicalEnabled
-                ? t('user.charity.physicalEnabled')
-                : t('user.charity.physicalDisabled')
-            }
-          />
-          <StatusBadge
-            active={donationKey.charityState === 'available'}
-            danger={donationKey.charityState === 'ended' || donationKey.charityState === 'expired'}
-            label={t(keyStateLabels[donationKey.charityState])}
-          />
+          <StatusBadge tone={donationKey.physicalEnabled ? 'ok' : 'bad'}>
+            {donationKey.physicalEnabled
+              ? t('user.charity.physicalEnabled')
+              : t('user.charity.physicalDisabled')}
+          </StatusBadge>
+          <StatusBadge tone={keyStateTones[donationKey.charityState]}>
+            {t(keyStateLabels[donationKey.charityState])}
+          </StatusBadge>
           {states
             .filter((state) => state !== donationKey.charityState)
             .map((state) => (
-              <StatusBadge
-                key={state}
-                active={state === 'available'}
-                danger={
-                  state.includes('expired') || state === 'ended' || state.includes('disabled')
-                }
-                label={t(`user.charity.keyState.${state}`)}
-              />
+              <StatusBadge key={state} tone={keyStateTones[state]}>
+                {t(`user.charity.keyState.${state}`)}
+              </StatusBadge>
             ))}
         </div>
       </div>
