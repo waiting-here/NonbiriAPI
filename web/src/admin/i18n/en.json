@@ -820,10 +820,11 @@
     },
     "navigation": {
       "overview": "Overview",
-      "users": "Users & permissions",
-      "operations": "Operations",
-      "services": "Services & charity",
-      "activities": "Activities & content"
+      "users": "Users",
+      "services": "Charity & services",
+      "records": "Logs & audits",
+      "activities": "Activities & content",
+      "system": "System"
     },
     "dashboard": {
       "nav": "Dashboard",

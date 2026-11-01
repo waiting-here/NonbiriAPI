@@ -24,10 +24,11 @@ import { activeAdminNavGroup, useCollapsedAdminNavGroups } from '../navigationGr
 
 const ADMIN_GROUP_LABEL_KEYS: Record<(typeof ADMIN_NAV_GROUPS)[number], string> = {
   overview: 'admin.navigation.overview',
-  users: 'admin.navigation.users',
-  operations: 'admin.navigation.operations',
   services: 'admin.navigation.services',
+  users: 'admin.navigation.users',
+  records: 'admin.navigation.records',
   activities: 'admin.navigation.activities',
+  system: 'admin.navigation.system',
 };
 
 function AdminLogin({
