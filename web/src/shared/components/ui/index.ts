@@ -14,3 +14,6 @@ export * from './DataTable';
 export * from './FilterBar';
 export * from './OutcomeNote';
 export * from './Button';
+export * from './Sheet';
+export * from './Stepper';
+export * from './StatusBadge';

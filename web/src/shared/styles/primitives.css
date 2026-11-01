@@ -104,11 +104,64 @@
   overflow-wrap: anywhere;
 }
 
-.nb-state__illustration {
-  display: block;
-  width: 3rem;
-  height: 3rem;
-  object-fit: contain;
+/* Illustrated states: the drawing replaces the icon tile. */
+.nb-state__art {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.nb-state__art .nb-illustration {
+  width: 6.5rem;
+}
+
+.empty-state.nb-state {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: var(--nb-space-3);
+  padding-block: var(--nb-space-8);
+  text-align: center;
+  box-shadow: none;
+  border-style: dashed;
+  border-color: var(--nb-color-border-strong);
+  background: var(--nb-color-surface-alt);
+}
+
+.empty-state.nb-state > div {
+  display: grid;
+  justify-items: center;
+  gap: var(--nb-space-2);
+  max-width: 36rem;
+}
+
+.empty-state.nb-state h2 {
+  margin: 0;
+  font-size: var(--nb-font-size-lg);
+}
+
+.empty-state.nb-state p {
+  margin: 0;
+  color: var(--nb-color-text-muted);
+}
+
+.empty-state .state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--nb-space-2);
+  margin-top: var(--nb-space-2);
+}
+
+@media (width < 40rem) {
+  .nb-state__art .nb-illustration {
+    width: 5.5rem;
+  }
+
+  .empty-state.nb-state {
+    padding: var(--nb-space-6) var(--nb-space-4);
+  }
 }
 
 .nb-state--error .nb-state__icon {

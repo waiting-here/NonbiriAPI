@@ -386,9 +386,9 @@
   align-items: center;
   gap: 0.35rem;
   border-radius: 999px;
-  padding: 0.25rem 0.55rem;
-  font-size: 0.76rem;
-  font-weight: 750;
+  padding: 0.15rem 0.6rem;
+  font-size: var(--nb-font-size-xs);
+  font-weight: var(--nb-font-weight-semibold);
   overflow-wrap: anywhere;
   white-space: nowrap;
 }

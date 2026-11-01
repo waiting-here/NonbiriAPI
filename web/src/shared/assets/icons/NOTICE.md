@@ -2,8 +2,10 @@
 
 The station icons in `src/shared/components/Icon.tsx` adapt SVG path data from
 [Lucide](https://lucide.dev/) (`lucide-static` 1.66.0). The paths are copied into
-the component source; no Lucide package is installed or loaded at runtime. Game
-icons in `src/shared/components/iconPaths.ts` are original to this project.
+the component source; no Lucide package is installed or loaded at runtime. The
+maintenance drawing in `src/shared/components/Illustration.tsx` reuses the
+wrench path. Game icons in `src/shared/components/iconPaths.ts` are original to
+this project.
 
 Adapted icons: activity, badge-check, bell, bot, box, bug, check, chevron-down,
 chevron-right, circle-alert, circle-user-round, circle-x, copy, external-link,

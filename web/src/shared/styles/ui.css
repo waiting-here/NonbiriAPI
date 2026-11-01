@@ -379,6 +379,10 @@
   background: var(--nb-color-violet-soft);
   color: var(--nb-color-violet);
 }
+.nb-badge--accent {
+  background: var(--nb-color-accent-soft);
+  color: var(--nb-color-accent);
+}
 .nb-badge--teal {
   background: var(--nb-color-teal-soft);
   color: var(--nb-color-teal);
