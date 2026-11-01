@@ -19,13 +19,13 @@
   gap: 0.75rem;
   margin-top: 1rem;
 }
-.charity-management fieldset {
+.charity-management fieldset:not(.nb-fields, .nb-fieldset) {
   border: 1px solid var(--nb-color-border);
   border-radius: 0.75rem;
   padding: 1rem;
   margin: 1rem 0;
 }
-.charity-management legend {
+.charity-management fieldset:not(.nb-fields, .nb-fieldset) > legend {
   padding: 0 0.4rem;
   font-weight: 700;
 }

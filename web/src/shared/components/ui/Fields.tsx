@@ -11,16 +11,20 @@ export function Fields({
   hint,
   children,
   className,
+  columns,
 }: {
   legend?: ReactNode;
   hint?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** Keep related settings in aligned columns instead of wrapping by control width. */
+  columns?: 1 | 2;
 }) {
   const grid = <div className="nb-fields__grid">{children}</div>;
-  if (!legend) return <div className={`nb-fields${className ? ` ${className}` : ''}`}>{grid}</div>;
+  const classes = `nb-fields${columns ? ` nb-fields--columns-${columns}` : ''}${className ? ` ${className}` : ''}`;
+  if (!legend) return <div className={classes}>{grid}</div>;
   return (
-    <fieldset className={`nb-fields${className ? ` ${className}` : ''}`}>
+    <fieldset className={classes}>
       <legend className="nb-fields__legend">{legend}</legend>
       {hint ? <p className="nb-fields__hint">{hint}</p> : null}
       {grid}

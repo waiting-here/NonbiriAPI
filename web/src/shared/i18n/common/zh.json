@@ -573,6 +573,8 @@
         }
       },
       "charity": {
+        "routingSettings": "请求路由",
+        "accessSettings": "访问与展示",
         "selectedKeyMissing": "所选密钥已不在这份捐赠中。",
         "changedWhileReading": "读取密钥时捐赠已发生变化，请刷新后再编辑。",
         "returnToList": "返回列表",

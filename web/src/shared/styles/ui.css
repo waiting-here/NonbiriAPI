@@ -429,6 +429,29 @@
   flex-basis: 100%;
   max-inline-size: none;
 }
+.nb-fields--columns-2 {
+  container: nb-fields / inline-size;
+}
+.nb-fields--columns-1 > .nb-fields__grid,
+.nb-fields--columns-2 > .nb-fields__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.nb-fields--columns-2 > .nb-fields__grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+:is(.nb-fields--columns-1, .nb-fields--columns-2) > .nb-fields__grid > * {
+  max-inline-size: none;
+}
+:is(.nb-fields--columns-1, .nb-fields--columns-2) > .nb-fields__grid > .nb-field--span {
+  grid-column: 1 / -1;
+}
+@container nb-fields (width < 40rem) {
+  .nb-fields--columns-2 > .nb-fields__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Fields outside a grid keep a readable control width. */
 .nb-field:where(:not(.nb-field--span, .nb-field--filter)) {
   max-inline-size: 44rem;
@@ -537,8 +560,10 @@
   grid-row: 1;
   align-self: center;
 }
-.nb-field:has(> input[type='checkbox']) > :is(.nb-field__help, .nb-field__error) {
+.nb-field:has(> input[type='checkbox']) > :not(input) {
   grid-column: 2;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .nb-input,
 .nb-select,
@@ -663,10 +688,9 @@
 
 .nb-seg {
   display: inline-flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   min-width: 0;
   max-width: 100%;
-  overflow-x: auto;
   padding: 3px;
   gap: 3px;
   border-radius: var(--nb-radius-md);
@@ -675,8 +699,11 @@
 }
 .nb-seg label {
   position: relative;
-  flex: 0 0 auto;
-  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .nb-seg input {
   position: absolute;
@@ -685,6 +712,7 @@
 }
 .nb-seg span {
   display: block;
+  text-align: center;
   padding: 0.38rem 0.85rem;
   border-radius: calc(var(--nb-radius-md) - 3px);
   font-size: var(--nb-font-size-sm);
@@ -703,9 +731,6 @@
 @media (width <= 32rem) {
   .nb-seg {
     display: flex;
-  }
-  .nb-seg label {
-    flex: 0 0 auto;
   }
   .nb-seg span {
     text-align: center;

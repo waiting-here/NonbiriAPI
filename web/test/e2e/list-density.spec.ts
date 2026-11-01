@@ -1292,6 +1292,25 @@ for (const role of ['admin', 'steward'] as const)
     await picker.getByRole('button', { name: /endpoint-1\.example\.test/ }).click();
     await expect(picker.locator('.ops-picker-choice')).toHaveCount(50);
     await picker.getByRole('button', { name: /^Reviewed key 1 —/ }).click();
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      const placement = await picker
+        .locator('.nb-choice-list__items .nb-field')
+        .first()
+        .evaluate((field) => {
+          const label = field.querySelector('label')!.getBoundingClientRect();
+          const source = field.querySelector('.ops-picker-source-types')!.getBoundingClientRect();
+          return {
+            labelX: label.x,
+            labelWidth: label.width,
+            sourceX: source.x,
+            sourceWidth: source.width,
+          };
+        });
+      expect(Math.abs(placement.sourceX - placement.labelX)).toBeLessThanOrEqual(1);
+      expect(placement.sourceWidth).toBeGreaterThanOrEqual(placement.labelWidth - 1);
+      await fitsPage(page);
+    }
     await picker.getByRole('checkbox', { name: /shared-model-1-/ }).check();
     await currentPage.getByRole('button', { name: 'Next', exact: true }).click();
     await picker.getByRole('checkbox', { name: /shared-model-61-/ }).check();

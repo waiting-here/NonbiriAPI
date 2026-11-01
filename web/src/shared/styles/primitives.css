@@ -331,7 +331,7 @@
   min-width: 0;
 }
 
-.nb-choice-list__items > li > :is(button, label) {
+.nb-choice-list__items > li > :is(button, label, .nb-field) {
   width: 100%;
   min-width: 0;
   margin: 0;
@@ -341,7 +341,7 @@
   font: inherit;
 }
 
-.nb-choice-list__items > li > :is(button, label) > * {
+.nb-choice-list__items > li > :is(button, label, .nb-field) > * {
   min-width: 0;
 }
 .nb-key-limits {
