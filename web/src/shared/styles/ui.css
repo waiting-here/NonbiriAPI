@@ -799,7 +799,10 @@
 }
 .nb-savebar__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--nb-space-2);
+  min-width: 0;
+  max-width: 100%;
 }
 @media (width <= 40rem) {
   .nb-savebar__actions {

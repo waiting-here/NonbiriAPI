@@ -378,9 +378,10 @@ test('admin validates quick amount count, duplicates and limits before saving th
 for (const scenario of [
   { width: 1440, height: 900, locale: 'en', theme: 'light' },
   { width: 768, height: 1024, locale: 'en', theme: 'dark' },
+  { width: 390, height: 844, locale: 'en', theme: 'light' },
   { width: 390, height: 844, locale: 'zh', theme: 'dark' },
 ]) {
-  test(`game panels retain labels, focus and drafts until explicitly closed at ${scenario.width}`, async ({
+  test(`game panels retain labels, focus and drafts until explicitly closed at ${scenario.width} ${scenario.locale}`, async ({
     context,
     page,
   }) => {
@@ -429,6 +430,18 @@ for (const scenario of [
       if (index === 0) {
         const amount = dialog.locator('input[name="fishing.bait_prices.worm"]');
         await amount.fill('3.25');
+        const saveBar = page.locator('.nb-savebar');
+        await expect(saveBar).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        for (const button of await saveBar.getByRole('button').all()) {
+          const bounds = await button.boundingBox();
+          expect(bounds).not.toBeNull();
+          expect(bounds!.x).toBeGreaterThanOrEqual(0);
+          expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(scenario.width);
+        }
+        await capture('unsaved');
         await page.keyboard.press('Escape');
         await expect(amount).toHaveValue('3.25');
         await expect(dialog).toBeVisible();

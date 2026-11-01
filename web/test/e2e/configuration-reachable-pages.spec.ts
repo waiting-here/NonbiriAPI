@@ -622,7 +622,9 @@ test('reachable admin settings consumes the bilingual catalog and rejects a 345-
   await page.evaluate(() => {
     document.documentElement.style.zoom = '200%';
   });
-  await page.getByRole('button', { name: /^Identity and appearance/ }).click();
+  await page
+    .getByRole('combobox', { name: 'Setting groups', exact: true })
+    .selectOption('identity');
   await expect(page.getByLabel('Site name')).toBeVisible();
   await assertResponsiveAndClean(page, guard);
 });
@@ -686,7 +688,7 @@ test('reachable admin settings saves legacy legal text with LF line endings', as
   });
 
   await page.goto(`${ADMIN_ORIGIN}/settings`);
-  await page.getByText('Legal text', { exact: true }).click();
+  await page.getByRole('combobox', { name: 'Setting groups', exact: true }).selectOption('legal');
   const textarea = page.getByLabel('Terms override (English)');
   const save = page.getByRole('button', { name: 'Save all changes' });
   await expect(save).toHaveCount(0);
