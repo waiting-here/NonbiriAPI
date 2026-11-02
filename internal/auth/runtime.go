@@ -40,6 +40,7 @@ type Runtime struct {
 	adminUsername                     string
 	adminPassword                     adminPasswordVerifier
 	adminCredentialGeneration         string
+	browserAuditKey                   []byte
 	authorizer                        *authz.Authorizer
 	maintenance                       MaintenanceGate
 	states                            *StateManager
@@ -170,6 +171,12 @@ func NewRuntime(c RuntimeConfig) (*Runtime, error) {
 	if err != nil {
 		_ = r.Close()
 		return nil, err
+	}
+	// Browser evidence is optional; a derivation failure must not disable login.
+	r.browserAuditKey, err = c.CredentialKeyDeriver.DeriveGenerationTwoSubkey(browserAuditPurpose)
+	if err != nil || len(r.browserAuditKey) < 32 {
+		clear(r.browserAuditKey)
+		r.browserAuditKey = nil
 	}
 	if err := r.registerBuiltins(); err != nil {
 		_ = r.Close()
@@ -664,6 +671,8 @@ func (r *Runtime) Close() error {
 		return nil
 	}
 	r.closed = true
+	clear(r.browserAuditKey)
+	r.browserAuditKey = nil
 	r.mu.Unlock()
 	var first error
 	for _, closeFn := range []func() error{r.states.Close, r.elevation.Close, r.oauthThrottle.Close, r.continuity.Close} {

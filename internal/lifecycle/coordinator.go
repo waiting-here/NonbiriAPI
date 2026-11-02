@@ -386,6 +386,9 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 	}
 	request := ExportRequest{UserID: userID, DecisionNow: decisionNow, Limit: CollectionLimit}
 	document := ExportDocument{SchemaVersion: SchemaVersion, GeneratedAt: decisionNow}
+	if document.BrowserAssociations, err = exportBrowserAssociations(ctx, tx, userID, decisionNow); err != nil {
+		return nil, err
+	}
 	if document.StewardPermissions, err = exportStewardPermissions(ctx, tx, userID); err != nil {
 		return nil, err
 	}

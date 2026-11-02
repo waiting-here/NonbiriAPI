@@ -217,12 +217,23 @@ func (r *Repository) CleanupBatch(ctx context.Context, now time.Time, limit int)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
+	cutoff := now.Add(-Retention).Unix()
+	var due bool
+	if err := r.readDB.QueryRowContext(ctx, `SELECT
+EXISTS(SELECT 1 FROM browser_associations WHERE expires_at<=?) OR
+EXISTS(SELECT 1 FROM risk_audit_minutes WHERE minute<?) OR
+EXISTS(SELECT 1 FROM risk_audit_gaps WHERE minute<?) OR
+EXISTS(SELECT 1 FROM risk_client_scans WHERE expires_at<=? OR reason='permission_changed')`, now.Unix(), cutoff, cutoff, now.Unix()).Scan(&due); err != nil {
+		return CleanupResult{}, ErrUnavailable
+	}
+	if !due {
+		return CleanupResult{}, nil
+	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return CleanupResult{}, ErrUnavailable
 	}
 	defer tx.Rollback()
-	cutoff := now.Add(-Retention).Unix()
 	scans, err := cleanupScansTx(ctx, tx, now.Unix(), limit)
 	if err != nil {
 		return CleanupResult{}, ErrUnavailable
@@ -247,8 +258,19 @@ func (r *Repository) CleanupBatch(ctx context.Context, now time.Time, limit int)
 		}
 		deleted += gapDeleted
 	}
+	if remaining := int64(limit) - deleted; remaining > 0 {
+		result, err = tx.ExecContext(ctx, `DELETE FROM browser_associations WHERE rowid IN (SELECT rowid FROM browser_associations WHERE expires_at<=? ORDER BY expires_at LIMIT ?)`, now.Unix(), remaining)
+		if err != nil {
+			return CleanupResult{}, ErrUnavailable
+		}
+		n, err := result.RowsAffected()
+		if err != nil {
+			return CleanupResult{}, ErrUnavailable
+		}
+		deleted += n
+	}
 	var more bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM risk_audit_minutes WHERE minute<? LIMIT 1) OR EXISTS(SELECT 1 FROM risk_audit_gaps WHERE minute<? LIMIT 1)`, cutoff, cutoff).Scan(&more); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM risk_audit_minutes WHERE minute<? LIMIT 1) OR EXISTS(SELECT 1 FROM risk_audit_gaps WHERE minute<? LIMIT 1) OR EXISTS(SELECT 1 FROM browser_associations WHERE expires_at<=? LIMIT 1)`, cutoff, cutoff, now.Unix()).Scan(&more); err != nil {
 		return CleanupResult{}, ErrUnavailable
 	}
 	if tx.Commit() != nil {

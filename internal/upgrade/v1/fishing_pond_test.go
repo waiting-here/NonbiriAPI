@@ -47,6 +47,7 @@ FROM game_fishing_length_facts l JOIN game_fishing_rank_facts f ON f.batch_id_te
 
 func restoreSchema44LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema45LayoutForTest(t, database)
 	hostileMustExec(t, database, `DROP INDEX idx_lake_notes_live_lease;
 DROP TRIGGER fishing_length_fact_recent_order;
 DROP TABLE game_fishing_recent_order;
@@ -75,7 +76,7 @@ func TestFishingPondSchema44UpgradeIsAdditiveAndAtomic(t *testing.T) {
 	hostileMustExec(t, store.DB(), `INSERT INTO game_fishing_rank_facts VALUES(?,?,100,2592100,zeroblob(16),1)`, batch, owner)
 	hostileMustExec(t, store.DB(), `INSERT INTO game_fishing_length_facts VALUES(?,0,'boot','junk',0,0,NULL,NULL)`, batch)
 	plan, err := storageSchema.plan(t.Context(), store.DB())
-	if err != nil || len(plan.steps) != 1 || plan.steps[0].from != 44 || plan.steps[0].version != 45 || plan.auditsCredentials() {
+	if err != nil || len(plan.steps) != 2 || plan.steps[0].from != 44 || plan.steps[0].version != 45 || plan.auditsCredentials() {
 		t.Fatal("additive upgrade plan", plan, err)
 	}
 	before := gatewayRows(t, store.DB())
@@ -97,7 +98,7 @@ func TestFishingPondSchema44UpgradeIsAdditiveAndAtomic(t *testing.T) {
 	}
 	checkSource()
 	checked, err := Run(t.Context(), path, vault, Options{})
-	if err != nil || checked.Status != "ready" || checked.SourceSchemaVersion != 44 || checked.TargetSchemaVersion != 45 {
+	if err != nil || checked.Status != "ready" || checked.SourceSchemaVersion != 44 || checked.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal("check", checked, err)
 	}
 	checkSource()
@@ -128,7 +129,7 @@ func TestFishingPondSchema44UpgradeIsAdditiveAndAtomic(t *testing.T) {
 		checkSource()
 	}
 	result, err := Run(t.Context(), path, vault, Options{Apply: true})
-	if err != nil || result.Status != "converted" || result.SourceSchemaVersion != 44 || result.TargetSchemaVersion != 45 {
+	if err != nil || result.Status != "converted" || result.SourceSchemaVersion != 44 || result.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal("apply", result, err)
 	}
 	store, err = db.Open(path, vault)
