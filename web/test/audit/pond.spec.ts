@@ -11,7 +11,7 @@ type Fixture = {
 };
 type Outcome = { ordinal: number; species_key: string; pond?: { return_state: string } };
 type Batch = { batch_id: string; outcomes: Outcome[] };
-type Settings = { revision: string; values: Record<string, unknown> };
+type Settings = { revision: string; master_enabled: boolean; fishing: { enabled: boolean } };
 
 async function session(browser: Browser, origin: string, cookie: Cookie, admin = false) {
   const context = await browser.newContext({
@@ -62,7 +62,7 @@ test('real pond return keeps one receipt and current anonymity on both count boa
     fixture.users.find((user) => user.level === 1)!.cookie,
   );
   const admin = await session(browser, fixture.admin_url, fixture.admin_cookie, true);
-  const configPath = '/admin/api/site-config';
+  const configPath = '/admin/api/games/config';
   const readSettings = async () => {
     const response = await api(admin, fixture.admin_url, configPath);
     expect(response.status()).toBe(200);
@@ -99,9 +99,10 @@ test('real pond return keeps one receipt and current anonymity on both count boa
   try {
     const enabled = await api(admin, fixture.admin_url, configPath, 'PATCH', {
       expected_revision: original.revision,
-      values: { games_enabled: true, game_fishing_enabled: true },
+      master_enabled: true,
+      fishing: { enabled: true },
     });
-    expect(enabled.status()).toBe(200);
+    expect(enabled.status(), await enabled.text()).toBe(200);
     await privacy(false);
     const before = await myCount();
     for (let attempt = 0; attempt < 6; attempt += 1) {
@@ -195,17 +196,18 @@ test('real pond return keeps one receipt and current anonymity on both count boa
       true,
     );
   } finally {
-    await privacy(originalPublic);
-    const current = await readSettings();
-    const restored = await api(admin, fixture.admin_url, configPath, 'PATCH', {
-      expected_revision: current.revision,
-      values: {
-        games_enabled: original.values.games_enabled,
-        game_fishing_enabled: original.values.game_fishing_enabled,
-      },
-    });
-    expect(restored.status()).toBe(200);
-    await user.close();
-    await admin.close();
+    try {
+      await privacy(originalPublic);
+      const current = await readSettings();
+      const restored = await api(admin, fixture.admin_url, configPath, 'PATCH', {
+        expected_revision: current.revision,
+        master_enabled: original.master_enabled,
+        fishing: { enabled: original.fishing.enabled },
+      });
+      expect.soft(restored.status(), await restored.text()).toBe(200);
+    } finally {
+      await user.close();
+      await admin.close();
+    }
   }
 });
