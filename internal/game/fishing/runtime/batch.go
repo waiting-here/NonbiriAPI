@@ -230,6 +230,13 @@ func (service *Service) startFishing(ctx context.Context, input StartInput, rule
 			if _, insertErr = tx.ExecContext(ctx, `INSERT INTO game_fishing_outcomes(batch_id,ordinal,species_key,tier,size_cm,payout_milli,net_payout_milli,platform_cut_milli,welfare_cut_milli,thursday_cut_milli) VALUES(?,?,?,?,?,?,?,?,?,?)`, batchID, ordinal, draw.Outcome.Key, string(draw.Outcome.Tier), draw.Outcome.SizeCentimetre, draw.Settlement.PayoutMilli, draw.Settlement.NetMilli, draw.Settlement.PlatformMilli, draw.Settlement.WelfareMilli, draw.Settlement.ThursdayMilli); insertErr != nil {
 				return classifyDB(insertErr)
 			}
+			// Only newly created catches receive pond eligibility. Old reserved
+			// batches and historical outcomes are deliberately not backfilled.
+			if rulesVersion == 2 && draw.Outcome.Tier == fishing.TierJunk && draw.Settlement.PayoutMilli == 0 {
+				if _, insertErr = tx.ExecContext(ctx, `INSERT INTO game_fishing_pond_outcomes(batch_id,ordinal) VALUES(?,?)`, batchID, ordinal); insertErr != nil {
+					return classifyDB(insertErr)
+				}
+			}
 			length, kind := draw.Outcome.BlueFatFishLengthCM, "blue"
 			if draw.Outcome.MilkCrabLengthCM != "" {
 				length, kind = draw.Outcome.MilkCrabLengthCM, "milk"

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	randomhttp "github.com/waiting-here/NonbiriAPI/internal/game/randomness/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
@@ -32,6 +33,7 @@ func RegisterUserRoutes(registrar resources.UserRouteRegistrar, service *Service
 		handler      resources.AuthorizedUserHandler
 	}{
 		{http.MethodPost, RouteFishingBatches, api.start}, {http.MethodGet, RouteFishingState, api.state}, {http.MethodPost, RouteFishingACK, api.ack}, {http.MethodPost, RouteFishingRecover, api.recover}, {http.MethodGet, RouteFishingLeaderboard, api.leaderboard},
+		{http.MethodPost, RouteFishingPondReturn, api.pondReturn}, {http.MethodGet, RouteFishingPondLeaderboard, api.pondLeaderboard},
 	}
 	for _, route := range routes {
 		if err := registrar.RegisterUserRoute(route.method, route.path, route.handler); err != nil {
@@ -39,6 +41,42 @@ func RegisterUserRoutes(registrar resources.UserRouteRegistrar, service *Service
 		}
 	}
 	return nil
+}
+
+func (api *httpAPI) pondReturn(w http.ResponseWriter, r *http.Request, principal resources.UserPrincipal) {
+	if !noBody(w, r) || !requireExactQuery(w, r) {
+		return
+	}
+	raw := r.PathValue("ordinal")
+	ordinal, err := strconv.Atoi(raw)
+	if err != nil || strconv.Itoa(ordinal) != raw || ordinal < 0 || ordinal > 9 {
+		returnInvalid(w)
+		return
+	}
+	result, err := api.service.ReturnPondOutcome(r.Context(), principal.UserID, r.PathValue("id"), ordinal)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (api *httpAPI) pondLeaderboard(w http.ResponseWriter, r *http.Request, principal resources.UserPrincipal) {
+	if !noBody(w, r) || !requireExactQuery(w, r, "board", "period") {
+		return
+	}
+	board := r.URL.Query().Get("board")
+	period := r.URL.Query().Get("period")
+	if values, ok := r.URL.Query()["period"]; ok && values[0] == "" {
+		returnInvalid(w)
+		return
+	}
+	result, err := api.service.PondLeaderboard(r.Context(), principal.UserID, board, period)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (api *httpAPI) start(w http.ResponseWriter, r *http.Request, principal resources.UserPrincipal) {
