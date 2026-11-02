@@ -25,6 +25,8 @@ type AdminRouteRegistrar interface {
 type route struct{ method, path, action string }
 
 var routes = []route{
+	{http.MethodGet, "/shared-browsers", "browsers"},
+	{http.MethodGet, "/shared-browsers/{id}", "browser"},
 	{http.MethodPost, "/scans", "scan_create_v2"}, {http.MethodGet, "/scans", "scan_recent_v2"},
 	{http.MethodGet, "/scans/{id}", "scan_get_v2"},
 	{http.MethodGet, "/scans/{id}/results", "scan_results_v2"},
@@ -225,6 +227,14 @@ func parseAction(raw json.RawMessage) (ActionMutation, error) {
 }
 
 func serve(repository *Repository, action string, actor Actor, w http.ResponseWriter, r *http.Request) {
+	if action == "browser" {
+		serveSharedBrowser(repository, actor, w, r)
+		return
+	}
+	if action == "browsers" {
+		serveSharedBrowsers(repository, actor, w, r)
+		return
+	}
 	if strings.HasPrefix(action, "scan_") {
 		serveScans(repository, action, actor, w, r)
 		return
