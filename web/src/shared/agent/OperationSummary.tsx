@@ -1,3 +1,4 @@
+import { CreditNumber } from '@shared/components/CreditNumber';
 import { useTranslation } from 'react-i18next';
 import { Fold } from '@shared/components/ui';
 import type { ReactElement } from 'react';
@@ -165,7 +166,7 @@ export function OperationSummary({
     )
       return (
         <span className="agent-number">
-          {formatCredits(text)} {t('common.creditsUnit')}
+          <CreditNumber value={formatCredits(text)} /> {t('common.creditsUnit')}
         </span>
       );
     return valueNames[text] ? (

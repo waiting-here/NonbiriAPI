@@ -22,9 +22,9 @@ it.each([false, true])(
     expect(
       shop.getByRole('heading', { name: english ? 'Limited ticket ×10' : '限定抽奖券 ×10' }),
     ).toBeVisible();
-    expect(
-      shop.getAllByText(english ? 'Cost: 10,000 credits' : '需要：10,000 悠哉积分'),
-    ).toHaveLength(2);
+    expect(shop.getAllByText(english ? /^Cost:/ : /^需要：/)).toHaveLength(2);
+    for (const cost of shop.getAllByText(english ? /^Cost:/ : /^需要：/))
+      expect(cost).toHaveTextContent(english ? 'Cost: 10,000 credits' : '需要：10,000 悠哉积分');
     expect(
       shop.getByText(english ? 'Remaining today: 0/1 bundles' : '今日剩余：0/1 件'),
     ).toBeVisible();

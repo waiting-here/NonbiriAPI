@@ -1,3 +1,4 @@
+import { CreditText } from '@shared/components/CreditText';
 import { Panel, PanelHead, PanelBody } from '@shared/components/ui';
 import { GameWallets } from './common/GameWallets';
 import { Link } from 'react-router';
@@ -101,13 +102,18 @@ function GameCard({ card }: { card: CenterCard }) {
         : text('common.open')
       : text('presentation.unavailable');
   const detail =
-    card.id === 'lakenotes'
-      ? ''
-      : card.price === undefined
-        ? text('center.reviewCosts')
-        : creditsToMilli(card.price) === 0n
-          ? text('center.free')
-          : text('center.from', { amount: formatCredits(card.price) });
+    card.id === 'lakenotes' ? (
+      ''
+    ) : card.price === undefined ? (
+      text('center.reviewCosts')
+    ) : creditsToMilli(card.price) === 0n ? (
+      text('center.free')
+    ) : (
+      <CreditText
+        i18nKey="user.games.copy.center.from"
+        amounts={{ amount: formatCredits(card.price) }}
+      />
+    );
   const reward = text(
     card.id === 'lakenotes'
       ? 'center.free'

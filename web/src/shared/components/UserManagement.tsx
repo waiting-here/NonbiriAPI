@@ -1,3 +1,4 @@
+import { CreditNumber } from '@shared/components/CreditNumber';
 import { FilterBar } from '@shared/components/ui/FilterBar';
 import { Fields, FormActions } from '@shared/components/ui/Fields';
 import { InferenceLimitFields, InferenceLimitSummary } from './userInferenceLimits';
@@ -592,9 +593,12 @@ function UserAuthority({
             </dd>
             <dt>{t('management.users.balances')}</dt>
             <dd>
-              {formatCredits(user.balance)} {t('management.users.creditsBalance')} ·{' '}
-              {formatCredits(user.game_balance)} {t('management.users.gameBalance')} ·{' '}
-              {formatCredits(user.donation_credit)} {t('management.users.donationBalance')}
+              <CreditNumber value={formatCredits(user.balance)} />{' '}
+              {t('management.users.creditsBalance')} ·{' '}
+              <CreditNumber value={formatCredits(user.game_balance)} />{' '}
+              {t('management.users.gameBalance')} ·{' '}
+              <CreditNumber value={formatCredits(user.donation_credit)} />{' '}
+              {t('management.users.donationBalance')}
             </dd>
             <dt>
               {t('management.users.created')} / {t('management.users.updated')}
@@ -1713,7 +1717,9 @@ export function UserManagement({
                             {balance === null ? (
                               accountLabels.unknown
                             ) : (
-                              <span className="nb-amount">{formatCredits(balance)}</span>
+                              <span className="nb-amount">
+                                <CreditNumber value={formatCredits(balance)} />
+                              </span>
                             )}
                           </span>
                         );

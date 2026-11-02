@@ -1,3 +1,4 @@
+import { creditDisplayFixtures } from './credit-display-fixtures';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test } from './test';
@@ -98,4 +99,76 @@ for (const intensity of ['vivid', 'balanced', 'focus'])
             JSON.stringify({ intensity, design, mode, width, pages }, null, 2) + '\n',
           );
           if (process.env.NONBIRI_APPEARANCE_AUDIT_STRICT) expect(failures).toEqual([]);
+        });
+
+const CREDIT_PAGES = [
+  ['/', 'home', '.home-wallet'],
+  ['/credits', 'credits', '.credit-history__table'],
+  ['/games/fishing', 'game', '.fishing-controls'],
+] as const;
+
+// Include default surfaces as well as every appearance for the new fractional ink.
+for (const intensity of ['vivid', 'balanced', 'focus'])
+  for (const design of ALL_APPEARANCES)
+    for (const mode of ['light', 'dark'])
+      for (const width of [1440, 390])
+        test(`credit fractions ${intensity} ${design} ${mode} ${width}`, async ({ page }) => {
+          test.skip(!enabled, 'Set NONBIRI_APPEARANCE_AUDIT to run the contrast audit.');
+          test.setTimeout(120_000);
+          await page.setViewportSize({ width, height: 900 });
+          await page.emulateMedia({ reducedMotion: 'reduce' });
+          await page.addInitScript(
+            ({ mode, intensity }) => {
+              localStorage.setItem('nb.lang', 'zh');
+              localStorage.setItem('nb.theme', mode);
+              localStorage.setItem('nb.appearance-intensity', intensity);
+            },
+            { mode, intensity },
+          );
+          await creditDisplayFixtures(page, design);
+          const directory = process.env.NONBIRI_APPEARANCE_AUDIT!;
+          mkdirSync(directory, { recursive: true });
+          const name = `credit-${intensity}-${design}-${mode}-${width}`;
+          const evidence: Record<string, unknown> = {};
+          for (const [path, label, selector] of CREDIT_PAGES) {
+            await page.goto(USER_ORIGIN + path);
+            const region = page.locator(selector).first();
+            await expect(region).toBeVisible();
+            await expect(region.locator('.credit-number__fraction').first()).toBeVisible();
+            await region.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+            await page.evaluate(() => document.fonts.ready);
+            if (label === 'credits') {
+              const signs = await page.locator('.credit-change').evaluateAll((elements) =>
+                elements.map((element) => ({
+                  text: element.textContent,
+                  color: getComputedStyle(element).color,
+                  integerColor: getComputedStyle(element.querySelector('.credit-number')!).color,
+                })),
+              );
+              expect(signs.some((value) => value.text === '+0.001')).toBe(true);
+              expect(signs.some((value) => value.text === '−0.001')).toBe(true);
+              expect(signs.every((value) => value.color === value.integerColor)).toBe(true);
+            }
+            const samples = (await pixelContrastSamples(page)).filter((sample) =>
+              sample.selector.includes('.credit-number__fraction'),
+            );
+            expect(
+              samples.length,
+              name + '/' + label + ' actual fractional samples',
+            ).toBeGreaterThan(0);
+            expect(
+              samples.filter((sample) => sample.ratio < 4.5),
+              name + '/' + label,
+            ).toEqual([]);
+            evidence[label] = samples;
+            expect(
+              await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+            ).toBe(true);
+            if (intensity === 'balanced' && (design === 'default' || design === 'amber'))
+              await page.screenshot({ path: resolve(directory, name + '-' + label + '.png') });
+          }
+          writeFileSync(
+            resolve(directory, name + '.json'),
+            JSON.stringify(evidence, null, 2) + String.fromCharCode(10),
+          );
         });

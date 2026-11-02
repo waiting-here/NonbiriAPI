@@ -1,3 +1,4 @@
+import { CreditNumber } from '@shared/components/CreditNumber';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorState, LoadingState } from '@shared/components/States';
@@ -67,24 +68,33 @@ function EntryTerms({ entry, playing }: { entry: Entry; playing: boolean }) {
     >
       <summary>
         {t('门票 ', 'Entry ')}
-        {formatCredits(entry.price)}
+        <CreditNumber value={formatCredits(entry.price)} />
         {t(' 积分 · ', ' credits · ')}
-        {entry.firstCleared
-          ? t('已首通，本局不发积分', 'Already cleared; no credits this game')
-          : Number(entry.firstClearReward) > 0
-            ? t('首通可领 ', 'First-clear reward: ') + formatCredits(entry.firstClearReward)
-            : t('本局不发积分', 'No credits this game')}
+        {entry.firstCleared ? (
+          t('已首通，本局不发积分', 'Already cleared; no credits this game')
+        ) : Number(entry.firstClearReward) > 0 ? (
+          <>
+            {t('首通可领 ', 'First-clear reward: ')}
+            <CreditNumber value={formatCredits(entry.firstClearReward)} />
+          </>
+        ) : (
+          t('本局不发积分', 'No credits this game')
+        )}
       </summary>
       <p className="reward-notice">
         <strong>{t('没有逐局积分奖励', 'No per-game credit rewards')}</strong>
         <span>
-          {entry.firstCleared
-            ? t(
-                '已领过首通奖励，本局不再发放积分。',
-                'First clear already completed; this game awards no credits.',
-              )
-            : t('仅首次通关可领取游戏积分：', 'Only the first clear awards game credits: ') +
-              formatCredits(entry.firstClearReward)}{' '}
+          {entry.firstCleared ? (
+            t(
+              '已领过首通奖励，本局不再发放积分。',
+              'First clear already completed; this game awards no credits.',
+            )
+          ) : (
+            <>
+              {t('仅首次通关可领取游戏积分：', 'Only the first clear awards game credits: ')}
+              <CreditNumber value={formatCredits(entry.firstClearReward)} />
+            </>
+          )}{' '}
           {t('局内分数不等于钱包积分。', 'Game score is not wallet credit.')}
         </span>
       </p>

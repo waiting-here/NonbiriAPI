@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { CreditNumber } from '@shared/components/CreditNumber';
 import { useState, type ReactNode } from 'react';
 import { AuthRequired } from '@shared/components/States';
 import { Icon, type IconName } from '@shared/components/Icon';
@@ -154,7 +155,11 @@ function formatExactDecimal(value: string): string {
 }
 
 export function ExactCredits({ value }: { value: string }) {
-  return <span className="core-number">{formatExactDecimal(value)}</span>;
+  return (
+    <span className="core-number">
+      <CreditNumber value={formatExactDecimal(value)} />
+    </span>
+  );
 }
 
 export function ExactCount({ value }: { value: string }) {

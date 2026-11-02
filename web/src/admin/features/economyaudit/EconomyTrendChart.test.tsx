@@ -163,7 +163,26 @@ describe('economy trend chart', () => {
     const slider = screen.getByRole('slider');
     fireEvent.focus(slider);
     expect(slider).toHaveAttribute('aria-valuemax', '1');
-    expect(screen.getByText(/New issuance 0 · Permanent retirement 0/)).toBeVisible();
+    expect(screen.getByRole('status')).toHaveTextContent('New issuance 0 · Permanent retirement 0');
     expect(latestConfiguration().data.datasets[0].data).toEqual([0]);
   });
+});
+
+it('keeps canvas accessibility text plain while splitting its visible exact selection', async () => {
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
+    () => ({}) as CanvasRenderingContext2D,
+  );
+  const view = await renderWithProviders(
+    <EconomyTrendChart series={makeSeries('general', [['1', '2']])} />,
+    { station: 'admin', locale: 'en' },
+  );
+  const slider = screen.getByRole('slider');
+  fireEvent.focus(slider);
+  expect(slider).toHaveAttribute(
+    'aria-valuetext',
+    expect.stringContaining('New issuance 0.001 · Permanent retirement 0.002'),
+  );
+  const selection = view.container.querySelector('output')!;
+  expect(selection).toHaveTextContent('New issuance 0.001 · Permanent retirement 0.002');
+  expect(selection.querySelectorAll('.credit-number__fraction')).toHaveLength(2);
 });

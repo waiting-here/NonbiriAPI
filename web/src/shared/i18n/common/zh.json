@@ -845,7 +845,7 @@
           "fine": "一次性罚款（积分）",
           "longNotice": "长上下文：输入 ≥ {{threshold}} token",
           "penaltyNotice": "超长惩罚：输入 ≥ {{threshold}} token",
-          "fineNote": "每次额外 {{amount}} 积分，不打折",
+          "fineNote": "每次额外 <amount>{{amount}}</amount> 积分，不打折",
           "longAvailable": "含长上下文价格，展开查看",
           "usageHelp": "仅以上游返回的用量判断门槛，包含缓存读写。"
         },

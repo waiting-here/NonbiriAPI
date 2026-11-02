@@ -463,3 +463,33 @@
   font-variant-numeric: tabular-nums;
   font-size: clamp(var(--nb-font-size-md), 9cqi, var(--nb-font-size-2xl));
 }
+
+/* Credit formatters keep exact strings; only the fractional display is secondary. */
+.credit-number {
+  font-variant-numeric: tabular-nums;
+}
+.credit-number__fraction {
+  color: var(--nb-credit-fraction-color, var(--nb-color-text-muted));
+}
+/* Existing subdued ink and filled controls keep their proven foreground. */
+:is(
+    .nb-muted,
+    .muted,
+    .core-muted,
+    .nb-sub,
+    .field-help,
+    .nb-btn--primary,
+    .nb-btn--danger,
+    .nb-btn--danger-outline:disabled
+  )
+  .credit-number {
+  --nb-credit-fraction-color: currentColor;
+}
+
+/* These games retain their original private surface palettes. */
+.bidding-game {
+  --nb-credit-fraction-color: var(--bid-muted);
+}
+:is(.bj-board, .catch-game, .gacha-app, .gacha-dialog) .credit-number {
+  --nb-credit-fraction-color: currentColor;
+}

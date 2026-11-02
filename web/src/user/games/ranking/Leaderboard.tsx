@@ -1,3 +1,4 @@
+import { CreditNumber } from '@shared/components/CreditNumber';
 import { useTranslation } from 'react-i18next';
 import { Toggle, Fold, Field } from '@shared/components/ui';
 import { useState } from 'react';
@@ -218,7 +219,9 @@ function RankingPanel({
                       meLabel={text('ranking.me')}
                     />
                   </td>
-                  <td data-unit={text('ranking.credits')}>{formatCredits(row.amount)}</td>
+                  <td data-unit={text('ranking.credits')}>
+                    <CreditNumber value={formatCredits(row.amount)} />
+                  </td>
                 </tr>
               ))}
             </tbody>

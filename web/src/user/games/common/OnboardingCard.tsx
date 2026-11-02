@@ -1,3 +1,5 @@
+import { CreditNumber } from '@shared/components/CreditNumber';
+import { CreditText } from '@shared/components/CreditText';
 import { useEffect, useRef, useState } from 'react';
 import { Fold, Note } from '@shared/components/ui';
 import { useTranslation } from 'react-i18next';
@@ -52,7 +54,12 @@ export function OnboardingCard({
       ) {
         pushToast?.({
           tone: 'success',
-          title: text('onboarding.awarded', { reward: formatCredits(item.reward) }),
+          title: (
+            <CreditText
+              i18nKey="user.games.copy.onboarding.awarded"
+              amounts={{ reward: formatCredits(item.reward) }}
+            />
+          ),
           message: text(taskCopy[item.key]),
         });
       }
@@ -62,10 +69,13 @@ export function OnboardingCard({
 
   if (progress.allCompleted) return null;
   const pending = progress.items.filter((item) => !item.completed);
-  const summary = text('onboarding.remaining', {
-    count: pending.length,
-    reward: formatCredits(sumCredits(pending.map((item) => item.reward))),
-  });
+  const summary = (
+    <CreditText
+      i18nKey="user.games.copy.onboarding.remaining"
+      values={{ count: pending.length }}
+      amounts={{ reward: formatCredits(sumCredits(pending.map((item) => item.reward))) }}
+    />
+  );
   return (
     <div className={`game-onboarding${compactNote ? ' game-onboarding--compact' : ''}`}>
       <Fold title={text('onboarding.title')} summary={summary}>
@@ -75,7 +85,10 @@ export function OnboardingCard({
             <li key={item.key}>
               <span>{text(taskCopy[item.key])}</span>
               <span>
-                <strong>+{formatCredits(item.reward)}</strong> {text('common.generalBalance')}
+                <strong>
+                  +<CreditNumber value={formatCredits(item.reward)} />
+                </strong>{' '}
+                {text('common.generalBalance')}
               </span>
             </li>
           ))}

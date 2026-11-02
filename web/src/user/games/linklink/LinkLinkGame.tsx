@@ -1,3 +1,4 @@
+import { CreditNumber } from '@shared/components/CreditNumber';
 import { Fold } from '@shared/components/ui/Fold';
 import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -131,7 +132,11 @@ function SummaryCard({
         <div>
           <dt>{text('linklink.summary.score')}</dt>
           <dd>
-            {summary.score === null ? text('linklink.summary.none') : formatCredits(summary.score)}
+            {summary.score === null ? (
+              text('linklink.summary.none')
+            ) : (
+              <CreditNumber value={formatCredits(summary.score)} />
+            )}
           </dd>
         </div>
         <div>

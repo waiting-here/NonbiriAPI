@@ -1,3 +1,4 @@
+import { CreditNumber } from '@shared/components/CreditNumber';
 import { useState } from 'react';
 import { Tabs } from '@shared/components/ui/Tabs';
 import { SectionHead } from '@shared/components/States';
@@ -246,7 +247,8 @@ export function Shop({
                     </h3>
                     <p className="gacha-offer__number">
                       {t('需要：', 'Cost: ')}
-                      {formatCredits(bulkTicketPrice)} {t('悠哉积分', 'credits')}
+                      <CreditNumber value={formatCredits(bulkTicketPrice)} />{' '}
+                      {t('悠哉积分', 'credits')}
                     </p>
                     <p className="gacha-offer__number">
                       {t('今日剩余：', 'Remaining today: ')}
