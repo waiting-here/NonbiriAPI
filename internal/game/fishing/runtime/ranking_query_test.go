@@ -86,6 +86,10 @@ CREATE TABLE game_fishing_length_facts(batch_id_text TEXT PRIMARY KEY,ordinal IN
 			exec(`INSERT INTO game_fishing_length_facts VALUES(?,0,?,?,?,?,?)`, id, species, size, blue, milk, fixtureNow-int64(batch%5))
 		}
 	}
+	exec(`CREATE TABLE game_fishing_recent_order(batch_id_text TEXT PRIMARY KEY,user_id INTEGER NOT NULL,expires_at INTEGER NOT NULL,length_cm TEXT NOT NULL,caught_at INTEGER NOT NULL,ordinal INTEGER NOT NULL);
+CREATE INDEX idx_fishing_recent_order ON game_fishing_recent_order(user_id,length(length_cm) DESC,length_cm COLLATE BINARY DESC,caught_at,batch_id_text,ordinal,expires_at);
+INSERT INTO game_fishing_recent_order SELECT f.batch_id_text,f.user_id,f.expires_at,COALESCE(l.blue_fat_fish_length_cm,l.milk_crab_length_cm,CAST(l.size_cm AS TEXT)),l.caught_at,l.ordinal
+FROM game_fishing_rank_facts f JOIN game_fishing_length_facts l ON l.batch_id_text=f.batch_id_text WHERE f.aggregate_applied=1;`)
 	exec(`UPDATE users SET is_admin=1 WHERE id=2`)
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
@@ -144,8 +148,8 @@ func TestRecentLeaderboardIndexedSelectionMatchesWindowRanking(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(strings.Join(plan, "; "), "idx_fishing_rank_facts_user (user_id=? AND expires_at>?)") {
-		t.Fatal("missing per-user expiry range", plan)
+	if !strings.Contains(strings.Join(plan, "; "), "COVERING INDEX idx_fishing_recent_order (user_id=?)") {
+		t.Fatal("missing per-user ordered projection", plan)
 	}
 }
 

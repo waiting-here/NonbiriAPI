@@ -318,17 +318,15 @@ func queryRecentSingleLeaderboard(ctx context.Context, tx *sql.Tx, userID, query
 	return scanLengthLeaderboard(rows, err, userID, "recent_single", &window)
 }
 
-// Select one catch per user with the existing user/expiry index before ranking.
-// The schema fixes expires_at=settled_at+30 days, so the window is unchanged.
+// Select the first unexpired catch from each user's persisted length order.
+// The derived projection keeps the original decimal-length and tie ordering.
 const recentSingleLeaderboardSQL = `WITH candidates AS (
 SELECT b.user_id,l.species_key,l.size_cm,l.blue_fat_fish_length_cm AS blue_length,l.milk_crab_length_cm AS milk_length,l.caught_at,b.public_tie_key
 FROM game_fishing_best b
 JOIN game_fishing_length_facts l ON l.batch_id_text=(
- SELECT candidate.batch_id_text FROM game_fishing_rank_facts fact
- CROSS JOIN game_fishing_length_facts candidate ON candidate.batch_id_text=fact.batch_id_text
- WHERE fact.user_id=b.user_id AND fact.aggregate_applied=1 AND fact.expires_at>?
- ORDER BY length(COALESCE(candidate.blue_fat_fish_length_cm,candidate.milk_crab_length_cm,CAST(candidate.size_cm AS TEXT))) DESC,
- COALESCE(candidate.blue_fat_fish_length_cm,candidate.milk_crab_length_cm,CAST(candidate.size_cm AS TEXT)) COLLATE BINARY DESC,
+ SELECT candidate.batch_id_text FROM game_fishing_recent_order candidate
+ WHERE candidate.user_id=b.user_id AND candidate.expires_at>?
+ ORDER BY length(candidate.length_cm) DESC,candidate.length_cm COLLATE BINARY DESC,
  candidate.caught_at ASC,candidate.batch_id_text ASC,candidate.ordinal ASC LIMIT 1)), ranked AS (
 SELECT c.user_id,c.species_key,c.size_cm,c.blue_length,c.milk_length,ROW_NUMBER() OVER(ORDER BY
 length(COALESCE(c.blue_length,c.milk_length,CAST(c.size_cm AS TEXT))) DESC,
