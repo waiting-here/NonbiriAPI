@@ -1,3 +1,4 @@
+import { CreditNumber } from '@shared/components/CreditNumber';
 import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -167,7 +168,9 @@ function MetricCards({ metrics }: { readonly metrics: Metrics }) {
       {metricKeys.map((key) => (
         <div className="nb-stat" key={key}>
           <dt className="nb-stat__label">{metricLabel(key, t)}</dt>
-          <dd className="nb-stat__value">{displayAmount(metrics[key])}</dd>
+          <dd className="nb-stat__value">
+            <CreditNumber value={displayAmount(metrics[key])} />
+          </dd>
         </div>
       ))}
     </dl>
@@ -201,7 +204,9 @@ function Stock({ summary }: { readonly summary: Summary }) {
         {rows.map(([label, value]) => (
           <div className="nb-stat" key={label}>
             <dt className="nb-stat__label">{label}</dt>
-            <dd className="nb-stat__value">{displayAmount(value)}</dd>
+            <dd className="nb-stat__value">
+              <CreditNumber value={displayAmount(value)} />
+            </dd>
           </div>
         ))}
       </dl>
@@ -211,7 +216,9 @@ function Stock({ summary }: { readonly summary: Summary }) {
             {negative.map(([label, value]) => (
               <div className="nb-stat audit-warning" key={label}>
                 <dt className="nb-stat__label">{label}</dt>
-                <dd className="nb-stat__value">{displayAmount(value)}</dd>
+                <dd className="nb-stat__value">
+                  <CreditNumber value={displayAmount(value)} />
+                </dd>
               </div>
             ))}
           </dl>
@@ -257,8 +264,9 @@ function Stock({ summary }: { readonly summary: Summary }) {
           r.interval_net_change !== null && (
             <p>
               {t('所选币种的区间净存量', 'Interval net stock for the selected asset')}:{' '}
-              {displayAmount(r.interval_closing_net)} − {displayAmount(r.interval_opening_net)} ={' '}
-              {displayAmount(r.interval_net_change)}
+              <CreditNumber value={displayAmount(r.interval_closing_net)} /> −{' '}
+              <CreditNumber value={displayAmount(r.interval_opening_net)} /> ={' '}
+              <CreditNumber value={displayAmount(r.interval_net_change)} />
             </p>
           )}
         <p>
@@ -311,8 +319,9 @@ function Trend({ filter }: { readonly filter: AuditFilter }) {
                   mobileLabel: metricLabel(key, t),
                   cell: 'meta' as const,
                   align: 'num' as const,
-                  render: (point: (typeof q.data.data)[number]) =>
-                    displayAmount(point.metrics[key]),
+                  render: (point: (typeof q.data.data)[number]) => (
+                    <CreditNumber value={displayAmount(point.metrics[key])} />
+                  ),
                 })),
               ]}
             />
@@ -374,7 +383,9 @@ function ChannelDetails({
             mobileLabel: metricLabel(key, t),
             cell: 'meta' as const,
             align: 'num' as const,
-            render: (channel: (typeof q.data.data)[number]) => displayAmount(channel.metrics[key]),
+            render: (channel: (typeof q.data.data)[number]) => (
+              <CreditNumber value={displayAmount(channel.metrics[key])} />
+            ),
           })),
           {
             key: 'operations',
@@ -458,7 +469,7 @@ function LedgerDetails({ filter }: { readonly filter: AuditFilter }) {
                 mobileLabel: t('变动', 'Delta'),
                 cell: 'meta',
                 align: 'num',
-                render: (entry) => displayAmount(entry.delta),
+                render: (entry) => <CreditNumber value={displayAmount(entry.delta)} />,
               },
             ]}
           />

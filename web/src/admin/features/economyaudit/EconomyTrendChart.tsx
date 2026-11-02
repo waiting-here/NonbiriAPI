@@ -15,6 +15,7 @@ import { chartAmountAtRatio, chartRatio } from './chartMath';
 import { assetLabel, useEconomyText } from './copy';
 import { useTranslation } from 'react-i18next';
 import { Fold } from '@shared/components/ui';
+import { CreditNumber } from '@shared/components/CreditNumber';
 
 Chart.register(
   CategoryScale,
@@ -249,8 +250,16 @@ export function EconomyTrendChart({ series }: { readonly series: Series }) {
             />
           </div>
           <output className="audit-chart-selection" aria-live="polite">
-            {selectedText ||
-              t('聚焦图表以查看首个时段。', 'Focus the chart to inspect the first time bucket.')}
+            {selectedPoint ? (
+              <>
+                {labels[selectedIndex!]} · {t('新增发行', 'New issuance')}{' '}
+                <CreditNumber value={displayAmount(selectedPoint.metrics.issued)} /> ·{' '}
+                {t('永久回收', 'Permanent retirement')}{' '}
+                <CreditNumber value={displayAmount(selectedPoint.metrics.reclaimed)} />
+              </>
+            ) : (
+              t('聚焦图表以查看首个时段。', 'Focus the chart to inspect the first time bucket.')
+            )}
           </output>
         </>
       ) : (

@@ -845,7 +845,7 @@
           "fine": "One-time fine (credits)",
           "longNotice": "Long context: input ≥ {{threshold}} tokens",
           "penaltyNotice": "Context penalty: input ≥ {{threshold}} tokens",
-          "fineNote": "Extra {{amount}} credits per request, without a discount",
+          "fineNote": "Extra <amount>{{amount}}</amount> credits per request, without a discount",
           "longAvailable": "Long-context prices available; expand to view",
           "usageHelp": "Thresholds use only reported usage, including cache reads and writes."
         },

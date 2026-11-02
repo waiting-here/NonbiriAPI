@@ -1,3 +1,4 @@
+import { CreditNumber } from '@shared/components/CreditNumber';
 import { BiddingLobby, AIMatchInfo, AIActionLog } from './AIPlayers';
 import { useAIText } from '@shared/aiPlayers';
 import { GameToolbar } from '../common/GameToolbar';
@@ -311,7 +312,9 @@ export function BiddingGame({
                     <span>
                       {text('bidding.tier')} {index + 1} {text('bidding.message2')}
                     </span>
-                    <strong>{formatCredits(config.modes[key]?.ticket ?? '0')}</strong>
+                    <strong>
+                      <CreditNumber value={formatCredits(config.modes[key]?.ticket ?? '0')} />
+                    </strong>
                     <small>
                       {!entryProblem({ config, accepting }, key)
                         ? text('bidding.open')

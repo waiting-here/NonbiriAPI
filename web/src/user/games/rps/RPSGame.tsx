@@ -1,3 +1,4 @@
+import { CreditText } from '@shared/components/CreditText';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { DuelDialog } from '../common/duel/Dialog';
 import { OverlayPortal } from '@shared/components/OverlayPortal';
@@ -544,16 +545,22 @@ function Match({
           </div>
         </dl>
         <p>
-          {text('rps.cuts', {
-            platform: formatCredits(state.economy.cuts.platform),
-            welfare: formatCredits(state.economy.cuts.welfare),
-            thursday: formatCredits(state.economy.cuts.thursday),
-          })}
+          <CreditText
+            i18nKey="user.games.copy.rps.cuts"
+            amounts={{
+              platform: formatCredits(state.economy.cuts.platform),
+              welfare: formatCredits(state.economy.cuts.welfare),
+              thursday: formatCredits(state.economy.cuts.thursday),
+            }}
+          />
         </p>
         <p>
-          {text('rps.welfareCarry', {
-            amount: formatCredits(state.economy.welfareCarry),
-          })}
+          <CreditText
+            i18nKey="user.games.copy.rps.welfareCarry"
+            amounts={{
+              amount: formatCredits(state.economy.welfareCarry),
+            }}
+          />
         </p>
       </details>
     </section>

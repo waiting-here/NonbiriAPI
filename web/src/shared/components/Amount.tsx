@@ -1,4 +1,5 @@
 import type { HTMLAttributes, ReactNode } from 'react';
+import { CreditNumber } from './CreditNumber';
 import { useTranslation } from 'react-i18next';
 
 export type AmountValue = string | bigint;
@@ -48,7 +49,7 @@ export function Amount({ value, unit, className = '', ...props }: AmountProps) {
   const displayUnit = unit ?? t('common.creditsUnit');
   return (
     <span className={`nb-amount${className ? ` ${className}` : ''}`} {...props}>
-      {rendered}
+      <CreditNumber value={rendered} />
       {displayUnit ? <span className="nb-amount__unit"> {displayUnit}</span> : null}
     </span>
   );

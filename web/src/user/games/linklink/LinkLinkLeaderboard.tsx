@@ -1,3 +1,4 @@
+import { CreditNumber } from '@shared/components/CreditNumber';
 import { useState } from 'react';
 import { Card, ErrorState, LoadingState } from '@shared/components/States';
 import { Field } from '@shared/components/ui/Field';
@@ -85,7 +86,9 @@ export function LinkLinkLeaderboard({
                       meLabel={text('fishing.leaderboard.me')}
                     />
                   </td>
-                  <td>{formatCredits(row.score)}</td>
+                  <td>
+                    <CreditNumber value={formatCredits(row.score)} />
+                  </td>
                   <td>
                     <time dateTime={new Date(row.achievedAt * 1000).toISOString()}>
                       {new Date(row.achievedAt * 1000).toLocaleString()}

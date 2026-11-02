@@ -1,3 +1,4 @@
+import { CreditNumber } from '@shared/components/CreditNumber';
 import type { DuelText } from '../common/duel/copy';
 import type { CSSProperties, ReactNode } from 'react';
 import type {
@@ -212,7 +213,13 @@ export function BlackjackBoard({
                   #{number + 1}
                   {number === ownSeat && ` · ${text('bidding.you')}`}
                 </strong>
-                <span>{terms ? formatCredits(terms.stake) : text('blackjack.open')}</span>
+                <span>
+                  {terms ? (
+                    <CreditNumber value={formatCredits(terms.stake)} />
+                  ) : (
+                    text('blackjack.open')
+                  )}
+                </span>
               </header>
               {terms && (
                 <PublicGameIdentity
@@ -314,27 +321,39 @@ export function BlackjackSettlement({
               <dl>
                 <div>
                   <dt>{text('blackjack.stake')}</dt>
-                  <dd>{milli(h.stake_milli)}</dd>
+                  <dd>
+                    <CreditNumber value={milli(h.stake_milli)} />
+                  </dd>
                 </div>
                 <div>
                   <dt>{text('blackjack.grossReturn')}</dt>
-                  <dd>{milli(h.gross_milli)}</dd>
+                  <dd>
+                    <CreditNumber value={milli(h.gross_milli)} />
+                  </dd>
                 </div>
                 <div>
                   <dt>{text('blackjack.platformFee')}</dt>
-                  <dd>−{milli(h.platform_milli)}</dd>
+                  <dd>
+                    −<CreditNumber value={milli(h.platform_milli)} />
+                  </dd>
                 </div>
                 <div>
                   <dt>{text('blackjack.welfarePool')}</dt>
-                  <dd>−{milli(h.welfare_milli)}</dd>
+                  <dd>
+                    −<CreditNumber value={milli(h.welfare_milli)} />
+                  </dd>
                 </div>
                 <div>
                   <dt>{text('blackjack.thursdayPool')}</dt>
-                  <dd>−{milli(h.thursday_milli)}</dd>
+                  <dd>
+                    −<CreditNumber value={milli(h.thursday_milli)} />
+                  </dd>
                 </div>
                 <div className="bj-net">
                   <dt>{text('blackjack.generalCreditsPaid')}</dt>
-                  <dd data-payout={h.net_milli}>{milli(h.net_milli)}</dd>
+                  <dd data-payout={h.net_milli}>
+                    <CreditNumber value={milli(h.net_milli)} />
+                  </dd>
                 </div>
               </dl>
             </article>

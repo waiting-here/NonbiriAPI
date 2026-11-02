@@ -1,3 +1,4 @@
+import { CreditNumber } from '@shared/components/CreditNumber';
 import type { CatchFeedback } from './Board';
 import { HZ } from './engine';
 import type { Session } from './session';
@@ -50,7 +51,7 @@ export function CatchResult({
       {result.first_clear && (
         <p className="first-clear-badge">
           {t('首次通关！获得游戏积分：', 'First clear! Game credits awarded: ')}
-          {formatCredits(result.reward)}
+          <CreditNumber value={formatCredits(result.reward)} />
         </p>
       )}
       <div className="result-stats">

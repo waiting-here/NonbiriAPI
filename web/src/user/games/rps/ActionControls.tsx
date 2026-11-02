@@ -1,3 +1,4 @@
+import { CreditText } from '@shared/components/CreditText';
 import { useState } from 'react';
 import { useGameCopy } from '../copy';
 import { creditsFromMilli, creditsToMilli, formatCredits } from '../common/strict';
@@ -118,7 +119,10 @@ export function ActionControls({
                   disabled={blocked}
                   onClick={() => adjust(-base)}
                 >
-                  {text('rps.dealer.subtract', { amount: formatCredits(state.ruleSnapshot.base) })}
+                  <CreditText
+                    i18nKey="user.games.copy.rps.dealer.subtract"
+                    amounts={{ amount: formatCredits(state.ruleSnapshot.base) }}
+                  />
                 </button>
                 <button
                   type="button"
@@ -126,7 +130,10 @@ export function ActionControls({
                   disabled={blocked}
                   onClick={() => adjust(base)}
                 >
-                  {text('rps.dealer.add', { amount: formatCredits(state.ruleSnapshot.base) })}
+                  <CreditText
+                    i18nKey="user.games.copy.rps.dealer.add"
+                    amounts={{ amount: formatCredits(state.ruleSnapshot.base) }}
+                  />
                 </button>
                 <button
                   type="button"
@@ -134,9 +141,16 @@ export function ActionControls({
                   disabled={blocked}
                   onClick={() => adjust('maximum')}
                 >
-                  {text(allIn ? 'rps.dealer.allIn' : 'rps.dealer.maximum', {
-                    amount: formatCredits(maximumWhole.toString()),
-                  })}
+                  <CreditText
+                    i18nKey={
+                      allIn
+                        ? 'user.games.copy.rps.dealer.allIn'
+                        : 'user.games.copy.rps.dealer.maximum'
+                    }
+                    amounts={{
+                      amount: formatCredits(maximumWhole.toString()),
+                    }}
+                  />
                 </button>
               </div>
               <button
@@ -161,11 +175,16 @@ export function ActionControls({
   return (
     <div className="rps-follower">
       <p role="status">
-        {callKnown
-          ? text('rps.follower.required', {
+        {callKnown ? (
+          <CreditText
+            i18nKey="user.games.copy.rps.follower.required"
+            amounts={{
               amount: formatCredits(state.economy.dealerRaise!),
-            })
-          : text('rps.waitingSync')}
+            }}
+          />
+        ) : (
+          text('rps.waitingSync')
+        )}
       </p>
       <div className="game-state-actions">
         <button

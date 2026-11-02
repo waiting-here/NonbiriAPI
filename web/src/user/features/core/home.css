@@ -74,6 +74,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .home-wallet .nb-stat__value {
+  white-space: normal;
   font-size: var(--nb-font-size-xl);
   overflow-wrap: anywhere;
 }

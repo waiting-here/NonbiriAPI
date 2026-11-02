@@ -115,9 +115,13 @@ it.each([
     fireEvent.change(dialog.getByRole('spinbutton', { name: '兑换数量' }), {
       target: { value: '1' },
     });
-    expect(dialog.getByText('优先消耗游戏积分：' + split)).toBeVisible();
-    for (const balance of [general, game].filter((value) => value.startsWith('-'))) {
-      expect(dialog.getByText(balance + ' 积分')).toBeVisible();
+    expect(dialog.getByText(/优先消耗游戏积分：/)).toHaveTextContent('优先消耗游戏积分：' + split);
+    for (const [name, balance] of [
+      ['通用积分余额', general],
+      ['游戏积分余额', game],
+    ]) {
+      if (balance.startsWith('-'))
+        expect(dialog.getByText(name).nextElementSibling).toHaveTextContent(balance + ' 积分');
     }
     const standard = dialog.getByRole('button', {
       name: standardAllowed ? '兑换 1 张' : '积分不足',
@@ -163,7 +167,9 @@ it('keeps rendering when an authoritative purchase response changes a wallet bel
     ),
   );
   fireEvent.click(await screen.findByTitle('兑换限定抽奖券'));
-  expect(await screen.findByText('-0.001 积分')).toBeVisible();
+  await waitFor(() =>
+    expect(screen.getByText('通用积分余额').nextElementSibling).toHaveTextContent('-0.001 积分'),
+  );
   expect(screen.getByRole('button', { name: '积分不足' })).toBeDisabled();
 });
 

@@ -1,3 +1,5 @@
+import { CreditNumber } from '@shared/components/CreditNumber';
+import { CreditText } from '@shared/components/CreditText';
 import { Fold } from '@shared/components/ui/Fold';
 import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -338,7 +340,12 @@ function ResultPanel({
               </div>
               <FishingGiftSource outcome={outcome} />
               <div className="fishing-outcome__payout">
-                <span>{text('fishing.reward', { amount: formatCredits(outcome.netReward) })}</span>
+                <span>
+                  <CreditText
+                    i18nKey="user.games.copy.fishing.reward"
+                    amounts={{ amount: formatCredits(outcome.netReward) }}
+                  />
+                </span>
                 {outcome.pond?.returnState !== 'gift' ? (
                   <RakeDetails gross={outcome.reward} rake={outcome.rake} />
                 ) : null}
@@ -507,7 +514,10 @@ function LeaderboardCard({
                     </span>
                   </span>
                 ) : (
-                  `${formatCredits((row as FishingTotalRow).totalCredits)} ${text('common.credits')}`
+                  <>
+                    <CreditNumber value={formatCredits((row as FishingTotalRow).totalCredits)} />{' '}
+                    {text('common.credits')}
+                  </>
                 );
                 return (
                   <tr
@@ -653,7 +663,12 @@ export function FishingGame() {
       pushToast?.({
         tone: 'success',
         title: text('fishing.result.title'),
-        message: text('fishing.netReceived', { amount: formatCredits(result.netPayoutTotal) }),
+        message: (
+          <CreditText
+            i18nKey="user.games.copy.fishing.netReceived"
+            amounts={{ amount: formatCredits(result.netPayoutTotal) }}
+          />
+        ),
       });
     }
   }, [result, pushToast, text]);

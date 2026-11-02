@@ -285,6 +285,7 @@
 }
 .game-wallets > div {
   min-width: 0;
+  max-width: 100%;
 }
 .game-wallets dt {
   font-size: var(--nb-font-size-xs);
@@ -292,7 +293,10 @@
 }
 .game-wallets dd {
   margin: 0;
-  white-space: nowrap;
+}
+.game-wallets .game-money {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 @media (width < 40rem) {

@@ -1,3 +1,4 @@
+import { CreditNumber } from '@shared/components/CreditNumber';
 import { GameToolbar } from '../common/GameToolbar';
 import { GameMoney } from '../common/GameMoney';
 import { GameBackLink } from '../common/GameBackLink';
@@ -172,9 +173,14 @@ function History({ close }: { readonly close: () => void }) {
                   >
                     <span>{new Date(h.started_at * 1000).toLocaleString()}</span>
                     <span>
-                      {h.phase === 'cancelled'
-                        ? text('blackjack.refunded')
-                        : `${text('blackjack.generalPaid')} ${formatCredits(h.net)}`}
+                      {h.phase === 'cancelled' ? (
+                        text('blackjack.refunded')
+                      ) : (
+                        <>
+                          {text('blackjack.generalPaid')}{' '}
+                          <CreditNumber value={formatCredits(h.net)} />
+                        </>
+                      )}
                     </span>
                   </button>
                 ))}
@@ -281,7 +287,7 @@ function QueueForm({
               aria-pressed={selected === creditsToMilli(amount)}
               onClick={() => setStake(amount)}
             >
-              {formatCredits(amount)}
+              <CreditNumber value={formatCredits(amount)} />
             </button>
           ))}
         </div>
@@ -356,7 +362,10 @@ export function BlackjackGame() {
                 >
                   {actionLabel(action)}
                   {(action === 'double' || action === 'split') && (
-                    <small> +{formatCredits(own.stake)}</small>
+                    <small>
+                      {' '}
+                      +<CreditNumber value={formatCredits(own.stake)} />
+                    </small>
                   )}
                 </button>
               ))}
@@ -387,14 +396,24 @@ export function BlackjackGame() {
               sound={sound}
               audioUnavailable={audio.unavailable}
               items={[
-                { id: 'rules', label: text('bidding.rules'), icon: 'help', onClick: () => setPanel('rules') },
+                {
+                  id: 'rules',
+                  label: text('bidding.rules'),
+                  icon: 'help',
+                  onClick: () => setPanel('rules'),
+                },
                 {
                   id: 'history',
                   label: text('blackjack.history'),
                   icon: 'history',
                   onClick: () => setPanel('history'),
                 },
-                { id: 'rankings', label: text('ranking.leaderboards'), icon: 'trophy', href: '#game-rankings' },
+                {
+                  id: 'rankings',
+                  label: text('ranking.leaderboards'),
+                  icon: 'trophy',
+                  href: '#game-rankings',
+                },
               ]}
             />
           </div>
@@ -480,9 +499,11 @@ export function BlackjackGame() {
                         : text('blackjack.playingThisRound')}
                   </h2>
                   <p>
-                    {text('blackjack.baseStake')} {formatCredits(own.stake)} ·{' '}
-                    {text('blackjack.gameCreditsHeld')} {formatCredits(own.payment.game)} ·{' '}
-                    {text('blackjack.generalCredits')} {formatCredits(own.payment.general)}
+                    {text('blackjack.baseStake')} <CreditNumber value={formatCredits(own.stake)} />{' '}
+                    · {text('blackjack.gameCreditsHeld')}{' '}
+                    <CreditNumber value={formatCredits(own.payment.game)} /> ·{' '}
+                    {text('blackjack.generalCredits')}{' '}
+                    <CreditNumber value={formatCredits(own.payment.general)} />
                   </p>
                   <p>
                     {text('blackjack.frozenFees')} {text('blackjack.platform')}{' '}
@@ -518,8 +539,10 @@ export function BlackjackGame() {
                     }
                   />
                   <p>
-                    {formatCredits(home.config.min_stake)}–{formatCredits(home.config.max_stake)} ·{' '}
-                    {text('blackjack.step')} {formatCredits(home.config.stake_step)} ·{' '}
+                    <CreditNumber value={formatCredits(home.config.min_stake)} />–
+                    <CreditNumber value={formatCredits(home.config.max_stake)} /> ·{' '}
+                    {text('blackjack.step')}{' '}
+                    <CreditNumber value={formatCredits(home.config.stake_step)} /> ·{' '}
                     {text('blackjack.totalFeesOnEachReturn')}{' '}
                     {(home.config.rake_bp.platform +
                       home.config.rake_bp.welfare +

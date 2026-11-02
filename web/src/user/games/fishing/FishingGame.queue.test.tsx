@@ -15,7 +15,9 @@ function resultWire(batchID: string, count: 1 | 10) {
     species_key: 'whitebait',
     tier: 'small',
     size_cm: 12,
-    reward: '1', net_reward: '1', rake: { platform: '0', welfare: '0', thursday: '0' },
+    reward: '1',
+    net_reward: '1',
+    rake: { platform: '0', welfare: '0', thursday: '0' },
   }));
   return {
     batch_id: batchID,
@@ -26,7 +28,9 @@ function resultWire(batchID: string, count: 1 | 10) {
     rules_version: 1,
     payment: { general: String(count), game: '0' },
     outcomes,
-    payout_total: String(count), net_payout_total: String(count), rake: { platform: '0', welfare: '0', thursday: '0' },
+    payout_total: String(count),
+    net_payout_total: String(count),
+    rake: { platform: '0', welfare: '0', thursday: '0' },
     balance: '12345678901234567890.125',
     game_balance: '0',
     settled_at: 1_800_000_000,
@@ -135,13 +139,20 @@ describe('Fishing result presentation and queue recovery', () => {
     result.outcomes[0].net_reward = '0.97';
     result.outcomes[0].rake = { ...result.rake };
     const snapshot = { ...gamesSnapshotWire(), balance: '-100', game_balance: '10' };
-    installJsonFetchFixtures(fishingFixtures(stateWire(result)).map((fixture) =>
-      fixture.path === '/api/games' ? { ...fixture, body: snapshot } : fixture));
-    const rendered = await renderWithProviders(<FishingGame />, { station: 'user', route: '/games/fishing', role: 'user' });
+    installJsonFetchFixtures(
+      fishingFixtures(stateWire(result)).map((fixture) =>
+        fixture.path === '/api/games' ? { ...fixture, body: snapshot } : fixture,
+      ),
+    );
+    const rendered = await renderWithProviders(<FishingGame />, {
+      station: 'user',
+      route: '/games/fishing',
+      role: 'user',
+    });
     await flushInitialFishing();
     expect(screen.getByRole('button', { name: 'Start fishing' })).toBeEnabled();
     const catchList = within(screen.getByRole('list', { name: 'Your catch is ready' }));
-    expect(catchList.getByText('Net: 0.97 general credits')).toBeVisible();
+    expect(catchList.getByRole('listitem')).toHaveTextContent('Net: 0.97 general credits');
     const details = catchList.getByText('Gross catch and deductions').closest('details')!;
     expect(details).not.toHaveAttribute('open');
     fireEvent.click(within(details).getByText('Gross catch and deductions'));
@@ -172,7 +183,9 @@ describe('Fishing result presentation and queue recovery', () => {
     await flushInitialFishing();
     const start = screen.getByRole('button', { name: 'Start fishing' });
     expect(visibleBatchID()).toBe(OLD_BATCH_ID);
-    expect(within(screen.getByRole('list', { name: 'Your catch is ready' })).queryAllByRole('listitem')).toHaveLength(0);
+    expect(
+      within(screen.getByRole('list', { name: 'Your catch is ready' })).queryAllByRole('listitem'),
+    ).toHaveLength(0);
     expect(start).toBeDisabled();
     fireEvent.click(start);
     fireEvent.click(start);
@@ -341,7 +354,9 @@ describe('Fishing result presentation and queue recovery', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(FISHING_REVEAL_MS);
     });
-    expect(within(screen.getByRole('list', { name: 'Your catch is ready' })).getAllByRole('listitem')).toHaveLength(1);
+    expect(
+      within(screen.getByRole('list', { name: 'Your catch is ready' })).getAllByRole('listitem'),
+    ).toHaveLength(1);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(200);
     });
@@ -353,7 +368,9 @@ describe('Fishing result presentation and queue recovery', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(220);
     });
-    expect(within(screen.getByRole('list', { name: 'Your catch is ready' })).getAllByRole('listitem')).toHaveLength(2);
+    expect(
+      within(screen.getByRole('list', { name: 'Your catch is ready' })).getAllByRole('listitem'),
+    ).toHaveLength(2);
     rendered.unmount();
   });
 
