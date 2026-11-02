@@ -562,6 +562,9 @@
   justify-items: start;
   gap: var(--nb-space-2);
 }
+.fishing-pond-batch-return {
+  margin-block: var(--nb-space-3);
+}
 .fishing-pond-return small {
   color: var(--nb-color-text-muted);
   font-size: var(--nb-font-size-sm);

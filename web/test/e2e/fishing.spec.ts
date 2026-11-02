@@ -676,7 +676,9 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
 
 for (const theme of ['light', 'dark'] as const)
   for (const width of [390, 1440]) {
-    test(`Pond gifts, return recovery and boards ${theme} ${width}`, async ({ page }) => {
+    test(`Pond gifts, single and batch return recovery and boards ${theme} ${width}`, async ({
+      page,
+    }) => {
       const faults: string[] = [];
       page.on('pageerror', (error) => faults.push(error.message));
       await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
@@ -695,11 +697,11 @@ for (const theme of ['light', 'dark'] as const)
         reward: '0',
         net_reward: '0',
         rake: { platform: '0', welfare: '0', thursday: '0' },
-        ...(ordinal === 0 || ordinal === 1
+        ...([0, 1, 4, 5].includes(ordinal)
           ? { pond: { return_state: 'available', gift: null } }
           : {}),
         ...(ordinal === 0 ? { species_key: 'boot' } : {}),
-        ...(ordinal === 1 ? { species_key: 'fry' } : {}),
+        ...([1, 5].includes(ordinal) ? { species_key: 'fry' } : {}),
         ...(ordinal === 2
           ? {
               species_key: 'old_tire',
@@ -751,6 +753,29 @@ for (const theme of ['light', 'dark'] as const)
           }),
         );
       });
+      let batchReturns = 0;
+      await page.route(`**/api/games/fishing/batches/${BATCH_ID}/return`, async (route) => {
+        const request = route.request();
+        expect(request.method()).toBe('POST');
+        expect(request.postData()).toBeNull();
+        expect(request.headers()['idempotency-key']).toBeUndefined();
+        batchReturns += 1;
+        if (batchReturns === 1) {
+          await route.abort('failed');
+          return;
+        }
+        const receipts = [0, 1, 4, 5].map((ordinal) => {
+          const state = ordinal === 1 || ordinal === 5 ? 'released' : 'returned';
+          Object.assign(outcomes[ordinal], { pond: { return_state: state, gift: null } });
+          return {
+            batch_id: BATCH_ID,
+            ordinal,
+            return_state: state,
+            returned_at: ordinal < 2 ? 1_800_000_000 : 1_800_000_001,
+          };
+        });
+        await route.fulfill(jsonResponse({ batch_id: BATCH_ID, receipts }));
+      });
       const boardRequests: string[] = [];
       await page.route('**/api/games/fishing/pond/leaderboard?*', async (route) => {
         const url = new URL(route.request().url());
@@ -799,6 +824,12 @@ for (const theme of ['light', 'dark'] as const)
       await expect(gift).not.toContainText('原本');
       await gift.scrollIntoViewIfNeeded();
       await capture('gift');
+      const batchAction = page.locator('.fishing-pond-batch-return');
+      await expect(
+        batchAction.getByRole('button', { name: '全部投回／放生（4 件）' }),
+      ).toBeEnabled();
+      await batchAction.scrollIntoViewIfNeeded();
+      await capture('batch-mixed');
       const junk = page.locator('.fishing-outcome[data-ordinal="0"]');
       await junk.getByRole('button', { name: '投回池塘', exact: true }).click();
       await expect(junk.getByRole('alert')).toContainText('尚未确认结果');
@@ -810,6 +841,19 @@ for (const theme of ['light', 'dark'] as const)
       const fry = page.locator('.fishing-outcome[data-ordinal="1"]');
       await fry.getByRole('button', { name: '放生', exact: true }).click();
       await expect(fry).toContainText('已放生');
+      await batchAction.getByRole('button', { name: '全部投回／放生（2 件）' }).click();
+      await expect(batchAction.getByRole('alert')).toContainText('尚未确认结果');
+      await expect(
+        page.locator('.fishing-outcome[data-ordinal="4"]').getByRole('button'),
+      ).toBeEnabled();
+      await batchAction.scrollIntoViewIfNeeded();
+      await capture('batch-retry');
+      await batchAction.getByRole('button', { name: '重试这批收获' }).click();
+      await expect(batchAction).toHaveCount(0);
+      await expect(page.locator('.fishing-outcome[data-ordinal="4"]')).toContainText('已投回池塘');
+      await expect(page.locator('.fishing-outcome[data-ordinal="5"]')).toContainText('已放生');
+      expect(batchReturns).toBe(2);
+      expect(resources).toHaveLength(3);
       expect(boardRequests).toEqual([]);
       await page.getByRole('tab', { name: '环保榜', exact: true }).click();
       const board = page.locator('.fishing-pond-board');

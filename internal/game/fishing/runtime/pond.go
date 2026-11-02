@@ -13,6 +13,7 @@ import (
 )
 
 const (
+	RouteFishingPondBatchReturn = "/api/games/fishing/batches/{id}/return"
 	RouteFishingPondReturn      = "/api/games/fishing/batches/{id}/outcomes/{ordinal}/return"
 	RouteFishingPondLeaderboard = "/api/games/fishing/pond/leaderboard"
 )
@@ -28,6 +29,11 @@ type PondReturnReceipt struct {
 	Ordinal     int    `json:"ordinal"`
 	ReturnState string `json:"return_state"`
 	ReturnedAt  int64  `json:"returned_at"`
+}
+
+type PondBatchReturnReceipt struct {
+	BatchID  string              `json:"batch_id"`
+	Receipts []PondReturnReceipt `json:"receipts"`
 }
 
 type PondLeaderboardRow struct {
@@ -196,79 +202,161 @@ func (service *Service) ReturnPondOutcome(ctx context.Context, userID int64, bat
 	if service == nil || service.closed.Load() {
 		return PondReturnReceipt{}, ErrClosed
 	}
-	if userID <= 0 || ordinal < 0 || ordinal > 9 {
+	if ordinal < 0 || ordinal > 9 {
 		return PondReturnReceipt{}, ErrInvalidRequest
 	}
+	result, err := service.returnPondOutcomes(ctx, userID, batchID, &ordinal)
+	if err != nil {
+		return PondReturnReceipt{}, err
+	}
+	return result.Receipts[0], nil
+}
+
+// ReturnPondBatch processes only this batch's eligible catches. Previously
+// returned catches keep their original receipts; gifts and valuable fish stay.
+func (service *Service) ReturnPondBatch(ctx context.Context, userID int64, batchID string) (PondBatchReturnReceipt, error) {
+	return service.returnPondOutcomes(ctx, userID, batchID, nil)
+}
+
+func (service *Service) returnPondOutcomes(ctx context.Context, userID int64, batchID string, ordinal *int) (PondBatchReturnReceipt, error) {
+	if service == nil || service.closed.Load() {
+		return PondBatchReturnReceipt{}, ErrClosed
+	}
+	if userID <= 0 {
+		return PondBatchReturnReceipt{}, ErrInvalidRequest
+	}
 	if !db.ValidateOpaqueID(batchID, "fb_") {
-		return PondReturnReceipt{}, ErrNotFound
+		return PondBatchReturnReceipt{}, ErrNotFound
 	}
 	tx, err := service.database.BeginTx(ctx, nil)
 	if err != nil {
-		return PondReturnReceipt{}, classifyDB(err)
+		return PondBatchReturnReceipt{}, classifyDB(err)
 	}
 	defer tx.Rollback()
 	if err = service.userAuthorizer.AuthorizeUserMutation(ctx, tx, userID); err != nil {
-		return PondReturnReceipt{}, mapAuthorization(err)
+		return PondBatchReturnReceipt{}, mapAuthorization(err)
 	}
-	var state, species, tier string
-	var payout int64
-	var returned sql.NullInt64
-	var gift sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT b.state,o.species_key,o.tier,o.payout_milli,p.returned_at,p.gift_species_key
-FROM game_fishing_batches b JOIN game_fishing_outcomes o ON o.batch_id=b.id
-JOIN game_fishing_pond_outcomes p ON p.batch_id=o.batch_id AND p.ordinal=o.ordinal
-WHERE b.id=? AND b.user_id=? AND o.ordinal=?`, batchID, userID, ordinal).Scan(&state, &species, &tier, &payout, &returned, &gift)
+	var state string
+	err = tx.QueryRowContext(ctx, `SELECT state FROM game_fishing_batches WHERE id=? AND user_id=?`, batchID, userID).Scan(&state)
 	if errors.Is(err, sql.ErrNoRows) {
-		return PondReturnReceipt{}, ErrNotFound
+		return PondBatchReturnReceipt{}, ErrNotFound
 	}
 	if err != nil {
-		return PondReturnReceipt{}, classifyDB(err)
+		return PondBatchReturnReceipt{}, classifyDB(err)
 	}
-	if state != "committed" || tier != "junk" || payout != 0 || gift.Valid {
-		return PondReturnReceipt{}, ErrConflict
+	if state != "committed" && ordinal == nil {
+		return PondBatchReturnReceipt{}, ErrConflict
 	}
-	receipt := PondReturnReceipt{BatchID: batchID, Ordinal: ordinal, ReturnState: "returned"}
-	if species == "fry" {
-		receipt.ReturnState = "released"
+	query := `SELECT o.ordinal,o.species_key,o.tier,o.payout_milli,p.returned_at,p.gift_species_key
+FROM game_fishing_outcomes o JOIN game_fishing_pond_outcomes p ON p.batch_id=o.batch_id AND p.ordinal=o.ordinal
+WHERE o.batch_id=?`
+	args := []any{batchID}
+	if ordinal != nil {
+		query += " AND o.ordinal=?"
+		args = append(args, *ordinal)
 	}
-	if returned.Valid {
-		receipt.ReturnedAt = returned.Int64
-		return receipt, nil
+	query += " ORDER BY o.ordinal LIMIT 10"
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return PondBatchReturnReceipt{}, classifyDB(err)
+	}
+	result := PondBatchReturnReceipt{BatchID: batchID, Receipts: make([]PondReturnReceipt, 0, 10)}
+	type catch struct {
+		receipt int
+		species string
+	}
+	pending := make([]catch, 0, 10)
+	for rows.Next() {
+		var value PondReturnReceipt
+		var species, tier string
+		var payout int64
+		var returned sql.NullInt64
+		var gift sql.NullString
+		if err = rows.Scan(&value.Ordinal, &species, &tier, &payout, &returned, &gift); err != nil {
+			rows.Close()
+			return PondBatchReturnReceipt{}, classifyDB(err)
+		}
+		if state != "committed" || tier != "junk" || payout != 0 || gift.Valid {
+			if ordinal != nil {
+				rows.Close()
+				return PondBatchReturnReceipt{}, ErrConflict
+			}
+			continue
+		}
+		value.BatchID = batchID
+		value.ReturnState = "returned"
+		if species == "fry" {
+			value.ReturnState = "released"
+		}
+		if returned.Valid {
+			value.ReturnedAt = returned.Int64
+		} else {
+			pending = append(pending, catch{receipt: len(result.Receipts), species: species})
+		}
+		result.Receipts = append(result.Receipts, value)
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return PondBatchReturnReceipt{}, classifyDB(err)
+	}
+	if err = rows.Close(); err != nil {
+		return PondBatchReturnReceipt{}, classifyDB(err)
+	}
+	if ordinal != nil && len(result.Receipts) == 0 {
+		return PondBatchReturnReceipt{}, ErrNotFound
+	}
+	if len(pending) == 0 {
+		return result, nil
 	}
 	var identity rankIdentity
 	var public int
 	err = tx.QueryRowContext(ctx, `SELECT COALESCE(p.game_profile_public,u.game_profile_public),u.username,u.guild_nick,COALESCE(u.discord_id,''),u.avatar,u.guild_avatar_url
 FROM users u LEFT JOIN game_user_preferences p ON p.user_id=u.id WHERE u.id=?`, userID).Scan(&public, &identity.Username, &identity.GuildNick, &identity.DiscordID, &identity.Avatar, &identity.GuildAvatar)
 	if err != nil {
-		return PondReturnReceipt{}, classifyDB(err)
+		return PondBatchReturnReceipt{}, classifyDB(err)
 	}
 	identity.Public = public == 1
 	snapshot := projectIdentity(identity)
 	if snapshot.Kind != "public" {
-		return PondReturnReceipt{}, ErrForbidden
+		return PondBatchReturnReceipt{}, ErrForbidden
 	}
-	now := service.now().UTC().Unix()
-	if species != "fry" {
-		if _, err = tx.ExecContext(ctx, `INSERT INTO game_fishing_pond_queue(donor_user_id,source_batch_id,source_ordinal,species_key,donor_display_name,donor_avatar_url,returned_at) VALUES(?,?,?,?,?,?,?)`, userID, batchID, ordinal, species, snapshot.DisplayName, snapshot.AvatarURL, now); err != nil {
-			return PondReturnReceipt{}, classifyDB(err)
-		}
-		if err = service.addPondCountTx(ctx, tx, userID, "gifts", now, 1); err != nil {
-			return PondReturnReceipt{}, err
-		}
-	}
-	result, err := tx.ExecContext(ctx, `UPDATE game_fishing_pond_outcomes SET returned_at=? WHERE batch_id=? AND ordinal=? AND returned_at IS NULL AND gift_species_key IS NULL`, now, batchID, ordinal)
+	insert, err := tx.PrepareContext(ctx, `INSERT INTO game_fishing_pond_queue(donor_user_id,source_batch_id,source_ordinal,species_key,donor_display_name,donor_avatar_url,returned_at) VALUES(?,?,?,?,?,?,?)`)
 	if err != nil {
-		return PondReturnReceipt{}, classifyDB(err)
+		return PondBatchReturnReceipt{}, classifyDB(err)
 	}
-	changed, rowsErr := result.RowsAffected()
-	if rowsErr != nil || changed != 1 {
-		return PondReturnReceipt{}, ErrConflict
+	defer insert.Close()
+	update, err := tx.PrepareContext(ctx, `UPDATE game_fishing_pond_outcomes SET returned_at=? WHERE batch_id=? AND ordinal=? AND returned_at IS NULL AND gift_species_key IS NULL`)
+	if err != nil {
+		return PondBatchReturnReceipt{}, classifyDB(err)
+	}
+	defer update.Close()
+	now := service.now().UTC().Unix()
+	var count int64
+	for _, value := range pending {
+		receipt := &result.Receipts[value.receipt]
+		if value.species != "fry" {
+			if _, err = insert.ExecContext(ctx, userID, batchID, receipt.Ordinal, value.species, snapshot.DisplayName, snapshot.AvatarURL, now); err != nil {
+				return PondBatchReturnReceipt{}, classifyDB(err)
+			}
+			count++
+		}
+		changed, err := update.ExecContext(ctx, now, batchID, receipt.Ordinal)
+		if err != nil {
+			return PondBatchReturnReceipt{}, classifyDB(err)
+		}
+		affected, rowsErr := changed.RowsAffected()
+		if rowsErr != nil || affected != 1 {
+			return PondBatchReturnReceipt{}, ErrConflict
+		}
+		receipt.ReturnedAt = now
+	}
+	if err = service.addPondCountTx(ctx, tx, userID, "gifts", now, count); err != nil {
+		return PondBatchReturnReceipt{}, err
 	}
 	if err = tx.Commit(); err != nil {
-		return PondReturnReceipt{}, classifyDB(err)
+		return PondBatchReturnReceipt{}, classifyDB(err)
 	}
-	receipt.ReturnedAt = now
-	return receipt, nil
+	return result, nil
 }
 
 func pondWindow(period string, now int64) (*int64, error) {

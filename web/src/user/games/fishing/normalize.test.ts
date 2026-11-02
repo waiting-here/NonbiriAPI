@@ -3,6 +3,7 @@ import {
   readFishingLeaderboard,
   readFishingPondLeaderboard,
   returnFishingOutcome,
+  returnFishingBatch,
   startFishing,
 } from './api';
 import {
@@ -417,6 +418,32 @@ describe('Pond wire projection', () => {
     expect(init.method).toBe('POST');
     expect(init.body).toBeUndefined();
     expect(new Headers(init.headers).get('Idempotency-Key')).toBeNull();
+  });
+
+  it('reads mixed batch receipts from one bodyless request and rejects an unrelated batch', async () => {
+    const wire = {
+      batch_id: id,
+      receipts: [
+        { batch_id: id, ordinal: 1, return_state: 'returned', returned_at: 1_800_000_000 },
+        { batch_id: id, ordinal: 3, return_state: 'released', returned_at: 1_800_000_001 },
+      ],
+    };
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify(wire), {
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await returnFishingBatch(id);
+    expect(result.receipts.map((receipt) => receipt.returnState)).toEqual(['returned', 'released']);
+    const [input, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(input).toBe(`/api/games/fishing/batches/${id}/return`);
+    expect(init.method).toBe('POST');
+    expect(init.body).toBeUndefined();
+    expect(new Headers(init.headers).get('Idempotency-Key')).toBeNull();
+    wire.batch_id = 'fb_AQEBAQEBAQEBAQEBAQEBAQ';
+    await expect(returnFishingBatch(id)).rejects.toMatchObject({ code: 'invalid_response' });
   });
 
   it('keeps large counts exact and rejects a mismatched board period', async () => {

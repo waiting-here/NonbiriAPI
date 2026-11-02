@@ -1,13 +1,15 @@
+import { useState } from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { installJsonFetchFixtures, renderWithProviders } from '../../../../test/unit/support';
 import {
   FishingGiftSource,
   FishingPondBoard,
+  FishingPondBatchReturn,
   FishingPondDisclosure,
   FishingPondReturn,
 } from './PondInteraction';
-import type { FishingOutcome } from './types';
+import type { FishingOutcome, FishingPondReceipt } from './types';
 
 const batchID = 'fb_AAAAAAAAAAAAAAAAAAAAAA';
 function catchItem(speciesKey = 'boot'): FishingOutcome {
@@ -165,6 +167,135 @@ describe('Pond catch interaction', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Release' }));
     await screen.findByText('Released');
     expect(onReceipt).toHaveBeenCalledWith(expect.objectContaining({ returnState: 'released' }));
+  });
+});
+
+function BatchInteraction({ isPublic = true }: { readonly isPublic?: boolean }) {
+  const [outcomes, setOutcomes] = useState([
+    catchItem(),
+    { ...catchItem(), ordinal: 1 },
+    { ...catchItem('fry'), ordinal: 2 },
+  ]);
+  const [busy, setBusy] = useState(false);
+  const accept = (receipts: readonly FishingPondReceipt[]) =>
+    setOutcomes((current) =>
+      current.map((outcome) => {
+        const receipt = receipts.find((value) => value.ordinal === outcome.ordinal);
+        return receipt
+          ? { ...outcome, pond: { returnState: receipt.returnState, gift: null } }
+          : outcome;
+      }),
+    );
+  return (
+    <>
+      <FishingPondDisclosure outcomes={outcomes} isPublic={isPublic} />
+      <FishingPondBatchReturn
+        batchID={batchID}
+        outcomes={outcomes}
+        isPublic={isPublic}
+        busy={busy}
+        onSending={setBusy}
+        onReceipts={accept}
+      />
+      {outcomes.map((outcome) => (
+        <FishingPondReturn
+          key={outcome.ordinal}
+          batchID={batchID}
+          outcome={outcome}
+          isPublic={isPublic}
+          busy={busy}
+          onSending={setBusy}
+          onReceipt={(receipt) => accept([receipt])}
+        />
+      ))}
+    </>
+  );
+}
+
+describe('Pond batch interaction', () => {
+  const batchPath = `/api/games/fishing/batches/${batchID}/return`;
+  const batchReceipt = {
+    batch_id: batchID,
+    receipts: [
+      receipt,
+      { ...receipt, ordinal: 1 },
+      { ...receipt, ordinal: 2, return_state: 'released' },
+    ],
+  };
+
+  it('keeps single actions, then handles all remaining junk and fry in one request', async () => {
+    const fetchMock = installJsonFetchFixtures([
+      { method: 'POST', path, body: receipt },
+      { method: 'POST', path: batchPath, body: batchReceipt },
+    ]);
+    const fixtureFetch = fetchMock.getMockImplementation()!;
+    let resolveBatch!: () => void;
+    const batchWait = new Promise<void>((resolve) => {
+      resolveBatch = resolve;
+    });
+    fetchMock.mockImplementation(async (input, init) => {
+      if (String(input) === batchPath) await batchWait;
+      return fixtureFetch(input, init);
+    });
+    await renderWithProviders(<BatchInteraction />, options);
+    expect(screen.getAllByText(/The signature stays/)).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Return junk & release fry (3)' })).toBeEnabled();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Return to pond' })[0]);
+    await screen.findByText('Returned to pond');
+    const batch = screen.getByRole('button', { name: 'Return junk & release fry (2)' });
+    fireEvent.click(batch);
+    expect(screen.getByRole('button', { name: 'Return to pond' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Release' })).toBeDisabled();
+    fireEvent.click(batch);
+    resolveBatch();
+    await waitFor(() => expect(screen.getAllByText('Returned to pond')).toHaveLength(2));
+    expect(screen.getByText('Released')).toBeVisible();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([path, batchPath]);
+    expect(fetchMock.mock.calls[1][1]?.body).toBeUndefined();
+  });
+
+  it('preserves the batch after an unknown result and can recover after anonymity changes', async () => {
+    const fetchMock = installJsonFetchFixtures([
+      { method: 'POST', path: batchPath, body: batchReceipt },
+    ]);
+    const fixtureFetch = fetchMock.getMockImplementation()!;
+    let sends = 0;
+    fetchMock.mockImplementation(async (input, init) => {
+      sends += 1;
+      if (sends === 1) throw new TypeError('Connection lost after batch commit');
+      return fixtureFetch(input, init);
+    });
+    const rendered = await renderWithProviders(<BatchInteraction />, options);
+    fireEvent.click(screen.getByRole('button', { name: 'Return junk & release fry (3)' }));
+    await screen.findByText(/Retry this batch to recover/);
+    expect(screen.getAllByRole('button', { name: 'Return to pond' })).toHaveLength(2);
+    rendered.rerender(<BatchInteraction isPublic={false} />);
+    const retry = screen.getByRole('button', { name: 'Retry this batch' });
+    expect(retry).toBeEnabled();
+    fireEvent.click(retry);
+    await waitFor(() => expect(screen.getAllByText('Returned to pond')).toHaveLength(2));
+    expect(screen.getByText('Released')).toBeVisible();
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([batchPath, batchPath]);
+  });
+
+  it.each([
+    ['boot', 'Return all to pond (2)'],
+    ['fry', 'Release all fry (2)'],
+  ])('uses accurate all-%s copy and current anonymity', async (species, label) => {
+    const rendered = await renderWithProviders(
+      <FishingPondBatchReturn
+        batchID={batchID}
+        outcomes={[catchItem(species), { ...catchItem(species), ordinal: 1 }]}
+        isPublic={false}
+        busy={false}
+        onSending={vi.fn()}
+        onReceipts={vi.fn()}
+      />,
+      options,
+    );
+    expect(screen.getByRole('button', { name: label })).toBeDisabled();
+    rendered.unmount();
   });
 });
 
