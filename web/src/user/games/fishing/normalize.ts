@@ -19,6 +19,7 @@ import {
   type FishingRake,
   type FishingPondOutcome,
   type FishingPondReceipt,
+  type FishingPondBatchReceipt,
   type FishingPondBoard,
   type FishingPondPeriod,
   type FishingPondLeaderboard,
@@ -429,6 +430,15 @@ export function normalizeFishingPondReceipt(value: unknown): FishingPondReceipt 
       'fishing pond receipt state',
     ),
     returnedAt: unixTime(record.returned_at, 'fishing pond return time'),
+  };
+}
+
+export function normalizeFishingPondBatchReceipt(value: unknown): FishingPondBatchReceipt {
+  const record = responseRecord(value, ['batch_id', 'receipts'], [], 'fishing pond batch receipt');
+  if (!Array.isArray(record.receipts)) invalidResponse('fishing pond batch receipts');
+  return {
+    batchID: opaqueID(record.batch_id, 'fb_', 'fishing pond batch'),
+    receipts: record.receipts.map(normalizeFishingPondReceipt),
   };
 }
 

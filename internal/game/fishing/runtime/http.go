@@ -33,7 +33,7 @@ func RegisterUserRoutes(registrar resources.UserRouteRegistrar, service *Service
 		handler      resources.AuthorizedUserHandler
 	}{
 		{http.MethodPost, RouteFishingBatches, api.start}, {http.MethodGet, RouteFishingState, api.state}, {http.MethodPost, RouteFishingACK, api.ack}, {http.MethodPost, RouteFishingRecover, api.recover}, {http.MethodGet, RouteFishingLeaderboard, api.leaderboard},
-		{http.MethodPost, RouteFishingPondReturn, api.pondReturn}, {http.MethodGet, RouteFishingPondLeaderboard, api.pondLeaderboard},
+		{http.MethodPost, RouteFishingPondReturn, api.pondReturn}, {http.MethodPost, RouteFishingPondBatchReturn, api.pondBatchReturn}, {http.MethodGet, RouteFishingPondLeaderboard, api.pondLeaderboard},
 	}
 	for _, route := range routes {
 		if err := registrar.RegisterUserRoute(route.method, route.path, route.handler); err != nil {
@@ -41,6 +41,18 @@ func RegisterUserRoutes(registrar resources.UserRouteRegistrar, service *Service
 		}
 	}
 	return nil
+}
+
+func (api *httpAPI) pondBatchReturn(w http.ResponseWriter, r *http.Request, principal resources.UserPrincipal) {
+	if !noBody(w, r) || !requireExactQuery(w, r) {
+		return
+	}
+	result, err := api.service.ReturnPondBatch(r.Context(), principal.UserID, r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (api *httpAPI) pondReturn(w http.ResponseWriter, r *http.Request, principal resources.UserPrincipal) {

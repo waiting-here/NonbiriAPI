@@ -8,7 +8,7 @@ import { useGameCopy } from '../copy';
 import { PublicGameIdentity } from '../common/PublicGameIdentity';
 import { GamePrivacyControl } from '../common/GamePrivacyControl';
 import { isResponseUnknown, isServiceStopped } from '../common/request';
-import { returnFishingOutcome, useFishingPondLeaderboard } from './api';
+import { returnFishingBatch, returnFishingOutcome, useFishingPondLeaderboard } from './api';
 import type {
   FishingOutcome,
   FishingPondBoard,
@@ -62,11 +62,15 @@ export function FishingPondReturn({
   outcome,
   isPublic,
   onReceipt,
+  busy = false,
+  onSending,
 }: {
   readonly batchID: string;
   readonly outcome: FishingOutcome;
   readonly isPublic: boolean;
   readonly onReceipt: (receipt: FishingPondReceipt) => void;
+  readonly busy?: boolean;
+  readonly onSending?: (sending: boolean) => void;
 }) {
   const { text } = useGameCopy();
   const [receipt, setReceipt] = useState<FishingPondReceipt | null>(null);
@@ -84,9 +88,10 @@ export function FishingPondReturn({
   const fry = outcome.speciesKey === 'fry';
   const unknown = error !== null && isResponseUnknown(error);
   const send = async () => {
-    if (inFlight.current) return;
+    if (inFlight.current || busy) return;
     inFlight.current = true;
     setSending(true);
+    onSending?.(true);
     setError(null);
     try {
       const response = await returnFishingOutcome(batchID, outcome.ordinal);
@@ -97,6 +102,7 @@ export function FishingPondReturn({
     } finally {
       inFlight.current = false;
       setSending(false);
+      onSending?.(false);
     }
   };
   const errorKey = unknown
@@ -111,7 +117,7 @@ export function FishingPondReturn({
       <button
         type="button"
         className="nb-btn nb-btn--secondary nb-btn--sm"
-        disabled={sending || (!isPublic && !unknown)}
+        disabled={sending || busy || (!isPublic && !unknown)}
         onClick={() => void send()}
       >
         {text(
@@ -125,6 +131,83 @@ export function FishingPondReturn({
         )}
       </button>
       {fry ? <small>{text('fishing.pond.releaseHelp')}</small> : null}
+      {error ? (
+        <p className="fishing-pond-error" role="alert">
+          {text(errorKey)}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export function FishingPondBatchReturn({
+  batchID,
+  outcomes,
+  isPublic,
+  busy,
+  onSending,
+  onReceipts,
+}: {
+  readonly batchID: string;
+  readonly outcomes: readonly FishingOutcome[];
+  readonly isPublic: boolean;
+  readonly busy: boolean;
+  readonly onSending: (sending: boolean) => void;
+  readonly onReceipts: (receipts: readonly FishingPondReceipt[]) => void;
+}) {
+  const { text } = useGameCopy();
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const inFlight = useRef(false);
+  const available = outcomes.filter((outcome) => outcome.pond?.returnState === 'available');
+  if (available.length < 2 && !error) return null;
+  const fry = available.filter((outcome) => outcome.speciesKey === 'fry').length;
+  const unknown = error !== null && isResponseUnknown(error);
+  const send = async () => {
+    if (inFlight.current || busy) return;
+    inFlight.current = true;
+    setSending(true);
+    onSending(true);
+    setError(null);
+    try {
+      const response = await returnFishingBatch(batchID);
+      onReceipts(response.receipts);
+    } catch (error) {
+      setError(error);
+    } finally {
+      inFlight.current = false;
+      setSending(false);
+      onSending(false);
+    }
+  };
+  const errorKey = unknown
+    ? 'fishing.pond.batchUnknown'
+    : isApiError(error) && error.code === 'forbidden'
+      ? 'fishing.pond.forbidden'
+      : isApiError(error) && error.code === 'not_found'
+        ? 'fishing.pond.batchUnavailable'
+        : 'fishing.pond.batchFailed';
+  return (
+    <div className="fishing-pond-return fishing-pond-batch-return">
+      <button
+        type="button"
+        className="nb-btn nb-btn--secondary"
+        disabled={sending || busy || (!isPublic && !unknown)}
+        onClick={() => void send()}
+      >
+        {text(
+          sending
+            ? 'fishing.pond.sending'
+            : error
+              ? 'fishing.pond.batchRetry'
+              : fry === 0
+                ? 'fishing.pond.batchReturn'
+                : fry === available.length
+                  ? 'fishing.pond.batchRelease'
+                  : 'fishing.pond.batchMixed',
+          { count: formatCount(available.length).display },
+        )}
+      </button>
       {error ? (
         <p className="fishing-pond-error" role="alert">
           {text(errorKey)}

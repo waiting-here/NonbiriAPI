@@ -65,6 +65,7 @@ import {
   FishingGiftSource,
   FishingPondBoard,
   FishingPondDisclosure,
+  FishingPondBatchReturn,
   FishingPondReturn,
 } from './PondInteraction';
 import './fishing.css';
@@ -280,10 +281,14 @@ function ResultPanel({
   onRetryACK,
   resultRef,
   isPublic,
-  onPondReceipt,
+  onPondReceipts,
+  pondBusy,
+  onPondSending,
 }: {
   readonly isPublic: boolean;
-  readonly onPondReceipt: (receipt: FishingPondReceipt) => void;
+  readonly onPondReceipts: (receipts: readonly FishingPondReceipt[]) => void;
+  readonly pondBusy: boolean;
+  readonly onPondSending: (sending: boolean) => void;
   readonly result: FishingBatchResult;
   readonly revealed: number;
   readonly hasMore: boolean;
@@ -305,6 +310,17 @@ function ResultPanel({
           </span>
         </div>
         <FishingPondDisclosure outcomes={result.outcomes.slice(0, revealed)} isPublic={isPublic} />
+        {revealed === result.outcomes.length ? (
+          <FishingPondBatchReturn
+            key={result.batchID}
+            batchID={result.batchID}
+            outcomes={result.outcomes}
+            isPublic={isPublic}
+            busy={pondBusy}
+            onSending={onPondSending}
+            onReceipts={onPondReceipts}
+          />
+        ) : null}
         <div className="fishing-outcomes" role="list" aria-label={text('fishing.result.title')}>
           {result.outcomes.slice(0, revealed).map((outcome) => (
             <article
@@ -354,7 +370,9 @@ function ResultPanel({
                 batchID={result.batchID}
                 outcome={outcome}
                 isPublic={isPublic}
-                onReceipt={onPondReceipt}
+                busy={pondBusy}
+                onSending={onPondSending}
+                onReceipt={(receipt) => onPondReceipts([receipt])}
               />
             </article>
           ))}
@@ -629,6 +647,7 @@ export function FishingGame() {
     readonly batchID: string;
     readonly state: 'sending' | 'failed';
   } | null>(null);
+  const [pondBusy, setPondBusy] = useState(false);
   const [viewedResult, setViewedResult] = useState<FishingBatchResult | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const pushToast = useOptionalToast()?.push;
@@ -872,6 +891,7 @@ export function FishingGame() {
     snapshot.data?.gamesEnabled && snapshot.data.fishing.enabled && snapshot.data.fishing.available,
   );
   const locked = Boolean(
+    pondBusy ||
     state.isPending ||
     state.error ||
     pending ||
@@ -885,24 +905,28 @@ export function FishingGame() {
     result,
     revealed,
   });
-  const acceptPondReceipt = useCallback(
-    (receipt: FishingPondReceipt) => {
+  const acceptPondReceipts = useCallback(
+    (receipts: readonly FishingPondReceipt[]) => {
       const update = (batch: FishingBatchResult | null): FishingBatchResult | null =>
-        batch?.batchID === receipt.batchID
+        batch && receipts.some((receipt) => receipt.batchID === batch.batchID)
           ? {
               ...batch,
-              outcomes: batch.outcomes.map((outcome) =>
-                outcome.ordinal === receipt.ordinal
+              outcomes: batch.outcomes.map((outcome) => {
+                const receipt = receipts.find(
+                  (receipt) =>
+                    receipt.batchID === batch.batchID && receipt.ordinal === outcome.ordinal,
+                );
+                return receipt
                   ? { ...outcome, pond: { returnState: receipt.returnState, gift: null } }
-                  : outcome,
-              ),
+                  : outcome;
+              }),
             }
           : batch;
       setViewedResult(update);
       queryClient.setQueryData<FishingState>(fishingKeys.state, (current) =>
         current ? { ...current, unrevealed: update(current.unrevealed) } : current,
       );
-      if (receipt.returnState === 'returned')
+      if (receipts.some((receipt) => receipt.returnState === 'returned'))
         void queryClient.invalidateQueries({
           queryKey: ['user', 'games', 'fishing', 'pond', 'leaderboard', 'gifts'],
         });
@@ -1031,7 +1055,9 @@ export function FishingGame() {
             <ResultPanel
               result={shownResult}
               isPublic={session.data?.user.game_profile_public ?? false}
-              onPondReceipt={acceptPondReceipt}
+              onPondReceipts={acceptPondReceipts}
+              pondBusy={pondBusy}
+              onPondSending={setPondBusy}
               revealed={shownRevealed}
               hasMore={authoritative?.hasMoreUnrevealed ?? false}
               ackState={result ? ackState : 'viewed'}

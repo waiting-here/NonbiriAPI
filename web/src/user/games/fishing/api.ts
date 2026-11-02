@@ -5,6 +5,7 @@ import {
   normalizeFishingLeaderboard,
   normalizeFishingPondLeaderboard,
   normalizeFishingPondReceipt,
+  normalizeFishingPondBatchReceipt,
   normalizeFishingStart,
   normalizeFishingState,
 } from './normalize';
@@ -14,6 +15,7 @@ import type {
   FishingPondPeriod,
   FishingPondLeaderboard,
   FishingPondReceipt,
+  FishingPondBatchReceipt,
   FishingLeaderboardBoard,
   FishingLeaderboard,
   FishingStartIntent,
@@ -178,6 +180,24 @@ export async function returnFishingOutcome(
       response.status,
     );
   return receipt;
+}
+
+export async function returnFishingBatch(
+  batchID: string,
+  signal?: AbortSignal,
+): Promise<FishingPondBatchReceipt> {
+  const response = await gameRequest<unknown>(
+    `/api/games/fishing/batches/${encodeURIComponent(batchID)}/return`,
+    { method: 'POST', signal, expectedStatuses: [200] },
+  );
+  const result = normalizeFishingPondBatchReceipt(response.data);
+  if (result.batchID !== batchID)
+    throw new ApiError(
+      'invalid_response',
+      'The server returned a different fishing batch.',
+      response.status,
+    );
+  return result;
 }
 
 export async function readFishingPondLeaderboard(
