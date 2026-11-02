@@ -421,6 +421,7 @@ test('original Gwent AI plays a paid legal match, restores results, resumes afte
       await actionUI(page, arena, current, select(current.view));
     }
     await expect(arena.locator('#arena-dialog')).not.toBeVisible();
+    const surrenderState = await get<Home>(ctx, base + '/state');
     await arena.locator('#arena-concede').click();
     const surrendered = page.waitForResponse(
       (response) =>
@@ -431,7 +432,16 @@ test('original Gwent AI plays a paid legal match, restores results, resumes afte
       .locator('#dialog-actions')
       .getByRole('button', { name: '认输', exact: true })
       .click();
-    expect((await surrendered).status()).toBe(200);
+    const surrenderResponse = await surrendered;
+    expect(
+      surrenderResponse.status(),
+      JSON.stringify({
+        observedPhase: surrenderState.current?.phase_seq,
+        observedDecision: surrenderState.current?.decision_id,
+        sent: surrenderResponse.request().postDataJSON(),
+        response: await surrenderResponse.text(),
+      }),
+    ).toBe(200);
     await expect(arena.locator('#result-overlay')).toBeVisible();
     const lost = (await get<Home>(ctx, base + '/state')).latest_result!;
     expect(lost.id).toBe(second.id);
