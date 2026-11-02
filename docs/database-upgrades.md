@@ -2,7 +2,7 @@
 
 ## Supported databases
 
-The service opens only the exact current schema **45**, or initializes current
+The service opens only the exact current schema **46**, or initializes current
 storage when the database and its sidecars are absent. An existing zero-byte,
 partial or unknown database is not a fresh instance. Older and newer schemas are
 rejected before migration, repair, WAL checkpoint or unfinished-work recovery.
@@ -11,7 +11,7 @@ version, with the explicit upgrade entry point. Current-schema identity,
 structure, configuration and encryption-root checks remain required.
 
 The standalone Go upgrader accepts exact registered schema **16–26** and
-**33–44** sources and targets schema 45. Schemas 27–32 and unregistered layouts
+**33–45** sources and targets schema 46. Schemas 27–32 and unregistered layouts
 are not supported. A developer or deployer must deliberately invoke the matching
 tool; the service, startup scripts and deployment helpers must not run
 `--apply` implicitly. Preserve the complete matching recovery set before any
@@ -24,7 +24,7 @@ also rejected by the upgrader. Failure or cancellation rolls back the conversion
 Do not replace newly accepted data with an old snapshot.
 
 SQLite identity remains `application_id=0x4E425249`, `user_version=2`. Account
-exports use format **32**, independently of the storage schema. Schema versions
+exports use format **33**, independently of the storage schema. Schema versions
 advance when storage changes require it, not with every software patch.
 
 ```sh
@@ -34,11 +34,11 @@ advance when storage changes require it, not with every software patch.
 
 Both commands read compiled metadata without loading application configuration
 or opening a database. Their format-version-1 descriptors identify the same
-target schema and hashes. The service reports `schema_version=45`,
-`minimum_schema_version=45`, `startup_policy="exact"` and
+target schema and hashes. The service reports `schema_version=46`,
+`minimum_schema_version=46`, `startup_policy="exact"` and
 `upgrade_tool="nonbiri-upgrade-v1"`, with empty `source_schema_versions`,
 `source_manifest_hashes` and `offline_conversions` arrays. The upgrader adds
-23 `offline_conversions` entries, one for each supported source, with its tool
+24 `offline_conversions` entries, one for each supported source, with its tool
 name, source commit, source version, pinned manifest hash and target version.
 An empty service list does not remove the separate upgrader.
 
@@ -48,6 +48,18 @@ It must not infer permission to migrate from the upgrader's advertised sources,
 parse Go files or derive schema versions from array lengths.
 
 ## Schema changes
+
+Schema 46 adds bounded browser-to-account observations for human abuse review,
+with indexes for group reads, per-account limits and expiration. The explicit
+45-to-46 step creates empty audit history; it does not infer earlier browser
+associations or modify existing business data. The registered schema-45 source
+is `34afb7524eb7e1d7583dcf88352b15a5b233dc5d`.
+
+Browser identifiers expire within 30 days of issuance. The server stores only
+irreversible identifiers and coalesces observations for each account and
+browser at most once per hour. Account deletion removes its associations;
+account export 33 includes only safe observations belonging to that account,
+without other accounts or raw cookies. Browser links never apply penalties.
 
 Schema 45 adds pond return eligibility for new catches, a signed FIFO queue,
 a transactionally maintained queue-size singleton, recent cleanup/contribution

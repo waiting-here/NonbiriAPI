@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage services, endpoints and service-scoped API keys, maintain model lists per endpoint/key pair, and configure personal or shared charity routing. Revocable CallerKeys authenticate gateway calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.3.4** improves time-filtered request-log queries, reduces repeated work when checking client rules, and improves configuration forms and error recovery across both stations. The refreshed interface simplifies navigation and service setup, preserves drafts across editors and side sheets, and improves mobile layouts, history navigation and keyboard controls. Pond Fishing adds optional signed gifts and cleanup/gifting leaderboards. Database schema is 45 and account export is format 32; existing databases require the explicit offline upgrade before starting this version. Build instructions are below; version history is in [CHANGELOG](CHANGELOG.md). Source availability does not establish instance deployment status.
+**v1.3.5** adds one-action return/release for eligible catches in a Fishing batch and shared-browser account associations for manual abuse auditing. Browser associations are limited evidence and never trigger automatic penalties. Historical charity-model log searches retain substring matching while reducing repeated scans. Database schema is 46 and account export is format 33; existing databases require the explicit offline upgrade before starting this version. Build instructions are below; version history is in [CHANGELOG](CHANGELOG.md). Source availability does not establish instance deployment status.
 
 ## Architecture
 
@@ -282,14 +282,14 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 45.
+Fresh databases start in maintenance with public features closed and use schema 46.
 The service opens only the exact current schema; older, newer, unknown or
 incomplete storage is rejected before migration, repair or recovery writes.
-For exact registered schema 16–26 and 33–44 sources, preserve a complete recovery
+For exact registered schema 16–26 and 33–45 sources, preserve a complete recovery
 set before deliberately running the matching standalone
 [upgrader](cmd/nonbiri-upgrade-v1/README.md) with `--check` or `--apply`.
 The service, startup scripts and deployment helpers must not apply upgrades
-implicitly. Account export uses format 32. Schema versions change when
+implicitly. Account export uses format 33. Schema versions change when
 storage requires it, independently of software patch releases.
 Use the matching binaries' schema descriptors to check accepted sources.
 Upgrades are one-way: a server expecting an older or different schema cannot

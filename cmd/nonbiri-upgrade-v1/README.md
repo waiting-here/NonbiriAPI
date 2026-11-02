@@ -1,6 +1,6 @@
 # Prepare existing storage
 
-The server initializes an absent database as schema 45 and opens only the exact
+The server initializes an absent database as schema 46 and opens only the exact
 current schema. Older, newer, unknown and incomplete storage is rejected before
 migration, repair or recovery writes. The service, startup scripts and deployment
 helpers must not run this upgrader implicitly. A developer or deployer must
@@ -35,10 +35,11 @@ exact source structures:
 | 42 | `cd07f2ccde4d98b130c3c6c71e905bd4a6fd06d3` |
 | 43 | `3462a3832de64d6066cb5db567987ea4ec6c10cf` |
 | 44 | `d7cd4f3a9204adba79c62b3f3cf32671cc2ed884` |
+| 45 | `34afb7524eb7e1d7583dcf88352b15a5b233dc5d` |
 
 The machine-readable descriptor is authoritative for these exact source commits
 and their pinned manifest hashes. All supported sources convert atomically to
-schema 45. Schemas 27–32 and unregistered layouts are not supported sources.
+schema 46. Schemas 27–32 and unregistered layouts are not supported sources.
 
 The executable that last used a database may differ from the listed commit if
 its stored application identity, generation, schema version and complete

@@ -4,7 +4,25 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## Unreleased
+## 1.3.5 — Unreleased
+
+### Added
+
+- Return all eligible junk and release fry from a Fishing batch in one action.
+  Keep individual actions and recover the same results after a retry without
+  duplicating gifts or leaderboard counts.
+- Add shared-browser account associations to manual abuse auditing. Use a
+  server-issued first-party cookie, bounded observations and a 30-day lifetime;
+  store only irreversible identifiers. Shared devices and copied or cleared
+  cookies limit the evidence, and associations never trigger automatic penalties.
+- Provide paginated account groups for administrators and authorized stewards,
+  with first/last observations, account deletion and safe personal export.
+
+### Compatibility
+
+- Advance the database to schema 46 and account export to format 33. Existing
+  databases require the explicit offline upgrade before this version starts.
+  The new audit starts with empty history and preserves existing business data.
 
 ### Fixed
 
