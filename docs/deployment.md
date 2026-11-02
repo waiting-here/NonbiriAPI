@@ -345,7 +345,7 @@ before migration, repair, WAL checkpoint or recovery writes. Exact registered
 schema **16–26** and **33–45** sources use the matching standalone
 [v1 upgrader](../cmd/nonbiri-upgrade-v1/README.md). Other intermediate structures,
 including schema 27–32, are unsupported. SQLite identity remains Generation 2;
-exports use format **32**. See [database upgrades](database-upgrades.md) for
+exports use format **33**. See [database upgrades](database-upgrades.md) for
 manifests, preserved data and content versions.
 
 Run `./nonbiriapi maintenance schema-info --json` and the matching tool's
