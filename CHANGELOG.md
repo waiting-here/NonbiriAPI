@@ -6,6 +6,20 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## 1.3.4 — 2026-11-01
 
+### Pond interaction
+
+- Let players with game anonymity disabled return newly caught zero-credit
+  junk to the pond once. Queue it in arrival order with the donor's Discord
+  name and avatar; later enabling anonymity does not remove that signature.
+- After an ordinary junk result, independently choose whether to deliver a
+  queued gift, with a greater chance as the queue grows. Show the donated
+  item and its donor while preserving zero payout and the original economic
+  draw. Received gifts cannot be returned again.
+- Let players release small fry without adding them to the gift queue or
+  either new leaderboard.
+- Add cleanup and gifting boards for the past seven days by default, 30 days
+  and all time. Rank identities follow the current game-anonymity setting.
+
 ### Interface
 
 - Refresh both stations with warm neutral surfaces, a teal accent and an apricot
@@ -43,6 +57,14 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed and improved
 
+- Fix donation failure-threshold edits when per-service health records exist.
+  Recompute disabled states with exact 128-bit values, preserving failure counts,
+  backoff schedules and idempotent receipts.
+- Read recent largest catches from an ordered projection and use daily pond
+  statistics with exact boundary facts for rolling boards and account exports.
+  Keep current privacy and expiry checks while avoiding repeated history scans.
+- Check Lake Notes capacity through a live-lease index so paused casts do not
+  increase the cost of starting or resuming play.
 - Keep side-sheet keyboard navigation within visible, enabled controls, including
   collapsed advanced fields. Ship font and icon license notices with both
   embedded stations.
@@ -72,12 +94,15 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Compatibility
 
-- Database schema remains 44 and account export remains 31; upgrading from
-  1.3.3 does not require a database conversion. Existing prices, accounting,
-  permissions and game rules are unchanged.
-- The interface changes use the existing APIs and keep URLs and query
-  parameters. Ported games, in-game displays and card or appearance artwork
-  keep their original design.
+- Existing databases require the explicit offline upgrade to schema 45 before
+  startup. The new pond tables start empty; historical catches gain neither
+  return eligibility nor leaderboard credit. Account export format is 32.
+- Pond details follow the existing 30-day game retention. Queued gifts retain
+  their signature until caught or the donor account is deleted; lifetime
+  counts follow the account. Deletion removes queued items and clears the
+  deleted donor's identity from other players' retained gifts.
+- Existing navigation URLs, prices, accounting and economic draw rules are
+  unchanged. Ported-game artwork and the original fishing stage remain intact.
 
 ## 1.3.3 — 2026-11-01
 

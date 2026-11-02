@@ -1174,6 +1174,8 @@ New game entries spend positive game credits first, then positive general credit
 | `POST /api/games/fishing/batches/{id}/ack` | Business-unique render acknowledgement; 204. |
 | `POST /api/games/fishing/batches/{id}/recover` | Idempotent owner recovery of the same exhausted batch; 200 or 202. |
 | `GET /api/games/fishing/leaderboard` | `board=single|recent_single|total`; top 20 plus the caller when eligible. |
+| `POST /api/games/fishing/batches/{id}/outcomes/{ordinal}/return` | No body; owner-only, naturally idempotent. Returns `{batch_id,ordinal,return_state,returned_at}` with `return_state=returned|released`. |
+| `GET /api/games/fishing/pond/leaderboard` | `board=cleanup|gifts`, `period=7d|30d|all` (default `7d`); `{board,period,window_start,entries,me}`. Rows contain `rank,item_count,identity,is_me`; counts are exact decimal strings. |
 
 A start creates all 1 or 10 CSPRNG outcomes and the reservation atomically. A failed settlement retains the same batch and outcomes for automatic recovery; it never redraws or charges again. After ten consecutive failures, only owner recovery continues. Committed or released batches replay without another economic write. Acknowledgement affects presentation only. Terminal batches/outcomes are retained for 30 days; the personal best has the account lifetime.
 
@@ -1184,6 +1186,27 @@ The length boards preserve the original `species_key` and `size_cm`. A result ou
 `single` is the lifetime largest-length board and has `window_start:null`. `recent_single` is the largest length per user among settlements strictly after `window_start=query_now-2592000`; `total` remains the rolling 30-day payout board. Expired catches leave the recent length board even before physical cleanup. Length ties use the earlier catch time and the same stable private tie key as the lifetime board. Anonymous preferences and current account eligibility apply independently to every read. ACK changes neither board. Upgrade backfill includes only retained complete settled batches with their matching original rank facts; unavailable historical catches are not reconstructed.
 
 After generating the original complete batch, each legendary catch independently has a 10% Easter-egg chance. An Easter egg starts at 201 cm; each additional centimetre has a 99% continuation chance, so `P(length >= 201+n)=0.99^n`. There is no gameplay length ceiling and the original legendary payout remains unchanged. Random-source, cancellation, work-budget or representation failures reject the complete start before reservation; they never clamp a length, redraw only part of the batch or change the payout rate.
+
+New zero-credit junk results may include `pond:{return_state,gift}`. Return states
+are `available`, `returned`, `released` and `gift`; old results may omit the object.
+A currently public player may return an eligible ordinary catch once. Small fry
+are released without entering the queue or either board. Received gifts cannot
+be returned. Successful repeats return the same receipt even after anonymity is
+enabled; current account authority still applies.
+
+The base draw and payout settle unchanged. For each junk result, an independent
+draw consumes the FIFO head with probability `n/(n+20)`, where `n` is the remaining
+queue size. The displayed `species_key` becomes the donated item's kind, with
+zero payout and `pond.gift` holding the return-time Discord name/avatar. Results
+do not display the displaced junk kind. Later anonymity affects leaderboards,
+but not the signature; donor-account deletion removes queued gifts and anonymizes
+already received gifts.
+
+Cleanup counts non-fry junk caught, including gifts. Gifting counts successfully
+returned non-fry junk. Both boards offer exact rolling seven-/30-day windows and
+lifetime totals. Queue mutations and counts commit with their authoritative
+transaction; old catches are not reconstructed. Queued gifts can outlive the
+original 30-day catch details until consumed or the donor account is deleted.
 
 ### 5.4 LinkLink
 
