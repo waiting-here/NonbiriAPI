@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -57,9 +58,10 @@ export function DraftLeaveGuard({
   const register = useContext(Context);
   const id = useId();
   const allow = useRef(allowNavigation);
-  useEffect(() => {
-    allow.current = allowNavigation;
-  }, [allowNavigation]);
+  useLayoutEffect(() => {
+    // A save can navigate before the scope's registered dirty state updates.
+    allow.current = (navigation) => !dirty || Boolean(allowNavigation?.(navigation));
+  }, [dirty, allowNavigation]);
   useEffect(() => register?.(id, { dirty, allow }), [register, id, dirty]);
   return register ? null : <AsyncLeaveDialog dirty={dirty} allowNavigation={allowNavigation} />;
 }
