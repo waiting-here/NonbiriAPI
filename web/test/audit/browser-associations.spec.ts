@@ -97,7 +97,7 @@ test('authenticated browser associations remain review-only across accounts and 
               localStorage.setItem('nb.theme', theme);
             }, theme);
             const page = await context.newPage();
-            const path = role === 'admin' ? '/risk-audit?' : '/steward?tab=risk&';
+            const path = role === 'admin' ? '/abuse-audit?' : '/steward?tab=risk&';
             await page.goto(
               origin +
                 path +

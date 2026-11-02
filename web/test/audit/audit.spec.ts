@@ -398,7 +398,11 @@ async function riskEvidence(page: Page, sustained = true) {
   ).toHaveText(sustained ? '5 / 0' : '0 / 5');
   await card.getByRole('button', { name: 'Inspect', exact: true }).click();
   await expect(page.getByText('Minute observations', { exact: true })).toBeVisible();
-  await group.getByRole('tab', { name: 'Shared IPs', exact: true }).click();
+  await group.getByRole('tab', { name: 'Account links', exact: true }).click();
+  await page
+    .getByRole('tablist', { name: 'Account links', exact: true })
+    .getByRole('tab', { name: 'Shared IPs', exact: true })
+    .click();
   await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
   await expect(page.getByText('Completed', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: f.source_ip, exact: true })).toBeVisible();
