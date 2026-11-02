@@ -4,7 +4,7 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## 1.3.4 — 2026-11-01
+## 1.3.4 — 2026-11-02
 
 ### Pond interaction
 
@@ -28,6 +28,9 @@ Each version entry describes its source and compatibility boundary; a release ta
   contrast limits; appearances may change only a fixed set of surface, text,
   border, accent and shadow values.
 - Replace the default mark with a symmetric N.
+- Give maintenance, browser-error and missing-interface pages the same visual
+  style, and add clear guidance when JavaScript is disabled. Standalone pages
+  keep their text and refresh action available without scripts or external assets.
 - Put activities, games and redemption codes directly in the user station's top
   bar and group the administrator sidebar into six sections. URLs are unchanged.
 - With a non-default appearance on wide screens, keep user pages in a centered
