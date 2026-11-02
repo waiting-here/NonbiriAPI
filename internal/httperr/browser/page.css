@@ -21,7 +21,10 @@ button { font: inherit; }
   border-bottom: 1px solid var(--nb-color-border);
   background: var(--nb-color-surface);
 }
-.browser-brand { display: inline-flex; align-items: center; min-height: var(--nb-space-10); color: var(--nb-color-text); font-weight: var(--nb-font-weight-bold); text-decoration: none; }
+.browser-brand { display: inline-flex; align-items: center; gap: var(--nb-space-3); min-height: var(--nb-space-10); color: var(--nb-color-text); font-weight: var(--nb-font-weight-bold); text-decoration: none; }
+.browser-brand svg { width: var(--nb-space-8); height: var(--nb-space-8); flex: none; }
+.browser-brand rect { fill: var(--nb-color-accent); }
+.browser-brand path { fill: none; stroke: var(--nb-color-accent-contrast); }
 .browser-controls { display: flex; align-items: center; gap: var(--nb-space-2); }
 .browser-controls[hidden] { display: none; }
 .browser-main {
@@ -30,20 +33,24 @@ button { font: inherit; }
   flex: 1;
   padding: var(--nb-space-12) var(--nb-space-6);
 }
-.browser-panel { width: 100%; max-width: var(--nb-content-readable); }
-.browser-panel .nb-panel__body { padding: var(--nb-space-10); }
+.browser-panel { width: 100%; max-width: 46rem; }
+.browser-panel .nb-panel__body { padding: var(--nb-space-10); gap: 0; }
 .browser-status {
-  margin: 0 0 var(--nb-space-4);
-  color: var(--nb-color-text-muted);
+  width: fit-content;
+  margin: 0 0 var(--nb-space-6);
+  padding: var(--nb-space-1) var(--nb-space-3);
+  border-radius: var(--nb-radius-pill);
+  color: var(--nb-color-accent);
+  background: var(--nb-color-accent-soft);
   font-size: var(--nb-font-size-sm);
   font-weight: var(--nb-font-weight-semibold);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .browser-panel h1 { margin: 0; font-size: var(--nb-font-size-2xl); font-weight: var(--nb-font-weight-bold); line-height: var(--nb-line-tight); overflow-wrap: anywhere; }
-.browser-panel .page-description { margin: var(--nb-space-4) 0 0; color: var(--nb-color-text-muted); }
+.browser-panel .page-description { margin: var(--nb-space-4) 0 0; color: var(--nb-color-text-muted); overflow-wrap: anywhere; }
 .browser-actions { display: flex; flex-wrap: wrap; gap: var(--nb-space-3); margin-top: var(--nb-space-8); }
-.browser-footer { padding: var(--nb-space-4) var(--nb-space-6); color: var(--nb-color-text-muted); font-size: var(--nb-font-size-sm); text-align: center; }
+.browser-actions .nb-btn { white-space: normal; overflow-wrap: anywhere; text-align: center; }
 .browser-brand:focus-visible { outline: none; box-shadow: var(--nb-focus-ring); border-radius: var(--nb-radius-sm); }
 @media (width < 40rem) {
   .browser-topbar { padding: var(--nb-space-3) var(--nb-space-4); gap: var(--nb-space-2); }
