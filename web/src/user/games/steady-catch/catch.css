@@ -1597,8 +1597,8 @@
   font-size: 13px;
   line-height: 1.5;
 }
-.catch-game .reward-notice strong,
-.catch-game .reward-notice span {
+.catch-game .reward-notice > strong,
+.catch-game .reward-notice > span {
   display: block;
 }
 .catch-game .reward-notice strong {

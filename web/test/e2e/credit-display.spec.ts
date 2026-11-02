@@ -124,6 +124,22 @@ for (const theme of ['light', 'dark']) {
           await page.locator(selector).first().scrollIntoViewIfNeeded();
         }
         await expect(page.locator(selector).first()).toContainText('0.001');
+        const wrappedAmounts = await page.locator('.credit-number').evaluateAll((elements) =>
+          elements
+            .filter((element) => element.checkVisibility() && element.textContent === '0.001')
+            .map((element) => {
+              const tops: number[] = [];
+              const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+              for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+                const range = document.createRange();
+                range.selectNodeContents(node);
+                tops.push(...[...range.getClientRects()].map((rect) => Math.round(rect.top)));
+              }
+              return { parent: element.parentElement?.className, lines: [...new Set(tops)] };
+            })
+            .filter((amount) => amount.lines.length > 1),
+        );
+        expect.soft(wrappedAmounts, path + ' ordinary 0.001 stays on one line').toEqual([]);
         await recordFractions(page, `credit-${path.split('/').pop()}-${theme}-${width}`);
       }
     });
