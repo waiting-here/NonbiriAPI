@@ -49,6 +49,7 @@ type Options struct {
 
 	Limiter           *game.StartLimiter
 	Random            fishing.IntSource
+	PondRandom        fishing.IntSource
 	Now               func() time.Time
 	GenerateID        func(string) (string, error)
 	LeaderboardTieKey []byte
@@ -69,6 +70,7 @@ type Service struct {
 	limiter           *game.StartLimiter
 	ownsLimiter       bool
 	random            fishing.IntSource
+	pondRandom        fishing.IntSource
 	proofs            bool
 	now               func() time.Time
 	generateID        func(string) (string, error)
@@ -79,6 +81,7 @@ type Service struct {
 	budgetNow      func() time.Time
 
 	rngMu             sync.Mutex
+	pondRNGMu         sync.Mutex
 	workerMu          sync.Mutex
 	workerCancel      context.CancelFunc
 	workerDone        chan struct{}
@@ -107,6 +110,9 @@ func New(options Options) (*Service, error) {
 	if options.Random == nil {
 		options.Random = fishing.CryptoSource{}
 	}
+	if options.PondRandom == nil {
+		options.PondRandom = fishing.CryptoSource{}
+	}
 	if options.WorkerInterval == 0 {
 		options.WorkerInterval = time.Second
 	}
@@ -134,6 +140,7 @@ func New(options Options) (*Service, error) {
 		userAuthorizer: options.UserAuthorizer, finance: options.Finance,
 		limiter: options.Limiter, ownsLimiter: ownsLimiter,
 		random: options.Random, proofs: proofs, now: options.Now, generateID: options.GenerateID,
+		pondRandom:        options.PondRandom,
 		leaderboardTieKey: key, capability: options.Capability,
 		workerInterval: options.WorkerInterval, budgetNow: options.BudgetNow,
 		wake: make(chan struct{}, 1),
@@ -220,6 +227,7 @@ func (service *Service) workerLoop(ctx context.Context, done chan struct{}) {
 		if err := service.expireRankFacts(ctx, now, service.budgetNow().Add(rankBudget)); err == nil {
 			_, _ = service.cleanupTerminalBatches(ctx, now)
 		}
+		_, _ = service.cleanupPondCounts(ctx, now)
 	}
 }
 

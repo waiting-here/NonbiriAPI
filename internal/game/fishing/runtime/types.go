@@ -47,15 +47,16 @@ func rakeFromMilli(platform, welfare, thursday int64) FishingRake {
 }
 
 type FishingOutcome struct {
-	NetReward           string      `json:"net_reward"`
-	Rake                FishingRake `json:"rake"`
-	Ordinal             int         `json:"ordinal"`
-	SpeciesKey          string      `json:"species_key"`
-	Tier                string      `json:"tier"`
-	SizeCM              int         `json:"size_cm"`
-	Reward              string      `json:"reward"`
-	BlueFatFishLengthCM *string     `json:"blue_fat_fish_length_cm"`
-	MilkCrabLengthCM    *string     `json:"milk_crab_length_cm"`
+	NetReward           string       `json:"net_reward"`
+	Rake                FishingRake  `json:"rake"`
+	Ordinal             int          `json:"ordinal"`
+	SpeciesKey          string       `json:"species_key"`
+	Tier                string       `json:"tier"`
+	SizeCM              int          `json:"size_cm"`
+	Reward              string       `json:"reward"`
+	BlueFatFishLengthCM *string      `json:"blue_fat_fish_length_cm"`
+	MilkCrabLengthCM    *string      `json:"milk_crab_length_cm"`
+	Pond                *PondOutcome `json:"pond,omitempty"`
 }
 
 type FishingBatchResult struct {
@@ -178,6 +179,8 @@ type UserExport struct {
 	Single      *FishingLeaderboardRow     `json:"fishing_single_best"`
 	Total       *FishingLeaderboardRow     `json:"fishing_rolling_total"`
 	RollingBest *FishingLeaderboardRow     `json:"fishing_rolling_best"`
+	PondQueue   []PondQueuedExport         `json:"fishing_pond_queue"`
+	PondStats   []PondStatExport           `json:"fishing_pond_stats"`
 }
 
 // FishingTerminalExport is the lifecycle-only terminal projection. RevealedAt

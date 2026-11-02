@@ -81,6 +81,9 @@ func (adapter *LifecycleAdapter) PrepareDeleteTx(
 }
 
 func (service *Service) prepareDeletion(ctx context.Context, tx *sql.Tx, userID, at int64) error {
+	if err := deletePondUserTx(ctx, tx, userID); err != nil {
+		return err
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT `+batchColumns+` FROM game_fishing_batches WHERE user_id=? ORDER BY created_at,id`, userID)
 	if err != nil {
 		return classifyDB(err)
@@ -233,6 +236,9 @@ func (adapter *LifecycleAdapter) ExportTx(
 		return result, err
 	}
 	result.RollingBest = ownLeaderboardRow(recent)
+	if err := exportPondTx(ctx, tx, userID, decisionNow, limit, &result); err != nil {
+		return result, err
+	}
 	return result, result.ValidateProjection()
 }
 
@@ -337,11 +343,20 @@ WHERE id=? AND state IN ('committed','released') AND settled_at<=?`, id, cutoff)
 		}
 		processed += len(ids)
 	}
+	if processed < limit {
+		count, err := deletePondCountsTx(workerCtx, tx, decisionNow, limit-processed)
+		if err != nil {
+			return RetentionResult{}, err
+		}
+		processed += count
+	}
 	var more int
 	if err := tx.QueryRowContext(workerCtx, `SELECT
 EXISTS(SELECT 1 FROM game_fishing_rank_facts WHERE aggregate_applied=1 AND expires_at<=?) OR
-EXISTS(SELECT 1 FROM game_fishing_batches WHERE state IN ('committed','released') AND settled_at<=?)`,
-		decisionNow, cutoff).Scan(&more); err != nil {
+EXISTS(SELECT 1 FROM game_fishing_batches WHERE state IN ('committed','released') AND settled_at<=?) OR
+EXISTS(SELECT 1 FROM game_fishing_pond_counts WHERE occurred_at<=?) OR
+EXISTS(SELECT 1 FROM game_fishing_pond_daily WHERE day_start<=?)`,
+		decisionNow, cutoff, cutoff, pondDayStart(cutoff)-pondDaySeconds).Scan(&more); err != nil {
 		return RetentionResult{}, classifyDB(err)
 	}
 	if more != 0 && more != 1 {
@@ -377,5 +392,10 @@ func (adapter *LifecycleAdapter) Cleanup(ctx context.Context, now int64) (int, e
 	if err := adapter.service.expireRankFacts(ctx, now, adapter.service.budgetNow().Add(rankBudget)); err != nil {
 		return 0, err
 	}
-	return adapter.service.cleanupTerminalBatches(ctx, now)
+	processed, err := adapter.service.cleanupTerminalBatches(ctx, now)
+	if err != nil {
+		return processed, err
+	}
+	count, err := adapter.service.cleanupPondCounts(ctx, now)
+	return processed + count, err
 }
