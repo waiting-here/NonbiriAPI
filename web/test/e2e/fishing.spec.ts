@@ -673,3 +673,213 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
   await expect(page.getByRole('heading', { name: '正在等待收获' })).toBeVisible();
   consoleGuard.assertNone();
 });
+
+for (const theme of ['light', 'dark'] as const)
+  for (const width of [390, 1440]) {
+    test(`Pond gifts, return recovery and boards ${theme} ${width}`, async ({ page }) => {
+      const faults: string[] = [];
+      page.on('pageerror', (error) => faults.push(error.message));
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await installUserShell(page, 'zh');
+      await page.addInitScript((value) => localStorage.setItem('nb.theme', value), theme);
+      const session = userSession('level4');
+      session.user.game_profile_public = true;
+      await page.route('**/api/session', (route) => route.fulfill(jsonResponse(session)));
+      const donor = '快乐的池塘朋友'.repeat(16);
+      const outcomes = Array.from({ length: 10 }, (_, ordinal) => ({
+        ordinal,
+        species_key: 'branch',
+        tier: 'junk',
+        size_cm: 0,
+        reward: '0',
+        net_reward: '0',
+        rake: { platform: '0', welfare: '0', thursday: '0' },
+        ...(ordinal === 0 || ordinal === 1
+          ? { pond: { return_state: 'available', gift: null } }
+          : {}),
+        ...(ordinal === 0 ? { species_key: 'boot' } : {}),
+        ...(ordinal === 1 ? { species_key: 'fry' } : {}),
+        ...(ordinal === 2
+          ? {
+              species_key: 'old_tire',
+              pond: {
+                return_state: 'gift',
+                gift: { kind: 'public', display_name: donor, avatar_url: AVATAR_URL },
+              },
+            }
+          : {}),
+      }));
+      const result = {
+        ...RESULT,
+        count: 10,
+        entry_total: '25',
+        payment: { general: '25', game: '0' },
+        outcomes,
+        payout_total: '0',
+        net_payout_total: '0',
+      };
+      const fixture = fixtureWith({
+        settlement_pending: null,
+        unrevealed: result,
+        has_more_unrevealed: false,
+      });
+      fixture.preserveAfterACK = true;
+      await installFishingRoutes(page, fixture);
+      let returns = 0;
+      const resources: string[] = [];
+      await page.route('**/api/games/fishing/batches/*/outcomes/*/return', async (route) => {
+        const request = route.request();
+        expect(request.method()).toBe('POST');
+        expect(request.postData()).toBeNull();
+        expect(request.headers()['idempotency-key']).toBeUndefined();
+        resources.push(new URL(request.url()).pathname);
+        const ordinal = Number(resources.at(-1)!.split('/').at(-2));
+        returns += 1;
+        if (returns === 1) {
+          await route.abort('failed');
+          return;
+        }
+        const state = ordinal === 1 ? 'released' : 'returned';
+        Object.assign(outcomes[ordinal], { pond: { return_state: state, gift: null } });
+        await route.fulfill(
+          jsonResponse({
+            batch_id: BATCH_ID,
+            ordinal,
+            return_state: state,
+            returned_at: 1_800_000_000,
+          }),
+        );
+      });
+      const boardRequests: string[] = [];
+      await page.route('**/api/games/fishing/pond/leaderboard?*', async (route) => {
+        const url = new URL(route.request().url());
+        const board = url.searchParams.get('board')!;
+        const period = url.searchParams.get('period')!;
+        boardRequests.push(board + ':' + period);
+        await route.fulfill(
+          jsonResponse({
+            board,
+            period,
+            window_start: period === 'all' ? null : 1_700_000_000,
+            entries:
+              period === '30d'
+                ? []
+                : [
+                    {
+                      rank: '1',
+                      item_count: '12000',
+                      identity: { kind: 'public', display_name: donor, avatar_url: AVATAR_URL },
+                      is_me: false,
+                    },
+                  ],
+            me:
+              period === '30d'
+                ? null
+                : { rank: '21', item_count: '2', identity: { kind: 'anonymous' }, is_me: true },
+          }),
+        );
+      });
+      const capture = async (name: string) => {
+        const directory = process.env.NONBIRI_POND_LAYOUT_EVIDENCE;
+        if (!directory) return;
+        mkdirSync(directory, { recursive: true });
+        await page.screenshot({ path: resolve(directory, `${theme}-${width}-${name}.png`) });
+      };
+      await page.goto(`${USER_ORIGIN}/games/fishing`);
+      const caught = page.locator('.fishing-outcome');
+      await expect(caught).toHaveCount(10);
+      await expect(page.getByText(/之后开启游戏匿名.*保留署名/)).toBeVisible();
+      const gift = caught.filter({ has: page.locator('[data-art-key="old_tire"]') });
+      await expect(gift).toContainText(donor);
+      await expect(gift).toContainText('来自');
+      await expect(gift).toContainText('净到账 0 通用积分');
+      await expect(gift.locator('img[src="' + AVATAR_URL + '"]')).toBeVisible();
+      await expect(gift.getByRole('button', { name: '投回池塘', exact: true })).toHaveCount(0);
+      await expect(gift).not.toContainText('原本');
+      await gift.scrollIntoViewIfNeeded();
+      await capture('gift');
+      const junk = page.locator('.fishing-outcome[data-ordinal="0"]');
+      await junk.getByRole('button', { name: '投回池塘', exact: true }).click();
+      await expect(junk.getByRole('alert')).toContainText('尚未确认结果');
+      await junk.scrollIntoViewIfNeeded();
+      await capture('retry');
+      await junk.getByRole('button', { name: '重试这件收获' }).click();
+      await expect(junk).toContainText('已投回池塘');
+      expect(resources[0]).toBe(resources[1]);
+      const fry = page.locator('.fishing-outcome[data-ordinal="1"]');
+      await fry.getByRole('button', { name: '放生', exact: true }).click();
+      await expect(fry).toContainText('已放生');
+      expect(boardRequests).toEqual([]);
+      await page.getByRole('tab', { name: '环保榜', exact: true }).click();
+      const board = page.locator('.fishing-pond-board');
+      await expect(board.getByRole('radio', { name: '过去 7 天' })).toBeChecked();
+      await expect(board).toContainText('匿名垂钓者');
+      expect(boardRequests).toEqual(['cleanup:7d']);
+      await board.scrollIntoViewIfNeeded();
+      await capture('board');
+      await board.getByRole('radiogroup').getByText('过去 30 天', { exact: true }).click();
+      await expect(board).toContainText('还没有记录');
+      await capture('empty');
+      await board.getByRole('radiogroup').getByText('历史', { exact: true }).click();
+      await expect(board).toContainText(donor);
+      await page.getByRole('tab', { name: '馈赠榜', exact: true }).click();
+      await expect(board.getByRole('radio', { name: '过去 7 天' })).toBeChecked();
+      await expect(board).toContainText(donor);
+      expect(boardRequests).toEqual(['cleanup:7d', 'cleanup:30d', 'cleanup:all', 'gifts:7d']);
+      for (const table of await page.locator('.nb-table-wrap').all())
+        expect(await table.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      session.user.game_profile_public = false;
+      Object.assign(outcomes[3], { pond: { return_state: 'available', gift: null } });
+      fixture.preserveAfterACK = false;
+      await page.reload();
+      await expect(page.locator('.fishing-gift-source')).toContainText(donor);
+      await expect(page.getByRole('button', { name: '投回池塘', exact: true })).toBeDisabled();
+      await page.locator('.fishing-outcome[data-ordinal="3"]').scrollIntoViewIfNeeded();
+      await capture('anonymous');
+      await expect.poll(() => fixture.state.unrevealed).toBeNull();
+      await expect(page.getByRole('button', { name: '放生', exact: true })).toHaveCount(0);
+      let privacyWrites = 0;
+      await page.route('**/api/me', async (route) => {
+        if (route.request().method() === 'PATCH') {
+          privacyWrites += 1;
+          expect(route.request().postDataJSON()).toEqual({ game_profile_public: true });
+          if (privacyWrites === 1) {
+            await route.fulfill(
+              jsonResponse(
+                { error: { code: 'invalid_request', message: 'Synthetic retryable profile save' } },
+                400,
+              ),
+            );
+            return;
+          }
+          session.user.game_profile_public = true;
+        }
+        await route.fulfill(jsonResponse(session));
+      });
+      const privacy = page.locator('.fishing-pond-disclosure');
+      const anonymity = privacy.getByRole('switch', { name: '在排行榜中匿名' });
+      await expect(anonymity).toBeChecked();
+      await privacy.evaluate((node) => node.scrollIntoView({ block: 'center' }));
+      await capture('privacy');
+      expect(await privacy.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await anonymity.click();
+      await expect(privacy.getByRole('alert')).toContainText('Synthetic retryable profile save');
+      await expect(page.getByRole('button', { name: '投回池塘', exact: true })).toBeDisabled();
+      await anonymity.click();
+      await expect(page.getByRole('button', { name: '投回池塘', exact: true })).toBeEnabled();
+      await expect(page.getByText(/之后开启游戏匿名.*保留署名/)).toHaveCount(1);
+      await expect(page).toHaveURL(`${USER_ORIGIN}/games/fishing`);
+      await expect(page.locator('[data-batch-id]')).toHaveAttribute('data-batch-id', BATCH_ID);
+      await page.getByRole('button', { name: '投回池塘', exact: true }).click();
+      await expect(page.locator('.fishing-outcome[data-ordinal="3"]')).toContainText('已投回池塘');
+      expect(privacyWrites).toBe(2);
+      expect(faults).toEqual([]);
+    });
+  }

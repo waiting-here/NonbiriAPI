@@ -18,7 +18,38 @@ export interface FishingRake {
   readonly thursday: string;
 }
 
+export interface FishingPondOutcome {
+  readonly returnState: 'available' | 'returned' | 'released' | 'gift';
+  readonly gift: PublicIdentity | null;
+}
+
+export interface FishingPondReceipt {
+  readonly batchID: string;
+  readonly ordinal: number;
+  readonly returnState: 'returned' | 'released';
+  readonly returnedAt: number;
+}
+
+export type FishingPondBoard = 'cleanup' | 'gifts';
+export type FishingPondPeriod = '7d' | '30d' | 'all';
+
+export interface FishingPondRow {
+  readonly rank: string;
+  readonly itemCount: string;
+  readonly identity: PublicIdentity;
+  readonly isMe: boolean;
+}
+
+export interface FishingPondLeaderboard {
+  readonly board: FishingPondBoard;
+  readonly period: FishingPondPeriod;
+  readonly windowStart: number | null;
+  readonly entries: readonly FishingPondRow[];
+  readonly me: FishingPondRow | null;
+}
+
 export interface FishingOutcome {
+  readonly pond?: FishingPondOutcome | null;
   readonly netReward: string;
   readonly rake: FishingRake;
   readonly ordinal: number;

@@ -3,11 +3,17 @@ import { ApiError } from '@shared/query/http';
 import { gameRequest } from '../common/request';
 import {
   normalizeFishingLeaderboard,
+  normalizeFishingPondLeaderboard,
+  normalizeFishingPondReceipt,
   normalizeFishingStart,
   normalizeFishingState,
 } from './normalize';
 import type {
   FishingBatchResult,
+  FishingPondBoard,
+  FishingPondPeriod,
+  FishingPondLeaderboard,
+  FishingPondReceipt,
   FishingLeaderboardBoard,
   FishingLeaderboard,
   FishingStartIntent,
@@ -16,6 +22,8 @@ import type {
 } from './types';
 
 export const fishingKeys = {
+  pondLeaderboard: (board: FishingPondBoard, period: FishingPondPeriod) =>
+    ['user', 'games', 'fishing', 'pond', 'leaderboard', board, period] as const,
   state: ['user', 'games', 'fishing', 'state', 'beta1'] as const,
   leaderboard: (board: FishingLeaderboardBoard) =>
     ['user', 'games', 'fishing', 'leaderboard', board, 'beta1'] as const,
@@ -151,4 +159,44 @@ export function useFishingLeaderboard(board: FishingLeaderboardBoard, enabled: b
 
 export function isFishingResult(value: FishingStartResult): value is FishingBatchResult {
   return 'outcomes' in value;
+}
+
+export async function returnFishingOutcome(
+  batchID: string,
+  ordinal: number,
+  signal?: AbortSignal,
+): Promise<FishingPondReceipt> {
+  const response = await gameRequest<unknown>(
+    `/api/games/fishing/batches/${encodeURIComponent(batchID)}/outcomes/${ordinal}/return`,
+    { method: 'POST', signal, expectedStatuses: [200] },
+  );
+  const receipt = normalizeFishingPondReceipt(response.data);
+  if (receipt.batchID !== batchID || receipt.ordinal !== ordinal)
+    throw new ApiError(
+      'invalid_response',
+      'The server returned a different fishing catch.',
+      response.status,
+    );
+  return receipt;
+}
+
+export async function readFishingPondLeaderboard(
+  board: FishingPondBoard,
+  period: FishingPondPeriod,
+  signal?: AbortSignal,
+): Promise<FishingPondLeaderboard> {
+  const response = await gameRequest<unknown>(
+    `/api/games/fishing/pond/leaderboard?board=${board}&period=${period}`,
+    { signal, expectedStatuses: [200] },
+  );
+  return normalizeFishingPondLeaderboard(response.data, board, period);
+}
+
+export function useFishingPondLeaderboard(board: FishingPondBoard, period: FishingPondPeriod) {
+  return useQuery({
+    queryKey: fishingKeys.pondLeaderboard(board, period),
+    queryFn: ({ signal }) => readFishingPondLeaderboard(board, period, signal),
+    staleTime: 30_000,
+    retry: false,
+  });
 }

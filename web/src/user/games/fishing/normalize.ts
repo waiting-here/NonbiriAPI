@@ -17,6 +17,12 @@ import {
   FISHING_TIERS,
   type FishingBatchResult,
   type FishingRake,
+  type FishingPondOutcome,
+  type FishingPondReceipt,
+  type FishingPondBoard,
+  type FishingPondPeriod,
+  type FishingPondLeaderboard,
+  type FishingPondRow,
   type FishingLeaderboardBoard,
   type FishingLeaderboard,
   type FishingSettlementPending,
@@ -189,7 +195,7 @@ export function normalizeFishingResult(value: unknown): FishingBatchResult {
     const outcome = responseRecord(
       value,
       ['ordinal', 'species_key', 'tier', 'size_cm', 'reward', 'net_reward', 'rake'],
-      ['blue_fat_fish_length_cm', 'milk_crab_length_cm'],
+      ['blue_fat_fish_length_cm', 'milk_crab_length_cm', 'pond'],
       `fishing outcome ${index}`,
     );
     const ordinal = safeInteger(outcome.ordinal, index, index, `fishing outcome ${index} ordinal`);
@@ -212,6 +218,7 @@ export function normalizeFishingResult(value: unknown): FishingBatchResult {
     const netReward = creditsValue(outcome.net_reward, {}, `fishing outcome ${index} net reward`);
     const rake = normalizeRake(outcome.rake, `fishing outcome ${index} rake`);
     return {
+      pond: normalizePondOutcome(outcome.pond),
       netReward,
       rake,
       ordinal,
@@ -391,4 +398,76 @@ export function normalizeFishingLeaderboard(
   )
     invalidResponse('total me row');
   return { board, windowStart, entries, me };
+}
+
+function normalizePondOutcome(value: unknown): FishingPondOutcome | null {
+  if (value === undefined || value === null) return null;
+  const record = responseRecord(value, ['return_state', 'gift'], [], 'fishing pond outcome');
+  return {
+    returnState: enumValue(
+      record.return_state,
+      ['available', 'returned', 'released', 'gift'] as const,
+      'fishing pond return state',
+    ),
+    gift: record.gift === null ? null : publicIdentity(record.gift, 'fishing gift source'),
+  };
+}
+
+export function normalizeFishingPondReceipt(value: unknown): FishingPondReceipt {
+  const record = responseRecord(
+    value,
+    ['batch_id', 'ordinal', 'return_state', 'returned_at'],
+    [],
+    'fishing pond receipt',
+  );
+  return {
+    batchID: opaqueID(record.batch_id, 'fb_', 'fishing pond batch'),
+    ordinal: safeInteger(record.ordinal, 0, 9, 'fishing pond ordinal'),
+    returnState: enumValue(
+      record.return_state,
+      ['returned', 'released'] as const,
+      'fishing pond receipt state',
+    ),
+    returnedAt: unixTime(record.returned_at, 'fishing pond return time'),
+  };
+}
+
+function pondRow(value: unknown): FishingPondRow {
+  const record = responseRecord(
+    value,
+    ['rank', 'item_count', 'identity', 'is_me'],
+    [],
+    'fishing pond row',
+  );
+  return {
+    rank: decimalValue(record.rank, { bits: 256, positive: true }, 'fishing pond rank'),
+    itemCount: decimalValue(record.item_count, { bits: 256 }, 'fishing pond count'),
+    identity: publicIdentity(record.identity, 'fishing pond identity'),
+    isMe: booleanValue(record.is_me, 'fishing pond me flag'),
+  };
+}
+
+export function normalizeFishingPondLeaderboard(
+  value: unknown,
+  expectedBoard: FishingPondBoard,
+  expectedPeriod: FishingPondPeriod,
+): FishingPondLeaderboard {
+  const record = responseRecord(
+    value,
+    ['board', 'period', 'window_start', 'entries', 'me'],
+    [],
+    'fishing pond leaderboard',
+  );
+  const board = enumValue(record.board, ['cleanup', 'gifts'] as const, 'fishing pond board');
+  const period = enumValue(record.period, ['7d', '30d', 'all'] as const, 'fishing pond period');
+  if (board !== expectedBoard || period !== expectedPeriod || !Array.isArray(record.entries))
+    invalidResponse('fishing pond leaderboard');
+  return {
+    board,
+    period,
+    windowStart:
+      record.window_start === null ? null : unixTime(record.window_start, 'fishing pond window'),
+    entries: record.entries.map(pondRow),
+    me: record.me === null ? null : pondRow(record.me),
+  };
 }
