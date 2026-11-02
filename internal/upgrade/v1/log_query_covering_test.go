@@ -13,6 +13,7 @@ import (
 
 func restoreSchema43LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema44LayoutForTest(t, database)
 	old := strings.Replace(db.CharityLogCoveringIndexSQL, ",id,started_at)", ",id)", 1)
 	hostileMustExec(t, database, "DROP INDEX idx_request_logs_charity_model;"+old)
 	assertRetainedManifest(t, database, db.Schema43ManifestHash)
@@ -34,7 +35,7 @@ VALUES(?,?,'provider/retained','charity_responses',1,2,'success',200,200)`, requ
 	restoreSchema43LayoutForTest(t, store.DB())
 	hostileMustExec(t, store.DB(), "UPDATE schema_state SET version=43")
 	plan, err := storageSchema.plan(t.Context(), store.DB())
-	if err != nil || len(plan.steps) != 1 || plan.steps[0].from != 43 || plan.steps[0].version != 44 || plan.auditsCredentials() {
+	if err != nil || len(plan.steps) != 2 || plan.steps[0].from != 43 || plan.steps[0].version != 44 || plan.auditsCredentials() {
 		t.Fatal("index-only upgrade plan changed", plan, err)
 	}
 	if !reflect.DeepEqual(plan.steps[0].impact.indexedTables, []string{"request_logs"}) {
@@ -58,7 +59,7 @@ VALUES(?,?,'provider/retained','charity_responses',1,2,'success',200,200)`, requ
 		t.Fatal("schema43 started without explicit upgrade")
 	}
 	checked, err := Run(t.Context(), path, vault, Options{})
-	if err != nil || checked.Status != "ready" || checked.SourceSchemaVersion != 43 || checked.TargetSchemaVersion != 44 {
+	if err != nil || checked.Status != "ready" || checked.SourceSchemaVersion != 43 || checked.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal("check", checked, err)
 	}
 	checkSource()
@@ -89,7 +90,7 @@ VALUES(?,?,'provider/retained','charity_responses',1,2,'success',200,200)`, requ
 		checkSource()
 	}
 	result, err := Run(t.Context(), path, vault, Options{Apply: true})
-	if err != nil || result.Status != "converted" || result.SourceSchemaVersion != 43 || result.TargetSchemaVersion != 44 {
+	if err != nil || result.Status != "converted" || result.SourceSchemaVersion != 43 || result.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal("apply", result, err)
 	}
 	store, err = db.Open(path, vault)

@@ -92,7 +92,7 @@ func TestExportUsesOneTransactionFrozenOrderAndEmptyArrays(t *testing.T) {
 	}
 	if document.Endpoints == nil || document.CatalogPairs == nil || document.Models == nil || document.PersonalAutomation == nil || document.Issues == nil ||
 		document.CreditLedger == nil || document.WelfareClaims == nil || document.Thursday == nil || document.Donations == nil ||
-		document.Fishing.Pending == nil || document.Fishing.Terminal == nil || document.LinkLink.Summaries == nil || document.RPS.Summaries == nil ||
+		document.Fishing.Pending == nil || document.Fishing.Terminal == nil || document.Fishing.PondQueue == nil || document.Fishing.PondStats == nil || document.LinkLink.Summaries == nil || document.RPS.Summaries == nil ||
 		document.Gwent.History == nil || document.Gwent.CurrentRounds == nil || document.GameOnboardingHolds == nil || document.Loans == nil || document.Penalties == nil || document.GameRankings.Totals == nil || document.GameRankings.Events == nil {
 		t.Fatal("an empty export collection encoded as null")
 	}

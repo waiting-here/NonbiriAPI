@@ -96,7 +96,18 @@ func (adapter *FishingAdapter) ExportFishing(
 	out := lifecycle.FishingExport{
 		Pending:    make([]lifecycle.FishingPendingExport, len(value.Pending)),
 		Terminal:   make([]lifecycle.FishingBatchExport, len(value.Terminal)),
+		PondQueue:  make([]lifecycle.FishingPondQueuedExport, len(value.PondQueue)),
+		PondStats:  make([]lifecycle.FishingPondStatExport, len(value.PondStats)),
 		SingleBest: single, RollingTotal: total, RollingBest: recent,
+	}
+	for index, queued := range value.PondQueue {
+		out.PondQueue[index] = lifecycle.FishingPondQueuedExport{
+			BatchID: queued.BatchID, Ordinal: queued.Ordinal, SpeciesKey: queued.SpeciesKey, ReturnedAt: queued.ReturnedAt,
+			Identity: lifecycle.FishingPondIdentityExport{Kind: queued.Identity.Kind, DisplayName: queued.Identity.DisplayName, AvatarURL: cloneString(queued.Identity.AvatarURL)},
+		}
+	}
+	for index, stat := range value.PondStats {
+		out.PondStats[index] = lifecycle.FishingPondStatExport{Board: stat.Board, Period: stat.Period, ItemCount: stat.ItemCount}
 	}
 	for index, pending := range value.Pending {
 		out.Pending[index] = lifecycle.FishingPendingExport{
@@ -113,6 +124,7 @@ func (adapter *FishingAdapter) ExportFishing(
 				return lifecycle.FishingExport{}, finalizer, lifecycle.ErrInvariant
 			}
 			outcomes[outcomeIndex] = lifecycle.FishingOutcomeExport{
+				Pond:    mapFishingPondOutcome(outcome.Pond),
 				Ordinal: outcome.Ordinal, SpeciesKey: outcome.SpeciesKey, Tier: outcome.Tier,
 				NetReward: outcome.NetReward, Rake: lifecycle.FishingRakeExport(outcome.Rake), SizeCM: outcome.SizeCM, Reward: outcome.Reward, BlueFatFishLengthCM: cloneString(outcome.BlueFatFishLengthCM), MilkCrabLengthCM: cloneString(outcome.MilkCrabLengthCM),
 			}
@@ -126,6 +138,17 @@ func (adapter *FishingAdapter) ExportFishing(
 		}
 	}
 	return out, finalizer, nil
+}
+
+func mapFishingPondOutcome(value *fishingruntime.PondOutcome) *lifecycle.FishingPondOutcomeExport {
+	if value == nil {
+		return nil
+	}
+	out := &lifecycle.FishingPondOutcomeExport{ReturnState: value.ReturnState, ReturnedAt: cloneInt64(value.ReturnedAt)}
+	if value.Gift != nil {
+		out.Gift = &lifecycle.FishingPondGiftExport{Kind: "anonymous"}
+	}
+	return out
 }
 
 func mapFishingRank(value *fishingruntime.FishingLeaderboardRow) (*lifecycle.FishingRankExport, error) {

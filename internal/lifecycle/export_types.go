@@ -404,11 +404,45 @@ type ModalityUsageExport struct {
 }
 
 type FishingExport struct {
-	Pending      []FishingPendingExport `json:"pending"`
-	Terminal     []FishingBatchExport   `json:"terminal"`
-	SingleBest   *FishingRankExport     `json:"single_best"`
-	RollingTotal *FishingRankExport     `json:"rolling_total"`
-	RollingBest  *FishingRankExport     `json:"rolling_best"`
+	Pending      []FishingPendingExport    `json:"pending"`
+	Terminal     []FishingBatchExport      `json:"terminal"`
+	SingleBest   *FishingRankExport        `json:"single_best"`
+	RollingTotal *FishingRankExport        `json:"rolling_total"`
+	RollingBest  *FishingRankExport        `json:"rolling_best"`
+	PondQueue    []FishingPondQueuedExport `json:"pond_queue"`
+	PondStats    []FishingPondStatExport   `json:"pond_stats"`
+}
+
+type FishingPondQueuedExport struct {
+	BatchID    string                    `json:"batch_id"`
+	Ordinal    int                       `json:"ordinal"`
+	SpeciesKey string                    `json:"species_key"`
+	ReturnedAt int64                     `json:"returned_at"`
+	Identity   FishingPondIdentityExport `json:"identity"`
+}
+
+type FishingPondIdentityExport struct {
+	Kind        string  `json:"kind"`
+	DisplayName string  `json:"display_name"`
+	AvatarURL   *string `json:"avatar_url"`
+}
+
+type FishingPondStatExport struct {
+	Board     string `json:"board"`
+	Period    string `json:"period"`
+	ItemCount string `json:"item_count"`
+}
+
+type FishingPondOutcomeExport struct {
+	ReturnState string                 `json:"return_state"`
+	Gift        *FishingPondGiftExport `json:"gift"`
+	ReturnedAt  *int64                 `json:"returned_at,omitempty"`
+}
+
+// Received gifts retain the fact of a contribution without exporting another
+// account's identity. The owner's queued contributions have a separate type.
+type FishingPondGiftExport struct {
+	Kind string `json:"kind"`
 }
 
 type FishingPendingExport struct {
@@ -445,15 +479,16 @@ type FishingRakeExport struct {
 	Thursday string `json:"thursday"`
 }
 type FishingOutcomeExport struct {
-	NetReward           string            `json:"net_reward"`
-	Rake                FishingRakeExport `json:"rake"`
-	Ordinal             int               `json:"ordinal"`
-	SpeciesKey          string            `json:"species_key"`
-	Tier                string            `json:"tier"`
-	SizeCM              int               `json:"size_cm"`
-	Reward              string            `json:"reward"`
-	BlueFatFishLengthCM *string           `json:"blue_fat_fish_length_cm"`
-	MilkCrabLengthCM    *string           `json:"milk_crab_length_cm"`
+	Pond                *FishingPondOutcomeExport `json:"pond,omitempty"`
+	NetReward           string                    `json:"net_reward"`
+	Rake                FishingRakeExport         `json:"rake"`
+	Ordinal             int                       `json:"ordinal"`
+	SpeciesKey          string                    `json:"species_key"`
+	Tier                string                    `json:"tier"`
+	SizeCM              int                       `json:"size_cm"`
+	Reward              string                    `json:"reward"`
+	BlueFatFishLengthCM *string                   `json:"blue_fat_fish_length_cm"`
+	MilkCrabLengthCM    *string                   `json:"milk_crab_length_cm"`
 }
 
 type FishingRankExport struct {

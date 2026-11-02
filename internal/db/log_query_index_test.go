@@ -8,6 +8,7 @@ import (
 
 func restoreSchema43LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema44LayoutForTest(t, database)
 	old := strings.Replace(CharityLogCoveringIndexSQL, ",id,started_at)", ",id)", 1)
 	hostileMustExec(t, database, "DROP INDEX idx_request_logs_charity_model;"+old)
 	assertRetainedManifest(t, database, Schema43ManifestHash)

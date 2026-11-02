@@ -657,6 +657,12 @@ func normalizeExportDocument(document *ExportDocument) {
 	if document.Fishing.Terminal == nil {
 		document.Fishing.Terminal = []FishingBatchExport{}
 	}
+	if document.Fishing.PondQueue == nil {
+		document.Fishing.PondQueue = []FishingPondQueuedExport{}
+	}
+	if document.Fishing.PondStats == nil {
+		document.Fishing.PondStats = []FishingPondStatExport{}
+	}
 	if document.LinkLink.Summaries == nil {
 		document.LinkLink.Summaries = []LinkLinkSummaryExport{}
 	}
@@ -750,6 +756,7 @@ func validateExportCollectionBounds(document ExportDocument) error {
 		len(document.Endpoints), len(document.CatalogPairs), len(document.Models), len(document.Issues),
 		len(document.Checkins), len(document.GameOnboarding), len(document.CreditLedger), len(document.WelfareClaims), len(document.Thursday), len(document.Donations),
 		len(document.Fishing.Pending), len(document.Fishing.Terminal), len(document.LinkLink.Summaries), len(document.RPS.Summaries),
+		len(document.Fishing.PondQueue), len(document.Fishing.PondStats),
 	}
 	penaltyActions := 0
 	for _, penalty := range document.Penalties {
