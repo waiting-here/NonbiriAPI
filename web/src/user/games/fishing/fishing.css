@@ -539,3 +539,73 @@
     display: none;
   }
 }
+
+.fishing-gift-source,
+.fishing-pond-return {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+.fishing-outcome > .fishing-gift-source {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--nb-space-1);
+}
+.fishing-gift-source .public-game-identity {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.fishing-pond-disclosure p {
+  margin-block: var(--nb-space-2);
+}
+.fishing-pond-return {
+  justify-items: start;
+  gap: var(--nb-space-2);
+}
+.fishing-pond-return small {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.fishing-pond-return .fishing-pond-error {
+  margin: 0;
+  color: var(--nb-color-danger);
+  font-size: var(--nb-font-size-sm);
+}
+.fishing-pond-board {
+  display: grid;
+  gap: var(--nb-space-3);
+  min-width: 0;
+}
+.fishing-pond-board > p {
+  margin: 0;
+}
+.fishing-pond-count {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.fishing-gift-source > span:not(.public-game-identity) {
+  flex: none;
+  white-space: nowrap;
+}
+.fishing-gift-source .public-game-identity__name,
+.fishing-pond-board .public-game-identity__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fishing-pond-disclosure .game-privacy-control {
+  margin: 0;
+}
+
+.fishing-pond-board .nb-table {
+  table-layout: fixed;
+}
+@media (width > 48rem) {
+  .fishing-pond-board .nb-table th:first-child {
+    width: 4rem;
+  }
+  .fishing-pond-board .nb-table th:last-child {
+    width: 7rem;
+  }
+}

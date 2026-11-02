@@ -27,6 +27,7 @@ import { creditsToMilli, formatCredits, multiplyCredits } from '../common/strict
 import { BAITS, type Bait } from '../common/types';
 import { gameKeys, useGamesSnapshot } from '../common/snapshot';
 import { FishingArtwork } from './FishingArtwork';
+import { junkArtwork } from './artRegistry';
 import blueFatFish from '@shared/assets/game-fishing/blue-fat-fish.png';
 import milkCrab from '@shared/assets/game-fishing/milk-crab.png';
 import fishingScene from '@shared/assets/game-heroes/fishing.webp';
@@ -55,8 +56,15 @@ import type {
   FishingStartResult,
   FishingState,
   FishingTotalRow,
+  FishingPondReceipt,
 } from './types';
 import { fishingItemName } from './text';
+import {
+  FishingGiftSource,
+  FishingPondBoard,
+  FishingPondDisclosure,
+  FishingPondReturn,
+} from './PondInteraction';
 import './fishing.css';
 
 function useReducedMotion(): boolean {
@@ -269,7 +277,11 @@ function ResultPanel({
   ackState,
   onRetryACK,
   resultRef,
+  isPublic,
+  onPondReceipt,
 }: {
+  readonly isPublic: boolean;
+  readonly onPondReceipt: (receipt: FishingPondReceipt) => void;
   readonly result: FishingBatchResult;
   readonly revealed: number;
   readonly hasMore: boolean;
@@ -290,6 +302,7 @@ function ResultPanel({
             {revealed} / {result.outcomes.length}
           </span>
         </div>
+        <FishingPondDisclosure outcomes={result.outcomes.slice(0, revealed)} isPublic={isPublic} />
         <div className="fishing-outcomes" role="list" aria-label={text('fishing.result.title')}>
           {result.outcomes.slice(0, revealed).map((outcome) => (
             <article
@@ -323,10 +336,19 @@ function ResultPanel({
                     : text(`fishing.tier.${outcome.tier}`)}
                 </span>
               </div>
+              <FishingGiftSource outcome={outcome} />
               <div className="fishing-outcome__payout">
                 <span>{text('fishing.reward', { amount: formatCredits(outcome.netReward) })}</span>
-                <RakeDetails gross={outcome.reward} rake={outcome.rake} />
+                {outcome.pond?.returnState !== 'gift' ? (
+                  <RakeDetails gross={outcome.reward} rake={outcome.rake} />
+                ) : null}
               </div>
+              <FishingPondReturn
+                batchID={result.batchID}
+                outcome={outcome}
+                isPublic={isPublic}
+                onReceipt={onPondReceipt}
+              />
             </article>
           ))}
         </div>
@@ -450,7 +472,13 @@ function LeaderboardCard({
             </thead>
             <tbody>
               {[...rows, ...missingMe].map((row) => {
-                const score = isSingleBoard ? (
+                const zeroJunk =
+                  isSingleBoard &&
+                  (row as FishingSingleRow).sizeCM === 0 &&
+                  junkArtwork.some((art) => art.key === (row as FishingSingleRow).speciesKey);
+                const score = zeroJunk ? (
+                  text('fishing.pond.zeroCatch')
+                ) : isSingleBoard ? (
                   <span className="fishing-board__catch">
                     {presentation(row as FishingSingleRow) !== null ? (
                       <BlueFatFishImage
@@ -605,6 +633,20 @@ export function FishingGame() {
   const refetchState = state.refetch;
   const result = authoritative?.unrevealed ?? null;
   useGameSettlement(result?.batchID);
+  const cleanupBatchID = result?.outcomes.some(
+    (outcome) => outcome.pond && outcome.tier === 'junk' && outcome.speciesKey !== 'fry',
+  )
+    ? result.batchID
+    : undefined;
+  useEffect(() => {
+    if (cleanupBatchID)
+      void queryClient.invalidateQueries(
+        {
+          queryKey: ['user', 'games', 'fishing', 'pond', 'leaderboard', 'cleanup'],
+        },
+        { cancelRefetch: false },
+      );
+  }, [cleanupBatchID, queryClient]);
   useEffect(() => {
     if (result && notifyBatch.current === result.batchID) {
       notifyBatch.current = null;
@@ -828,6 +870,30 @@ export function FishingGame() {
     result,
     revealed,
   });
+  const acceptPondReceipt = useCallback(
+    (receipt: FishingPondReceipt) => {
+      const update = (batch: FishingBatchResult | null): FishingBatchResult | null =>
+        batch?.batchID === receipt.batchID
+          ? {
+              ...batch,
+              outcomes: batch.outcomes.map((outcome) =>
+                outcome.ordinal === receipt.ordinal
+                  ? { ...outcome, pond: { returnState: receipt.returnState, gift: null } }
+                  : outcome,
+              ),
+            }
+          : batch;
+      setViewedResult(update);
+      queryClient.setQueryData<FishingState>(fishingKeys.state, (current) =>
+        current ? { ...current, unrevealed: update(current.unrevealed) } : current,
+      );
+      if (receipt.returnState === 'returned')
+        void queryClient.invalidateQueries({
+          queryKey: ['user', 'games', 'fishing', 'pond', 'leaderboard', 'gifts'],
+        });
+    },
+    [queryClient],
+  );
   const closeRules = useCallback(() => setRulesOpen(false), []);
   const header = (
     <GameHeader
@@ -949,6 +1015,8 @@ export function FishingGame() {
           {shownResult ? (
             <ResultPanel
               result={shownResult}
+              isPublic={session.data?.user.game_profile_public ?? false}
+              onPondReceipt={acceptPondReceipt}
               revealed={shownRevealed}
               hasMore={authoritative?.hasMoreUnrevealed ?? false}
               ackState={result ? ackState : 'viewed'}
@@ -1092,6 +1160,16 @@ export function FishingGame() {
               id: 'total',
               label: text('fishing.leaderboard.total'),
               content: <FishingTotalBoard />,
+            },
+            {
+              id: 'cleanup',
+              label: text('fishing.pond.cleanup'),
+              content: <FishingPondBoard board="cleanup" />,
+            },
+            {
+              id: 'gifts',
+              label: text('fishing.pond.gifts'),
+              content: <FishingPondBoard board="gifts" />,
             },
             {
               id: 'profit',

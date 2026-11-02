@@ -513,3 +513,36 @@ describe('Fishing result presentation and queue recovery', () => {
     rendered.unmount();
   });
 });
+
+it('hides zero-credit junk species in legacy length boards while preserving treasure names', async () => {
+  vi.useFakeTimers();
+  stubReducedMotion(true);
+  const identity = { kind: 'anonymous' };
+  const board = {
+    board: 'recent_single',
+    window_start: 1_700_000_000,
+    entries: [
+      { rank: '1', species_key: 'boot', size_cm: 0, identity, is_me: false },
+      { rank: '2', species_key: 'bottle', size_cm: 0, identity, is_me: false },
+    ],
+    me: null,
+  };
+  installJsonFetchFixtures(
+    fishingFixtures(emptyStateWire()).map((fixture) =>
+      fixture.path === '/api/games/fishing/leaderboard?board=recent_single'
+        ? { ...fixture, body: board }
+        : fixture,
+    ),
+  );
+  const rendered = await renderWithProviders(<FishingGame />, {
+    station: 'user',
+    route: '/games/fishing',
+    role: 'user',
+  });
+  await flushInitialFishing();
+  const rankings = within(document.querySelector('.fishing-board')! as HTMLElement);
+  expect(rankings.getByText('Zero-credit catch')).toBeVisible();
+  expect(rankings.getByText(/Treasure bottle/)).toBeVisible();
+  expect(rankings.queryByText(/Old boot/)).not.toBeInTheDocument();
+  rendered.unmount();
+});
