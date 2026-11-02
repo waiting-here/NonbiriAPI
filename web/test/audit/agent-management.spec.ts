@@ -24,6 +24,21 @@ type CodexFixtureCounts = {
   denied: number;
 };
 
+async function saveBinding(page: Page, form: Locator) {
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PUT' &&
+        new URL(response.url()).pathname === '/admin/api/ai/driver-bindings',
+    ),
+    form.getByRole('button', { name: common.common.save, exact: true }).click(),
+  ]);
+  expect(response.status()).toBe(200);
+  await expect(form.getByRole('combobox')).toBeEnabled();
+  await expect(form.getByText(common.common.outcome.saved, { exact: true })).toBeVisible();
+  await expect(form.getByRole('button', { name: common.common.save, exact: true })).toBeDisabled();
+}
+
 async function inspectLayouts(page: Page, name: string, anchor?: Locator) {
   for (const theme of ['light', 'dark']) {
     await page.evaluate((value) => {
@@ -99,10 +114,7 @@ test('administrator configures a source, edits personal memory and cleans retain
     await assignment
       .getByLabel(copy.drivers.scopes.admin_chat, { exact: true })
       .selectOption(profile.id);
-    await assignment.getByRole('button', { name: common.common.save, exact: true }).click();
-    await expect(
-      assignment.getByRole('button', { name: common.common.save, exact: true }),
-    ).toBeDisabled();
+    await saveBinding(page, assignment);
     await page
       .getByRole('heading', { name: copy.drivers.sources, exact: true })
       .scrollIntoViewIfNeeded();
@@ -225,10 +237,7 @@ test('administrator assigns Codex individually and retains readable changes afte
       has: page.getByLabel(copy.drivers.scopes.admin_chat, { exact: true }),
     });
     await administrator.getByRole('combobox').selectOption(profile.id);
-    await administrator.getByRole('button', { name: common.common.save, exact: true }).click();
-    await expect(
-      administrator.getByRole('button', { name: common.common.save, exact: true }),
-    ).toBeDisabled();
+    await saveBinding(page, administrator);
     const individual = bindings.locator('details').filter({
       has: page.locator('summary', { hasText: copy.drivers.individual }),
     });
@@ -237,10 +246,7 @@ test('administrator assigns Codex individually and retains readable changes afte
     await individual.getByLabel(copy.drivers.steward, { exact: true }).selectOption(steward.id);
     const personal = individual.locator('form');
     await personal.getByRole('combobox').selectOption(profile.id);
-    await personal.getByRole('button', { name: common.common.save, exact: true }).click();
-    await expect(
-      personal.getByRole('button', { name: common.common.save, exact: true }),
-    ).toBeDisabled();
+    await saveBinding(page, personal);
     const assigned = (await readConfiguration()).bindings.filter(
       (entry: { driver_id: string }) => entry.driver_id === profile.id,
     );
@@ -262,10 +268,7 @@ test('administrator assigns Codex individually and retains readable changes afte
     await expect(sources.getByText(revisedName, { exact: true })).toBeVisible();
     for (const binding of [administrator, personal]) {
       await binding.getByRole('combobox').selectOption('');
-      await binding.getByRole('button', { name: common.common.save, exact: true }).click();
-      await expect(
-        binding.getByRole('button', { name: common.common.save, exact: true }),
-      ).toBeDisabled();
+      await saveBinding(page, binding);
     }
     await form.getByRole('button', { name: common.common.connections.delete, exact: true }).click();
     await form

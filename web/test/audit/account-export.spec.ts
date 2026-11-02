@@ -59,25 +59,30 @@ test('account page downloads the current export with personal session-header set
     const page = await context.newPage();
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    const responsePending = page.waitForResponse(
-      (response) =>
-        response.request().method() === 'POST' &&
-        new URL(response.url()).pathname === '/api/account/export',
-    );
-    const downloadPending = page.waitForEvent('download');
-    await page.goto(state.user_url + '/account');
-    const response = await responsePending;
-    expect(response.status()).toBe(200);
-    const filename = 'nonbiriapi-account-export-v31.json';
-    expect(response.headers()['content-disposition']).toBe(`attachment; filename="${filename}"`);
-    const download = await downloadPending;
+    const filename = 'nonbiriapi-account-export-v32.json';
+    const [, download] = await Promise.all([
+      page
+        .waitForResponse(
+          (response) =>
+            response.request().method() === 'POST' &&
+            new URL(response.url()).pathname === '/api/account/export',
+        )
+        .then((response) => {
+          expect(response.status()).toBe(200);
+          expect(response.headers()['content-disposition']).toBe(
+            `attachment; filename="${filename}"`,
+          );
+        }),
+      page.waitForEvent('download'),
+      page.goto(state.user_url + '/account'),
+    ]);
     expect(download.suggestedFilename()).toBe(filename);
     const exported = JSON.parse(await readFile((await download.path())!, 'utf8')) as {
       schema_version: number;
       user: { id: string };
       models: { id: string; session_headers: unknown }[];
     };
-    expect(exported.schema_version).toBe(31);
+    expect(exported.schema_version).toBe(32);
     expect(exported.user.id).toBe(account.user_id);
     expect(exported.models.find((entry) => entry.id === model.id)?.session_headers).toEqual(
       sessionHeaders,
