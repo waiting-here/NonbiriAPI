@@ -79,11 +79,15 @@ func (repository *Repository) beginStewardReadOn(
 	if repository == nil || database == nil || ctx == nil || stewardUserID <= 0 || authorizer == nil {
 		return nil, false, ErrInvalid
 	}
+	acquired := observeLogRead(ctx, "acquire")
 	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	acquired(err)
 	if err != nil {
 		return nil, false, translateReadError(ctx, err)
 	}
+	authorized := observeLogRead(ctx, "authorize")
 	redact, err := authorizer.AuthorizeStewardLogRead(ctx, tx, stewardUserID)
+	authorized(err)
 	if err != nil {
 		_ = tx.Rollback()
 		if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -108,6 +112,7 @@ func (repository *Repository) authorizeStewardRead(
 	if repository == nil || ctx == nil {
 		return ErrInvalid
 	}
+	ctx = logReadContext(ctx, "steward_precheck")
 	ctx, cancel := context.WithTimeout(ctx, logPageTimeout)
 	defer cancel()
 	tx, _, err := repository.beginStewardReadOn(ctx, repository.readDB, stewardUserID, authorizer)

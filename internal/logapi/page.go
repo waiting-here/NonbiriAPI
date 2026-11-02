@@ -21,11 +21,16 @@ type logReadQueryer interface {
 // The route establishes the session identity; page reads repeat its current
 // account check in the same snapshot as the authorized count and rows.
 func (r *Repository) beginPageRead(ctx context.Context, role string, actorID, now int64) (*sql.Tx, error) {
+	acquired := observeLogRead(ctx, "acquire")
 	tx, err := r.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	acquired(err)
 	if err != nil {
 		return nil, translateReadError(ctx, err)
 	}
-	if err := r.authorizeRead(ctx, tx, role, actorID, now); err != nil {
+	authorized := observeLogRead(ctx, "authorize")
+	err = r.authorizeRead(ctx, tx, role, actorID, now)
+	authorized(err)
+	if err != nil {
 		_ = tx.Rollback()
 		return nil, err
 	}
@@ -67,7 +72,10 @@ func logPageQuery(ctx context.Context, reader logReadQueryer, selection, countSe
 		return selection + order + ` LIMIT ?`, append(args, limit+1), nil, nil
 	}
 	var total int64
-	if err := reader.QueryRowContext(ctx, countSelection, args...).Scan(&total); err != nil {
+	counted := observeLogRead(ctx, "count")
+	err := reader.QueryRowContext(ctx, countSelection, args...).Scan(&total)
+	counted(err)
+	if err != nil {
 		return "", nil, nil, translateReadError(ctx, err)
 	}
 	metadata, offset, err := requested.Window(total)

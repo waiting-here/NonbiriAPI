@@ -42,6 +42,8 @@ func TestDatabasePhasesRejectUnregisteredLabels(t *testing.T) {
 	LifecycleStage(ctx, "private-phase", "claims")(nil)
 	LifecycleStage(ctx, "recovery", "private-user")(nil)
 	CompletionStage(ctx, "private-user")(nil)
+	LogReadPhase(ctx, "private-user", "count")(nil)
+	LogReadPhase(ctx, "admin", "private-model")(nil)
 	if rows := p.Drain(); len(rows) != 0 {
 		t.Fatalf("unregistered labels recorded: %+v", rows)
 	}

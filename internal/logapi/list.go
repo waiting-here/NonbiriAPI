@@ -27,10 +27,11 @@ const (
 	upstreamModelPredicate = ` AND l.id IN (SELECT request_log_id FROM request_attempts WHERE upstream_model_id=?)`
 )
 
-func (repository *Repository) ListUser(ctx context.Context, userID int64, filter ListFilter) (Page[UserLogRow], error) {
+func (repository *Repository) ListUser(ctx context.Context, userID int64, filter ListFilter) (result Page[UserLogRow], resultErr error) {
 	if repository == nil || ctx == nil || userID <= 0 {
 		return Page[UserLogRow]{}, ErrInvalid
 	}
+	ctx = logReadContext(ctx, "user")
 	filter, err := normalizeListFilter(filter, "user")
 	if err != nil {
 		return Page[UserLogRow]{}, err
@@ -90,6 +91,8 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 	if err != nil {
 		return Page[UserLogRow]{}, err
 	}
+	finishRows := observeLogRead(ctx, "rows")
+	defer func() { finishRows(resultErr) }()
 	rows, err := reader.QueryContext(ctx, query, args...)
 	if err != nil {
 		return Page[UserLogRow]{}, translateReadError(ctx, err)
@@ -155,6 +158,7 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 		page.NextCursor = &next
 	}
 	if tx != nil {
+		finishRows(nil)
 		if err := tx.Commit(); err != nil {
 			return Page[UserLogRow]{}, translateReadError(ctx, err)
 		}
@@ -162,10 +166,11 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 	return page, nil
 }
 
-func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) (Page[AdminLogRow], error) {
+func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) (result Page[AdminLogRow], resultErr error) {
 	if repository == nil || ctx == nil {
 		return Page[AdminLogRow]{}, ErrInvalid
 	}
+	ctx = logReadContext(ctx, "admin")
 	filter, err := normalizeListFilter(filter, "admin")
 	if err != nil {
 		return Page[AdminLogRow]{}, err
@@ -237,10 +242,12 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 		query += ` AND l.started_at<?`
 		args = append(args, *filter.To)
 	}
-	if filter.CharityModel != nil {
-		query += charityModelPredicate
-		args = append(args, *filter.CharityModel)
+	modelPredicate, modelArgs, err := charityModelFilter(ctx, reader, filter)
+	if err != nil {
+		return Page[AdminLogRow]{}, err
 	}
+	query += modelPredicate
+	args = append(args, modelArgs...)
 	if cursor.rowID != 0 {
 		query += ` AND (l.started_at<? OR (l.started_at=? AND l.id<?))`
 		args = append(args, cursor.startedAt, cursor.startedAt, cursor.rowID)
@@ -249,6 +256,8 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 	if err != nil {
 		return Page[AdminLogRow]{}, err
 	}
+	finishRows := observeLogRead(ctx, "rows")
+	defer func() { finishRows(resultErr) }()
 	rows, err := reader.QueryContext(ctx, query, args...)
 	if err != nil {
 		return Page[AdminLogRow]{}, translateReadError(ctx, err)
@@ -298,6 +307,7 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 		if err := rows.Close(); err != nil {
 			return Page[AdminLogRow]{}, translateReadError(ctx, err)
 		}
+		finishRows(nil)
 		if err := tx.Commit(); err != nil {
 			return Page[AdminLogRow]{}, translateReadError(ctx, err)
 		}
@@ -310,10 +320,11 @@ func (repository *Repository) ListSteward(
 	stewardUserID int64,
 	filter ListFilter,
 	authorizer StewardAuthorizer,
-) (Page[StewardLogRow], error) {
+) (result Page[StewardLogRow], resultErr error) {
 	if repository == nil || ctx == nil || stewardUserID <= 0 || authorizer == nil {
 		return Page[StewardLogRow]{}, ErrInvalid
 	}
+	ctx = logReadContext(ctx, "steward")
 	filter, err := normalizeListFilter(filter, "steward")
 	if err != nil {
 		return Page[StewardLogRow]{}, err
@@ -383,10 +394,12 @@ func (repository *Repository) ListSteward(
 		query += ` AND l.started_at<?`
 		args = append(args, *filter.To)
 	}
-	if filter.CharityModel != nil {
-		query += charityModelPredicate
-		args = append(args, *filter.CharityModel)
+	modelPredicate, modelArgs, err := charityModelFilter(ctx, tx, filter)
+	if err != nil {
+		return Page[StewardLogRow]{}, err
 	}
+	query += modelPredicate
+	args = append(args, modelArgs...)
 	if cursor.rowID != 0 {
 		query += ` AND (l.started_at<? OR (l.started_at=? AND l.id<?))`
 		args = append(args, cursor.startedAt, cursor.startedAt, cursor.rowID)
@@ -396,6 +409,8 @@ func (repository *Repository) ListSteward(
 		return Page[StewardLogRow]{}, err
 	}
 
+	finishRows := observeLogRead(ctx, "rows")
+	defer func() { finishRows(resultErr) }()
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return Page[StewardLogRow]{}, translateReadError(ctx, err)
@@ -446,6 +461,7 @@ func (repository *Repository) ListSteward(
 		}
 		page.NextCursor = &next
 	}
+	finishRows(nil)
 	if err := tx.Commit(); err != nil {
 		return Page[StewardLogRow]{}, translateReadError(ctx, err)
 	}

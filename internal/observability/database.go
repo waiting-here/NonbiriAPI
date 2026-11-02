@@ -37,6 +37,22 @@ func DatabasePhase(ctx context.Context, operation, phase string) func(error) {
 	}
 }
 
+// LogReadPhase separates pool acquisition, authorization and query work.
+// Labels never include a filter, model name, account or SQL text.
+func LogReadPhase(ctx context.Context, role, phase string) func(error) {
+	switch role {
+	case "user", "admin", "steward", "steward_precheck":
+	default:
+		return func(error) {}
+	}
+	switch phase {
+	case "acquire", "authorize", "models", "count", "rows":
+		return boundedOperationTimer(ctx, "log_read."+role+"."+phase)
+	default:
+		return func(error) {}
+	}
+}
+
 // CompletionStage records bounded scheduler stages. Batch-size and overflow
 // rows are event counts; queue, connection and transaction times overlap.
 func CompletionStage(ctx context.Context, stage string) func(error) {

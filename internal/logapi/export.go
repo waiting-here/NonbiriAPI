@@ -23,6 +23,7 @@ func (repository *Repository) ExportAdmin(ctx context.Context, filter ListFilter
 	if repository == nil || ctx == nil {
 		return nil, ErrInvalid
 	}
+	ctx = logReadContext(ctx, "admin")
 	ctx, cancel := context.WithTimeout(ctx, logPageTimeout)
 	defer cancel()
 	if repository.readAuth == nil {
@@ -53,6 +54,7 @@ func (repository *Repository) ExportSteward(ctx context.Context, userID int64, f
 	if repository == nil || ctx == nil || userID <= 0 || authorizer == nil {
 		return nil, ErrInvalid
 	}
+	ctx = logReadContext(ctx, "steward")
 	ctx, cancel := context.WithTimeout(ctx, logPageTimeout)
 	defer cancel()
 	tx, _, err := repository.beginStewardReadOn(ctx, repository.readDB, userID, authorizer)
@@ -70,7 +72,7 @@ func (repository *Repository) ExportSteward(ctx context.Context, userID int64, f
 	return rows, nil
 }
 
-func (repository *Repository) exportManagement(ctx context.Context, reader logReadQueryer, filter ListFilter) ([]AdminLogRow, error) {
+func (repository *Repository) exportManagement(ctx context.Context, reader logReadQueryer, filter ListFilter) (result []AdminLogRow, resultErr error) {
 	if filter.Cursor != "" || filter.Limit != 0 || filter.Model != nil || filter.Page != nil {
 		return nil, ErrInvalid
 	}
@@ -135,18 +137,22 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		query += ` AND l.started_at<?`
 		args = append(args, *normalized.To)
 	}
-	if normalized.CharityModel != nil {
-		query += charityModelPredicate
-		args = append(args, *normalized.CharityModel)
+	modelPredicate, modelArgs, err := charityModelFilter(ctx, reader, normalized)
+	if err != nil {
+		return nil, err
 	}
+	query += modelPredicate
+	args = append(args, modelArgs...)
 	query += ` ORDER BY l.started_at ASC,l.id ASC LIMIT ?`
 	args = append(args, maxExportRows+1)
+	finishRows := observeLogRead(ctx, "rows")
+	defer func() { finishRows(resultErr) }()
 	rows, err := reader.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, translateReadError(ctx, err)
 	}
 	defer rows.Close()
-	result := make([]AdminLogRow, 0, 256)
+	result = make([]AdminLogRow, 0, 256)
 	for rows.Next() {
 		var userID sql.NullInt64
 		record, identity, scanErr := scanManagementCommon(rows, &userID)

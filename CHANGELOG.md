@@ -4,6 +4,16 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## Unreleased
+
+### Fixed
+
+- Speed up historical charity-model log searches by resolving matching names
+  once within the authorized read snapshot, then using the existing model
+  index. Preserve substring matching, pagination, retention and query limits.
+- Separate log-read connection waits, authorization, model lookup, counting
+  and row consumption in anonymous performance metrics.
+
 ## 1.3.4 — 2026-11-02
 
 ### Pond interaction
