@@ -493,3 +493,8 @@
 :is(.bj-board, .catch-game, .gacha-app, .gacha-dialog) .credit-number {
   --nb-credit-fraction-color: currentColor;
 }
+
+/* Selected tier cards need their full foreground on the private tinted paper. */
+.bidding-game .bid-modes .credit-number {
+  --nb-credit-fraction-color: currentColor;
+}

@@ -102,6 +102,10 @@ for (const theme of ['light', 'dark']) {
       gacha.credits = { general: '0.001', game: '0.001' };
       gacha.shop.permanent_price = '0.001';
       await page.route('**/api/gacha/state', (route) => route.fulfill({ json: gacha }));
+      await page.route('**/api/gacha/actions', (route) => {
+        expect(route.request().postDataJSON()).toMatchObject({ action: 'enter' });
+        return route.fulfill({ json: { snapshot: gacha } });
+      });
       await page.route('**/api/gacha/entry', (route) =>
         route.fulfill({ json: { enabled: true, entered: true, pools: [] } }),
       );
@@ -138,18 +142,28 @@ for (const theme of ['light', 'dark']) {
       ['/games/fishing', '.game-wallets'],
     ]) {
       await page.goto(USER_ORIGIN + path);
-      const region = page.locator(selector);
-      await expect(region).toBeVisible();
-      const amount = region.locator('.credit-number').filter({ hasText: '170,141' }).first();
-      await expect(amount).toHaveText('170,141,183,460,469,231,731,687,303,715,884,105.727');
-      await amount.scrollIntoViewIfNeeded();
-      const bounds = await amount.evaluate((element) => {
-        const range = document.createRange();
-        range.selectNodeContents(element);
-        return [...range.getClientRects()].map((rect) => ({ left: rect.left, right: rect.right }));
-      });
-      expect(bounds.every((rect) => rect.left >= 0 && rect.right <= 391)).toBe(true);
-      await recordFractions(page, `credit-extreme-${path === '/' ? 'home' : 'game'}-${theme}-390`);
+      const regions = page.locator(selector);
+      await expect(regions).not.toHaveCount(0);
+      for (let index = 0; index < (await regions.count()); index++) {
+        const region = regions.nth(index);
+        await expect(region).toBeVisible();
+        const amount = region.locator('.credit-number').filter({ hasText: '170,141' });
+        await expect(amount).toHaveText('170,141,183,460,469,231,731,687,303,715,884,105.727');
+        await amount.scrollIntoViewIfNeeded();
+        const bounds = await amount.evaluate((element) => {
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          return [...range.getClientRects()].map((rect) => ({
+            left: rect.left,
+            right: rect.right,
+          }));
+        });
+        expect(bounds.every((rect) => rect.left >= 0 && rect.right <= 391)).toBe(true);
+        await recordFractions(
+          page,
+          `credit-extreme-${path === '/' ? 'home' : 'game'}-${theme}-390-wallet-${index}`,
+        );
+      }
     }
   });
 }
