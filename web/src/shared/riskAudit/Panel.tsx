@@ -9,6 +9,7 @@ import { Link, useSearchParams } from 'react-router';
 import { queryPath } from '@shared/operations/api';
 import { ClientScans } from './ClientScans';
 import { TaskScans } from './TaskScans';
+import { SharedBrowsers } from './SharedBrowsers';
 import { TimeInput } from '@shared/components/TimeInput';
 import { TimeContextNotice } from '@shared/components/TimeContext';
 import { createTimeDraft, timeDraftValue } from '@shared/time';
@@ -21,7 +22,7 @@ import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { isPageNumber, isPageSize } from '@shared/operations/pageNumbers';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { isForbidden, isUnauthorized, isStewardPermissionDenied } from '@shared/query/http';
 import {
   accessPaths,
   riskAPI,
@@ -1734,7 +1735,8 @@ function Access({ role, scopeKey, c, filters }: Scope) {
     </div>
   );
 }
-type Tab = 'users' | 'ips' | 'user_ips' | 'clients' | 'rules' | 'config' | 'access';
+type Tab = 'users' | 'ips' | 'user_ips' | 'browsers' | 'clients' | 'rules' | 'config' | 'access';
+type PrimaryTab = Exclude<Tab, 'ips' | 'user_ips' | 'browsers'> | 'associations';
 function useAuditAuthority(role: RiskRole, scopeKey: string) {
   const client = useQueryClient(),
     [error, setError] = useState<unknown>(null);
@@ -1743,7 +1745,12 @@ function useAuditAuthority(role: RiskRole, scopeKey: string) {
     const matches = (key: readonly unknown[] | undefined) =>
       key?.[0] === 'risk' && key[1] === role && key[2] === scopeKey;
     const inspect = (value: unknown, key: readonly unknown[] | undefined) => {
-      if (revoked || !matches(key) || (!isForbidden(value) && !isUnauthorized(value))) return;
+      if (
+        revoked ||
+        !matches(key) ||
+        (!isForbidden(value) && !isUnauthorized(value) && !isStewardPermissionDenied(value))
+      )
+        return;
       revoked = true;
       setError(value);
       client.removeQueries({ queryKey: ['risk', role, scopeKey] });
@@ -1779,10 +1786,24 @@ function RiskBody({
   const [params, setParams] = useSearchParams();
   const rawTab = params.get('audit_tab') ?? '';
   const tab: Tab = (
-    ['users', 'ips', 'user_ips', 'clients', 'rules', 'config', 'access'] as string[]
+    ['users', 'ips', 'user_ips', 'browsers', 'clients', 'rules', 'config', 'access'] as string[]
   ).includes(rawTab)
     ? (rawTab as Tab)
     : 'users';
+  const associationTab = tab === 'ips' || tab === 'user_ips' || tab === 'browsers';
+  const selectTab = (value: Tab) => {
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set('audit_tab', value);
+      next.delete('audit_user');
+      next.delete('audit_user_from');
+      next.delete('audit_user_to');
+      next.delete('audit_user_watermark');
+      next.delete('audit_user_total');
+      next.set('audit_user_page', '1');
+      return next;
+    });
+  };
   const ipUser = params.get('audit_ip_user') ?? undefined;
   const selectedUser = /^[1-9][0-9]{0,18}$/.test(params.get('audit_user') ?? '')
     ? params.get('audit_user')!
@@ -1925,30 +1946,30 @@ function RiskBody({
           <p>{c.caveat}</p>
           <p>{c.autoBanHelp}</p>
         </Fold>
-        <Tabs<Tab>
+        <Tabs<PrimaryTab>
           label={c.title}
-          value={tab}
-          tabs={(['users', 'ips', 'user_ips', 'clients', 'rules', 'config', 'access'] as Tab[]).map(
-            (value) => ({
-              value,
-              label: value === 'user_ips' ? t('common.audit.userIPsTab') : c[value],
-            }),
-          )}
-          onChange={(v) => {
-            setParams((previous) => {
-              const next = new URLSearchParams(previous);
-              next.set('audit_tab', v);
-              next.delete('audit_user');
-              next.delete('audit_user_from');
-              next.delete('audit_user_to');
-              next.delete('audit_user_watermark');
-              next.delete('audit_user_total');
-              next.set('audit_user_page', '1');
-              return next;
-            });
-          }}
+          value={associationTab ? 'associations' : (tab as PrimaryTab)}
+          tabs={(
+            ['users', 'associations', 'clients', 'rules', 'config', 'access'] as PrimaryTab[]
+          ).map((value) => ({
+            value,
+            label: value === 'associations' ? t('common.audit.associations') : c[value],
+          }))}
+          onChange={(value) => selectTab(value === 'associations' ? 'browsers' : value)}
         />
-        {tab !== 'rules' && tab !== 'config' ? (
+        {associationTab ? (
+          <Tabs<Tab>
+            label={t('common.audit.associations')}
+            value={tab}
+            tabs={[
+              { value: 'browsers', label: t('common.audit.browsers.tab') },
+              { value: 'ips', label: c.ips },
+              { value: 'user_ips', label: t('common.audit.userIPsTab') },
+            ]}
+            onChange={selectTab}
+          />
+        ) : null}
+        {tab !== 'rules' && tab !== 'config' && tab !== 'browsers' ? (
           <>
             <FilterBar
               activeCount={Number(customRange) + Number(filters.kind !== 'total')}
@@ -2042,6 +2063,8 @@ function RiskBody({
           <IPs {...scope} inspect={setSelectedUser} />
         ) : tab === 'user_ips' ? (
           <UserIPWindows key={ipUser ?? 'all'} {...scope} userID={ipUser} />
+        ) : tab === 'browsers' ? (
+          <SharedBrowsers role={role} scopeKey={scopeKey} />
         ) : tab === 'clients' ? (
           <Clients {...scope} inspect={setSelectedUser} />
         ) : tab === 'rules' ? (
