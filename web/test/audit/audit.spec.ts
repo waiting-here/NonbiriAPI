@@ -905,10 +905,17 @@ test('audit presentation keeps folds, role tabs and mobile content within the vi
         await expect(page.locator('main h1')).toBeVisible();
         if (path === '/abuse-audit') {
           const tabs = page.getByRole('tablist', { name: 'Abuse audit', exact: true });
-          await expect(tabs.getByRole('tab')).toHaveCount(7);
-          for (let index = 0; index < 7; index++) {
+          await expect(tabs.getByRole('tab')).toHaveCount(6);
+          for (let index = 0; index < 6; index++) {
             await tabs.getByRole('tab').nth(index).click();
             await expect(tabs.getByRole('tab').nth(index)).toHaveAttribute('aria-selected', 'true');
+          }
+          await tabs.getByRole('tab', { name: 'Account links', exact: true }).click();
+          const accountTabs = page.getByRole('tablist', { name: 'Account links', exact: true });
+          await expect(accountTabs.getByRole('tab')).toHaveCount(3);
+          for (const tab of await accountTabs.getByRole('tab').all()) {
+            await tab.click();
+            await expect(tab).toHaveAttribute('aria-selected', 'true');
           }
           await tabs.getByRole('tab').first().click();
           await expect(
