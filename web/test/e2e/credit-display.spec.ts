@@ -19,18 +19,20 @@ async function recordFractions(page: Page, label: string) {
   const samples = (await pixelContrastSamples(page)).filter((sample) =>
     sample.selector.includes('.credit-number__fraction'),
   );
-  expect(samples.length, label + ' actual fraction samples').toBeGreaterThan(0);
-  expect(
-    samples.filter((sample) => sample.ratio < 4.5),
-    label,
-  ).toEqual([]);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const directory = process.env.NONBIRI_CREDIT_VISUAL_DIR;
   if (directory) {
     mkdirSync(directory, { recursive: true });
     await page.screenshot({ path: resolve(directory, label + '.png') });
     writeFileSync(resolve(directory, label + '.json'), JSON.stringify(samples, null, 2));
   }
+  expect(samples.length, label + ' actual fraction samples').toBeGreaterThan(0);
+  expect
+    .soft(
+      samples.filter((sample) => sample.ratio < 4.5),
+      label,
+    )
+    .toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
 
 for (const theme of ['light', 'dark']) {
@@ -57,7 +59,11 @@ for (const theme of ['light', 'dark']) {
       snapshot.steadycatch.enabled = true;
       snapshot.steadycatch.price = '0.001';
       snapshot.steadycatch.first_clear_reward = '0.001';
-      for (const mode of Object.values(snapshot.bidding.modes)) mode.ticket = '0.001';
+      snapshot.bidding.enabled = true;
+      for (const mode of Object.values(snapshot.bidding.modes)) {
+        mode.enabled = true;
+        mode.ticket = '0.001';
+      }
       const blackjack = blackjackWire();
       if (blackjack.you) {
         blackjack.you.stake = '0.001';
@@ -120,7 +126,7 @@ for (const theme of ['light', 'dark']) {
   }
 
   test(`credit extreme exact balance wraps at 390 in ${theme}`, async ({ page }) => {
-    const balance = '170141183460469231731687303715884105727.001';
+    const balance = '170141183460469231731687303715884105.727';
     await page.setViewportSize({ width: 390, height: 1000 });
     await page.addInitScript((mode) => {
       localStorage.setItem('nb.lang', 'en');
@@ -135,7 +141,7 @@ for (const theme of ['light', 'dark']) {
       const region = page.locator(selector);
       await expect(region).toBeVisible();
       const amount = region.locator('.credit-number').filter({ hasText: '170,141' }).first();
-      await expect(amount).toHaveText('170,141,183,460,469,231,731,687,303,715,884,105,727.001');
+      await expect(amount).toHaveText('170,141,183,460,469,231,731,687,303,715,884,105.727');
       await amount.scrollIntoViewIfNeeded();
       const bounds = await amount.evaluate((element) => {
         const range = document.createRange();
