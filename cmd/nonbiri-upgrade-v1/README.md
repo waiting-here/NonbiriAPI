@@ -56,13 +56,17 @@ CGO_ENABLED=0 go build -trimpath -o nonbiri-upgrade-v1 ./cmd/nonbiri-upgrade-v1
 ```
 
 Both metadata commands need no database or environment. The converter reports
-its exact sources in `offline_conversions` and target schema 45. The server
-reports current and minimum schema 45, `startup_policy="exact"` and
+its exact sources in `offline_conversions` and target schema 46. The server
+reports current and minimum schema 46, `startup_policy="exact"` and
 `upgrade_tool="nonbiri-upgrade-v1"`, with empty `source_schema_versions`,
 `source_manifest_hashes` and `offline_conversions` arrays. The converter
-retains that target policy and adds its 23 offline-source entries. These describe
+retains that target policy and adds its 24 offline-source entries. These describe
 different executables; the empty server list does not remove the converter or
 authorize a deployment helper to call it automatically.
+
+The 45-to-46 step adds empty, bounded browser association history for manual
+abuse review. It preserves existing data and never invents earlier observations.
+Account export 33 adds only the owner's safe observation and expiry times.
 
 The 44-to-45 step adds new-catch pond eligibility, a signed FIFO gift queue,
 an atomic queue-size counter, recent cleanup/contribution counts with daily
@@ -165,7 +169,7 @@ Earlier sources receive default-off MFA policies without enrollments or proofs.
 Schema 20 adds four covering indexes for request-log filtering; it changes no
 business records. Schema 21 widens endpoint tags with `noncommercial_gateway`
 and model-discovery outcomes with `region` and `unavailable`, preserving
-existing rows. The current application produces account export format 32, including own
+existing rows. The current application produces account export format 33, including own
 stored/effective steward permissions and retained policy history. Schema 36
 rebuilds the risk-rule/automatic-ban and blacklist audit tables with existing
 rows, labels, indexes and constraints preserved; new actions can record actual
@@ -192,7 +196,7 @@ conversion, remove the retired Gateway variable and `NONBIRI_SMTP_HOST`,
 `NONBIRI_SMTP_FROM` and `NONBIRI_SMTP_TLS` from the deployment environment.
 
 The [rc.7 command](../nonbiri-upgrade-rc7/README.md) remains a narrow wrapper
-accepting schema 16 and current schema 45. Both commands use one engine.
+accepting schema 16 and current schema 46. Both commands use one engine.
 `scripts/check-upgrade.sh` creates a populated synthetic source with the pinned
 rc.7 program, converts it, compares retained facts and resumes economy checks.
 The offline suite also covers the registered schema 17–26 fixtures. No

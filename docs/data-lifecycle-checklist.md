@@ -483,7 +483,7 @@ add credentials or change account export format or donation-history retention.
 Normal startup initializes absent storage or opens only exact current schema 46.
 Older, newer, unknown and incomplete databases are rejected before migration,
 repair, WAL checkpoint or recovery writes. Exact registered schema 16–26 and
-33–44 sources require a deliberate standalone-converter invocation after the
+33–45 sources require a deliberate standalone-converter invocation after the
 matching recovery set is preserved; service startup and deployment helpers must
 not apply upgrades implicitly. Atomic conversion preserves the relevant indexes,
 authorization, steward policy/audit/tag data and assistant storage. Pending
