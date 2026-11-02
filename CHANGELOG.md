@@ -34,6 +34,9 @@ Each version entry describes its source and compatibility boundary; a release ta
   column so the artwork stays visible at both sides.
 - Show the home start steps as one sequence with the next action highlighted,
   and place the wallet beside both check-ins.
+- Give the decimal point and fractional credit digits a secondary theme color
+  across shared displays and amount messages. Preserve exact values, signs,
+  copying and plain-text controls; retain readable foregrounds on game surfaces.
 - Show the API access key beside the client setup instructions on wide screens.
 - Add services and endpoints in a side sheet. Mainstream presets come first, and
   matching mainstream services appear under the address field.
