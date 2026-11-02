@@ -3,6 +3,10 @@
   --nb-color-text: var(--text);
   --nb-color-text-muted: var(--muted);
   --nb-color-surface: var(--panel);
+  --nb-color-surface-raised: var(--panel);
+  --nb-color-surface-muted: var(--nb-color-surface-alt);
+  --nb-color-surface-emphasis: var(--nb-color-surface-alt);
+  --nb-color-accent-quiet: var(--nb-color-surface-alt);
   --nb-color-surface-alt: #172e41;
   --nb-color-border: var(--line);
   --nb-color-accent: var(--mint);
@@ -38,6 +42,7 @@
 }
 @media (max-width: 40rem) {
   .catch-game .catch-navigation {
+    flex-wrap: wrap;
     gap: 6px;
     margin-bottom: 8px;
   }
@@ -69,6 +74,7 @@
   }
   .catch-game .game-wallets > div {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
     justify-content: space-between;
   }
