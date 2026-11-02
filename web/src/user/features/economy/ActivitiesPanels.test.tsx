@@ -200,7 +200,9 @@ describe('activity cards', () => {
       role: 'user',
     });
     expect(screen.getByRole('button', { name: activityCopy.welfare.claim })).toBeDisabled();
-    expect(screen.getByText('0', { exact: true })).toBeInTheDocument();
+    expect(
+      screen.getByText(activityCopy.welfare.availableAmount).nextElementSibling,
+    ).toHaveTextContent(/^0 credits$/);
     expect(claimMutation.mutateAsync).not.toHaveBeenCalled();
   });
 

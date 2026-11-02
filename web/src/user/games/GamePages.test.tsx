@@ -562,7 +562,9 @@ describe('beta.1 game pages', () => {
     await waitFor(() =>
       expect(document.querySelector('.fishing-stage')).toHaveClass('fishing-stage--l4'),
     );
-    expect(screen.getAllByText(/12,345,678,901,234,567,890\.125/).length).toBeGreaterThan(0);
+    expect(rendered.container.querySelector('.game-wallets')).toHaveTextContent(
+      '12,345,678,901,234,567,890.125',
+    );
     await rendered.user.click(screen.getByRole('button', { name: /Ten-catch batch/i }));
     expect(screen.getByText('Batch total').parentElement).toHaveTextContent('10 credits');
     await rendered.user.click(screen.getByRole('button', { name: 'How to play' }));
@@ -1414,7 +1416,7 @@ describe('beta.1 game pages', () => {
     expect(screen.getByText('Current pool streaks').parentElement).toHaveTextContent(
       'paid 0 · free 0',
     );
-    expect(screen.getByText('Welfare carry: 0.125 credits')).toBeInTheDocument();
+    expect(screen.getByText(/^Welfare carry:/)).toHaveTextContent('Welfare carry: 0.125 credits');
     expect(screen.getByRole('button', { name: 'Rock' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Raise' })).not.toBeInTheDocument();
     await rendered.user.click(screen.getByRole('button', { name: 'How to play' }));

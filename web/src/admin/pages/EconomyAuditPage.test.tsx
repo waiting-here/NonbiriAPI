@@ -150,7 +150,9 @@ describe('administrator economy audit', () => {
       locale: 'en',
     });
     expect(await screen.findByRole('heading', { name: 'Current stock' })).toBeVisible();
-    expect(screen.getAllByText('9,007,199,254,740,993.123').length).toBeGreaterThan(0);
+    expect(screen.getByText('Available user balances').nextElementSibling).toHaveTextContent(
+      /^9,007,199,254,740,993\.123$/,
+    );
     expect(screen.getByText('Negative user balances')).toBeVisible();
     expect(screen.getByLabelText('From')).toBeVisible();
     expect(container.querySelectorAll('.time-context-notice')).toHaveLength(1);
