@@ -117,6 +117,9 @@ func (service *Service) settle(ctx context.Context, batchID string, expectedUser
 		if err := applyLengthFact(ctx, tx, record); err != nil {
 			return err
 		}
+		if err := service.settlePondTx(ctx, tx, record, decisionNow); err != nil {
+			return err
+		}
 		result, updateErr := tx.ExecContext(ctx, `UPDATE game_fishing_batches SET state='committed',ledger_rows_remaining=?,attempt_count=0,next_attempt_at=NULL,last_error_class=NULL,retry_exhausted=0,settled_at=? WHERE id=? AND user_id=? AND state='reserved'`, zero, decisionNow, record.ID, record.UserID)
 		if updateErr != nil {
 			return classifyDB(updateErr)
@@ -249,8 +252,9 @@ func loadResultTx(ctx context.Context, tx *sql.Tx, record batchRecord, replay bo
 	if err != nil {
 		return nil, ErrInvariant
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT o.ordinal,o.species_key,o.tier,o.size_cm,o.payout_milli,CASE WHEN l.kind='blue' THEN l.length_cm END,CASE WHEN l.kind='milk' THEN l.length_cm END,COALESCE(o.net_payout_milli,o.payout_milli),o.platform_cut_milli,o.welfare_cut_milli,o.thursday_cut_milli
+	rows, err := tx.QueryContext(ctx, `SELECT o.ordinal,COALESCE(p.gift_species_key,o.species_key),o.tier,o.size_cm,o.payout_milli,CASE WHEN l.kind='blue' THEN l.length_cm END,CASE WHEN l.kind='milk' THEN l.length_cm END,COALESCE(o.net_payout_milli,o.payout_milli),o.platform_cut_milli,o.welfare_cut_milli,o.thursday_cut_milli,p.ordinal,p.returned_at,p.gift_species_key,p.donor_display_name,p.donor_avatar_url
 FROM game_fishing_outcomes o LEFT JOIN game_fishing_outcome_lengths l ON l.batch_id=o.batch_id AND l.ordinal=o.ordinal
+LEFT JOIN game_fishing_pond_outcomes p ON p.batch_id=o.batch_id AND p.ordinal=o.ordinal
 WHERE o.batch_id=? ORDER BY o.ordinal`, record.ID)
 	if err != nil {
 		return nil, classifyDB(err)
@@ -260,8 +264,13 @@ WHERE o.batch_id=? ORDER BY o.ordinal`, record.ID)
 	for rows.Next() {
 		var outcome FishingOutcome
 		var payout, net, platform, welfare, thursday int64
-		if err = rows.Scan(&outcome.Ordinal, &outcome.SpeciesKey, &outcome.Tier, &outcome.SizeCM, &payout, &outcome.BlueFatFishLengthCM, &outcome.MilkCrabLengthCM, &net, &platform, &welfare, &thursday); err != nil {
+		var pondOrdinal, returnedAt sql.NullInt64
+		var giftSpecies, donorName, donorAvatar sql.NullString
+		if err = rows.Scan(&outcome.Ordinal, &outcome.SpeciesKey, &outcome.Tier, &outcome.SizeCM, &payout, &outcome.BlueFatFishLengthCM, &outcome.MilkCrabLengthCM, &net, &platform, &welfare, &thursday, &pondOrdinal, &returnedAt, &giftSpecies, &donorName, &donorAvatar); err != nil {
 			return nil, classifyDB(err)
+		}
+		if pondOrdinal.Valid {
+			outcome.Pond = projectPondOutcome(outcome.SpeciesKey, returnedAt, giftSpecies, donorName, donorAvatar)
 		}
 		if !ValidExportOutcome(outcome) {
 			return nil, ErrInvariant

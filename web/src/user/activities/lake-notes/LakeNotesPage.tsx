@@ -1,3 +1,4 @@
+import { CreditText } from '@shared/components/CreditText';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
@@ -122,12 +123,14 @@ function LakeExchange({
       <h2>{text('exchangeHeading')}</h2>
       {rate && rateUnits ? (
         <p>
-          {text('exchangeHelp', {
-            source: formatCredits(unitsToNatural(rate.source_amount, rateUnits[0])),
-            sourceUnit: text(rateUnits[0]),
-            target: formatCredits(unitsToNatural(rate.target_amount, rateUnits[1])),
-            targetUnit: text(rateUnits[1]),
-          })}
+          <CreditText
+            i18nKey="user.lakeNotes.exchangeHelp"
+            amounts={{
+              sourceAmount: formatCredits(unitsToNatural(rate.source_amount, rateUnits[0])),
+              targetAmount: formatCredits(unitsToNatural(rate.target_amount, rateUnits[1])),
+            }}
+            values={{ sourceUnit: text(rateUnits[0]), targetUnit: text(rateUnits[1]) }}
+          />
         </p>
       ) : null}
       <form
@@ -181,12 +184,14 @@ function LakeExchange({
       </form>
       {quote && pair ? (
         <p className="lake-quote">
-          {text('quoteAmounts', {
-            source: formatCredits(unitsToNatural(quote.source_amount, pair[0])),
-            sourceUnit: text(pair[0]),
-            target: formatCredits(unitsToNatural(quote.target_amount, pair[1])),
-            targetUnit: text(pair[1]),
-          })}
+          <CreditText
+            i18nKey="user.lakeNotes.quoteAmounts"
+            amounts={{
+              sourceAmount: formatCredits(unitsToNatural(quote.source_amount, pair[0])),
+              targetAmount: formatCredits(unitsToNatural(quote.target_amount, pair[1])),
+            }}
+            values={{ sourceUnit: text(pair[0]), targetUnit: text(pair[1]) }}
+          />
         </p>
       ) : null}
       {error || operation.error ? <ErrorState error={error ?? operation.error} /> : null}

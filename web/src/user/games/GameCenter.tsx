@@ -1,3 +1,4 @@
+import { CreditText } from '@shared/components/CreditText';
 import { Panel, PanelHead, PanelBody } from '@shared/components/ui';
 import { GameWallets } from './common/GameWallets';
 import { Link } from 'react-router';
@@ -7,7 +8,7 @@ import { ErrorState, LoadingState, PageHeader } from '@shared/components/States'
 import { GameHero, type GameHeroKind } from './assets/GameHero';
 import { useGameCopy, type GameCopyKey } from './copy';
 import { isMaintenance } from './common/request';
-import { formatCredits } from './common/strict';
+import { creditsToMilli, formatCredits } from './common/strict';
 import { useGamesSnapshot } from './common/snapshot';
 import type { GamesSnapshot } from './common/types';
 import './games.css';
@@ -20,18 +21,25 @@ interface CenterCard {
   readonly title: GameCopyKey;
   readonly body: GameCopyKey;
   readonly state: Availability;
-  readonly detail: string;
-  readonly total?: number;
+  readonly price?: string;
+}
+
+function minimumPrice(prices: readonly string[]): string | undefined {
+  return prices.reduce<string | undefined>(
+    (lowest, price) =>
+      lowest === undefined || creditsToMilli(price) < creditsToMilli(lowest) ? price : lowest,
+    undefined,
+  );
 }
 
 function cardState(
   snapshot: GamesSnapshot,
   kind: GameHeroKind,
-): { state: Availability; detail: string; total?: number } {
+): { state: Availability; price?: string } {
   if (kind === 'lakenotes')
     return {
       state: snapshot.gamesEnabled && snapshot.lakenotes.enabled ? 'open' : 'closed',
-      detail: '',
+      price: '0',
     };
   if (kind === 'steadycatch')
     return {
@@ -39,7 +47,7 @@ function cardState(
         snapshot.gamesEnabled && snapshot.steadycatch.enabled && snapshot.steadycatch.available
           ? 'open'
           : 'closed',
-      detail: formatCredits(snapshot.steadycatch.price),
+      price: snapshot.steadycatch.price,
     };
   if (kind === 'blackjack')
     return {
@@ -47,36 +55,42 @@ function cardState(
         snapshot.gamesEnabled && snapshot.blackjack.enabled && snapshot.blackjack.available
           ? 'open'
           : 'closed',
-      detail: formatCredits(snapshot.blackjack.min_stake),
+      price: snapshot.blackjack.min_stake,
     };
-  if (kind === 'fishing') {
+  if (kind === 'fishing')
     return {
       state:
         snapshot.gamesEnabled && snapshot.fishing.enabled && snapshot.fishing.available
           ? 'open'
           : 'closed',
-      detail: formatCredits(snapshot.fishing.baitPrices.worm),
+      price: minimumPrice(Object.values(snapshot.fishing.baitPrices)),
     };
-  }
   if (kind === 'linklink') {
-    const values = Object.values(snapshot.linklink.specs);
-    const count =
-      snapshot.gamesEnabled && snapshot.linklink.enabled
-        ? values.filter((spec) => spec.enabled).length
-        : 0;
+    const specs = Object.values(snapshot.linklink.specs).filter((spec) => spec.enabled);
     return {
-      state: count > 0 ? 'open' : 'closed',
-      detail: String(count),
-      total: values.length,
+      state:
+        snapshot.gamesEnabled && snapshot.linklink.enabled && specs.length > 0 ? 'open' : 'closed',
+      price: minimumPrice(specs.map((spec) => spec.price)),
     };
   }
+  if (kind === 'rps')
+    return {
+      state:
+        snapshot.gamesEnabled &&
+        snapshot.rps.enabled &&
+        Object.values(snapshot.rps.modes).some((mode) => mode.enabled)
+          ? 'open'
+          : 'closed',
+    };
   const game = snapshot[kind];
-  const modes = Object.values(game.modes);
-  const count =
-    snapshot.gamesEnabled && game.enabled && (!('available' in game) || game.available)
-      ? modes.filter((mode) => mode.enabled && (!('available' in mode) || mode.available)).length
-      : 0;
-  return { state: count > 0 ? 'open' : 'closed', detail: String(count), total: modes.length };
+  const modes = Object.values(game.modes).filter((mode) => mode.enabled && mode.available);
+  return {
+    state:
+      snapshot.gamesEnabled && game.enabled && game.available && modes.length > 0
+        ? 'open'
+        : 'closed',
+    price: minimumPrice(modes.map((mode) => mode.ticket)),
+  };
 }
 
 function GameCard({ card }: { card: CenterCard }) {
@@ -88,13 +102,18 @@ function GameCard({ card }: { card: CenterCard }) {
         : text('common.open')
       : text('presentation.unavailable');
   const detail =
-    card.id === 'lakenotes'
-      ? ''
-      : card.id === 'fishing' || card.id === 'blackjack' || card.id === 'steadycatch'
-        ? text('center.from', { amount: card.detail })
-        : text(card.detail === String(card.total) ? 'center.modesAll' : 'center.modes', {
-            count: card.detail,
-          });
+    card.id === 'lakenotes' ? (
+      ''
+    ) : card.price === undefined ? (
+      text('center.reviewCosts')
+    ) : creditsToMilli(card.price) === 0n ? (
+      text('center.free')
+    ) : (
+      <CreditText
+        i18nKey="user.games.copy.center.from"
+        amounts={{ amount: formatCredits(card.price) }}
+      />
+    );
   const reward = text(
     card.id === 'lakenotes'
       ? 'center.free'
@@ -152,7 +171,7 @@ export function GameCenter() {
   ).map((id) => {
     const availability =
       maintenance || !snapshot.data
-        ? { state: 'maintenance' as const, detail: '' }
+        ? { state: 'maintenance' as const }
         : cardState(snapshot.data, id);
     return {
       id,

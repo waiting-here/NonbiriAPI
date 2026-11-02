@@ -106,6 +106,8 @@ describe('server-projected charity prices', () => {
     expect(screen.getByText('Long context: input ≥ 100,000 tokens')).toBeVisible();
     expect(screen.getByLabelText('Current price: 150')).toBeVisible();
     expect(screen.getByText('Context penalty: input ≥ 200,000 tokens')).toBeVisible();
-    expect(screen.getByText('Extra 50 credits per request, without a discount')).toBeVisible();
+    expect(
+      screen.getByText('Context penalty: input ≥ 200,000 tokens').parentElement,
+    ).toHaveTextContent('Extra 50 credits per request, without a discount');
   });
 });

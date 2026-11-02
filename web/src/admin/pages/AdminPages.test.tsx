@@ -197,10 +197,11 @@ describe('administrator paged operation pages', () => {
       locale: 'en',
       route: '/users',
     });
-    expect(await screen.findByText('8,007,199,254,740.123')).toBeVisible();
-    expect(screen.getByText('Trusted steward')).toBeVisible();
+    expect(await screen.findByText('Trusted steward')).toBeVisible();
+    const userRow = screen.getByRole('row', { name: /Trusted steward/ });
+    expect(userRow).toHaveTextContent('8,007,199,254,740.123');
     expect(screen.getByText(/1234…5678/)).toHaveAttribute('title', '#7 · 123456789012345678');
-    expect(screen.queryByText('8007199254740.123')).not.toBeInTheDocument();
+    expect(userRow).not.toHaveTextContent('8007199254740.123');
   });
 
   it('closes a previously loaded user editor when the list loses authority', async () => {

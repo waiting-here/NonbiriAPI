@@ -646,6 +646,8 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
     '/api/charity/models?view=catalog&page=1&page_size=50&q=needle&allowed_for_me=true&currently_available=true',
   );
 
+  await expect(page.getByRole('combobox', { name: '本人访问权限', exact: true })).toBeHidden();
+  await page.locator('.economy-catalog-filters .nb-filter__more > summary').click();
   await expect(page.getByRole('combobox', { name: '本人访问权限', exact: true })).toBeVisible();
   await page.getByRole('combobox', { name: '本人访问权限', exact: true }).selectOption('false');
   await expect(page.getByText('[公益]provider/denied', { exact: true })).toBeVisible();

@@ -302,13 +302,17 @@ for (const [width, theme] of [
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
           true,
         );
+        if (width === 390) {
+          const inputBox = await control.getByLabel(copy.label).boundingBox();
+          const controlBox = await control.boundingBox();
+          expect(inputBox).not.toBeNull();
+          expect(controlBox).not.toBeNull();
+          expect(inputBox!.width).toBeGreaterThanOrEqual(controlBox!.width - 1);
+          expect(inputBox!.height).toBeGreaterThanOrEqual(40);
+        }
         if (process.env.NONBIRI_VISUAL_DIR) {
           await mkdir(process.env.NONBIRI_VISUAL_DIR, { recursive: true });
           await control.getByLabel(copy.label).focus();
-          if (width === 390) {
-            const inputBox = await control.getByLabel(copy.label).boundingBox();
-            expect(inputBox?.width).toBeGreaterThanOrEqual(280);
-          }
           await page.screenshot({
             path: resolve(
               process.env.NONBIRI_VISUAL_DIR,

@@ -3,7 +3,7 @@ import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { Link, useLocation } from 'react-router';
 import { ApiAddressCopy, apiAddress, markOnboarding } from '../features/core/onboarding';
 import { PersonalAutomationGuide } from '../features/core/PersonalAutomationGuide';
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { PageHeader } from '@shared/components/States';
@@ -129,7 +129,14 @@ function ClientInstructions() {
   );
 }
 
-export function CallerKeyPanel({ accountId }: { accountId: string }) {
+export function CallerKeyPanel({
+  accountId,
+  children,
+}: {
+  accountId: string;
+  /** Extra guides shown after the client instructions. */
+  children?: ReactNode;
+}) {
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
   const authority = useCallerKey(accountId);
@@ -386,69 +393,78 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
         </section>
       ) : null}
 
-      <section className="nb-panel">
-        <div className="nb-panel__head">
-          <h2>{t('keys.metadataTitle')}</h2>
-          <button
-            type="button"
-            className={metadata ? 'nb-btn nb-btn--secondary' : 'nb-btn nb-btn--primary'}
-            disabled={actionDisabled}
-            onClick={trigger}
-          >
-            {state.mutation === 'pending'
-              ? t('common.working')
-              : metadata
-                ? t('keys.rotate')
-                : t('keys.generate')}
-          </button>
-        </div>
-        {authority.isPending && !state.authority ? (
-          <CoreLoading compact />
-        ) : authority.error && !state.authority ? (
-          <CoreErrorPanel
-            error={authority.error}
-            compact
-            onRetry={() => void authority.refetch()}
+      <div className="api-access-layout">
+        <section className="nb-panel api-access-key">
+          <div className="nb-panel__head">
+            <h2>{t('keys.metadataTitle')}</h2>
+            <button
+              type="button"
+              className={metadata ? 'nb-btn nb-btn--secondary' : 'nb-btn nb-btn--primary'}
+              disabled={actionDisabled}
+              onClick={trigger}
+            >
+              {state.mutation === 'pending'
+                ? t('common.working')
+                : metadata
+                  ? t('keys.rotate')
+                  : t('keys.generate')}
+            </button>
+          </div>
+          {authority.isPending && !state.authority ? (
+            <CoreLoading compact />
+          ) : authority.error && !state.authority ? (
+            <CoreErrorPanel
+              error={authority.error}
+              compact
+              onRetry={() => void authority.refetch()}
+            />
+          ) : state.authority && metadata ? (
+            <dl className="nb-facts">
+              <div>
+                <dt>{t('keys.display')}</dt>
+                <dd>
+                  <code className="core-mono">{metadata.display}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>{t('common.created')}</dt>
+                <dd>
+                  <CoreTime value={metadata.created_at} />
+                </dd>
+              </div>
+              <div>
+                <dt>{t('common.updated')}</dt>
+                <dd>
+                  <CoreTime value={metadata.updated_at} />
+                </dd>
+              </div>
+            </dl>
+          ) : state.authority ? (
+            <Note title={t('keys.noKeyTitle')}>{t('keys.noKeyBody')}</Note>
+          ) : null}
+          <OutcomeNote
+            busy={regeneration.isPending || authority.isFetching}
+            outcome={
+              state.mutation === 'conflict'
+                ? { kind: 'conflict', reload: () => void authority.refetch() }
+                : state.mutation === 'unknown'
+                  ? {
+                      kind: 'unknown',
+                      oneTimeSecret: true,
+                      recheck: () => void authority.refetch(),
+                    }
+                  : state.mutation === 'error'
+                    ? { kind: 'oneTimeMissed' }
+                    : { kind: 'idle' }
+            }
           />
-        ) : state.authority && metadata ? (
-          <dl className="nb-facts">
-            <div>
-              <dt>{t('keys.display')}</dt>
-              <dd>
-                <code className="core-mono">{metadata.display}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>{t('common.created')}</dt>
-              <dd>
-                <CoreTime value={metadata.created_at} />
-              </dd>
-            </div>
-            <div>
-              <dt>{t('common.updated')}</dt>
-              <dd>
-                <CoreTime value={metadata.updated_at} />
-              </dd>
-            </div>
-          </dl>
-        ) : state.authority ? (
-          <Note title={t('keys.noKeyTitle')}>{t('keys.noKeyBody')}</Note>
-        ) : null}
-        <OutcomeNote
-          busy={regeneration.isPending || authority.isFetching}
-          outcome={
-            state.mutation === 'conflict'
-              ? { kind: 'conflict', reload: () => void authority.refetch() }
-              : state.mutation === 'unknown'
-                ? { kind: 'unknown', oneTimeSecret: true, recheck: () => void authority.refetch() }
-                : state.mutation === 'error'
-                  ? { kind: 'oneTimeMissed' }
-                  : { kind: 'idle' }
-          }
-        />
-      </section>
+        </section>
 
-      <ClientInstructions />
+        <div className="api-access-main">
+          <ClientInstructions />
+          {children}
+        </div>
+      </div>
 
       <ConfirmDialog
         open={confirmOpen}
@@ -470,12 +486,9 @@ export function KeysPage() {
   return (
     <CoreUserGate>
       {(user) => (
-        <>
-          <CallerKeyPanel key={user.id} accountId={user.id} />
-          <div className="page core-page api-access-page">
-            <PersonalAutomationGuide />
-          </div>
-        </>
+        <CallerKeyPanel key={user.id} accountId={user.id}>
+          <PersonalAutomationGuide />
+        </CallerKeyPanel>
       )}
     </CoreUserGate>
   );

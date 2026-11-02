@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
-import emptyStateURL from '@shared/assets/state-empty.svg';
 import { routePath } from '@shared/routing/routeRegistry';
+import { Illustration } from './Illustration';
 
 export function NotFoundPage({ station = 'user' }: { station?: 'user' | 'admin' }) {
   const { t } = useTranslation();
@@ -11,11 +11,18 @@ export function NotFoundPage({ station = 'user' }: { station?: 'user' | 'admin' 
   return (
     <section className="page nb-standalone-state" data-error-kind="404">
       <div className="nb-state nb-state--warning">
-        <span className="nb-state__icon"><img className="nb-state__illustration" src={emptyStateURL} alt="" /></span>
+        <span className="nb-state__icon nb-state__art" aria-hidden="true">
+          <Illustration name="search" />
+        </span>
         <div>
           <h1>{t('common.notFoundTitle')}</h1>
           <p>{t('common.notFoundBody')}</p>
-          <Link className="nb-btn nb-btn--secondary" to={routePath(station, station === 'admin' ? 'admin-home' : 'home')}><span>{t('common.backHome')}</span></Link>
+          <Link
+            className="nb-btn nb-btn--secondary"
+            to={routePath(station, station === 'admin' ? 'admin-home' : 'home')}
+          >
+            <span>{t('common.backHome')}</span>
+          </Link>
         </div>
       </div>
     </section>

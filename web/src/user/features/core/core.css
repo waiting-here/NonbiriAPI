@@ -94,7 +94,7 @@
   gap: var(--nb-space-4);
   padding: calc(var(--nb-space-5) * var(--nb-density-factor));
   border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-lg);
+  border-radius: var(--nb-radius-card);
   background: var(--nb-color-surface);
   box-shadow: var(--nb-elevation-1);
 }
@@ -221,6 +221,51 @@
 
 .core-state--compact {
   padding: var(--nb-space-3);
+}
+
+/* Empty lists match the shared empty state: centred cloud, title, short help and actions. */
+.core-state--empty {
+  flex-direction: column;
+  align-items: center;
+  gap: var(--nb-space-3);
+  padding: var(--nb-space-8) var(--nb-space-5);
+  border-style: dashed;
+  border-color: var(--nb-color-border-strong);
+  border-radius: var(--nb-radius-card);
+  background: var(--nb-color-surface-alt);
+  text-align: center;
+}
+.core-state--empty > div {
+  display: grid;
+  justify-items: center;
+  gap: var(--nb-space-2);
+  max-width: 36rem;
+}
+.core-state--empty strong {
+  font-size: var(--nb-font-size-lg);
+}
+.core-state--empty p {
+  margin: 0;
+  color: var(--nb-color-text-muted);
+}
+.core-state--empty .core-state__art svg {
+  inline-size: 6.5rem;
+  block-size: auto;
+}
+.core-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--nb-space-2);
+  margin-top: var(--nb-space-2);
+}
+@media (width < 40rem) {
+  .core-state--empty {
+    padding: var(--nb-space-6) var(--nb-space-4);
+  }
+  .core-state--empty .core-state__art svg {
+    inline-size: 5.5rem;
+  }
 }
 
 .core-state--error {
@@ -853,6 +898,57 @@
 .services-page .nb-filter__fields {
   padding-top: var(--nb-space-3);
 }
+/* Endpoints of one service as selectable cards; the chosen one opens below. */
+.services-entry-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: var(--nb-space-2);
+}
+.services-entry {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: var(--nb-space-3) var(--nb-space-4);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-card);
+  background: var(--nb-color-surface);
+  color: var(--nb-color-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color var(--nb-motion-micro) var(--nb-motion-ease);
+}
+.services-entry:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--nb-color-accent) 45%, var(--nb-color-border-strong));
+}
+.services-entry[aria-pressed='true'] {
+  border-color: var(--nb-color-accent);
+  background: var(--nb-color-accent-quiet);
+  box-shadow: inset 0 0 0 1px var(--nb-color-accent);
+}
+.services-entry:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.services-entry strong,
+.services-entry span {
+  overflow-wrap: anywhere;
+}
+.services-entry strong {
+  font-weight: var(--nb-font-weight-semibold);
+}
+.services-entry span {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-xs);
+}
+.services-detail__panel {
+  min-width: 0;
+}
+.services-settings {
+  padding: var(--nb-space-5);
+}
 .services-detail .nb-panel--danger {
   padding: var(--nb-space-4);
 }
@@ -964,6 +1060,9 @@
   .services-detail .nb-facts {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+  .services-detail .services-summary-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .services-detail .connection-match-facts {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1011,6 +1110,21 @@
   }
 }
 
+/* Model detail: the call name and settings summary sit beside the sources on wide pages. */
+.models-workspace .model-detail-layout,
+.models-workspace .model-detail-aside,
+.models-workspace .model-detail-main {
+  display: grid;
+  gap: var(--nb-space-5);
+  align-content: start;
+  min-width: 0;
+}
+@media (width > 64rem) {
+  .models-workspace .model-detail-layout {
+    grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+    align-items: start;
+  }
+}
 .models-workspace .model-editor,
 .models-workspace .model-detail-body {
   display: grid;

@@ -15,7 +15,7 @@ func TestExactEntryRequiresFutureResetWhileExistingAnchorEditsRemainUsable(t *te
 	r.Interval, r.Alignment, r.AnchorLocal = "month", ptr("exact_time"), ptr("2026-10-27T03:00:01")
 	for _, now := range []int64{first, first + 1} {
 		err := transaction(t, q, func(tx *sql.Tx) error { return Replace(context.Background(), tx, 1, now, []RuleInput{r}) })
-		if !errors.Is(err, ErrInvalid) {
+		if !errors.Is(err, ErrInvalid) || !errors.Is(err, ErrFirstResetNotFuture) {
 			t.Fatalf("new rule accepted current/past first reset: %v", err)
 		}
 	}
@@ -26,7 +26,7 @@ func TestExactEntryRequiresFutureResetWhileExistingAnchorEditsRemainUsable(t *te
 	r.ID = old.ID
 	for _, now := range []int64{first, first + 1} {
 		err := transaction(t, q, func(tx *sql.Tx) error { return Replace(context.Background(), tx, 1, now, []RuleInput{r}) })
-		if !errors.Is(err, ErrInvalid) {
+		if !errors.Is(err, ErrInvalid) || !errors.Is(err, ErrFirstResetNotFuture) {
 			t.Fatalf("alignment entry accepted current/past reset: %v", err)
 		}
 	}

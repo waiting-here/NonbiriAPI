@@ -124,6 +124,8 @@ var chineseCodes = map[string]string{
 }
 
 var chineseMessages = map[string]string{
+	"The first reset must be in the future when creating a recurring rule or switching to a specified reset time. Choose a later date and time in the rule's time zone.": "新建循环规则或改用指定刷新时间时，首次刷新必须在未来。请按规则时区选择更晚的日期与时间。",
+
 	"No approved services are eligible for failure reset; check approval and credential availability.":          "没有符合失败重置条件的已批准服务，请检查审批和凭据是否仍然有效。",
 	"tool thinking requires the original signed content blocks":                                                 "工具调用中的思考内容需要原始签名内容块",
 	"expected a supported thinking configuration":                                                               "需要受支持的思考配置",

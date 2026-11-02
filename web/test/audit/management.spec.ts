@@ -12,6 +12,7 @@ import { expect, test, type Browser, type BrowserContext } from '@playwright/tes
 
 import en from '../../src/user/i18n/en.json' with { type: 'json' };
 import commonEn from '../../src/shared/i18n/common/en.json' with { type: 'json' };
+import commonZh from '../../src/shared/i18n/common/zh.json' with { type: 'json' };
 import adminZh from '../../src/admin/i18n/zh.json' with { type: 'json' };
 
 type Cookie = { Name: string; Value: string };
@@ -19,8 +20,12 @@ interface Fixture {
   admin_url: string;
   user_url: string;
   admin_cookie: Cookie;
+  control_url: string;
+  control_token: string;
   users: { id: string; level: number; cookie: Cookie }[];
   management: {
+    gemini_endpoint_id: string;
+    gemini_key_id: string;
     trainee_target_id: string;
     old_user_id: string;
     history_record_id: string;
@@ -30,6 +35,7 @@ interface Fixture {
     automatic_donation_id: string;
     pending_donation_id: string;
     binding_donation_id: string;
+    binding_model_ids: string[];
     custom_binding_donation_id: string;
     multiline_review_donation_id: string;
     resource_health: { donation_id: string };
@@ -94,6 +100,159 @@ async function write(context: BrowserContext, origin: string, path: string, data
   expect(response.ok(), 'Synthetic setup ' + path + ': ' + response.status()).toBe(true);
   return response.json();
 }
+
+test('date filters fit their fields across desktop and narrow containers', async ({ browser }) => {
+  const state = fixture();
+  const context = await session(browser, 'admin');
+  try {
+    const page = await context.newPage();
+    for (const route of ['/management-operations', '/games/history']) {
+      await page.goto(state.admin_url + route);
+      const dates = page.locator('.nb-filter input[type="datetime-local"]');
+      await expect(dates).toHaveCount(2);
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate((mode) => {
+          document.documentElement.dataset.theme = mode;
+        }, theme);
+        for (const width of [1440, 768, 390]) {
+          await page.setViewportSize({ width, height: 900 });
+          const more = page.locator('.nb-filter__more');
+          if (await more.locator('summary').isVisible()) {
+            if (!(await more.evaluate((element) => (element as HTMLDetailsElement).open))) {
+              await more.locator('summary').click();
+            }
+          }
+          await dates.first().scrollIntoViewIfNeeded();
+          for (const date of await dates.all()) {
+            await expect(date).toBeVisible();
+            const bounds = await date.evaluate((element) => {
+              const field = element.closest('.nb-field')!;
+              const inputRect = element.getBoundingClientRect();
+              const fieldRect = field.getBoundingClientRect();
+              return {
+                fitsField:
+                  inputRect.left >= fieldRect.left - 1 && inputRect.right <= fieldRect.right + 1,
+                fitsViewport: inputRect.left >= 0 && inputRect.right <= innerWidth,
+                overflow: field.scrollWidth - field.clientWidth,
+              };
+            });
+            expect(bounds.fitsField).toBe(true);
+            expect(bounds.fitsViewport).toBe(true);
+            expect(bounds.overflow).toBeLessThanOrEqual(1);
+          }
+          if (process.env.NONBIRI_VISUAL_DIR) {
+            await page.screenshot({
+              path: resolve(
+                process.env.NONBIRI_VISUAL_DIR,
+                `date-filters-${route.replaceAll('/', '-')}-${theme}-${width}.png`,
+              ),
+            });
+          }
+        }
+      }
+    }
+  } finally {
+    await context.close();
+  }
+});
+
+test('independent diagnostics retain their filtered window when paging in both stations', async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const state = fixture();
+  const owner = await session(browser, 1);
+  const prefix = `/api/endpoints/${state.management.gemini_endpoint_id}/keys/${state.management.gemini_key_id}/models`;
+  const control = async (mode: string) => {
+    const response = await owner.request.post(state.control_url + '/gemini-discovery', {
+      headers: { Authorization: 'Bearer ' + state.control_token },
+      data: { mode },
+    });
+    expect(response.status()).toBe(200);
+  };
+  try {
+    await control('region');
+    for (let index = 0; index < 21; index++) {
+      const accepted = await owner.request.post(state.user_url + prefix + '/refresh', {
+        headers: { Origin: state.user_url, 'Idempotency-Key': randomUUID() },
+      });
+      expect(accepted.status()).toBe(202);
+      const { evidence } = await accepted.json();
+      await expect
+        .poll(async () => {
+          const catalog = await read(owner, state.user_url, prefix + '?limit=20');
+          return {
+            revision: catalog.evidence.revision,
+            state: catalog.evidence.state,
+            safe_class: catalog.evidence.safe_class,
+          };
+        })
+        .toEqual({ revision: evidence.revision, state: 'failed', safe_class: 'region' });
+    }
+    // The UI searches an exclusive end time at whole-second precision.
+    const completedAt = Math.floor(Date.now() / 1000);
+    await expect.poll(() => Math.floor(Date.now() / 1000)).toBeGreaterThan(completedAt);
+    for (const role of ['admin', 6] as const) {
+      const context = await session(browser, role);
+      try {
+        const origin = role === 'admin' ? state.admin_url : state.user_url;
+        const apiPath = role === 'admin' ? '/admin/api/diagnostics' : '/api/steward/diagnostics';
+        const page = await context.newPage();
+        await page.goto(origin + (role === 'admin' ? '/logs' : '/steward?tab=logs'));
+        const region = page.getByRole('region', { name: 'Discovery and activity diagnostics' });
+        await region.getByLabel('Category', { exact: true }).selectOption('model_discovery');
+        const userId = state.users.find((user) => user.level === 1)!.id;
+        await region.getByLabel('User ID', { exact: true }).fill(userId);
+        const responseFor = (before?: string) =>
+          page.waitForResponse((response) => {
+            const url = new URL(response.url());
+            return (
+              url.pathname === apiPath &&
+              url.searchParams.get('user_id') === userId &&
+              url.searchParams.get('kind') === 'model_discovery' &&
+              url.searchParams.get('before') === (before ?? null)
+            );
+          });
+        const firstResponse = responseFor();
+        await region.getByRole('button', { name: 'Search', exact: true }).click();
+        const first = await (await firstResponse).json();
+        expect(first.data).toHaveLength(20);
+        expect(first.next_before).toBeTruthy();
+        const rows = region.locator(':scope > div > details');
+        await expect(rows).toHaveCount(20);
+        const firstText = await rows.allTextContents();
+        const previous = region.getByRole('button', { name: 'Previous', exact: true });
+        const next = region.getByRole('button', { name: 'Next', exact: true });
+        await expect(previous).toBeDisabled();
+        const secondResponse = responseFor(first.next_before);
+        await next.click();
+        const second = await (await secondResponse).json();
+        expect(second.data.length).toBeGreaterThan(0);
+        expect([second.from, second.to]).toEqual([first.from, first.to]);
+        const firstIds = first.data.map((entry: { id: string }) => entry.id);
+        expect(second.data.every((entry: { id: string }) => !firstIds.includes(entry.id))).toBe(
+          true,
+        );
+        await expect(rows).toHaveCount(second.data.length);
+        await expect(previous).toBeEnabled();
+        const returnResponse = responseFor();
+        await previous.click();
+        const returned = await (await returnResponse).json();
+        expect(returned).toEqual(first);
+        await expect(rows).toHaveText(firstText);
+        await expect(previous).toBeDisabled();
+      } finally {
+        await context.close();
+      }
+    }
+  } finally {
+    try {
+      await control('success');
+    } finally {
+      await owner.close();
+    }
+  }
+});
 
 test('level 5 reads accounts and retains the lower-user ban boundary', async ({ browser }) => {
   const state = fixture();
@@ -996,5 +1155,210 @@ test('saved Gateway capabilities keep target actions inside the narrow card', as
     });
   } finally {
     await context.close();
+  }
+});
+
+test('charity settings keep grouped controls, readable model sources, and actionable reset errors', async ({
+  browser,
+}) => {
+  const state = fixture();
+  for (const role of ['admin', 6] as const) {
+    const language = role === 'admin' ? 'zh' : 'en';
+    const copy = (language === 'zh' ? commonZh : commonEn).common;
+    const context = await session(browser, role, false, language);
+    const origin = role === 'admin' ? state.admin_url : state.user_url;
+    const prefix = role === 'admin' ? '/admin/api' : '/api/steward';
+    const route = role === 'admin' ? '/charity?' : '/steward?tab=charity&';
+    const donationID = state.management.binding_donation_id;
+    const donation = await read(context, origin, prefix + '/donations/' + donationID);
+    const limitsPath =
+      prefix + '/donations/' + donationID + '/keys/' + donation.keys[0].id + '/recurring-limits';
+    try {
+      const page = await context.newPage();
+      const capture = async (name: string, focus: () => Promise<void>) => {
+        for (const theme of ['light', 'dark']) {
+          await page.evaluate((value) => {
+            document.documentElement.dataset.theme = value;
+          }, theme);
+          for (const width of [1440, 390]) {
+            await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+            await focus();
+            expect(
+              await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+            ).toBe(true);
+            if (process.env.NONBIRI_VISUAL_DIR) {
+              await page.screenshot({
+                path: resolve(
+                  process.env.NONBIRI_VISUAL_DIR,
+                  `settings-${role}-${name}-${theme}-${width}.jpg`,
+                ),
+                type: 'jpeg',
+                quality: 82,
+                animations: 'disabled',
+              });
+            }
+          }
+        }
+      };
+      await page.goto(
+        origin +
+          route +
+          'charity_section=models&charity_model=' +
+          state.management.binding_model_ids[0],
+      );
+      const settings = page.locator('.charity-model-access-routing');
+      await expect(settings).toBeVisible();
+      await capture('groups', async () => {
+        await settings.scrollIntoViewIfNeeded();
+        const groups = await settings
+          .locator(':scope > .nb-fields__grid > fieldset')
+          .evaluateAll((nodes) =>
+            nodes.map((node) => {
+              const bounds = node.getBoundingClientRect();
+              return { x: bounds.x, y: bounds.y, width: bounds.width, bottom: bounds.bottom };
+            }),
+          );
+        expect(groups).toHaveLength(2);
+        if (page.viewportSize()!.width === 1440) {
+          expect(Math.abs(groups[0]!.y - groups[1]!.y)).toBeLessThanOrEqual(1);
+          expect(Math.abs(groups[0]!.width - groups[1]!.width)).toBeLessThanOrEqual(1);
+        } else {
+          expect(groups[1]!.y).toBeGreaterThanOrEqual(groups[0]!.bottom);
+        }
+        const overflow = await settings
+          .locator('input, select, textarea, .nb-field, .nb-toggle, .nb-seg')
+          .evaluateAll((nodes) =>
+            nodes
+              .filter((node) => node.scrollWidth > node.clientWidth + 1)
+              .map((node) => node.tagName),
+          );
+        expect(overflow).toEqual([]);
+        const segmented = settings.getByRole('radiogroup');
+        await segmented.scrollIntoViewIfNeeded();
+        const choices = await segmented.evaluate((node) => {
+          const bounds = node.getBoundingClientRect();
+          return Array.from(node.querySelectorAll('label')).map((label) => {
+            const option = label.getBoundingClientRect();
+            return option.left >= bounds.left && option.right <= bounds.right;
+          });
+        });
+        expect(choices).toEqual([true, true, true]);
+        const previous = await segmented.locator('input:checked').inputValue();
+        for (const option of await segmented.locator('label').all()) {
+          await option.click();
+          await expect(option.getByRole('radio')).toBeChecked();
+        }
+        await segmented.locator(`input[value="${previous}"]`).locator('..').click();
+      });
+      await capture('access', async () => {
+        await settings
+          .locator(':scope > .nb-fields__grid > fieldset')
+          .last()
+          .scrollIntoViewIfNeeded();
+      });
+      const picker = page.locator('.ops-binding-picker');
+      await picker
+        .getByRole('searchbox', { name: copy.operations.charity.searchSources })
+        .fill('Binding browser service');
+      await picker
+        .getByRole('searchbox', { name: copy.operations.charity.searchSources })
+        .press('Enter');
+      await picker.getByRole('button').filter({ hasText: 'Binding browser service' }).click();
+      await picker
+        .getByRole('region', { name: copy.operations.charity.chooseKey })
+        .getByRole('button', { name: /Binding browser key 1/ })
+        .click();
+      await capture('sources', async () => {
+        const row = picker.locator('.nb-choice-list__items .nb-field').first();
+        await row.scrollIntoViewIfNeeded();
+        const placement = await row.evaluate((node) => {
+          const label = node.querySelector('label')!.getBoundingClientRect();
+          const source = node.querySelector('.ops-picker-source-types')!.getBoundingClientRect();
+          return {
+            labelX: label.x,
+            sourceX: source.x,
+            labelWidth: label.width,
+            sourceWidth: source.width,
+          };
+        });
+        expect(Math.abs(placement.labelX - placement.sourceX)).toBeLessThanOrEqual(1);
+        expect(placement.sourceWidth).toBeGreaterThanOrEqual(placement.labelWidth - 1);
+      });
+      await page.goto(origin + route + 'charity_section=donations&donation_id=' + donationID);
+      const disclosure = page.locator('.recurring-limits-disclosure').first();
+      await disclosure.locator(':scope > summary').click();
+      const limits = disclosure.locator('.recurring-limits');
+      await limits
+        .getByRole('button', {
+          name: language === 'zh' ? '添加循环规则' : 'Add recurring rule',
+          exact: true,
+        })
+        .click();
+      await limits
+        .getByLabel(language === 'zh' ? '计量维度' : 'Measure', { exact: true })
+        .selectOption('credits');
+      await limits
+        .getByLabel(language === 'zh' ? '周期' : 'Period', { exact: true })
+        .selectOption('month');
+      await limits
+        .getByLabel(language === 'zh' ? '起算方式' : 'Starts at', { exact: true })
+        .selectOption('exact_time');
+      const anchor = limits.getByLabel(
+        language === 'zh' ? '刷新日期与时间' : 'Reset date and time',
+        { exact: true },
+      );
+      await anchor.fill('2026-10-30T23:59:59');
+      await limits
+        .getByLabel(language === 'zh' ? '时区' : 'Time zone', { exact: true })
+        .fill('America/Indianapolis');
+      await limits.getByLabel(language === 'zh' ? '上限' : 'Limit', { exact: true }).fill('240000');
+      const save = limits.getByRole('button', {
+        name: language === 'zh' ? '保存循环限量' : 'Save recurring limits',
+        exact: true,
+      });
+      const rejected = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === limitsPath && response.request().method() === 'PUT',
+      );
+      await save.click();
+      expect((await rejected).status()).toBe(400);
+      await expect(limits.getByRole('alert')).toContainText(
+        language === 'zh' ? '首次刷新必须在未来' : 'The first reset must be in the future',
+      );
+      await expect(anchor).toHaveValue('2026-10-30T23:59:59');
+      await expect(
+        limits.getByLabel(language === 'zh' ? '上限' : 'Limit', { exact: true }),
+      ).toHaveValue('240000');
+      await capture('reset-error', async () => {
+        await limits.getByRole('alert').scrollIntoViewIfNeeded();
+      });
+      const future = new Date(Date.now() + 40 * 86400_000).toISOString().slice(0, 10) + 'T23:59:59';
+      await anchor.fill(future);
+      const accepted = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === limitsPath && response.request().method() === 'PUT',
+      );
+      await save.click();
+      expect((await accepted).status()).toBe(200);
+      await expect(limits.getByRole('alert')).toHaveCount(0);
+      const saved = await read(context, origin, limitsPath);
+      expect(saved.rules).toHaveLength(1);
+      expect(saved.rules[0]).toMatchObject({
+        anchor_local: future,
+        time_zone: 'America/Indianapolis',
+        metric: 'credits',
+        limit: '240000',
+      });
+    } finally {
+      const current = await read(context, origin, limitsPath);
+      if (current.rules.length > 0) {
+        const restored = await context.request.put(origin + limitsPath, {
+          headers: { Origin: origin, 'Idempotency-Key': randomUUID() },
+          data: { expected_revision: current.donation_revision, rules: [] },
+        });
+        expect(restored.status()).toBe(200);
+      }
+      await context.close();
+    }
   }
 });

@@ -574,7 +574,7 @@ func ComputeGameLeaderboardTieKeyFromDerivedKey(leaderboardKey []byte, game, boa
 func validGameLeaderboardTuple(game, board, mode string) bool {
 	switch game {
 	case "fishing":
-		return (board == "single" || board == "total") && mode == ""
+		return (board == "single" || board == "total" || board == "cleanup" || board == "gifts") && mode == ""
 	case "rps":
 		if board != "profit_rate" && board != "net_profit" {
 			return false

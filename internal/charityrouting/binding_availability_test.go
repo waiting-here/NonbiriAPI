@@ -72,13 +72,54 @@ FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donat
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-	_, adminErr := e.service.GetBindingsAdmin(ctx, mid)
-	_, stewardErr := e.service.GetBindingsSteward(ctx, steward, mid)
-	cancel()
-	writer.Rollback()
-	if adminErr != nil || stewardErr != nil {
-		t.Fatalf("health reads waited for writer: admin=%v steward=%v", adminErr, stewardErr)
+	defer writer.Rollback()
+	writerStats := e.store.DB().Stats()
+	if writerStats.MaxOpenConnections != 1 || writerStats.InUse != 1 {
+		t.Fatalf("sole write connection is not held: %+v", writerStats)
+	}
+	readWhileWriterHeld := func(name string, read func(context.Context) error) {
+		t.Helper()
+		before := e.store.DB().Stats()
+		// Each request gets its own deadline; the previous read must not spend it.
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		defer cancel()
+		started := time.Now()
+		err := read(ctx)
+		elapsed := time.Since(started)
+		after := e.store.DB().Stats()
+		waits := after.WaitCount - before.WaitCount
+		t.Logf("%s health read: elapsed=%s writer_waits=%d", name, elapsed, waits)
+		if err != nil {
+			t.Fatalf("%s health read while writer held: %v", name, err)
+		}
+		if after.InUse != 1 || waits != 0 {
+			t.Fatalf("%s health read changed writer occupancy: before=%+v after=%+v", name, before, after)
+		}
+	}
+	readWhileWriterHeld("admin", func(ctx context.Context) error {
+		value, err := e.service.GetBindingsAdmin(ctx, mid)
+		if err != nil {
+			return err
+		}
+		if len(value.Bindings) != 1 {
+			t.Fatalf("admin bindings while writer held: %+v", value)
+		}
+		check(value.Bindings[0].Targets)
+		return nil
+	})
+	readWhileWriterHeld("steward", func(ctx context.Context) error {
+		value, err := e.service.GetBindingsSteward(ctx, steward, mid)
+		if err != nil {
+			return err
+		}
+		if len(value.Bindings) != 1 {
+			t.Fatalf("steward bindings while writer held: %+v", value)
+		}
+		check(value.Bindings[0].Targets)
+		return nil
+	})
+	if err := writer.Rollback(); err != nil {
+		t.Fatal(err)
 	}
 	models, _, err := e.service.keyModelPages(t.Context(), roleAdmin, 0, did, key, 0, pagination.Default())
 	if err != nil || len(models.Data) != 1 || models.Data[0].AvailableBindingCount != "1" {

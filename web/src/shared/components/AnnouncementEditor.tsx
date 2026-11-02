@@ -10,7 +10,14 @@ import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { TimeInput } from '@shared/components/TimeInput';
-import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
+import {
+  Card,
+  ErrorState,
+  LoadingState,
+  PageHeader,
+  SectionHead,
+  StatusBadge,
+} from '@shared/components/States';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
@@ -70,12 +77,14 @@ export function AnnouncementEditor({
   announcementId,
   backTo,
   onAuthorityLoss,
+  embedded = false,
 }: {
   role: ManagementRole;
   account: string;
   announcementId: string;
   backTo: string;
   onAuthorityLoss?: () => void;
+  embedded?: boolean;
 }) {
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
@@ -231,16 +240,33 @@ export function AnnouncementEditor({
     important: t('management.announcements.severity.important'),
   };
 
-  if (denied) return <ErrorState error={denied} />;
-  if (authority.isPending || !draft || !authority.data)
+  const awaitingAuthority = authority.isPending || !draft || !authority.data;
+  const title =
+    denied || awaitingAuthority
+      ? t('management.announcements.detail.loadingTitle')
+      : draft.title_en || draft.title_zh || t('management.announcements.detail.untitled');
+  const description = t(
+    awaitingAuthority
+      ? 'management.announcements.detail.loadingDescription'
+      : 'management.announcements.detail.description',
+  );
+  const back = <Link to={backTo}>{t('management.announcements.detail.back')}</Link>;
+  const header = embedded ? (
+    <div className="ops-stack">
+      <div className="nb-page-header__back">{back}</div>
+      <SectionHead title={title} description={description} />
+    </div>
+  ) : (
+    <PageHeader title={title} description={description} back={back} />
+  );
+  const pageClassName = embedded ? 'ops-page' : 'page ops-page';
+  if (denied || authority.isPending || !draft || !authority.data)
     return (
-      <div className="page ops-page">
-        <PageHeader
-          title={t('management.announcements.detail.loadingTitle')}
-          description={t('management.announcements.detail.loadingDescription')}
-          back={<Link to={backTo}>{t('management.announcements.detail.back')}</Link>}
-        />
-        {authority.error ? (
+      <div className={pageClassName}>
+        {header}
+        {denied ? (
+          <ErrorState error={denied} />
+        ) : authority.error ? (
           <ErrorState error={authority.error} onRetry={() => void authority.refetch()} />
         ) : (
           <LoadingState />
@@ -293,12 +319,8 @@ export function AnnouncementEditor({
   };
   const authorityBlocked = Boolean(authority.error) || authority.isFetching;
   return (
-    <div className="page ops-page">
-      <PageHeader
-        title={draft.title_en || draft.title_zh || t('management.announcements.detail.untitled')}
-        description={t('management.announcements.detail.description')}
-        back={<Link to={backTo}>{t('management.announcements.detail.back')}</Link>}
-      />
+    <div className={pageClassName}>
+      {header}
       <Card>
         <div className="ops-toolbar">
           <StatusBadge active={item.state === 'published'} label={stateLabels[item.state]} />

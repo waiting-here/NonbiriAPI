@@ -39,6 +39,13 @@ export function Collection({
     [character, setCharacter] = useState(''),
     [rarity, setRarity] = useState(''),
     [owned, setOwned] = useState('');
+  const clearFilters = () => {
+    setSearch('');
+    setSearchDraft('');
+    setCharacter('');
+    setRarity('');
+    setOwned('');
+  };
   const visibleThemes = themes.filter((theme) => state.visible_themes.includes(theme.id));
   const visibleCards = cards.filter((card) => state.visible_themes.includes(card.theme));
   const filtered = visibleCards.filter(
@@ -99,15 +106,9 @@ export function Collection({
                 )}
               </Field>
             }
-            activeCount={[character, rarity, owned].filter(Boolean).length}
+            activeCount={[search, character, rarity, owned].filter(Boolean).length}
             onSubmit={() => setSearch(searchDraft.trim())}
-            onReset={() => {
-              setSearch('');
-              setSearchDraft('');
-              setCharacter('');
-              setRarity('');
-              setOwned('');
-            }}
+            onReset={clearFilters}
             secondary={
               <>
                 <Field label={t('角色', 'Character')}>
@@ -165,16 +166,7 @@ export function Collection({
               <Icon name="search" />
               <h3>{t('没有找到这张卡', 'No cards found')}</h3>
               <p>{t('试试其他角色或主题名称。', 'Try another character or theme.')}</p>
-              <Button
-                onClick={() => {
-                  setSearch('');
-                  setCharacter('');
-                  setRarity('');
-                  setOwned('');
-                }}
-              >
-                {t('清除筛选', 'Clear filters')}
-              </Button>
+              <Button onClick={clearFilters}>{t('清除筛选', 'Clear filters')}</Button>
             </div>
           )}
         </>

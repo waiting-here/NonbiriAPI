@@ -246,6 +246,7 @@ for (const theme of ['light', 'dark'] as const)
         route.fulfill({ contentType: 'text/event-stream', body: ': connected\n\n' }),
       );
       const snapshot = gamesSnapshotWire();
+      snapshot.balance = '10000';
       const state = {
         session_id: `ll_${'A'.repeat(22)}`,
         spec: '6x8',
@@ -304,20 +305,44 @@ for (const theme of ['light', 'dark'] as const)
           await page.screenshot({ path: join(folder, `${name}-${theme}-${width}.png`) });
         }
       }
+      async function cycleFocus(dialog: ReturnType<Page['locator']>) {
+        for (const key of ['Shift+Tab', 'Tab', 'Tab', 'Shift+Tab', 'Tab']) {
+          await page.keyboard.press(key);
+          expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(
+            true,
+          );
+        }
+      }
       await page.goto(USER_ORIGIN + '/games/rps');
-      await inspect('.rps-modal', 'rps-tutorial');
-      await page.getByRole('button', { name: 'Skip for now', exact: true }).click();
+      await inspect('.rps-tutorial-dialog', 'rps-tutorial');
+      await cycleFocus(page.getByRole('dialog'));
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('dialog')).toHaveCount(0);
       const rules = page.getByRole('button', { name: 'How to play', exact: true });
       await rules.click();
-      await inspect('.game-rules-modal', 'game-rules');
+      await inspect('.game-rules-dialog', 'game-rules');
+      await cycleFocus(page.getByRole('dialog'));
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog')).toHaveCount(0);
       await expect(rules).toBeFocused();
+
+      await page.locator('[data-mode="deathmatch"]').click();
+      const joinQueue = page.getByRole('button', { name: 'Join Deathmatch queue', exact: true });
+      await joinQueue.click();
+      await inspect('.nb-dialog-backdrop', 'rps-deathmatch');
+      await cycleFocus(page.getByRole('alertdialog', { name: 'Deathmatch' }));
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('alertdialog')).toHaveCount(0);
+      await expect(joinQueue).toBeFocused();
+
       await page.goto(USER_ORIGIN + '/games/linklink');
-      await page.locator('.linklink-abandon').click();
-      await inspect('.linklink-modal', 'linklink-abandon');
-      await page.locator('.linklink-modal .nb-btn--secondary').click();
-      await expect(page.locator('.linklink-modal')).toHaveCount(0);
+      const abandon = page.locator('.linklink-abandon');
+      await abandon.click();
+      await inspect('.nb-dialog-backdrop', 'linklink-abandon');
+      await cycleFocus(page.getByRole('alertdialog', { name: 'Abandon without refund?' }));
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('alertdialog')).toHaveCount(0);
+      await expect(abandon).toBeFocused();
       await expect(page.locator('.linklink-tile')).toHaveCount(48);
       guard.assertNone();
     });

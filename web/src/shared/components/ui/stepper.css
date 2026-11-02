@@ -1,0 +1,106 @@
+.nb-stepper {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: var(--nb-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  container: nb-stepper / inline-size;
+}
+
+.nb-stepper__step {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--nb-space-3);
+  min-width: 0;
+  padding: var(--nb-space-4);
+  border: 1px solid color-mix(in srgb, var(--nb-color-border) 80%, transparent);
+  border-radius: var(--nb-radius-card);
+  background: var(--nb-color-surface-alt);
+}
+
+.nb-stepper__step[data-state='current'] {
+  border-color: color-mix(in srgb, var(--nb-color-accent) 45%, var(--nb-color-border));
+  background: var(--nb-color-accent-quiet);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--nb-color-accent) 10%, transparent);
+}
+
+.nb-stepper__marker {
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  border: 1.5px solid var(--nb-color-border-strong);
+  background: var(--nb-color-surface-raised);
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+  font-weight: var(--nb-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.nb-stepper__step[data-state='current'] .nb-stepper__marker {
+  border-color: var(--nb-color-accent);
+  background: var(--nb-color-accent);
+  color: var(--nb-color-accent-contrast);
+}
+
+.nb-stepper__step[data-state='done'] .nb-stepper__marker {
+  border-color: transparent;
+  background: var(--nb-color-success-soft);
+  color: var(--nb-color-success);
+}
+
+.nb-stepper__marker .nb-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* A column, so actions line up at the bottom when steps sit side by side. */
+.nb-stepper__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nb-space-2);
+  min-width: 0;
+  height: 100%;
+}
+
+.nb-stepper__title {
+  padding-top: 0.2rem;
+  font-weight: var(--nb-font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.nb-stepper__step[data-state='done'] .nb-stepper__title {
+  color: var(--nb-color-text-muted);
+}
+
+.nb-stepper__description {
+  margin: 0;
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+  overflow-wrap: anywhere;
+}
+
+.nb-stepper__action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nb-space-2);
+  margin-top: auto;
+  padding-top: var(--nb-space-1);
+}
+
+@container nb-stepper (width < 44rem) {
+  .nb-stepper__step {
+    grid-column: 1;
+  }
+}
+
+@media (width < 48rem) {
+  .nb-stepper {
+    grid-auto-flow: row;
+  }
+}

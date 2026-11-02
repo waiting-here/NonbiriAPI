@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { ApiError } from '@shared/query/http';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -350,7 +350,10 @@ function SettingField({
         ? 'short'
         : 'medium';
   return (
-    <div className={`nb-setting nb-field--${size}${dirty ? ' is-dirty' : ''}`}>
+    <div
+      id={`site-setting-${entry.key}`}
+      className={`nb-setting nb-field--${size}${dirty ? ' is-dirty' : ''}`}
+    >
       {entry.type === 'boolean' ? (
         <Toggle
           label={title}
@@ -643,14 +646,14 @@ export function SettingsPage() {
   );
   const pending: Record<string, CatalogValue> = {};
   const changedElsewhere: string[] = [];
-  let invalidDraft = false;
+  const invalidDrafts: { entry: SiteConfigCatalogEntry; message: string }[] = [];
   let pendingCount = 0;
   for (const entry of authority.data?.catalog ?? []) {
     const draft = drafts[entry.key];
     if (!draft) continue;
     const parsed = parsedDraft(entry, draft, t);
     if (parsed.error !== null) {
-      invalidDraft = true;
+      invalidDrafts.push({ entry, message: parsed.error });
       pendingCount += 1;
       continue;
     }
@@ -710,7 +713,7 @@ export function SettingsPage() {
     }
     return result;
   }, [authority.data, search]);
-  const catalogLabels = useMemo(
+  const catalogLabels = useMemo<Readonly<Record<string, string>>>(
     () => ({
       charity_model_pricing: t('admin.settings.charityModelPricing'),
       ...Object.fromEntries(
@@ -747,6 +750,11 @@ export function SettingsPage() {
     requestedGroup && navigationGroups.includes(requestedGroup)
       ? requestedGroup
       : (navigationGroups[0] ?? 'economy');
+  const hiddenErrors = invalidDrafts.filter(({ entry }) =>
+    search.trim()
+      ? !groups.get(entry.group)?.some((visible) => visible.key === entry.key)
+      : entry.group !== activeGroup,
+  );
   const editedGroups = [
     ...new Set(
       (authority.data?.catalog ?? [])
@@ -759,9 +767,29 @@ export function SettingsPage() {
         .map((entry) => entry.group),
     ),
   ];
+  const pendingFocus = useRef<{ key: string; group: string } | null>(null);
+  const selectGroup = (name: string) => {
+    setSearch('');
+    setSearchDraft('');
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set('group', name);
+      return next;
+    });
+  };
+  useEffect(() => {
+    const target = pendingFocus.current;
+    if (!target || search.trim() || target.group !== activeGroup) return;
+    const field = document.getElementById(`site-setting-${target.key}`);
+    const control = field?.querySelector<HTMLElement>('input, textarea, select, button');
+    if (!control) return;
+    pendingFocus.current = null;
+    control.focus();
+    field?.scrollIntoView?.({ block: 'center' });
+  }, [activeGroup, search]);
   const dangerousChanges = editedGroups.some((name) => DANGEROUS_GROUPS.has(name));
   const saveDisabled =
-    invalidDraft ||
+    invalidDrafts.length > 0 ||
     Boolean(dependencyError) ||
     changedElsewhere.length > 0 ||
     !Object.keys(pending).length ||
@@ -785,38 +813,35 @@ export function SettingsPage() {
 
   return (
     <div className="page ops-page">
-      <PageHeader
-        title={t('admin.settings.title')}
-        description={t('admin.settings.description')}
-        actions={
-          <FilterBar
-            role="search"
-            ariaLabel={t('common.search')}
-            activeCount={search ? 1 : 0}
-            onSubmit={() => setSearch(searchDraft.trim())}
-            onReset={() => {
-              setSearch('');
-              setSearchDraft('');
-            }}
-            search={
-              <Field label={t('common.search')}>
-                {(props) => (
-                  <input
-                    {...props}
-                    name="site-config-search"
-                    autoComplete="off"
-                    className="settings-search"
-                    type="search"
-                    value={searchDraft}
-                    placeholder={t('admin.settings.searchHelp')}
-                    onChange={(event) => setSearchDraft(event.target.value)}
-                  />
-                )}
-              </Field>
-            }
-          />
-        }
-      />
+      <PageHeader title={t('admin.settings.title')} description={t('admin.settings.description')} />
+      <div className="settings-search-bar">
+        <FilterBar
+          role="search"
+          ariaLabel={t('common.search')}
+          activeCount={search ? 1 : 0}
+          onSubmit={() => setSearch(searchDraft.trim())}
+          onReset={() => {
+            setSearch('');
+            setSearchDraft('');
+          }}
+          search={
+            <Field label={t('common.search')}>
+              {(props) => (
+                <input
+                  {...props}
+                  name="site-config-search"
+                  autoComplete="off"
+                  className="settings-search"
+                  type="search"
+                  value={searchDraft}
+                  placeholder={t('admin.settings.searchHelp')}
+                  onChange={(event) => setSearchDraft(event.target.value)}
+                />
+              )}
+            </Field>
+          }
+        />
+      </div>
       {authority.isPending ? (
         <LoadingState />
       ) : initialFailure ? (
@@ -831,6 +856,45 @@ export function SettingsPage() {
               className="nb-settings__nav"
               aria-label={t('admin.settings.navigation', { defaultValue: 'Setting groups' })}
             >
+              <div className="settings-mobile-selector">
+                <Field label={t('admin.settings.navigation')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={search.trim() ? '' : activeGroup}
+                      onChange={(event) => selectGroup(event.target.value)}
+                    >
+                      {search.trim() ? (
+                        <option value="">{t('admin.settings.searchResults')}</option>
+                      ) : null}
+                      {[false, true].map((dangerous) => (
+                        <optgroup
+                          key={String(dangerous)}
+                          label={t(
+                            dangerous ? 'admin.settings.cautious' : 'admin.settings.regular',
+                          )}
+                        >
+                          {navigationGroups
+                            .filter(
+                              (name) =>
+                                (DANGEROUS_GROUPS.has(name) ||
+                                  name === 'legal-hold' ||
+                                  name === 'maintenance') === dangerous,
+                            )
+                            .map((name) => (
+                              <option key={name} value={name}>
+                                {navigationLabel(t, name)}
+                                {editedGroups.includes(name)
+                                  ? ` · ${t('admin.settings.modified')}`
+                                  : ''}
+                              </option>
+                            ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+              </div>
               {[false, true].map((dangerous) => (
                 <div className="settings-nav-group" key={String(dangerous)}>
                   <h2>
@@ -851,15 +915,7 @@ export function SettingsPage() {
                         key={name}
                         aria-current={!search.trim() && activeGroup === name ? 'page' : undefined}
                         className={editedGroups.includes(name) ? 'is-dirty' : undefined}
-                        onClick={() => {
-                          setSearch('');
-                          setSearchDraft('');
-                          setParams((current) => {
-                            const next = new URLSearchParams(current);
-                            next.set('group', name);
-                            return next;
-                          });
-                        }}
+                        onClick={() => selectGroup(name)}
                       >
                         {navigationLabel(t, name)}
                         {editedGroups.includes(name) ? (
@@ -907,6 +963,29 @@ export function SettingsPage() {
             </div>
           </div>
           <div className="settings-feedback">
+            {hiddenErrors.length ? (
+              <div className="settings-errors" role="alert">
+                <p>{t('admin.settings.correctErrors')}</p>
+                <ul>
+                  {hiddenErrors.map(({ entry, message }) => (
+                    <li key={entry.key}>
+                      <button
+                        type="button"
+                        className="nb-btn nb-btn--ghost"
+                        onClick={() => {
+                          pendingFocus.current = { key: entry.key, group: entry.group };
+                          selectGroup(entry.group);
+                        }}
+                      >
+                        {navigationLabel(t, entry.group)} · {catalogLabels[entry.key]}
+                      </button>
+                      <span>{message}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
             {dependencyError ? (
               <p role="alert" className="field-error">
                 {dependencyError}

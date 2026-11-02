@@ -801,3 +801,124 @@ describe('administrator mainstream channels page', () => {
     expect(screen.getByText('Account two')).toBeVisible();
   });
 });
+
+it('retains channel and new-channel drafts through selection and cancels only the active draft', async () => {
+  const rows = [channel(activeID, 'First channel'), channel(generatedID(2), 'Second channel')];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL | Request) => {
+      const path = new URL(
+        input instanceof Request ? input.url : String(input),
+        window.location.origin,
+      ).pathname;
+      if (path === '/admin/api/session') return jsonResponse(session());
+      if (path === '/admin/api/endpoint-create-options')
+        return jsonResponse({ native_service_options: [] });
+      if (path === '/admin/api/mainstream-channels') return jsonResponse(page(rows));
+      const item = rows.find((row) => path === `/admin/api/mainstream-channels/${row.id}`);
+      if (item) return jsonResponse(item);
+      throw new Error(`Unexpected request: ${path}`);
+    }),
+  );
+  const view = await renderWithProviders(<MainstreamChannelsPanel />, {
+    station: 'admin',
+    role: 'admin',
+  });
+  await screen.findByText('First channel');
+  const open = async (index: number) => {
+    await view.user.click(screen.getAllByRole('button', { name: 'View' })[index]);
+    await screen.findByLabelText('Channel name');
+  };
+  const name = () => screen.getByLabelText('Channel name');
+  await open(0);
+  await view.user.type(name(), ' edited');
+  await open(1);
+  await waitFor(() => expect(name()).toHaveValue('Second channel'));
+  await view.user.type(name(), ' edited');
+  await view.user.click(screen.getByRole('button', { name: /New channel/ }));
+  await view.user.type(name(), 'New draft');
+  await view.user.click(screen.getByRole('button', { name: /New channel/ }));
+  expect(name()).toHaveValue('New draft');
+  await open(0);
+  await waitFor(() => expect(name()).toHaveValue('First channel edited'));
+  await view.user.click(screen.getByRole('button', { name: 'Cancel' }));
+  await open(0);
+  expect(name()).toHaveValue('First channel');
+  await open(1);
+  await waitFor(() => expect(name()).toHaveValue('Second channel edited'));
+  await view.user.click(screen.getByRole('button', { name: /New channel/ }));
+  expect(name()).toHaveValue('New draft');
+  await view.user.click(screen.getByRole('button', { name: 'Cancel' }));
+  await view.user.click(screen.getByRole('button', { name: /New channel/ }));
+  expect(name()).toHaveValue('');
+});
+
+it('keeps the channel edit revision through refresh and clears it after cancellation and success', async () => {
+  let current = channel(activeID, 'Original channel');
+  const writes: Record<string, unknown>[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const path = new URL(
+        input instanceof Request ? input.url : String(input),
+        window.location.origin,
+      ).pathname;
+      const method = init?.method ?? 'GET';
+      if (path === '/admin/api/session') return jsonResponse(session());
+      if (path === '/admin/api/endpoint-create-options')
+        return jsonResponse({ native_service_options: [] });
+      if (path === '/admin/api/mainstream-channels') return jsonResponse(page([current]));
+      if (path === `/admin/api/mainstream-channels/${activeID}`) {
+        if (method === 'GET') return jsonResponse(current);
+        const patch = JSON.parse(String(init?.body));
+        writes.push(patch);
+        if (patch.expected_revision !== current.revision) {
+          return jsonResponse(
+            { error: { code: 'conflict', message: 'The channel changed.' } },
+            409,
+          );
+        }
+        current = { ...current, name: patch.name, revision: String(Number(current.revision) + 1) };
+        const saved = current;
+        if (writes.length === 2)
+          current = { ...current, name: 'Newer server update', revision: '6' };
+        return jsonResponse(saved);
+      }
+      throw new Error(`Unexpected request: ${method} ${path}`);
+    }),
+  );
+  const view = await renderWithProviders(<MainstreamChannelsPanel />, {
+    station: 'admin',
+    role: 'admin',
+  });
+  await screen.findByText('Original channel');
+  await view.user.click(screen.getByRole('button', { name: 'View' }));
+  await view.user.type(await screen.findByLabelText('Channel name'), ' edited');
+  current = { ...current, revision: '4', name: 'Updated on server' };
+  await act(async () => {
+    view.queryClient.setQueryData(
+      ['admin', 'operations', 'mainstream-channels', 'detail', 'admin', activeID],
+      current,
+    );
+  });
+  await screen.findByText(`${activeID} / 4`);
+  expect(screen.getByLabelText('Channel name')).toHaveValue('Original channel edited');
+  await view.user.click(screen.getByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(writes).toHaveLength(1));
+  expect(writes[0]).toEqual({ expected_revision: '3', name: 'Original channel edited' });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled());
+  expect(screen.getByLabelText('Channel name')).toHaveValue('Original channel edited');
+  await view.user.click(screen.getByRole('button', { name: 'Cancel' }));
+  await view.user.click(screen.getByRole('button', { name: 'View' }));
+  expect(screen.getByLabelText('Channel name')).toHaveValue('Updated on server');
+  await view.user.type(screen.getByLabelText('Channel name'), ' saved');
+  await view.user.click(screen.getByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(writes).toHaveLength(2));
+  expect(writes[1]).toEqual({ expected_revision: '4', name: 'Updated on server saved' });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled());
+  expect(screen.getByLabelText('Channel name')).toHaveValue('Newer server update');
+  await view.user.type(screen.getByLabelText('Channel name'), ' again');
+  await view.user.click(screen.getByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(writes).toHaveLength(3));
+  expect(writes[2].expected_revision).toBe('6');
+});

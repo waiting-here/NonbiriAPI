@@ -1,11 +1,9 @@
-.home-page .home-hero {
+/* Getting started spans the page; the wallet and both check-ins share the next row. */
+.home-page .home-overview {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(16rem, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--nb-space-5);
   align-items: start;
-}
-.home-hero:has(.home-wallet:only-child) {
-  grid-template-columns: minmax(0, 1fr);
 }
 .home-start,
 .home-wallet,
@@ -15,58 +13,42 @@
   gap: var(--nb-space-4);
   min-width: 0;
 }
-.home-start {
-  background: var(--nb-color-accent-quiet);
-}
-.home-start--complete {
-  background: var(--nb-color-surface);
-}
 .home-start h2,
 .home-wallet h2 {
   font-size: var(--nb-font-size-xl);
 }
-.home-checklist {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: var(--nb-space-2);
+.home-start__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--nb-space-2) var(--nb-space-4);
 }
-.home-checklist li {
+.home-start__title {
   display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr) auto;
-  gap: var(--nb-space-3);
+  gap: var(--nb-space-1);
+  min-width: 0;
+}
+.home-start__title p {
+  margin: 0;
+}
+.home-start__side {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  padding: var(--nb-space-3);
-  border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-md);
-  background: var(--nb-color-surface);
+  gap: var(--nb-space-2) var(--nb-space-3);
 }
-.home-step-dot {
+.home-start--complete {
+  padding-block: var(--nb-space-4);
+}
+.home-start--complete .home-start__head {
+  align-items: center;
+}
+.home-checkins {
   display: grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 50%;
-  border: 2px solid var(--nb-color-border-strong);
-  color: var(--nb-color-text-muted);
-  font-weight: var(--nb-font-weight-bold);
-}
-.home-checklist li[data-done] .home-step-dot {
-  background: var(--nb-color-success);
-  border-color: var(--nb-color-success);
-  color: var(--nb-color-on-accent);
-}
-.home-checklist li[data-done] strong {
-  color: var(--nb-color-text-muted);
-}
-.home-checklist p {
-  font-size: var(--nb-font-size-sm);
-  color: var(--nb-color-text-muted);
-  margin: 0;
-}
-.home-checklist .nb-inline {
-  justify-content: end;
+  gap: var(--nb-space-3);
+  min-width: 0;
+  container: home-checkins / inline-size;
 }
 .home-address-copy {
   max-width: 100%;
@@ -86,12 +68,13 @@
   flex-basis: 100%;
 }
 .home-checklist .home-address-copy {
-  margin-block: var(--nb-space-2);
+  margin-block: var(--nb-space-1);
 }
 .home-wallet .nb-stats {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .home-wallet .nb-stat__value {
+  white-space: normal;
   font-size: var(--nb-font-size-xl);
   overflow-wrap: anywhere;
 }
@@ -101,6 +84,11 @@
 .home-page .core-checkin-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--nb-space-4);
+}
+@container home-checkins (width < 28rem) {
+  .home-page .core-checkin-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .home-page .core-checkin-card {
   padding: var(--nb-space-4) var(--nb-space-5);
@@ -194,9 +182,22 @@
 .home-intro > .nb-btn {
   justify-self: center;
 }
-.api-access-page {
-  max-width: var(--nb-content-readable);
-  margin-inline: auto;
+/* The key stays in a narrow column beside the client instructions and guides. */
+.api-access-layout,
+.api-access-main {
+  display: grid;
+  gap: var(--nb-space-5);
+  align-items: start;
+  min-width: 0;
+}
+@media (width > 64rem) {
+  .api-access-layout {
+    grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
+  }
+  .api-access-key {
+    position: sticky;
+    top: calc(4.25rem + var(--nb-space-4));
+  }
 }
 .api-access-page .nb-panel > .nb-facts,
 .api-access-page .nb-panel > .nb-note,
@@ -258,7 +259,7 @@
   overflow-wrap: anywhere;
 }
 @media (width <= 64rem) {
-  .home-page .home-hero {
+  .home-page .home-overview {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -269,31 +270,17 @@
     min-height: 40px;
   }
   .home-wallet > .nb-between > a,
-  .home-start > .nb-between > a,
+  .home-start__side > a,
   .home-announcements .nb-panel__head > a {
     display: inline-flex;
     align-items: center;
     min-height: 40px;
-  }
-  .home-checklist li > span.nb-inline {
-    grid-column: 1 / -1;
-    justify-self: stretch;
   }
 
   .home-page .nb-btn,
   .home-page a:not(.nb-btn),
   .api-access-page .nb-btn {
     min-height: 40px;
-  }
-  .home-checklist li {
-    grid-template-columns: 2rem minmax(0, 1fr);
-  }
-  .home-checklist li > :last-child {
-    grid-column: 2;
-    justify-self: start;
-  }
-  .home-checklist .nb-inline {
-    justify-content: start;
   }
   .home-page .home-announcement-card__actions {
     grid-column: 1 / -1;
@@ -309,18 +296,6 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
-@media (width <= 32rem) {
-  .home-page .core-checkin-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
 .home-page .nb-page-header h1 {
   text-wrap: balance;
-}
-.home-checklist-footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--nb-space-2);
 }

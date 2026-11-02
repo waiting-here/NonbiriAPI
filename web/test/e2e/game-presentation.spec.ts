@@ -909,10 +909,12 @@ test.describe('RPS dealer and follower controls', () => {
     await page.goto(`${USER_ORIGIN}/games/rps`);
     await expect(page.locator('.rps-dealer input')).toBeEnabled();
     const input = page.locator('.rps-dealer input');
-    const add = page.getByRole('button', { name: '+2 credits' });
-    const subtract = page.getByRole('button', { name: '−2 credits' });
+    const add = page.getByRole('button', { name: '+ 2 credits', exact: true });
+    const subtract = page.getByRole('button', { name: '− 2 credits', exact: true });
     const maximum = page.getByRole('button', { name: 'Max 10 credits' });
     await expect(add).toBeVisible();
+    await expect(add).toHaveText('+2 credits');
+    await expect(subtract).toHaveText('−2 credits');
     await input.fill('');
     await add.click();
     await expect(input).toHaveValue('2');
@@ -924,6 +926,7 @@ test.describe('RPS dealer and follower controls', () => {
     await expect(input).toHaveValue('10');
     await expect(page.locator('.rps-raise-flash')).toHaveClass(/is-maximum/);
     expect(actions).toHaveLength(0);
+    await saveScreenshot(page, 'rps-raise-shortcuts.png');
     await page.getByRole('button', { name: 'Raise', exact: true }).click();
     await expect.poll(() => actions.length).toBe(1);
     expect(actions[0]).toMatchObject({

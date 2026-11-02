@@ -3,8 +3,8 @@
 
 .brand-suffix {
   color: var(--nb-color-text-muted);
-  font-size: 0.82rem;
-  font-weight: 600;
+  font-size: var(--nb-font-size-xs);
+  font-weight: var(--nb-font-weight-semibold);
 }
 
 .nb-admin-shell {
@@ -23,9 +23,10 @@
   align-items: center;
   gap: var(--nb-space-5);
   min-height: 4.25rem;
-  border-bottom: 1px solid var(--nb-color-border);
-  padding: 0.65rem clamp(var(--nb-space-4), 4vw, var(--nb-space-8));
+  border-bottom: 1px solid color-mix(in srgb, var(--nb-color-border) 80%, transparent);
+  padding: 0.65rem clamp(var(--nb-space-4), 2vw, var(--nb-space-6));
   background: var(--nb-color-surface);
+  box-shadow: none;
 }
 
 .nb-admin-header__brand {
@@ -39,12 +40,12 @@
   display: inline-flex;
   align-items: center;
   min-height: 1.5rem;
-  border: 1px solid var(--nb-color-border);
   border-radius: var(--nb-radius-pill);
-  padding: 0.2rem 0.5rem;
-  color: var(--nb-color-text-muted);
+  padding: 0.15rem 0.6rem;
+  background: var(--nb-color-highlight-soft);
+  color: var(--nb-color-highlight);
   font-size: var(--nb-font-size-xs);
-  font-weight: var(--nb-font-weight-bold);
+  font-weight: var(--nb-font-weight-semibold);
   white-space: nowrap;
 }
 
@@ -62,14 +63,15 @@
   align-self: start;
   height: calc(100dvh - 4.25rem);
   overflow-y: auto;
-  border-right: 1px solid var(--nb-color-border);
-  background: var(--nb-color-surface);
+  border-right: 1px solid color-mix(in srgb, var(--nb-color-border) 80%, transparent);
+  background: var(--nb-color-sidebar);
+  scrollbar-width: thin;
 }
 
 .nb-admin-sidebar__nav {
   display: grid;
-  gap: var(--nb-space-2);
-  padding: var(--nb-space-3) var(--nb-space-3) var(--nb-space-5);
+  gap: var(--nb-space-4);
+  padding: var(--nb-space-4) var(--nb-space-3) var(--nb-space-6);
 }
 
 .nb-admin-sidebar__group {
@@ -87,12 +89,11 @@
 }
 
 .nb-admin-sidebar__group-title {
-  margin: 0;
+  margin: 0 0 var(--nb-space-1);
   color: var(--nb-color-text-subtle);
   font-size: var(--nb-font-size-xs);
-  font-weight: var(--nb-font-weight-bold);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: var(--nb-font-weight-semibold);
+  letter-spacing: 0.02em;
   overflow-wrap: anywhere;
 }
 
@@ -103,7 +104,7 @@
   gap: var(--nb-space-2);
   width: 100%;
   min-height: 1.75rem;
-  padding: 0.25rem 0.7rem;
+  padding: 0.25rem 0.75rem;
 }
 
 .nb-admin-sidebar__group-title > button {
@@ -160,30 +161,54 @@
 }
 
 .nb-admin-sidebar__link {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--nb-space-2);
+  gap: var(--nb-space-3);
   min-width: 0;
-  min-height: 1.75rem;
-  border-radius: var(--nb-radius-md);
-  padding: 0.2rem 0.7rem;
+  min-height: 2.25rem;
+  border-radius: var(--nb-radius-control);
+  padding: 0.35rem 0.75rem;
   line-height: 1.35;
   color: var(--nb-color-text-muted);
   font-size: var(--nb-font-size-sm);
-  font-weight: var(--nb-font-weight-semibold);
+  font-weight: var(--nb-font-weight-medium);
   text-decoration: none;
+  transition:
+    background-color var(--nb-motion-micro) var(--nb-motion-ease),
+    color var(--nb-motion-micro) var(--nb-motion-ease);
 }
 
 .nb-admin-sidebar__link > svg {
   flex: 0 0 auto;
-  width: 1.05rem;
-  height: 1.05rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--nb-color-text-subtle);
 }
 
-.nb-admin-sidebar__link:hover,
-.nb-admin-sidebar__link[aria-current='page'] {
-  background: var(--nb-color-surface-emphasis);
+.nb-admin-sidebar__link:hover {
+  background: var(--nb-color-nav-hover);
   color: var(--nb-color-text);
+}
+
+.nb-admin-sidebar__link[aria-current='page'] {
+  background: var(--nb-color-nav-active);
+  color: var(--nb-color-accent);
+  font-weight: var(--nb-font-weight-semibold);
+}
+
+.nb-admin-sidebar__link[aria-current='page'] > svg {
+  color: var(--nb-color-accent);
+}
+
+.nb-admin-sidebar__link[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  inset-block: 0.45rem;
+  inset-inline-start: calc(-1 * var(--nb-space-3) + 2px);
+  width: 3px;
+  border-radius: var(--nb-radius-pill);
+  background: var(--nb-color-accent);
 }
 
 .nb-admin-sidebar__label {

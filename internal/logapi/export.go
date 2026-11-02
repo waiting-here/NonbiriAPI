@@ -111,10 +111,6 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		query += endpointKeyPredicate
 		args = append(args, *normalized.EndpointKeyID)
 	}
-	if normalized.CharityModel != nil {
-		query += charityModelPredicate
-		args = append(args, *normalized.CharityModel)
-	}
 	if normalized.UpstreamModel != nil {
 		query += upstreamModelPredicate
 		args = append(args, *normalized.UpstreamModel)
@@ -138,6 +134,10 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	if normalized.To != nil {
 		query += ` AND l.started_at<?`
 		args = append(args, *normalized.To)
+	}
+	if normalized.CharityModel != nil {
+		query += charityModelPredicate
+		args = append(args, *normalized.CharityModel)
 	}
 	query += ` ORDER BY l.started_at ASC,l.id ASC LIMIT ?`
 	args = append(args, maxExportRows+1)

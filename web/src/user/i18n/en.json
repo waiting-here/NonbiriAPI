@@ -1,5 +1,18 @@
 {
   "user": {
+    "fatFish": {
+      "states": {
+        "prepared": "Ready to start",
+        "active": "Playing",
+        "verifying": "Checking result",
+        "settled_pass": "Passed",
+        "settled_fail": "Not passed",
+        "abandoned": "Abandoned",
+        "expired": "Timed out",
+        "cancelled_refunded": "Cancelled and refunded"
+      },
+      "recordReference": "Record reference"
+    },
     "keys": {
       "nav": "API access"
     },
@@ -8,6 +21,12 @@
     },
     "diagnostics": {
       "nav": "Records"
+    },
+    "navigation": {
+      "own": "My services",
+      "ownSections": "My services",
+      "services": "Services",
+      "models": "Models"
     },
     "shell": {
       "navLabel": "Main navigation",
@@ -29,6 +48,7 @@
       "clientHelp": "Use the model name copied in the previous step.",
       "clientGuide": "See client instructions",
       "setupDone": "Setup complete",
+      "stepDone": "Done",
       "apiAccess": "View API access",
       "hide": "Hide",
       "collapseHelp": "This checklist collapses when setup is complete.",
@@ -204,6 +224,8 @@
           "nextPage": "Next page",
           "yourCompleteGamesFromTheLast30": "Your complete games from the last 30 days.",
           "firstPage": "First page",
+          "previousPage": "Previous page",
+          "pagePosition": "Page {{page}}",
           "verifyRandomness": "Verify randomness",
           "seedDisclosed": "Seed disclosed",
           "openingCommitmentLocked": "Opening commitment locked",
@@ -1198,8 +1220,8 @@
           "firstBust": "Bust once",
           "first21": "Reach 21 once",
           "firstNatural21": "Get a natural 21 once",
-          "remaining": "{{count}} tasks left · {{reward}} general credits available",
-          "awarded": "Newcomer reward: +{{reward}} general credits",
+          "remaining": "{{count}} tasks left · <reward>{{reward}}</reward> general credits available",
+          "awarded": "Newcomer reward: +<reward>{{reward}}</reward> general credits",
           "fishingHelp": "Finish one cast or a ten-catch batch with each bait to receive its one-time reward automatically.",
           "linklinkHelp": "Clear each board size once to receive its one-time reward automatically.",
           "rpsHelp": "Finish each mode once to receive its one-time reward automatically. Automatic timeout moves count too; leaving a queue does not.",
@@ -1262,7 +1284,7 @@
           },
           "enter": "Enter game",
           "details": "View availability",
-          "from": "From {{amount}} credits",
+          "from": "From <amount>{{amount}}</amount> credits",
           "specs": "{{count}} of 3 board sizes open",
           "modes": "Playable modes: {{count}}",
           "learn": "Learn, history and ongoing games",
@@ -1280,10 +1302,42 @@
             "body": "Collect fish across four waters, upgrade your gear, and fill your fishing journal."
           },
           "modesAll": "Modes: {{count}}",
+          "reviewCosts": "View play options and costs",
           "firstClearReward": "First-clear reward",
           "winCredits": "Win credits"
         },
         "fishing": {
+          "pond": {
+            "zeroCatch": "Zero-credit catch",
+            "cleanup": "Cleanup leaderboard",
+            "gifts": "Gift leaderboard",
+            "period": "Time period",
+            "days7": "Past 7 days",
+            "days30": "Past 30 days",
+            "all": "All time",
+            "cleanupHelp": "Junk recovered, including received gifts. Small fry do not count.",
+            "giftsHelp": "Junk successfully returned to the pond.",
+            "itemCount": "Items",
+            "empty": "No records yet",
+            "emptyCleanup": "Catch some junk to help clean up the pond.",
+            "emptyGifts": "Return newly caught junk to the pond to start a record.",
+            "giftFrom": "A gift from",
+            "giftSuffix": "",
+            "anonymousSource": "Anonymous source",
+            "disclosure": "This item may be caught as a gift with your current Discord nickname and avatar. The signature stays if you turn game anonymity on later.",
+            "anonymousHelp": "Turn off game anonymity before returning or releasing a catch.",
+            "release": "Release",
+            "return": "Return to pond",
+            "released": "Released",
+            "returned": "Returned to pond",
+            "releaseHelp": "Releasing small fry does not add a gift or count toward either board.",
+            "sending": "Working…",
+            "retry": "Retry this catch",
+            "unknown": "The result is unconfirmed. Retrying checks this same catch without returning it twice.",
+            "forbidden": "Check game anonymity and your account status, then retry.",
+            "unavailable": "This catch can no longer be returned. Refresh the page to see your latest catch.",
+            "failed": "The action did not finish. Retry this catch."
+          },
           "eyebrow": "Pond fishing",
           "title": "A quiet cast, a surprise catch",
           "description": "Choose your bait and cast a line.",
@@ -1350,7 +1404,7 @@
             "welfare": "Welfare pool deduction",
             "thursday": "Thursday pool deduction"
           },
-          "netReceived": "Net catch: +{{amount}} general credits",
+          "netReceived": "Net catch: +<amount>{{amount}}</amount> general credits",
           "tier": {
             "small": "Small",
             "regular": "Common",
@@ -1361,7 +1415,7 @@
             "treasure": "Treasure"
           },
           "size": "{{size}} cm",
-          "reward": "Net: {{amount}} general credits",
+          "reward": "Net: <amount>{{amount}}</amount> general credits",
           "blueFatFish": {
             "label": "Blue fat fish",
             "original": "Original legendary species: {{species}}"
@@ -1489,16 +1543,16 @@
             "noRaise": "Do not raise",
             "raise": "Raise",
             "adjust": "Adjust the raise",
-            "subtract": "−{{amount}} credits",
-            "add": "+{{amount}} credits",
-            "maximum": "Max {{amount}} credits",
-            "allIn": "All in {{amount}} credits",
+            "subtract": "−<amount>{{amount}}</amount> credits",
+            "add": "+<amount>{{amount}}</amount> credits",
+            "maximum": "Max <amount>{{amount}}</amount> credits",
+            "allIn": "All in <amount>{{amount}}</amount> credits",
             "integerOnly": "Positive whole credits only. Maximum: {{max}}.",
             "noCapacity": "Less than 1 whole credit remains; only no raise is legal."
           },
           "follower": {
             "call": "Call",
-            "required": "Required to call: {{amount}} credits",
+            "required": "Required to call: <amount>{{amount}}</amount> credits",
             "surrender": "Surrender"
           },
           "waitingSync": "Waiting for the current decision to sync…",
@@ -1537,8 +1591,8 @@
           "freeTies": "Free-pool ties (limit {{limit}})",
           "poolStreaks": "Current pool streaks",
           "poolStreakValues": "paid {{paid}} · free {{free}}",
-          "cuts": "This stake is divided into platform {{platform}}, welfare {{welfare}}, and Thursday {{thursday}} credits",
-          "welfareCarry": "Welfare carry: {{amount}} credits",
+          "cuts": "This stake is divided into platform <platform>{{platform}}</platform>, welfare <welfare>{{welfare}}</welfare>, and Thursday <thursday>{{thursday}}</thursday> credits",
+          "welfareCarry": "Welfare carry: <amount>{{amount}}</amount> credits",
           "economyDetails": "Stakes and round details",
           "tieStreak": "Consecutive free ties {{count}} / {{limit}}",
           "lastReveal": "Previous round",
@@ -2882,11 +2936,11 @@
       "treasureReward": "Chest reward: {{coins}} coins · {{bait}} ×{{count}}",
       "debrisReward": "Recovered {{item}}",
       "exchangeHeading": "Exchange coins and site credits",
-      "exchangeHelp": "Exchange rate: {{source}} {{sourceUnit}} : {{target}} {{targetUnit}}. Preview the amounts before confirming.",
+      "exchangeHelp": "Exchange rate: <sourceAmount>{{sourceAmount}}</sourceAmount> {{sourceUnit}} : <targetAmount>{{targetAmount}}</targetAmount> {{targetUnit}}. Preview the amounts before confirming.",
       "direction": "Direction",
       "batches": "Number of batches",
       "quote": "Preview exchange",
-      "quoteAmounts": "Pay {{source}} {{sourceUnit}} and receive {{target}} {{targetUnit}}",
+      "quoteAmounts": "Pay <sourceAmount>{{sourceAmount}}</sourceAmount> {{sourceUnit}} and receive <targetAmount>{{targetAmount}}</targetAmount> {{targetUnit}}",
       "exchangeConfirm": "Confirm exchange",
       "exchangeUnknown": "The exchange is unconfirmed. Try again.",
       "exchangeSaved": "Exchange completed.",
@@ -3635,15 +3689,16 @@
       "retryDiscovery": "Retry loading models",
       "manualName": "Enter a model name manually",
       "searchPlaceholder": "Name, address, or note",
-      "advancedSetup": "Protocol and channel presets",
+      "advancedSetup": "Protocol and model list",
       "serviceAddress": "Service address",
+      "customBody": "Enter a service address and key.",
+      "mainstreamBody": "Pick a common service set up by the site, with the address and protocol filled in.",
       "keyOwnership": "By adding this key, you confirm that you are authorized to use it.",
       "addAndFetch": "Add and fetch models",
       "addKeyAndFetch": "Add key and fetch models",
       "addAnotherKey": "Add another key",
       "additionalKey": "API key {{number}}",
       "keyAdded": "Key added. Manage its model lists for this endpoint.",
-      "manageServiceKeys": "Manage service keys",
       "serviceKeysHelp": "Keys belong to this service. View their endpoints, replace or disable them, or reuse them on another endpoint with “Use existing key”.",
       "currentKey": "Current key",
       "noEndpoints": "This service has no endpoints yet. Add one to manage keys and models.",
@@ -3748,7 +3803,7 @@
     "exact": {
       "alignment": "Exact reset time",
       "anchor": "Reset date and time",
-      "help": "Enter the reset time in {{zone}}. Until a future first reset, usage counts from this save. Short months use their last day, then return to the original day.",
+      "help": "Enter the reset time in {{zone}}. For a new rule or when switching to this option, the first reset must be in the future; usage counts from this save. An existing rule may keep its original date. Short months use their last day, then return to the original day.",
       "preview": "Next three resets",
       "loading": "Calculating reset times…",
       "unavailable": "Check the reset date and time, then try again.",

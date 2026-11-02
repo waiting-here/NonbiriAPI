@@ -383,8 +383,8 @@ describe('numbered role log panel', () => {
     await waitFor(() =>
       expect(within(dialog).getAllByText('upstream-model', { exact: true })).toHaveLength(2),
     );
-    expect(within(dialog).getByText('123.45', { exact: true })).toBeVisible();
-    expect(within(dialog).queryByText('999.99', { exact: true })).toBeNull();
+    expect(within(dialog).getByText('Charge (credits)').parentElement).toHaveTextContent('123.45');
+    expect(dialog).not.toHaveTextContent('999.99');
     const attemptItems = Array.from(dialog.querySelectorAll('.log-attempt')) as HTMLElement[];
     expect(attemptItems).toHaveLength(2);
     expect(within(attemptItems[0]!).getByText('2', { exact: true })).toBeVisible();

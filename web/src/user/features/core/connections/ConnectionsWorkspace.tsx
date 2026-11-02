@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { PageHeader } from '@shared/components/States';
-import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
-import { Field, Fold, Note } from '@shared/components/ui';
+import { Sheet } from '@shared/components/ui/Sheet';
+import { Tabs } from '@shared/components/ui/Tabs';
+import { Note } from '@shared/components/ui';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { EndpointDetail } from '../EndpointDetail';
@@ -21,6 +22,9 @@ import { ConnectionEditor } from './ConnectionEditor';
 import { ConnectionSummary } from './ConnectionSummary';
 import { CredentialsPanel } from './CredentialsPanel';
 import { DiscoverySourceDetail } from './DiscoverySourceDetail';
+import { SectionTabs } from '../../../components/SectionTabs';
+
+type ConnectionView = 'entries' | 'credentials' | 'settings';
 
 function clearDetailScope(params: URLSearchParams) {
   for (const field of [
@@ -74,6 +78,9 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
         }
       />
     );
+  // Opening a service from the finished form ends the create task, so returning to the
+  // list does not reopen the sheet.
+  if (selected && creating) setCreating(false);
   if (selected)
     return <ConnectionDetail key={user.id + ':' + selected} accountId={user.id} id={selected} />;
   const createButton = (
@@ -89,16 +96,18 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
         description={t('common.connections.intro')}
         actions={createButton}
       />
-      {creating ? (
-        <ExpandablePanel
-          open
-          onClose={close}
-          title={t('user.workflows.addService')}
-          closeLabel={t('common.connections.close')}
-        >
-          <ServiceCreateForm accountId={user.id} />
-        </ExpandablePanel>
-      ) : null}
+      <SectionTabs group="own" />
+      <Sheet
+        key={user.id}
+        open={creating}
+        keepMounted
+        size="lg"
+        onClose={close}
+        title={t('user.workflows.addService')}
+        closeLabel={t('common.connections.close')}
+      >
+        <ServiceCreateForm accountId={user.id} onManage={close} />
+      </Sheet>
       <ConnectionResourceList
         restoreScroll
         accountId={user.id}
@@ -161,7 +170,25 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
   const { t } = useTranslation();
   const [params, setParams] = useSearchState();
   const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [addTask, setAddTask] = useState(0);
+  const [settingsVersion, setSettingsVersion] = useState(0);
+  const tabsID = useId();
+  const requestedView = params.get('connection_view');
+  // Explicit tabs take precedence; old key detail links still infer the credentials tab.
+  const view: ConnectionView =
+    requestedView === 'entries' || requestedView === 'credentials' || requestedView === 'settings'
+      ? requestedView
+      : params.get('credential_id')
+        ? 'credentials'
+        : 'entries';
+  const [visitedViews, setVisitedViews] = useState<ConnectionView[]>([view]);
+  if (!visitedViews.includes(view)) setVisitedViews([...visitedViews, view]);
+  const setView = (next: ConnectionView) =>
+    setParams((previous) => {
+      const updated = new URLSearchParams(previous);
+      updated.set('connection_view', next);
+      return updated;
+    });
   const connection = useQuery({
     queryKey: [...connectionKeys.root(accountId), 'connection', id],
     queryFn: ({ signal }) => connectionAPI.get(id, signal),
@@ -190,6 +217,11 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
         <CoreErrorPanel error={connection.error} onRetry={() => void connection.refetch()} />
       </div>
     );
+  const tabs = [
+    { value: 'entries', label: t('common.connections.entries') },
+    { value: 'credentials', label: t('common.connections.credentials') },
+    { value: 'settings', label: t('common.connections.editConnection') },
+  ] as const;
   return (
     <div className="page core-page core-stack services-detail">
       <PageHeader
@@ -197,56 +229,78 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
         description={connection.data.note}
         back={<Link to={back}>{t('common.connections.backToConnections')}</Link>}
         actions={
-          <button
-            type="button"
-            className="nb-btn nb-btn--secondary"
-            onClick={() => setEditing((value) => !value)}
-          >
-            {t('common.connections.editConnection')}
+          <button type="button" className="nb-btn nb-btn--primary" onClick={() => setAdding(true)}>
+            {t('common.connections.addEntry')}
           </button>
         }
       />
-      {editing ? (
-        <ExpandablePanel
-          open
-          onClose={() => setEditing(false)}
-          title={t('common.connections.editConnection')}
-          closeLabel={t('common.connections.close')}
-        >
-          <ConnectionEditor
-            accountId={accountId}
-            connection={connection.data}
-            onSaved={() => setEditing(false)}
-            onDeleted={() => setParams(backParams)}
-          />
-        </ExpandablePanel>
-      ) : null}
-      <div className="nb-actions">
-        <button type="button" className="nb-btn nb-btn--secondary" onClick={() => setAdding(true)}>
-          {t('common.connections.addEntry')}
-        </button>
-      </div>
-      {adding ? (
-        <ExpandablePanel
-          open
-          onClose={() => setAdding(false)}
-          title={t('common.connections.addEntry')}
-          closeLabel={t('common.connections.close')}
-        >
-          <ServiceCreateForm accountId={accountId} connection={connection.data} />
-        </ExpandablePanel>
-      ) : null}
-      <ConnectionEndpoints accountId={accountId} connectionId={id} />
-      <Fold
-        lazy
-        title={t('user.services.manageServiceKeys')}
-        defaultOpen={
-          params.get('connection_view') === 'credentials' || Boolean(params.get('credential_id'))
-        }
+      <Tabs
+        label={connection.data.display_name}
+        value={view}
+        onChange={setView}
+        tabs={tabs.map((tab) => ({
+          ...tab,
+          id: tabsID + '-' + tab.value,
+          panelId: tabsID + '-' + tab.value + '-panel',
+        }))}
+      />
+      {tabs.map((tab) =>
+        visitedViews.includes(tab.value) ? (
+          <div
+            key={tab.value}
+            className="services-detail__panel"
+            role="tabpanel"
+            id={tabsID + '-' + tab.value + '-panel'}
+            aria-labelledby={tabsID + '-' + tab.value}
+            hidden={view !== tab.value}
+          >
+            {tab.value === 'settings' ? (
+              <section className="nb-panel services-settings">
+                <ConnectionEditor
+                  key={settingsVersion}
+                  accountId={accountId}
+                  connection={connection.data}
+                  onSaved={() => {
+                    setSettingsVersion((version) => version + 1);
+                    setParams((previous) => {
+                      if (previous.get('connection_view') !== 'settings') return previous;
+                      const next = new URLSearchParams(previous);
+                      next.set('connection_view', 'entries');
+                      return next;
+                    });
+                  }}
+                  onDeleted={() => setParams(backParams)}
+                />
+              </section>
+            ) : tab.value === 'credentials' ? (
+              <div className="nb-stack">
+                <Note>{t('user.services.serviceKeysHelp')}</Note>
+                <CredentialsPanel accountId={accountId} connectionId={id} />
+              </div>
+            ) : (
+              <ConnectionEndpoints accountId={accountId} connectionId={id} />
+            )}
+          </div>
+        ) : null,
+      )}
+      <Sheet
+        key={addTask}
+        open={adding}
+        keepMounted
+        size="lg"
+        onClose={() => setAdding(false)}
+        title={t('common.connections.addEntry')}
+        closeLabel={t('common.connections.close')}
       >
-        <Note>{t('user.services.serviceKeysHelp')}</Note>
-        <CredentialsPanel accountId={accountId} connectionId={id} />
-      </Fold>
+        <ServiceCreateForm
+          accountId={accountId}
+          connection={connection.data}
+          onManage={() => {
+            setAdding(false);
+            setAddTask((task) => task + 1);
+          }}
+        />
+      </Sheet>
     </div>
   );
 }
@@ -296,18 +350,31 @@ function ConnectionEndpoints({
         <CoreErrorPanel error={query.error} onRetry={() => void query.refetch()} />
       ) : query.data ? (
         <>
-          {query.data.pagination.total_items !== '1' ? (
+          {query.data.pagination.total_items !== '1' && (query.data.data.length > 0 || selected) ? (
             <>
-              <Field label={t('common.connections.entry')}>
-                {(props) => (
-                  <select
-                    {...props}
+              <div
+                className="services-entry-list"
+                role="group"
+                aria-label={t('common.connections.entries')}
+              >
+                {/* An entry opened from a link stays listed even when it is on another page. */}
+                {[
+                  ...(selected && !query.data.data.some((row) => row.id === selected.id)
+                    ? [selected]
+                    : []),
+                  ...query.data.data,
+                ].map((row) => (
+                  <button
+                    key={row.id}
+                    type="button"
+                    className="services-entry"
+                    data-entry-id={row.id}
+                    aria-pressed={row.id === selected?.id}
                     disabled={modelsLocked}
-                    value={selected?.id ?? ''}
-                    onChange={(event) =>
+                    onClick={() =>
                       setParams((previous) => {
                         const next = new URLSearchParams(previous);
-                        next.set('endpoint_id', event.target.value);
+                        next.set('endpoint_id', row.id);
                         next.delete('key_id');
                         next.delete('focus_key_id');
                         for (const field of [...next.keys()])
@@ -316,19 +383,11 @@ function ConnectionEndpoints({
                       })
                     }
                   >
-                    {selected && !query.data.data.some((row) => row.id === selected.id) ? (
-                      <option value={selected.id}>
-                        {selected.note || selected.base_url} · {selected.base_url}
-                      </option>
-                    ) : null}
-                    {query.data.data.map((row) => (
-                      <option key={row.id} value={row.id}>
-                        {row.note || row.base_url} · {row.base_url}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </Field>
+                    <strong>{row.note || row.base_url}</strong>
+                    <span className="mono">{row.base_url}</span>
+                  </button>
+                ))}
+              </div>
               <PagePagination
                 metadata={query.data.pagination}
                 requestedPage={pager.page}

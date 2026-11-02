@@ -1,3 +1,7 @@
+import { useTranslation } from 'react-i18next';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
+import { CopyValue } from '@shared/components/CopyValue';
+import { GameMoney } from '../../games/common/GameMoney';
 import { SimplePager } from '@shared/operations/SimplePager';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { useEffect, useRef, useState } from 'react';
@@ -25,6 +29,16 @@ import { UserPageGate } from '../../components/UserPageGate';
 import { useUserSession } from '../../data';
 import './fatfish.css';
 const root = ['user', 'fat-fish'] as const;
+const challengeStateKeys: Record<FatFishChallenge['state'], string> = {
+  prepared: 'user.fatFish.states.prepared',
+  active: 'user.fatFish.states.active',
+  verifying: 'user.fatFish.states.verifying',
+  settled_pass: 'user.fatFish.states.settled_pass',
+  settled_fail: 'user.fatFish.states.settled_fail',
+  abandoned: 'user.fatFish.states.abandoned',
+  expired: 'user.fatFish.states.expired',
+  cancelled_refunded: 'user.fatFish.states.cancelled_refunded',
+};
 const terminal = (state: string) =>
   ['settled_pass', 'settled_fail', 'abandoned', 'expired', 'cancelled_refunded'].includes(state);
 function Condition({ hint }: { hint?: FatFishConditionHint }) {
@@ -105,6 +119,8 @@ function Content({ account }: { account: string }) {
   }, [text]);
   const keys = [...root, account] as const;
   const playSupportError = localPlaySupportError();
+  const { t } = useTranslation();
+  const formatTime = useDateTimeFormatter();
   const [params, setParams] = useSearchParams();
   const periodID = params.get('period') ?? '',
     nodeID = params.get('node') ?? '';
@@ -378,7 +394,8 @@ function Content({ account }: { account: string }) {
         <Card>
           <h2>{text('common.currentChallenge')}</h2>
           <p>
-            {text('common.status')}: {active.state} · {text('common.ticket')}: {active.ticket_price}
+            {t(challengeStateKeys[active.state])} · {text('common.ticket')}:{' '}
+            <GameMoney value={active.ticket_price} />
           </p>
           {activeController ? (
             <>
@@ -675,22 +692,40 @@ function Content({ account }: { account: string }) {
           <EmptyState title={text('common.noChallengeHistoryTitle')} body={text('common.noChallengeHistoryBody')} />
         ) : null}
         <ol className="fatfish-history">
-          {history.data?.items.map((item) => (
-            <li key={item.id}>
-              <code>{item.id}</code>
-              <strong>
-                {item.result?.passed ? text('common.passed') : text('common.notPassed')}
-              </strong>
-              <span>
-                {item.result?.stars ?? 0}★ · {formatScoreUnits(item.result?.score_units ?? '0')}
-              </span>
-              <span>
-                {text('common.ticket')}: {item.result?.ticket_charge ?? item.ticket_price} ·{' '}
-                {text('common.refund')}: {item.result?.ticket_refund ?? '0'} ·{' '}
-                {text('common.rewards')}: {item.result?.rewards ?? '0'}
-              </span>
-            </li>
-          ))}
+          {history.data?.items.map((item) => {
+            const timestamp = item.end_at_ms ?? item.start_at_ms ?? item.prepared_at_ms;
+            return (
+              <li key={item.id}>
+                <div className="fatfish-history__heading">
+                  <strong>{t(challengeStateKeys[item.state])}</strong>
+                  {typeof timestamp === 'number' ? (
+                    <time dateTime={new Date(timestamp).toISOString()}>
+                      {formatTime(timestamp / 1000)}
+                    </time>
+                  ) : null}
+                </div>
+                {item.result ? (
+                  <span>
+                    {item.result.stars}★ · {formatScoreUnits(item.result.score_units)}
+                  </span>
+                ) : null}
+                <span>
+                  {text('common.ticket')}:{' '}
+                  <GameMoney value={item.result?.ticket_charge ?? item.ticket_price} />
+                  {item.result ? (
+                    <>
+                      {' · '}{text('common.refund')}: <GameMoney value={item.result.ticket_refund} />
+                      {' · '}{text('common.rewards')}: <GameMoney value={item.result.rewards} />
+                    </>
+                  ) : null}
+                </span>
+                <details className="fatfish-history__reference">
+                  <summary>{t('user.fatFish.recordReference')}</summary>
+                  <CopyValue value={item.id} label={t('user.fatFish.recordReference')} />
+                </details>
+              </li>
+            );
+          })}
         </ol>
         <SimplePager
           page={historyPage}

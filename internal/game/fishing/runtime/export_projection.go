@@ -56,8 +56,42 @@ func validPresentation(species string, size int, blue, milk *string) bool {
 }
 
 func ValidExportOutcome(value FishingOutcome) bool {
-	return validPresentation(value.SpeciesKey, value.SizeCM, value.BlueFatFishLengthCM, value.MilkCrabLengthCM) &&
-		(value.BlueFatFishLengthCM == nil && value.MilkCrabLengthCM == nil || value.Tier == "legend")
+	if !validPresentation(value.SpeciesKey, value.SizeCM, value.BlueFatFishLengthCM, value.MilkCrabLengthCM) ||
+		(value.BlueFatFishLengthCM != nil || value.MilkCrabLengthCM != nil) && value.Tier != "legend" {
+		return false
+	}
+	if value.Pond == nil {
+		return true
+	}
+	if value.Tier != "junk" || value.SizeCM != 0 {
+		return false
+	}
+	known := false
+	for _, species := range fishing.JunkRoster() {
+		if value.SpeciesKey == species {
+			known = true
+			break
+		}
+	}
+	if !known {
+		return false
+	}
+	switch value.Pond.ReturnState {
+	case "available":
+		return value.Pond.Gift == nil && value.Pond.ReturnedAt == nil
+	case "returned":
+		return value.SpeciesKey != "fry" && value.Pond.Gift == nil && value.Pond.ReturnedAt != nil
+	case "released":
+		return value.SpeciesKey == "fry" && value.Pond.Gift == nil && value.Pond.ReturnedAt != nil
+	case "gift":
+		if value.SpeciesKey == "fry" || value.Pond.Gift == nil || value.Pond.ReturnedAt != nil {
+			return false
+		}
+		_, err := value.Pond.Gift.MarshalJSON()
+		return err == nil
+	default:
+		return false
+	}
 }
 
 func (value UserExport) ValidateProjection() error {
@@ -69,6 +103,9 @@ func (value UserExport) ValidateProjection() error {
 	for _, batch := range value.Terminal {
 		for _, outcome := range batch.Outcomes {
 			if !ValidExportOutcome(outcome) {
+				return ErrInvariant
+			}
+			if outcome.Pond != nil && outcome.Pond.Gift != nil && outcome.Pond.Gift.Kind != "anonymous" {
 				return ErrInvariant
 			}
 		}

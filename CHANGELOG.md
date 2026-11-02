@@ -4,6 +4,121 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.3.4 — 2026-11-02
+
+### Pond interaction
+
+- Let players with game anonymity disabled return newly caught zero-credit
+  junk to the pond once. Queue it in arrival order with the donor's Discord
+  name and avatar; later enabling anonymity does not remove that signature.
+- After an ordinary junk result, independently choose whether to deliver a
+  queued gift, with a greater chance as the queue grows. Show the donated
+  item and its donor while preserving zero payout and the original economic
+  draw. Received gifts cannot be returned again.
+- Let players release small fry without adding them to the gift queue or
+  either new leaderboard.
+- Add cleanup and gifting boards for the past seven days by default, 30 days
+  and all time. Rank identities follow the current game-anonymity setting.
+
+### Interface
+
+- Refresh both stations with warm neutral surfaces, a teal accent and an apricot
+  highlight, self-hosted Inter for Latin text and figures, and one shape for
+  controls and one for cards. Dark mode and account appearances keep their
+  contrast limits; appearances may change only a fixed set of surface, text,
+  border, accent and shadow values.
+- Replace the default mark with a symmetric N.
+- Give maintenance, browser-error and missing-interface pages the same visual
+  style, and add clear guidance when JavaScript is disabled. Standalone pages
+  keep their text and refresh action available without scripts or external assets.
+- Put activities, games and redemption codes directly in the user station's top
+  bar and group the administrator sidebar into six sections. URLs are unchanged.
+- With a non-default appearance on wide screens, keep user pages in a centered
+  column so the artwork stays visible at both sides.
+- Show the home start steps as one sequence with the next action highlighted,
+  and place the wallet beside both check-ins.
+- Give the decimal point and fractional credit digits a secondary theme color
+  across shared displays and amount messages. Preserve exact values, signs,
+  copying and plain-text controls; retain readable foregrounds on game surfaces.
+- Show the API access key beside the client setup instructions on wide screens.
+- Add services and endpoints in a side sheet. Mainstream presets come first, and
+  matching mainstream services appear under the address field.
+- Split service details into endpoint, key and settings tabs, with endpoints as
+  selectable cards. Preserve visited drafts and unfinished writes across tab
+  changes and side-sheet dismissal; completed setup opens the created endpoint.
+- Hide unused model filters on empty lists while keeping active filters
+  available after a failed search. Show model details in two columns and give
+  empty lists a small cloud illustration.
+- Make copying a charity model name a bordered row action. The four charity
+  catalog filters now open from More filters, which shows how many are
+  applied; applied filters stay visible as removable chips, and the opened
+  state is kept for the browser session. Give donation steps and status badges
+  the same spacing and hierarchy as the shared controls.
+- Lead the administrator overview with pending donations and open reports,
+  each linked to its queue, and keep the donation review decision on screen
+  while a long key list is reviewed. Failed pending-count reads expose a retry.
+- Line up search buttons with their inputs, keep labels level with copyable
+  values and keep announcement actions at their natural width. Headings that a
+  page or side sheet focuses when it opens no longer show a focus ring.
+
+### Fixed and improved
+
+- Fix donation failure-threshold edits when per-service health records exist.
+  Recompute disabled states with exact 128-bit values, preserving failure counts,
+  backoff schedules and idempotent receipts.
+- Read recent largest catches from an ordered projection and use daily pond
+  statistics with exact boundary facts for rolling boards and account exports.
+  Keep current privacy and expiry checks while avoiding repeated history scans.
+- Check Lake Notes capacity through a live-lease index so paused casts do not
+  increase the cost of starting or resuming play.
+- Keep side-sheet keyboard navigation within visible, enabled controls, including
+  collapsed advanced fields. Ship font and icon license notices with both
+  embedded stations.
+- Apply scalar and date bounds before charity-model text matching in administrator
+  and steward request-log lists and exports, reducing work for narrow time windows.
+  Permissions, complete result counts, ordering and query budgets are unchanged.
+- Add management-read regressions and performance cases combining model, date
+  and status filters.
+- Reuse the client-rule authority query within each transaction when multiple
+  rules match, preserving fresh permission checks and the five-second budget.
+- Keep model-binding source labels beside their checkboxes, group charity model
+  settings by task and allow segmented options to wrap without clipping.
+  Explain when a recurring quota's first reset must be in the future, preserving
+  the existing rule for historical anchors on unchanged schedules.
+- Give site settings and date filters enough space, expose settings categories
+  on small screens and make invalid drafts in other groups directly reachable.
+  Preserve Gateway capability and mainstream-channel drafts when switching
+  editors, group capability fields and state the full scope of game-config saves.
+- Keep one page heading in embedded announcement editors and retain the return
+  link while user announcements load or fail. Improve mobile service summaries.
+- Add previous-page navigation and current-page indicators to independent
+  diagnostics and duel histories while retaining their existing cursor APIs.
+- Keep keyboard focus inside game rules, tutorials and confirmation dialogs,
+  restoring it to the trigger when closed. Clear both the visible search and
+  applied filters in the gacha collection. Show readable Fat Fish states and
+  history summaries, and clearer game-hall cost information.
+
+### Dependency maintenance
+
+- Update React and React DOM to 19.3.1, React Router to 8.5.1 and TanStack
+  Query to 5.105.0. Refresh Playwright and TypeScript ESLint with their matching
+  lockfile entries and bundled license notices.
+- Update the pure-Go SQLite driver to 1.61.1, including the prepared-statement
+  performance fix, and golang.org/x/sys to 0.49.0. Keep the Go 1.26 toolchain.
+- Update the pinned Node setup and artifact transfer actions used by CI.
+
+### Compatibility
+
+- Existing databases require the explicit offline upgrade to schema 45 before
+  startup. The new pond tables start empty; historical catches gain neither
+  return eligibility nor leaderboard credit. Account export format is 32.
+- Pond details follow the existing 30-day game retention. Queued gifts retain
+  their signature until caught or the donor account is deleted; lifetime
+  counts follow the account. Deletion removes queued items and clears the
+  deleted donor's identity from other players' retained gifts.
+- Existing navigation URLs, prices, accounting and economic draw rules are
+  unchanged. Ported-game artwork and the original fishing stage remain intact.
+
 ## 1.3.3 — 2026-11-01
 
 ### Added

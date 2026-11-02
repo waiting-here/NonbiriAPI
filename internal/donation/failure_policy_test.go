@@ -36,6 +36,10 @@ func TestFailurePolicyImmediateRecomputeAndReplay(t *testing.T) {
 		t.Fatal("creation default", d.Keys[0])
 	}
 	key := parseTestID(t, d.Keys[0].ID)
+	seedResetHealth(t, e, key)
+	if _, err := e.store.DB().Exec(`UPDATE donation_service_health SET failure_streak=nbi_u128(12) WHERE native_service_bit=1`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := e.store.DB().Exec(`UPDATE donation_keys SET enabled=0,failure_streak=?,failure_disabled=1,next_claim_seq=?,next_fold_seq=? WHERE id=?`, db.EncodeU128(db.U128{15: 12}), db.EncodeU128(db.U128{15: 13}), db.EncodeU128(db.U128{15: 13}), key); err != nil {
 		t.Fatal(err)
 	}
@@ -65,6 +69,35 @@ func TestFailurePolicyImmediateRecomputeAndReplay(t *testing.T) {
 		}
 		if value.FailureDisableThreshold != c.threshold || value.FailureStreak != "12" || value.FailureDisabled != c.disabled {
 			t.Fatalf("receipt %+v", value)
+		}
+		rows, err := e.store.DB().Query(`SELECT native_service_bit,failure_disabled,hex(streak_generation),hex(failure_streak),retry_after_until,backoff_retry_at,backoff_generation,backoff_episode FROM donation_service_health ORDER BY id`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		services := 0
+		for rows.Next() {
+			var bit, retry, backoff, generation, episode int64
+			var disabled bool
+			var streakGeneration, streak string
+			if err := rows.Scan(&bit, &disabled, &streakGeneration, &streak, &retry, &backoff, &generation, &episode); err != nil {
+				rows.Close()
+				t.Fatal(err)
+			}
+			wantStreak := strings.Repeat("0", 32)
+			if bit == 1 {
+				wantStreak = "0000000000000000000000000000000C"
+			}
+			if disabled != (c.disabled && bit == 1) || streakGeneration != "00000000000000000000000000000007" || streak != wantStreak || retry != donationTestNow+60 || backoff != donationTestNow+120 || generation != 3 || episode != 2 {
+				t.Errorf("service policy recompute changed unrelated state: bit=%d disabled=%t generation=%s streak=%s retry=%d backoff=%d generation=%d episode=%d", bit, disabled, streakGeneration, streak, retry, backoff, generation, episode)
+			}
+			services++
+		}
+		if err := rows.Err(); err != nil {
+			t.Error(err)
+		}
+		rows.Close()
+		if services < 2 {
+			t.Fatal("fixture must cover separate service health")
 		}
 		replay := policyHTTP(t, api, c.role, c.actor, d, c.revision, c.threshold, c.seed)
 		if replay.Code != 200 || replay.Body.String() != w.Body.String() {
@@ -112,6 +145,7 @@ func TestFailurePolicyCanonicalU128AndSafeProjection(t *testing.T) {
 	e.seedUser(t, "", nil, true)
 	_, physical := e.seedEndpointKey(t, owner, 'q')
 	d := approvedResetDonation(t, e, owner, physical)
+	seedResetHealth(t, e, parseTestID(t, d.Keys[0].ID))
 	api := &httpAPI{service: e.service}
 	for _, value := range []string{"", "-1", "+1", "01", " 1", "1.0", "340282366920938463463374607431768211456"} {
 		if w := policyHTTP(t, api, "", owner, d, "2", value, "a"); w.Code != 400 {

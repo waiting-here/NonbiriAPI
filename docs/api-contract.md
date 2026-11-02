@@ -152,11 +152,11 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 44. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts 22 exact registered schema 16–26 and 33–43 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`, including for 43-to-44. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 45. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts 23 exact registered schema 16–26 and 33–44 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`, including for 44-to-45. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
 
-`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=44`, `minimum_schema_version=44`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its 22 supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
+`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=45`, `minimum_schema_version=45`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its 23 supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
 
-Current account export `schema_version=31` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v31.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
+Current account export `schema_version=32` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v32.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
 ### 1.5 Display time context
 
@@ -1174,6 +1174,8 @@ New game entries spend positive game credits first, then positive general credit
 | `POST /api/games/fishing/batches/{id}/ack` | Business-unique render acknowledgement; 204. |
 | `POST /api/games/fishing/batches/{id}/recover` | Idempotent owner recovery of the same exhausted batch; 200 or 202. |
 | `GET /api/games/fishing/leaderboard` | `board=single|recent_single|total`; top 20 plus the caller when eligible. |
+| `POST /api/games/fishing/batches/{id}/outcomes/{ordinal}/return` | No body; owner-only, naturally idempotent. Returns `{batch_id,ordinal,return_state,returned_at}` with `return_state=returned|released`. |
+| `GET /api/games/fishing/pond/leaderboard` | `board=cleanup|gifts`, `period=7d|30d|all` (default `7d`); `{board,period,window_start,entries,me}`. Rows contain `rank,item_count,identity,is_me`; counts are exact decimal strings. |
 
 A start creates all 1 or 10 CSPRNG outcomes and the reservation atomically. A failed settlement retains the same batch and outcomes for automatic recovery; it never redraws or charges again. After ten consecutive failures, only owner recovery continues. Committed or released batches replay without another economic write. Acknowledgement affects presentation only. Terminal batches/outcomes are retained for 30 days; the personal best has the account lifetime.
 
@@ -1184,6 +1186,27 @@ The length boards preserve the original `species_key` and `size_cm`. A result ou
 `single` is the lifetime largest-length board and has `window_start:null`. `recent_single` is the largest length per user among settlements strictly after `window_start=query_now-2592000`; `total` remains the rolling 30-day payout board. Expired catches leave the recent length board even before physical cleanup. Length ties use the earlier catch time and the same stable private tie key as the lifetime board. Anonymous preferences and current account eligibility apply independently to every read. ACK changes neither board. Upgrade backfill includes only retained complete settled batches with their matching original rank facts; unavailable historical catches are not reconstructed.
 
 After generating the original complete batch, each legendary catch independently has a 10% Easter-egg chance. An Easter egg starts at 201 cm; each additional centimetre has a 99% continuation chance, so `P(length >= 201+n)=0.99^n`. There is no gameplay length ceiling and the original legendary payout remains unchanged. Random-source, cancellation, work-budget or representation failures reject the complete start before reservation; they never clamp a length, redraw only part of the batch or change the payout rate.
+
+New zero-credit junk results may include `pond:{return_state,gift}`. Return states
+are `available`, `returned`, `released` and `gift`; old results may omit the object.
+A currently public player may return an eligible ordinary catch once. Small fry
+are released without entering the queue or either board. Received gifts cannot
+be returned. Successful repeats return the same receipt even after anonymity is
+enabled; current account authority still applies.
+
+The base draw and payout settle unchanged. For each junk result, an independent
+draw consumes the FIFO head with probability `n/(n+20)`, where `n` is the remaining
+queue size. The displayed `species_key` becomes the donated item's kind, with
+zero payout and `pond.gift` holding the return-time Discord name/avatar. Results
+do not display the displaced junk kind. Later anonymity affects leaderboards,
+but not the signature; donor-account deletion removes queued gifts and anonymizes
+already received gifts.
+
+Cleanup counts non-fry junk caught, including gifts. Gifting counts successfully
+returned non-fry junk. Both boards offer exact rolling seven-/30-day windows and
+lifetime totals. Queue mutations and counts commit with their authoritative
+transaction; old catches are not reconstructed. Queued gifts can outlive the
+original 30-day catch details until consumed or the donor account is deleted.
 
 ### 5.4 LinkLink
 
@@ -2357,7 +2380,7 @@ not proof that deletion has finished; read its cleanup status.
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v31.json`, with `schema_version:31` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside format 31.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v32.json`, with `schema_version:32` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside format 32.
 Structured failure/delivery snapshots and restricted raw diagnostics are also
 excluded; the export retains its existing safe request summaries.
 
@@ -2379,6 +2402,15 @@ UTC Unix seconds. Sources belong to one endpoint/key pair, and keys belong to
 one service. Legacy cross-service references are split by the explicit schema-40
 upgrade without changing saved binding, budget or donation-approval identities.
 
+Format 32 adds `fishing.pond_queue` for the owner's queued contributions, including
+`batch_id,ordinal,species_key,returned_at` and their own saved display name/avatar
+under `identity`. `fishing.pond_stats` contains `board,period,item_count`, with
+counts as decimal strings. Retained outcomes may include `pond` with
+`return_state,gift` and optional `returned_at`. A received gift exports only its
+anonymous kind, never another donor's name, avatar or account identity.
+Deleting an account removes its queued contributions and statistics and clears
+its signature from other players' retained catches.
+
 The top-level fields include `limited_activities`, `image_tasks` and `inactivity`. Limited activities contain the safe general/paper/brush wallet projection and own exchange receipts; the existing game wallet remains separate. Image tasks contain only local ID, state, requested/actual image counts, times, billing state and two-currency charge/refund facts. Inactivity contains safe own activity timestamps and retained execution outcomes. No prompts, complete execution parameters, images, source facts, raw errors, risk rules, private adapter/configuration or upstream task identifiers are included.
 
 The export includes safe account, resource, wallet, activity, donation and game fields, including `game_onboarding_holds`, `loans`, `game_rankings` and `penalties`. `user` contains `charity_profile_public` and nullable `donation_credit_achieved_at`, without internal tie sequence. `game_onboarding` includes `game_key,task_key,award,completed_at,operation_id`; pending qualifications contain only `id,game_key,task_key,created_at`, never internal capacity or parent/account IDs. Loan exports contain `loan_id,operation_id,created_at`, the terms and actual balances listed in §5.9, excluding quote tokens, nonces, internal sequence and configuration revision. `game_rankings` contains `statistics_start,totals,events`: totals contain `board,window,amount,achieved_at`; events contain `game,settled_at,loss,positive_profit` with expired amounts null. Charity contributions expire at seven days and profit events at 30 days; historical totals remain until account deletion. `penalties` contains safe reason codes, actual/expected times, state/result and actions, with owner request/operation links where available; it excludes rules, thresholds, counted members and management evidence. Active cases persist; ended cases and direct deductions expire after 90 days, while request links expire after 30 days. Every collection, and the combined actions across penalty cases, is capped at 10,000; the complete JSON is capped at 16 MiB. Exceeding either fails without truncation. Bounded ranking catch-up can return retryable 503. Game settlement and safe projections share one transaction, so exported balances and qualifications agree.
@@ -2395,7 +2427,7 @@ The following fields are top-level (an excerpt, not a complete export):
 
 ```json
 {
-  "schema_version": 31,
+  "schema_version": 32,
   "request_adaptations": [],
   "continuity": [],
   "fat_fish": {"summaries": [], "progress": []}

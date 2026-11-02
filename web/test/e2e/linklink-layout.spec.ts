@@ -295,7 +295,7 @@ async function applyViewport(
     document.documentElement.dataset.density = density;
     document.documentElement.dataset.fontSize = fontSize;
   }, fixture);
-  const expectedBackground = fixture.theme === 'dark' ? 'rgb(16, 25, 35)' : 'rgb(243, 247, 251)';
+  const expectedBackground = fixture.theme === 'dark' ? 'rgb(22, 21, 19)' : 'rgb(246, 244, 239)';
   await expect
     .poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor))
     .toBe(expectedBackground);

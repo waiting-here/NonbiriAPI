@@ -24,7 +24,12 @@ import { routePath } from '@shared/routing/routeRegistry';
 import { SHELL_DRAWER_MEDIA_QUERY } from '@shared/styles/tokens';
 import { useUserSession } from '../data';
 import { clearManagementSession } from '@shared/charityManagement';
-import { USER_PRIMARY_NAV, userRouteLayout } from '../navigation';
+import {
+  USER_PRIMARY_NAV,
+  USER_SECTION_LINKS,
+  activeUserNavGroup,
+  userRouteLayout,
+} from '../navigation';
 import { AccountAppearance } from '../appearance/AppearanceProvider';
 import { BackgroundViewButton } from '../appearance/BackgroundViewButton';
 import { AppearanceButton } from '../appearance/AppearanceButton';
@@ -99,7 +104,7 @@ export function UserLayout() {
   }, [restoreMenuFocus]);
 
   const location = useLocation();
-  const recordsOpen = ['/logs', '/credits', '/debug', '/issues'].includes(location.pathname);
+  const currentGroup = activeUserNavGroup(location.pathname);
   // The OAuth re-authorization callback always returns to the configured
   // redirect path (default "/"), not to the account page that requested it.
   // If an account action parked a pending intent in sessionStorage and the
@@ -312,20 +317,37 @@ export function UserLayout() {
                 <li key={item.key}>
                   <NavLink
                     className="nb-user-header__nav-link"
-                    data-active={item.key === 'logs' && recordsOpen ? 'true' : undefined}
+                    data-active={item.group && item.group === currentGroup ? 'true' : undefined}
                     to={item.to}
                     end={item.end}
                     onClick={closeMenu}
                   >
                     {item.icon ? <Icon name={item.icon} /> : null}
-                    {item.labelKey
-                      ? t(item.labelKey, {
-                          defaultValue: item.fallbackLabelKey
-                            ? t(item.fallbackLabelKey)
-                            : item.labelKey,
-                        })
-                      : t(`user.${item.key}.nav`)}
+                    <span>
+                      {item.labelKey
+                        ? t(item.labelKey, {
+                            defaultValue: item.fallbackLabelKey
+                              ? t(item.fallbackLabelKey)
+                              : item.labelKey,
+                          })
+                        : t(`user.${item.key}.nav`)}
+                    </span>
                   </NavLink>
+                  {menuOpen && item.group ? (
+                    <ul className="nb-user-header__subnav">
+                      {USER_SECTION_LINKS[item.group].map((link) => (
+                        <li key={link.to}>
+                          <NavLink
+                            className="nb-user-header__subnav-link"
+                            to={link.to}
+                            onClick={closeMenu}
+                          >
+                            {t(link.labelKey)}
+                          </NavLink>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </li>
               ))}
             </ul>

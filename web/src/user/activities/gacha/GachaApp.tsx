@@ -1,3 +1,4 @@
+import { CreditNumber } from '@shared/components/CreditNumber';
 import { artSourceSet } from './art-resolution';
 import { ArtworkImage, ArtworkBadge, ArtworkUnavailable } from '@shared/artwork/ArtworkImage';
 import { useArtworkPolicy } from '@shared/artwork/context';
@@ -1005,7 +1006,7 @@ export function GachaApp({
             <TicketIcon limited={ticket === 'limited'} />
           </div>
           <p>
-            {formatCredits(unitPrice)} {t('积分 / 张', 'credits / ticket')}
+            <CreditNumber value={formatCredits(unitPrice)} /> {t('积分 / 张', 'credits / ticket')}
           </p>
           <Field
             label={t('兑换数量', 'Quantity')}
@@ -1026,25 +1027,29 @@ export function GachaApp({
           <dl className="gacha-buy-summary">
             <dt>{t('游戏积分余额', 'Game credits')}</dt>
             <dd>
-              {formatCredits(state.credits.game)} {t('积分', 'credits')}
+              <CreditNumber value={formatCredits(state.credits.game)} /> {t('积分', 'credits')}
             </dd>
             <dt>{t('通用积分余额', 'General credits')}</dt>
             <dd>
-              {formatCredits(state.credits.general)} {t('积分', 'credits')}
+              <CreditNumber value={formatCredits(state.credits.general)} /> {t('积分', 'credits')}
             </dd>
             <dt>{t('本次花费', 'Total cost')}</dt>
             <dd>
-              {pointText(totalMilli)} {t('积分', 'credits')}
+              <CreditNumber value={pointText(totalMilli)} /> {t('积分', 'credits')}
             </dd>
           </dl>
           <p>
-            {ticket === 'permanent'
-              ? t('优先消耗游戏积分：', 'Game credits first: ') +
-                pointText(gameSpend) +
-                t(' 游戏积分 + ', ' game + ') +
-                pointText(generalSpend) +
-                t(' 通用积分', ' general')
-              : t('仅消耗通用积分。', 'Uses general credits only.')}
+            {ticket === 'permanent' ? (
+              <>
+                {t('优先消耗游戏积分：', 'Game credits first: ')}
+                <CreditNumber value={pointText(gameSpend)} />
+                {t(' 游戏积分 + ', ' game + ')}
+                <CreditNumber value={pointText(generalSpend)} />
+                {t(' 通用积分', ' general')}
+              </>
+            ) : (
+              t('仅消耗通用积分。', 'Uses general credits only.')
+            )}
           </p>
           <p>
             {t(

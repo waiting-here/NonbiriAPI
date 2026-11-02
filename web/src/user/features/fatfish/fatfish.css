@@ -76,3 +76,23 @@
   .fatfish-page .fatfish-facts { grid-template-columns: minmax(0, 1fr); }
   .fatfish-page .fatfish-facts dd { margin-bottom: .4rem; }
 }
+
+.fatfish-page .fatfish-history li {
+  display: grid;
+  gap: var(--nb-space-2);
+}
+.fatfish-history__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--nb-space-2) var(--nb-space-4);
+}
+.fatfish-history__heading time,
+.fatfish-history__reference {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.fatfish-page .game-money {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}

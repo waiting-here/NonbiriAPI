@@ -1,6 +1,6 @@
 # Prepare existing storage
 
-The server initializes an absent database as schema 44 and opens only the exact
+The server initializes an absent database as schema 45 and opens only the exact
 current schema. Older, newer, unknown and incomplete storage is rejected before
 migration, repair or recovery writes. The service, startup scripts and deployment
 helpers must not run this upgrader implicitly. A developer or deployer must
@@ -34,10 +34,11 @@ exact source structures:
 | 41 | `5c721cd00b1ebcc402f0b85ce02aa9014498aa97` |
 | 42 | `cd07f2ccde4d98b130c3c6c71e905bd4a6fd06d3` |
 | 43 | `3462a3832de64d6066cb5db567987ea4ec6c10cf` |
+| 44 | `d7cd4f3a9204adba79c62b3f3cf32671cc2ed884` |
 
 The machine-readable descriptor is authoritative for these exact source commits
 and their pinned manifest hashes. All supported sources convert atomically to
-schema 44. Schemas 27–32 and unregistered layouts are not supported sources.
+schema 45. Schemas 27–32 and unregistered layouts are not supported sources.
 
 The executable that last used a database may differ from the listed commit if
 its stored application identity, generation, schema version and complete
@@ -54,13 +55,26 @@ CGO_ENABLED=0 go build -trimpath -o nonbiri-upgrade-v1 ./cmd/nonbiri-upgrade-v1
 ```
 
 Both metadata commands need no database or environment. The converter reports
-its exact sources in `offline_conversions` and target schema 44. The server
-reports current and minimum schema 44, `startup_policy="exact"` and
+its exact sources in `offline_conversions` and target schema 45. The server
+reports current and minimum schema 45, `startup_policy="exact"` and
 `upgrade_tool="nonbiri-upgrade-v1"`, with empty `source_schema_versions`,
 `source_manifest_hashes` and `offline_conversions` arrays. The converter
-retains that target policy and adds its 22 offline-source entries. These describe
+retains that target policy and adds its 23 offline-source entries. These describe
 different executables; the empty server list does not remove the converter or
 authorize a deployment helper to call it automatically.
+
+The 44-to-45 step adds new-catch pond eligibility, a signed FIFO gift queue,
+an atomic queue-size counter, recent cleanup/contribution counts with daily
+aggregates, and lifetime totals. All new history starts empty; old catches receive no return eligibility.
+Queue entries and cumulative counts survive ordinary fishing-detail cleanup.
+The step also backfills an indexed projection of active recent-length facts,
+preserving exact lengths and tie ordering while avoiding repeated per-user sorts.
+Its rows follow the original facts' expiry and account-deletion cascades.
+An index on unpaused live Lake Notes leases preserves capacity rules and retained casts.
+The accepted schema-44 manifest remains
+`34f60341e1c5cfbff150726855fc5e2b9793b9cb75e6b6217717dd2e8d946ef5`.
+Account export 32 adds safe pond contributions, received-gift metadata and counts;
+it excludes other players' names, avatars, internal IDs and queue ordering.
 
 The 43-to-44 step extends the existing charity-model log index with the request
 start time. Filtered pages can sort from the covering index without reading
@@ -150,7 +164,7 @@ Earlier sources receive default-off MFA policies without enrollments or proofs.
 Schema 20 adds four covering indexes for request-log filtering; it changes no
 business records. Schema 21 widens endpoint tags with `noncommercial_gateway`
 and model-discovery outcomes with `region` and `unavailable`, preserving
-existing rows. The current application produces account export format 31, including own
+existing rows. The current application produces account export format 32, including own
 stored/effective steward permissions and retained policy history. Schema 36
 rebuilds the risk-rule/automatic-ban and blacklist audit tables with existing
 rows, labels, indexes and constraints preserved; new actions can record actual
@@ -177,7 +191,7 @@ conversion, remove the retired Gateway variable and `NONBIRI_SMTP_HOST`,
 `NONBIRI_SMTP_FROM` and `NONBIRI_SMTP_TLS` from the deployment environment.
 
 The [rc.7 command](../nonbiri-upgrade-rc7/README.md) remains a narrow wrapper
-accepting schema 16 and current schema 44. Both commands use one engine.
+accepting schema 16 and current schema 45. Both commands use one engine.
 `scripts/check-upgrade.sh` creates a populated synthetic source with the pinned
 rc.7 program, converts it, compares retained facts and resumes economy checks.
 The offline suite also covers the registered schema 17–26 fixtures. No

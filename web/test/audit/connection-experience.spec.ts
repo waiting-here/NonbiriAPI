@@ -304,14 +304,11 @@ test('connection search exposes entry context and separate System One setup', as
     }
     await row.getByRole('link', { name, exact: true }).click();
     await expect(page.getByRole('heading', { name, level: 1, exact: true })).toBeVisible();
-    await page.getByRole('button', { name: c.editConnection, exact: true }).click();
+    await page.getByRole('tab', { name: c.editConnection, exact: true }).click();
     await expect(page.getByRole('textbox', { name: c.name, exact: true })).toHaveValue(name);
-    await page
-      .getByRole('region', { name: c.editConnection, exact: true })
-      .getByRole('button', { name: c.close, exact: true })
-      .click();
+    await page.getByRole('tab', { name: c.entries, exact: true }).click();
     await page.getByRole('button', { name: c.addEntry, exact: true }).click();
-    const form = page.getByRole('region', { name: c.addEntry, exact: true });
+    const form = page.getByRole('dialog', { name: c.addEntry, exact: true });
     await openFold(form, services.advancedSetup);
     await form
       .getByRole('combobox', { name: c.protocol, exact: true })
@@ -347,7 +344,7 @@ test('new System One key discovers OpenAI models before any extra save', async (
     const page = await owner.newPage();
     await page.goto(fixture().user_url + '/endpoints?connection_id=' + group.id);
     await page.getByRole('button', { name: c.addEntry, exact: true }).click();
-    const form = page.getByRole('region', { name: c.addEntry, exact: true });
+    const form = page.getByRole('dialog', { name: c.addEntry, exact: true });
     await form.getByLabel(services.serviceAddress, { exact: true }).fill(base);
     await form.getByLabel(userEn.user.workflows.serviceName, { exact: true }).fill(tag);
     await openFold(form, services.advancedSetup);
@@ -679,7 +676,7 @@ test('service keys reject cross-service reuse while shared versions preserve cha
     const page = await owner.newPage();
     await page.goto(fixture().user_url + '/endpoints?connection_id=' + second.id);
     await page.getByRole('button', { name: c.addEntry, exact: true }).click();
-    const newEndpoint = page.getByRole('region', { name: c.addEntry, exact: true });
+    const newEndpoint = page.getByRole('dialog', { name: c.addEntry, exact: true });
     const availableKeys = newEndpoint.getByRole('table', { name: c.chooseCredential, exact: true });
     await expect(availableKeys.getByText(tag + ' isolated key', { exact: true })).toBeVisible();
     await expect(availableKeys.getByText(tag, { exact: true })).toHaveCount(0);
@@ -743,7 +740,8 @@ test('service keys reject cross-service reuse while shared versions preserve cha
       .toBe('failed');
     await page.reload();
     await expect(page.getByText(services.retainedCatalog, { exact: true })).toBeVisible();
-    const serviceKeys = await openFold(page, services.manageServiceKeys);
+    await page.getByRole('tab', { name: c.credentials, exact: true }).click();
+    const serviceKeys = page.getByRole('tabpanel', { name: c.credentials, exact: true });
     await serviceKeys
       .getByRole('row')
       .filter({ hasText: tag })
@@ -842,7 +840,7 @@ test('service keys reject cross-service reuse while shared versions preserve cha
     });
     await page.getByRole('button', { name: c.backToCredentials, exact: true }).click();
     await expect(page.getByPlaceholder(c.credentialSearch)).toBeVisible();
-    await page.getByRole('button', { name: c.editConnection, exact: true }).click();
+    await page.getByRole('tab', { name: c.editConnection, exact: true }).click();
     await page.getByRole('button', { name: c.deleteConnection, exact: true }).click();
     const deleted = responseFor(page, 'DELETE', '/api/connections/' + first.id);
     await page
@@ -2058,10 +2056,9 @@ test('mainstream authorization isolates endpoint catalogs and lets users decline
     const page = await owner.newPage();
     await page.goto(fixture().user_url + '/endpoints?connection_id=' + group.id);
     await page.getByRole('button', { name: c.addEntry, exact: true }).click();
-    const form = page.getByRole('region', { name: c.addEntry, exact: true });
-    await openFold(form, services.advancedSetup);
+    const form = page.getByRole('dialog', { name: c.addEntry, exact: true });
     const mainstreamMode = form.getByRole('radio', { name: c.mainstream, exact: true });
-    await form.locator('.nb-seg').getByText(c.mainstream, { exact: true }).click();
+    await mainstreamMode.locator('..').click();
     await expect(mainstreamMode).toBeChecked();
     await form.getByRole('combobox', { name: c.mainstream, exact: true }).selectOption(channel.id);
     const entryChoices = await openFold(form, c.entries);

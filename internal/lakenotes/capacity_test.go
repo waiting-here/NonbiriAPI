@@ -82,7 +82,7 @@ VALUES(?,?,'capacity-test',?,?,1,1,0,X'7b7d',X'7b7d',0,0,?,?,?,?,?)`,
 	})
 }
 
-func TestCapacityQueryExcludesTerminalHistory(t *testing.T) {
+func TestCapacityQueryExcludesPausedAndTerminalHistory(t *testing.T) {
 	f := newFixture(t)
 	rows, err := f.database.Query("EXPLAIN QUERY PLAN "+liveLeaseCountSQL, f.now.Load(), "")
 	if err != nil {
@@ -101,8 +101,8 @@ func TestCapacityQueryExcludesTerminalHistory(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if plan := strings.Join(steps, " | "); !strings.Contains(plan, "idx_lake_notes_active_cast_user") {
-		t.Fatalf("capacity query must exclude retained terminal history: %s", plan)
+	if plan := strings.Join(steps, " | "); !strings.Contains(plan, "idx_lake_notes_live_lease") || !strings.Contains(plan, "lease_until_ns>?") {
+		t.Fatalf("capacity query must search live leases without scanning paused or terminal casts: %s", plan)
 	}
 }
 

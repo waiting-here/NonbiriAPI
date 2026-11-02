@@ -67,7 +67,8 @@
   flex: 0 0 auto;
   width: 2rem;
   height: 2rem;
-  border-radius: var(--nb-radius-md);
+  /* Matches the bundled mark's corner radius (18/64). */
+  border-radius: 28%;
   object-fit: cover;
 }
 
@@ -115,7 +116,7 @@
   gap: var(--nb-space-2);
   width: min(18rem, calc(100vw - 2rem));
   border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-lg);
+  border-radius: var(--nb-radius-card);
   padding: var(--nb-space-3);
   background: var(--nb-color-surface-raised);
   box-shadow: var(--nb-elevation-overlay);

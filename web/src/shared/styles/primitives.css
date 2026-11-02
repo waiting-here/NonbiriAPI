@@ -80,7 +80,7 @@
   gap: var(--nb-space-4);
   min-width: 0;
   border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-lg);
+  border-radius: var(--nb-radius-card);
   padding: calc(var(--nb-space-8) * var(--nb-density-factor));
   background: var(--nb-color-surface);
   box-shadow: var(--nb-elevation-1);
@@ -91,7 +91,7 @@
   place-items: center;
   width: 2.5rem;
   height: 2.5rem;
-  border-radius: var(--nb-radius-md);
+  border-radius: var(--nb-radius-control);
   background: var(--nb-color-accent-soft);
   color: var(--nb-color-accent);
 }
@@ -104,11 +104,64 @@
   overflow-wrap: anywhere;
 }
 
-.nb-state__illustration {
-  display: block;
-  width: 3rem;
-  height: 3rem;
-  object-fit: contain;
+/* Illustrated states: the drawing replaces the icon tile. */
+.nb-state__art {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.nb-state__art .nb-illustration {
+  width: 6.5rem;
+}
+
+.empty-state.nb-state {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: var(--nb-space-3);
+  padding-block: var(--nb-space-8);
+  text-align: center;
+  box-shadow: none;
+  border-style: dashed;
+  border-color: var(--nb-color-border-strong);
+  background: var(--nb-color-surface-alt);
+}
+
+.empty-state.nb-state > div {
+  display: grid;
+  justify-items: center;
+  gap: var(--nb-space-2);
+  max-width: 36rem;
+}
+
+.empty-state.nb-state h2 {
+  margin: 0;
+  font-size: var(--nb-font-size-lg);
+}
+
+.empty-state.nb-state p {
+  margin: 0;
+  color: var(--nb-color-text-muted);
+}
+
+.empty-state .state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--nb-space-2);
+  margin-top: var(--nb-space-2);
+}
+
+@media (width < 40rem) {
+  .nb-state__art .nb-illustration {
+    width: 5.5rem;
+  }
+
+  .empty-state.nb-state {
+    padding: var(--nb-space-6) var(--nb-space-4);
+  }
 }
 
 .nb-state--error .nb-state__icon {
@@ -134,7 +187,7 @@
   display: grid;
   place-items: center;
   padding: var(--nb-space-4);
-  background: rgb(12 23 35 / 0.58);
+  background: var(--nb-color-scrim);
 }
 
 .nb-dialog {
@@ -142,7 +195,7 @@
   max-height: min(90vh, 46rem);
   overflow: auto;
   border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-xl);
+  border-radius: var(--nb-radius-2xl);
   padding: var(--nb-space-6);
   background: var(--nb-color-surface-raised);
   box-shadow: var(--nb-elevation-overlay);
@@ -194,8 +247,12 @@
   background: var(--nb-color-surface);
 }
 
-.nb-message-field dt { font-weight: var(--nb-font-weight-semibold); }
-.nb-message-field dd { margin: var(--nb-space-1) 0 var(--nb-space-3); }
+.nb-message-field dt {
+  font-weight: var(--nb-font-weight-semibold);
+}
+.nb-message-field dd {
+  margin: var(--nb-space-1) 0 var(--nb-space-3);
+}
 .nb-messages pre,
 .nb-operation-feedback pre {
   white-space: pre-wrap;
@@ -203,7 +260,12 @@
   font-family: var(--nb-font-mono);
   font-size: calc(var(--nb-font-size-sm) * var(--nb-font-scale));
 }
-.nb-message-pagination { display: flex; align-items: center; gap: var(--nb-space-3); flex-wrap: wrap; }
+.nb-message-pagination {
+  display: flex;
+  align-items: center;
+  gap: var(--nb-space-3);
+  flex-wrap: wrap;
+}
 
 .dialog-title-row {
   display: flex;
@@ -239,7 +301,7 @@
   gap: var(--nb-space-3);
   align-items: start;
   border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-md);
+  border-radius: var(--nb-radius-card);
   padding: var(--nb-space-4);
   background: var(--nb-color-surface-raised);
   box-shadow: var(--nb-elevation-2);
@@ -331,7 +393,7 @@
   min-width: 0;
 }
 
-.nb-choice-list__items > li > :is(button, label) {
+.nb-choice-list__items > li > :is(button, label, .nb-field) {
   width: 100%;
   min-width: 0;
   margin: 0;
@@ -341,7 +403,7 @@
   font: inherit;
 }
 
-.nb-choice-list__items > li > :is(button, label) > * {
+.nb-choice-list__items > li > :is(button, label, .nb-field) > * {
   min-width: 0;
 }
 .nb-key-limits {
@@ -400,4 +462,39 @@
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   font-size: clamp(var(--nb-font-size-md), 9cqi, var(--nb-font-size-2xl));
+}
+
+/* Credit formatters keep exact strings; only the fractional display is secondary. */
+.credit-number {
+  font-variant-numeric: tabular-nums;
+}
+.credit-number__fraction {
+  color: var(--nb-credit-fraction-color, var(--nb-color-text-muted));
+}
+/* Existing subdued ink and filled controls keep their proven foreground. */
+:is(
+    .nb-muted,
+    .muted,
+    .core-muted,
+    .nb-sub,
+    .field-help,
+    .nb-btn--primary,
+    .nb-btn--danger,
+    .nb-btn--danger-outline:disabled
+  )
+  .credit-number {
+  --nb-credit-fraction-color: currentColor;
+}
+
+/* These games retain their original private surface palettes. */
+.bidding-game {
+  --nb-credit-fraction-color: var(--bid-muted);
+}
+:is(.bj-board, .catch-game, .gacha-app, .gacha-dialog) .credit-number {
+  --nb-credit-fraction-color: currentColor;
+}
+
+/* Selected tier cards need their full foreground on the private tinted paper. */
+.bidding-game .bid-modes .credit-number {
+  --nb-credit-fraction-color: currentColor;
 }

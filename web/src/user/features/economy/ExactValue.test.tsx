@@ -7,7 +7,7 @@ it.each([
   ['-9007199254740993.999', '-9,007,199,254,740,993.999'],
   ['0', '0'],
 ])('displays the signed credit value %s without applying price rules', (value, displayed) => {
-  render(<CreditAmount value={value} unit="credits" />);
-  expect(screen.getByText(displayed)).toBeVisible();
+  const view = render(<CreditAmount value={value} unit="credits" />);
+  expect(view.container.querySelector('.nb-amount')).toHaveTextContent(displayed);
   expect(screen.getByText('credits')).toBeVisible();
 });

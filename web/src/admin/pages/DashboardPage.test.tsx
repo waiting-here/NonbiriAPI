@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { DashboardPage } from './DashboardPage';
 import { renderWithProviders } from '../../../test/unit/support';
+import { getDonationBadge } from '@shared/operations/charity';
 import { adminPageKeys } from '../features/operations/adminPages';
 
 vi.mock('../features/operations/core', async (importOriginal) => ({
@@ -13,6 +14,10 @@ vi.mock('../features/operations/core', async (importOriginal) => ({
 vi.mock('../features/operations/reports', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/operations/reports')>()),
   getReportBadge: async () => null,
+}));
+vi.mock('@shared/operations/charity', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@shared/operations/charity')>()),
+  getDonationBadge: vi.fn(async () => ({ pending_count: '4', server_now: 1_800_000_000 })),
 }));
 
 function response(body: unknown, status = 200) {
@@ -47,6 +52,30 @@ function overview(userCount: number, total = 37) {
 }
 
 describe('dashboard endpoint overview', () => {
+  it('offers retry when the pending donation count cannot load', async () => {
+    vi.mocked(getDonationBadge).mockRejectedValueOnce(new Error('Unable to load donation count'));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(
+          input instanceof Request ? input.url : String(input),
+          window.location.origin,
+        );
+        return url.pathname === '/admin/api/session'
+          ? response({ admin: { username: 'dashboard-admin' } })
+          : response(overview(0, 0));
+      }),
+    );
+    const { user } = await renderWithProviders(<DashboardPage />, {
+      station: 'admin',
+      locale: 'en',
+    });
+    const alert = await screen.findByRole('alert');
+    await user.click(within(alert).getByRole('button', { name: /retry/i }));
+    expect(await screen.findByText('4', { exact: true })).toBeVisible();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it.each([101, 10017])(
     'uses a bounded numbered page for %i users sharing an endpoint',
     async (count) => {

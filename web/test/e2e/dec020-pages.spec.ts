@@ -612,13 +612,7 @@ test('user endpoint source wizard submits an immutable mainstream channel select
 
   await page.goto(`${USER_ORIGIN}/endpoints?connection_id=1`);
   await page.getByRole('button', { name: connectionCopy.addEntry, exact: true }).first().click();
-  const wizard = page
-    .locator('.nb-expandable-panel')
-    .filter({ has: page.getByRole('heading', { name: connectionCopy.addEntry, exact: true }) });
-  await wizard
-    .locator('.nb-fold > summary')
-    .filter({ hasText: userCopy.user.services.advancedSetup })
-    .click();
+  const wizard = page.getByRole('dialog', { name: connectionCopy.addEntry, exact: true });
   const mainstream = wizard.getByRole('radio', { name: connectionCopy.mainstream, exact: true });
   await mainstream.locator('..').click();
   await expect(mainstream).toBeChecked();

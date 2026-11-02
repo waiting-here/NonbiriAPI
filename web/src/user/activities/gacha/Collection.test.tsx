@@ -47,3 +47,35 @@ it('submits card search explicitly, applies selects immediately, and preserves f
   expect(screen.getByRole('textbox', { name: 'Search' })).toHaveValue(first.name_en);
   expect(count()).toBe(1);
 });
+
+it('clears both the applied search and its draft from the empty-state action', async () => {
+  const state = gachaSnapshot();
+  state.visible_themes = ['g'];
+  const visible = cards.filter((card) => card.theme === 'g');
+  const view = await renderWithProviders(
+    <Collection
+      state={state}
+      english
+      busy={false}
+      act={vi.fn()}
+      inspect={vi.fn()}
+      viewGroup={vi.fn()}
+    />,
+    { station: 'user', role: 'user' },
+  );
+  const search = screen.getByRole('textbox', { name: 'Search' });
+  await view.user.type(search, 'No matching card');
+  await view.user.click(screen.getByRole('button', { name: 'Search' }));
+  expect(screen.getByText('More filters · 1')).toBeVisible();
+  expect(screen.getByRole('heading', { name: 'No cards found' })).toBeVisible();
+  await view.user.click(screen.getByRole('button', { name: 'Clear filters' }));
+  expect(search).toHaveValue('');
+  expect(view.container.querySelectorAll('.gacha-catalog .gacha-card')).toHaveLength(
+    visible.length,
+  );
+  expect(screen.getByText('More filters', { exact: true })).toBeVisible();
+  await view.user.click(screen.getByRole('button', { name: 'Search' }));
+  expect(view.container.querySelectorAll('.gacha-catalog .gacha-card')).toHaveLength(
+    visible.length,
+  );
+});

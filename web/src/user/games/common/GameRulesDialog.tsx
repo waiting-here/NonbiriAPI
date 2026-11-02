@@ -1,5 +1,5 @@
 import { OverlayPortal } from '@shared/components/OverlayPortal';
-import { useEffect, useId, useRef } from 'react';
+import { DuelDialog } from './duel/Dialog';
 import '../games.css';
 
 export interface GameRulesSection {
@@ -35,77 +35,35 @@ export function GameRulesDialog({
   readonly sections: readonly GameRulesSection[];
   readonly onClose: () => void;
 }) {
-  const titleID = `game-rules-title-${useId().replaceAll(':', '')}`;
-  const bodyID = `${titleID}-body`;
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const returnFocusRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    returnFocusRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeRef.current?.focus();
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      returnFocusRef.current?.focus();
-      returnFocusRef.current = null;
-    };
-  }, [onClose, open]);
-
   if (!open) return null;
 
   return (
     <OverlayPortal>
-      <div
-        className="game-rules-modal"
-        role="presentation"
-        onMouseDown={(event) => {
-          if (event.target === event.currentTarget) onClose();
-        }}
+      <DuelDialog
+        title={title}
+        closeLabel={closeLabel}
+        onClose={onClose}
+        closeOnBackdrop
+        className="game-rules-dialog"
       >
-        <div
-          className="card game-rules-modal__panel"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={titleID}
-          aria-describedby={bodyID}
-        >
-          <div className="game-rules-modal__heading">
-            <h2 id={titleID}>{title}</h2>
-            <button
-              ref={closeRef}
-              type="button"
-              className="nb-btn nb-btn--secondary game-rules-modal__close"
-              onClick={onClose}
-            >
-              {closeLabel}
-            </button>
-          </div>
-          <div id={bodyID} className="game-rules-modal__body">
-            {sections.map((section) => (
-              <section className="game-rules-modal__section" key={section.title}>
-                <h3>{section.title}</h3>
-                {section.paragraphs?.map((paragraph) => (
-                  <p key={paragraph}>{paragraph}</p>
-                ))}
-                {section.items?.length ? (
-                  <ul>
-                    {section.items.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </section>
-            ))}
-          </div>
+        <div className="game-rules-modal__body">
+          {sections.map((section) => (
+            <section className="game-rules-modal__section" key={section.title}>
+              <h3>{section.title}</h3>
+              {section.paragraphs?.map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
+              {section.items?.length ? (
+                <ul>
+                  {section.items.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </section>
+          ))}
         </div>
-      </div>
+      </DuelDialog>
     </OverlayPortal>
   );
 }

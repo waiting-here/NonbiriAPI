@@ -33,7 +33,8 @@ export function DuelRoundLog<V, F, P, S, L, A>({
   readonly renderRound: (round: DuelRound<V, F, S>, you: Seat) => ReactNode;
 }) {
   const text = useDuelText();
-  const [cursor, setCursor] = useState<string | null>(null);
+  const [cursors, setCursors] = useState<(string | null)[]>([null]);
+  const cursor = cursors.at(-1) ?? null;
   const query = useQuery({
     queryKey: [...duelKeys.root(codec.game), 'rounds', id, active, cursor],
     queryFn: ({ signal }) => readRounds(codec, id, active, cursor, signal),
@@ -73,9 +74,10 @@ export function DuelRoundLog<V, F, P, S, L, A>({
         <button
           type="button"
           className="nb-btn nb-btn--secondary"
+          disabled={query.isFetching}
           onClick={() => {
-            setCursor(null);
-            void query.refetch();
+            if (cursors.length === 1) void query.refetch();
+            else setCursors([null]);
           }}
         >
           {text('common.refreshFirstPage')}
@@ -83,8 +85,20 @@ export function DuelRoundLog<V, F, P, S, L, A>({
         <button
           type="button"
           className="nb-btn nb-btn--secondary"
+          disabled={cursors.length === 1 || query.isFetching}
+          onClick={() => setCursors((previous) => previous.slice(0, -1))}
+        >
+          {text('common.previousPage')}
+        </button>
+        <span aria-live="polite">{text('common.pagePosition', { page: cursors.length })}</span>
+        <button
+          type="button"
+          className="nb-btn nb-btn--secondary"
           disabled={!query.data?.nextCursor || query.isFetching}
-          onClick={() => setCursor(query.data?.nextCursor ?? null)}
+          onClick={() => {
+            const nextCursor = query.data?.nextCursor;
+            if (nextCursor) setCursors((previous) => [...previous, nextCursor]);
+          }}
         >
           {text('common.nextPage')}
         </button>
@@ -145,7 +159,8 @@ export function DuelHistory<V, F, P, S, L, A>({
   readonly onClose: () => void;
 }) {
   const text = useDuelText();
-  const [cursor, setCursor] = useState<string | null>(null);
+  const [cursors, setCursors] = useState<(string | null)[]>([null]);
+  const cursor = cursors.at(-1) ?? null;
   const [id, setID] = useState<string | null>(null);
   const query = useQuery({
     queryKey: [...duelKeys.root(codec.game), 'history', 'list', cursor],
@@ -196,16 +211,28 @@ export function DuelHistory<V, F, P, S, L, A>({
             <button
               type="button"
               className="nb-btn nb-btn--secondary"
-              disabled={!cursor}
-              onClick={() => setCursor(null)}
+              disabled={cursors.length === 1 || query.isFetching}
+              onClick={() => setCursors([null])}
             >
               {text('common.firstPage')}
             </button>
             <button
               type="button"
               className="nb-btn nb-btn--secondary"
+              disabled={cursors.length === 1 || query.isFetching}
+              onClick={() => setCursors((previous) => previous.slice(0, -1))}
+            >
+              {text('common.previousPage')}
+            </button>
+            <span aria-live="polite">{text('common.pagePosition', { page: cursors.length })}</span>
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
               disabled={!query.data?.nextCursor || query.isFetching}
-              onClick={() => setCursor(query.data?.nextCursor ?? null)}
+              onClick={() => {
+                const nextCursor = query.data?.nextCursor;
+                if (nextCursor) setCursors((previous) => [...previous, nextCursor]);
+              }}
             >
               {text('common.nextPage')}
             </button>

@@ -659,6 +659,8 @@ func TestLeaderboardTieTupleWhitelist(t *testing.T) {
 	valid := [][3]string{
 		{"fishing", "single", ""},
 		{"fishing", "total", ""},
+		{"fishing", "cleanup", ""},
+		{"fishing", "gifts", ""},
 		{"rps", "profit_rate", "quick"},
 		{"rps", "profit_rate", "standard"},
 		{"rps", "profit_rate", "deathmatch"},
@@ -679,6 +681,8 @@ func TestLeaderboardTieTupleWhitelist(t *testing.T) {
 	}
 	for _, tuple := range [][3]string{
 		{"fishing", "single", "quick"},
+		{"fishing", "cleanup", "quick"},
+		{"fishing", "gifts", "quick"},
 		{"fishing", "profit_rate", ""},
 		{"rps", "single", "quick"},
 		{"rps", "net_profit", ""},

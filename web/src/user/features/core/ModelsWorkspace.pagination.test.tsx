@@ -207,6 +207,24 @@ afterEach(() => {
 });
 
 describe('ModelsWorkspace numbered pagination', () => {
+  it('keeps active filters reachable when the first model query fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = requestURL(input);
+        if (url.pathname === '/api/models')
+          return url.searchParams.get('q')
+            ? jsonResponse({ error: { code: 'service_unavailable', message: 'Please retry' } }, 503)
+            : jsonResponse(numbered([modelRecord('1')], '1', 20, 1));
+        throw new Error('Unexpected request: ' + url.pathname);
+      }),
+    );
+    const view = await renderWorkspace('/models?q=unavailable');
+    await screen.findByRole('alert');
+    await view.user.click(screen.getByRole('button', { name: /reset/i }));
+    expect(await screen.findByText('provider-1/model-1')).toBeVisible();
+  });
+
   it('clamps an outer model page, keeps the URL, and returns after deletion', async () => {
     const listedModels = Array.from({ length: 5 }, (_, index) => modelRecord(String(index + 21)));
     const detail = modelRecord('21');
@@ -988,7 +1006,16 @@ describe('ModelsWorkspace numbered pagination', () => {
         screen.queryByText(view.i18n.t('common.outcome.saved')),
         screen.queryByText('Saved to the model list. You can now add it as a source.'),
       ]).toEqual([null, null]);
-      await view.user.click(await screen.findByRole('checkbox', { name: /^typed-model / }));
+      await waitFor(() =>
+        expect(document.querySelector('.personal-binding-picker__models')).toHaveAttribute(
+          'aria-busy',
+          'false',
+        ),
+      );
+      const candidate = await screen.findByRole('checkbox', { name: /^typed-model / });
+      await waitFor(() => expect(candidate).toBeEnabled());
+      await view.user.click(candidate);
+      expect(candidate).toBeChecked();
       await view.user.click(screen.getByText('Call types', { selector: 'strong' }));
       expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
       expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();

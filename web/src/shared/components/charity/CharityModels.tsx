@@ -355,40 +355,37 @@ function ModelForm({
             })}
           </p>
         ) : null}
-        <fieldset className="ops-form-section">
-          <legend>{copy.basicSettings}</legend>
-          <Fields>
-            <Field label={t(charityCopyKey(role, 'provider'))}>
-              {(field) => (
-                <input
-                  {...field}
-                  value={draft.provider}
-                  onChange={(event) => {
-                    const provider = event.target.value;
-                    setDraft((current) => ({ ...current, provider }));
-                  }}
-                />
-              )}
-            </Field>
-            <Field label={t(charityCopyKey(role, 'model'))}>
-              {(field) => (
-                <input
-                  {...field}
-                  value={draft.model}
-                  onChange={(event) => {
-                    const model = event.target.value;
-                    setDraft((current) => ({ ...current, model }));
-                  }}
-                />
-              )}
-            </Field>
-            <Toggle
-              label={t('common.operations.charity.enableCharityModel')}
-              checked={draft.enabled}
-              onChange={(enabled) => setDraft((current) => ({ ...current, enabled }))}
-            />
-          </Fields>
-        </fieldset>
+        <Fields legend={copy.basicSettings} columns={2}>
+          <Field label={t(charityCopyKey(role, 'provider'))}>
+            {(field) => (
+              <input
+                {...field}
+                value={draft.provider}
+                onChange={(event) => {
+                  const provider = event.target.value;
+                  setDraft((current) => ({ ...current, provider }));
+                }}
+              />
+            )}
+          </Field>
+          <Field label={t(charityCopyKey(role, 'model'))}>
+            {(field) => (
+              <input
+                {...field}
+                value={draft.model}
+                onChange={(event) => {
+                  const model = event.target.value;
+                  setDraft((current) => ({ ...current, model }));
+                }}
+              />
+            )}
+          </Field>
+          <Toggle
+            label={t('common.operations.charity.enableCharityModel')}
+            checked={draft.enabled}
+            onChange={(enabled) => setDraft((current) => ({ ...current, enabled }))}
+          />
+        </Fields>
         <ModelTypesField
           value={draft.modelTypes}
           onChange={(modelTypes) => setDraft((current) => ({ ...current, modelTypes }))}
@@ -412,41 +409,38 @@ function ModelForm({
         {draft.modelTypes.includes('images_generations') ? (
           <p className="nb-sub">{t('common.operations.charity.imageBillingHelp')}</p>
         ) : null}
-        <fieldset className="ops-form-section">
-          <legend>{copy.accessRouting}</legend>
-          <Fields>
-            <Field label={t('common.operations.charity.routeStrategy')}>
+        <Fields legend={copy.accessRouting} columns={2} className="charity-model-access-routing">
+          <Fields legend={t('common.operations.charity.routingSettings')} columns={1}>
+            <Field
+              label={t('common.operations.charity.routeStrategy')}
+              help={t(
+                draft.routeStrategy === 'ordered'
+                  ? 'common.operations.charity.routeOrderedHelp'
+                  : draft.routeStrategy === 'random'
+                    ? 'common.operations.charity.routeRandomHelp'
+                    : draft.routeStrategy === 'cache_balanced'
+                      ? 'common.operations.charity.routeCacheBalancedHelp'
+                      : 'common.operations.charity.routeExpiryWeightedHelp',
+              )}
+            >
               {(field) => (
-                <>
-                  <select
-                    {...field}
-                    value={draft.routeStrategy}
-                    onChange={(event) => {
-                      const routeStrategy = event.target.value as ModelDraft['routeStrategy'];
-                      setDraft((current) => ({ ...current, routeStrategy }));
-                    }}
-                  >
-                    <option value="ordered">{t('common.operations.charity.routeOrdered')}</option>
-                    <option value="random">{t('common.operations.charity.routeRandom')}</option>
-                    <option value="expiry_weighted">
-                      {t('common.operations.charity.routeExpiryWeighted')}
-                    </option>
-                    <option value="cache_balanced">
-                      {t('common.operations.charity.routeCacheBalanced')}
-                    </option>
-                  </select>
-                  <small>
-                    {t(
-                      draft.routeStrategy === 'ordered'
-                        ? 'common.operations.charity.routeOrderedHelp'
-                        : draft.routeStrategy === 'random'
-                          ? 'common.operations.charity.routeRandomHelp'
-                          : draft.routeStrategy === 'cache_balanced'
-                            ? 'common.operations.charity.routeCacheBalancedHelp'
-                            : 'common.operations.charity.routeExpiryWeightedHelp',
-                    )}
-                  </small>
-                </>
+                <select
+                  {...field}
+                  value={draft.routeStrategy}
+                  onChange={(event) => {
+                    const routeStrategy = event.target.value as ModelDraft['routeStrategy'];
+                    setDraft((current) => ({ ...current, routeStrategy }));
+                  }}
+                >
+                  <option value="ordered">{t('common.operations.charity.routeOrdered')}</option>
+                  <option value="random">{t('common.operations.charity.routeRandom')}</option>
+                  <option value="expiry_weighted">
+                    {t('common.operations.charity.routeExpiryWeighted')}
+                  </option>
+                  <option value="cache_balanced">
+                    {t('common.operations.charity.routeCacheBalanced')}
+                  </option>
+                </select>
               )}
             </Field>
             {role === 'admin' ? (
@@ -487,9 +481,27 @@ function ModelForm({
                 />
               </>
             ) : null}
+
+            <Field label={copy.excluded} help={copy.excludedHint} size="long">
+              {(field) => (
+                <textarea
+                  {...field}
+                  value={draft.excluded}
+                  onChange={(event) => {
+                    const excluded = event.target.value;
+                    setDraft((current) => ({ ...current, excluded }));
+                  }}
+                />
+              )}
+            </Field>
           </Fields>
-          <Fields>
-            <fieldset className="ops-model-levels">
+          <Fields legend={t('common.operations.charity.accessSettings')} columns={1}>
+            <Toggle
+              label={copy.mainstream}
+              checked={draft.isMainstream}
+              onChange={(isMainstream) => setDraft((current) => ({ ...current, isMainstream }))}
+            />
+            <fieldset className="nb-fieldset ops-model-levels">
               <legend>{t('common.operations.charity.allowedLevels')}</legend>
               <div className="ops-model-level-actions">
                 <button
@@ -544,23 +556,6 @@ function ModelForm({
                 </small>
               ) : null}
             </fieldset>
-            <Toggle
-              label={copy.mainstream}
-              checked={draft.isMainstream}
-              onChange={(isMainstream) => setDraft((current) => ({ ...current, isMainstream }))}
-            />
-            <Field label={copy.excluded} help={copy.excludedHint} size="long">
-              {(field) => (
-                <textarea
-                  {...field}
-                  value={draft.excluded}
-                  onChange={(event) => {
-                    const excluded = event.target.value;
-                    setDraft((current) => ({ ...current, excluded }));
-                  }}
-                />
-              )}
-            </Field>
             <Field
               label={t('common.operations.charity.publicDescription')}
               help={t('common.operations.charity.publicDescriptionHelp')}
@@ -579,7 +574,7 @@ function ModelForm({
               )}
             </Field>
           </Fields>
-        </fieldset>
+        </Fields>
         {draft.modelTypes.includes('chat_completions') || draft.modelTypes.includes('responses') ? (
           <RolePolicyEditor
             value={draft.rolePolicy}

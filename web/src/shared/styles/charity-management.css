@@ -19,13 +19,13 @@
   gap: 0.75rem;
   margin-top: 1rem;
 }
-.charity-management fieldset {
+.charity-management fieldset:where(:not(.nb-fields, .nb-fieldset)) {
   border: 1px solid var(--nb-color-border);
   border-radius: 0.75rem;
   padding: 1rem;
   margin: 1rem 0;
 }
-.charity-management legend {
+.charity-management fieldset:where(:not(.nb-fields, .nb-fieldset)) > legend {
   padding: 0 0.4rem;
   font-weight: 700;
 }
@@ -119,6 +119,22 @@
 .charity-donations__panes.nb-md {
   grid-template-columns: minmax(24rem, 1fr) minmax(0, 1.2fr);
   align-items: start;
+}
+/* The review decision stays reachable at the bottom of the screen inside its card. */
+.charity-review-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--nb-z-sticky);
+  margin-inline: calc(-1 * var(--nb-space-3));
+  padding: var(--nb-space-3);
+  border-top: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-control);
+  background: color-mix(in srgb, var(--nb-color-surface) 94%, transparent);
+  backdrop-filter: blur(8px);
+}
+.charity-review-actions .nb-form-actions,
+.charity-review-actions > * {
+  margin: 0;
 }
 .charity-donation-summary {
   display: grid;

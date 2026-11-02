@@ -397,7 +397,9 @@ describe('home independent capability states', () => {
 
     expect(screen.getByRole('heading', { name: 'Hello, Guild Alice' })).toBeVisible();
     expect(await screen.findByText('Lifetime calls')).toBeVisible();
-    expect(await screen.findByText('-1.5')).toBeVisible();
+    await waitFor(() =>
+      expect(document.querySelector('.home-wallet .nb-stat__value')).toHaveTextContent(/^-1\.5$/),
+    );
     expect(await screen.findByRole('heading', { name: 'Continue or view results' })).toBeVisible();
     expect(screen.getByText('Could not load this section')).toBeVisible();
     expect(await screen.findByText('Planned maintenance')).toBeVisible();

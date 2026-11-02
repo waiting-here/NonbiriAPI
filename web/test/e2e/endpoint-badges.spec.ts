@@ -47,10 +47,10 @@ for (const width of [1440, 390]) {
         return route.fallback();
       });
       await page.goto(`${USER_ORIGIN}/endpoints?connection_id=1`);
-      const endpoint = page.getByRole('combobox', { name: '端点', exact: true });
+      const endpoint = page.getByRole('group', { name: '端点', exact: true });
       await expect(page.getByText('主流订阅', { exact: true })).toBeVisible();
       await expect(page.getByText('主流 API 平台', { exact: true })).toHaveCount(0);
-      await endpoint.selectOption('2');
+      await endpoint.locator('[data-entry-id="2"]').click();
       await expect(page.getByText('主流 API 平台', { exact: true })).toBeVisible();
       await expect(page.getByText('主流订阅', { exact: true })).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
@@ -63,11 +63,11 @@ for (const width of [1440, 390]) {
       });
       current = false;
       await page.reload();
-      await expect(page.getByText('常用 API 服务', { exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: '常用 API 服务', exact: true })).toBeVisible();
       await expect(page.getByText('主流订阅', { exact: true })).toHaveCount(0);
       await expect(page.getByText('主流 API 平台', { exact: true })).toHaveCount(0);
-      await endpoint.selectOption('1');
-      await expect(page.getByText('常用订阅服务', { exact: true })).toBeVisible();
+      await endpoint.locator('[data-entry-id="1"]').click();
+      await expect(page.getByRole('heading', { name: '常用订阅服务', exact: true })).toBeVisible();
       await expect(page.getByText('主流订阅', { exact: true })).toHaveCount(0);
       await expect(page.getByText('主流 API 平台', { exact: true })).toHaveCount(0);
       guard.assertNone();

@@ -26,7 +26,7 @@ func TestConnectionsUpgradePreservesPublishedHistoryAndCredentials(t *testing.T)
 	defer database.Close()
 	mustExec(t, database, "PRAGMA foreign_keys=ON")
 	plan, err := storageSchema.plan(ctx, database)
-	if err != nil || len(plan.steps) != 12 || plan.steps[0].version != 33 || plan.steps[1].version != 34 || plan.steps[2].version != 35 || plan.steps[3].version != 36 || plan.steps[4].version != 37 || plan.steps[5].version != 38 || plan.steps[6].version != 39 || plan.steps[7].version != 40 || plan.steps[8].version != 41 || plan.steps[9].version != 42 || plan.steps[10].version != 43 || plan.steps[11].version != db.CurrentSchemaVersion || !plan.auditsCredentials() {
+	if err != nil || len(plan.steps) != 13 || plan.steps[0].version != 33 || plan.steps[1].version != 34 || plan.steps[2].version != 35 || plan.steps[3].version != 36 || plan.steps[4].version != 37 || plan.steps[5].version != 38 || plan.steps[6].version != 39 || plan.steps[7].version != 40 || plan.steps[8].version != 41 || plan.steps[9].version != 42 || plan.steps[10].version != 43 || plan.steps[11].version != 44 || plan.steps[12].version != db.CurrentSchemaVersion || !plan.auditsCredentials() {
 		t.Fatalf("connection migration plan: %+v, %v", plan, err)
 	}
 	owner := hostileInsertUser(t, database, "connection-owner", 0, 1)
@@ -227,6 +227,14 @@ func gatewayRows(t *testing.T, database *sql.DB) map[string][]string {
 	}
 	result := make(map[string][]string, len(tables))
 	for _, table := range tables {
+		if table == "game_fishing_recent_order" {
+			assertFishingRecentOrderProjectionForTest(t, database)
+			continue
+		}
+		if isFishingPondTableForTest(table) {
+			assertInitialFishingPondTableForTest(t, database, table)
+			continue
+		}
 		rows, err := database.Query("SELECT * FROM " + quoteSQLiteIdentifier(table))
 		if err != nil {
 			t.Fatal(err)

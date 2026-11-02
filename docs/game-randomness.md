@@ -12,6 +12,8 @@
 
 随机种子不用于会话、加密 nonce、身份、防作弊令牌、游标、匿名化或其他对局。知道一局的公开种子不能推导其他局的种子。开局承诺使已经保存承诺的玩家能发现终局更换种子；它不证明可信运营者从未事先筛选种子，也不证明所有日志完整或单局必定获利。
 
+池塘馈赠在原抽取之后独立决定，只替换零积分垃圾的展示。现有凭证核验原抽取及经济结果，不包含共享队列与投入者署名，也不能用它重建当时的馈赠队列。
+
 ## English
 
 New games use independent 256-bit secret server seeds. The game page offers an opening SHA-256 commitment, local verification after disclosure, and a downloadable JSON proof. Active seeds never enter browser responses. Server projections also withhold dealer holes, undealt cards and opponents' unrevealed choices; client state and phase parameters cannot authorize disclosure.
@@ -23,6 +25,8 @@ Proofs are owner-scoped and retained for up to 30 days. Blackjack spectators can
 Once a terminal seed is disclosed, including after cancellation, the complete Bidding reward decks or Blackjack shoe can be reconstructed, including unused cards. Ordinary game history and game export fields do not list those cards, but the separate proof and exported `randomness` allow reconstruction. Active deck order remains secret; disclosure does not expose other players' identities, funding sources or other games' secrets.
 
 Seeds never derive login tokens, encryption nonces, other games, cursors or anonymization keys. Saving the opening commitment lets a player detect a later seed substitution. This is not a proof that a trusted operator never selected among seeds, that the transcript is complete, or that a player will profit.
+
+Pond gifts use an independent draw after the original outcome and only replace zero-credit junk presentation. Existing proofs verify the original economic draw; they do not include the shared gift queue or donor signatures and cannot reconstruct that queue.
 
 ## Wire protocol
 

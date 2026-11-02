@@ -1,10 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readFishingLeaderboard, startFishing } from './api';
+import {
+  readFishingLeaderboard,
+  readFishingPondLeaderboard,
+  returnFishingOutcome,
+  startFishing,
+} from './api';
 import {
   normalizeFishingLeaderboard,
   normalizeFishingPending,
   normalizeFishingResult,
   normalizeFishingState,
+  normalizeFishingPondReceipt,
 } from './normalize';
 
 const id = 'fb_AAAAAAAAAAAAAAAAAAAAAA';
@@ -358,4 +364,86 @@ describe('Fishing wire', () => {
     ).resolves.toMatchObject({ batchID: id, state: 'settlement_pending' });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+});
+
+describe('Pond wire projection', () => {
+  it('keeps old catches ineligible and accepts gifted species and persisted donor identity', () => {
+    expect(normalizeFishingResult(resultWire()).outcomes[0].pond).toBeNull();
+    const value = resultWire();
+    Object.assign(value.outcomes[0], {
+      species_key: 'old_tire',
+      tier: 'junk',
+      size_cm: 0,
+      reward: '0',
+      net_reward: '0',
+      pond: {
+        return_state: 'gift',
+        gift: {
+          kind: 'public',
+          display_name: 'Donor at return time',
+          avatar_url: null,
+        },
+      },
+    });
+    const outcome = normalizeFishingResult(value).outcomes[0];
+    expect(outcome.speciesKey).toBe('old_tire');
+    expect(outcome.pond).toEqual({
+      returnState: 'gift',
+      gift: { kind: 'public', displayName: 'Donor at return time', avatarURL: null },
+    });
+    Object.assign(value.outcomes[0], {
+      pond: { return_state: 'gift', gift: { kind: 'anonymous' } },
+    });
+    expect(normalizeFishingResult(value).outcomes[0].pond?.gift).toEqual({ kind: 'anonymous' });
+  });
+
+  it('checks receipt identity and uses the natural catch resource without a payload', async () => {
+    const receipt = {
+      batch_id: id,
+      ordinal: 0,
+      return_state: 'returned',
+      returned_at: 1_800_000_000,
+    };
+    expect(normalizeFishingPondReceipt(receipt).returnState).toBe('returned');
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ ...receipt, ordinal: 1 }), {
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(returnFishingOutcome(id, 0)).rejects.toMatchObject({ code: 'invalid_response' });
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.method).toBe('POST');
+    expect(init.body).toBeUndefined();
+    expect(new Headers(init.headers).get('Idempotency-Key')).toBeNull();
+  });
+
+  it('keeps large counts exact and rejects a mismatched board period', async () => {
+    const wire = {
+      board: 'gifts',
+      period: 'all',
+      window_start: null,
+      entries: [
+        { rank: '1', item_count: '9007199254740993', identity: { kind: 'anonymous' }, is_me: true },
+      ],
+      me: null,
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify(wire), {
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+    );
+    const parsed = await readFishingPondLeaderboard('gifts', 'all');
+    expect(parsed.entries[0].itemCount).toBe('9007199254740993');
+    await expect(readFishingPondLeaderboard('gifts', '7d')).rejects.toMatchObject({
+      code: 'invalid_response',
+    });
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
 });

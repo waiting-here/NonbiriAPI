@@ -130,3 +130,35 @@ test.each(['/logs', '/credits', '/debug', '/issues'])(
     expect(rendered.container.querySelectorAll('.records-tabs a')).toHaveLength(4);
   },
 );
+
+test.each(['/endpoints', '/endpoints/42', '/models'])(
+  'keeps the own-services entry active on %s',
+  async (route) => {
+    installJsonFetchFixtures([
+      { method: 'GET', path: '/api/session', body: levelFiveSession },
+      { method: 'GET', path: '/api/config', body: publicConfig },
+    ]);
+    const rendered = await renderWithProviders(
+      <Routes>
+        <Route element={<UserLayout />}>
+          <Route path={route} element={<div>page</div>} />
+        </Route>
+      </Routes>,
+      { station: 'user', role: 'level5', route },
+    );
+    await screen.findByRole('button', { name: 'fixture-user' });
+    const links = [...rendered.container.querySelectorAll('#user-navigation > ul > li > a')];
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '/',
+      '/keys',
+      '/charity',
+      '/endpoints',
+      '/logs',
+      '/activities',
+      '/games',
+      '/rewards',
+    ]);
+    expect(links[3]).toHaveAttribute('data-active', 'true');
+    expect(links[4]).not.toHaveAttribute('data-active');
+  },
+);

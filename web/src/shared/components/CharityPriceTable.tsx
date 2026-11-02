@@ -1,3 +1,4 @@
+import { CreditText } from './CreditText';
 import type { EffectiveDiscount, RecurringDiscount } from '@shared/operations/recurringDiscount';
 import { formatCount } from '@shared/utils/formatNumber';
 import { useEffect, useState } from 'react';
@@ -108,9 +109,10 @@ export function CharityPriceTable({
         })}
       </strong>
       <span>
-        {t('common.operations.charity.context.fineNote', {
-          amount: formatAmount(contextPenalty.fineMilli),
-        })}
+        <CreditText
+          i18nKey="common.operations.charity.context.fineNote"
+          amounts={{ amount: formatAmount(contextPenalty.fineMilli) }}
+        />
       </span>
     </p>
   );

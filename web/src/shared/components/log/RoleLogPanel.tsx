@@ -1,3 +1,4 @@
+import { CreditNumber } from '@shared/components/CreditNumber';
 import { FailureDetails, RequestDelivery } from '@shared/observability/FailureDiagnostics';
 import {
   FAILURE_CATEGORIES,
@@ -866,7 +867,11 @@ function ScopedRoleLogPanel({
       header: t('common.operations.logs.charge'),
       cell: 'meta',
       align: 'num',
-      render: (row) => <span className="nb-amount">{formatCredits(row.usage.charge)}</span>,
+      render: (row) => (
+        <span className="nb-amount">
+          <CreditNumber value={formatCredits(row.usage.charge)} />
+        </span>
+      ),
     },
   ];
 
@@ -1050,7 +1055,11 @@ function ScopedRoleLogPanel({
             : []),
           {
             label: t('common.operations.logs.charge'),
-            value: <span className="nb-amount">{formatCredits(detailRequest.usage.charge)}</span>,
+            value: (
+              <span className="nb-amount">
+                <CreditNumber value={formatCredits(detailRequest.usage.charge)} />
+              </span>
+            ),
           },
           ...('attempts' in detailData
             ? [

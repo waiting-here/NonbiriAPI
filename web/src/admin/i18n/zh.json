@@ -820,10 +820,11 @@
     },
     "navigation": {
       "overview": "概览",
-      "users": "用户与权限",
-      "operations": "运营",
-      "services": "服务与公益",
-      "activities": "活动与内容"
+      "users": "用户",
+      "services": "公益与服务",
+      "records": "日志与审计",
+      "activities": "活动与内容",
+      "system": "系统"
     },
     "dashboard": {
       "nav": "仪表盘",
@@ -849,6 +850,10 @@
       "pendingReview": "待审核",
       "approvedProcessing": "正在处理",
       "openReportInbox": "打开举报收件箱",
+      "attentionTitle": "待处理",
+      "donationsPending": "待处理捐赠",
+      "openDonations": "前往处理",
+      "nothingPending": "暂无待处理",
       "generalCheckins": "通用积分签到次数",
       "gameCheckins": "游戏积分签到次数"
     },
@@ -937,6 +942,8 @@
       "subjectUser": "用户 #{{id}}"
     },
     "settings": {
+      "searchResults": "搜索结果",
+      "correctErrors": "请修正以下设置后保存。",
       "nav": "站点参数",
       "title": "站点参数",
       "description": "调整站点参数。可同时编辑多项，检查后统一保存。",
@@ -1047,6 +1054,7 @@
       "shell": "珍珠贝",
       "saved": "游戏设置已保存。",
       "save": "保存游戏配置",
+      "saveAllChanges": "保存全部更改",
       "controls": {
         "settings": "游戏设置",
         "revisionTerms": "可同时调整多项，保存后生效；已经开始的游戏继续使用开始时的设置。"
@@ -2065,7 +2073,7 @@
     "exact": {
       "alignment": "指定刷新时间",
       "anchor": "刷新日期与时间",
-      "help": "按 {{zone}} 填写刷新时间。首次刷新在未来时，本次保存起开始计量；短月份使用月末，之后恢复原日期。",
+      "help": "按 {{zone}} 填写刷新时间。新建规则或改用此方式时，首次刷新必须在未来，本次保存起开始计量；已有规则可保留原日期。短月份使用月末，之后恢复原日期。",
       "preview": "接下来三次刷新",
       "loading": "正在计算刷新时间…",
       "unavailable": "请检查刷新日期与时间后重试。",

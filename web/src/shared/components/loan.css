@@ -9,7 +9,7 @@
   overflow: auto;
 }
 .loan-dialog::backdrop {
-  background: #0008;
+  background: var(--nb-color-scrim);
 }
 .loan-dialog header,
 .loan-actions {

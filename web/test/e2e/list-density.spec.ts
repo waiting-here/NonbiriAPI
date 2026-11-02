@@ -403,15 +403,15 @@ test('mainstream resources retain their channel name and protocol when switching
     return route.fallback();
   });
   await page.goto(`${USER_ORIGIN}/endpoints?connection_id=1`);
-  const selector = page.getByRole('combobox', {
-    name: commonCopy.common.connections.entry,
+  const selector = page.getByRole('group', {
+    name: commonCopy.common.connections.entries,
     exact: true,
   });
-  await expect(selector.locator('option')).toHaveCount(2);
+  await expect(selector.getByRole('button')).toHaveCount(2);
   const detail = page.locator('.services-detail--enabled');
   await expect(detail.locator('.nb-facts')).toContainText('Example Gateway');
   await expect(detail.locator('.nb-facts')).toContainText('OpenAI-compatible');
-  await selector.selectOption('2');
+  await selector.locator('[data-entry-id="2"]').click();
   await expect(detail.getByRole('heading', { name: endpoint(2).note, exact: true })).toBeVisible();
   await expect(detail.locator('.nb-facts')).toContainText('OpenAI-compatible');
   for (const width of [320, 390, 1935]) {
@@ -698,7 +698,7 @@ for (const locale of ['en', 'zh'] as const) {
       .getByRole('button', { name: locale === 'zh' ? '搜索' : 'Search', exact: true })
       .click();
     await expect(cards).toHaveCount(12);
-    await expect(page.locator('.economy-catalog-filters .nb-filter__more')).toHaveCount(0);
+    await page.locator('.economy-catalog-filters .nb-filter__more > summary').click();
     await page
       .getByRole('combobox', {
         name: locale === 'zh' ? '本人访问权限' : 'Your access',
@@ -1292,6 +1292,25 @@ for (const role of ['admin', 'steward'] as const)
     await picker.getByRole('button', { name: /endpoint-1\.example\.test/ }).click();
     await expect(picker.locator('.ops-picker-choice')).toHaveCount(50);
     await picker.getByRole('button', { name: /^Reviewed key 1 —/ }).click();
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      const placement = await picker
+        .locator('.nb-choice-list__items .nb-field')
+        .first()
+        .evaluate((field) => {
+          const label = field.querySelector('label')!.getBoundingClientRect();
+          const source = field.querySelector('.ops-picker-source-types')!.getBoundingClientRect();
+          return {
+            labelX: label.x,
+            labelWidth: label.width,
+            sourceX: source.x,
+            sourceWidth: source.width,
+          };
+        });
+      expect(Math.abs(placement.sourceX - placement.labelX)).toBeLessThanOrEqual(1);
+      expect(placement.sourceWidth).toBeGreaterThanOrEqual(placement.labelWidth - 1);
+      await fitsPage(page);
+    }
     await picker.getByRole('checkbox', { name: /shared-model-1-/ }).check();
     await currentPage.getByRole('button', { name: 'Next', exact: true }).click();
     await picker.getByRole('checkbox', { name: /shared-model-61-/ }).check();

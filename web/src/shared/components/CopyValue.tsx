@@ -7,10 +7,13 @@ export function CopyValue({
   value,
   label,
   showValue = true,
+  variant = 'ghost',
 }: {
   value: string;
   label: string;
   showValue?: boolean;
+  /** `secondary` for a row's main action, such as copying a model name. */
+  variant?: 'ghost' | 'secondary';
 }) {
   const { t } = useTranslation();
   const [result, setResult] = useState<{ value: string; ok: boolean }>();
@@ -19,7 +22,7 @@ export function CopyValue({
       {showValue ? <code>{value}</code> : null}
       <Button
         type="button"
-        variant="ghost"
+        variant={variant}
         aria-label={t('common.copyValue', { label })}
         onClick={() => {
           void copyText(value).then((ok) => setResult({ value, ok }));

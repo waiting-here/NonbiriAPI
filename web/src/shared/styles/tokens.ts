@@ -27,6 +27,8 @@ export const designTokens = {
     danger: '--nb-color-danger',
     onDanger: '--nb-color-on-danger',
     info: '--nb-color-info',
+    highlight: '--nb-color-highlight',
+    highlightSoft: '--nb-color-highlight-soft',
   },
   spacing: {
     zero: '--nb-space-0',
@@ -42,6 +44,8 @@ export const designTokens = {
     md: '--nb-radius-md',
     lg: '--nb-radius-lg',
     pill: '--nb-radius-pill',
+    control: '--nb-radius-control',
+    card: '--nb-radius-card',
   },
   elevation: {
     none: '--nb-elevation-0',
@@ -106,6 +110,7 @@ export const cssVar = (token: DesignToken): `var(${string})` => `var(${token})`;
  * drawer before its trigger becomes hidden.
  */
 export const SHELL_DRAWER_MEDIA_QUERY = {
-  user: '(max-width: 63.999rem)',
+  // Matches --nb-shell-breakpoint: below 70rem the user station uses the drawer.
+  user: '(max-width: 69.999rem)',
   admin: '(max-width: 64rem)',
 } as const;

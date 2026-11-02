@@ -48,7 +48,7 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
-async function setup() {
+async function setup(embedded = false, ready = true) {
   const view = await renderWithProviders(<LocationProbe />, {
     station: 'admin',
     role: 'admin',
@@ -66,7 +66,9 @@ async function setup() {
   });
   view.rerender(
     <>
+      {embedded ? <h1>Management workspace</h1> : null}
       <AnnouncementEditor
+        embedded={embedded}
         role="admin"
         account="fixture-admin"
         announcementId={id}
@@ -75,7 +77,7 @@ async function setup() {
       <LocationProbe />
     </>,
   );
-  await screen.findByLabelText('English title');
+  if (ready) await screen.findByLabelText('English title');
   return view;
 }
 type View = Awaited<ReturnType<typeof setup>>;
@@ -113,6 +115,41 @@ beforeEach(() => {
 });
 
 describe('announcement reconciliation authority', () => {
+  it('keeps the standalone editor page heading', async () => {
+    await setup();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Fixture notice' })).toBeVisible();
+  });
+  it('keeps one page heading while an embedded editor loads, renders and fails', async () => {
+    const pending = deferred<AdminAnnouncement>();
+    vi.mocked(getAdminAnnouncement).mockReturnValueOnce(pending.promise);
+    const view = await setup(true, false);
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 2, name: 'Announcement' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Back to announcements' })).toHaveAttribute(
+      'href',
+      '/announcements',
+    );
+    await act(async () => {
+      pending.resolve(item);
+      await pending.promise;
+    });
+    await screen.findByLabelText('English title');
+    expect(screen.getByRole('heading', { level: 2, name: 'Fixture notice' })).toBeVisible();
+    vi.mocked(getAdminAnnouncement).mockRejectedValueOnce(
+      new ApiError('not_found', 'Notice unavailable', 404),
+    );
+    await act(async () => {
+      await view.queryClient.invalidateQueries({ queryKey: detailKey });
+    });
+    await screen.findByRole('alert');
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 2, name: 'Announcement' })).toBeVisible(),
+    );
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('link', { name: 'Back to announcements' })).toBeVisible();
+    expect(screen.queryByLabelText('English title')).toBeNull();
+  });
   it.each(['account', 'unmount'] as const)(
     'blocks delete cleanup and navigation after %s during list refresh',
     async (boundary) => {

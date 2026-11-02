@@ -117,7 +117,7 @@ async function observed(page: Page) {
     });
   });
 }
-async function aligned(arena: FrameLocator, current: Match) {
+async function aligned(arena: FrameLocator, current: Match, exactPhase = false) {
   await expect
     .poll(async () => {
       const value = await arena.locator('body').evaluate(() => {
@@ -131,7 +131,7 @@ async function aligned(arena: FrameLocator, current: Match) {
       return value
         ? [
             value.id,
-            current.decision_id
+            current.decision_id && !exactPhase
               ? BigInt(value.phaseSeq) >= BigInt(current.phase_seq)
               : value.phaseSeq === current.phase_seq,
             value.decisionID,
@@ -414,12 +414,30 @@ test('original Gwent AI plays a paid legal match, restores results, resumes afte
       creditsToMilli(second.own_payment.game),
     );
     await page.goto(fixture().user_url + '/games/gwent');
+    let surrenderState: Match | null = null;
     for (let step = 0; step < 8; step++) {
       const current = (await get<Home>(ctx, base + '/state')).current!;
-      await aligned(arena, current);
-      if (!current.view.choice) break;
+      if (!current.view.legal_actions.length) {
+        await control(ctx, 'advance', { seconds: 1 });
+        await expect
+          .poll(async () => {
+            const next = (await get<Home>(ctx, base + '/state')).current;
+            return (
+              next?.phase_seq !== current.phase_seq || Boolean(next?.view.legal_actions.length)
+            );
+          })
+          .toBe(true);
+        continue;
+      }
+      if (!current.view.choice) {
+        surrenderState = current;
+        break;
+      }
       await actionUI(page, arena, current, select(current.view));
     }
+    expect(surrenderState, 'Concede on a stable player turn after the AI advances').not.toBeNull();
+    // Surrender confirms the exact global phase, unlike decision-scoped card actions.
+    await aligned(arena, surrenderState!, true);
     await expect(arena.locator('#arena-dialog')).not.toBeVisible();
     await arena.locator('#arena-concede').click();
     const surrendered = page.waitForResponse(
@@ -431,7 +449,16 @@ test('original Gwent AI plays a paid legal match, restores results, resumes afte
       .locator('#dialog-actions')
       .getByRole('button', { name: '认输', exact: true })
       .click();
-    expect((await surrendered).status()).toBe(200);
+    const surrenderResponse = await surrendered;
+    expect(
+      surrenderResponse.status(),
+      JSON.stringify({
+        observedPhase: surrenderState?.phase_seq,
+        observedDecision: surrenderState?.decision_id,
+        sent: surrenderResponse.request().postDataJSON(),
+        response: await surrenderResponse.text(),
+      }),
+    ).toBe(200);
     await expect(arena.locator('#result-overlay')).toBeVisible();
     const lost = (await get<Home>(ctx, base + '/state')).latest_result!;
     expect(lost.id).toBe(second.id);

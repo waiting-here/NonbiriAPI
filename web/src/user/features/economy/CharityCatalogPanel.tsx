@@ -5,10 +5,11 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { CharityPriceTable, type CharityPriceRow } from '@shared/components/CharityPriceTable';
-import { DataTable, Field, FilterBar } from '@shared/components/ui';
+import { DataTable, Field, FilterBar, StatusBadge } from '@shared/components/ui';
+import type { StatusTone } from '@shared/components/ui/StatusBadge';
 import { CopyValue } from '@shared/components/CopyValue';
 import { RecentCharitySuccess } from '@shared/components/DonationControlFacts';
-import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
+import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { type PageSize } from '@shared/operations/pageNumbers';
@@ -42,6 +43,13 @@ const AVAILABILITY_COPY: Record<CatalogAvailability, string> = {
   level_denied: 'user.charity.catalog.availability.level_denied',
   no_usable_key: 'user.charity.catalog.availability.no_usable_key',
   available: 'user.charity.catalog.availability.available',
+};
+const AVAILABILITY_TONE: Record<CatalogAvailability, StatusTone> = {
+  feature_disabled: 'bad',
+  model_disabled: 'neutral',
+  level_denied: 'neutral',
+  no_usable_key: 'warn',
+  available: 'ok',
 };
 
 function boundQueryDraft(value: string): string {
@@ -145,7 +153,7 @@ function CatalogFilters({
   return (
     <div className="economy-catalog-filters">
       <FilterBar
-        secondaryAlwaysVisible
+        persistKey="charity-catalog-filters"
         search={
           <>
             <Field label={t('user.charity.catalog.search')}>
@@ -407,10 +415,9 @@ export function CharityCatalogPanel({
                   header: t('user.charity.presentation.status'),
                   cell: 'status',
                   render: (model) => (
-                    <StatusBadge
-                      active={model.availability === 'available'}
-                      label={t(AVAILABILITY_COPY[model.availability])}
-                    />
+                    <StatusBadge tone={AVAILABILITY_TONE[model.availability]}>
+                      {t(AVAILABILITY_COPY[model.availability])}
+                    </StatusBadge>
                   ),
                 },
                 {
@@ -452,6 +459,7 @@ export function CharityCatalogPanel({
                   render: (model) => (
                     <CopyValue
                       showValue={false}
+                      variant="secondary"
                       value={model.fullName}
                       label={t('user.charity.modelName')}
                     />

@@ -143,7 +143,7 @@ async function visuals(page: Page, info: TestInfo, name: string, focus: Locator)
       }
       for (const note of await focus.locator('.charity-context-note').all()) {
         const heading = await note.locator('strong').boundingBox();
-        const text = await note.locator('span').boundingBox();
+        const text = await note.locator(':scope > span').boundingBox();
         expect(heading).not.toBeNull();
         expect(text).not.toBeNull();
         expect(text!.y).toBeGreaterThanOrEqual(heading!.y + heading!.height);

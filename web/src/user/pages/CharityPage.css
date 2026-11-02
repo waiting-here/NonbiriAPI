@@ -10,19 +10,30 @@
 }
 .donate-step {
   display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   gap: var(--nb-space-3);
   align-items: start;
+  min-width: 0;
+  padding: var(--nb-space-4);
+  border: 1px solid color-mix(in srgb, var(--nb-color-border) 80%, transparent);
+  border-radius: var(--nb-radius-card);
+  background: var(--nb-color-surface-alt);
 }
 .donate-step__number {
   display: grid;
   place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: var(--nb-radius-pill);
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 1.5px solid color-mix(in srgb, var(--nb-color-accent) 45%, var(--nb-color-border));
+  border-radius: 50%;
   color: var(--nb-color-accent);
   background: var(--nb-color-accent-soft);
-  font-weight: 700;
+  font-size: var(--nb-font-size-sm);
+  font-weight: var(--nb-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+.donate-step > :last-child {
+  min-width: 0;
 }
 .donate-step h3 {
   margin: 0 0 var(--nb-space-2);
@@ -92,6 +103,10 @@
   padding-left: var(--nb-space-4);
 }
 @media (width < 48rem) {
+  .donate-step {
+    gap: var(--nb-space-2);
+    padding: var(--nb-space-3);
+  }
   .economy-charity-page > .nb-tabs > button {
     flex: 0 0 auto;
     min-width: max-content;

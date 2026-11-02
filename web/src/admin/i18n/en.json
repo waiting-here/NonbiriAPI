@@ -820,10 +820,11 @@
     },
     "navigation": {
       "overview": "Overview",
-      "users": "Users & permissions",
-      "operations": "Operations",
-      "services": "Services & charity",
-      "activities": "Activities & content"
+      "users": "Users",
+      "services": "Charity & services",
+      "records": "Logs & audits",
+      "activities": "Activities & content",
+      "system": "System"
     },
     "dashboard": {
       "nav": "Dashboard",
@@ -849,6 +850,10 @@
       "pendingReview": "Review",
       "approvedProcessing": "Processing",
       "openReportInbox": "Open report inbox",
+      "attentionTitle": "Needs attention",
+      "donationsPending": "Donations to handle",
+      "openDonations": "Handle donations",
+      "nothingPending": "Nothing to handle",
       "generalCheckins": "General-credit check-ins",
       "gameCheckins": "Game-credit check-ins"
     },
@@ -937,6 +942,8 @@
       "subjectUser": "User #{{id}}"
     },
     "settings": {
+      "searchResults": "Search results",
+      "correctErrors": "Correct these settings before saving.",
       "nav": "Site settings",
       "title": "Site settings",
       "description": "Edit multiple settings, review your changes, and save them together.",
@@ -1047,6 +1054,7 @@
       "shell": "Pearl shell",
       "saved": "Game settings saved.",
       "save": "Save game configuration",
+      "saveAllChanges": "Save all changes",
       "controls": {
         "settings": "Game settings",
         "revisionTerms": "Edit multiple settings and save them together. Games already in progress keep their starting settings."
@@ -2065,7 +2073,7 @@
     "exact": {
       "alignment": "Exact reset time",
       "anchor": "Reset date and time",
-      "help": "Enter the reset time in {{zone}}. Until a future first reset, usage counts from this save. Short months use their last day, then return to the original day.",
+      "help": "Enter the reset time in {{zone}}. For a new rule or when switching to this option, the first reset must be in the future; usage counts from this save. An existing rule may keep its original date. Short months use their last day, then return to the original day.",
       "preview": "Next three resets",
       "loading": "Calculating reset times…",
       "unavailable": "Check the reset date and time, then try again.",

@@ -3,26 +3,6 @@
   gap: var(--nb-space-4);
   min-width: 0;
 }
-.records-tabs {
-  display: flex;
-  gap: var(--nb-space-5);
-  overflow-x: auto;
-}
-.records-tabs a {
-  display: flex;
-  align-items: center;
-  gap: var(--nb-space-2);
-  min-height: 44px;
-  padding: var(--nb-space-2) 0;
-  text-decoration: none;
-  white-space: nowrap;
-  color: var(--nb-color-text-muted);
-  border-bottom: 2px solid transparent;
-}
-.records-tabs a[aria-current='page'] {
-  color: var(--nb-color-accent);
-  border-bottom-color: var(--nb-color-accent);
-}
 .records-issue {
   padding: var(--nb-space-4) 0;
   border-bottom: 1px solid var(--nb-color-border);
@@ -57,9 +37,6 @@
   border-bottom: 1px solid var(--nb-color-border);
 }
 @media (width <= 48rem) {
-  .records-tabs {
-    gap: var(--nb-space-4);
-  }
   .records-debug-results thead {
     display: none;
   }

@@ -133,11 +133,11 @@ describe('RPS authoritative raise controls', () => {
       return <ActionControls {...value} busy={false} onAction={vi.fn()} />;
     }
     await renderWithProviders(<Harness />, { station: 'user' });
-    expect(screen.getByText('Required to call: 1 credits')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Required to call: 1 credits');
     expect(screen.getByRole('button', { name: 'Call' })).toBeEnabled();
     act(() => update({ state: source, current: false }));
     expect(screen.getByText('Waiting for the current decision to sync…')).toBeInTheDocument();
-    expect(screen.queryByText('Required to call: 1 credits')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).not.toHaveTextContent('Required to call: 1 credits');
     expect(screen.getByRole('button', { name: 'Call' })).toBeDisabled();
     act(() =>
       update({

@@ -379,7 +379,10 @@ for (const scenario of SCENARIOS) {
     const boardTabs = page.getByRole('tablist', {
       name: scenario.language === 'zh' ? '选择排行榜' : 'Choose a leaderboard',
     });
-    await boardTabs.getByRole('tab').nth(2).click();
+    await boardTabs.getByRole('tab', {
+      name: scenario.language === 'zh' ? '锦鲤榜' : 'Lucky catch leaderboard',
+      exact: true,
+    }).click();
     await expect(
       page.getByRole('heading', {
         name: scenario.language === 'zh' ? '锦鲤榜' : 'Lucky catch leaderboard',

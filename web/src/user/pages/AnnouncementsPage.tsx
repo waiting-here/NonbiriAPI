@@ -114,25 +114,27 @@ export function AnnouncementsPage() {
                         ? ` · ${t('user.announcements.languageFallback', { language: t(LANGUAGE_LABEL_KEYS[item.effective_language]) })}`
                         : ''}
                     </p>
-                    {dismissed ? (
-                      <button
-                        type="button"
+                    <div className="nb-actions">
+                      <Link
                         className="nb-btn nb-btn--secondary"
-                        onClick={() => {
-                          restoreAnnouncement(key);
-                          void announcements.refetch();
-                        }}
+                        to={`/announcements/${encodeURIComponent(item.id)}`}
+                        state={{ returnTo }}
                       >
-                        {t('user.announcements.restoreHomeSummary')}
-                      </button>
-                    ) : null}
-                    <Link
-                      className="nb-btn nb-btn--secondary"
-                      to={`/announcements/${encodeURIComponent(item.id)}`}
-                      state={{ returnTo }}
-                    >
-                      {t('user.announcements.readMore')}
-                    </Link>
+                        {t('user.announcements.readMore')}
+                      </Link>
+                      {dismissed ? (
+                        <button
+                          type="button"
+                          className="nb-btn nb-btn--ghost"
+                          onClick={() => {
+                            restoreAnnouncement(key);
+                            void announcements.refetch();
+                          }}
+                        >
+                          {t('user.announcements.restoreHomeSummary')}
+                        </button>
+                      ) : null}
+                    </div>
                   </Card>
                 );
               })}

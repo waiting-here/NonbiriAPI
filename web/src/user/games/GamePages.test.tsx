@@ -349,7 +349,12 @@ describe('beta.1 game pages', () => {
     expect(screen.getByRole('heading', { name: 'Pond fishing' })).toBeInTheDocument();
     expect(screen.getAllByText('Open')).toHaveLength(2);
     expect(rendered.container.querySelectorAll('.game-center-card.is-closed')).toHaveLength(7);
-    expect(screen.getAllByText('Playable modes: 2')).toHaveLength(2);
+    expect(rendered.container.querySelector('.game-center-card--linklink')).toHaveTextContent(
+      'From 3 credits',
+    );
+    expect(rendered.container.querySelector('.game-center-card--rps')).toHaveTextContent(
+      'View play options and costs',
+    );
     expect(
       rendered.container.querySelector('.game-center-card--likes .game-card-meta'),
     ).not.toHaveTextContent('modes');
@@ -384,6 +389,39 @@ describe('beta.1 game pages', () => {
     ]);
     expect(heroes.every((hero) => hero.getAttribute('alt') === '')).toBe(true);
     expect(rendered.container.querySelector('.game-center-card__hero svg')).not.toBeInTheDocument();
+  });
+
+  it('shows available entry prices without inferring RPS costs from its base amount', async () => {
+    const snapshot = gamesSnapshotWire();
+    snapshot.fishing.bait_prices = { worm: '9', lure: '2', premium: '3' };
+    snapshot.linklink.specs['6x8'] = { enabled: false, price: '0', seconds: 150 };
+    snapshot.linklink.specs['8x8'] = { enabled: true, price: '2', seconds: 180 };
+    snapshot.bidding.enabled = true;
+    snapshot.bidding.modes.tier1 = {
+      ...snapshot.bidding.modes.tier1,
+      enabled: true,
+      ticket: '3000',
+    };
+    snapshot.bidding.modes.tier2 = {
+      ...snapshot.bidding.modes.tier2,
+      enabled: true,
+      available: false,
+      ticket: '1',
+    };
+    snapshot.steadycatch.enabled = true;
+    installJsonFetchFixtures([{ method: 'GET', path: '/api/games', body: snapshot }]);
+    const view = await renderWithProviders(<GameCenter />, {
+      station: 'user',
+      route: '/games',
+      role: 'user',
+    });
+    await screen.findByRole('heading', { name: 'Games' });
+    const card = (id: string) => view.container.querySelector('.game-center-card--' + id);
+    expect(card('fishing')).toHaveTextContent('From 2 credits');
+    expect(card('linklink')).toHaveTextContent('From 2 credits');
+    expect(card('bidding')).toHaveTextContent('From 3,000 credits');
+    expect(card('steadycatch')).toHaveTextContent('Free play');
+    expect(card('rps')).toHaveTextContent('View play options and costs');
   });
 
   it('keeps all closed game cards accessible for rules during maintenance', async () => {
@@ -524,7 +562,9 @@ describe('beta.1 game pages', () => {
     await waitFor(() =>
       expect(document.querySelector('.fishing-stage')).toHaveClass('fishing-stage--l4'),
     );
-    expect(screen.getAllByText(/12,345,678,901,234,567,890\.125/).length).toBeGreaterThan(0);
+    expect(rendered.container.querySelector('.game-wallets')).toHaveTextContent(
+      '12,345,678,901,234,567,890.125',
+    );
     await rendered.user.click(screen.getByRole('button', { name: /Ten-catch batch/i }));
     expect(screen.getByText('Batch total').parentElement).toHaveTextContent('10 credits');
     await rendered.user.click(screen.getByRole('button', { name: 'How to play' }));
@@ -1376,7 +1416,7 @@ describe('beta.1 game pages', () => {
     expect(screen.getByText('Current pool streaks').parentElement).toHaveTextContent(
       'paid 0 · free 0',
     );
-    expect(screen.getByText('Welfare carry: 0.125 credits')).toBeInTheDocument();
+    expect(screen.getByText(/^Welfare carry:/)).toHaveTextContent('Welfare carry: 0.125 credits');
     expect(screen.getByRole('button', { name: 'Rock' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Raise' })).not.toBeInTheDocument();
     await rendered.user.click(screen.getByRole('button', { name: 'How to play' }));
@@ -1385,7 +1425,7 @@ describe('beta.1 game pages', () => {
     expect(rules).toHaveTextContent('20-second limit');
     expect(rules).toHaveTextContent('first nine ordinary stakes');
     expect(rules).toHaveTextContent('latest 30 days');
-    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent(rules, new Event('cancel', { bubbles: false, cancelable: true }));
     expect(
       screen.queryByRole('dialog', { name: 'How three-player RPS works' }),
     ).not.toBeInTheDocument();
@@ -1633,7 +1673,7 @@ describe('beta.1 game pages', () => {
     expect(deathmatch).toHaveTextContent('Entry amount: 4 credits');
     await rendered.user.click(deathmatch);
     await rendered.user.click(screen.getByRole('button', { name: 'Join Deathmatch queue' }));
-    const dialog = screen.getByRole('dialog');
+    const dialog = screen.getByRole('alertdialog', { name: 'Deathmatch' });
     expect(dialog).toHaveTextContent('Entry amount: 4 credits');
     await rendered.user.click(standard);
     expect(dialog).toHaveTextContent('Entry amount: 4 credits');

@@ -191,9 +191,7 @@ for (const width of [1440, 390]) {
         ].includes(kind);
         await page.goto(`${USER_ORIGIN}/endpoints?connection_id=1`);
         await page.getByRole('button', { name: c.addEntry, exact: true }).first().click();
-        const wizard = page
-          .locator('.nb-expandable-panel')
-          .filter({ has: page.getByRole('heading', { name: c.addEntry, exact: true }) });
+        const wizard = page.getByRole('dialog', { name: c.addEntry, exact: true });
         await wizard.locator('summary').filter({ hasText: serviceUI.advancedSetup }).click();
         const choice = wizard.getByRole('combobox', { name: c.protocol, exact: true });
         await choice.selectOption(kind);

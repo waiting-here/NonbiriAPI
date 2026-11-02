@@ -573,6 +573,8 @@
         }
       },
       "charity": {
+        "routingSettings": "请求路由",
+        "accessSettings": "访问与展示",
         "selectedKeyMissing": "所选密钥已不在这份捐赠中。",
         "changedWhileReading": "读取密钥时捐赠已发生变化，请刷新后再编辑。",
         "returnToList": "返回列表",
@@ -843,7 +845,7 @@
           "fine": "一次性罚款（积分）",
           "longNotice": "长上下文：输入 ≥ {{threshold}} token",
           "penaltyNotice": "超长惩罚：输入 ≥ {{threshold}} token",
-          "fineNote": "每次额外 {{amount}} 积分，不打折",
+          "fineNote": "每次额外 <amount>{{amount}}</amount> 积分，不打折",
           "longAvailable": "含长上下文价格，展开查看",
           "usageHelp": "仅以上游返回的用量判断门槛，包含缓存读写。"
         },
@@ -3679,6 +3681,7 @@
     }
   },
   "gatewayCapabilities": {
+    "capabilities": "模型能力",
     "title": "Gateway 模型能力",
     "description": "为精确的 Gateway 地址和上游模型声明已验证能力。保存后立即用于新请求，普通调用和工具压平调用共用。",
     "add": "添加模型能力",
