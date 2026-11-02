@@ -98,6 +98,15 @@ Each version entry describes its source and compatibility boundary; a release ta
   applied filters in the gacha collection. Show readable Fat Fish states and
   history summaries, and clearer game-hall cost information.
 
+### Dependency maintenance
+
+- Update React and React DOM to 19.3.1, React Router to 8.5.1 and TanStack
+  Query to 5.105.0. Refresh Playwright and TypeScript ESLint with their matching
+  lockfile entries and bundled license notices.
+- Update the pure-Go SQLite driver to 1.61.1, including the prepared-statement
+  performance fix, and golang.org/x/sys to 0.49.0. Keep the Go 1.26 toolchain.
+- Update the pinned Node setup and artifact transfer actions used by CI.
+
 ### Compatibility
 
 - Existing databases require the explicit offline upgrade to schema 45 before
