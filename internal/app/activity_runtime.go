@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/appearance"
+	"github.com/waiting-here/NonbiriAPI/internal/attendance"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -35,6 +36,7 @@ type activityRuntime struct {
 	limited     *limitedactivities.Service
 	gacha       *gacha.Service
 	rewards     *rewards.Service
+	attendance  *attendance.Service
 	appearance  *appearance.Service
 	images      *imageactivity.Service
 	fish        *fatfish.Service
@@ -135,6 +137,11 @@ func newActivityRuntime(ctx context.Context, store *db.Store, vault *secret.Vaul
 		return nil, err
 	}
 	a.rewards, err = rewards.New(rewards.Config{Database: store.DB(), ReadDatabase: store.ReadDB(), Users: users, Admins: roles, Gate: admission, Keys: vault, Activity: activeActivityRecorder{}, Now: now})
+	if err != nil {
+		_ = a.Close()
+		return nil, err
+	}
+	a.attendance, err = attendance.New(attendance.Config{Database: store.DB(), ReadDatabase: store.ReadDB(), Users: users, Admins: roles, Gate: admission, Keys: vault, Activity: activeActivityRecorder{}, Now: now})
 	if err != nil {
 		_ = a.Close()
 		return nil, err
@@ -374,6 +381,9 @@ func (a *activityRuntime) RegisterRoutes(sessions *auth.Runtime) error {
 		return err
 	}
 	if err := rewards.RegisterRoutes(l, l, a.rewards); err != nil {
+		return err
+	}
+	if err := attendance.RegisterRoutes(l, l, a.attendance); err != nil {
 		return err
 	}
 	if err := gacha.RegisterRoutes(l, l, a.gacha); err != nil {

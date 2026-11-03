@@ -26,7 +26,7 @@ func TestBrowserAssociationsExportOnlyOwnSafeObservations(t *testing.T) {
 	if err = json.Unmarshal(body, &document); err != nil {
 		t.Fatal(err)
 	}
-	if document.SchemaVersion != 33 || len(document.BrowserAssociations) != 1 || document.BrowserAssociations[0].FirstSeen != 3 {
+	if document.SchemaVersion != 34 || len(document.BrowserAssociations) != 1 || document.BrowserAssociations[0].FirstSeen != 3 {
 		t.Fatal("unsafe or incomplete browser export", document.BrowserAssociations)
 	}
 	if strings.Contains(string(body), digest) || strings.Contains(string(body), "browser_digest") || strings.Contains(string(body), "other-browser-user") {

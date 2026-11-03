@@ -13,6 +13,7 @@ import (
 
 func restoreSchema47LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema48LayoutForTest(t, database)
 	hostileMustExec(t, database, "DROP INDEX idx_request_logs_operation_started")
 	assertRetainedManifest(t, database, db.Schema47ManifestHash)
 }
@@ -33,7 +34,7 @@ VALUES(?,?,'provider/retained','charity_responses',1,2,'success',200,200)`, requ
 	restoreSchema47LayoutForTest(t, store.DB())
 	hostileMustExec(t, store.DB(), "UPDATE schema_state SET version=47")
 	plan, err := storageSchema.plan(t.Context(), store.DB())
-	if err != nil || len(plan.steps) != 1 || plan.steps[0].from != 47 || plan.steps[0].version != 48 || plan.auditsCredentials() {
+	if err != nil || len(plan.steps) != 2 || plan.steps[0].from != 47 || plan.steps[0].version != 48 || plan.auditsCredentials() {
 		t.Fatal("index-only upgrade plan changed", plan, err)
 	}
 	if !reflect.DeepEqual(plan.steps[0].impact.indexedTables, []string{"request_logs"}) {
