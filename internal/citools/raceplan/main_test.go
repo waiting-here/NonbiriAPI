@@ -503,6 +503,29 @@ func TestPlanDigestPinsEffectiveExecutionPolicy(t *testing.T) {
 	if got := digest("20m", 4); got == fourGroups {
 		t.Fatal("different command deadline has the same digest")
 	}
+	plan.SkipVet = true
+	if got := digest("30m", 4); got == fourGroups {
+		t.Fatal("different vet policy has the same digest")
+	}
+}
+
+func TestManagedRaceVetPolicyPreservesStandaloneDefault(t *testing.T) {
+	plan := shardPlan{
+		WholePackages: []string{"example/whole"},
+		SplitTests:    map[string][]string{"example/split": {"TestOne"}},
+	}
+	for _, skip := range []bool{false, true} {
+		plan.SkipVet = skip
+		for _, group := range executionGroups(plan, "30m", 1) {
+			hasVetOff := false
+			for _, arg := range group.Args {
+				hasVetOff = hasVetOff || arg == "-vet=off"
+			}
+			if hasVetOff != skip {
+				t.Fatalf("skip=%t args=%q", skip, group.Args)
+			}
+		}
+	}
 }
 
 func TestExecuteGroupsContinuesAndAggregatesFailures(t *testing.T) {

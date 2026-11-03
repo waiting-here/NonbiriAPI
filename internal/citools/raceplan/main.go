@@ -73,6 +73,7 @@ type planUnit struct {
 
 type shardPlan struct {
 	Index               int
+	SkipVet             bool
 	EstimatedSeconds    float64
 	WholePackages       []string
 	WholePackageWeights map[string]float64
@@ -115,11 +116,12 @@ func runCLI(args []string, stdout, stderr io.Writer) (resultErr error) {
 	exportTemplate := flags.String("export-template", "", "print verified template environment")
 	githubOutput := flags.String("github-output", "", "append dynamic shard outputs")
 	direct := flags.Bool("direct", false, "run explicit go test arguments with one ordinary-process template")
+	skipVet := flags.Bool("skip-vet", false, "skip duplicate vet when the ordinary Go gate provides it")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if *direct {
-		if *shardSpec != "" || *planOnly || *packageSelection != "" || *prepare != "" || *prepared != "" || *template != "" || *prepareTemplate != "" || *exportTemplate != "" || *githubOutput != "" {
+		if *shardSpec != "" || *planOnly || *packageSelection != "" || *prepare != "" || *prepared != "" || *template != "" || *prepareTemplate != "" || *exportTemplate != "" || *githubOutput != "" || *skipVet {
 			return errors.New("direct execution cannot change the catalog or prepared run")
 		}
 		return executeDirect(*goTool, *timeout, flags.Args(), stdout, stderr)
@@ -152,7 +154,7 @@ func runCLI(args []string, stdout, stderr io.Writer) (resultErr error) {
 		return fmt.Errorf("invalid timeout %q", *timeout)
 	}
 	if *prepared != "" {
-		if *prepare != "" || *planOnly || *packageSelection != "" {
+		if *prepare != "" || *planOnly || *packageSelection != "" || *skipVet {
 			return errors.New("prepared execution cannot change the catalog")
 		}
 		return executePrepared(*goTool, *prepared, *shardSpec, *timeout, *workers, stdout)
@@ -179,7 +181,7 @@ func runCLI(args []string, stdout, stderr io.Writer) (resultErr error) {
 		return err
 	}
 	hints = catalogHints(listed, hints, stderr, !selectionSpecified)
-	catalog, err := buildCatalog(*goTool, listed, hints, stderr)
+	catalog, err := buildCatalog(*goTool, listed, hints, *skipVet, stderr)
 	if err != nil {
 		return err
 	}
@@ -196,6 +198,9 @@ func runCLI(args []string, stdout, stderr io.Writer) (resultErr error) {
 	}
 	if err != nil {
 		return err
+	}
+	for index := range plans {
+		plans[index].SkipVet = *skipVet
 	}
 	digest := planDigest(plans, *timeout, *workers)
 	if *prepare != "" {
@@ -354,9 +359,9 @@ func listPackages(goTool string) ([]listedPackage, error) {
 	return packages, nil
 }
 
-func buildCatalog(goTool string, listed []listedPackage, hints timingHints, output io.Writer) ([]catalogPackage, error) {
+func buildCatalog(goTool string, listed []listedPackage, hints timingHints, skipVet bool, output io.Writer) ([]catalogPackage, error) {
 	return discoverCatalog(listed, hints, output, func(packagePath string) ([]string, error) {
-		return listTopLevelTests(goTool, packagePath)
+		return listTopLevelTests(goTool, packagePath, skipVet)
 	})
 }
 
@@ -422,8 +427,12 @@ func packageHasTestMain(item listedPackage) (bool, error) {
 	return false, nil
 }
 
-func listTopLevelTests(goTool, packagePath string) ([]string, error) {
-	command := exec.Command(goTool, "test", "-race", "-list", testListPattern, packagePath)
+func listTopLevelTests(goTool, packagePath string, skipVet bool) ([]string, error) {
+	args := []string{"test", "-race", "-list", testListPattern}
+	if skipVet {
+		args = append(args, "-vet=off")
+	}
+	command := exec.Command(goTool, append(args, packagePath)...)
 	output, err := command.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("list tests for %s: %w: %s", packagePath, err, strings.TrimSpace(string(output)))
@@ -683,6 +692,9 @@ func printPlans(output io.Writer, plans []shardPlan, digest, timeout string, wor
 
 func executionGroups(plan shardPlan, timeout string, workers int) []commandGroup {
 	base := []string{"test", "-race", "-shuffle=on", "-count=1", "-timeout=" + timeout, "-p=1", "-v"}
+	if plan.SkipVet {
+		base = append(base, "-vet=off")
+	}
 	groups := make([]commandGroup, 0, len(plan.WholePackages)+len(plan.SplitTests))
 	wholePackages := append([]string(nil), plan.WholePackages...)
 	sort.Strings(wholePackages)
