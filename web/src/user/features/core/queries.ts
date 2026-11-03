@@ -1,4 +1,11 @@
-import { CancelledError, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import {
+  CancelledError,
+  matchQuery,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+  type QueryKey,
+} from '@tanstack/react-query';
 import {
   captureStationSession,
   stationSessionMatches,
@@ -516,6 +523,7 @@ export interface ResourceDependentInvalidation {
   endpointId?: string;
   modelIds?: readonly string[] | 'all';
   charity?: boolean;
+  queryKeys?: readonly QueryKey[];
 }
 
 /**
@@ -529,61 +537,45 @@ export async function invalidateResourceDependents(
 ): Promise<boolean> {
   if (!coreSessionMatchesAccount(queryClient, accountId)) return false;
 
-  const invalidations = [
-    queryClient.invalidateQueries({ queryKey: [...coreKeys.account(accountId), 'connections'] }),
-    queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
-    queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
-    queryClient.invalidateQueries({
-      queryKey: options.endpointId
-        ? coreKeys.endpointKeysRoot(accountId, options.endpointId)
-        : [...coreKeys.account(accountId), 'endpoint-keys'],
-    }),
-    queryClient.invalidateQueries({ queryKey: userKeys.endpoints }),
-    queryClient.invalidateQueries({
-      queryKey: options.endpointId
-        ? userKeys.endpointKeys(options.endpointId)
-        : userKeys.endpointKeysRoot,
-    }),
-    queryClient.invalidateQueries({ queryKey: userKeys.keyModelsRoot }),
-    queryClient.invalidateQueries({
-      queryKey: [...coreKeys.account(accountId), 'binding-candidates'],
-    }),
-    queryClient.invalidateQueries({ queryKey: coreKeys.endpointRoutingAll(accountId) }),
-    queryClient.invalidateQueries({
-      queryKey: ['user', 'economy', 'endpoint-choices', accountId],
-    }),
+  const queryKeys: QueryKey[] = [
+    [...coreKeys.account(accountId), 'connections'],
+    coreKeys.endpointsRoot(accountId),
+    coreKeys.modelsRoot(accountId),
+    options.endpointId
+      ? coreKeys.endpointKeysRoot(accountId, options.endpointId)
+      : [...coreKeys.account(accountId), 'endpoint-keys'],
+    userKeys.endpoints,
+    options.endpointId ? userKeys.endpointKeys(options.endpointId) : userKeys.endpointKeysRoot,
+    userKeys.keyModelsRoot,
+    [...coreKeys.account(accountId), 'binding-candidates'],
+    coreKeys.endpointRoutingAll(accountId),
+    ['user', 'economy', 'endpoint-choices', accountId],
+    ...(options.queryKeys ?? []),
   ];
 
   if (options.modelIds) {
-    invalidations.push(
-      queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
-      queryClient.invalidateQueries({ queryKey: userKeys.models }),
-      queryClient.invalidateQueries({ queryKey: userKeys.bindingsRoot }),
-    );
+    queryKeys.push(userKeys.models, userKeys.bindingsRoot);
     if (options.modelIds === 'all') {
-      invalidations.push(
-        queryClient.invalidateQueries({ queryKey: [...coreKeys.account(accountId), 'model'] }),
-        queryClient.invalidateQueries({ queryKey: [...coreKeys.account(accountId), 'bindings'] }),
+      queryKeys.push(
+        [...coreKeys.account(accountId), 'model'],
+        [...coreKeys.account(accountId), 'bindings'],
       );
     } else {
       for (const modelId of new Set(options.modelIds)) {
-        invalidations.push(
-          queryClient.invalidateQueries({ queryKey: coreKeys.model(accountId, modelId) }),
-          queryClient.invalidateQueries({ queryKey: coreKeys.bindings(accountId, modelId) }),
-          queryClient.invalidateQueries({ queryKey: coreKeys.candidatesRoot(accountId, modelId) }),
-        );
+        queryKeys.push(coreKeys.model(accountId, modelId), coreKeys.bindings(accountId, modelId));
       }
     }
   }
 
   if (options.charity) {
-    invalidations.push(
-      queryClient.invalidateQueries({ queryKey: userKeys.charityModels }),
-      queryClient.invalidateQueries({ queryKey: userKeys.donations }),
-    );
+    queryKeys.push(userKeys.charityModels, userKeys.donations);
   }
 
-  await Promise.all(invalidations);
+  // A query can match several resource prefixes. Refetch it once so a second
+  // invalidation cannot cancel and restart the same post-write request.
+  await queryClient.invalidateQueries({
+    predicate: (query) => queryKeys.some((queryKey) => matchQuery({ queryKey }, query)),
+  });
   return coreSessionMatchesAccount(queryClient, accountId);
 }
 

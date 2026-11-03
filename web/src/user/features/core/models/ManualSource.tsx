@@ -59,15 +59,10 @@ export function ManualSource({
           ),
         );
       }
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: coreKeys.catalogRoot(accountId, endpointId, keyId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: coreKeys.endpointRoutingRoot(accountId, endpointId),
-        }),
-        invalidateResourceDependents(queryClient, accountId, { endpointId }),
-      ]);
+      await invalidateResourceDependents(queryClient, accountId, {
+        endpointId,
+        queryKeys: [coreKeys.catalogRoot(accountId, endpointId, keyId)],
+      });
       context.assertCurrent();
       const failed = queryClient
         .getQueryCache()

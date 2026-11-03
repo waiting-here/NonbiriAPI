@@ -1,4 +1,4 @@
-import { CancelledError, QueryClient } from '@tanstack/react-query';
+import { CancelledError, QueryClient, QueryObserver } from '@tanstack/react-query';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -255,6 +255,98 @@ describe('core query identity and cache projections', () => {
       expect(client.getQueryState(key)?.isInvalidated, JSON.stringify(key)).toBe(true);
     }
     expect(client.getQueryState(coreKeys.model('2', '31'))?.isInvalidated).toBe(false);
+  });
+
+  it('refreshes each active resource once when dependency and detail prefixes overlap', async () => {
+    const client = new QueryClient();
+    client.setQueryData(coreKeys.session, { user: { id: '1' } });
+    const keys = [
+      coreKeys.models('1'),
+      coreKeys.endpointKeys('1', '11'),
+      coreKeys.candidatesRoot('1', '31'),
+      coreKeys.endpointRouting('1', '11', ['21']),
+      coreKeys.endpoint('1', '11'),
+      coreKeys.catalog('1', '11', '21'),
+    ];
+    const pending: ReturnType<typeof deferred<{ version: number }>>[] = [];
+    const aborted = vi.fn();
+    const readers = keys.map(() =>
+      vi.fn(({ signal }: { signal: AbortSignal }) => {
+        signal.addEventListener('abort', aborted);
+        const read = deferred<{ version: number }>();
+        pending.push(read);
+        return read.promise;
+      }),
+    );
+    const unsubscribe = keys.map((key, index) => {
+      client.setQueryData(key, { version: 1 });
+      return new QueryObserver(client, {
+        queryKey: key,
+        queryFn: readers[index]!,
+        staleTime: Infinity,
+      }).subscribe(() => undefined);
+    });
+    client.setQueryData(coreKeys.models('2'), { version: 1 });
+    try {
+      const refresh = invalidateResourceDependents(client, '1', {
+        endpointId: '11',
+        modelIds: ['31', '31'],
+        queryKeys: [
+          coreKeys.modelsRoot('1'),
+          coreKeys.endpointKeysRoot('1', '11'),
+          coreKeys.endpoint('1', '11'),
+          coreKeys.catalogRoot('1', '11', '21'),
+        ],
+      });
+      for (const read of readers) expect(read).toHaveBeenCalledTimes(1);
+      expect(aborted).not.toHaveBeenCalled();
+      for (const read of pending) read.resolve({ version: 2 });
+      expect(await refresh).toBe(true);
+      for (const key of keys) expect(client.getQueryData(key)).toEqual({ version: 2 });
+      expect(client.getQueryState(coreKeys.models('2'))?.isInvalidated).toBe(false);
+    } finally {
+      for (const read of pending) read.resolve({ version: 2 });
+      for (const off of unsubscribe) off();
+      client.clear();
+    }
+  });
+
+  it('replaces a pre-write read once and rejects a changed session after the refresh', async () => {
+    const client = new QueryClient();
+    const key = coreKeys.models('1');
+    client.setQueryData(coreKeys.session, { user: { id: '1' } });
+    client.setQueryData(key, { version: 1 });
+    const pending: ReturnType<typeof deferred<{ version: number }>>[] = [];
+    const aborted = vi.fn();
+    const observer = new QueryObserver(client, {
+      queryKey: key,
+      staleTime: Infinity,
+      queryFn: ({ signal }) => {
+        signal.addEventListener('abort', aborted);
+        const read = deferred<{ version: number }>();
+        pending.push(read);
+        return read.promise;
+      },
+    });
+    const unsubscribe = observer.subscribe(() => undefined);
+    try {
+      const beforeWrite = observer.refetch();
+      const refresh = invalidateResourceDependents(client, '1', { modelIds: 'all' });
+      expect(pending).toHaveLength(2);
+      expect(aborted).toHaveBeenCalledTimes(1);
+      client.setQueryData(coreKeys.session, { user: { id: '2' } });
+      pending[1]!.resolve({ version: 2 });
+      expect(await refresh).toBe(false);
+      pending[0]!.resolve({ version: 1 });
+      await beforeWrite;
+      expect(client.getQueryData(key)).toEqual({ version: 2 });
+      expect(await invalidateResourceDependents(client, '1')).toBe(false);
+      expect(pending).toHaveLength(2);
+    } finally {
+      for (const read of pending) read.resolve({ version: 2 });
+      unsubscribe();
+      client.clear();
+    }
   });
 
   it('rejects mutation cache projections after the shared session changes account', () => {

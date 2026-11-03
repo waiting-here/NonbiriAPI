@@ -186,13 +186,9 @@ export function ModelEditor({
             savedResult.current = current;
           });
       }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
-        initial
-          ? queryClient.invalidateQueries({ queryKey: coreKeys.model(accountId, initial.id) })
-          : Promise.resolve(),
-        invalidateResourceDependents(queryClient, accountId),
-      ]);
+      await invalidateResourceDependents(queryClient, accountId, {
+        queryKeys: initial ? [coreKeys.model(accountId, initial.id)] : [],
+      });
       context.assertCurrent();
       if (!error || confirmed) {
         const saved = savedResult.current;
