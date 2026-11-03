@@ -99,13 +99,25 @@ export function ModalSurface({
             <Dialog
               {...props}
               ref={ref}
-              render={(dialogProps) => (
-                <section
-                  {...mergeProps(dialogProps, modalProps)}
-                  aria-modal={open || undefined}
-                  aria-busy={busy}
-                />
-              )}
+              render={(dialogProps) => {
+                const overlayProps = mergeProps(dialogProps, modalProps);
+                return (
+                  <section
+                    {...overlayProps}
+                    aria-modal={open || undefined}
+                    aria-busy={busy}
+                    onKeyDown={(event) => {
+                      // A pending child must also block the browser's native parent-dialog cancel.
+                      if (busy && event.key === 'Escape') {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        return;
+                      }
+                      overlayProps.onKeyDown?.(event);
+                    }}
+                  />
+                );
+              }}
             >
               {children}
             </Dialog>

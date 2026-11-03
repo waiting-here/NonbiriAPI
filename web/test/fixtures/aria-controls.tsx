@@ -18,6 +18,7 @@ function Controls() {
   const [sheet, setSheet] = useState(false);
   const [native, setNative] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [confirmBusy, setConfirmBusy] = useState(false);
   const [value, setValue] = useState('');
   const [locked, setLocked] = useState(false);
   const [enabled, setEnabled] = useState(false);
@@ -109,7 +110,13 @@ function Controls() {
                 confirmLabel="Remove"
                 cancelLabel="Cancel"
                 onCancel={() => setConfirm(false)}
-                onConfirm={() => setConfirm(false)}
+                busy={confirmBusy}
+                onConfirm={async () => {
+                  setConfirmBusy(true);
+                  await fetch('/__aria-test/confirm');
+                  setConfirmBusy(false);
+                  setConfirm(false);
+                }}
               />
             </NativeDialog>
           ) : null}

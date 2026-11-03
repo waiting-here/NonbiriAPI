@@ -27,6 +27,34 @@ function Nested() {
   );
 }
 describe('overlay integration', () => {
+  it('consumes Escape in a busy confirmation before its native parent receives it', async () => {
+    const user = userEvent.setup();
+    const nativeKeyDown = vi.fn(),
+      closeNative = vi.fn(),
+      closeConfirm = vi.fn();
+    render(
+      <NativeDialog aria-label="Native parent" onDismiss={closeNative} onKeyDown={nativeKeyDown}>
+        <ConfirmDialog
+          open
+          busy
+          title="Saving"
+          description="Please wait"
+          confirmLabel="Save"
+          onConfirm={() => undefined}
+          onCancel={closeConfirm}
+        />
+      </NativeDialog>,
+    );
+    const confirm = screen.getByRole('alertdialog', { name: 'Saving' });
+    await waitFor(() => expect(confirm).toHaveFocus());
+    await user.keyboard('{Escape}');
+    expect(nativeKeyDown).not.toHaveBeenCalled();
+    expect(closeNative).not.toHaveBeenCalled();
+    expect(closeConfirm).not.toHaveBeenCalled();
+    expect(confirm).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Native parent' })).toHaveProperty('open', true);
+  });
+
   it.each([false, true])(
     'leaves Escape to native cancel inside a Sheet (busy %s)',
     async (busy) => {
