@@ -1,3 +1,4 @@
+import { setControlChecked } from '../controls';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { expect, test } from './test';
@@ -416,7 +417,7 @@ test('Gateway attribution defaults off and uses the normal administrator save fl
     await page.getByRole('button', { name: 'API format', exact: true }).click();
   await expect(input).not.toBeChecked();
   for (const value of ['true', 'false']) {
-    await input.setChecked(value === 'true');
+    await setControlChecked(input, value === 'true');
     await page.getByRole('button', { name: 'Save all changes' }).click();
     await expect.poll(() => enabled).toBe(value === 'true');
     await page.reload();

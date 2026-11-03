@@ -1,3 +1,4 @@
+import { setControlChecked } from '../controls';
 import { contentHash, seedCommitForVersion } from '../../src/shared/fatfish/engine/canonical';
 import type { Level } from '../../src/shared/fatfish/engine/types';
 import { expect, test } from './test';
@@ -79,7 +80,10 @@ for (const language of ['en', 'zh'] as const) {
     await inserted.click();
     await stage.press('Delete');
     await expect(hole.getByLabel('X', { exact: true })).toHaveCount(4);
-    await page.getByLabel(text.move_selected_hole, { exact: true }).check();
+    await setControlChecked(
+      page.getByLabel(text.move_selected_hole, { exact: true }),
+      true,
+    );
     const holeHandle = page.locator('.fatfish-level-map circle[aria-label]').nth(4);
     await holeHandle.scrollIntoViewIfNeeded();
     const holeVertex = await holeHandle.boundingBox(); if (!holeVertex) throw new Error('Hole vertex is not visible');

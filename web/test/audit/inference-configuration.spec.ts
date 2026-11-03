@@ -1,3 +1,4 @@
+import { setControlChecked } from '../controls';
 import {
   fillService,
   protocolServices,
@@ -405,10 +406,10 @@ async function modality(
   rates: Partial<TokenPrices>,
 ) {
   const panel = await fold(scope, title);
-  await panel.getByRole('switch', { name: prices.input, exact: true }).setChecked(input);
-  await panel.getByRole('switch', { name: prices.output, exact: true }).setChecked(output);
+  await setControlChecked(panel.getByRole('switch', { name: prices.input, exact: true }), input);
+  await setControlChecked(panel.getByRole('switch', { name: prices.output, exact: true }), output);
   const group = panel.getByRole('group', { name: kind, exact: true });
-  await group.getByRole('switch', { name: prices.configure, exact: true }).check();
+  await setControlChecked(group.getByRole('switch', { name: prices.configure, exact: true }), true);
   const labels = {
     uncached_input: prices.uncached_input,
     cache_write_input: prices.cache_write_input,
@@ -458,9 +459,15 @@ test('modality prices, long-context rewards, template application and search-uni
     const donor = await modality(page, prices.donor, prices.audio, false, true, { output: '3' });
     await expect(donor.getByLabel(prices.uncached_input, { exact: true })).toHaveCount(0);
     const long = await fold(page, operations.context.settings);
-    await long.getByRole('switch', { name: operations.context.long, exact: true }).check();
+    await setControlChecked(
+      long.getByRole('switch', { name: operations.context.long, exact: true }),
+      true,
+    );
     await long.getByLabel(operations.context.longThreshold, { exact: true }).fill('1000');
-    await long.getByRole('switch', { name: prices.longReward, exact: true }).check();
+    await setControlChecked(
+      long.getByRole('switch', { name: prices.longReward, exact: true }),
+      true,
+    );
     await long.getByLabel('Output donor reward', { exact: true }).fill('11');
     await modality(long, prices.longUser, prices.text, true, true, {
       uncached_input: '20',
@@ -468,7 +475,10 @@ test('modality prices, long-context rewards, template application and search-uni
       cache_read_input: '2',
       output: '30',
     });
-    await long.getByRole('switch', { name: prices.longDonorOverride, exact: true }).check();
+    await setControlChecked(
+      long.getByRole('switch', { name: prices.longDonorOverride, exact: true }),
+      true,
+    );
     const longDonor = await modality(long, prices.longDonor, prices.audio, false, true, {
       output: '13',
     });

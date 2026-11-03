@@ -1,3 +1,4 @@
+import { setControlChecked } from '../controls';
 import { fillService, submitService } from '../service-onboarding';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -69,7 +70,7 @@ test('administrator artwork control persists and updates both public configurati
     await expect(control).toBeChecked();
     await capture(page, info, 'artwork-settings', control);
     for (const disabled of [false, true]) {
-      await control.setChecked(disabled);
+      await setControlChecked(control, disabled);
       const saved = responseFor(page, 'PATCH', '/admin/api/site-config');
       await page.getByRole('button', { name: admin.admin.settings.saveAll, exact: true }).click();
       expect((await saved).status()).toBe(200);

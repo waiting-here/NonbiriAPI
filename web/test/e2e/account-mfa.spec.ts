@@ -1,3 +1,4 @@
+import { setControlChecked } from '../controls';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test } from './test';
@@ -159,9 +160,7 @@ test('expiry preserves the announcement editor and never replays a write', async
   expect(writes).toBe(1);
 });
 
-test('administrator reset requires confirmation and fresh elevation', async ({
-  page,
-}) => {
+test('administrator reset requires confirmation and fresh elevation', async ({ page }) => {
   await mockRoleSession(page, 'admin', 'admin');
   await mockPublicConfig(page, 'admin');
   const target = managedUserFixture();
@@ -271,7 +270,10 @@ test('administrator level requirements default off and save independently', asyn
     await expect(
       page.getByRole('switch', { name: `Require authenticator for L${level}`, exact: true }),
     ).not.toBeChecked();
-  await page.getByRole('switch', { name: 'Require authenticator for L6', exact: true }).check();
+  await setControlChecked(
+    page.getByRole('switch', { name: 'Require authenticator for L6', exact: true }),
+    true,
+  );
   await page.getByRole('button', { name: 'Save all changes', exact: true }).click();
   expect(saved).toBeUndefined();
   await page

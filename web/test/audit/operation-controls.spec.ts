@@ -1,3 +1,4 @@
+import { setControlChecked } from '../controls';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { expect, test, type Browser, type BrowserContext } from '@playwright/test';
@@ -278,7 +279,7 @@ test('administrator saves selected image-model availability and reads the author
       .selectOption(model.id);
     const availability = page.getByLabel('Make this model available', { exact: true });
     await expect(availability).toBeChecked();
-    await availability.uncheck();
+    await setControlChecked(availability, false);
     await page.getByRole('checkbox', { name: model.upstream_model_id, exact: true }).check();
     const saved = page.waitForResponse(
       (response) =>

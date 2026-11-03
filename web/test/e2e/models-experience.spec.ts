@@ -416,7 +416,7 @@ for (const scenario of cases) {
       await expect(results.locator('.personal-binding-picker__model')).toHaveCount(1);
       await results
         .getByRole('radio', { name: bindingCopy.manual, exact: true })
-        .locator('..')
+        .locator('xpath=ancestor::label[1]')
         .click();
       await expect.poll(() => state.reads.at(-1)?.searchParams.get('source')).toBe('manual');
       await expect(
@@ -431,7 +431,7 @@ for (const scenario of cases) {
         .click();
       await results
         .getByRole('radio', { name: bindingCopy.allModels, exact: true })
-        .locator('..')
+        .locator('xpath=ancestor::label[1]')
         .click();
       await results.getByRole('checkbox', { name: /gpt-source-11\b/ }).check();
       await picker
@@ -583,16 +583,22 @@ for (const scenario of cases) {
       .fill('changed');
     await page
       .getByRole('radio', { name: core('models.random'), exact: true })
-      .locator('..')
+      .locator('xpath=ancestor::label[1]')
       .click();
-    await page.getByRole('switch', { name: core('models.silentRetry'), exact: true }).click();
-    await page.getByRole('switch', { name: core('models.flattenTools'), exact: true }).click();
+    await page
+      .getByRole('switch', { name: core('models.silentRetry'), exact: true })
+      .locator('xpath=ancestor::label[1]')
+      .click();
+    await page
+      .getByRole('switch', { name: core('models.flattenTools'), exact: true })
+      .locator('xpath=ancestor::label[1]')
+      .click();
     await page
       .getByRole('radio', {
         name: scenario.locale === 'en' ? 'Always fetch as a stream' : '总是用流式取回',
         exact: true,
       })
-      .locator('..')
+      .locator('xpath=ancestor::label[1]')
       .click();
     await picture(page, `${scenario.width}-${scenario.locale}-${scenario.theme}-advanced`);
     await page.getByRole('button', { name: core('common.save'), exact: true }).click();
@@ -640,7 +646,7 @@ for (const scenario of cases) {
     ).toHaveCount(0);
     await page
       .getByRole('radio', { name: core('models.cacheBalanced'), exact: true })
-      .locator('..')
+      .locator('xpath=ancestor::label[1]')
       .click();
     await types.scrollIntoViewIfNeeded();
     await picture(

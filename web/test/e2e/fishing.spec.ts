@@ -368,7 +368,7 @@ test('fishing uses desktop space, fits mobile results, and retains the anonymity
   await expect(page).toHaveURL(`${USER_ORIGIN}/games#game-privacy`);
   await expect(anonymity).toBeInViewport();
   await expect(anonymity).toBeChecked();
-  await anonymity.click();
+  await anonymity.locator('xpath=ancestor::label[1]').click();
   await expect.poll(() => writes).toBe(1);
   await expect(anonymity).not.toBeChecked();
   await page.reload();
@@ -913,10 +913,10 @@ for (const theme of ['light', 'dark'] as const)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
-      await anonymity.click();
+      await anonymity.locator('xpath=ancestor::label[1]').click();
       await expect(privacy.getByRole('alert')).toContainText('Synthetic retryable profile save');
       await expect(page.getByRole('button', { name: '投回池塘', exact: true })).toBeDisabled();
-      await anonymity.click();
+      await anonymity.locator('xpath=ancestor::label[1]').click();
       await expect(page.getByRole('button', { name: '投回池塘', exact: true })).toBeEnabled();
       await expect(page.getByText(/之后开启游戏匿名.*保留署名/)).toHaveCount(1);
       await expect(page).toHaveURL(`${USER_ORIGIN}/games/fishing`);

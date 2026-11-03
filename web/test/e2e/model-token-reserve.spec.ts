@@ -543,10 +543,10 @@ for (const scenario of scenarios) {
     });
     const transport = editor.getByRole('radiogroup', { name: ruleLabel });
     await expect(transport.getByRole('radio', { name: options[0], exact: true })).toBeChecked();
-    await expect(transport.locator('label > span')).toHaveText(options);
+    await expect(transport.locator('label')).toHaveText(options);
     await transport
       .getByRole('radio', { name: options[chinese ? 2 : 1], exact: true })
-      .locator('..')
+      .locator('xpath=ancestor::label[1]')
       .click();
     await expect(transport).toHaveAccessibleDescription(
       chinese

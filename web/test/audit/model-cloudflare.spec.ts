@@ -1,3 +1,4 @@
+import { setControlChecked } from '../controls';
 import {
   fillService,
   protocolServices,
@@ -217,7 +218,7 @@ test('personal models default on and retain a changed setting after a real revis
     await editor.getByRole('textbox', { name: 'Prefix', exact: true }).fill('browser');
     await editor.getByRole('textbox', { name: 'Model name', exact: true }).fill(name);
     await configureManagedHeaders(page);
-    await toggle.uncheck();
+    await setControlChecked(toggle, false);
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page).toHaveURL((url) =>
       /^[1-9]\d*$/.test(url.searchParams.get('model_id') ?? ''),
@@ -236,13 +237,13 @@ test('personal models default on and retain a changed setting after a real revis
     await page.getByRole('button', { name: 'Edit model', exact: true }).click();
     await expect(toggle).not.toBeChecked();
     await expectManagedHeaders(page);
-    await toggle.check();
+    await setControlChecked(toggle, true);
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(toggle).toHaveCount(0);
     current = await read(context, origin, path);
     expect(current.cloudflare_proxy_enabled).toBe(true);
     await page.getByRole('button', { name: 'Edit model', exact: true }).click();
-    await toggle.uncheck();
+    await setControlChecked(toggle, false);
     await patch(context, origin, path, current, true, { model: name + '-changed' });
     const conflict = page.waitForResponse(
       (response) =>
@@ -257,7 +258,7 @@ test('personal models default on and retain a changed setting after a real revis
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.getByRole('button', { name: 'Edit model', exact: true }).click();
     await expect(toggle).toBeChecked();
-    await toggle.uncheck();
+    await setControlChecked(toggle, false);
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(toggle).toHaveCount(0);
     expect((await read(context, origin, path)).cloudflare_proxy_enabled).toBe(false);
@@ -291,7 +292,7 @@ for (const role of ['admin', 6] as const) {
         .getByRole('textbox', { name: 'Model', exact: true })
         .fill('proxy-' + randomUUID().slice(0, 8));
       await configureManagedHeaders(page);
-      await toggle.check();
+      await setControlChecked(toggle, true);
       await page.getByRole('button', { name: 'Add charity model', exact: true }).click();
       await expect(page).toHaveURL(/charity_model=[1-9]\d*/);
       const id = new URL(page.url()).searchParams.get('charity_model');
@@ -305,7 +306,7 @@ for (const role of ['admin', 6] as const) {
       await expectManagedHeaders(page);
       if (role === 'admin') await saveSeparateAdaptation(page, context, origin, path);
       await expect(toggle).toBeChecked();
-      await toggle.uncheck();
+      await setControlChecked(toggle, false);
       const save = page.getByRole('button', {
         name: common.common.workflow.saveTarget.replace('{{id}}', id!),
         exact: true,
@@ -318,7 +319,7 @@ for (const role of ['admin', 6] as const) {
       await page.reload();
       await expect(toggle).not.toBeChecked();
       current = await read(context, origin, path);
-      await toggle.check();
+      await setControlChecked(toggle, true);
       await patch(context, origin, path, current, false, {
         public_description: 'Changed in another session',
       });
@@ -339,7 +340,7 @@ for (const role of ['admin', 6] as const) {
         .getByRole('button', { name: common.common.operations.charity.reloadModel, exact: true })
         .click();
       await expect(toggle).not.toBeChecked();
-      await toggle.check();
+      await setControlChecked(toggle, true);
       await save.click();
       await expect
         .poll(async () => (await read(context, origin, path)).cloudflare_proxy_enabled)
@@ -372,7 +373,7 @@ test('level 5 reads the saved setting and cannot change the global model policy'
     await expect(page.getByText(copy.label, { exact: true })).toBeVisible();
     const forwarding = page.getByRole('switch', { name: copy.label, exact: true });
     await expect(forwarding).toBeChecked({ checked: current.cloudflare_proxy_enabled });
-    await forwarding.setChecked(!current.cloudflare_proxy_enabled);
+    await setControlChecked(forwarding, !current.cloudflare_proxy_enabled);
     const submitted = page.waitForResponse(
       (response) =>
         response.request().method() === 'PATCH' && new URL(response.url()).pathname === path,

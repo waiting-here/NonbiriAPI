@@ -728,7 +728,10 @@ test('stopping an in-flight step keeps a committed resource for explicit continu
       .getByRole('button', { name: en.user.core['endpoints.addKey'], exact: false })
       .first()
       .click();
-    await page.getByRole('radio', { name: c.newCredential, exact: true }).locator('..').click();
+    await page
+      .getByRole('radio', { name: c.newCredential, exact: true })
+      .locator('xpath=ancestor::label[1]')
+      .click();
     await expect(page.getByRole('radio', { name: c.newCredential, exact: true })).toBeChecked();
     await expect(page.getByLabel(c.secret, { exact: true })).toBeVisible();
     await expect(page.getByLabel(c.secret, { exact: true })).toHaveValue('');

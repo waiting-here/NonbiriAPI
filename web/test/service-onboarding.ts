@@ -84,12 +84,12 @@ export async function fillService(
   }
   if (input.secret !== undefined) {
     const newKey = panel.getByRole('radio', { name: copy.newCredential, exact: true });
-    if (await newKey.count()) await newKey.locator('..').click();
+    if (await newKey.count()) await newKey.locator('xpath=ancestor::label[1]').click();
     await panel.getByLabel(copy.secret, { exact: true }).fill(input.secret);
   } else {
     await panel
       .getByRole('radio', { name: copy.existingCredential, exact: true })
-      .locator('..')
+      .locator('xpath=ancestor::label[1]')
       .click();
     const choices = panel.getByRole('table', { name: copy.chooseCredential, exact: true });
     await expect(choices.getByRole('button', { name: copy.select, exact: true })).toHaveCount(1);
