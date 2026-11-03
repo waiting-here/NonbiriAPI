@@ -23,6 +23,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Interface
 
+- Choose assistant reasoning effort from a labeled control in administrator
+  model-source settings, with protocol-aware parameters and provider defaults.
 - Use React Aria Components for shared dialogs, sheets, menus, tabs, switches,
   radio groups and input suggestions across both stations and game shells.
   Preserve the existing appearance, native form controls and game visuals.

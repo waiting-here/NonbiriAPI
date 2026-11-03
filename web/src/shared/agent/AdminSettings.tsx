@@ -34,6 +34,7 @@ import {
 } from './api';
 import { AgentError } from './AgentParts';
 import { DriverPanel } from './DriverPanel';
+import { ReasoningEffortField } from './ReasoningEffortField';
 
 const toolLabels: Record<string, string> = {
   donations: 'common.agent.tools.donations',
@@ -399,6 +400,12 @@ function DriverForm({ initial, account }: { initial: DriverSettings; account: st
                   {t('common.agent.discoverModels')}
                 </Button>
               </div>
+              <ReasoningEffortField
+                provider="chat_completions"
+                value={extra}
+                onChange={setExtra}
+                disabled={busy}
+              />
               <Fields>
                 <Field size="short" label={t('common.agent.contextWindow')}>
                   {(props) => (

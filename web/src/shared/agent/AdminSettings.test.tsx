@@ -81,6 +81,29 @@ async function mount() {
   return view;
 }
 describe('Agent administrator settings', () => {
+  it('saves default-source reasoning effort without editing its advanced JSON', async () => {
+    mocks.driver.mockResolvedValue({
+      ...driver,
+      extra_parameters: { reasoning_effort: 'low', seed: 7 },
+    });
+    mocks.putDriver.mockImplementation(async (input) => ({ ...driver, ...input, revision: '1' }));
+    const view = await mount();
+    const effort = await screen.findByRole('combobox', {
+      name: common.common.agent.reasoningEffort.label,
+    });
+    expect(effort).toHaveValue('low');
+    await view.user.selectOptions(effort, 'high');
+    await view.user.click(
+      within(effort.closest('form')!).getByRole('button', { name: common.common.save }),
+    );
+    await waitFor(() => expect(mocks.putDriver).toHaveBeenCalledOnce());
+    expect(mocks.putDriver.mock.calls[0]?.[0].extra_parameters).toEqual({
+      reasoning_effort: 'high',
+      seed: 7,
+    });
+    expect(effort).toHaveValue('high');
+  });
+
   it('saves endpoint credentials before discovery and keeps the plaintext key out of query caches', async () => {
     const order: string[] = [];
     mocks.putDriver.mockImplementation(async (input) => {

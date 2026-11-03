@@ -101,6 +101,40 @@ async function mount(connectionOnly = false) {
   return view;
 }
 describe('Model source settings', () => {
+  it('saves reasoning effort from the visible source control and preserves other reasoning options', async () => {
+    config.profiles[1] = {
+      ...profile(),
+      settings: {
+        ...profile().settings,
+        provider: 'responses',
+        extra_parameters: { reasoning: { effort: 'low', summary: 'auto' } },
+      },
+    };
+    mocks.save.mockImplementation(async (_id, input) => {
+      const value = {
+        ...profile(),
+        name: input.name,
+        settings: { ...profile().settings, ...input.settings, revision: '3' },
+      };
+      config = { ...config, profiles: [config.profiles[0], value] };
+      return value;
+    });
+    const view = await mount();
+    await view.user.click(screen.getByRole('button', { name: common.common.edit }));
+    const editor = screen.getByRole('form', { name: text.editSource });
+    const effort = within(editor).getByRole('combobox', {
+      name: common.common.agent.reasoningEffort.label,
+    });
+    expect(effort).toHaveValue('low');
+    await view.user.selectOptions(effort, 'high');
+    await view.user.click(within(editor).getByRole('button', { name: common.common.save }));
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledOnce());
+    expect(mocks.save.mock.calls[0]?.[1].settings.extra_parameters).toEqual({
+      reasoning: { effort: 'high', summary: 'auto' },
+    });
+    expect(effort).toHaveValue('high');
+  });
+
   it('discards a late catalogue after the source protocol changes', async () => {
     let complete!: (models: string[]) => void;
     mocks.models.mockImplementation(

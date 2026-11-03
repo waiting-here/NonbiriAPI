@@ -5,6 +5,7 @@ import { Button, Field, Fields, FormActions, Fold, Note } from '@shared/componen
 import { useOperation } from '@shared/operations/useOperation';
 import { agentRoot } from './api';
 import { AgentError, AgentTime } from './AgentParts';
+import { ReasoningEffortField } from './ReasoningEffortField';
 import {
   changeProvider,
   deleteProfile,
@@ -312,6 +313,12 @@ export function DriverProfileEditor({
               />
             )}
           </Field>
+          <ReasoningEffortField
+            provider={draft.settings.provider}
+            value={extra}
+            onChange={setExtra}
+            disabled={save.isPending || read.isPending}
+          />
         </Fields>
         <FormActions>
           <Button
