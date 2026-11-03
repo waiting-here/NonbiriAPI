@@ -339,6 +339,20 @@
     ]
   },
   {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/activities",
+    "reason": "Serial collection-size, pagination and query-index checks without competing operations; full ordinary scale coverage retained.",
+    "tests": [
+      "TestPoolNumberedPagesCountWindowAndStableOrder"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/game/builtin/finance",
+    "reason": "Serial stake, asset and return matrix over isolated rolled-back SQL transactions; full ordinary accounting coverage retained. Concurrent ledger and settlement tests stay in race.",
+    "tests": [
+      "TestBlackjackActualLedgerAllStakesAssetsAndReturns"
+    ]
+  },
+  {
     "package": "github.com/waiting-here/NonbiriAPI/internal/upgrade/v1",
     "reason": "Serial conversion, rollback and data preservation; ordinary conversion and exact released-source upgrade gates retained. Exclusive-access cancellation stays in race.",
     "tests": [
