@@ -24,6 +24,8 @@ func (s *Service) mutateUse(ctx context.Context, role reviewerRole, actorID, don
 		if role != recurringOwner {
 			return empty, ErrForbidden
 		}
+	case "release_rate_limit":
+		method, route = http.MethodPost, useRoute(role)+"/{useId}/rate-limit-release"
 	case "reset":
 		method = http.MethodPost
 		route = useRoute(role) + "/{useId}/failure-streak-reset"
@@ -114,6 +116,11 @@ func (s *Service) mutateUse(ctx context.Context, role reviewerRole, actorID, don
 			return empty, err
 		}
 		result, err = tx.ExecContext(ctx, `UPDATE donation_uses SET current_pending_revision_id=NULL,revision=revision+1,updated_at=? WHERE id=? AND revision=? AND current_pending_revision_id=?`, now, useID, revision, pending.Int64)
+	case "release_rate_limit":
+		if err := releaseUseRateLimitTx(ctx, tx, useID, now); err != nil {
+			return empty, err
+		}
+		result, err = tx.ExecContext(ctx, `UPDATE donation_uses SET revision=revision+1,updated_at=? WHERE id=? AND revision=?`, now, useID, revision)
 	case "reset":
 		receipt, err := resetUseTx(ctx, tx, useID, revision, now)
 		if err != nil {
