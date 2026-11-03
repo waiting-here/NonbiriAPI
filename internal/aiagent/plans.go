@@ -24,7 +24,20 @@ func (s *Service) previewOperations(ctx context.Context, actor Actor, ops []Oper
 	}
 	out := make([]OperationPreview, 0, len(ops))
 	for _, op := range ops {
-		if op.Kind == "memory.edit" {
+		if op.Kind == "management.api" {
+			if len(ops) != 1 || actor.Automatic {
+				return nil, ErrInvalid
+			}
+			manager, ok := s.config.Operations.(ManagementOperations)
+			if !ok {
+				return nil, ErrUnavailable
+			}
+			preview, err := manager.PreviewManagement(ctx, actor, op)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, preview)
+		} else if op.Kind == "memory.edit" {
 			var input memoryEdit
 			if err := json.Unmarshal(op.Input, &input); err != nil {
 				return nil, ErrInvalid
@@ -261,6 +274,9 @@ func (s *Service) Decide(ctx context.Context, actor Actor, id int64, approve boo
 	if plan.State != "pending" {
 		managementlog.MarkReplay(ctx)
 		return plan, nil
+	}
+	if approve && len(plan.Operations) == 1 && plan.Operations[0].Kind == "management.api" {
+		return s.decideManagement(ctx, actor, plan, job, feedback)
 	}
 	defer func() {
 		resultErr = errors.Join(resultErr, s.historyFailureAfterRollback(ctx, plan.Operations, resultErr))

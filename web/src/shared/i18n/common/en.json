@@ -2692,7 +2692,7 @@
         }
       },
       "toolDescriptionFor": "{{tool}}: instructions",
-      "toolDescriptionHelp": "These instructions help the model choose and use each tool. Current permissions determine which tools and operations are available.",
+      "toolDescriptionHelp": "These instructions help the model use each tool within the administrator’s or steward’s current permissions. Reads and model-list refresh run directly. Other operations are available only in chat and require the interlocutor’s approval.",
       "webSearch": "Web search",
       "searchURL": "Full search endpoint URL",
       "searchHelp": "Send a JSON search request with Bearer authentication to this full endpoint URL.",
@@ -2770,6 +2770,8 @@
         "preview": "Preview only",
         "auto": "Automatic"
       },
+      "managementOutcomeUnknown": "The operation outcome is unconfirmed. Check its actual state before retrying. It will not run again automatically.",
+      "managementRequestHelp": "Approve to execute this management request. Each request runs independently. If its outcome is unknown, check the actual state first.",
       "tools": {
         "donations": "Read donations",
         "donation_models": "Read donated model catalogs",
@@ -2781,7 +2783,11 @@
         "web_search": "Search the web",
         "propose_operations": "Propose operation plans",
         "edit_memory": "Propose memory edits",
-        "management_history": "Query management operations"
+        "management_history": "Query management operations",
+        "management_catalog": "Find management operations",
+        "management_read": "Read management data",
+        "refresh_models": "Refresh model lists",
+        "propose_management_operation": "Propose management operation"
       },
       "tokens": {
         "input": "Input",

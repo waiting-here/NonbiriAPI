@@ -71,9 +71,11 @@ Each template permits up to 100 messages and 1 MiB of combined
 content. `auto_prefill` and `chat_prefill` append optional assistant text and
 default to empty.
 
-The eleven description keys are `donations`, `donation_models`, `review_history`,
+The fifteen description keys are `donations`, `donation_models`, `review_history`,
 `charity_models`, `charity_binding_presets`, `users`, `site_status`,
-`web_search`, `propose_operations`, `edit_memory` and `management_history`.
+`web_search`, `propose_operations`, `edit_memory`, `management_history`,
+`management_catalog`, `management_read`, `refresh_models` and
+`propose_management_operation`.
 Read tools provide only authorized data. Search additionally
 requires its configured service and key. Plans and memory writes are available
 only in conversation mode, with the corresponding authority. Descriptions are
@@ -169,11 +171,11 @@ Stewards and automatic review receive neither this read tool nor this action.
 ## Saved configuration and API clients
 
 Saved custom templates and descriptions, switches and explicit tool choices
-are preserved. Only an exact prior built-in chat template or memory-tool
+are preserved. Only an exact prior built-in chat/automatic-review template or memory-tool
 description can refresh to the current built-in version. Missing new tool
 keys receive their defaults. If an older configuration has no tool descriptions,
 reads supply the built-in defaults.
-`GET /admin/api/ai/config` returns the effective descriptions for all eleven tools.
+`GET /admin/api/ai/config` returns the effective descriptions for all fifteen tools.
 
 `PUT /admin/api/ai/config` keeps its revision check and other configuration
 fields. Its optional `tool_descriptions` object is a partial update:
@@ -204,3 +206,64 @@ the preset; copy the desired published text explicitly if you want it again.
 See the [API contract](api-contract.md#78-experimental-ai-assistant) for routes,
 limits, recovery and retention, and the [embedded preset reference](../internal/aiagent/presets/README.md)
 for the source bundle.
+
+
+## Administrator-wide management tools (v1.3.6)
+
+`management_catalog` discovers the actual registered administrator API surface.
+For stewards it returns only steward routes permitted by their current grants.
+The host retains the original session/MFA checks, donation scope, target hierarchy,
+field permissions, numeric limits, resource versions and fresh elevation rules.
+The catalog also serves the shipped Markdown request contracts (`document`,
+`search`, line `offset`); it grants no filesystem, shell or arbitrary HTTP access.
+Route lists are paginated at 40 entries. Generic API queries keep the original
+endpoint pagination and return `{status_code,body}` (or bounded text/binary data).
+Streaming reads return a finite sample; other reads have a 30-second deadline.
+Responses larger than 1 MiB retain their status with an explicit omitted-body
+notice; an omitted mutation response must not be treated as a failed submission.
+
+| Tool | Automatic review | Conversation |
+| --- | --- | --- |
+| `management_catalog` | Read/discovery routes and documentation | Authorized read/discovery/write routes and documentation |
+| `management_read` | All authorized read operations, including explicitly classified POST queries | Same, using the interlocutor's live authority |
+| `refresh_models` | Immediate upstream model-list retrieval | Immediate upstream model-list retrieval |
+| `propose_management_operation` | Absent from the tool list | One exact write request, awaiting the interlocutor's approval |
+
+Model discovery includes donated-key discovery, assistant driver discovery and
+picture-book upstream model discovery. After discovery changes the pending
+catalog, a fresh complete review snapshot is supplied before the next model
+decision; final version validation still rejects any subsequent change.
+Selection, approval, model creation and
+binding changes remain writes. Unknown POST/PUT/PATCH/DELETE routes default to
+writes; names such as `/preview` or `/refresh` do not implicitly make them safe.
+Authentication bootstrap, CallerKey automation routes and assistant conversation
+control writes are not delegated. The assistant cannot approve its own plans.
+Existing typed `propose_operations` and memory writes keep their approval gates;
+the existing automatic-review final decision workflow is unchanged.
+
+A management proposal freezes its route template, path parameters, query and
+body. Only that conversation's human can approve it. The original domain handler
+validates and executes the request with a host-generated idempotency key. It owns
+its normal transaction and asynchronous work. Generic requests cannot be mixed
+with the typed atomic batch: each is approved independently. A durable claim is
+saved before dispatch, preventing repeated decisions from executing twice. If
+the process stops before a receipt is saved, the outcome is unknown, never
+silently retried; query the real resource before proposing any further action.
+Cancellation stops active execution where possible and does not undo committed
+work. Late receipts do not restart an edited or cancelled conversation.
+Management history retains AI execution and the approving human's provenance.
+
+Automatic tools use persisted review-owner authority only after the trusted
+host selects a registered read/discovery route; they do not fabricate a session
+or grant fresh elevation. Every domain authorization rechecks the live owner,
+administrator status, ban and enabled review mode. Changing tools/descriptions
+is reflected on the next model turn. Newly added tool switches default on;
+updates from older settings clients preserve their saved values. Only unchanged
+built-in v1.3.5 prompts migrate; customized prompts are retained.
+
+`/compact` already dispatches a `compact` job and sends a dedicated `compaction`
+request without tools. Optional text after the command is a summary focus. The
+command itself is excluded from normal conversation requests, originals remain
+stored, and subsequent turns use the saved summary. `/compactly`, quoted mentions
+and text merely discussing the command remain ordinary text. Regression tests
+cover sending, editing, empty context, chunking, cancellation and continuation.

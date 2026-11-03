@@ -236,6 +236,12 @@ export function OperationSummary({
         </p>
       ) : null}
       {fields(input, before)}
+      {operation.kind === 'management.api' ? (
+        <>
+          <p>{t('common.agent.managementRequestHelp')}</p>
+          <pre className="agent-raw">{JSON.stringify(input, null, 2)}</pre>
+        </>
+      ) : null}
       {operation.kind === 'management.cleanup' ? (
         <>
           <p>

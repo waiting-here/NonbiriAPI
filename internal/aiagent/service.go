@@ -20,16 +20,17 @@ type runningJob struct {
 	actorID int64
 }
 type Service struct {
-	config   Config
-	db, read *sql.DB
-	now      func() time.Time
-	ctx      context.Context
-	cancel   context.CancelFunc
-	mu       sync.Mutex
-	running  map[int64]runningJob
-	wakeup   chan struct{}
-	wg       sync.WaitGroup
-	start    sync.Once
+	config            Config
+	db, read          *sql.DB
+	now               func() time.Time
+	ctx               context.Context
+	cancel            context.CancelFunc
+	mu                sync.Mutex
+	running           map[int64]runningJob
+	managementRunning map[int64]runningJob
+	wakeup            chan struct{}
+	wg                sync.WaitGroup
+	start             sync.Once
 }
 
 func New(config Config) (*Service, error) {
@@ -80,8 +81,18 @@ func (s *Service) Start() { s.start.Do(func() { s.wg.Add(1); go s.loop() }) }
 // Recover is called before the model dispatcher starts. Interrupted network
 // turns are never reissued automatically after process recovery.
 func (s *Service) Recover(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE ai_agent_jobs SET state='interrupted',error='服务重启，请继续对话或重新提交待审内容',updated_at=? WHERE state='running'`, s.now().UnixMilli())
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = s.recoverManagement(ctx, tx); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE ai_agent_jobs SET state='interrupted',error='服务重启，请继续对话或重新提交待审内容',updated_at=? WHERE state='running'`, s.now().UnixMilli()); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 func (s *Service) Close() error {
 	s.cancel()
@@ -111,6 +122,9 @@ func (s *Service) cancelAutomatic() {
 func (s *Service) cancelChat() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for _, job := range s.managementRunning {
+		job.cancel()
+	}
 	for _, job := range s.running {
 		if job.kind != "auto_review" {
 			job.cancel()
@@ -120,6 +134,9 @@ func (s *Service) cancelChat() {
 func (s *Service) cancelJob(id int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if job, ok := s.managementRunning[id]; ok {
+		job.cancel()
+	}
 	if job, ok := s.running[id]; ok {
 		job.cancel()
 	}
@@ -132,6 +149,11 @@ func (s *Service) InvalidateActor(actorID int64) {
 		return
 	}
 	s.mu.Lock()
+	for _, job := range s.managementRunning {
+		if job.actorID == actorID {
+			job.cancel()
+		}
+	}
 	for _, job := range s.running {
 		if job.actorID == actorID {
 			job.cancel()

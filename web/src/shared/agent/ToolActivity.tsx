@@ -18,6 +18,11 @@ const toolIcons: Record<string, IconName> = {
   web_search: 'search',
   propose_operations: 'steward',
   edit_memory: 'reports',
+  management_history: 'logs',
+  management_catalog: 'search',
+  management_read: 'dashboard',
+  refresh_models: 'models',
+  propose_management_operation: 'steward',
 };
 const toolLabels: Record<string, string> = {
   donations: 'common.agent.tools.donations',
@@ -30,6 +35,11 @@ const toolLabels: Record<string, string> = {
   web_search: 'common.agent.tools.web_search',
   propose_operations: 'common.agent.tools.propose_operations',
   edit_memory: 'common.agent.tools.edit_memory',
+  management_history: 'common.agent.tools.management_history',
+  management_catalog: 'common.agent.tools.management_catalog',
+  management_read: 'common.agent.tools.management_read',
+  refresh_models: 'common.agent.tools.refresh_models',
+  propose_management_operation: 'common.agent.tools.propose_management_operation',
 };
 const activityLabels = {
   returned: 'common.agent.activity.states.returned',
@@ -43,6 +53,7 @@ const activityLabels = {
   unrecorded: 'common.agent.activity.states.unrecorded',
   interrupted: 'common.agent.activity.states.interrupted',
   cancelled: 'common.agent.activity.states.cancelled',
+  unknown: 'common.agent.states.unknown',
 };
 function parsed(value: unknown): unknown {
   if (typeof value !== 'string') return value;
@@ -93,7 +104,8 @@ export function ToolActivity({
         );
         const output = object(outputValue);
         const plan = plans.find((item) => call.id && item.tool_call_ids?.includes(call.id));
-        const errorInfo = object(output.error);
+        const planStatus = object(plan?.result).status;
+        const errorInfo = object(output.error ?? object(output.body).error);
         const error =
           typeof output.error === 'string'
             ? output.error
@@ -103,29 +115,36 @@ export function ToolActivity({
                   .join(' ')
               : '';
         const state =
-          error || output.status === 'failed'
-            ? 'failed'
-            : output.status === 'interrupted' || output.status === 'cancelled'
-              ? output.status
-              : output.status === 'rejected' || plan?.state === 'rejected'
-                ? 'rejected'
-                : output.status === 'completed'
-                  ? 'completed'
-                  : response
-                    ? 'returned'
-                    : plan?.state === 'pending'
-                      ? 'waiting_confirmation'
-                      : plan?.state === 'approved'
-                        ? 'approved'
-                        : plan?.state === 'superseded' || plan?.state === 'invalidated'
-                          ? 'invalidated'
-                          : running
-                            ? 'running'
-                            : 'unrecorded';
+          output.status === 'unknown' || planStatus === 'unknown'
+            ? 'unknown'
+            : error ||
+                output.status === 'failed' ||
+                plan?.state === 'failed' ||
+                Number(output.status_code) >= 400
+              ? 'failed'
+              : output.status === 'interrupted' || output.status === 'cancelled'
+                ? output.status
+                : output.status === 'rejected' || plan?.state === 'rejected'
+                  ? 'rejected'
+                  : output.status === 'completed'
+                    ? 'completed'
+                    : response
+                      ? 'returned'
+                      : plan?.state === 'pending'
+                        ? 'waiting_confirmation'
+                        : planStatus === 'executing'
+                          ? 'running'
+                          : plan?.state === 'approved'
+                            ? 'approved'
+                            : plan?.state === 'superseded' || plan?.state === 'invalidated'
+                              ? 'invalidated'
+                              : running
+                                ? 'running'
+                                : 'unrecorded';
         const tone =
           state === 'failed'
             ? 'bad'
-            : ['waiting_confirmation', 'interrupted', 'cancelled'].includes(state)
+            : ['waiting_confirmation', 'interrupted', 'cancelled', 'unknown'].includes(state)
               ? 'warn'
               : state === 'completed'
                 ? 'ok'
@@ -143,11 +162,13 @@ export function ToolActivity({
               : input.kind === 'auto_review'
                 ? t('common.agent.reviewMemory')
                 : ''
-            : typeof input.query === 'string'
-              ? input.query
-              : typeof input.donation_id === 'string'
-                ? t('common.agent.donation') + ' #' + input.donation_id
-                : '';
+            : typeof input.route === 'string'
+              ? input.route
+              : typeof input.query === 'string'
+                ? input.query
+                : typeof input.donation_id === 'string'
+                  ? t('common.agent.donation') + ' #' + input.donation_id
+                  : '';
         const items = [output.items, output.data, output.models, output.results].find(
           Array.isArray,
         );

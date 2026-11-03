@@ -15,6 +15,7 @@ var presetFiles embed.FS
 type presetBundle struct {
 	auto, chat             []TemplateMessage
 	previousChat           []TemplateMessage
+	v135Chat, v135Auto     []TemplateMessage
 	previousMemoryTool     string
 	descriptions           map[string]string
 	autoMemory, chatMemory string
@@ -35,6 +36,8 @@ func loadPresets() presetBundle {
 		"auto-review.json":       &value.auto,
 		"chat.json":              &value.chat,
 		"previous-chat.json":     &value.previousChat,
+		"v135-chat.json":         &value.v135Chat,
+		"v135-auto-review.json":  &value.v135Auto,
 		"tool-descriptions.json": &value.descriptions,
 	} {
 		if err := json.Unmarshal(read(name), target); err != nil {
@@ -56,8 +59,11 @@ func loadPresets() presetBundle {
 }
 
 func refreshDefaultTemplate(settings *Settings) {
-	if reflect.DeepEqual(settings.ChatTemplate, builtInPresets.previousChat) {
+	if reflect.DeepEqual(settings.ChatTemplate, builtInPresets.previousChat) || reflect.DeepEqual(settings.ChatTemplate, builtInPresets.v135Chat) {
 		settings.ChatTemplate = append([]TemplateMessage(nil), builtInPresets.chat...)
+	}
+	if reflect.DeepEqual(settings.AutoTemplate, builtInPresets.v135Auto) {
+		settings.AutoTemplate = append([]TemplateMessage(nil), builtInPresets.auto...)
 	}
 	if settings.ToolDescriptions["edit_memory"] == builtInPresets.previousMemoryTool {
 		settings.ToolDescriptions["edit_memory"] = builtInPresets.descriptions["edit_memory"]

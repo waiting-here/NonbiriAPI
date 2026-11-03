@@ -160,6 +160,9 @@ func (a *Authorizer) AuthorizeMFAIdentity(ctx context.Context, tx *sql.Tx, actor
 }
 
 func (a *Authorizer) authorize(ctx context.Context, tx *sql.Tx, actor Actor, requirement Requirement, mfaIdentity bool) (Principal, error) {
+	if a != nil && tx != nil && ctx != nil && !mfaIdentity && AutomaticReviewOwner(ctx) > 0 {
+		return a.authorizeAutomaticReview(ctx, tx, actor, requirement)
+	}
 	if a == nil || tx == nil || ctx == nil || !actor.Kind.valid() || actor.UserID <= 0 || actor.SessionTokenHash == "" {
 		return Principal{}, ErrUnauthorized
 	}

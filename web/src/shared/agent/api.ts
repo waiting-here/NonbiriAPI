@@ -111,6 +111,11 @@ export const AGENT_TOOLS = [
   'web_search',
   'propose_operations',
   'edit_memory',
+  'management_history',
+  'management_catalog',
+  'management_read',
+  'refresh_models',
+  'propose_management_operation',
 ] as const;
 export interface AgentSettings {
   chat_enabled: boolean;

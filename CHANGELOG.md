@@ -8,6 +8,12 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
+- Administrator-wide AI management tools reuse the live management API and
+  steward grants. Read operations and model-list refresh run directly; other
+  tools are absent from automatic review and require the interlocutor's approval
+  in chat. Approved API operations retain audit provenance and are never replayed
+  automatically after an uncertain result. `/compact` remains a dedicated,
+  tool-free summary request rather than an ordinary chat message.
 - Independent attendance periods on the user activity page, with cumulative or
   consecutive counting, sparse milestone bundles and automatic rewards in the
   sign-in transaction. Multiple periods may run together; each milestone is

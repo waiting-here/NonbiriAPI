@@ -52,6 +52,7 @@ type Runtime struct {
 
 	mu                              sync.Mutex
 	userMux, adminMux               *http.ServeMux
+	managementRoutes                map[string]managementRoute
 	routes                          map[string]struct{}
 	userSessionInvalidationObserver UserSessionInvalidationObserver
 	userLifecycle                   *lifecyclegate.Gate
@@ -309,7 +310,11 @@ func (r *Runtime) RegisterUserRoute(method, pattern string, handler resources.Au
 		}
 		handler(w, req, resources.UserPrincipal{UserID: actor.UserID})
 	})
-	return r.registerUserInternal(method, pattern, adapter, false, false)
+	if err := r.registerUserInternal(method, pattern, adapter, false, false); err != nil {
+		return err
+	}
+	r.captureManagementRoute(method, pattern, adapter)
+	return nil
 }
 
 func (r *Runtime) RegisterContinuationUserRoute(method, pattern string, handler resources.AuthenticatedContinuationHandler) error {
@@ -334,7 +339,11 @@ func (r *Runtime) RegisterAdminRoute(method, pattern string, handler http.Handle
 	if handler == nil {
 		return ErrInvalidRoute
 	}
-	return r.registerAdminInternal(method, pattern, handler, false, false)
+	if err := r.registerAdminInternal(method, pattern, handler, false, false); err != nil {
+		return err
+	}
+	r.captureManagementRoute(method, pattern, handler)
+	return nil
 }
 
 func (r *Runtime) UserRouteRegistrar() resources.UserRouteRegistrar { return r }
