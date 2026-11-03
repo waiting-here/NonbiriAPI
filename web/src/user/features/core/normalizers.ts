@@ -845,16 +845,7 @@ function browseCount(value: unknown, label: string): string {
   return decimal(value, label);
 }
 
-function browsePreviewLimit(bindingCount: string): number {
-  const count = BigInt(bindingCount);
-  return count < 3n ? Number(count) : 3;
-}
-
-function normalizeEndpointBrowse(
-  value: unknown,
-  endpointKeyCount: string,
-  endpointEnabled: boolean,
-): EndpointBrowse {
+function normalizeEndpointBrowse(value: unknown): EndpointBrowse {
   const record = responseRecord(
     value,
     ['model_count', 'available_key_count', 'state'],
@@ -866,21 +857,7 @@ function normalizeEndpointBrowse(
     record.available_key_count,
     'endpoint browse available key count',
   );
-  if (BigInt(availableKeyCount) > BigInt(endpointKeyCount)) {
-    invalid('endpoint browse available key count');
-  }
   const state = endpointBrowseState(record.state);
-  if (
-    (state === 'endpoint_disabled' && (endpointEnabled || availableKeyCount !== '0')) ||
-    (state === 'no_keys' &&
-      (!endpointEnabled || endpointKeyCount !== '0' || availableKeyCount !== '0')) ||
-    (state === 'no_usable_key' &&
-      (!endpointEnabled || endpointKeyCount === '0' || availableKeyCount !== '0')) ||
-    (state === 'available' &&
-      (!endpointEnabled || endpointKeyCount === '0' || availableKeyCount === '0'))
-  ) {
-    invalid('endpoint browse state');
-  }
   return {
     model_count: modelCount,
     available_key_count: availableKeyCount,
@@ -935,21 +912,7 @@ function normalizeEndpointKeyBrowse(
     record.available_binding_count,
     'endpoint key browse available binding count',
   );
-  if (
-    BigInt(modelCount) > BigInt(bindingCount) ||
-    BigInt(availableBindingCount) > BigInt(bindingCount)
-  ) {
-    invalid('endpoint key browse counts');
-  }
   const preview = normalizeBrowsePreview(record.preview);
-  if (
-    (bindingCount === '0' && preview.length > 0) ||
-    (preview.some((row) => row.target_id)
-      ? preview.length < browsePreviewLimit(bindingCount)
-      : preview.length !== browsePreviewLimit(bindingCount))
-  ) {
-    invalid('endpoint key browse preview');
-  }
   if (
     preview.some(
       (binding) => binding.endpoint_id !== endpointID || binding.endpoint_key_id !== keyID,
@@ -979,18 +942,7 @@ function normalizeModelBrowse(value: unknown, modelID: string, bindingCount: str
     record.available_binding_count,
     'model browse available binding count',
   );
-  if (BigInt(availableBindingCount) > BigInt(bindingCount)) {
-    invalid('model browse available binding count');
-  }
   const preview = normalizeBrowsePreview(record.preview);
-  if (
-    (bindingCount === '0' && preview.length > 0) ||
-    (preview.some((row) => row.target_id)
-      ? preview.length < browsePreviewLimit(bindingCount)
-      : preview.length !== browsePreviewLimit(bindingCount))
-  ) {
-    invalid('model browse preview');
-  }
   if (preview.some((binding) => binding.model_id !== modelID)) {
     invalid('model browse parent');
   }
@@ -1022,7 +974,7 @@ function normalizeLegacyEndpoint(value: unknown): Endpoint {
   const enabled = exactBoolean(record.enabled, 'endpoint enabled state');
   const keyCount = decimal(record.key_count, 'endpoint key count');
   const browse = Object.hasOwn(record, 'browse')
-    ? normalizeEndpointBrowse(record.browse, keyCount, enabled)
+    ? normalizeEndpointBrowse(record.browse)
     : undefined;
   return {
     id: endpointID,
