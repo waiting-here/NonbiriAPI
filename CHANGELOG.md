@@ -20,12 +20,22 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Compatibility
 
-- Advance the database to schema 46 and account export to format 33. Existing
+- Advance the database to schema 47 and account export to format 33. Existing
   databases require the explicit offline upgrade before this version starts.
-  The new audit starts with empty history and preserves existing business data.
+  The new audit starts with empty history; a derived donor-head index is built
+  from retained pond gifts. Existing business data and queue order are preserved.
 
 ### Fixed
 
+- Skip the recipient's own returned junk when a pond gift is drawn. Take the
+  earliest other donor's item, or keep the new catch when none is available.
+  Bound candidate reads even behind a long queue of the recipient's own items;
+  preserve the original gift probability and atomic settlement.
+- Reduce Lake Notes checkpoint copying and repeated JSON decoding while keeping
+  saved casts, replay, randomness and economic rules compatible.
+- Reuse immutable request-source facts and the authorization already checked
+  within each dispatch transaction. Preserve source backfill, account retirement
+  and current access checks while removing duplicate SQL and serialization.
 - Speed up historical charity-model log searches by resolving matching names
   once within the authorized read snapshot, then using the existing model
   index. Preserve substring matching, pagination, retention and query limits.

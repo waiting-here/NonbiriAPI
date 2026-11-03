@@ -152,9 +152,9 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 46. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts 24 exact registered schema 16–26 and 33–45 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`, including for 45-to-46. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 47. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts 25 exact registered schema 16–26 and 33–46 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`, including for 45-to-47. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
 
-`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=46`, `minimum_schema_version=46`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its 24 supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
+`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=47`, `minimum_schema_version=47`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its 25 supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
 
 Current account export `schema_version=33` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v33.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
@@ -1238,8 +1238,11 @@ of the items. The result page offers one action when multiple items are availabl
 while preserving individual returns and the same return-time signature disclosure.
 
 The base draw and payout settle unchanged. For each junk result, an independent
-draw consumes the FIFO head with probability `n/(n+20)`, where `n` is the remaining
-queue size. The displayed `species_key` becomes the donated item's kind, with
+draw chooses a gift with probability `n/(n+20)`, where `n` is the remaining full
+queue size, including the recipient's own items. On a hit, skip their own returns
+and consume the earliest other donor's item. If none is available, keep the new
+junk without another draw or changing the queue. Only consumed gifts reduce `n`
+for subsequent results in the batch. The displayed `species_key` becomes the donated item's kind, with
 zero payout and `pond.gift` holding the return-time Discord name/avatar. Results
 do not display the displaced junk kind. Later anonymity affects leaderboards,
 but not the signature; donor-account deletion removes queued gifts and anonymizes
