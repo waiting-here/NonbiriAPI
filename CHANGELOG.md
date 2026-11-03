@@ -17,13 +17,28 @@ Each version entry describes its source and compatibility boundary; a release ta
   cookies limit the evidence, and associations never trigger automatic penalties.
 - Provide paginated account groups for administrators and authorized stewards,
   with first/last observations, account deletion and safe personal export.
+- Filter request logs by service operation, such as chat completions or image
+  generation. Each choice includes matching personal and charity requests;
+  pagination, saved filters and existing exports use the same selection.
+
+### Interface
+
+- Use React Aria Components for shared dialogs, sheets, menus, tabs, switches,
+  radio groups and input suggestions across both stations and game shells.
+  Preserve the existing appearance, native form controls and game visuals.
+- Improve keyboard navigation, focus restoration, field labels and error
+  descriptions. Nested overlays continue to work in native game dialogs and
+  fullscreen, while visited panels and dismissed sheets retain their drafts.
+- Pause temporary notifications while hovered or focused, and keep error
+  notifications available until dismissed.
 
 ### Compatibility
 
-- Advance the database to schema 47 and account export to format 33. Existing
+- Advance the database to schema 48 and account export to format 33. Existing
   databases require the explicit offline upgrade before this version starts.
   The new audit starts with empty history; a derived donor-head index is built
-  from retained pond gifts. Existing business data and queue order are preserved.
+  from retained pond gifts. An operation index supports filtered log counts and
+  pages. Existing business data and queue order are preserved.
 
 ### Fixed
 

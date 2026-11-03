@@ -20,8 +20,8 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh/exact-current schema 47 startup and explicit offline conversion
-  of registered schema 16–26 and 33–46 sources: target equality,
+- Validate fresh/exact-current schema 48 startup and explicit offline conversion
+  of registered schema 16–26 and 33–47 sources: target equality,
   rollback/cancellation, re-entry and upgrade-then-start. Verify older, newer,
   unknown and incomplete storage is rejected by the service before migration,
   repair, checkpoint or recovery writes. Check descriptor source coverage and
@@ -35,11 +35,12 @@ has passed.
 - Keep content-only catalog/template/period edits free of DDL and preserve administrator
   edits, historical eligibility, pity and claims. Recheck exports and deletion
   for every new user-associated record.
-- Check account export 32 includes own stored/effective steward permissions,
+- Check account export 33 includes own stored/effective steward permissions,
   retained policy history and personal-model header configuration, but excludes
   temporary generated values, shared charity settings, pressure samples and
-  caller-parameter receipts. Include own pond queue/statistics while excluding
-  other donor identities, and verify that the browser accepts and downloads
+  caller-parameter receipts. Include own pond queue/statistics and safe browser
+  association observations while excluding other accounts and donor identities;
+  verify that the browser accepts and downloads
   the current export format. Verify model/user deletion, late completions and
   the zero/default/positive idle-lifetime cases across all five formats.
 - Exercise shared-credential rotation with old approved uses, whole-submission
@@ -100,6 +101,11 @@ has passed.
   session refresh during gacha entry, account switching, short/long SSE outages,
   delayed LinkLink responses, hidden-content loading and stale deployment assets.
   Preserve approved game designs, animations and reduced-motion fallbacks.
+- Check shared controls with nested sheets, native dialogs, menus and fullscreen:
+  keyboard containment and restoration, visible labels and errors, preserved
+  drafts, disabled form state and background isolation. Verify request-log
+  service filters through real role-scoped APIs, pagination, browser history
+  and JSON/CSV exports.
 - Compare startup, SQL count, allocation and response timings with fixed inputs.
   Record CI queue, setup, build, test and runner usage from normal runs. Reduced
   effective coverage is not a performance improvement.

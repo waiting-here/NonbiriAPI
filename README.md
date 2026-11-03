@@ -4,11 +4,18 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage services, endpoints and service-scoped API keys, maintain model lists per endpoint/key pair, and configure personal or shared charity routing. Revocable CallerKeys authenticate gateway calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.3.5** adds one-action return/release for eligible catches in a Fishing batch and skips the recipient's own returned junk when selecting gifts. Shared-browser account associations provide limited evidence for manual abuse auditing and never trigger automatic penalties. Historical charity-model log searches and Lake Notes checkpoints reduce repeated work. Database schema is 47 and account export is format 33; existing databases require the explicit offline upgrade before starting this version. Build instructions are below; version history is in [CHANGELOG](CHANGELOG.md). Source availability does not establish instance deployment status.
+**v1.3.5** adds one-action return/release for eligible catches in a Fishing batch and skips the recipient's own returned junk when selecting gifts. Shared-browser account associations provide limited evidence for manual abuse auditing and never trigger automatic penalties. Request logs support service-operation filters. Historical charity-model log searches and Lake Notes checkpoints reduce repeated work. Database schema is 48 and account export is format 33; existing databases require the explicit offline upgrade before starting this version. Build instructions are below; version history is in [CHANGELOG](CHANGELOG.md). Source availability does not establish instance deployment status.
 
 ## Architecture
 
 One Go process serves two embedded React stations and one local SQLite database. User and administrator stations have separate hosts and authorization boundaries. Production targets Linux/amd64; Windows supports development and build verification.
+
+Shared interactive controls use React Aria Components with the project's CSS
+and appearance tokens. Stable React Aria hooks connect overlays to native game
+dialogs and fullscreen. Ordinary inputs, selects, disclosures and static tables
+retain native HTML semantics; game rendering remains independent. Keyboard and
+focus checks cover the shared controls without implying complete screen-reader
+support for game canvases or charts.
 
 Model directories evaluate current availability in read-only SQLite snapshots,
 with batched candidate and success-rate queries. Personal model lists use the
@@ -163,6 +170,8 @@ remain intact when artwork is disabled; see [artwork availability](docs/gacha.md
 
 The mystery shop offers daily bundles of ten standard or limited tickets for
 10,000 credits each, using game credits first. Each bundle has its own daily limit.
+Request logs can filter by service operation, including chat completions and
+image generation, across matching personal and charity calls.
 Management request logs support an exact Discord ID filter alongside the called
 charity model; additional filters include the upstream model used.
 Authorized managers can open the corresponding charity model or each attempt's
@@ -282,10 +291,10 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 47.
+Fresh databases start in maintenance with public features closed and use schema 48.
 The service opens only the exact current schema; older, newer, unknown or
 incomplete storage is rejected before migration, repair or recovery writes.
-For exact registered schema 16–26 and 33–46 sources, preserve a complete recovery
+For exact registered schema 16–26 and 33–47 sources, preserve a complete recovery
 set before deliberately running the matching standalone
 [upgrader](cmd/nonbiri-upgrade-v1/README.md) with `--check` or `--apply`.
 The service, startup scripts and deployment helpers must not apply upgrades

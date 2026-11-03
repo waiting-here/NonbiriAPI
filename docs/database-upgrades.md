@@ -2,7 +2,7 @@
 
 ## Supported databases
 
-The service opens only the exact current schema **47**, or initializes current
+The service opens only the exact current schema **48**, or initializes current
 storage when the database and its sidecars are absent. An existing zero-byte,
 partial or unknown database is not a fresh instance. Older and newer schemas are
 rejected before migration, repair, WAL checkpoint or unfinished-work recovery.
@@ -11,7 +11,7 @@ version, with the explicit upgrade entry point. Current-schema identity,
 structure, configuration and encryption-root checks remain required.
 
 The standalone Go upgrader accepts exact registered schema **16–26** and
-**33–46** sources and targets schema 47. Schemas 27–32 and unregistered layouts
+**33–47** sources and targets schema 48. Schemas 27–32 and unregistered layouts
 are not supported. A developer or deployer must deliberately invoke the matching
 tool; the service, startup scripts and deployment helpers must not run
 `--apply` implicitly. Preserve the complete matching recovery set before any
@@ -34,11 +34,11 @@ advance when storage changes require it, not with every software patch.
 
 Both commands read compiled metadata without loading application configuration
 or opening a database. Their format-version-1 descriptors identify the same
-target schema and hashes. The service reports `schema_version=47`,
-`minimum_schema_version=47`, `startup_policy="exact"` and
+target schema and hashes. The service reports `schema_version=48`,
+`minimum_schema_version=48`, `startup_policy="exact"` and
 `upgrade_tool="nonbiri-upgrade-v1"`, with empty `source_schema_versions`,
 `source_manifest_hashes` and `offline_conversions` arrays. The upgrader adds
-25 `offline_conversions` entries, one for each supported source, with its tool
+26 `offline_conversions` entries, one for each supported source, with its tool
 name, source commit, source version, pinned manifest hash and target version.
 An empty service list does not remove the separate upgrader.
 
@@ -48,6 +48,14 @@ It must not infer permission to migrate from the upgrader's advertised sources,
 parse Go files or derive schema versions from array lengths.
 
 ## Schema changes
+
+Schema 48 adds an expression index for request-log operation filters. It groups
+personal and charity calls by operation and orders each group by request time
+and ID, with completion time available for retention checks. Existing log facts
+and export format 33 are unchanged. Building the index requires an offline
+upgrade with enough measured time and temporary storage for the retained logs.
+The registered schema-47 source is
+`b3b0dbfda01d3d22140c0c0a74e28afc2f2baa58`.
 
 Schema 47 adds one derived queue head per pond donor, maintained by queue
 insert/delete triggers. The 46-to-47 step backfills heads through the existing
@@ -271,7 +279,7 @@ review HMACs, generated session headers, deployment settings and internal dispat
 authorizations. See [service connections](service-connections.md) and the
 [data lifecycle](data-lifecycle-checklist.md).
 
-The registered offline sources are schemas 16–26 and 33–46 with their exact
+The registered offline sources are schemas 16–26 and 33–47 with their exact
 manifests. Other intermediate database layouts are not supported sources.
 
 Schema 26 adds shared channel binding presets and their ordered upstream-model
@@ -372,7 +380,7 @@ donation terminal clocks, expiry, balances or historical settlements.
 ## One-time conversion
 
 Build `./cmd/nonbiri-upgrade-v1` from the same commit as the target application.
-The converter accepts exact registered schema 16–26 and 33–46 structures. For rc.7,
+The converter accepts exact registered schema 16–26 and 33–47 structures. For rc.7,
 the reference source is `82f1711b674425745a768f781e0e0c34dcb37ac3`. The database
 manifest determines eligibility, not a guess based on a release label.
 
@@ -384,7 +392,7 @@ repeated immediately before conversion. Ordinary `--apply` validates the exact
 source, encryption-root identity, required configuration and migration-affected relationships, without scanning
 unrelated historical tables. Run it with the service stopped and its existing
 master key available. The converter acquires exclusive
-database access and converts the source to schema 47 in one transaction. A matching
+database access and converts the source to schema 48 in one transaction. A matching
 current schema is a no-op; structural drift, an unknown source or a wrong key is
 rejected. Failure or cancellation rolls back.
 

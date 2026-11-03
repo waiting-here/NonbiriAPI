@@ -395,7 +395,7 @@ Personal requests reserve no general credits and remain available with a negativ
 | `GET /api/caller-key` | Returns null or `{display,created_at,updated_at,generation}`, plus `X-Nonbiri-CallerKey-Generation`; the body generation must match the header. `display` is masked and cannot be used for calls, and GET never returns the full secret. |
 | `POST /api/caller-key/regenerate` | Accepts `{expected_generation}`; on success returns `{secret,metadata}` once, with `metadata.generation = expected_generation + 1`. The full secret is present only in this successful response; generate a replacement again if it was not saved. |
 | `GET /api/home/game-summary` | Safe resumable-game and pending-result route identities. No arbitrary URL is returned. |
-| `GET /api/logs` | Filters `model,error_code,status,from,to`; legacy `cursor,limit` or numbered `page,page_size`; returns owner rows and numbered `pagination`. |
+| `GET /api/logs` | Filters `operation,model,error_code,status,from,to`; legacy `cursor,limit` or numbered `page,page_size`; returns owner rows and numbered `pagination`. |
 | `GET /api/logs/{id}` | Legacy `attempt_cursor,attempt_limit` or numbered `attempt_page,attempt_page_size`; numbered detail returns `attempt_pagination`. |
 | `GET /api/logs/options` | Closed query; returns retained owner model-name options. |
 | `GET /api/issues` | Required `state=current|closed`, plus legacy `cursor,limit` or numbered `page,page_size`; returns the owner's bounded issue page and numbered `pagination`. |
@@ -1491,7 +1491,7 @@ Administrator and steward log list/detail/export entries contain nullable `user_
 
 Each management attempt displays its persisted nullable `endpoint_key_id` routing snapshot, including separate IDs for retries. It never returns the key secret. The logical request's `usage.charge` is the authoritative total charge shown in both list and detail. Attempt `usage.charge` remains a compatibility zero, not an independently settled fee; the page does not present it as a charge. CSV and JSON exports share the management row fields and existing 10,000-row/16 MiB all-or-error limits. CSV additionally includes `caller_discord_nickname,caller_discord_id` with spreadsheet-safe escaping. Steward export reads recheck authority in the export snapshot, and all exports are no-store.
 
-`GET /api/steward/logs` accepts `user_id,discord_id,endpoint_key_id,error_code,status,from,to,endpoint_base_url,upstream_model,charity_model,usage_total_mismatch,phase` plus legacy `cursor,limit` or numbered `page,page_size`; `GET /api/steward/logs/{id}` accepts the corresponding `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size`. The numbered list/detail responses carry `pagination`/`attempt_pagination`. Export accepts the same filters without pagination; cursors remain bound to role, actor and filters.
+`GET /api/steward/logs` accepts `operation,user_id,discord_id,endpoint_key_id,error_code,status,from,to,endpoint_base_url,upstream_model,charity_model,usage_total_mismatch,phase` plus legacy `cursor,limit` or numbered `page,page_size`; `GET /api/steward/logs/{id}` accepts the corresponding `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size`. The numbered list/detail responses carry `pagination`/`attempt_pagination`. Export accepts the same filters without pagination; cursors remain bound to role, actor and filters.
 
 Log reads have a five-second budget, including connection waits. Timeouts and canceled reads return `503 service_unavailable`; callers may narrow the filters and retry the read without resending the original model request. Read-only queries use a bounded two-connection pool, with current session, role and MFA authority checked in the same snapshot. Reads that record access to legally held diagnostics retain a write transaction.
 
@@ -1616,7 +1616,17 @@ The generic site-config patch rejects maintenance, announcement epoch, and all a
 
 The administrator list reads retain cursor mode and also accept numbered `page,page_size` with the shared metadata, except where noted: `GET /admin/api/users` accepts `is_banned=true|false`, `q`, and `level=1|2|3|4|5|6`; `GET /admin/api/usage?group_by=user` is paginated, while `group_by=site` is a complete non-paginated snapshot and rejects all page/cursor parameters; `GET /admin/api/activity` is paginated; and `GET /admin/api/overview/endpoints` accepts `q`, `tag`, and an exact positive `user_id`, combined with AND, and is paginated. The user filter selects base URLs used by that user; row totals and expanded user lists still cover all users of each base URL. Numbered endpoint-overview rows contain at most three user previews; the complete group can be read with `GET /admin/api/overview/endpoints/users?base_url=<exact>&page=<page>&page_size=<size>`, which is numbered-only and returns `{data,next_cursor:null,pagination}`. `base_url` is an exact canonical value, not a pattern.
 
-`GET /admin/api/logs` accepts `error_code,status,from,to,user_id,discord_id,endpoint_key_id,endpoint_base_url,upstream_model,charity_model,usage_total_mismatch,phase` plus cursor or numbered page parameters; `GET /admin/api/logs/{id}` accepts `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size` and returns `attempt_pagination` in numbered mode. `GET /admin/api/alerts` accepts `resolved=true|false` plus either pagination mode. Log exports accept the same role-scoped non-pagination filters but reject `cursor,limit,page,page_size`.
+`GET /admin/api/logs` accepts `operation,error_code,status,from,to,user_id,discord_id,endpoint_key_id,endpoint_base_url,upstream_model,charity_model,usage_total_mismatch,phase` plus cursor or numbered page parameters; `GET /admin/api/logs/{id}` accepts `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size` and returns `attempt_pagination` in numbered mode. `GET /admin/api/alerts` accepts `resolved=true|false` plus either pagination mode. Log exports accept the same role-scoped non-pagination filters but reject `cursor,limit,page,page_size`.
+
+The optional `operation` filter on user, administrator and authorized steward
+log lists accepts one of the 16 operation names in §3.4, or `model_discovery`.
+For example, `operation=images_generations` matches both personal and charity
+image-generation requests under the caller's existing scope. Omission includes
+all operations; empty, repeated, unknown or differently cased values return 400.
+It intersects other filters and applies to numbered counts, cursor identity and
+existing JSON/CSV exports. Response `route_kind` values remain unchanged. A
+`charity_model` condition narrows the selected operation to matching charity
+calls; combining it with `model_discovery` returns no rows.
 
 The optional management `discord_id` filter is a canonical positive decimal string
 from 1 through 18446744073709551615. It exactly matches the immutable
