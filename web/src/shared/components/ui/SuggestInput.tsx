@@ -62,6 +62,11 @@ export function SuggestInput({
   return (
     <ComboBox
       className="nb-suggestions"
+      // Keep the selection consistent with free text, so closing cannot restore an old choice.
+      value={suggestions.includes(value) ? value : null}
+      onChange={(next) => {
+        if (typeof next === 'string' && !disabled && !readOnly) onChange(next);
+      }}
       inputValue={value}
       onInputChange={(next) => {
         if (!disabled && !readOnly) onChange(next);

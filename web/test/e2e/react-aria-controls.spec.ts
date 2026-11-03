@@ -35,6 +35,15 @@ test.beforeAll(async () => {
 for (const width of [1440, 390])
   for (const theme of ['light', 'dark']) {
     test('stable overlay composition ' + width + ' ' + theme, async ({ page }) => {
+      const clickVisibleLabel = async (control: ReturnType<typeof page.locator>) => {
+        const label = control.locator('xpath=ancestor::label[1]');
+        await label.scrollIntoViewIfNeeded();
+        await expect(label).toBeVisible();
+        const bounds = await label.boundingBox();
+        expect(bounds).not.toBeNull();
+        // Send a real pointer action; locator.click intentionally waits for enabled controls.
+        await page.mouse.click(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
+      };
       const violations: string[] = [];
       page.on('pageerror', (error) => violations.push(error.message));
       await page.setViewportSize({ width, height: 900 });
@@ -125,8 +134,7 @@ for (const width of [1440, 390])
       await expect(combo).toBeDisabled();
       await expect(page.getByRole('listbox')).toHaveCount(0);
       const toggle = sheet.getByRole('switch', { name: 'Enabled' });
-      const toggleLabel = toggle.locator('xpath=ancestor::label[1]');
-      await toggleLabel.click();
+      await clickVisibleLabel(toggle);
       await expect(toggle).not.toBeChecked();
       await expect(combo).toHaveValue('a');
       await sheet.getByRole('button', { name: 'Unlock configuration' }).click();
@@ -138,14 +146,12 @@ for (const width of [1440, 390])
       await pendingReads.shift()!.fulfill({ json: { locked: true } });
       await expect(clear).toBeDisabled();
       await page.keyboard.press('ArrowLeft');
-      await sheet
-        .getByRole('radio', { name: 'Add', exact: true })
-        .locator('xpath=ancestor::label[1]')
-        .click();
+      await clickVisibleLabel(sheet.getByRole('radio', { name: 'Add', exact: true }));
       await expect(clear).toBeChecked();
       await sheet.getByRole('button', { name: 'Unlock configuration' }).click();
       await sheet.getByRole('button', { name: 'Open game dialog' }).click();
       const game = page.getByRole('dialog', { name: 'Game dialog', exact: true });
+      const nativeElement = page.locator('dialog.fixture-native');
       await game.getByRole('button', { name: 'Game actions' }).click();
       const menu = page.getByRole('menu');
       expect(await menu.evaluate((node) => Boolean(node.closest('dialog:modal')))).toBe(true);
@@ -172,8 +178,10 @@ for (const width of [1440, 390])
       await page.keyboard.press('Escape');
       await expect(confirm).toHaveCount(0);
       await expect(game).toBeVisible();
+      await expect(nativeElement).toHaveJSProperty('open', true);
       await page.keyboard.press('Escape');
       await expect(game).toHaveCount(0);
+      await expect(nativeElement).toHaveCount(0);
       await expect(sheet).toBeVisible();
       await sheet.getByRole('button', { name: 'Enter full screen' }).click();
       await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(true);

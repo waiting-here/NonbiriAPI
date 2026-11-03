@@ -29,6 +29,53 @@ function Harness() {
   );
 }
 describe('freeform suggestions', () => {
+  it.each(['disabled', 'readOnly'] as const)(
+    'preserves an edited prior selection through %s, reopening, Escape and blur',
+    async (lock) => {
+      function Editable({ locked = false }: { locked?: boolean }) {
+        const [value, setValue] = useState('');
+        return (
+          <>
+            <SuggestInput
+              aria-label="Model"
+              value={value}
+              onChange={setValue}
+              suggestions={['alpha', 'beta']}
+              disabled={locked && lock === 'disabled'}
+              readOnly={locked && lock === 'readOnly'}
+            />
+            <button>Next</button>
+          </>
+        );
+      }
+      const user = userEvent.setup();
+      const view = render(<Editable />);
+      const input = screen.getByRole('combobox', { name: 'Model' });
+      await user.click(input);
+      await user.keyboard('{ArrowDown}{Enter}');
+      expect(input).toHaveValue('alpha');
+      await user.clear(input);
+      await user.type(input, 'a');
+      await user.keyboard('{ArrowDown}');
+      expect(screen.getByRole('listbox')).toBeVisible();
+      view.rerender(<Editable locked />);
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(input).toHaveValue('a');
+      await user.keyboard('{Enter}');
+      expect(input).toHaveValue('a');
+      view.rerender(<Editable />);
+      await user.click(input);
+      await user.keyboard('{Escape}{Tab}');
+      expect(input).toHaveValue('a');
+      await user.clear(input);
+      await user.keyboard('{Escape}{Tab}');
+      expect(input).toHaveValue('');
+      await user.type(input, 'b');
+      await user.keyboard('{ArrowDown}{Enter}');
+      expect(input).toHaveValue('beta');
+    },
+  );
+
   it('closes an already open list and preserves the draft when its form becomes busy', async () => {
     const user = userEvent.setup();
     const changed = vi.fn();

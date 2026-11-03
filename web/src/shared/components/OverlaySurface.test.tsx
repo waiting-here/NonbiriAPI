@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { NativeDialog } from './NativeDialog';
 import { ConfirmDialog } from './ConfirmDialog';
 import { MoreMenu } from './ui/MoreMenu';
@@ -27,6 +27,41 @@ function Nested() {
   );
 }
 describe('overlay integration', () => {
+  it.each([false, true])(
+    'leaves Escape to native cancel inside a Sheet (busy %s)',
+    async (busy) => {
+      const user = userEvent.setup();
+      const closeSheet = vi.fn(),
+        closeNative = vi.fn(),
+        keyDown = vi.fn();
+      render(
+        <Sheet open title="Outer sheet" closeLabel="Close sheet" onClose={closeSheet}>
+          <NativeDialog
+            aria-label="Inner native"
+            onDismiss={closeNative}
+            busy={busy}
+            onKeyDown={keyDown}
+          >
+            <button>Native action</button>
+          </NativeDialog>
+        </Sheet>,
+      );
+      const native = screen.getByRole('dialog', { name: 'Inner native' });
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Native action' })).toHaveFocus(),
+      );
+      await user.keyboard('{Escape}');
+      expect(keyDown).toHaveBeenCalled();
+      expect(keyDown.mock.calls.at(-1)?.[0].defaultPrevented).toBe(false);
+      expect(closeSheet).not.toHaveBeenCalled();
+      expect(native).toHaveProperty('open', true);
+      // jsdom has no native cancel dispatch; the browser composition test presses real Escape.
+      fireEvent(native, new Event('cancel', { cancelable: true }));
+      expect(closeNative).toHaveBeenCalledTimes(busy ? 0 : 1);
+      expect(screen.getByRole('dialog', { name: 'Outer sheet' })).toBeVisible();
+    },
+  );
+
   it('keeps menu and confirmation portals in a native top-layer dialog', async () => {
     const user = userEvent.setup();
     render(<Nested />);
