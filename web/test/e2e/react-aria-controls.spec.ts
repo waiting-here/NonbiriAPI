@@ -78,6 +78,10 @@ for (const width of [1440, 390])
           : route.abort();
       });
       const pendingReads: import('@playwright/test').Route[] = [];
+      const pendingConfirms: import('@playwright/test').Route[] = [];
+      await page.route('**/__aria-test/confirm', (route) => {
+        pendingConfirms.push(route);
+      });
       await page.route('**/__aria-test/lock', (route) => {
         pendingReads.push(route);
       });
@@ -175,6 +179,19 @@ for (const width of [1440, 390])
           ),
         });
       }
+      await confirm.getByRole('button', { name: 'Remove', exact: true }).click();
+      await expect(confirm).toHaveAttribute('aria-busy', 'true');
+      await expect.poll(() => pendingConfirms.length).toBe(1);
+      await page.keyboard.press('Escape');
+      await expect(nativeElement).toHaveJSProperty('open', true);
+      await expect(sheet).toBeVisible();
+      await expect(confirm).toBeVisible();
+      await pendingConfirms.shift()!.fulfill({ json: { completed: true } });
+      await expect(confirm).toHaveCount(0);
+      await expect(nativeElement).toHaveJSProperty('open', true);
+      await game.getByRole('button', { name: 'Game actions' }).click();
+      await page.getByRole('menuitem', { name: 'Remove item' }).click();
+      await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused();
       await page.keyboard.press('Escape');
       await expect(confirm).toHaveCount(0);
       await expect(game).toBeVisible();
