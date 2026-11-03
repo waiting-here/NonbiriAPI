@@ -4,7 +4,7 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## 1.3.6 — Unreleased
+## 1.3.6 — 2026-11-03
 
 ### Added
 
@@ -33,6 +33,27 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Reuse one authoritative seat snapshot while advancing elapsed Blackjack
   decision batches. Idle idempotency cleanup checks the read pool before taking
   a writer, while work found by the probe is rechecked in its transaction.
+- Parse complete SSE lines directly from the reader buffer instead of allocating
+  a large temporary buffer for each line. Fragmented lines retain bounded owned
+  storage and existing event, cancellation and protocol checks.
+- Encode Lake Notes profiles directly with their stored clock representation,
+  avoiding whole-profile JSON round trips during checkpoints. Existing clock
+  bits, amounts, saved profiles and active casts remain compatible.
+- Probe orphan credential cleanup through the read pool before acquiring the
+  writer; actual cleanup still rechecks references and expiry in its transaction.
+- Refresh overlapping resource queries once after confirmed operations and
+  batch service-creation refreshes, including partial failure recovery. Browse
+  summaries retain structural and resource-identity checks without re-proving
+  the server's count, state and preview-length relationships in the browser.
+
+### Development
+
+- Reuse closed historical database fixture images while keeping each upgrade
+  test's mutable copy independent. Preserve the released-program upgrade gate.
+- Avoid repeated vet in CI race shards after the ordinary Go gate covers the
+  same packages. Run serial pagination and stake matrices in the ordinary suite;
+  concurrent authorization, accounting, cancellation and recovery tests remain
+  in the race suite.
 
 ### Compatibility
 

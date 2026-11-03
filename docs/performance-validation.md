@@ -247,3 +247,39 @@ Compare identical seeds, data, build inputs, toolchain and machine. Record the
 commit/tree and real exit status alongside each result. Report workload mix and
 admitted/completed work, not only latency. Release targets are evaluated in the
 result report, rather than enforced as machine-speed assertions in unit tests.
+
+## Streaming, profile storage and idle maintenance
+
+For smaller changes, measure the actual parser, storage codec or maintenance
+entry point with the same fixtures and toolchain before and after:
+
+```sh
+go test ./internal/egress -run '^$' -bench '^BenchmarkParseSSE$' -benchmem
+go test ./internal/lakenotes/rules -run '^$' -bench '^BenchmarkProfileStorage$' -benchmem
+go test ./internal/claim -run '^$' -bench '^BenchmarkEmptyOrphanSecretMaintenance$' -benchmem
+```
+
+The SSE benchmark covers short, multiline and fragmented events. A buffer may
+be borrowed only until the next reader operation; both the parser and routed
+response consumer must retain event data across refills. Large fragmented
+events still need owned storage, so do not extrapolate short-line gains to them.
+
+Profile storage benchmarks use empty and full baskets, preserving decimal
+amounts and exact binary64 clock bits. Saved fixtures from the prior encoder
+check field compatibility independently of JSON object ordering. Rule-file
+identity changes also require the active-cast compatibility path and tests,
+even when the refactor leaves game behavior unchanged.
+
+Idle cleanup benchmarks retain live credentials at two scales. Reader probes
+avoid writer occupancy when there is no work; their scans still depend on the
+retained dataset. Separately verify that an empty pass finishes with the writer
+held, and that new references, expiry and cancellation are checked correctly
+when a positive probe reaches the transaction. Allocation, reader work and
+writer ownership are different measurements.
+
+CI reuses immutable closed historical fixture images, with a private database
+copy for each conversion test. The independent released-program fixture still
+checks source provenance. Serial SQL pagination and stake/return matrices run
+in the ordinary suite; race coverage focuses on competing operations. CI may
+skip duplicate vet in prepared race shards only because its required ordinary
+Go job vets the same package set. Standalone race commands retain vet by default.

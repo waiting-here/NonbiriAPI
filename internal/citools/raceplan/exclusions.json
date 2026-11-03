@@ -366,6 +366,7 @@
       "TestFinalSchemaConversionAcceptsExactStableSources",
       "TestFishingPresentationMigrationFromExactSchema17",
       "TestFishingPresentationMigrationRejectsOtherVersion",
+      "TestHistoricalSourceFixtureCacheSurvivesCleanupAndIsolatesCopies",
       "TestOfflineDescriptorContainsOnlyExactSupportedSources",
       "TestProtocolExtensionPreservesSourceAndAllowsExplicitTypes",
       "TestSchemaMigrationsRejectUnknownSourcesAndIncompleteChains",
