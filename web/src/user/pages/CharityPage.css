@@ -2,6 +2,9 @@
   display: grid;
   gap: var(--nb-space-4);
 }
+.charity-catalog-workspace > [role='tabpanel'] {
+  min-width: 0;
+}
 .economy-charity-page > .nb-tabs-root > .nb-tabs {
   margin-bottom: var(--nb-space-5);
 }

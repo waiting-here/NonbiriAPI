@@ -1,0 +1,64 @@
+.attendance-management,
+.attendance-management__list,
+.attendance-management__summary,
+.attendance-editor,
+.attendance-editor__tiers {
+  display: grid;
+  gap: var(--nb-space-5);
+  min-width: 0;
+}
+.attendance-management > p,
+.attendance-management__summary > p {
+  margin: 0;
+}
+.attendance-management__rewards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  gap: var(--nb-space-4);
+}
+.attendance-management__rewards > div {
+  display: grid;
+  align-content: start;
+  gap: var(--nb-space-3);
+  min-width: 0;
+}
+.attendance-editor__rules {
+  display: grid;
+  gap: var(--nb-space-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.attendance-editor__rules > legend {
+  padding: 0 0 var(--nb-space-3);
+  font-weight: var(--nb-font-weight-semibold);
+}
+.attendance-editor__rules > p {
+  margin: 0;
+}
+.attendance-editor__tier {
+  display: grid;
+  gap: var(--nb-space-4);
+  padding-block: var(--nb-space-4);
+  border-top: 1px solid var(--nb-color-border);
+  min-width: 0;
+}
+.attendance-editor__tier-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--nb-space-3);
+}
+.attendance-editor .reward-item {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+}
+@media (width < 40rem) {
+  .attendance-editor .reward-item {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .attendance-editor .reward-item > button {
+    justify-self: start;
+    grid-column: 1 / -1;
+  }
+}
