@@ -1,4 +1,4 @@
-import { rewardLabels, conditionSummary, assetName } from '@shared/rewards/copy';
+import { rewardLabels, conditionSummary } from '@shared/rewards/copy';
 import { useState } from 'react';
 import { CursorPagination } from '@shared/operations/CursorPagination';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -22,6 +22,7 @@ import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { formatCount } from '@shared/utils/formatNumber';
 import { operationKey } from '@shared/operations/api';
 import { ConditionEditor } from '@shared/rewards/ConditionEditor';
+import { RewardEditor } from '@shared/rewards/RewardEditor';
 import { RewardSummary } from '@shared/rewards/RewardSummary';
 import {
   createReward,
@@ -179,82 +180,12 @@ function RewardsContent() {
                   />
                 )}
               </Field>
-              <div className="reward-stack">
-                {draft.rewards.map((item, index) => (
-                  <div className="reward-item" key={index}>
-                    <Field label={t('common.rewards.asset')}>
-                      {(props) => (
-                        <select
-                          {...props}
-                          value={item.asset}
-                          onChange={(e) =>
-                            setDraft({
-                              ...draft,
-                              rewards: draft.rewards.map((r, i) =>
-                                i === index ? { asset: e.target.value, quantity: '1' } : r,
-                              ),
-                            })
-                          }
-                        >
-                          {assets
-                            .filter(
-                              (a) =>
-                                a.id === item.asset || !draft.rewards.some((r) => r.asset === a.id),
-                            )
-                            .map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {assetName(assets, a.id, english)}
-                              </option>
-                            ))}
-                        </select>
-                      )}
-                    </Field>
-                    <Field label={t('common.rewards.quantity')}>
-                      {(props) => (
-                        <input
-                          {...props}
-                          required
-                          inputMode="decimal"
-                          value={item.quantity}
-                          onChange={(e) =>
-                            setDraft({
-                              ...draft,
-                              rewards: draft.rewards.map((r, i) =>
-                                i === index ? { ...r, quantity: e.target.value } : r,
-                              ),
-                            })
-                          }
-                        />
-                      )}
-                    </Field>
-                    <Button
-                      type="button"
-                      disabled={draft.rewards.length === 1}
-                      onClick={() =>
-                        setDraft({ ...draft, rewards: draft.rewards.filter((_, i) => i !== index) })
-                      }
-                    >
-                      {t('common.rewards.remove')}
-                    </Button>
-                  </div>
-                ))}
-                <div>
-                  <Button
-                    type="button"
-                    disabled={draft.rewards.length >= 32}
-                    onClick={() => {
-                      const a = assets.find((a) => !draft.rewards.some((r) => r.asset === a.id));
-                      if (a)
-                        setDraft({
-                          ...draft,
-                          rewards: [...draft.rewards, { asset: a.id, quantity: '1' }],
-                        });
-                    }}
-                  >
-                    {t('common.rewards.addReward')}
-                  </Button>
-                </div>
-              </div>
+              <RewardEditor
+                value={draft.rewards}
+                assets={assets}
+                onChange={(rewards) => setDraft({ ...draft, rewards })}
+                disabled={busy}
+              />
               <Fold title={t('common.rewards.conditions')}>
                 <p>{t('common.rewards.conditionHelp')}</p>
                 <ConditionEditor

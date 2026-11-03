@@ -20,6 +20,7 @@ type GovernanceExport struct {
 	Appearance        json.RawMessage       `json:"appearance"`
 	Gacha             json.RawMessage       `json:"gacha"`
 	Rewards           json.RawMessage       `json:"rewards"`
+	Attendance        json.RawMessage       `json:"attendance"`
 }
 type ActivityWalletExport struct {
 	General string `json:"general"`

@@ -96,6 +96,16 @@ export function OperationPlan({
     setConfirmation(false);
   };
   const [elevationError, setElevationError] = useState<unknown>(null);
+  const executionStatus =
+    plan.result && typeof plan.result === 'object' && 'status' in plan.result
+      ? String(plan.result.status)
+      : '';
+  const displayState =
+    executionStatus === 'executing'
+      ? 'running'
+      : executionStatus === 'unknown'
+        ? 'unknown'
+        : plan.state;
   const content = (
     <section
       className={'agent-plan nb-stack' + (plan.state !== 'pending' ? ' agent-plan--history' : '')}
@@ -133,6 +143,9 @@ export function OperationPlan({
       </ol>
       {plan.result ? (
         <RawData title={t('common.agent.executionResult')} value={plan.result} />
+      ) : null}
+      {executionStatus === 'unknown' ? (
+        <Note tone="warn">{t('common.agent.managementOutcomeUnknown')}</Note>
       ) : null}
       {plan.state === 'pending' && !readOnly ? (
         <>
@@ -223,7 +236,7 @@ export function OperationPlan({
       summary={t('common.agent.activity.operationCount', {
         value: formatCount(plan.operations.length).display,
       })}
-      meta={<AgentState state={plan.state} />}
+      meta={<AgentState state={displayState} />}
       lazy
     >
       {content}

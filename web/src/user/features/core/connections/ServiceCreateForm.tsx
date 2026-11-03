@@ -7,7 +7,7 @@ import { ProtocolRerankField } from '@shared/components/ProtocolRerankField';
 import type { NativeService, RerankFormat } from '@shared/nativeServices';
 import { DISCOVERY_FORMATS, type DiscoveryPreset } from '@shared/connections';
 import { useQueryClient } from '@tanstack/react-query';
-import { coreKeys, useEndpointCreateOptions } from '../queries';
+import { coreKeys, coreSessionMatchesAccount, useEndpointCreateOptions } from '../queries';
 import { CoreErrorPanel, CoreLoading } from '../components';
 import type { ConnectorType, Endpoint, EndpointCreateInput, EndpointKey } from '../types';
 import type { Connection, Credential, DiscoverySource } from './types';
@@ -65,6 +65,7 @@ export function ServiceCreateForm({
   const activeSecret = useRef(0);
   const [owned] = useState(true);
   const [busy, setBusy] = useState(false);
+  const batching = useRef(false);
   const [saved, setSaved] = useState(() => setupProgress(connection));
   const progress = useRef(setupProgress(connection));
   const activeRow = useRef('');
@@ -95,10 +96,15 @@ export function ServiceCreateForm({
       grants: { ...saved.grants },
     });
   };
-  const operation = useConnectionOperation(accountId, accept, () => {
-    setSecret('');
-    setExtraSecrets((previous) => previous.map(() => ''));
-  });
+  const operation = useConnectionOperation(
+    accountId,
+    accept,
+    () => {
+      setSecret('');
+      setExtraSecrets((previous) => previous.map(() => ''));
+    },
+    { deferRefetch: () => batching.current },
+  );
   const channels = options.data?.mainstream_channels ?? [];
   const channel = channels.find((row) => row.id === channelId);
   const nativeOptions = options.data?.native_service_options ?? [];
@@ -193,6 +199,7 @@ export function ServiceCreateForm({
   };
   const save = async () => {
     if (locked || !ready) return;
+    batching.current = true;
     setBusy(true);
     const requestSecret = secret;
     const requestExtras = extraSecrets.slice();
@@ -310,6 +317,9 @@ export function ServiceCreateForm({
     } catch {
       // Completed resources remain available when the next stage is retried.
     } finally {
+      batching.current = false;
+      if (coreSessionMatchesAccount(client, accountId))
+        await client.refetchQueries({ queryKey: coreKeys.account(accountId), type: 'active' });
       setBusy(false);
     }
   };

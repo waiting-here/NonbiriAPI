@@ -79,7 +79,9 @@ func (a agentAuthority) Authorize(ctx context.Context, tx *sql.Tx, actor agentpl
 		switch action {
 		case "ai.auto", "donations", "donation_models", "review_history", "charity_models", "donation.review", "charity.binding.add":
 		default:
-			return authz.ErrForbidden
+			if authz.AutomaticReviewOwner(ctx) != actor.ID {
+				return authz.ErrForbidden
+			}
 		}
 		var allowed bool
 		err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM ai_agent_settings c JOIN users u ON u.id=c.owner_id WHERE c.id=1 AND c.mode<>'off' AND c.owner_id=? AND u.is_admin=1 AND (u.is_banned=0 OR u.banned_until<=?))`, actor.ID, time.Now().Unix()).Scan(&allowed)
@@ -150,7 +152,7 @@ func (r agentRouteRegistrar) adapt(handler aiagent.AuthorizedHandler) http.Handl
 		if session.Kind == authz.ActorAdminSession {
 			role = "admin"
 		}
-		handler(w, request, agentplan.Actor{ID: session.UserID, Role: role, Label: label, SessionHash: session.SessionTokenHash, SessionGeneration: session.SessionGeneration, Elevation: session.ElevationToken})
+		handler(w, request, agentplan.Actor{ID: session.UserID, Role: role, Label: label, SessionHash: session.SessionTokenHash, SessionGeneration: session.SessionGeneration, Elevation: session.ElevationToken, Automatic: authz.AutomaticReviewOwner(request.Context()) == session.UserID})
 	}
 }
 func (r agentRouteRegistrar) RegisterAdminRoute(method, path string, handler aiagent.AuthorizedHandler) error {

@@ -197,6 +197,14 @@ type Operations interface {
 	ReviewOperations(context.Context, int64, string, ReviewResult) ([]Operation, error)
 }
 
+// ManagementOperations reuses domain HTTP handlers which own their transaction
+// and may enqueue work or perform network I/O. They are approved individually;
+// they must never run inside PreparedBatch's atomic writer transaction.
+type ManagementOperations interface {
+	PreviewManagement(context.Context, Actor, Operation) (OperationPreview, error)
+	ExecuteManagement(context.Context, Actor, Operation, string) (json.RawMessage, error)
+}
+
 type SearchSecrets interface {
 	SealAgentKey([]byte, string) (string, error)
 	OpenAgentKey(string, string) ([]byte, error)

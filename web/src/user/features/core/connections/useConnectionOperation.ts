@@ -15,6 +15,7 @@ export function useConnectionOperation(
   accountId: string,
   onSaved: (value: ConnectionResult) => void,
   clearSecrets?: () => void,
+  options: { deferRefetch?: () => boolean } = {},
 ) {
   const client = useQueryClient();
   const saved = useRef<ConnectionResult | null>(null);
@@ -43,7 +44,10 @@ export function useConnectionOperation(
         });
         result = await readConnectionResult(intent, status, context.signal);
       }
-      await client.invalidateQueries({ queryKey: coreKeys.account(accountId) });
+      await client.invalidateQueries({
+        queryKey: coreKeys.account(accountId),
+        refetchType: options.deferRefetch?.() ? 'none' : 'active',
+      });
       context.assertCurrent();
       if (result) {
         context.commit(() => onSaved(result));

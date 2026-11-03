@@ -15,6 +15,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/agentplan"
 	"github.com/waiting-here/NonbiriAPI/internal/agentusers"
 	"github.com/waiting-here/NonbiriAPI/internal/aiagent"
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
@@ -25,6 +26,7 @@ import (
 )
 
 type agentOperations struct {
+	runtime   *auth.Runtime
 	read      *sql.DB
 	donations *donation.Service
 	charity   *charityrouting.Service
@@ -74,7 +76,7 @@ func (o *agentOperations) Tools(ctx context.Context, actor agentplan.Actor, auto
 		out = append(out, aiagent.Tool{Name: name, Description: agentSchemaDescription(schemas[name]), Parameters: schemas[name], ChatOnly: name == "charity_binding_presets" || name == "management_history"})
 	}
 	if automatic {
-		return out, nil
+		return append(out, o.managementTools(true)...), nil
 	}
 	ops := donation.AgentOperationSchemas()
 	for name, schema := range charityrouting.AgentOperationSchemas() {
@@ -111,7 +113,7 @@ func (o *agentOperations) Tools(ctx context.Context, actor agentplan.Actor, auto
 		raw, _ := json.Marshal(map[string]any{"type": "object", "properties": map[string]any{"operations": map[string]any{"type": "array", "minItems": 1, "maxItems": 100, "items": map[string]any{"anyOf": variants}}}, "required": []string{"operations"}, "additionalProperties": false})
 		out = append(out, aiagent.Tool{Name: "propose_operations", Description: "Propose the complete ordered plan requested by the human. Every operation requires human confirmation; the whole plan is checked and committed together. Read exact current resource versions first. No operations execute in this tool.", Parameters: raw, ChatOnly: true})
 	}
-	return out, nil
+	return append(out, o.managementTools(false)...), nil
 }
 
 func agentSchemaDescription(raw json.RawMessage) string {
@@ -126,6 +128,9 @@ func agentDenied(err error) bool {
 }
 
 func (o *agentOperations) Read(ctx context.Context, actor agentplan.Actor, name string, args json.RawMessage) (json.RawMessage, error) {
+	if name == "management_catalog" || name == "management_read" || name == "refresh_models" {
+		return o.readManagement(ctx, actor, name, args)
+	}
 	ctx = agentContext(ctx, actor, name)
 	tx, err := o.read.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {

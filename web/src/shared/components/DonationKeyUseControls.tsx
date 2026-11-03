@@ -23,10 +23,11 @@ import type { ServiceFailureReset } from '@shared/operations/failureReset';
 type Write = {
   id: string;
   key: string;
-  action: 'patch' | 'withdraw' | 'reset';
+  action: 'patch' | 'withdraw' | 'reset' | 'release_rate_limit';
   input: Record<string, unknown>;
 };
-type Action = 'pause' | 'resume' | 'discoveryOn' | 'discoveryOff' | 'withdraw' | 'reset';
+type Action =
+  'pause' | 'resume' | 'discoveryOn' | 'discoveryOff' | 'withdraw' | 'reset' | 'release_rate_limit';
 
 export function DonationKeyUseControls({
   role,
@@ -100,7 +101,8 @@ export function DonationKeyUseControls({
     Boolean(row.pending?.discovery_source_id || row.approved?.discovery_source_id);
   const applicable = (action: Action) =>
     rows.filter((row) => {
-      if (action === 'reset') return row.capabilities.can_reset_failures && row.approved;
+      if (action === 'reset' || action === 'release_rate_limit')
+        return row.capabilities.can_reset_failures && row.approved;
       if (!row.capabilities.can_manage || (!row.pending && !row.approved)) return false;
       if (action === 'withdraw') return row.pending;
       if (action === 'pause') return row.enabled;
@@ -119,7 +121,10 @@ export function DonationKeyUseControls({
     const writes = applicable(action).map((row): Write => ({
       id: row.id,
       key: operationKey(),
-      action: action === 'withdraw' || action === 'reset' ? action : 'patch',
+      action:
+        action === 'withdraw' || action === 'reset' || action === 'release_rate_limit'
+          ? action
+          : 'patch',
       input: {
         expected_revision: row.revision,
         ...(action === 'pause' || action === 'resume'
@@ -184,6 +189,7 @@ export function DonationKeyUseControls({
           </>
         ) : null}
         {button('reset', 'common.connections.resetKeyFailures')}
+        {button('release_rate_limit', 'common.connections.releaseKeyRateLimit')}
       </div>
       {operation.isSuccess ? <Note tone="ok">{t('common.outcome.saved')}</Note> : null}
       <FailureResetDetails services={resets} />

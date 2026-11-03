@@ -120,6 +120,9 @@ func TestWritePreviewFailureKeepsMixedRoundRecoverable(t *testing.T) {
 	for _, mixed := range []bool{false, true} {
 		t.Run(fmt.Sprint(mixed), func(t *testing.T) {
 			f := newFixture(t)
+			// Keep room for thirty distinct failure receipts independently of the
+			// evolving built-in prompt. The oversized read must still be rejected.
+			f.driver.settings = &agentrequest.Settings{ContextWindow: 10000, MaxOutputTokens: 1024, OutputReserveTokens: 1024}
 			f.s.config.Operations = resultBudgetOperations{Operations: f.ops, read: func(json.RawMessage) (json.RawMessage, error) {
 				raw, _ := json.Marshal(map[string]string{"data": strings.Repeat("x", 20000)})
 				return raw, nil

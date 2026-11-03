@@ -2376,6 +2376,7 @@
       "disableKeyDiscovery": "关闭目录共享",
       "withdrawPendingContent": "撤回待审内容",
       "resetKeyFailures": "清零失败并恢复服务",
+      "releaseKeyRateLimit": "解除限流",
       "reviewIncomplete": "审核尚未完成，请检查结果。",
       "reviewSaved": "审核已保存。",
       "chooseConnectionFirst": "请在服务内选择密钥。"
@@ -2691,7 +2692,7 @@
         }
       },
       "toolDescriptionFor": "{{tool}}：使用说明",
-      "toolDescriptionHelp": "这些说明会发给模型，帮助它选择和使用工具。可调用的工具及操作范围由当前授权决定。",
+      "toolDescriptionHelp": "这些说明会发给模型，帮助它选择和使用工具。读取范围遵循管理员或协管当前授权。只读操作和模型列表刷新可直接执行；其他操作仅在对话中提供，并需本人批准。",
       "webSearch": "网页搜索",
       "searchURL": "搜索接口完整地址",
       "searchHelp": "向完整接口地址发送带 Bearer 认证的 JSON 搜索请求。",
@@ -2769,6 +2770,8 @@
         "preview": "预览建议",
         "auto": "自动执行"
       },
+      "managementOutcomeUnknown": "操作结果尚未确认。请先查询实际状态，系统不会自动重复执行。",
+      "managementRequestHelp": "批准后执行以下管理请求。每项请求独立执行；如果结果未知，请先核对实际状态。",
       "tools": {
         "donations": "查看捐赠",
         "donation_models": "查看捐赠模型目录",
@@ -2780,7 +2783,11 @@
         "web_search": "搜索网页",
         "propose_operations": "提出操作计划",
         "edit_memory": "建议修改记忆",
-        "management_history": "查询管理操作记录"
+        "management_history": "查询管理操作记录",
+        "management_catalog": "查找管理接口",
+        "management_read": "查询管理数据",
+        "refresh_models": "重新拉取模型列表",
+        "propose_management_operation": "提出管理操作"
       },
       "tokens": {
         "input": "输入",

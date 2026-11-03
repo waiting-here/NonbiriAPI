@@ -12,7 +12,11 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
-var toolNames = []string{"donations", "donation_models", "review_history", "charity_models", "charity_binding_presets", "users", "site_status", "web_search", "propose_operations", "edit_memory", "management_history"}
+var toolNames = []string{"donations", "donation_models", "review_history", "charity_models", "charity_binding_presets", "users", "site_status", "web_search", "propose_operations", "edit_memory", "management_history", "management_catalog", "management_read", "refresh_models", "propose_management_operation"}
+
+func optionalToolSetting(name string) bool {
+	return name == "management_history" || name == "management_catalog" || name == "management_read" || name == "refresh_models" || name == "propose_management_operation"
+}
 
 func defaultSettings() Settings {
 	tools := make(map[string]bool, len(toolNames))
@@ -103,7 +107,7 @@ func (s *Service) PutSettings(ctx context.Context, actor Actor, input SettingsUp
 		}
 	}
 	for _, name := range toolNames {
-		if _, ok := input.Tools[name]; !ok && name != "management_history" {
+		if _, ok := input.Tools[name]; !ok && !optionalToolSetting(name) {
 			return Settings{}, ErrInvalid
 		}
 	}
@@ -140,14 +144,15 @@ func (s *Service) PutSettings(ctx context.Context, actor Actor, input SettingsUp
 	if input.SearchAPIKey == nil {
 		encrypted = stored
 	}
-	if _, present := input.Tools["management_history"]; !present {
-		copied := make(map[string]bool, len(input.Tools)+1)
-		for name, enabled := range input.Tools {
+	copied := make(map[string]bool, len(toolNames))
+	for _, name := range toolNames {
+		if enabled, ok := input.Tools[name]; ok {
 			copied[name] = enabled
+		} else {
+			copied[name] = previous.Tools[name]
 		}
-		copied["management_history"] = previous.Tools["management_history"]
-		input.Tools = copied
 	}
+	input.Tools = copied
 	value := input.Settings
 	value.ToolDescriptions = mergeToolDescriptions(previous.ToolDescriptions, descriptions)
 	value.Revision = input.ExpectedRevision + 1

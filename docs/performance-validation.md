@@ -4,6 +4,45 @@ Run synthetic experiments against temporary databases and a local mock upstream.
 Never point these tests at a deployed instance. Default admission limits remain
 enabled; a rejected request is not counted as accepted throughput.
 
+## v1.3.6 database follow-up
+
+A read-only review of v1.3.5 fixed-label runtime counters covered 644 minute
+windows from 2026-11-03 08:11 to 18:54 UTC and 313,108 completed HTTP requests.
+Blackjack state reads accounted for 17,935 transaction observations and 323,195
+aggregate active milliseconds. Idempotency recovery had 1,281 observations and
+85,810 aggregate active milliseconds. These are cumulative observations, not
+CPU time or end-to-end latency improvements. Unclassified database activity and
+long-lived inference streams cannot be attributed to these paths from this sample.
+
+Two local changes follow those observations. Blackjack reads seats once while
+advancing elapsed decision batches in the same writer transaction, and clears
+consumed pending actions in that snapshot. It introduces no cross-request cache.
+Idempotency maintenance probes its covering indexes through the read pool;
+an empty pass takes no writer, and a nonempty pass retains the original bounded
+transaction and recheck. New work arriving after an empty probe is handled by
+the next pass. A held-writer test verifies that an empty pass completes through
+the reader; expiry and cancellation tests verify resumed cleanup.
+
+`BenchmarkIdleDecisionAdvance` compares the previous repeated seat query with
+the revised advance over a real canonical schema-48 SQLite fixture, before
+attendance integration. One Windows/amd64, Go 1.26.10 run used 100 iterations
+per case and `GOMAXPROCS=2`:
+
+| Seats / elapsed seconds | Repeated query | Reused snapshot | Bytes before / after |
+| --- | ---: | ---: | ---: |
+| 1 / 1 | 58.3 µs | 68.1 µs | 5,667 / 5,672 |
+| 1 / 19 | 410.8 µs | 51.0 µs | 59,566 / 5,664 |
+| 9 / 1 | 86.3 µs | 87.8 µs | 21,294 / 21,296 |
+| 9 / 19 | 741.4 µs | 76.5 µs | 309,246 / 21,293 |
+
+The one-second cases show no improvement. This is a narrow idle-batch
+microbenchmark, not a mixed-load or production throughput claim. The regression
+test separately queues actions in different seconds, advances across the gap
+and checks that each action, revision and settlement occurs once. Production
+impact remains to be measured after an explicitly authorized deployment.
+
+## Running measurements
+
 For a slow test package, record per-test progress before changing its timeout:
 
 ```sh
@@ -208,3 +247,40 @@ Compare identical seeds, data, build inputs, toolchain and machine. Record the
 commit/tree and real exit status alongside each result. Report workload mix and
 admitted/completed work, not only latency. Release targets are evaluated in the
 result report, rather than enforced as machine-speed assertions in unit tests.
+
+## Streaming, profile storage and idle maintenance
+
+For smaller changes, measure the actual parser, storage codec or maintenance
+entry point with the same fixtures and toolchain before and after:
+
+```sh
+go test ./internal/egress -run '^$' -bench '^BenchmarkParseSSE$' -benchmem
+go test ./internal/lakenotes/rules -run '^$' -bench '^BenchmarkProfileStorage$' -benchmem
+go test ./internal/claim -run '^$' -bench '^BenchmarkEmptyOrphanSecretMaintenance$' -benchmem
+```
+
+The SSE benchmark covers short, multiline and fragmented events. A buffer may
+be borrowed only until the next reader operation; both the parser and routed
+response consumer must retain event data across refills. Large fragmented
+events still need owned storage, so do not extrapolate short-line gains to them.
+
+Profile storage benchmarks use empty and full baskets, preserving decimal
+amounts and exact binary64 clock bits. Saved fixtures from the prior encoder
+check field compatibility independently of JSON object ordering. Rule-file
+identity changes also require the active-cast compatibility path and tests,
+even when the refactor leaves game behavior unchanged.
+
+Idle cleanup benchmarks retain live credentials at two scales. Reader probes
+avoid writer occupancy when there is no work; their scans still depend on the
+retained dataset. Separately verify that an empty pass finishes with the writer
+held, and that new references, expiry and cancellation are checked correctly
+when a positive probe reaches the transaction. Allocation, reader work and
+writer ownership are different measurements.
+
+CI reuses immutable closed historical fixture images, with a private database
+copy for each conversion test. The independent released-program fixture still
+checks source provenance. Serial SQL pagination, stake/return and historical
+data-preservation matrices run in the ordinary suite; race coverage retains
+competing operations, upgrade progress and interrupted transactions. CI may
+skip duplicate vet in prepared race shards only because its required ordinary
+Go job vets the same package set. Standalone race commands retain vet by default.

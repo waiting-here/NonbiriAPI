@@ -302,6 +302,26 @@ export async function mockRoleSession(
     });
     return;
   }
+  const apiRoot = station === 'admin' ? '/admin/api' : '/api';
+  await page.route(origin + apiRoot + '/attendance?*', async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        items: [],
+        page: 1,
+        page_size: Number(url.searchParams.get('page_size') ?? 20),
+        total: 0,
+        site_date: new Date(Date.now() + 480 * 60_000).toISOString().slice(0, 10),
+        timezone_offset_minutes: 480,
+        available: true,
+      },
+    });
+  });
+  await mockJson(page, { origin, method: 'GET', path: apiRoot + '/rewards/assets', body: [] });
   if (station === 'user') {
     await mockJson(page, {
       origin,

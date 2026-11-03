@@ -4,6 +4,10 @@ import { renderWithProviders } from '../../../test/unit/support';
 import type { Period, Pool } from '../features/operations/economy';
 import { ActivitiesPage } from './ActivitiesPage';
 
+vi.mock('../features/attendance/AttendanceManagement', () => ({
+  AttendanceManagement: () => null,
+}));
+
 const previousPeriod: Period = {
   id: `thu_${'A'.repeat(22)}`,
   period_key: '2026-09-10',

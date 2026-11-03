@@ -49,7 +49,7 @@ func TestBrowserUnknownSharedAndDeletedInputsKeepFullCoverage(t *testing.T) {
 		if err := selectBrowserPlan(&plan); err != nil {
 			t.Fatal(err)
 		}
-		if len(plan.Browser.Specs) != 5 || !slices.Equal(plan.Browser.Suites, []string{"audit", "fatfish", "lakenotes", "management", "picturebook", "proxy", "workflow"}) || len(plan.Browser.matrix()) != 4 || !plan.Browser.Engine {
+		if len(plan.Browser.Specs) != 5 || !slices.Equal(plan.Browser.Suites, []string{"attendance", "audit", "fatfish", "lakenotes", "management", "picturebook", "proxy", "workflow"}) || len(plan.Browser.matrix()) != 4 || !plan.Browser.Engine {
 			t.Fatalf("incomplete fallback for %s: %+v", path, plan)
 		}
 	}

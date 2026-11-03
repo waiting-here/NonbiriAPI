@@ -28,6 +28,10 @@ const recoveryRemainingQuery = `SELECT EXISTS(
 ) OR EXISTS(SELECT 1 FROM idempotency_records WHERE expires_at<=?)
  OR EXISTS(SELECT 1 FROM resource_operation_status WHERE expires_at<=?)`
 
+const retentionRemainingQuery = `SELECT EXISTS(
+ SELECT 1 FROM idempotency_records WHERE expires_at<=?
+) OR EXISTS(SELECT 1 FROM resource_operation_status WHERE expires_at<=?)`
+
 // MaintenanceResult is the closed, bounded outcome consumed by lifecycle.
 // More reports whether another row matching the same frozen decision time
 // remained after this transaction committed.
@@ -40,10 +44,15 @@ type MaintenanceResult struct {
 // Mutation services continue to own replay authorization and domain work.
 type Maintenance struct {
 	database *sql.DB
+	readDB   *sql.DB
 }
 
-func NewMaintenance(database *sql.DB) *Maintenance {
-	return &Maintenance{database: database}
+func NewMaintenance(database *sql.DB, readers ...*sql.DB) *Maintenance {
+	reader := database
+	if len(readers) > 0 && readers[0] != nil {
+		reader = readers[0]
+	}
+	return &Maintenance{database: database, readDB: reader}
 }
 
 // Recover removes visible in-progress rows and records whose fixed replay
@@ -92,6 +101,24 @@ func (maintenance *Maintenance) deleteBatch(
 
 	workerCtx, cancel := context.WithDeadline(ctx, budgetDeadline)
 	defer cancel()
+	var remainingQuery string
+	switch operation {
+	case maintenanceRecovery:
+		remainingQuery = recoveryRemainingQuery
+	case maintenanceRetention:
+		remainingQuery = retentionRemainingQuery
+	default:
+		return MaintenanceResult{}, errors.New("idempotency maintenance operation is invalid")
+	}
+	// Empty sweeps must not wait for or occupy the shared writer. A row
+	// committed after this probe is picked up by the next bounded sweep.
+	var pending bool
+	if err := maintenance.readDB.QueryRowContext(workerCtx, remainingQuery, decisionNow, decisionNow).Scan(&pending); err != nil {
+		return MaintenanceResult{}, fmt.Errorf("check idempotency maintenance work: %w", err)
+	}
+	if !pending {
+		return MaintenanceResult{}, nil
+	}
 	tx, err := maintenance.database.BeginTx(workerCtx, nil)
 	if err != nil {
 		return MaintenanceResult{}, fmt.Errorf("begin idempotency maintenance: %w", err)
@@ -151,14 +178,7 @@ WHERE (actor_scope_hash,key_hash) IN (
 	processed += projectionCount
 
 	var more int
-	switch operation {
-	case maintenanceRecovery:
-		err = tx.QueryRowContext(workerCtx, recoveryRemainingQuery, decisionNow, decisionNow).Scan(&more)
-	case maintenanceRetention:
-		err = tx.QueryRowContext(workerCtx, `SELECT EXISTS(
- SELECT 1 FROM idempotency_records WHERE expires_at<=?
-) OR EXISTS(SELECT 1 FROM resource_operation_status WHERE expires_at<=?)`, decisionNow, decisionNow).Scan(&more)
-	}
+	err = tx.QueryRowContext(workerCtx, remainingQuery, decisionNow, decisionNow).Scan(&more)
 	if err != nil {
 		return MaintenanceResult{}, fmt.Errorf("check remaining idempotency maintenance work: %w", err)
 	}

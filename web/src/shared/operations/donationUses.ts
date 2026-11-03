@@ -326,7 +326,7 @@ export function mutateDonationUse(
   role: UseRole,
   donationId: string,
   useId: string,
-  action: 'patch' | 'withdraw' | 'reset',
+  action: 'patch' | 'withdraw' | 'reset' | 'release_rate_limit',
   input: Record<string, unknown>,
   key: string,
   signal?: AbortSignal,
@@ -335,7 +335,13 @@ export function mutateDonationUse(
     path(role, donationId) +
       '/' +
       encodeURIComponent(useId) +
-      (action === 'withdraw' ? '/pending' : action === 'reset' ? '/failure-streak-reset' : ''),
+      (action === 'withdraw'
+        ? '/pending'
+        : action === 'reset'
+          ? '/failure-streak-reset'
+          : action === 'release_rate_limit'
+            ? '/rate-limit-release'
+            : ''),
     (value) => {
       const row = record(value ?? {}, ['failure_reset'], 'use receipt', []);
       return {
@@ -344,7 +350,12 @@ export function mutateDonationUse(
       };
     },
     idempotentOptions(key, {
-      method: action === 'withdraw' ? 'DELETE' : action === 'reset' ? 'POST' : 'PATCH',
+      method:
+        action === 'withdraw'
+          ? 'DELETE'
+          : action === 'reset' || action === 'release_rate_limit'
+            ? 'POST'
+            : 'PATCH',
       json: input,
       signal,
     }),

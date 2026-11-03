@@ -414,7 +414,7 @@ func newLifecycleCoordinator(
 	secretAdapter := lifecycleadapters.NewOrphanSecretRecovery(claimService)
 	fatFishAdapter := activityEngines.fish.LifecycleAdapter()
 	idempotencyAdapter := lifecycleadapters.NewIdempotencyMaintenance(
-		idempotency.NewMaintenance(store.DB()),
+		idempotency.NewMaintenance(store.DB(), store.ReadDB()),
 	)
 
 	coordinator, err := lifecycle.New(lifecycle.Config{

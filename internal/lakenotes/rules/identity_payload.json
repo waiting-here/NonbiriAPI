@@ -21,7 +21,7 @@
     "internal/lakenotes/rules/fish.go": "c30b6bf043f4e2bb44f68fbae39f5cb448f12dde666808e4bb695e3e897908e7",
     "internal/lakenotes/rules/profile.go": "7c3f7c4ebf61268c5a02ff9a35a833932fd3da3dd053db2fd96fdc60d2e99e6e",
     "internal/lakenotes/rules/random.go": "0cbfbc9f01a39393f5aeac229661fcee3b93b0b697a857d2dcd8b5e17cd0173d",
-    "internal/lakenotes/rules/state.go": "d705a59d4231a9b0159350ac8eeea6be99cd132baaa3f027510b0e2fd591e6a2",
+    "internal/lakenotes/rules/state.go": "27bc6eb6d5fb45ba8cae72d9186abe95f66c96ab77b063fd035d9964d68868a9",
     "internal/lakenotes/rules/validate.go": "28615e9539cc759dc7f2724f8bba23e3f9c872c41298a8e7cb5978975958d31b",
     "web/src/user/activities/lake-notes/rules/actions.ts": "e1427c8c84dba8e359b43e47ccae55c094b64f59ac07f70202b5ca30a51f0739",
     "web/src/user/activities/lake-notes/rules/cast.ts": "ad89b74e7af77fa3d0573dc3ae40a2d3b3f9f7fb3a70f9e65d60f9493ed32e8c",

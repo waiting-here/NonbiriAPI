@@ -48,6 +48,10 @@ const toolLabels: Record<string, string> = {
   propose_operations: 'common.agent.tools.propose_operations',
   edit_memory: 'common.agent.tools.edit_memory',
   management_history: 'common.agent.tools.management_history',
+  management_catalog: 'common.agent.tools.management_catalog',
+  management_read: 'common.agent.tools.management_read',
+  refresh_models: 'common.agent.tools.refresh_models',
+  propose_management_operation: 'common.agent.tools.propose_management_operation',
 };
 function useAdminRequestGuard() {
   const client = useQueryClient();

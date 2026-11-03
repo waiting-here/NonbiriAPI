@@ -11,6 +11,43 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
+// A discovery tool may finish asynchronously between model turns. Advance the
+// pinned snapshot only BEFORE another model request, with the entire new facts
+// included in that request. The final review still checks the exact signature;
+// never silently bless new catalog facts after receiving the model's decision.
+func (s *Service) refreshReviewIntelligence(ctx context.Context, job Job, actor Actor) (json.RawMessage, error) {
+	facts, signature, err := s.config.Operations.Intelligence(ctx, job.DonationID)
+	if err != nil {
+		return nil, err
+	}
+	if signature == "" || !json.Valid(facts) {
+		return nil, ErrInvalid
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err = s.authorize(ctx, tx, actor, "ai.auto"); err != nil {
+		return nil, err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE ai_agent_jobs SET intelligence=?,revision_signature=?,updated_at=? WHERE id=? AND kind='auto_review' AND actor_id=? AND state='running' AND revision_signature<>?`, string(facts), signature, s.now().UnixMilli(), job.ID, actor.ID, signature)
+	if err != nil {
+		return nil, err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, nil
+	}
+	return facts, nil
+}
+
 // PendingSubmission is called only by a successful donor submission, inside
 // its transaction and after deterministic auto-approval. Enabling the feature
 // never scans historical pending donations, and there is no manual enqueue API.

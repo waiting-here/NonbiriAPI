@@ -53,7 +53,7 @@ const (
 // timezoneFreezeTables are the tables whose first row freezes the offset.
 // They may not exist yet when this guard runs (their schema lands with their
 // own features), so existence is checked per table inside the transaction.
-var timezoneFreezeTables = []string{"checkins", "game_checkins", "user_activity_daily", "site_activity_daily", "economy_audit_buckets"}
+var timezoneFreezeTables = []string{"checkins", "game_checkins", "user_activity_daily", "site_activity_daily", "economy_audit_buckets", "attendance_periods"}
 
 // ResolveSiteTimezoneTx reads the same authoritative offset as day-key writers.
 func ResolveSiteTimezoneTx(ctx context.Context, tx *sql.Tx) (int, error) {

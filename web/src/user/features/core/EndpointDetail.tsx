@@ -186,14 +186,10 @@ function AddEndpointKeyForm({
           confirmed = true;
         }
       }
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: coreKeys.endpointKeysRoot(accountId, endpoint.id),
-        }),
-        queryClient.invalidateQueries({ queryKey: coreKeys.endpoint(accountId, endpoint.id) }),
-        queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
-        invalidateResourceDependents(queryClient, accountId, { endpointId: endpoint.id }),
-      ]);
+      await invalidateResourceDependents(queryClient, accountId, {
+        endpointId: endpoint.id,
+        queryKeys: [coreKeys.endpoint(accountId, endpoint.id)],
+      });
       context.assertCurrent();
       if (!error || confirmed) context.commit(onClose);
       if (confirmed) return { operationConfirmed: true };
@@ -776,15 +772,10 @@ export function PairManualCatalog({
           ),
         );
       }
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: coreKeys.catalogRoot(accountId, endpointId, keyId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: coreKeys.endpointRoutingRoot(accountId, endpointId),
-        }),
-        invalidateResourceDependents(queryClient, accountId, { endpointId }),
-      ]);
+      await invalidateResourceDependents(queryClient, accountId, {
+        endpointId,
+        queryKeys: [coreKeys.catalogRoot(accountId, endpointId, keyId)],
+      });
       context.assertCurrent();
       const failed = queryClient
         .getQueryCache()
@@ -816,12 +807,10 @@ export function PairManualCatalog({
         : null;
   const hasAttempt = busy || operation.outcome === 'unknown';
   const refresh = async (): Promise<boolean> => {
-    await Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: coreKeys.catalogRoot(accountId, endpointId, keyId),
-      }),
-      invalidateResourceDependents(queryClient, accountId, { endpointId }),
-    ]);
+    await invalidateResourceDependents(queryClient, accountId, {
+      endpointId,
+      queryKeys: [coreKeys.catalogRoot(accountId, endpointId, keyId)],
+    });
     return !queryClient
       .getQueryCache()
       .findAll({ queryKey: coreKeys.catalogRoot(accountId, endpointId, keyId) })
@@ -1082,20 +1071,14 @@ function EndpointKeyCard({
           }
         }
       }
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: coreKeys.endpointKeysRoot(accountId, endpoint.id),
-        }),
-        queryClient.invalidateQueries({ queryKey: coreKeys.endpoint(accountId, endpoint.id) }),
-        queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
-        queryClient.invalidateQueries({
-          queryKey: coreKeys.catalogRoot(accountId, endpoint.id, keyData.id),
-        }),
-        invalidateResourceDependents(queryClient, accountId, {
-          endpointId: endpoint.id,
-          ...(intent.kind === 'delete' ? { modelIds: 'all' as const, charity: true } : {}),
-        }),
-      ]);
+      await invalidateResourceDependents(queryClient, accountId, {
+        endpointId: endpoint.id,
+        queryKeys: [
+          coreKeys.endpoint(accountId, endpoint.id),
+          coreKeys.catalogRoot(accountId, endpoint.id, keyData.id),
+        ],
+        ...(intent.kind === 'delete' ? { modelIds: 'all' as const, charity: true } : {}),
+      });
       context.assertCurrent();
       const failed = queryClient
         .getQueryCache()
@@ -1616,23 +1599,27 @@ export function EndpointDetail({
           else throw caught;
         }
       }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
-        invalidateResourceDependents(queryClient, accountId, {
-          endpointId,
-          ...(intent.kind === 'delete' ? { modelIds: 'all' as const, charity: true } : {}),
-        }),
-      ]);
+      const deleted = intent.kind === 'delete' && (!error || confirmed);
+      await invalidateResourceDependents(queryClient, accountId, {
+        endpointId,
+        queryKeys: deleted ? [] : [coreKeys.endpoint(accountId, endpointId)],
+        ...(intent.kind === 'delete' ? { modelIds: 'all' as const, charity: true } : {}),
+      });
       context.assertCurrent();
-      if (intent.kind === 'delete' && (!error || confirmed)) {
+      if (deleted) {
         context.commit(() => {
           queryClient.removeQueries({ queryKey: coreKeys.endpoint(accountId, endpointId) });
           navigate(returnTo);
         });
       } else {
-        const [current, currentKeys] = await Promise.all([endpoint.refetch(), keys.refetch()]);
-        context.assertCurrent();
-        if (current.error || currentKeys.error) throw current.error ?? currentKeys.error;
+        const currentError = queryClient.getQueryState(
+          coreKeys.endpoint(accountId, endpointId),
+        )?.error;
+        const keyError = queryClient
+          .getQueryCache()
+          .findAll({ queryKey: coreKeys.endpointKeysRoot(accountId, endpointId), type: 'active' })
+          .find((query) => query.state.status === 'error')?.state.error;
+        if (currentError || keyError) throw currentError ?? keyError;
         if (!error || confirmed) context.commit(() => setEntryScopeOpen(false));
       }
       if (confirmed) return { operationConfirmed: true };

@@ -200,30 +200,42 @@ describe('resource browse summary normalizers', () => {
       },
     });
     expect(result.browse?.preview.map((item) => item.model_id)).toEqual(['41', '42']);
-    expect(() => normalizeEndpointKey({ ...OLD_KEY, browse: { ...keyBrowse([]) } })).toThrow(
-      /browse preview/i,
-    );
   });
 
-  it('enforces counts, parent IDs, duplicate previews, and limits', () => {
+  it('rejects malformed browse structure, count values, states, and oversized previews', () => {
     expect(() =>
       normalizeEndpoint({
         ...OLD_ENDPOINT,
-        browse: { ...endpointBrowse(), available_key_count: '3' },
+        browse: { ...endpointBrowse(), available_key_count: '9223372036854775808' },
       }),
     ).toThrow(/available key count/i);
     expect(() =>
       normalizeEndpoint({
         ...OLD_ENDPOINT,
-        browse: { ...endpointBrowse(), state: 'no_keys' },
+        browse: { ...endpointBrowse(), state: 'other' },
       }),
     ).toThrow(/endpoint browse state/i);
     expect(() =>
       normalizeEndpointKey({
         ...OLD_KEY,
-        browse: { ...keyBrowse(), model_count: '2' },
+        browse: { ...keyBrowse(), model_count: '1.5' },
       }),
-    ).toThrow(/endpoint key browse counts/i);
+    ).toThrow(/endpoint key browse model count/i);
+    expect(() =>
+      normalizeEndpointKey({ ...OLD_KEY, browse: { ...keyBrowse(), preview: null } }),
+    ).toThrow(/binding preview/i);
+    expect(() =>
+      normalizeModel({ ...OLD_MODEL, browse: { available_binding_count: '1' } }),
+    ).toThrow(/model browse summary/i);
+    expect(() =>
+      normalizeEndpointKey({
+        ...OLD_KEY,
+        browse: keyBrowse(Array.from({ length: 4 }, (_, i) => binding(i))),
+      }),
+    ).toThrow(/binding preview/i);
+  });
+
+  it('rejects wrong preview parents and duplicate connections while preserving scalar limits', () => {
     expect(() =>
       normalizeEndpointKey({
         ...OLD_KEY,
@@ -233,11 +245,17 @@ describe('resource browse summary normalizers', () => {
           preview: [BASE_BINDING, { ...BASE_BINDING, id: '52' }],
         },
       }),
-    ).toThrow(/endpoint key browse parent|preview/i);
+    ).toThrow(/binding preview pairs/i);
     expect(() =>
       normalizeEndpointKey({
         ...OLD_KEY,
         browse: { ...keyBrowse(), preview: [{ ...BASE_BINDING, endpoint_key_id: '99' }] },
+      }),
+    ).toThrow(/endpoint key browse parent/i);
+    expect(() =>
+      normalizeEndpointKey({
+        ...OLD_KEY,
+        browse: { ...keyBrowse(), preview: [{ ...BASE_BINDING, endpoint_id: '99' }] },
       }),
     ).toThrow(/endpoint key browse parent/i);
     expect(() =>
@@ -247,12 +265,6 @@ describe('resource browse summary normalizers', () => {
         browse: modelBrowse([]),
       }),
     ).toThrow(/model binding count/i);
-    expect(() =>
-      normalizeModel({
-        ...OLD_MODEL,
-        browse: { ...modelBrowse(), available_binding_count: '2' },
-      }),
-    ).toThrow(/model browse available binding count/i);
     expect(() =>
       normalizeModel({
         ...OLD_MODEL,

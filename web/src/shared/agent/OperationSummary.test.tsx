@@ -3,6 +3,35 @@ import { expect, it } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { OperationSummary } from './OperationSummary';
 
+it('shows the exact management request before approval', async () => {
+  await renderWithProviders(
+    <OperationSummary
+      operation={{
+        kind: 'management.api',
+        target_id: '',
+        input: {
+          route: 'PATCH /admin/api/site-config/{key}',
+          path_params: { key: 'site_name' },
+          body: { value: 'New site name' },
+        },
+      }}
+      preview={{
+        title: 'Update site name',
+        description: '',
+        dangerous: true,
+        requires_elevation: false,
+      }}
+    />,
+    { station: 'admin', role: 'admin' },
+  );
+  expect(screen.getByText('Update site name')).toBeVisible();
+  expect(screen.getByText(/Each request runs independently/)).toBeVisible();
+  const request = screen.getByText(/PATCH \/admin\/api\/site-config/);
+  expect(request).toBeVisible();
+  expect(request).toHaveTextContent('site_name');
+  expect(request).toHaveTextContent('New site name');
+});
+
 it('shows the fixed cleanup count and filters before approving a management cleanup', async () => {
   await renderWithProviders(
     <OperationSummary

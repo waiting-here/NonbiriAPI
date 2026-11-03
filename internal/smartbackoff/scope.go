@@ -121,11 +121,11 @@ func ObserveRetryAfter(ctx context.Context, tx *sql.Tx, claimID string, until, n
 	}
 	if f.scope.healthID > 0 {
 		_, err = tx.ExecContext(ctx, `UPDATE donation_service_health SET retry_after_until=max(COALESCE(retry_after_until,0),?),updated_at=max(updated_at,?)
-WHERE id=? AND EXISTS(SELECT 1 FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id WHERE u.id=donation_service_health.use_id AND dk.id=? AND dk.ended_at IS NULL)`, until, now, f.scope.healthID, f.key.Int64)
+WHERE id=? AND backoff_generation=? AND EXISTS(SELECT 1 FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id WHERE u.id=donation_service_health.use_id AND dk.id=? AND dk.ended_at IS NULL)`, until, now, f.scope.healthID, f.generation, f.key.Int64)
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO donation_key_cooldowns(donation_key_id,rate_limited_until,updated_at)
-SELECT id,?,? FROM donation_keys WHERE id=? AND ended_at IS NULL
-ON CONFLICT(donation_key_id) DO UPDATE SET rate_limited_until=max(donation_key_cooldowns.rate_limited_until,excluded.rate_limited_until),updated_at=max(donation_key_cooldowns.updated_at,excluded.updated_at)`, until, now, f.key.Int64)
+SELECT k.id,?,? FROM donation_keys k JOIN donation_key_backoffs b ON b.donation_key_id=k.id WHERE k.id=? AND k.ended_at IS NULL AND b.generation=?
+ON CONFLICT(donation_key_id) DO UPDATE SET rate_limited_until=max(donation_key_cooldowns.rate_limited_until,excluded.rate_limited_until),updated_at=max(donation_key_cooldowns.updated_at,excluded.updated_at)`, until, now, f.key.Int64, f.generation)
 	return err
 }

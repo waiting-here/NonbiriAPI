@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { NATIVE_SERVICE_LABEL_KEYS } from '@shared/nativeServices';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { formatCount } from '@shared/utils/formatNumber';
 import {
   FAILURE_RESET_REASON_KEYS,
@@ -9,6 +9,7 @@ import {
 
 export function FailureResetDetails({ services }: { services: ServiceFailureReset[] }) {
   const { t } = useTranslation();
+  const formatDateTime = useDateTimeFormatter();
   if (!services.length) return null;
   return (
     <ul className="nb-small">

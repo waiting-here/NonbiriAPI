@@ -4,6 +4,71 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.3.6 — 2026-11-03
+
+### Added
+
+- Administrator-wide AI management tools reuse the live management API and
+  steward grants. Read operations and model-list refresh run directly; other
+  tools are absent from automatic review and require the interlocutor's approval
+  in chat. Approved API operations retain audit provenance and are never replayed
+  automatically after an uncertain result. `/compact` remains a dedicated,
+  tool-free summary request rather than an ordinary chat message.
+- Independent attendance periods on the user activity page, with cumulative or
+  consecutive counting, sparse milestone bundles and automatic rewards in the
+  sign-in transaction. Multiple periods may run together; each milestone is
+  awarded once per account even after a broken streak. Administrators configure
+  future site-calendar dates, titles, Markdown descriptions and existing reward
+  assets. Started periods preserve their dates, rules and rewards.
+- A separate manual rate-limit release beside failure recovery for donors,
+  administrators and authorized stewards. It clears upstream waits and fences
+  late observations while preserving failures, manual pauses and configured limits.
+
+### Fixed and improved
+
+- Recovery receipts use the same station time context as service health.
+  Administrator and steward views follow site time even in an EST browser.
+- Charity tabs hide the model catalog when viewing or creating donations, retain
+  drafts and keep the charity leaderboard visible.
+- Reuse one authoritative seat snapshot while advancing elapsed Blackjack
+  decision batches. Idle idempotency cleanup checks the read pool before taking
+  a writer, while work found by the probe is rechecked in its transaction.
+- Parse complete SSE lines directly from the reader buffer instead of allocating
+  a large temporary buffer for each line. Fragmented lines retain bounded owned
+  storage and existing event, cancellation and protocol checks.
+- Encode Lake Notes profiles directly with their stored clock representation,
+  avoiding whole-profile JSON round trips during checkpoints. Existing clock
+  bits, amounts, saved profiles and active casts remain compatible.
+- Probe orphan credential cleanup through the read pool before acquiring the
+  writer; actual cleanup still rechecks references and expiry in its transaction.
+- Refresh overlapping resource queries once after confirmed operations and
+  batch service-creation refreshes, including partial failure recovery. Browse
+  summaries retain structural and resource-identity checks without re-proving
+  the server's count, state and preview-length relationships in the browser.
+
+### Development
+
+- Reuse closed historical database fixture images while keeping each upgrade
+  test's mutable copy independent. Preserve the released-program upgrade gate.
+- Include attendance, browser associations, discovery logs and shared-credential
+  deletion in browser CI. Attendance uses an isolated site-calendar fixture.
+- Refresh upgrade-test timing weights to separate long cancellation matrices
+  across shards while retaining their existing deadlines.
+- Avoid repeated vet in CI race shards after the ordinary Go gate covers the
+  same packages. Run serial pagination, stake and historical data-preservation
+  matrices in the ordinary suite; concurrent authorization, accounting,
+  cancellation, upgrade progress and recovery tests remain in the race suite.
+
+### Compatibility
+
+- Advance storage to schema 49 and account export to format 34. The explicit
+  offline upgrader accepts registered schemas 16–26 and 33–48, including the
+  deployed v1.3.5 layout. Attendance history starts empty. Existing balances,
+  configuration, activity history and receipts are preserved.
+- Attendance dates, progress and award receipts are exported for their owner
+  and removed with the account. Shared period definitions remain; no new
+  retention worker or production deployment is implied by these source changes.
+
 ## 1.3.5 — 2026-11-03
 
 ### Added

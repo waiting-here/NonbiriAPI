@@ -110,12 +110,17 @@ type RuntimeConfig struct {
 
 // ActorFromContext returns the request-bound, non-secret authorization actor.
 // It contains only irreversible session lookup material and the live session
-// generation observed at the entry boundary.
+// generation observed at the entry boundary. The internal read/discovery
+// dispatcher can also carry the explicitly marked persisted review owner;
+// authz revalidates that service authority in every domain transaction.
 func ActorFromContext(ctx context.Context) (authz.Actor, bool) {
 	if ctx == nil {
 		return authz.Actor{}, false
 	}
 	actor, ok := ctx.Value(actorContextKey{}).(authz.Actor)
+	if ok && actor.Kind == authz.ActorAdminSession && actor.UserID > 0 && actor.SessionTokenHash == "" && authz.AutomaticReviewOwner(ctx) == actor.UserID {
+		return actor, true
+	}
 	return actor, ok && actor.UserID > 0 && actor.SessionTokenHash != "" && actor.SessionGeneration != ""
 }
 

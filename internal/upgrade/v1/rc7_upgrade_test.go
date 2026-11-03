@@ -47,6 +47,20 @@ func sourceFixture(t *testing.T) (string, *secret.Vault) {
 }
 func sourceFixtureFromDDL(t *testing.T, sourceDDL string, version int, manifest string) (string, *secret.Vault) {
 	t.Helper()
+	identity := sourceFixtureIdentity{DDL: sourceDDL, Version: version, Manifest: manifest}
+	image := historicalSourceImages.load(identity, func() []byte {
+		path, _ := buildSourceFixtureFromDDL(t, sourceDDL, version, manifest)
+		image, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return image
+	})
+	return copyHistoricalSourceImage(t, image), testVault(t, 0x71)
+}
+
+func buildSourceFixtureFromDDL(t *testing.T, sourceDDL string, version int, manifest string) (string, *secret.Vault) {
+	t.Helper()
 	vault := testVault(t, 0x71)
 	directory := t.TempDir()
 	seed := filepath.Join(directory, "seed.sqlite")

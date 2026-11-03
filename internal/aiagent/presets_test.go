@@ -287,3 +287,38 @@ func TestSiteReadDescriptionsUseCompleteFilteredResults(t *testing.T) {
 		}
 	}
 }
+
+func TestManagementSettingsUpgradePreservesCustomPromptsAndSwitches(t *testing.T) {
+	old := defaultSettings()
+	old.ChatTemplate = append([]TemplateMessage(nil), builtInPresets.v135Chat...)
+	old.AutoTemplate = append([]TemplateMessage(nil), builtInPresets.v135Auto...)
+	refreshDefaultTemplate(&old)
+	if !reflect.DeepEqual(old.ChatTemplate, builtInPresets.chat) || !reflect.DeepEqual(old.AutoTemplate, builtInPresets.auto) {
+		t.Fatal("unchanged built-ins not refreshed")
+	}
+	custom := defaultSettings()
+	custom.ChatTemplate[0].Content += "\nCustom operator instruction."
+	want := custom.ChatTemplate[0].Content
+	refreshDefaultTemplate(&custom)
+	if custom.ChatTemplate[0].Content != want {
+		t.Fatal("custom prompt replaced")
+	}
+	f := newFixture(t)
+	settings, err := f.s.Settings(t.Context(), f.actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.Tools["refresh_models"] = false
+	saved, err := f.s.PutSettings(t.Context(), f.actor, SettingsUpdate{Settings: settings, ExpectedRevision: settings.Revision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	delete(saved.Tools, "refresh_models")
+	delete(saved.Tools, "management_catalog")
+	delete(saved.Tools, "management_read")
+	delete(saved.Tools, "propose_management_operation")
+	updated, err := f.s.PutSettings(t.Context(), f.actor, SettingsUpdate{Settings: saved, ExpectedRevision: saved.Revision})
+	if err != nil || updated.Tools["refresh_models"] || !updated.Tools["management_catalog"] {
+		t.Fatal("old client reset new tool settings", updated, err)
+	}
+}

@@ -314,6 +314,64 @@ for (const scenario of [
     await presetPlan.getByRole('button', { name: copy.approvePlan }).click();
     await expect.poll(() => decisions.length).toBe(3);
     expect(decisions[2]).toEqual({ approve: true, feedback: '' });
+
+    plan.state = 'pending';
+    plan.result = undefined;
+    const managementInput = {
+      route:
+        station === 'admin'
+          ? 'PATCH /admin/api/site-config/{key}'
+          : 'PATCH /api/steward/charity-models/{id}',
+      path_params: station === 'admin' ? { key: 'site_name' } : { id: '42' },
+      body: { value: longModel, expected_revision: '3' },
+    };
+    plan.operations = [{ kind: 'management.api', target_id: '', input: managementInput }];
+    plan.preview = [
+      { title: 'Management request', description: '', dangerous: true, requires_elevation: false },
+    ];
+    messages[3]!.tool_calls = [
+      {
+        id: 'write-1',
+        type: 'function',
+        function: {
+          name: 'propose_management_operation',
+          arguments: JSON.stringify(managementInput),
+        },
+      },
+    ];
+    data.messages = messages;
+    data.job = job;
+    await page.reload();
+    const managementPlan = page.getByRole('region', { name: copy.plan });
+    await expect(managementPlan.locator('pre').first()).toContainText(managementInput.route);
+    await expect(managementPlan.locator('pre').first()).toContainText(longModel);
+    for (const width of [1440, 390]) {
+      for (const theme of ['light', 'dark']) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.evaluate((value) => {
+          document.documentElement.dataset.theme = value;
+        }, theme);
+        await managementPlan.scrollIntoViewIfNeeded();
+        await fits(width);
+        await evidence(`management-${width}-${theme}`);
+      }
+    }
+    await managementPlan.getByRole('button', { name: copy.approvePlan }).click();
+    await expect(page.getByRole('alertdialog')).toBeVisible();
+    expect(decisions).toHaveLength(3);
+    await page.getByRole('alertdialog').getByRole('button', { name: copy.approvePlan }).click();
+    await expect.poll(() => decisions.length).toBe(4);
+    expect(decisions[3]).toEqual({ approve: true, feedback: '' });
+    plan.state = 'failed';
+    plan.result = { status: 'unknown', retry_automatically: false };
+    await page.reload();
+    const unknownPlan = page
+      .locator('details')
+      .filter({ has: page.locator('summary').filter({ hasText: copy.plan }) })
+      .last();
+    await unknownPlan.locator(':scope > summary').click();
+    await expect(unknownPlan.getByText(copy.managementOutcomeUnknown)).toBeVisible();
+    await expect(page.getByRole('button', { name: copy.approvePlan })).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 }
