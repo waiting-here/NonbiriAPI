@@ -144,70 +144,79 @@ function CharityContent() {
       />
       <Tabs
         label={t('user.charity.sections')}
+        panelId="charity-section-panel"
         value={tab}
         onChange={selectTab}
         tabs={[
-          { value: 'models', label: t('user.charity.tabs.models') },
-          { value: 'donations', label: t('user.charity.tabs.donations') },
-          { value: 'donate', label: t('user.charity.tabs.donate') },
+          { value: 'models', id: 'charity-tab-models', label: t('user.charity.tabs.models') },
+          {
+            value: 'donations',
+            id: 'charity-tab-donations',
+            label: t('user.charity.tabs.donations'),
+          },
+          { value: 'donate', id: 'charity-tab-donate', label: t('user.charity.tabs.donate') },
         ]}
-      >
-        <section
-          hidden={tab !== 'models'}
-          className="charity-catalog-workspace economy-model-workspace"
-          aria-label={t('user.charity.catalog.modelsList')}
+      />
+      <div className="charity-catalog-workspace economy-model-workspace">
+        <div
+          id="charity-section-panel"
+          role="tabpanel"
+          aria-labelledby={`charity-tab-${tab}`}
+          tabIndex={0}
         >
-          <CharityCatalogPanel
-            key={accountID ?? 'no-account'}
-            accountID={accountID}
-            enabled={tab === 'models'}
-          />
-          <aside className="economy-charity-sidebar">
-            <Leaderboard board="charity" enabled={tab === 'models'} foldHelp />
-            <CharitySafetyNotice />
-          </aside>
-        </section>
-        <section hidden={tab !== 'donations'} aria-label={t('user.charity.donationsTitle')}>
-          {session.data ? (
-            <div className="nb-stats charity-donation-stats">
-              <div className="nb-stat">
-                <div className="nb-stat__label">
-                  {t('user.charity.presentation.donationCredit')}
-                </div>
-                <div className="nb-stat__value">
-                  <CreditAmount value={session.data.user.donation_credit} />
+          <section hidden={tab !== 'models'} aria-label={t('user.charity.catalog.modelsList')}>
+            <CharityCatalogPanel
+              key={accountID ?? 'no-account'}
+              accountID={accountID}
+              enabled={tab === 'models'}
+            />
+          </section>
+          <section hidden={tab !== 'donations'} aria-label={t('user.charity.donationsTitle')}>
+            {session.data ? (
+              <div className="nb-stats charity-donation-stats">
+                <div className="nb-stat">
+                  <div className="nb-stat__label">
+                    {t('user.charity.presentation.donationCredit')}
+                  </div>
+                  <div className="nb-stat__value">
+                    <CreditAmount value={session.data.user.donation_credit} />
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : null}
-          {accountID ? (
-            <OwnerDonationsPanel accountID={accountID} enabled={tab === 'donations'} />
-          ) : (
-            <LoadingState />
-          )}
-        </section>
-        <section
-          hidden={tab !== 'donate'}
-          id="submit-donation"
-          aria-label={t('user.charity.submitDonation')}
-        >
-          {capability.error ? (
-            <ErrorState error={capability.error} onRetry={() => void capability.refetch()} />
-          ) : intake && intake !== 'open' ? (
-            <DonationIntakePanel state={intake} />
-          ) : !intake ? (
-            <LoadingState />
-          ) : null}
-          {intake === 'open' && accountID ? (
-            <DonationComposer
-              key={accountID}
-              draftNamespace={accountID}
-              notice={configuredDonationNotice}
-              enabled={tab === 'donate' && !capability.error && !capability.isFetching}
-            />
-          ) : null}
-        </section>
-      </Tabs>
+            ) : null}
+            {accountID ? (
+              <OwnerDonationsPanel accountID={accountID} enabled={tab === 'donations'} />
+            ) : (
+              <LoadingState />
+            )}
+          </section>
+          <section
+            hidden={tab !== 'donate'}
+            id="submit-donation"
+            aria-label={t('user.charity.submitDonation')}
+          >
+            {capability.error ? (
+              <ErrorState error={capability.error} onRetry={() => void capability.refetch()} />
+            ) : intake && intake !== 'open' ? (
+              <DonationIntakePanel state={intake} />
+            ) : !intake ? (
+              <LoadingState />
+            ) : null}
+            {intake === 'open' && accountID ? (
+              <DonationComposer
+                key={accountID}
+                draftNamespace={accountID}
+                notice={configuredDonationNotice}
+                enabled={tab === 'donate' && !capability.error && !capability.isFetching}
+              />
+            ) : null}
+          </section>
+        </div>
+        <aside className="economy-charity-sidebar">
+          <Leaderboard board="charity" foldHelp />
+          <CharitySafetyNotice />
+        </aside>
+      </div>
     </div>
   );
 }

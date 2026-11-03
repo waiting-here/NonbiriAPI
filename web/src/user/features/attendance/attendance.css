@@ -1,0 +1,108 @@
+.attendance-section {
+  display: grid;
+  gap: var(--nb-space-4);
+  min-width: 0;
+}
+.attendance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr));
+  gap: var(--nb-space-5);
+  align-items: start;
+}
+.attendance-card {
+  min-width: 0;
+}
+.attendance-card__content {
+  display: grid;
+  gap: var(--nb-space-4);
+}
+.attendance-card__content > p {
+  margin: 0;
+}
+.attendance-card__dates,
+.attendance-card__today {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.attendance-progress {
+  display: grid;
+  gap: var(--nb-space-2);
+  padding-block: var(--nb-space-3);
+  border-block: 1px solid var(--nb-color-border);
+}
+.attendance-progress > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--nb-space-3);
+  align-items: baseline;
+}
+.attendance-progress strong {
+  font-size: var(--nb-font-size-2xl);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.attendance-progress__label,
+.attendance-progress > p {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.attendance-progress > p {
+  margin: 0;
+}
+.attendance-tiers {
+  list-style: none;
+  display: grid;
+  gap: var(--nb-space-3);
+  padding: 0;
+  margin: 0;
+}
+.attendance-tier {
+  display: grid;
+  gap: var(--nb-space-3);
+  padding: var(--nb-space-4);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-alt);
+  border-inline-start: var(--nb-space-1) solid var(--nb-color-border);
+  min-width: 0;
+}
+.attendance-tier.is-awarded {
+  border-inline-start-color: var(--nb-color-success);
+}
+.attendance-tier__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--nb-space-2);
+}
+
+.attendance-card__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8rem;
+  gap: var(--nb-space-4);
+  align-items: center;
+  padding: var(--nb-space-4);
+  border-bottom: 1px solid var(--nb-color-border);
+}
+.attendance-card__header > .nb-panel__head {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+.attendance-card__header h3 {
+  overflow-wrap: anywhere;
+}
+.attendance-card__art {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  object-position: center 40%;
+  border-radius: var(--nb-radius-md);
+}
+@media (width < 40rem) {
+  .attendance-card__header {
+    grid-template-columns: minmax(0, 1fr) 7rem;
+  }
+}

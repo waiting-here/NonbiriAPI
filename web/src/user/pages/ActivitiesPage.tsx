@@ -15,6 +15,7 @@ import { useActivities, useActivityAccountEvents } from '../features/economy/que
 import { LoanCard } from '../features/economy/LoanCard';
 import { GachaEntry, GachaPoolEntries } from '../activities/gacha/GachaEntry';
 import { useGachaEntry } from '../activities/gacha/entry';
+import { AttendanceSection } from '../features/attendance/AttendanceSection';
 import { LimitedActivitiesSection } from '../features/limitedactivities/LimitedActivities';
 import '../features/economy/economy.css';
 import '../features/economy/activities.css';
@@ -78,6 +79,7 @@ function ActivitiesContent() {
           <GachaPoolEntries pools={gacha.data.pools} />
         ) : null}
       </LimitedActivitiesSection>
+      {accountID && <AttendanceSection key={accountID} account={accountID} />}
       <h2>{t('common.activities.permanent')}</h2>
       {activities.isPending && !activities.data ? <LoadingState /> : null}
       {activities.error && !activities.data ? (

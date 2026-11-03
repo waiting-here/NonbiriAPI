@@ -4,6 +4,8 @@ import { ApiError } from '@shared/query/http';
 import { renderWithProviders } from '../../../../test/unit/support';
 import userEn from '../../i18n/en.json';
 import { ActivitiesPage } from '../../pages/ActivitiesPage';
+
+vi.mock('../attendance/AttendanceSection', () => ({ AttendanceSection: () => null }));
 import { ThursdayCard, WelfareCard } from './ActivitiesPanels';
 import * as economyQueries from './queries';
 import type {

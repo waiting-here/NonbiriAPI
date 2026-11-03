@@ -354,6 +354,61 @@ for (const locale of ['zh', 'en'] as const) {
   });
 }
 
+for (const width of [390, 1440]) {
+  test(
+    'charity tabs retain the catalog and keep the board visible at ' + width + 'px',
+    async ({ context, page }) => {
+      const fixture = createCatalogFixture();
+      const setup = await installCatalogFixture(
+        context,
+        page,
+        fixture,
+        'en',
+        width === 390 ? 'dark' : 'light',
+        width,
+        'charity-tabs-ephemeral',
+      );
+      await page.route('**/api/donations?**', async (route) => {
+        const url = new URL(route.request().url());
+        await route.fulfill({
+          json: {
+            data: [],
+            next_cursor: null,
+            pagination: {
+              page: '1',
+              page_size: Number(url.searchParams.get('page_size') ?? 20),
+              total_items: '0',
+              total_pages: '1',
+            },
+          },
+        });
+      });
+      await page.route('**/api/charity/models', async (route) => {
+        await route.fulfill({ json: { ...catalogCapability(fixture), donation_intake: 'closed' } });
+      });
+      await page.goto(USER_ORIGIN + '/charity');
+      const catalog = page.locator('.economy-catalog-card');
+      const board = page.locator('.progression-ranking');
+      const search = page.getByRole('searchbox', {
+        name: 'Search model name or public description',
+      });
+      await expect(catalog).toBeVisible();
+      await search.fill('Retained search draft');
+      for (const tab of ['My donations', 'Donate my keys']) {
+        await page.getByRole('tab', { name: tab, exact: true }).click();
+        await expect(catalog).toBeHidden();
+        await expect(board).toBeVisible();
+        await assertNoHorizontalOverflow(page);
+      }
+      await page.getByRole('tab', { name: 'Shared models', exact: true }).click();
+      await expect(catalog).toBeVisible();
+      await expect(search).toHaveValue('Retained search draft');
+      await expect(board).toBeVisible();
+      setup.consoleGuard.assertNone();
+    },
+  );
+}
+
 test('catalog filters use a counted complete sample and restore URL-backed state', async ({
   context,
   page,

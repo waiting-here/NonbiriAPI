@@ -1,3 +1,4 @@
+import { AttendanceManagement } from '../features/attendance/AttendanceManagement';
 import { isActivityLiterature } from '@shared/utils/activityLiterature';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
@@ -511,6 +512,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
       <Link className="nb-btn nb-btn--secondary" to="/activities/gacha">
         {t('admin.activities.gacha', { defaultValue: '真·抽卡模拟器' })}
       </Link>
+      <AttendanceManagement key={account} account={account} enabled={scopeReady} />
       {sessionError ? (
         <ErrorState error={sessionError} />
       ) : config.error ? (
