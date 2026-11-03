@@ -3,7 +3,7 @@ package rules
 import _ "embed"
 
 // RulesID binds the original catalog, both algorithms, and numerical protocol.
-const RulesID = "lake-notes-69248b547d87b06e1d6279bfbfb27937c0015d514cbdd6040d11ad796977dba3"
+const RulesID = "lake-notes-33f47677b8f2d324619d6fa55bcfee0704a7fe5734c90870e0e33911894fd3bd"
 
 //go:embed identity_payload.json
 var identityJSON []byte

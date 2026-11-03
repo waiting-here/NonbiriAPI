@@ -1,8 +1,9 @@
 package rules
 
 import (
-	"encoding/json"
+	"maps"
 	"math"
+	"slices"
 	"sort"
 )
 
@@ -77,13 +78,22 @@ func InitialProfile() Profile {
 	return p
 }
 func CloneProfile(p Profile) Profile {
-	b, e := json.Marshal(p)
-	if e != nil {
-		panic(e)
+	q := p
+	q.OwnedGear = slices.Clone(p.OwnedGear)
+	q.Basket = slices.Clone(p.Basket)
+	q.Contracts = slices.Clone(p.Contracts)
+	q.BaitStock = maps.Clone(p.BaitStock)
+	q.Records = maps.Clone(p.Records)
+	q.DebrisStock = maps.Clone(p.DebrisStock)
+	q.CollectionClaims = nil
+	if len(p.CollectionClaims) != 0 {
+		q.CollectionClaims = maps.Clone(p.CollectionClaims)
 	}
-	var q Profile
-	if e = json.Unmarshal(b, &q); e != nil {
-		panic(e)
+	for i, loadout := range p.SavedLoadouts {
+		if loadout != nil {
+			copy := *loadout
+			q.SavedLoadouts[i] = &copy
+		}
 	}
 	return q
 }

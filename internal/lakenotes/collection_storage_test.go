@@ -9,6 +9,15 @@ import (
 )
 
 func TestCollectionProtocolPreservesPriorActiveCast(t *testing.T) {
+	testCompatibleActiveCast(t, collectionPriorRulesID)
+}
+
+func TestProfileCloningPreservesPriorActiveCast(t *testing.T) {
+	testCompatibleActiveCast(t, cloningPriorRulesID)
+}
+
+func testCompatibleActiveCast(t *testing.T, savedRulesID string) {
+	t.Helper()
 	f := newFixture(t)
 	f.enable(t)
 	profile := f.profile(t)
@@ -30,15 +39,15 @@ func TestCollectionProtocolPreservesPriorActiveCast(t *testing.T) {
 	if err = json.Unmarshal(raw, &fields); err != nil {
 		t.Fatal(err)
 	}
-	fields["rules_id"], _ = json.Marshal(collectionPriorRulesID)
+	fields["rules_id"], _ = json.Marshal(savedRulesID)
 	raw, err = json.Marshal(fields)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.database.Exec("UPDATE lake_notes_casts SET rules_id=?,snapshot=? WHERE id=?", collectionPriorRulesID, raw, id); err != nil {
+	if _, err = f.database.Exec("UPDATE lake_notes_casts SET rules_id=?,snapshot=? WHERE id=?", savedRulesID, raw, id); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.database.Exec("UPDATE lake_notes_profiles SET rules_id=? WHERE user_id=?", collectionPriorRulesID, f.user); err != nil {
+	if _, err = f.database.Exec("UPDATE lake_notes_profiles SET rules_id=? WHERE user_id=?", savedRulesID, f.user); err != nil {
 		t.Fatal(err)
 	}
 	draws := f.random.draws.Load()
