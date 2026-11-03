@@ -122,20 +122,12 @@ export function EndpointWizard({
         });
         result = await readResourceResult(intent, status, context.signal);
       }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
-        intent.kind === 'key' || intent.kind === 'refresh'
-          ? queryClient.invalidateQueries({
-              queryKey: coreKeys.endpointKeysRoot(accountId, intent.endpointId),
-            })
-          : Promise.resolve(),
-        intent.kind === 'refresh'
-          ? queryClient.invalidateQueries({
-              queryKey: coreKeys.catalogRoot(accountId, intent.endpointId, intent.keyId),
-            })
-          : Promise.resolve(),
-        invalidateResourceDependents(queryClient, accountId),
-      ]);
+      await invalidateResourceDependents(queryClient, accountId, {
+        queryKeys:
+          intent.kind === 'refresh'
+            ? [coreKeys.catalogRoot(accountId, intent.endpointId, intent.keyId)]
+            : [],
+      });
       context.assertCurrent();
       if (result) {
         context.commit(() => apply(result));

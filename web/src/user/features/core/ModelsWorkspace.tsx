@@ -122,10 +122,7 @@ function ModelDetail({
           else throw caught;
         }
       }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
-        invalidateResourceDependents(queryClient, accountId),
-      ]);
+      await invalidateResourceDependents(queryClient, accountId);
       context.assertCurrent();
       if (deleted) {
         context.commit(onDeleted);

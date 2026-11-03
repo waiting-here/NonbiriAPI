@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { QueryObserver, type QueryClient } from '@tanstack/react-query';
 import { act, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@shared/query/http';
 import { Sheet } from '@shared/components/ui/Sheet';
 import { renderWithProviders } from '../../../../../test/unit/support';
@@ -10,8 +11,25 @@ import type { Endpoint, EndpointKey } from '../types';
 import type { Connection, Credential } from './types';
 import common from '@shared/i18n/common/en.json';
 import userEn from '../../../i18n/en.json';
+import { coreKeys } from '../queries';
 
 const mocks = vi.hoisted(() => ({ execute: vi.fn(), status: vi.fn(), read: vi.fn() }));
+const resourceObservers: (() => void)[] = [];
+afterEach(() => {
+  for (const unsubscribe of resourceObservers.splice(0)) unsubscribe();
+});
+
+function observeResourceReads(client: QueryClient) {
+  const queryKey = coreKeys.models('7');
+  client.setQueryData(queryKey, { version: 1 });
+  const read = vi.fn(async () => ({ version: 2 }));
+  resourceObservers.push(
+    new QueryObserver(client, { queryKey, queryFn: read, staleTime: Infinity }).subscribe(
+      () => undefined,
+    ),
+  );
+  return read;
+}
 const options = {
   base_connector_types: ['openai-compatible', 'typesafe-systemone'],
   native_service_options: [
@@ -272,9 +290,16 @@ describe('service setup as one task', () => {
   it('creates a custom service, credential and grant with one main submission', async () => {
     const onManage = vi.fn();
     const view = await fillCustom(undefined, { onManage });
+    const reads = observeResourceReads(view.queryClient);
+    const original = mocks.execute.getMockImplementation()!;
+    mocks.execute.mockImplementation(async (...args) => {
+      expect(reads).not.toHaveBeenCalled();
+      return original(...args);
+    });
     expect(screen.getByLabelText(userEn.user.workflows.serviceName)).toHaveValue('service.example');
     await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
     await screen.findByText(userEn.user.workflows.serviceReady);
+    await waitFor(() => expect(reads).toHaveBeenCalledTimes(1));
     expect(mocks.execute.mock.calls.map(([intent]) => intent.kind)).toEqual([
       'connection',
       'endpoint',
@@ -434,6 +459,41 @@ describe('service setup as one task', () => {
       'key',
     ]);
   });
+  it('refreshes partial setup once after a rejected grant and retains confirmed resources on retry', async () => {
+    const original = mocks.execute.getMockImplementation()!;
+    let fail = true;
+    mocks.execute.mockImplementation(async (...args) => {
+      if (args[0].kind === 'key' && fail) {
+        fail = false;
+        throw new ApiError('invalid_request', 'Synthetic grant failure', 400);
+      }
+      return original(...args);
+    });
+    const view = await fillCustom();
+    const reads = observeResourceReads(view.queryClient);
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
+    const resume = await screen.findByRole('button', {
+      name: userEn.user.workflows.continueService,
+    });
+    await waitFor(() => expect(resume).toBeEnabled());
+    expect(reads).toHaveBeenCalledTimes(1);
+    expect(mocks.execute.mock.calls.map(([intent]) => intent.kind)).toEqual([
+      'connection',
+      'endpoint',
+      'credential',
+      'key',
+    ]);
+    await view.user.click(resume);
+    await screen.findByText(userEn.user.workflows.serviceReady);
+    await waitFor(() => expect(reads).toHaveBeenCalledTimes(2));
+    expect(mocks.execute.mock.calls.map(([intent]) => intent.kind)).toEqual([
+      'connection',
+      'endpoint',
+      'credential',
+      'key',
+      'key',
+    ]);
+  });
   it('retains a dismissed in-flight task and checks its unknown receipt without recreating resources', async () => {
     const original = mocks.execute.getMockImplementation()!;
     let rejectCredential!: (error: Error) => void;
@@ -453,6 +513,7 @@ describe('service setup as one task', () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ kind: 'credential', credential });
     const view = await fillCustom(undefined, { retained: true });
+    const reads = observeResourceReads(view.queryClient);
     await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
     await waitFor(() =>
       expect(mocks.execute.mock.calls.map(([intent]) => intent.kind)).toEqual([
@@ -469,11 +530,13 @@ describe('service setup as one task', () => {
       rejectCredential(new ApiError('network_error', 'Synthetic lost response', 0));
     });
     await waitFor(() => expect(mocks.status).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(reads).toHaveBeenCalledTimes(1));
     await view.user.click(screen.getByRole('button', { name: 'Resume service setup' }));
     const check = await screen.findByRole('button', {
       name: common.common.connections.checkResult,
     });
     await view.user.click(check);
+    await waitFor(() => expect(reads).toHaveBeenCalledTimes(2));
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: userEn.user.workflows.continueService }),
@@ -483,6 +546,7 @@ describe('service setup as one task', () => {
       screen.getByRole('button', { name: userEn.user.workflows.continueService }),
     );
     await screen.findByText(userEn.user.workflows.serviceReady);
+    await waitFor(() => expect(reads).toHaveBeenCalledTimes(3));
     expect(mocks.execute.mock.calls.map(([intent]) => intent.kind)).toEqual([
       'connection',
       'endpoint',
@@ -507,6 +571,7 @@ describe('service setup as one task', () => {
       }),
     );
     const view = await fillCustom();
+    const reads = observeResourceReads(view.queryClient);
     await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAnotherKey }));
     const extraLabel = userEn.user.services.additionalKey.replace('{{number}}', '2');
     await view.user.type(screen.getByLabelText(extraLabel), 'synthetic-session-extra');
@@ -519,6 +584,7 @@ describe('service setup as one task', () => {
       resolve({ kind: 'connection', connection: { id: '1' } });
     });
     expect(mocks.execute).toHaveBeenCalledTimes(1);
+    expect(reads).not.toHaveBeenCalled();
     expect(screen.getByLabelText(common.common.connections.secret)).toHaveValue('');
     expect(screen.getByLabelText(extraLabel)).toHaveValue('');
   });
