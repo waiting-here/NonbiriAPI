@@ -4,7 +4,7 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## 1.3.5 — Unreleased
+## 1.3.5 — 2026-11-03
 
 ### Added
 
