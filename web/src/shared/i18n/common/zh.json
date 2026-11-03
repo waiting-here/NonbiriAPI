@@ -2376,6 +2376,7 @@
       "disableKeyDiscovery": "关闭目录共享",
       "withdrawPendingContent": "撤回待审内容",
       "resetKeyFailures": "清零失败并恢复服务",
+      "releaseKeyRateLimit": "解除限流",
       "reviewIncomplete": "审核尚未完成，请检查结果。",
       "reviewSaved": "审核已保存。",
       "chooseConnectionFirst": "请在服务内选择密钥。"

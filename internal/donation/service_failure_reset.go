@@ -60,7 +60,7 @@ type serviceResetState struct {
 // Select the approved credential version, even when a newer self-use version
 // exists. Manual switches do not prevent counter maintenance; revoked approval,
 // deleted credentials and unavailable credential material do.
-func resetServicesTx(ctx context.Context, tx *sql.Tx, donationID, keyID, useID, now int64) ([]ServiceFailureReset, error) {
+func readServiceResetStatesTx(ctx context.Context, tx *sql.Tx, donationID, keyID, useID, now int64) ([]serviceResetState, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT u.id,dk.endpoint_key_id,u.native_service_bit,COALESCE(g.credential_version_id,0),
  COALESCE(h.id,0),h.streak_generation,h.failure_streak,COALESCE(h.failure_disabled,0),
  NULLIF(h.retry_after_until,0),NULLIF((`+smartbackoff.ServiceUntilSQL("h")+`),0),
@@ -119,6 +119,14 @@ func resetServicesTx(ctx context.Context, tx *sql.Tx, donationID, keyID, useID, 
 	}
 	err = rows.Err()
 	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	return states, nil
+}
+
+func resetServicesTx(ctx context.Context, tx *sql.Tx, donationID, keyID, useID, now int64) ([]ServiceFailureReset, error) {
+	states, err := readServiceResetStatesTx(ctx, tx, donationID, keyID, useID, now)
 	if err != nil {
 		return nil, err
 	}

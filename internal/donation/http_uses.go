@@ -3,6 +3,8 @@ package donation
 import (
 	"net/http"
 	"strconv"
+
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
 
 const (
@@ -111,6 +113,10 @@ func (api *httpAPI) useMutationHandler(role reviewerRole, action string) Authori
 		route := useRoute(role) + "/{useId}"
 		if action == "cancel" {
 			route += "/pending"
+		}
+		if action == "release_rate_limit" {
+			route += "/rate-limit-release"
+			managementlog.SetAction(r.Context(), "rate_limit.release", "解除限流")
 		}
 		if action == "reset" {
 			route += "/failure-streak-reset"

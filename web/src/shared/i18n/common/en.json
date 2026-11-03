@@ -2376,6 +2376,7 @@
       "disableKeyDiscovery": "Stop sharing catalog",
       "withdrawPendingContent": "Withdraw pending content",
       "resetKeyFailures": "Reset failures and resume services",
+      "releaseKeyRateLimit": "Release rate limit",
       "reviewIncomplete": "Review is incomplete. Check the results.",
       "reviewSaved": "Review saved.",
       "chooseConnectionFirst": "Choose a key within its service."

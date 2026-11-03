@@ -111,3 +111,41 @@ describe('key-wide sharing controls', () => {
     );
   });
 });
+
+it.each(['owner', 'admin', 'steward'] as const)(
+  'releases authorized service waits directly for %s without resetting failures',
+  async (role) => {
+    mocks.mutate.mockReset().mockResolvedValue({});
+    const approved = {
+      ...row('6'),
+      capabilities: { ...row('6').capabilities, can_reset_failures: true },
+    };
+    const view = await renderWithProviders(
+      <DonationKeyUseControls
+        role={role}
+        accountId="1"
+        donationId="3"
+        donationKeyId="4"
+        uses={[approved, row('7')]}
+      />,
+      { station: role === 'admin' ? 'admin' : 'user', role: role === 'admin' ? 'admin' : 'user' },
+    );
+    view.queryClient.setQueryData(
+      role === 'admin' ? ['admin', 'session'] : ['user', 'session'],
+      role === 'admin'
+        ? { admin: { username: 'fixture' } }
+        : { user: { id: '1', username: 'fixture', effective_level: role === 'steward' ? 6 : 1 } },
+    );
+    await view.user.click(screen.getByRole('button', { name: 'Release rate limit' }));
+    await screen.findByText('Saved.');
+    expect(mocks.mutate).toHaveBeenCalledOnce();
+    expect(mocks.mutate.mock.calls[0]!.slice(0, 5)).toEqual([
+      role,
+      '3',
+      '6',
+      'release_rate_limit',
+      { expected_revision: '9' },
+    ]);
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  },
+);
