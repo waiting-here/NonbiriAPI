@@ -238,15 +238,21 @@ func (s *Service) MaintainOrphanSecretsAt(
 	workerCtx, cancel := recoveryBudgetContext(ctx, budgetDeadline)
 	defer cancel()
 
+	threshold := int64(-1)
+	if decisionNow >= int64(OrphanSecretTTL.Seconds()) {
+		threshold = decisionNow - int64(OrphanSecretTTL.Seconds())
+	}
+	// Empty passes do not need the writer. Work appearing after this snapshot
+	// is handled by the next pass; mutations below recheck live references.
+	pending, err := hasOrphanSecretWork(workerCtx, s.readDB, threshold)
+	if err != nil || !pending {
+		return MaintenanceReport{}, err
+	}
 	tx, err := s.db.BeginTx(workerCtx, nil)
 	if err != nil {
 		return MaintenanceReport{}, fmt.Errorf("claim: begin credential maintenance: %w", err)
 	}
 	defer tx.Rollback()
-	threshold := int64(-1)
-	if decisionNow >= int64(OrphanSecretTTL.Seconds()) {
-		threshold = decisionNow - int64(OrphanSecretTTL.Seconds())
-	}
 	deletedResult, err := tx.ExecContext(workerCtx, `DELETE FROM endpoint_key_secrets
 WHERE id IN (
  SELECT id FROM endpoint_key_secrets
@@ -260,9 +266,6 @@ WHERE id IN (
 	deleted, err := deletedResult.RowsAffected()
 	if err != nil {
 		return MaintenanceReport{}, fmt.Errorf("claim: count deleted credentials: %w", err)
-	}
-	if deleted < 0 || deleted > int64(limit) {
-		return MaintenanceReport{}, ErrInvariant
 	}
 	remaining := limit - int(deleted)
 	marked := int64(0)
@@ -280,9 +283,6 @@ WHERE id IN (
 		marked, err = markedResult.RowsAffected()
 		if err != nil {
 			return MaintenanceReport{}, fmt.Errorf("claim: count orphan credentials: %w", err)
-		}
-		if marked < 0 || marked > int64(remaining) {
-			return MaintenanceReport{}, ErrInvariant
 		}
 	}
 	more, err := hasOrphanSecretWork(workerCtx, tx, threshold)
@@ -308,17 +308,18 @@ func (s *Service) hasClaimRecoveryWork(ctx context.Context) (bool, error) {
 	return pending != 0, nil
 }
 
-func hasOrphanSecretWork(ctx context.Context, tx *sql.Tx, threshold int64) (bool, error) {
+type orphanSecretReader interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func hasOrphanSecretWork(ctx context.Context, reader orphanSecretReader, threshold int64) (bool, error) {
 	var pending int
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
+	if err := reader.QueryRowContext(ctx, `SELECT EXISTS(
  SELECT 1 FROM endpoint_key_secrets s
  WHERE (s.orphaned_at IS NULL OR s.orphaned_at<=?)
    AND NOT EXISTS(SELECT 1 FROM secret_live_references live WHERE live.secret_ref_id=s.id)
 )`, threshold).Scan(&pending); err != nil {
 		return false, fmt.Errorf("claim: inspect orphan credential backlog: %w", err)
-	}
-	if pending != 0 && pending != 1 {
-		return false, ErrInvariant
 	}
 	return pending == 1, nil
 }

@@ -289,8 +289,10 @@ func (b *sseEventBuilder) dispatch(ctx context.Context, out chan<- SSEEvent) err
 	}
 }
 
+// The returned line is valid until the next read from reader. Complete lines
+// borrow its buffer; only lines spanning multiple reads need an owned copy.
 func readBoundedLine(reader *bufio.Reader, limit int) ([]byte, bool, error) {
-	line := make([]byte, 0, min(limit, defaultSSEReadBuffer))
+	var line []byte
 	for {
 		fragment, err := reader.ReadSlice('\n')
 		if len(fragment) > 0 {
@@ -301,7 +303,11 @@ func readBoundedLine(reader *bufio.Reader, limit int) ([]byte, bool, error) {
 			if len(line)+len(content) > limit {
 				return nil, false, &SSELineTooLargeError{Limit: limit}
 			}
-			line = append(line, content...)
+			if len(line) == 0 && !errors.Is(err, bufio.ErrBufferFull) {
+				line = content
+			} else {
+				line = append(line, content...)
+			}
 		}
 
 		switch {
