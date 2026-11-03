@@ -1,3 +1,4 @@
+import { setControlChecked } from '../controls';
 import { expect, test } from './test';
 import { ADMIN_ORIGIN } from './ports';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
@@ -257,16 +258,18 @@ test('inactivity settings validate, preview exact human-readable amounts and sav
   await page.goto(ADMIN_ORIGIN + '/inactivity-policy');
   await expect(page.getByLabel('Inactive days', { exact: true })).toHaveCount(0);
   await layout(page, 'inactivity-default');
-  await page.getByLabel('Enable inactivity policy', { exact: true }).check();
-  await page.getByLabel('Enable credit decay', { exact: true }).check();
+  await setControlChecked(page.getByLabel('Enable inactivity policy', { exact: true }), true);
+  await setControlChecked(page.getByLabel('Enable credit decay', { exact: true }), true);
   await page.getByRole('button', { name: 'Preview accounts', exact: true }).click();
   expect(previews).toBe(0);
   await page.getByLabel('Inactive days', { exact: true }).fill('30');
   await page.getByLabel('Interval', { exact: true }).fill('7');
-  await page
-    .getByRole('region', { name: 'General credits', exact: true })
-    .getByLabel('Decay this currency')
-    .check();
+  await setControlChecked(
+    page
+      .getByRole('region', { name: 'General credits', exact: true })
+      .getByLabel('Decay this currency'),
+    true,
+  );
   await page.getByLabel('Decay per period', { exact: true }).fill('1.25');
   await page.getByLabel('Balance floor', { exact: true }).fill('12.345');
   await page.getByRole('button', { name: 'Preview accounts', exact: true }).click();

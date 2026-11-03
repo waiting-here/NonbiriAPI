@@ -614,7 +614,7 @@ test('user endpoint source wizard submits an immutable mainstream channel select
   await page.getByRole('button', { name: connectionCopy.addEntry, exact: true }).first().click();
   const wizard = page.getByRole('dialog', { name: connectionCopy.addEntry, exact: true });
   const mainstream = wizard.getByRole('radio', { name: connectionCopy.mainstream, exact: true });
-  await mainstream.locator('..').click();
+  await mainstream.locator('xpath=ancestor::label[1]').click();
   await expect(mainstream).toBeChecked();
   await wizard
     .getByRole('combobox', { name: connectionCopy.mainstream, exact: true })

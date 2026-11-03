@@ -2058,7 +2058,7 @@ test('mainstream authorization isolates endpoint catalogs and lets users decline
     await page.getByRole('button', { name: c.addEntry, exact: true }).click();
     const form = page.getByRole('dialog', { name: c.addEntry, exact: true });
     const mainstreamMode = form.getByRole('radio', { name: c.mainstream, exact: true });
-    await mainstreamMode.locator('..').click();
+    await mainstreamMode.locator('xpath=ancestor::label[1]').click();
     await expect(mainstreamMode).toBeChecked();
     await form.getByRole('combobox', { name: c.mainstream, exact: true }).selectOption(channel.id);
     const entryChoices = await openFold(form, c.entries);

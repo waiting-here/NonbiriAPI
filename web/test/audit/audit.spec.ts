@@ -1,3 +1,4 @@
+import { setControlChecked } from '../controls';
 import { resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -792,7 +793,7 @@ test('administrator check-in choice persists and both cards follow real daily el
       exact: true,
     });
     await expect(choice).not.toBeChecked();
-    await choice.check();
+    await setControlChecked(choice, true);
     await settingsPage.getByRole('button', { name: 'Save all changes', exact: true }).click();
     await expect(settingsPage.getByText('Settings saved.', { exact: true })).toBeVisible();
     await settingsPage.reload();
@@ -852,7 +853,7 @@ test('administrator check-in choice persists and both cards follow real daily el
     await expect(gameButton).toHaveCount(0);
     await expect(game.getByText('Available tomorrow', { exact: true })).toBeVisible();
 
-    await choice.uncheck();
+    await setControlChecked(choice, false);
     await settingsPage.getByRole('button', { name: 'Save all changes', exact: true }).click();
     await expect(settingsPage.getByText('Settings saved.', { exact: true })).toBeVisible();
     await page.reload();

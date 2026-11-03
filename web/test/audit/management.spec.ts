@@ -1248,7 +1248,10 @@ test('charity settings keep grouped controls, readable model sources, and action
           await option.click();
           await expect(option.getByRole('radio')).toBeChecked();
         }
-        await segmented.locator(`input[value="${previous}"]`).locator('..').click();
+        await segmented
+          .locator(`input[value="${previous}"]`)
+          .locator('xpath=ancestor::label[1]')
+          .click();
       });
       await capture('access', async () => {
         await settings
