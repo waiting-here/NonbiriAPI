@@ -279,7 +279,8 @@ writer ownership are different measurements.
 
 CI reuses immutable closed historical fixture images, with a private database
 copy for each conversion test. The independent released-program fixture still
-checks source provenance. Serial SQL pagination and stake/return matrices run
-in the ordinary suite; race coverage focuses on competing operations. CI may
+checks source provenance. Serial SQL pagination, stake/return and historical
+data-preservation matrices run in the ordinary suite; race coverage retains
+competing operations, upgrade progress and interrupted transactions. CI may
 skip duplicate vet in prepared race shards only because its required ordinary
 Go job vets the same package set. Standalone race commands retain vet by default.

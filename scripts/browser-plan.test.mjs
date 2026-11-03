@@ -25,7 +25,7 @@ test('one or no spec is assigned only to a necessary shard', () => {
 });
 
 test('integration groups cover each selected suite exactly once', () => {
-  const suites = ['picturebook', 'audit', 'management', 'workflow', 'proxy', 'fatfish', 'lakenotes'];
+  const suites = ['picturebook', 'audit', 'management', 'attendance', 'workflow', 'proxy', 'fatfish', 'lakenotes'];
   const groups = [...selectSuites(suites, 'content'), ...selectSuites(suites, 'management')];
   assert.deepEqual(groups.sort(), suites.sort());
   assert.deepEqual(selectSuites(['management'], 'content'), []);
@@ -56,7 +56,7 @@ test('CI collects every selected browser suite while preserving failures and loc
   chmodSync(npm, 0o700);
   try {
     for (const [ci, failure, expectedStatus, expectedCount] of [
-      ['true', '17', 1, 4], ['true', '0', 0, 4], ['', '17', 17, 1],
+      ['true', '17', 1, 5], ['true', '0', 0, 5], ['', '17', 17, 1],
     ]) {
       writeFileSync(trace, '');
       const result = spawnSync(bash, ['--noprofile', '--norc',
@@ -64,7 +64,7 @@ test('CI collects every selected browser suite while preserving failures and loc
         encoding: 'utf8', timeout: 30_000,
         env: { ...process.env, CI: ci, FAIL_CODE: failure, NPM: portable(npm),
           RUNNER_TRACE: portable(trace), NONBIRI_BROWSER_FIXTURE_BINARY: 'unused-existing-fixture',
-          BROWSER_PLAN: JSON.stringify({ suites: ['audit', 'management', 'workflow', 'proxy'] }) },
+          BROWSER_PLAN: JSON.stringify({ suites: ['audit', 'management', 'attendance', 'workflow', 'proxy'] }) },
       });
       assert.equal(result.status, expectedStatus, result.stderr || String(result.error));
       const commands = readFileSync(trace, 'utf8').trim().split('\n');

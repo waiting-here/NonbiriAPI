@@ -50,10 +50,14 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 - Reuse closed historical database fixture images while keeping each upgrade
   test's mutable copy independent. Preserve the released-program upgrade gate.
+- Include attendance, browser associations, discovery logs and shared-credential
+  deletion in browser CI. Attendance uses an isolated site-calendar fixture.
+- Refresh upgrade-test timing weights to separate long cancellation matrices
+  across shards while retaining their existing deadlines.
 - Avoid repeated vet in CI race shards after the ordinary Go gate covers the
-  same packages. Run serial pagination and stake matrices in the ordinary suite;
-  concurrent authorization, accounting, cancellation and recovery tests remain
-  in the race suite.
+  same packages. Run serial pagination, stake and historical data-preservation
+  matrices in the ordinary suite; concurrent authorization, accounting,
+  cancellation, upgrade progress and recovery tests remain in the race suite.
 
 ### Compatibility
 

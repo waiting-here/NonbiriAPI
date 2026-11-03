@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 export const integrationGroups = {
   content: ['picturebook', 'fatfish', 'lakenotes'],
-  management: ['audit', 'management', 'workflow', 'proxy'],
+  management: ['audit', 'management', 'attendance', 'workflow', 'proxy'],
 };
 
 export function selectSpecs(specs, shard, hints = {}) {

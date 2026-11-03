@@ -354,8 +354,9 @@
   },
   {
     "package": "github.com/waiting-here/NonbiriAPI/internal/upgrade/v1",
-    "reason": "Serial conversion, rollback and data preservation; ordinary conversion and exact released-source upgrade gates retained. Exclusive-access cancellation stays in race.",
+    "reason": "Serial conversion, rollback and data preservation; ordinary conversion and exact released-source upgrade gates retained. Concurrent access, progress and real cancellation stay in race.",
     "tests": [
+      "TestAgentOfflineUpgradePreservesExactSchema36",
       "TestConversionBackfillBatchesShareOneTransaction",
       "TestConversionChecksThenUpgradesExactSourceAndReenters",
       "TestConversionImportsGatewayOnlyBeforeInitialization",
@@ -367,14 +368,17 @@
       "TestFishingPresentationMigrationFromExactSchema17",
       "TestFishingPresentationMigrationRejectsOtherVersion",
       "TestHistoricalSourceFixtureCacheSurvivesCleanupAndIsolatesCopies",
+      "TestLogIndexConversionPreservesEverySourceTable",
       "TestOfflineDescriptorContainsOnlyExactSupportedSources",
       "TestProtocolExtensionPreservesSourceAndAllowsExplicitTypes",
+      "TestRebuiltSourceRetainsCredentialAndAffectedRelationChecks",
       "TestSchemaMigrationsRejectUnknownSourcesAndIncompleteChains",
       "TestSchemaMigrationsRollbackWholeChainAndRetry",
       "TestSchemaMigrationsUpgradeEveryPriorRevisionOnce",
       "TestStableContentUpgradeCancellationRollsBackBothChanges",
       "TestStableContentUpgradePreservesSavedStateAndReopens",
       "TestStableContentUpgradeRejectsDriftBeforeWriting",
+      "TestTableRebuildPreservesAbsentSequence",
       "TestTableRebuildPreservesDataReferencesDDLAndSequence"
     ]
   }
