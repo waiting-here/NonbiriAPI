@@ -360,7 +360,7 @@ test('owner reads donation keys and details from current API responses', async (
       await card
         .getByRole('button', { name: copy.presentation.donationActions, exact: true })
         .click();
-      await card.getByRole('menuitem', { name: copy.ownerPages.keys, exact: true }).click();
+      await page.getByRole('menuitem', { name: copy.ownerPages.keys, exact: true }).click();
       const keys = panel.getByRole('region', { name: copy.ownerPages.keys, exact: true });
       const response = await read(context, state.user_url, '/api/donations/' + id);
       const key = response.keys[0];

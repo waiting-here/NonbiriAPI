@@ -303,7 +303,7 @@ for (const scenario of [
             expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(scenario.width);
             expect(
               await label
-                .locator('span')
+                .locator(':scope > span:not(:has(input))')
                 .evaluate(
                   (node) =>
                     node.scrollWidth <= node.clientWidth + 1 &&

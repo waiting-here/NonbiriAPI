@@ -88,7 +88,7 @@ test('credit history filters, jumps between stable pages and fits a mobile viewp
         expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
         expect(
           await label
-            .locator('span')
+            .locator(':scope > span:not(:has(input))')
             .evaluate(
               (node) =>
                 node.scrollWidth <= node.clientWidth + 1 &&

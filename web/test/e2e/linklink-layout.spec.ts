@@ -282,12 +282,19 @@ async function applyViewport(
     if (await accountTrigger.isVisible()) {
       await accountTrigger.click();
       await page.locator('.nb-account-menu .theme-select').selectOption(fixture.theme);
+      await page.keyboard.press('Escape');
     } else {
       const menuButton = page.locator('.nb-menu-button');
       await expect(menuButton).toBeVisible();
       await menuButton.click();
       await page.locator('.nb-user-drawer-actions .theme-select').selectOption(fixture.theme);
-      await menuButton.click();
+      await page
+        .getByRole('dialog')
+        .getByRole('button', {
+          name: fixture.language === 'zh' ? '关闭导航' : 'Close navigation',
+          exact: true,
+        })
+        .click();
     }
     await expect(page.locator('html')).toHaveAttribute('data-theme', fixture.theme);
   }

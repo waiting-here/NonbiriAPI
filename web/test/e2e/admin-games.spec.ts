@@ -520,7 +520,12 @@ for (const width of [390, 1440]) {
       });
     const overflow = await dialog.evaluate((root) =>
       [root, ...root.querySelectorAll<HTMLElement>('*')]
-        .filter((el) => el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1)
+        .filter((el) => {
+          const style = getComputedStyle(el);
+          const visuallyHidden =
+            style.clip === 'rect(0px, 0px, 0px, 0px)' || style.clipPath === 'inset(50%)';
+          return !visuallyHidden && el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1;
+        })
         .map((el) => ({
           tag: el.tagName,
           class: el.className,

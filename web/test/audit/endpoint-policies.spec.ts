@@ -118,13 +118,21 @@ test('endpoint list keeps numbered pagination, draft and focus through route ins
     const page = await context.newPage();
     await page.goto(origin + '/endpoint-policies?page=2&page_size=10');
     const rulesPanel = page.getByRole('tabpanel', { name: copy.rulesTab, exact: true });
+    const rulesPageSize = rulesPanel.getByRole('combobox', {
+      name: common.common.pageControls.size,
+      exact: true,
+    });
+    const rulesPageJump = rulesPanel.getByRole('textbox', {
+      name: common.common.pageControls.jump,
+      exact: true,
+    });
     const routePanel = page.getByRole('tabpanel', { name: copy.routesTab, exact: true });
     const row = page.getByRole('row').filter({ hasText: target.base_url });
     const trigger = row.getByRole('button', { name: copy.edit, exact: true });
     await expect(trigger).toBeVisible();
     await visuals(page, info, 'endpoint-policy-list', async () => {
-      await rulesPanel.getByLabel(common.common.pageControls.jump).scrollIntoViewIfNeeded();
-      await expect(rulesPanel.getByLabel(common.common.pageControls.size)).toBeVisible();
+      await rulesPageJump.scrollIntoViewIfNeeded();
+      await expect(rulesPageSize).toBeVisible();
     });
     await trigger.click();
     await expect(page.getByRole('heading', { name: copy.editRules, exact: true })).toBeVisible();
@@ -147,31 +155,39 @@ test('endpoint list keeps numbered pagination, draft and focus through route ins
     await expect(page.getByText(loaded.worker_origin, { exact: true })).toBeVisible();
     await expect(page.getByText(copy.proxyMode.worker, { exact: true })).toBeVisible();
     await expect(page.getByText(copy.legacyInactive, { exact: true })).toBeVisible();
-    await routePanel.getByLabel(common.common.pageControls.size).selectOption('10');
-    await routePanel.getByLabel(common.common.pageControls.jump).fill('3');
-    await routePanel.getByLabel(common.common.pageControls.jump).press('Enter');
-    await expect(routePanel.getByLabel(common.common.pageControls.jump)).toHaveValue('3');
+    const routePageSize = routePanel.getByRole('combobox', {
+      name: common.common.pageControls.size,
+      exact: true,
+    });
+    const routePageJump = routePanel.getByRole('textbox', {
+      name: common.common.pageControls.jump,
+      exact: true,
+    });
+    await routePageSize.selectOption('10');
+    await routePageJump.fill('3');
+    await routePageJump.press('Enter');
+    await expect(routePageJump).toHaveValue('3');
     await routePanel.getByRole('button', { name: common.common.previous, exact: true }).click();
-    await expect(routePanel.getByLabel(common.common.pageControls.jump)).toHaveValue('2');
+    await expect(routePageJump).toHaveValue('2');
     await visuals(page, info, 'endpoint-loaded-routes', async () => {
       await routePanel.getByText(loaded.worker_origin, { exact: true }).scrollIntoViewIfNeeded();
     });
     await page.getByRole('tab', { name: copy.rulesTab, exact: true }).click();
     await expect(value).toHaveValue('retained_endpoint_draft');
     await page.getByRole('tab', { name: copy.routesTab, exact: true }).click();
-    await expect(routePanel.getByLabel(common.common.pageControls.jump)).toHaveValue('2');
+    await expect(routePageJump).toHaveValue('2');
     await page.getByRole('tab', { name: copy.rulesTab, exact: true }).click();
     await page.getByRole('button', { name: copy.backList, exact: true }).click();
-    await expect(rulesPanel.getByLabel(common.common.pageControls.jump)).toHaveValue('2');
+    await expect(rulesPageJump).toHaveValue('2');
     await expect(trigger).toBeFocused();
     await trigger.click();
     await expect(value).toHaveValue('retained_endpoint_draft');
     await page.getByRole('button', { name: common.common.cancel, exact: true }).click();
     await page.getByRole('button', { name: copy.backList, exact: true }).click();
-    await rulesPanel.getByLabel(common.common.pageControls.size).selectOption('20');
-    await expect(rulesPanel.getByLabel(common.common.pageControls.jump)).toHaveValue('1');
-    await rulesPanel.getByLabel(common.common.pageControls.jump).fill('2');
-    await rulesPanel.getByLabel(common.common.pageControls.jump).press('Enter');
+    await rulesPageSize.selectOption('20');
+    await expect(rulesPageJump).toHaveValue('1');
+    await rulesPageJump.fill('2');
+    await rulesPageJump.press('Enter');
     await expect(page).toHaveURL(/page=2/);
     await expect(page).toHaveURL(/page_size=20/);
   } finally {

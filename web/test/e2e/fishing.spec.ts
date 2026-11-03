@@ -630,7 +630,10 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
   expect(scrollBeforeMenu).toBeGreaterThan(100);
   await page.getByRole('button', { name: '打开导航' }).click();
   await expect(page.getByRole('link', { name: '账号' })).toBeVisible();
-  await expect(page.locator('.nb-menu-button')).toBeInViewport();
+  const closeNavigation = page
+    .getByRole('dialog')
+    .getByRole('button', { name: '关闭导航', exact: true });
+  await expect(closeNavigation).toBeInViewport();
   expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(scrollBeforeMenu, 0);
   const drawer = page.locator('.nb-user-header__nav');
   const drawerBox = await drawer.boundingBox();
@@ -651,7 +654,7 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
   expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(scrollBeforeMenu, 0);
   await page.getByRole('button', { name: '打开导航' }).click();
   await expect(page.getByRole('link', { name: '首页', exact: true })).toBeInViewport();
-  await page.locator('.nb-menu-button').click();
+  await closeNavigation.click();
   await expect(drawer).not.toBeVisible();
   expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(scrollBeforeMenu, 0);
   await page.evaluate(() => {
