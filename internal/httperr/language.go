@@ -124,6 +124,23 @@ var chineseCodes = map[string]string{
 }
 
 var chineseMessages = map[string]string{
+	"The attendance activity could not be updated. Please try again.":                                    "签到活动暂时无法更新，请稍后重试。",
+	"Check the attendance dates and rewards.":                                                            "请检查签到日期和奖励配置。",
+	"The activity or site date changed. Refresh and try again.":                                          "活动或站点日期已变化，请刷新后重试。",
+	"Attendance period not found.":                                                                       "找不到这期签到活动。",
+	"This period is not accepting sign-ins.":                                                             "这期活动当前不能签到。",
+	"The reward could not fit in your account. Your sign-in was not saved; free capacity and try again.": "奖励超出账号可容纳的上限，本次签到尚未保存。请腾出空间后重试。",
+	"title or description is too long or invalid":                                                        "标题或说明过长，或包含无效内容。",
+	"choose cumulative or consecutive attendance":                                                        "请选择累计签到或连续签到。",
+	"configure between 1 and 366 reward tiers":                                                           "请设置 1 至 366 个奖励档位。",
+	"reward days must be unique and between 1 and 3660":                                                  "奖励天数不能重复，且须在 1 至 3660 天之间。",
+	"check the reward assets and quantities":                                                             "请检查奖励种类和数量。",
+	"use at most 1024 reward items across the period":                                                    "每期最多配置 1024 项奖励。",
+	"use valid calendar dates":                                                                           "请输入有效的日期。",
+	"the date range must cover the highest reward day and no more than 3660 days":                        "活动时长须覆盖最高奖励天数，且不能超过 3660 天。",
+	"the start date must be after today in site time":                                                    "开始日期须晚于站点时间的今天。",
+	"after the start date only the title and description can change":                                     "活动开始后只能修改标题和说明。",
+	"the site date changed; refresh the activity before signing in":                                      "站点日期已变化，请刷新活动后再签到。",
 	"The first reset must be in the future when creating a recurring rule or switching to a specified reset time. Choose a later date and time in the rule's time zone.": "新建循环规则或改用指定刷新时间时，首次刷新必须在未来。请按规则时区选择更晚的日期与时间。",
 
 	"No approved services are eligible for failure reset; check approval and credential availability.":          "没有符合失败重置条件的已批准服务，请检查审批和凭据是否仍然有效。",

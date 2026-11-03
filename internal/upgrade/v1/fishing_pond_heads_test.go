@@ -62,7 +62,7 @@ func TestPondHeadSchema46UpgradePreservesQueueAndRollsBack(t *testing.T) {
 	t.Log("backfill plan:", backfillPlan)
 	before := gatewayRows(t, store.DB(), true)
 	plan, err := storageSchema.plan(t.Context(), store.DB())
-	if err != nil || len(plan.steps) != 2 || plan.steps[0].from != 46 || plan.steps[0].version != 47 || plan.auditsCredentials() || plan.rebuildsTables() {
+	if err != nil || len(plan.steps) != 3 || plan.steps[0].from != 46 || plan.steps[0].version != 47 || plan.auditsCredentials() || plan.rebuildsTables() {
 		t.Fatal("head upgrade plan", plan, err)
 	}
 	if err = store.Close(); err != nil {

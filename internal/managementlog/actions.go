@@ -10,6 +10,7 @@ var domainLabels = map[string]string{
 	"announcements": "公告", "maintenance": "维护状态", "alerts": "告警", "abuse-audit": "风险审计",
 	"activities": "活动", "activity": "活动", "pools": "奖池", "limited-activities": "限时活动",
 	"inactivity-policy": "低活跃策略", "rewards": "奖励活动", "gacha": "抽卡与商店", "games": "游戏",
+	"attendance":  "签到活动",
 	"legal-holds": "法律保全", "ai": "AI 工作区", "management-operations": "管理操作记录",
 	"model-bindings": "公益模型绑定", "donation-key-failure-policy": "捐赠密钥失败策略", "branding": "站点外观", "egress": "出站配置", "endpoint-backoff-policy": "端点退避策略",
 	"endpoint-backoff-policies": "端点退避策略",
