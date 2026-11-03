@@ -117,7 +117,7 @@ VALUES(?,?,?,?,'accepted',?,'reserved',?,'user',?,?)`,
 			input.ReservedMilli, rows, at); err != nil {
 			return fmt.Errorf("claim: persist request acceptance: %w", err)
 		}
-		if err := s.ensureRequestLogTx(callbackCtx, callbackTx, requestID); err != nil {
+		if err := s.createRequestLogTx(callbackCtx, callbackTx, requestID); err != nil {
 			return err
 		}
 		if input.Route.IsCharity() {
@@ -249,7 +249,7 @@ VALUES(?,?,? ,?,'accepted',1,'none',0,'user',?,?)`,
 		requestID, input.ActorUserID, RouteDiscovery, "", u128Small(0), at); err != nil {
 		return Request{}, Handle{}, fmt.Errorf("claim: persist discovery request: %w", err)
 	}
-	if err := s.ensureRequestLogTx(ctx, tx, requestID); err != nil {
+	if err := s.createRequestLogTx(ctx, tx, requestID); err != nil {
 		return Request{}, Handle{}, err
 	}
 	handle, err := s.claimTx(ctx, tx, claimID, at, ClaimInput{
@@ -512,22 +512,17 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 		clear(encrypted)
 		return nil, ErrInvariant
 	}
-	if err := RevalidateDispatchTargetTx(ctx, tx, handle.claimID, at); err != nil {
+	target, err := revalidateDispatchTargetTx(ctx, tx, handle.claimID, at)
+	if err != nil {
 		clear(contextID)
 		clear(encrypted)
 		return nil, err
 	}
-	if RouteKind(requestRoute).Operation() == connectorcontract.OperationChatCompletions {
-		var forceStoreFalse bool
-		err := tx.QueryRowContext(ctx, `SELECT force_store_false FROM endpoint_keys WHERE id=?`, handle.candidate.EndpointKeyID).Scan(&forceStoreFalse)
-		if err != nil || forceStoreFalse != handle.candidate.Policy.ForceStoreFalse {
-			clear(contextID)
-			clear(encrypted)
-			if err != nil {
-				return nil, authorizationError(err)
-			}
-			return nil, ErrNotFound
-		}
+	if RouteKind(requestRoute).Operation() == connectorcontract.OperationChatCompletions &&
+		target.forceStoreFalse != handle.candidate.Policy.ForceStoreFalse {
+		clear(contextID)
+		clear(encrypted)
+		return nil, ErrNotFound
 	}
 	var managedHeaders http.Header
 	backoff := smartbackoff.Dispatch{}
@@ -536,11 +531,6 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 			clear(contextID)
 			clear(encrypted)
 			return nil, ErrNotFound
-		}
-		if err := requireActiveUser(ctx, tx, callerID.Int64, at, true); err != nil {
-			clear(contextID)
-			clear(encrypted)
-			return nil, err
 		}
 		if s.charity == nil {
 			clear(contextID)
@@ -648,7 +638,8 @@ SET state='dispatched',dispatched_at=? WHERE id=? AND state='claimed'`, at, hand
 	}, nil
 }
 
-func (s *Service) ensureRequestLogTx(ctx context.Context, tx *sql.Tx, requestID string) error {
+// createRequestLogTx is used when acceptance has just created the request.
+func (s *Service) createRequestLogTx(ctx context.Context, tx *sql.Tx, requestID string) error {
 	result, err := tx.ExecContext(ctx, `INSERT INTO request_logs(
 logical_request_id,user_id,model,route_kind,started_at,requested_streaming,automatic_actions)
 SELECT r.id,r.user_id,r.model_snapshot,r.route_kind,r.created_at,?,0
@@ -661,38 +652,66 @@ ON CONFLICT(logical_request_id) DO NOTHING`, requestattempt.RequestedStreaming(c
 	if err != nil {
 		return err
 	}
-	if created == 0 {
+	_, hasSource := observability.SourceFromContext(ctx)
+	if created != 0 && (s.observations == nil || !hasSource) {
+		return nil
+	}
+	found, err := s.completeRequestLogSourceTx(ctx, tx, requestID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Service) ensureRequestLogTx(ctx context.Context, tx *sql.Tx, requestID string) error {
+	found, err := s.completeRequestLogSourceTx(ctx, tx, requestID)
+	if err != nil || found {
+		return err
+	}
+	return s.createRequestLogTx(ctx, tx, requestID)
+}
+
+// A retained root and its source are read in this transaction. Classified
+// sources are immutable; absent sources and unclassified facts still need the
+// ordinary backfill, including when the live user has already been deleted.
+func (s *Service) completeRequestLogSourceTx(ctx context.Context, tx *sql.Tx, requestID string) (bool, error) {
+	_, hasSource := observability.SourceFromContext(ctx)
+	if s.observations == nil || !hasSource {
 		var exists int
 		err := tx.QueryRowContext(ctx, "SELECT 1 FROM request_logs WHERE logical_request_id=?", requestID).Scan(&exists)
 		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
+			return false, nil
 		}
-		if err != nil {
-			return err
-		}
+		return err == nil, err
 	}
-	if s.observations != nil {
-		if _, present := observability.SourceFromContext(ctx); present {
-			var user sql.NullInt64
-			var route RouteKind
-			var at int64
-			if err := tx.QueryRowContext(ctx, `SELECT origin_user_id,route_kind,started_at FROM request_logs WHERE logical_request_id=?`, requestID).Scan(&user, &route, &at); err != nil {
-				return err
-			}
-			kind := "unclassified"
-			if route.IsSelf() {
-				kind = "self"
-			} else if route.IsCharity() {
-				kind = "charity"
-			} else if route == RouteDiscovery {
-				kind = "discovery"
-			}
-			if user.Valid {
-				return s.observations.RecordSourceTx(ctx, tx, requestID, user.Int64, kind, at)
-			}
-		}
+	var user sql.NullInt64
+	var route RouteKind
+	var at int64
+	var sourceKind sql.NullString
+	err := tx.QueryRowContext(ctx, `SELECT l.origin_user_id,l.route_kind,l.started_at,s.kind
+FROM request_logs l LEFT JOIN request_source_facts s ON s.request_log_id=l.id
+WHERE l.logical_request_id=?`, requestID).Scan(&user, &route, &at, &sourceKind)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
 	}
-	return nil
+	if err != nil {
+		return false, err
+	}
+	if !user.Valid || sourceKind.Valid && sourceKind.String != "unclassified" {
+		return true, nil
+	}
+	kind := "unclassified"
+	if route.IsSelf() {
+		kind = "self"
+	} else if route.IsCharity() {
+		kind = "charity"
+	} else if route == RouteDiscovery {
+		kind = "discovery"
+	}
+	return true, s.observations.RecordSourceTx(ctx, tx, requestID, user.Int64, kind, at)
 }
 
 func requireActiveUser(ctx context.Context, tx *sql.Tx, userID, at int64, charity bool) error {

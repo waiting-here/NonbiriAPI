@@ -102,3 +102,30 @@ FROM dispatch_claims c JOIN request_attempt_service_facts f ON f.claim_id=c.id W
 		t.Fatalf("terminal facts lost or live reference retained: state=%s refs=%d/%d facts=%d versions=%d/%d/%d/%d types=%s/%s", state, secretRefs, targetRefs, facts, credentialID, version, grantRevision, targetRevision, configured, wire)
 	}
 }
+
+// Dispatch reuses only the authority read inside its own transaction.
+func TestConnectionDispatchRechecksCurrentForceStorePolicy(t *testing.T) {
+	f, input := connectionClaimInput(t)
+	handle, err := f.service.Claim(t.Context(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.db.Exec("UPDATE endpoint_keys SET force_store_false=1-force_store_false WHERE id=?", input.Candidate.EndpointKeyID); err != nil {
+		t.Fatal(err)
+	}
+	if dispatch, err := f.service.TakeForDispatch(t.Context(), handle); !errors.Is(err, ErrNotFound) || dispatch != nil || f.codec.openCount() != 0 {
+		t.Fatalf("changed store policy dispatched: opens=%d err=%v", f.codec.openCount(), err)
+	}
+	var state string
+	if err = f.db.QueryRow("SELECT state FROM dispatch_claims WHERE id=?", handle.ClaimID()).Scan(&state); err != nil || state != "claimed" {
+		t.Fatalf("rejected dispatch state=%s err=%v", state, err)
+	}
+	if _, err = f.db.Exec("UPDATE endpoint_keys SET force_store_false=1-force_store_false WHERE id=?", input.Candidate.EndpointKeyID); err != nil {
+		t.Fatal(err)
+	}
+	dispatch, err := f.service.TakeForDispatch(t.Context(), handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dispatch.Clear()
+}
