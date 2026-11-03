@@ -44,3 +44,16 @@ afterEach(async () => {
   document.documentElement.lang = '';
   delete document.documentElement.dataset.theme;
 });
+
+// Reflect the platform inert property which jsdom does not implement.
+if (!('inert' in HTMLElement.prototype)) {
+  Object.defineProperty(HTMLElement.prototype, 'inert', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.hasAttribute('inert');
+    },
+    set(this: HTMLElement, value: boolean) {
+      this.toggleAttribute('inert', value);
+    },
+  });
+}

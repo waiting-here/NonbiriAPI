@@ -58,24 +58,25 @@ export function AgentWorkspace({ role, account }: { role: AgentRole; account: st
         tabs={(Object.keys(tabs) as Tab[])
           .filter((tab) => role === 'admin' || ['chat', 'reviews', 'memories'].includes(tab))
           .map((tab) => ({ value: tab, label: t(tabs[tab]) }))}
-      />
-      {visited.map((tab) => (
-        <div key={tab} hidden={tab !== value} role="tabpanel">
-          {tab === 'chat' ? (
-            <ChatPanel role={role} account={account} active={tab === value} />
-          ) : tab === 'reviews' ? (
-            <ReviewsPanel role={role} account={account} active={tab === value} />
-          ) : tab === 'memories' ? (
-            <MemoriesPanel role={role} account={account} active={tab === value} />
-          ) : tab === 'settings' ? (
-            <AdminSettings account={account} active={tab === value} />
-          ) : tab === 'requests' ? (
-            <RequestsPanel account={account} active={tab === value} />
-          ) : (
-            <ArchivesPanel account={account} active={tab === value} />
-          )}
-        </div>
-      ))}
+      >
+        {visited.map((tab) => (
+          <div key={tab} hidden={tab !== value}>
+            {tab === 'chat' ? (
+              <ChatPanel role={role} account={account} active={tab === value} />
+            ) : tab === 'reviews' ? (
+              <ReviewsPanel role={role} account={account} active={tab === value} />
+            ) : tab === 'memories' ? (
+              <MemoriesPanel role={role} account={account} active={tab === value} />
+            ) : tab === 'settings' ? (
+              <AdminSettings account={account} active={tab === value} />
+            ) : tab === 'requests' ? (
+              <RequestsPanel account={account} active={tab === value} />
+            ) : (
+              <ArchivesPanel account={account} active={tab === value} />
+            )}
+          </div>
+        ))}
+      </Tabs>
     </div>
   );
 }

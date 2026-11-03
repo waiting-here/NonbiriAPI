@@ -219,23 +219,27 @@ describe('endpoint policy management', () => {
     const view = await open('/endpoint-policies?view=routes');
     const panel = screen.getByRole('tabpanel', { name: 'Outbound routes' });
     await within(panel).findByRole('table');
-    fireEvent.change(within(panel).getByLabelText('Items per page'), { target: { value: '10' } });
-    fireEvent.change(within(panel).getByLabelText('Go to page'), { target: { value: '2' } });
-    fireEvent.keyDown(within(panel).getByLabelText('Go to page'), { key: 'Enter' });
-    expect(within(panel).getByLabelText('Go to page')).toHaveValue('2');
+    fireEvent.change(within(panel).getByRole('combobox', { name: 'Items per page' }), {
+      target: { value: '10' },
+    });
+    fireEvent.change(within(panel).getByRole('textbox', { name: 'Go to page' }), {
+      target: { value: '2' },
+    });
+    fireEvent.keyDown(within(panel).getByRole('textbox', { name: 'Go to page' }), { key: 'Enter' });
+    expect(within(panel).getByRole('textbox', { name: 'Go to page' })).toHaveValue('2');
     expect(within(panel).getAllByRole('row')).toHaveLength(11);
     await view.user.click(screen.getByRole('tab', { name: 'Extra backoff rules' }));
     await view.user.click(screen.getByRole('tab', { name: 'Outbound routes' }));
-    expect(within(panel).getByLabelText('Go to page')).toHaveValue('2');
+    expect(within(panel).getByRole('textbox', { name: 'Go to page' })).toHaveValue('2');
     data.routeCount(5);
     await view.user.click(within(panel).getByRole('button', { name: 'Refresh' }));
     await waitFor(() => expect(within(panel).getAllByRole('row')).toHaveLength(6));
-    expect(within(panel).queryByLabelText('Go to page')).not.toBeInTheDocument();
+    expect(within(panel).queryByRole('textbox', { name: 'Go to page' })).not.toBeInTheDocument();
     expect(within(panel).getByText('5 items')).toBeVisible();
     data.routeCount(21);
     await view.user.click(within(panel).getByRole('button', { name: 'Refresh' }));
-    expect(await within(panel).findByLabelText('Go to page')).toHaveValue('1');
-    expect(within(panel).getByLabelText('Items per page')).toHaveValue('10');
+    expect(await within(panel).findByRole('textbox', { name: 'Go to page' })).toHaveValue('1');
+    expect(within(panel).getByRole('combobox', { name: 'Items per page' })).toHaveValue('10');
   });
   it('reorders, removes and clears rules without resetting key state', async () => {
     const data = fixture();
@@ -387,7 +391,9 @@ describe('endpoint policy management', () => {
   it('refuses default level 5 and ordinary users before loading privileged content', async () => {
     const data = fixture();
     const view = await open('/endpoint-policies', 'steward');
-    expect(screen.getByRole('alert')).toHaveTextContent(permissionCopy.management.permissions.denied);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      permissionCopy.management.permissions.denied,
+    );
     expect(data.requests).toHaveLength(0);
     view.queryClient.setQueryData(['user', 'session'], { user: { id: '7', effective_level: 5 } });
     await waitFor(() => expect(screen.getByRole('alert')).toBeVisible());

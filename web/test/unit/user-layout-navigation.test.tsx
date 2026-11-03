@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
 import { Route, Routes } from 'react-router';
 import { RecordsHeader } from '../../src/user/components/RecordsHeader';
@@ -93,11 +93,11 @@ describe('level-five user shell navigation', () => {
 
     await rendered.user.click(screen.getByRole('button', { name: 'Open navigation' }));
     await waitFor(() => expect(screen.getAllByRole('link', { name: 'Steward' })).toHaveLength(1));
-    const closeMenuButton = screen
-      .getAllByRole('button', { name: 'Close navigation' })
-      .find((button) => button.classList.contains('nb-menu-button'));
-    expect(closeMenuButton).toBeDefined();
-    await rendered.user.click(closeMenuButton!);
+    const closeMenuButton = within(
+      screen.getByRole('dialog', { name: 'Main navigation' }),
+    ).getByRole('button', { name: 'Close navigation' });
+    expect(closeMenuButton.closest('[role="dialog"]')).not.toBeNull();
+    await rendered.user.click(closeMenuButton);
     expect(screen.queryAllByRole('link', { name: 'Steward' })).toHaveLength(0);
 
     await rendered.user.click(screen.getByRole('button', { name: 'fixture-user' }));

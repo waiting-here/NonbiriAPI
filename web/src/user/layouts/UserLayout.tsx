@@ -1,3 +1,5 @@
+import { FocusScope } from 'react-aria';
+import { useDrawerOverlay } from '@shared/components/OverlaySurface';
 import { MfaChallenge } from '../features/mfa/MfaChallenge';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -100,7 +102,7 @@ export function UserLayout() {
   }, []);
   const closeMenu = useCallback(() => {
     setMenuOpen(false);
-    restoreMenuFocus();
+    requestAnimationFrame(restoreMenuFocus);
   }, [restoreMenuFocus]);
 
   const location = useLocation();
@@ -126,46 +128,7 @@ export function UserLayout() {
     if (hasElevated) navigate(USER_ACCOUNT_PATH, { replace: true });
   }, [location.pathname, navigate]);
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    // Lock the root scroller. Making body a scroll container disconnects the
-    // sticky header from the viewport when the document is already scrolled.
-    const scrollRoot = document.documentElement;
-    const previousOverflow = scrollRoot.style.overflow;
-    scrollRoot.style.overflow = 'hidden';
-    if (navRef.current) navRef.current.scrollTop = 0;
-    const firstLink = navRef.current?.querySelector<HTMLElement>('a[href], button:not([disabled])');
-    firstLink?.focus({ preventScroll: true });
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.target instanceof Element && event.target.closest('[aria-modal="true"]')) return;
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closeMenu();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-      const focusable = Array.from(
-        navRef.current?.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), select:not([disabled])',
-        ) ?? [],
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      scrollRoot.style.overflow = previousOverflow;
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [closeMenu, menuOpen]);
+  const drawerProps = useDrawerOverlay(menuOpen, closeMenu, navRef);
 
   useEffect(() => {
     if (!menuOpen || typeof window === 'undefined' || typeof window.matchMedia !== 'function')
@@ -298,6 +261,7 @@ export function UserLayout() {
               ref={menuButtonRef}
               type="button"
               className="nb-btn nb-btn--secondary mobile-menu-btn nb-menu-button"
+              style={menuOpen ? { visibility: 'hidden' } : undefined}
               aria-expanded={menuOpen}
               aria-controls="user-navigation"
               aria-label={t(menuOpen ? 'shell.closeMenu' : 'shell.openMenu')}
@@ -306,89 +270,104 @@ export function UserLayout() {
               <Icon name={menuOpen ? 'close' : 'menu'} />
             </button>
           ) : null}
-          <nav
-            ref={navRef}
-            id="user-navigation"
-            className={`site-nav nb-user-header__nav ${menuOpen ? 'is-open' : ''}`}
-            aria-label={t('user.shell.navLabel')}
-          >
-            <ul className="nb-user-header__nav-list">
-              {navItems.map((item) => (
-                <li key={item.key}>
-                  <NavLink
-                    className="nb-user-header__nav-link"
-                    data-active={item.group && item.group === currentGroup ? 'true' : undefined}
-                    to={item.to}
-                    end={item.end}
-                    onClick={closeMenu}
-                  >
-                    {item.icon ? <Icon name={item.icon} /> : null}
-                    <span>
-                      {item.labelKey
-                        ? t(item.labelKey, {
-                            defaultValue: item.fallbackLabelKey
-                              ? t(item.fallbackLabelKey)
-                              : item.labelKey,
-                          })
-                        : t(`user.${item.key}.nav`)}
-                    </span>
-                  </NavLink>
-                  {menuOpen && item.group ? (
-                    <ul className="nb-user-header__subnav">
-                      {USER_SECTION_LINKS[item.group].map((link) => (
-                        <li key={link.to}>
-                          <NavLink
-                            className="nb-user-header__subnav-link"
-                            to={link.to}
-                            onClick={closeMenu}
-                          >
-                            {t(link.labelKey)}
-                          </NavLink>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-            {signedIn && menuOpen ? (
-              <div className="nb-user-drawer-actions">
-                <div className="nb-user-drawer-actions__identity">{displayName}</div>
-                <Link
-                  className="nb-btn nb-btn--ghost nb-btn--sm"
-                  to={USER_ACCOUNT_PATH}
-                  onClick={closeMenu}
-                >
-                  <Icon name="account" />
-                  {t('user.account.nav')}
-                </Link>
-                {showStewardEntry ? (
+          <FocusScope contain={menuOpen}>
+            <nav
+              {...drawerProps}
+              role={menuOpen ? 'dialog' : undefined}
+              aria-modal={menuOpen || undefined}
+              ref={navRef}
+              id="user-navigation"
+              className={`site-nav nb-user-header__nav ${menuOpen ? 'is-open' : ''}`}
+              aria-label={t('user.shell.navLabel')}
+            >
+              <ul className="nb-user-header__nav-list">
+                {navItems.map((item) => (
+                  <li key={item.key}>
+                    <NavLink
+                      className="nb-user-header__nav-link"
+                      data-active={item.group && item.group === currentGroup ? 'true' : undefined}
+                      to={item.to}
+                      end={item.end}
+                      onClick={closeMenu}
+                    >
+                      {item.icon ? <Icon name={item.icon} /> : null}
+                      <span>
+                        {item.labelKey
+                          ? t(item.labelKey, {
+                              defaultValue: item.fallbackLabelKey
+                                ? t(item.fallbackLabelKey)
+                                : item.labelKey,
+                            })
+                          : t(`user.${item.key}.nav`)}
+                      </span>
+                    </NavLink>
+                    {menuOpen && item.group ? (
+                      <ul className="nb-user-header__subnav">
+                        {USER_SECTION_LINKS[item.group].map((link) => (
+                          <li key={link.to}>
+                            <NavLink
+                              className="nb-user-header__subnav-link"
+                              to={link.to}
+                              onClick={closeMenu}
+                            >
+                              {t(link.labelKey)}
+                            </NavLink>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              {signedIn && menuOpen ? (
+                <div className="nb-user-drawer-actions">
+                  <div className="nb-user-drawer-actions__identity">{displayName}</div>
                   <Link
                     className="nb-btn nb-btn--ghost nb-btn--sm"
-                    to={USER_STEWARD_PATH}
+                    to={USER_ACCOUNT_PATH}
                     onClick={closeMenu}
                   >
-                    <Icon name="steward" />
-                    {t('user.steward.nav')}
+                    <Icon name="account" />
+                    {t('user.account.nav')}
                   </Link>
-                ) : null}
-                <AppearanceButton />
-                <ThemeToggle />
+                  {showStewardEntry ? (
+                    <Link
+                      className="nb-btn nb-btn--ghost nb-btn--sm"
+                      to={USER_STEWARD_PATH}
+                      onClick={closeMenu}
+                    >
+                      <Icon name="steward" />
+                      {t('user.steward.nav')}
+                    </Link>
+                  ) : null}
+                  <AppearanceButton />
+                  <ThemeToggle />
+                  <button
+                    type="button"
+                    className="nb-btn nb-btn--secondary"
+                    onClick={() => {
+                      closeMenu();
+                      logout.mutate();
+                    }}
+                    disabled={logout.isPending}
+                  >
+                    <Icon name="logout" />
+                    {logout.isPending ? t('common.working') : t('common.signOut')}
+                  </button>
+                </div>
+              ) : null}
+              {menuOpen && (
                 <button
                   type="button"
-                  className="nb-btn nb-btn--secondary"
-                  onClick={() => {
-                    closeMenu();
-                    logout.mutate();
-                  }}
-                  disabled={logout.isPending}
+                  className="nb-btn nb-btn--secondary nb-drawer-close"
+                  aria-label={t('shell.closeMenu')}
+                  onClick={closeMenu}
                 >
-                  <Icon name="logout" />
-                  {logout.isPending ? t('common.working') : t('common.signOut')}
+                  <Icon name="close" />
                 </button>
-              </div>
-            ) : null}
-          </nav>
+              )}
+            </nav>
+          </FocusScope>
           {signedIn && menuOpen ? (
             <button
               type="button"

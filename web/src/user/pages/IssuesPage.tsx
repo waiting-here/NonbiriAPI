@@ -99,102 +99,103 @@ export function IssuesPage() {
           { value: 'current', label: t('user.issues.currentTab') },
           { value: 'closed', label: t('user.issues.closedTab') },
         ]}
-      />
-      {session.error ? (
-        <ErrorState error={session.error} onRetry={() => void session.refetch()} />
-      ) : session.isPending || (issues.isPending && !pageData) ? (
-        <LoadingState />
-      ) : issues.error && !pageData ? (
-        <ErrorState error={issues.error} onRetry={() => void issues.refetch()} />
-      ) : pageData ? (
-        <div aria-busy={busy}>
-          {issues.error ? (
-            <ErrorState error={issues.error} onRetry={() => void issues.refetch()} />
-          ) : null}
-          {pageData.projection_incomplete ? (
-            <p className="inline-notice" role="status">
-              {t('user.issues.projectionIncomplete')}
-            </p>
-          ) : null}
-          {pageData.data.length === 0 ? (
-            <EmptyState
-              title={t('user.issues.empty')}
-              body={
-                state === 'current'
-                  ? t('user.issues.emptyCurrentBody')
-                  : t('user.issues.emptyClosedBody')
-              }
-            />
-          ) : (
-            <Card>
-              {pageData.data.map((issue) => (
-                <div key={issue.id} className="nb-row records-issue">
-                  <div className="records-issue__heading">
-                    <h2>{t(SUMMARY_LABEL_KEYS[issue.summary_code])}</h2>
-                    <StatusBadge
-                      active={issue.state === 'current'}
-                      label={t(STATE_LABEL_KEYS[issue.state])}
-                      danger={issue.state === 'current'}
-                    />
-                  </div>
-                  {issue.safe_detail ? (
-                    <p>
-                      {Object.hasOwn(DETAIL_LABEL_KEYS, issue.safe_detail)
-                        ? t(DETAIL_LABEL_KEYS[issue.safe_detail])
-                        : issue.safe_detail}
-                    </p>
-                  ) : null}
-                  <dl className="nb-facts nb-facts--inline">
-                    <dt>{t('user.issues.resourceType')}</dt>
-                    <dd>{t(RESOURCE_LABEL_KEYS[issue.resource_kind])}</dd>
-                    <dt>{t('user.issues.firstSeen')}</dt>
-                    <dd>{formatDateTime(issue.first_seen_at)}</dd>
-                    <dt>{t('user.issues.lastSeen')}</dt>
-                    <dd>{formatDateTime(issue.last_seen_at)}</dd>
-                    <dt>{t('user.issues.observations')}</dt>
-                    <dd className="mono">{issue.count}</dd>
-                    {issue.closed_at !== null ? (
-                      <>
-                        <dt>{t('user.issues.closedAt')}</dt>
-                        <dd>{formatDateTime(issue.closed_at)}</dd>
-                      </>
+      >
+        {session.error ? (
+          <ErrorState error={session.error} onRetry={() => void session.refetch()} />
+        ) : session.isPending || (issues.isPending && !pageData) ? (
+          <LoadingState />
+        ) : issues.error && !pageData ? (
+          <ErrorState error={issues.error} onRetry={() => void issues.refetch()} />
+        ) : pageData ? (
+          <div aria-busy={busy}>
+            {issues.error ? (
+              <ErrorState error={issues.error} onRetry={() => void issues.refetch()} />
+            ) : null}
+            {pageData.projection_incomplete ? (
+              <p className="inline-notice" role="status">
+                {t('user.issues.projectionIncomplete')}
+              </p>
+            ) : null}
+            {pageData.data.length === 0 ? (
+              <EmptyState
+                title={t('user.issues.empty')}
+                body={
+                  state === 'current'
+                    ? t('user.issues.emptyCurrentBody')
+                    : t('user.issues.emptyClosedBody')
+                }
+              />
+            ) : (
+              <Card>
+                {pageData.data.map((issue) => (
+                  <div key={issue.id} className="nb-row records-issue">
+                    <div className="records-issue__heading">
+                      <h2>{t(SUMMARY_LABEL_KEYS[issue.summary_code])}</h2>
+                      <StatusBadge
+                        active={issue.state === 'current'}
+                        label={t(STATE_LABEL_KEYS[issue.state])}
+                        danger={issue.state === 'current'}
+                      />
+                    </div>
+                    {issue.safe_detail ? (
+                      <p>
+                        {Object.hasOwn(DETAIL_LABEL_KEYS, issue.safe_detail)
+                          ? t(DETAIL_LABEL_KEYS[issue.safe_detail])
+                          : issue.safe_detail}
+                      </p>
                     ) : null}
-                  </dl>
-                  {issue.deep_link ? (
-                    <Link
-                      className="nb-btn nb-btn--secondary"
-                      to={
-                        issue.deep_link.route_id === 'endpoint-detail'
-                          ? `/endpoints/${encodeURIComponent(issue.deep_link.resource_id)}`
-                          : '/models'
-                      }
-                    >
-                      {t('user.issues.openResource')}
-                    </Link>
-                  ) : (
-                    <p className="table-note">
-                      {t(
-                        issue.state === 'closed'
-                          ? 'user.issues.closedResourceUnavailable'
-                          : 'user.issues.resourceUnavailable',
-                      )}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </Card>
-          )}
-          <PagePagination
-            metadata={pageData.pagination}
-            busy={busy}
-            onPageChange={pager.setPage}
-            onPageSizeChange={pager.setPageSize}
-            requestedPage={pager.page}
-          />
-        </div>
-      ) : (
-        <LoadingState />
-      )}
+                    <dl className="nb-facts nb-facts--inline">
+                      <dt>{t('user.issues.resourceType')}</dt>
+                      <dd>{t(RESOURCE_LABEL_KEYS[issue.resource_kind])}</dd>
+                      <dt>{t('user.issues.firstSeen')}</dt>
+                      <dd>{formatDateTime(issue.first_seen_at)}</dd>
+                      <dt>{t('user.issues.lastSeen')}</dt>
+                      <dd>{formatDateTime(issue.last_seen_at)}</dd>
+                      <dt>{t('user.issues.observations')}</dt>
+                      <dd className="mono">{issue.count}</dd>
+                      {issue.closed_at !== null ? (
+                        <>
+                          <dt>{t('user.issues.closedAt')}</dt>
+                          <dd>{formatDateTime(issue.closed_at)}</dd>
+                        </>
+                      ) : null}
+                    </dl>
+                    {issue.deep_link ? (
+                      <Link
+                        className="nb-btn nb-btn--secondary"
+                        to={
+                          issue.deep_link.route_id === 'endpoint-detail'
+                            ? `/endpoints/${encodeURIComponent(issue.deep_link.resource_id)}`
+                            : '/models'
+                        }
+                      >
+                        {t('user.issues.openResource')}
+                      </Link>
+                    ) : (
+                      <p className="table-note">
+                        {t(
+                          issue.state === 'closed'
+                            ? 'user.issues.closedResourceUnavailable'
+                            : 'user.issues.resourceUnavailable',
+                        )}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </Card>
+            )}
+            <PagePagination
+              metadata={pageData.pagination}
+              busy={busy}
+              onPageChange={pager.setPage}
+              onPageSizeChange={pager.setPageSize}
+              requestedPage={pager.page}
+            />
+          </div>
+        ) : (
+          <LoadingState />
+        )}
+      </Tabs>
     </div>
   );
 }

@@ -91,72 +91,73 @@ function UsagePanel({ account, active }: { account: string; active: boolean }) {
           { value: 'total', label: t('common.agent.allTime') },
           { value: 'last_24_hours', label: t('common.agent.last24Hours') },
         ]}
-      />
-      {query.isPending ? (
-        <LoadingState />
-      ) : query.error ? (
-        <AgentError error={query.error} onRetry={() => void query.refetch()} />
-      ) : (
-        <>
-          {rows.length ? (
-            <DataTable
-              caption={t('common.agent.usage')}
-              rows={rows.slice((current - 1) * pager.pageSize, current * pager.pageSize)}
-              rowKey={(row) => [row.actor_id, row.source, row.kind].join(':')}
-              columns={[
-                {
-                  key: 'actor',
-                  header: t('common.agent.actor'),
-                  cell: 'title',
-                  render: (row) => <span>{row.actor_label || row.actor_id}</span>,
-                },
-                {
-                  key: 'source',
-                  header: t('common.agent.source'),
-                  cell: 'meta',
-                  render: (row) => (
-                    <span>
-                      {t(sourceLabels[row.source] ?? 'common.agent.sources.auto_review')} ·{' '}
-                      {t(
-                        row.kind === 'compaction'
-                          ? 'common.agent.compaction'
-                          : 'common.agent.modelRequest',
-                      )}
-                    </span>
-                  ),
-                },
-                {
-                  key: 'count',
-                  header: t('common.agent.requests'),
-                  cell: 'meta',
-                  align: 'num',
-                  render: (row) => formatCount(row.requests).display,
-                },
-                {
-                  key: 'tokens',
-                  header: t('common.agent.usage'),
-                  cell: 'meta',
-                  render: (row) => <UsageTokens usage={row.usage} />,
-                },
-              ]}
+      >
+        {query.isPending ? (
+          <LoadingState />
+        ) : query.error ? (
+          <AgentError error={query.error} onRetry={() => void query.refetch()} />
+        ) : (
+          <>
+            {rows.length ? (
+              <DataTable
+                caption={t('common.agent.usage')}
+                rows={rows.slice((current - 1) * pager.pageSize, current * pager.pageSize)}
+                rowKey={(row) => [row.actor_id, row.source, row.kind].join(':')}
+                columns={[
+                  {
+                    key: 'actor',
+                    header: t('common.agent.actor'),
+                    cell: 'title',
+                    render: (row) => <span>{row.actor_label || row.actor_id}</span>,
+                  },
+                  {
+                    key: 'source',
+                    header: t('common.agent.source'),
+                    cell: 'meta',
+                    render: (row) => (
+                      <span>
+                        {t(sourceLabels[row.source] ?? 'common.agent.sources.auto_review')} ·{' '}
+                        {t(
+                          row.kind === 'compaction'
+                            ? 'common.agent.compaction'
+                            : 'common.agent.modelRequest',
+                        )}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'count',
+                    header: t('common.agent.requests'),
+                    cell: 'meta',
+                    align: 'num',
+                    render: (row) => formatCount(row.requests).display,
+                  },
+                  {
+                    key: 'tokens',
+                    header: t('common.agent.usage'),
+                    cell: 'meta',
+                    render: (row) => <UsageTokens usage={row.usage} />,
+                  },
+                ]}
+              />
+            ) : (
+              <AgentEmpty body={t('common.agent.usageEmpty')} />
+            )}
+            <PagePagination
+              metadata={{
+                page: String(current),
+                page_size: pager.pageSize,
+                total_items: String(rows.length),
+                total_pages: String(pages),
+              }}
+              requestedPage={pager.page}
+              busy={query.isFetching}
+              onPageChange={pager.setPage}
+              onPageSizeChange={pager.setPageSize}
             />
-          ) : (
-            <AgentEmpty body={t('common.agent.usageEmpty')} />
-          )}
-          <PagePagination
-            metadata={{
-              page: String(current),
-              page_size: pager.pageSize,
-              total_items: String(rows.length),
-              total_pages: String(pages),
-            }}
-            requestedPage={pager.page}
-            busy={query.isFetching}
-            onPageChange={pager.setPage}
-            onPageSizeChange={pager.setPageSize}
-          />
-        </>
-      )}
+          </>
+        )}
+      </Tabs>
     </div>
   );
 }

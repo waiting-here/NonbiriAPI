@@ -1489,7 +1489,7 @@
   .gacha-topbar {
     flex-direction: column-reverse;
   }
-  .gacha-topbar > .nb-tabs {
+  .gacha-topbar > .nb-tabs-root > .nb-tabs {
     width: 100%;
     justify-content: center;
   }
@@ -1517,7 +1517,7 @@
     padding: var(--nb-space-3);
     flex-wrap: wrap;
   }
-  .gacha-pool-nav > .nb-tabs {
+  .gacha-pool-nav > .nb-tabs-root > .nb-tabs {
     width: 100%;
   }
   .gacha-pool-nav > .nb-btn {

@@ -511,6 +511,8 @@ describe('administrator alerts page', () => {
         input instanceof Request ? input.url : String(input),
         window.location.origin,
       );
+      if (target.pathname === '/admin/api/alerts/21/resolve')
+        return Promise.resolve(jsonResponse(alert('21', true)));
       if (target.pathname === '/admin/api/session') return Promise.resolve(jsonResponse(session()));
       if (target.pathname === '/admin/api/alerts' && target.searchParams.get('page') === '1') {
         return Promise.resolve(
@@ -520,7 +522,7 @@ describe('administrator alerts page', () => {
         );
       }
       if (target.pathname === '/admin/api/alerts' && target.searchParams.get('page') === '2') {
-        return nextPage.promise;
+        return nextPage.promise.then((response) => response.clone());
       }
       throw new Error(`Unexpected request: ${target.pathname}${target.search}`);
     });
@@ -540,7 +542,12 @@ describe('administrator alerts page', () => {
     expect(screen.getByRole('checkbox', { name: 'Select alert 1' })).toBeVisible();
     expect(document.querySelector('[aria-busy="true"]')).toBeInTheDocument();
     await rendered.user.click(screen.getAllByRole('button', { name: 'Alert actions' })[0]);
-    expect(screen.getAllByRole('menuitem', { name: 'Resolve' })[0]).toBeDisabled();
+    const resolve = screen.getByRole('menuitem', { name: 'Resolve' });
+    expect(resolve).toHaveAttribute('aria-disabled', 'true');
+    const reads = fetchMock.mock.calls.length;
+    await rendered.user.click(resolve);
+    expect(fetchMock).toHaveBeenCalledTimes(reads);
+    await rendered.user.keyboard('{Escape}');
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toBeDisabled();
 
@@ -554,6 +561,14 @@ describe('administrator alerts page', () => {
     });
     expect(await screen.findByRole('checkbox', { name: 'Select alert 21' })).toBeVisible();
     expect(screen.queryByRole('checkbox', { name: 'Select alert 1' })).not.toBeInTheDocument();
+    await rendered.user.click(screen.getByRole('button', { name: 'Alert actions' }));
+    expect(screen.getByRole('menuitem', { name: 'Resolve' })).not.toHaveAttribute('aria-disabled');
+    await rendered.user.click(screen.getByRole('menuitem', { name: 'Resolve' }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) => String(input).endsWith('/alerts/21/resolve')),
+      ).toBe(true),
+    );
   });
 
   it('restores a previous URL collection on browser back', async () => {

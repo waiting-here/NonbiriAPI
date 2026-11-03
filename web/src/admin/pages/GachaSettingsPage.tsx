@@ -191,6 +191,7 @@ function RulesFields({
                 </Field>
               )}
               <Toggle
+                disabled={disabled}
                 label={
                   tier.toUpperCase() +
                   t(' 连续未中后的限定保证', ' featured guarantee after consecutive misses')
@@ -493,12 +494,13 @@ function PoolEditor({
               <Toggle
                 label={t('发布奖池，按配置时间开放', 'Publish and open on schedule')}
                 checked={pool.published}
-                disabled={locked}
+                disabled={locked || busy}
                 onChange={(published) => setPool({ ...pool, published })}
               />
               <Toggle
                 label={t('暂停奖池和限定兑换', 'Pause drawing and limited exchanges')}
                 checked={pool.paused}
+                disabled={busy}
                 onChange={(paused) => setPool({ ...pool, paused })}
               />
             </>
@@ -726,161 +728,162 @@ function GachaSettingsContent() {
               { value: 'statistics', label: ui('admin.gachaStats.tab') },
               { value: 'shop-statistics', label: ui('admin.gachaShopStats.tab') },
             ]}
-          />
-          {section === 'statistics' && session.data && !session.error ? (
-            <GachaPoolStatistics
-              key={session.data.admin.username}
-              accountKey={session.data.admin.username}
-            />
-          ) : null}
-          {section === 'shop-statistics' && session.data && !session.error ? (
-            <GachaShopStatistics
-              key={session.data.admin.username}
-              accountKey={session.data.admin.username}
-            />
-          ) : null}
-          {section === 'settings' && (
-            <SettingsForm
-              key={query.data.revision}
-              config={query.data}
-              busy={busy}
-              save={save}
-              t={t}
-            />
-          )}
-          {section === 'pools' && (
-            <Panel>
-              <PanelHead
-                title={t('限定奖池', 'Limited pools')}
-                description={t(
-                  '可以同时开放任意数量的限定奖池。',
-                  'Multiple limited pools can be open at once.',
-                )}
-                actions={
-                  <Button variant="primary" disabled={busy} onClick={() => copyPool()}>
-                    {t('新建奖池', 'New pool')}
-                  </Button>
-                }
+          >
+            {section === 'statistics' && session.data && !session.error ? (
+              <GachaPoolStatistics
+                key={session.data.admin.username}
+                accountKey={session.data.admin.username}
               />
-              <PanelBody>
-                {!query.data.pools.some((p) => p.kind === 'limited') && (
-                  <p>
-                    {t(
-                      '尚未发布限定奖池。可先从配置模板读取并微调。',
-                      'No limited pool yet. Start by loading a template and adjusting it.',
-                    )}
-                  </p>
-                )}
-                <div className="gacha-admin-pools">
-                  {query.data.pools
-                    .filter((p) => p.kind === 'limited')
-                    .map((pool) => (
-                      <article key={pool.id}>
+            ) : null}
+            {section === 'shop-statistics' && session.data && !session.error ? (
+              <GachaShopStatistics
+                key={session.data.admin.username}
+                accountKey={session.data.admin.username}
+              />
+            ) : null}
+            {section === 'settings' && (
+              <SettingsForm
+                key={query.data.revision}
+                config={query.data}
+                busy={busy}
+                save={save}
+                t={t}
+              />
+            )}
+            {section === 'pools' && (
+              <Panel>
+                <PanelHead
+                  title={t('限定奖池', 'Limited pools')}
+                  description={t(
+                    '可以同时开放任意数量的限定奖池。',
+                    'Multiple limited pools can be open at once.',
+                  )}
+                  actions={
+                    <Button variant="primary" disabled={busy} onClick={() => copyPool()}>
+                      {t('新建奖池', 'New pool')}
+                    </Button>
+                  }
+                />
+                <PanelBody>
+                  {!query.data.pools.some((p) => p.kind === 'limited') && (
+                    <p>
+                      {t(
+                        '尚未发布限定奖池。可先从配置模板读取并微调。',
+                        'No limited pool yet. Start by loading a template and adjusting it.',
+                      )}
+                    </p>
+                  )}
+                  <div className="gacha-admin-pools">
+                    {query.data.pools
+                      .filter((p) => p.kind === 'limited')
+                      .map((pool) => (
+                        <article key={pool.id}>
+                          <ArtworkImage
+                            artworkKey={'cover:' + pool.cover}
+                            src={'/assets/gacha/covers/' + pool.cover + '.webp'}
+                            alt={pool.name}
+                          />
+                          <div>
+                            <h3>{pool.name}</h3>
+                            <ArtworkBadge artworkKey={'cover:' + pool.cover} />
+                            <ArtworkUnavailable artworkKey={'cover:' + pool.cover} />
+                            <p>
+                              {!pool.published
+                                ? t('草稿', 'Draft')
+                                : pool.paused
+                                  ? t('已暂停', 'Paused')
+                                  : poolOpen(pool, query.data!.server_time)
+                                    ? t('开放中', 'Open')
+                                    : pool.ends_at && pool.ends_at <= query.data!.server_time
+                                      ? t('已结束', 'Ended')
+                                      : t('即将开放', 'Scheduled')}
+                            </p>
+                            <p>
+                              {pool.starts_at ? formatDateTime(pool.starts_at) : '—'} →{' '}
+                              {pool.ends_at ? formatDateTime(pool.ends_at) : '—'}
+                            </p>
+                            <div className="gacha-admin-actions">
+                              <Button
+                                disabled={busy}
+                                onClick={() => {
+                                  mutation.reset();
+                                  setDraft({ pool });
+                                }}
+                              >
+                                {t('编辑', 'Edit')}
+                              </Button>
+                              <Button disabled={busy} onClick={() => copyPool(pool)}>
+                                {t('复制为新一期', 'Create similar period')}
+                              </Button>
+                            </div>
+                          </div>
+                        </article>
+                      ))}
+                  </div>
+                </PanelBody>
+              </Panel>
+            )}
+            {section === 'presets' && (
+              <Panel>
+                <PanelHead
+                  title={t('保存好的配置组合', 'Saved configurations')}
+                  description={t(
+                    '模板保留封面、卡牌、概率和保底规则。读取后重新填写开放时间。',
+                    'Templates keep the cover, cards, rates and pity rules. Set a new schedule when using one.',
+                  )}
+                />
+                <PanelBody>
+                  <div className="gacha-admin-pools">
+                    {query.data.presets.map((preset) => (
+                      <article key={preset.id}>
                         <ArtworkImage
-                          artworkKey={'cover:' + pool.cover}
-                          src={'/assets/gacha/covers/' + pool.cover + '.webp'}
-                          alt={pool.name}
+                          artworkKey={'cover:' + preset.pool.cover}
+                          src={'/assets/gacha/covers/' + preset.pool.cover + '.webp'}
+                          alt={preset.name}
                         />
                         <div>
-                          <h3>{pool.name}</h3>
-                          <ArtworkBadge artworkKey={'cover:' + pool.cover} />
-                          <ArtworkUnavailable artworkKey={'cover:' + pool.cover} />
+                          <h3>{preset.name}</h3>
+                          <ArtworkBadge artworkKey={'cover:' + preset.pool.cover} />
+                          <ArtworkUnavailable artworkKey={'cover:' + preset.pool.cover} />
                           <p>
-                            {!pool.published
-                              ? t('草稿', 'Draft')
-                              : pool.paused
-                                ? t('已暂停', 'Paused')
-                                : poolOpen(pool, query.data!.server_time)
-                                  ? t('开放中', 'Open')
-                                  : pool.ends_at && pool.ends_at <= query.data!.server_time
-                                    ? t('已结束', 'Ended')
-                                    : t('即将开放', 'Scheduled')}
-                          </p>
-                          <p>
-                            {pool.starts_at ? formatDateTime(pool.starts_at) : '—'} →{' '}
-                            {pool.ends_at ? formatDateTime(pool.ends_at) : '—'}
+                            {preset.pool.featured.length} {t('张限定卡', 'limited cards')}
                           </p>
                           <div className="gacha-admin-actions">
+                            <Button disabled={busy} onClick={() => copyPool(preset.pool)}>
+                              {t('读取并微调', 'Load and adjust')}
+                            </Button>
                             <Button
                               disabled={busy}
                               onClick={() => {
                                 mutation.reset();
-                                setDraft({ pool });
+                                setDraft({ pool: preset.pool, preset });
                               }}
                             >
-                              {t('编辑', 'Edit')}
-                            </Button>
-                            <Button disabled={busy} onClick={() => copyPool(pool)}>
-                              {t('复制为新一期', 'Create similar period')}
+                              {t('编辑模板', 'Edit template')}
                             </Button>
                           </div>
                         </div>
                       </article>
                     ))}
-                </div>
-              </PanelBody>
-            </Panel>
-          )}
-          {section === 'presets' && (
-            <Panel>
-              <PanelHead
-                title={t('保存好的配置组合', 'Saved configurations')}
-                description={t(
-                  '模板保留封面、卡牌、概率和保底规则。读取后重新填写开放时间。',
-                  'Templates keep the cover, cards, rates and pity rules. Set a new schedule when using one.',
-                )}
-              />
-              <PanelBody>
-                <div className="gacha-admin-pools">
-                  {query.data.presets.map((preset) => (
-                    <article key={preset.id}>
-                      <ArtworkImage
-                        artworkKey={'cover:' + preset.pool.cover}
-                        src={'/assets/gacha/covers/' + preset.pool.cover + '.webp'}
-                        alt={preset.name}
-                      />
-                      <div>
-                        <h3>{preset.name}</h3>
-                        <ArtworkBadge artworkKey={'cover:' + preset.pool.cover} />
-                        <ArtworkUnavailable artworkKey={'cover:' + preset.pool.cover} />
-                        <p>
-                          {preset.pool.featured.length} {t('张限定卡', 'limited cards')}
-                        </p>
-                        <div className="gacha-admin-actions">
-                          <Button disabled={busy} onClick={() => copyPool(preset.pool)}>
-                            {t('读取并微调', 'Load and adjust')}
-                          </Button>
-                          <Button
-                            disabled={busy}
-                            onClick={() => {
-                              mutation.reset();
-                              setDraft({ pool: preset.pool, preset });
-                            }}
-                          >
-                            {t('编辑模板', 'Edit template')}
-                          </Button>
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </PanelBody>
-            </Panel>
-          )}
-          {draft && (
-            <>
-              <PoolEditor
-                key={draft.preset?.id ?? draft.pool.id}
-                draft={draft}
-                config={query.data}
-                busy={busy}
-                save={save}
-                close={() => setDraft(null)}
-                feedback={feedback}
-                t={t}
-              />
-            </>
-          )}
+                  </div>
+                </PanelBody>
+              </Panel>
+            )}
+            {draft && (
+              <>
+                <PoolEditor
+                  key={draft.preset?.id ?? draft.pool.id}
+                  draft={draft}
+                  config={query.data}
+                  busy={busy}
+                  save={save}
+                  close={() => setDraft(null)}
+                  feedback={feedback}
+                  t={t}
+                />
+              </>
+            )}
+          </Tabs>
         </>
       )}
     </div>

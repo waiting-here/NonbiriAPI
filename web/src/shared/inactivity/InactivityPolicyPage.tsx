@@ -34,7 +34,9 @@ function AssetEditor({
   rule,
   onChange,
   zh,
+  disabled,
 }: {
+  disabled: boolean;
   name: string;
   rule: AssetRule | null;
   onChange: (value: AssetRule | null) => void;
@@ -44,6 +46,7 @@ function AssetEditor({
     <section className="inactivity-asset" aria-label={name}>
       <h4>{name}</h4>
       <Toggle
+        disabled={disabled}
         label={zh ? '对此积分启用衰减' : 'Decay this currency'}
         checked={rule !== null}
         onChange={(enabled) =>
@@ -299,6 +302,7 @@ function Editor({
           <section className="inactivity-section" aria-labelledby="inactivity-decay-heading">
             <h3 id="inactivity-decay-heading">{zh ? '积分衰减' : 'Credit decay'}</h3>
             <Toggle
+              disabled={pending}
               label={zh ? '启用积分衰减' : 'Enable credit decay'}
               checked={policy.decay.enabled}
               onChange={(enabled) => change({ ...policy, decay: { ...policy.decay, enabled } })}
@@ -326,6 +330,7 @@ function Editor({
                 <div className="inactivity-assets">
                   {(['general', 'game'] as const).map((asset) => (
                     <AssetEditor
+                      disabled={pending}
                       key={asset}
                       zh={zh}
                       name={
@@ -358,6 +363,7 @@ function Editor({
               {zh ? '保护性永久封禁' : 'Permanent protective ban'}
             </h3>
             <Toggle
+              disabled={pending}
               label={zh ? '启用保护性封禁' : 'Enable protective bans'}
               checked={policy.protection.enabled}
               onChange={(enabled) =>

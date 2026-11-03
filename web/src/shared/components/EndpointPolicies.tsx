@@ -216,191 +216,184 @@ function EndpointPoliciesContent({
               return next;
             })
           }
-        />
-        <div
-          role="tabpanel"
-          aria-label={t('common.endpointPolicies.rulesTab')}
-          hidden={view !== 'rules'}
         >
-          {rulesAllowed ? (
-            <>
-              <div hidden={Boolean(selection)} ref={listRef} tabIndex={-1} className="nb-form">
-                <FilterBar
-                  activeCount={q ? 1 : 0}
-                  onReset={() => {
-                    setSearch('');
-                    setParams((previous) => {
-                      const next = new URLSearchParams(previous);
-                      next.delete('q');
-                      next.set('page', '1');
-                      return next;
-                    });
-                  }}
-                  onSubmit={() => {
-                    if (validManagementSearch(search))
+          <div aria-label={t('common.endpointPolicies.rulesTab')} hidden={view !== 'rules'}>
+            {rulesAllowed ? (
+              <>
+                <div hidden={Boolean(selection)} ref={listRef} tabIndex={-1} className="nb-form">
+                  <FilterBar
+                    activeCount={q ? 1 : 0}
+                    onReset={() => {
+                      setSearch('');
                       setParams((previous) => {
                         const next = new URLSearchParams(previous);
-                        next.set('q', search.trim());
+                        next.delete('q');
                         next.set('page', '1');
                         return next;
                       });
-                  }}
-                  search={
-                    <>
-                      <Field label={t('common.endpointPolicies.search')}>
-                        {(props) => (
-                          <input
-                            {...props}
-                            type="search"
-                            value={search}
-                            maxLength={256}
-                            placeholder={t('common.endpointPolicies.searchPlaceholder')}
-                            onChange={(event) => setSearch(event.target.value)}
-                          />
-                        )}
-                      </Field>
-                    </>
-                  }
-                />
-                <div className="nb-actions">
-                  <Button
-                    type="button"
-                    variant="primary"
-                    onClick={() => {
-                      remember();
-                      setParams((previous) => {
-                        const next = new URLSearchParams(previous);
-                        next.set('new', '1');
-                        return next;
-                      });
                     }}
-                  >
-                    {t('common.endpointPolicies.configureEndpoint')}
-                  </Button>
-                </div>
-                {list.isPending ? (
-                  <LoadingState />
-                ) : list.error ? (
-                  <ErrorState error={list.error} onRetry={() => void list.refetch()} />
-                ) : (
-                  <>
-                    {list.data.data.length ? (
-                      <DataTable
-                        caption={t('common.endpointPolicies.endpoints')}
-                        rows={list.data.data}
-                        rowKey={endpointIdentityKey}
-                        columns={[
-                          {
-                            key: 'endpoint',
-                            header: t('common.endpointPolicies.endpoint'),
-                            mobileLabel: t('common.endpointPolicies.endpoint'),
-                            cell: 'title',
-                            render: (row) => (
-                              <>
-                                <span className="mono endpoint-policy-url">{row.base_url}</span>
-                                <small>
-                                  <GatewayConnectorLabel value={row.connector_type} />
-                                </small>
-                              </>
-                            ),
-                          },
-                          {
-                            key: 'rules',
-                            header: t('common.endpointPolicies.ruleCount'),
-                            mobileLabel: t('common.endpointPolicies.ruleCount'),
-                            cell: 'meta',
-                            align: 'num',
-                            render: (row) => formatCount(row.rule_count).display,
-                          },
-                          {
-                            key: 'keys',
-                            header: t('common.endpointPolicies.keyCount'),
-                            mobileLabel: t('common.endpointPolicies.keyCount'),
-                            cell: 'meta',
-                            align: 'num',
-                            render: (row) => formatCount(row.key_count).display,
-                          },
-                          {
-                            key: 'actions',
-                            header: t('common.workflow.actions'),
-                            mobileLabel: t('common.workflow.actions'),
-                            cell: 'action',
-                            render: (row) => (
-                              <Button
-                                type="button"
-                                id={`endpoint-policy-${encodeURIComponent(endpointIdentityKey(row))}`}
-                                onClick={() => open(row)}
-                              >
-                                {t('common.endpointPolicies.edit')}
-                              </Button>
-                            ),
-                          },
-                        ]}
-                      />
-                    ) : (
-                      <EmptyState
-                        title={t('common.endpointPolicies.empty')}
-                        body={t('common.endpointPolicies.emptyHelp')}
-                      />
-                    )}
-                    <PagePagination
-                      alwaysShowJump
-                      metadata={list.data.pagination}
-                      requestedPage={pager.page}
-                      onPageChange={pager.setPage}
-                      onPageSizeChange={pager.setPageSize}
-                      busy={list.isFetching}
-                    />
-                  </>
-                )}
-              </div>
-              <div ref={detailRef} tabIndex={-1} hidden={!selection} className="nb-form">
-                <div hidden={!isNew || Boolean(selected)}>
-                  <NewEndpoint
-                    role={role}
-                    accountId={accountId}
-                    active={isNew && !selected}
-                    onChoose={open}
-                    onCapabilityLoss={onCapabilityLoss}
+                    onSubmit={() => {
+                      if (validManagementSearch(search))
+                        setParams((previous) => {
+                          const next = new URLSearchParams(previous);
+                          next.set('q', search.trim());
+                          next.set('page', '1');
+                          return next;
+                        });
+                    }}
+                    search={
+                      <>
+                        <Field label={t('common.endpointPolicies.search')}>
+                          {(props) => (
+                            <input
+                              {...props}
+                              type="search"
+                              value={search}
+                              maxLength={256}
+                              placeholder={t('common.endpointPolicies.searchPlaceholder')}
+                              onChange={(event) => setSearch(event.target.value)}
+                            />
+                          )}
+                        </Field>
+                      </>
+                    }
                   />
+                  <div className="nb-actions">
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={() => {
+                        remember();
+                        setParams((previous) => {
+                          const next = new URLSearchParams(previous);
+                          next.set('new', '1');
+                          return next;
+                        });
+                      }}
+                    >
+                      {t('common.endpointPolicies.configureEndpoint')}
+                    </Button>
+                  </div>
+                  {list.isPending ? (
+                    <LoadingState />
+                  ) : list.error ? (
+                    <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+                  ) : (
+                    <>
+                      {list.data.data.length ? (
+                        <DataTable
+                          caption={t('common.endpointPolicies.endpoints')}
+                          rows={list.data.data}
+                          rowKey={endpointIdentityKey}
+                          columns={[
+                            {
+                              key: 'endpoint',
+                              header: t('common.endpointPolicies.endpoint'),
+                              mobileLabel: t('common.endpointPolicies.endpoint'),
+                              cell: 'title',
+                              render: (row) => (
+                                <>
+                                  <span className="mono endpoint-policy-url">{row.base_url}</span>
+                                  <small>
+                                    <GatewayConnectorLabel value={row.connector_type} />
+                                  </small>
+                                </>
+                              ),
+                            },
+                            {
+                              key: 'rules',
+                              header: t('common.endpointPolicies.ruleCount'),
+                              mobileLabel: t('common.endpointPolicies.ruleCount'),
+                              cell: 'meta',
+                              align: 'num',
+                              render: (row) => formatCount(row.rule_count).display,
+                            },
+                            {
+                              key: 'keys',
+                              header: t('common.endpointPolicies.keyCount'),
+                              mobileLabel: t('common.endpointPolicies.keyCount'),
+                              cell: 'meta',
+                              align: 'num',
+                              render: (row) => formatCount(row.key_count).display,
+                            },
+                            {
+                              key: 'actions',
+                              header: t('common.workflow.actions'),
+                              mobileLabel: t('common.workflow.actions'),
+                              cell: 'action',
+                              render: (row) => (
+                                <Button
+                                  type="button"
+                                  id={`endpoint-policy-${encodeURIComponent(endpointIdentityKey(row))}`}
+                                  onClick={() => open(row)}
+                                >
+                                  {t('common.endpointPolicies.edit')}
+                                </Button>
+                              ),
+                            },
+                          ]}
+                        />
+                      ) : (
+                        <EmptyState
+                          title={t('common.endpointPolicies.empty')}
+                          body={t('common.endpointPolicies.emptyHelp')}
+                        />
+                      )}
+                      <PagePagination
+                        alwaysShowJump
+                        metadata={list.data.pagination}
+                        requestedPage={pager.page}
+                        onPageChange={pager.setPage}
+                        onPageSizeChange={pager.setPageSize}
+                        busy={list.isFetching}
+                      />
+                    </>
+                  )}
                 </div>
-                {visited.map((endpoint) => (
-                  <div
-                    key={endpointIdentityKey(endpoint)}
-                    hidden={endpointIdentityKey(endpoint) !== selection}
-                  >
-                    <PolicyWorkspace
+                <div ref={detailRef} tabIndex={-1} hidden={!selection} className="nb-form">
+                  <div hidden={!isNew || Boolean(selected)}>
+                    <NewEndpoint
                       role={role}
                       accountId={accountId}
-                      endpoint={endpoint}
-                      active={endpointIdentityKey(endpoint) === selection}
-                      onReady={setReady}
+                      active={isNew && !selected}
+                      onChoose={open}
                       onCapabilityLoss={onCapabilityLoss}
                     />
                   </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <StewardPermissionNotice />
-          )}
-        </div>
-        <div
-          role="tabpanel"
-          aria-label={t('common.endpointPolicies.routesTab')}
-          hidden={view !== 'routes'}
-        >
-          {routesAllowed ? (
-            <LoadedRoutes
-              role={role}
-              accountId={accountId}
-              active={view === 'routes'}
-              onCapabilityLoss={onCapabilityLoss}
-            />
-          ) : (
-            <StewardPermissionNotice />
-          )}
-        </div>
+                  {visited.map((endpoint) => (
+                    <div
+                      key={endpointIdentityKey(endpoint)}
+                      hidden={endpointIdentityKey(endpoint) !== selection}
+                    >
+                      <PolicyWorkspace
+                        role={role}
+                        accountId={accountId}
+                        endpoint={endpoint}
+                        active={endpointIdentityKey(endpoint) === selection}
+                        onReady={setReady}
+                        onCapabilityLoss={onCapabilityLoss}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <StewardPermissionNotice />
+            )}
+          </div>
+          <div aria-label={t('common.endpointPolicies.routesTab')} hidden={view !== 'routes'}>
+            {routesAllowed ? (
+              <LoadedRoutes
+                role={role}
+                accountId={accountId}
+                active={view === 'routes'}
+                onCapabilityLoss={onCapabilityLoss}
+              />
+            ) : (
+              <StewardPermissionNotice />
+            )}
+          </div>
+        </Tabs>
       </div>
     </DraftLeaveScope>
   );

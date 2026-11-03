@@ -4,14 +4,13 @@ import { describe, expect, test, vi } from 'vitest';
 import { ConfirmDialog } from '../../src/shared/components/ConfirmDialog';
 import { renderWithProviders } from './support';
 
-function DialogHarness() {
+function DialogHarness({ busy = false }: { busy?: boolean }) {
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)}>Open dialog</button>
-      <button type="button" onClick={() => setBusy(true)}>Start work</button>
-      <button type="button" onClick={() => setBusy(false)}>Stop work</button>
+      <button type="button" onClick={() => setOpen(true)}>
+        Open dialog
+      </button>
       <ConfirmDialog
         open={open}
         title="Delete record"
@@ -32,14 +31,14 @@ describe('ConfirmDialog modal focus lifecycle', () => {
     await rendered.user.click(trigger);
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
 
-    await rendered.user.click(screen.getByRole('button', { name: 'Start work' }));
+    rendered.rerender(<DialogHarness busy />);
     const dialog = screen.getByRole('alertdialog');
     await waitFor(() => expect(dialog).toHaveFocus());
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
     await rendered.user.keyboard('{Escape}');
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
 
-    await rendered.user.click(screen.getByRole('button', { name: 'Stop work' }));
+    rendered.rerender(<DialogHarness busy={false} />);
     await rendered.user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();

@@ -116,7 +116,7 @@ for (const [language, width, theme] of [
         await page.goto(
           origin +
             (role === 'steward' ? '/steward?tab=logs&' : '/logs?') +
-            'request_id=' +
+            'operation=model_discovery&request_id=' +
             requestID,
         );
         const panel = page.locator('.nb-expandable-panel:not([hidden])');
@@ -158,6 +158,49 @@ for (const [language, width, theme] of [
             ? join(visualDir, name + '-attempt.png')
             : info.outputPath(name + '-attempt.png'),
         });
+        const operation = page.getByRole('combobox', {
+          name: (language === 'zh' ? zh : en).logs.operation,
+          exact: true,
+        });
+        await expect(operation).toHaveValue('model_discovery');
+        const logRoot =
+          role === 'admin'
+            ? '/admin/api/logs'
+            : role === 'steward'
+              ? '/api/steward/logs'
+              : '/api/logs';
+        for (const selected of ['images_generations', 'chat_completions', 'model_discovery']) {
+          await operation.selectOption(selected);
+          await expect(page).toHaveURL(new RegExp('operation=' + selected));
+          const response = await context.request.get(
+            origin + logRoot + '?operation=' + selected + '&page=1&page_size=100',
+          );
+          expect(response.status()).toBe(200);
+          const rows = (await response.json()).data as { route_kind: string }[];
+          if (selected !== 'images_generations') expect(rows.length).toBeGreaterThan(0);
+          expect(
+            rows.every((row) =>
+              selected === 'model_discovery'
+                ? row.route_kind === selected
+                : row.route_kind === 'openai_' + selected ||
+                  row.route_kind === 'charity_' + selected,
+            ),
+          ).toBe(true);
+          for (const format of ['csv', 'json']) {
+            const href = await page
+              .locator('a[download][href*="export.' + format + '"]')
+              .getAttribute('href');
+            expect(href).not.toBeNull();
+            expect(new URL(href!, origin).searchParams.get('operation')).toBe(selected);
+            expect((await context.request.get(new URL(href!, origin).href)).status()).toBe(200);
+          }
+        }
+        await page.reload();
+        await expect(operation).toHaveValue('model_discovery');
+        await operation.selectOption('');
+        await expect(page).not.toHaveURL(/operation=/);
+        await page.goBack();
+        await expect(operation).toHaveValue('model_discovery');
         await page.close();
       }
       const invalidID = await refresh('invalid');

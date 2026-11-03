@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { useSearchParams } from 'react-router';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -66,11 +67,16 @@ function install(targets: AdminUser[], handle: (call: Call) => unknown | Promise
 function Harness({
   role = 'admin',
   trainee = false,
+  externalTarget,
 }: {
   role?: ManagementRole;
   trainee?: boolean;
+  externalTarget?: string;
 }) {
   const [, setSearch] = useSearchParams();
+  useEffect(() => {
+    if (externalTarget) setSearch({ user: externalTarget });
+  }, [externalTarget, setSearch]);
   return (
     <>
       <button onClick={() => setSearch({ user: '8' })}>Switch target</button>
@@ -270,7 +276,8 @@ it.each(['read', 'confirm', 'write'] as const)(
         expect(calls.some((call) => call.path.endsWith('/caller-key'))).toBe(true),
       );
     }
-    await view.user.click(screen.getByRole('button', { name: 'Switch target' }));
+    // External navigation can replace the target while a modal correctly isolates the page.
+    view.rerender(<Harness externalTarget="8" />);
     await screen.findByRole('heading', { name: 'member-8' });
     await screen.findByText('No active site key. The user can create one from their account.');
     await act(async () =>

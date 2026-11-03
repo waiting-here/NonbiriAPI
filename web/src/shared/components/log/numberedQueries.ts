@@ -19,6 +19,7 @@ import {
   normalizeUserLogAttempt,
   normalizeUserLogRow,
   validLogDiscordID,
+  isLogOperation,
   type AdminLogAttempt,
   type AdminLogRow,
   type CallerIdentity,
@@ -83,8 +84,9 @@ const ROLE_PATHS: Record<LogRole, string> = {
 };
 
 const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
-  user: ['model', 'error_code', 'status', 'from', 'to', 'phase'],
+  user: ['operation', 'model', 'error_code', 'status', 'from', 'to', 'phase'],
   steward: [
+    'operation',
     'user_id',
     'discord_id',
     'endpoint_key_id',
@@ -101,6 +103,7 @@ const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
     'error_phase',
   ],
   admin: [
+    'operation',
     'user_id',
     'discord_id',
     'endpoint_key_id',
@@ -161,6 +164,7 @@ function requestFilter(role: LogRole, value: LogFiltersValue): LogFiltersValue {
       result.usage_total_mismatch = true;
       continue;
     }
+    if (key === 'operation' && !isLogOperation(raw)) invalidRequest('log operation filter');
     const text = requestString(raw, `log ${key} filter`, key === 'status' ? 3 : 512);
     if (text === '') continue;
     if (key === 'phase' && text !== 'handler' && text !== 'pre_handler')

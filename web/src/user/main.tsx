@@ -1,3 +1,4 @@
+import { AriaProvider } from '@shared/components/AriaProvider';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router';
@@ -18,14 +19,20 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <ThemeProvider>
-      <ToastProvider>
-        <QueryClientProvider client={createQueryClient()}>
-          <TimeContextProvider station="user">
-            <RouterProvider router={router} />
-          </TimeContextProvider>
-        </QueryClientProvider>
-      </ToastProvider>
-    </ThemeProvider>
+    <AriaProvider
+      navigate={(href) => {
+        void router.navigate(href);
+      }}
+    >
+      <ThemeProvider>
+        <ToastProvider>
+          <QueryClientProvider client={createQueryClient()}>
+            <TimeContextProvider station="user">
+              <RouterProvider router={router} />
+            </TimeContextProvider>
+          </QueryClientProvider>
+        </ToastProvider>
+      </ThemeProvider>
+    </AriaProvider>
   </StrictMode>,
 );

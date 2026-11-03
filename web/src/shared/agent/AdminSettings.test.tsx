@@ -104,7 +104,11 @@ describe('Agent administrator settings', () => {
     );
     await view.user.click(screen.getByRole('button', { name: 'Fetch models' }));
     await waitFor(() => expect(order).toEqual(['save', 'discover']));
-    expect(document.querySelector('datalist option')).toHaveAttribute('value', 'synthetic-model');
+    const model = screen.getByRole('combobox', { name: common.common.connections.model });
+    await view.user.click(model);
+    await view.user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('option', { name: 'synthetic-model' })).toBeVisible();
+    await view.user.keyboard('{Escape}');
     expect(mocks.putDriver.mock.calls[0]![0]).toMatchObject({
       api_key: 'synthetic-driver-secret',
       expected_revision: '0',
@@ -145,6 +149,27 @@ describe('Agent administrator settings', () => {
     );
     await waitFor(() => expect(mocks.putSettings).toHaveBeenCalledTimes(1));
     expect(mocks.putSettings.mock.calls[0]![0].chat_enabled).toBe(true);
+  });
+  it('does not change the visible switch label while settings save is pending', async () => {
+    let finish!: (value: AgentSettings) => void;
+    mocks.putSettings.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const view = await mount();
+    const toggle = await screen.findByRole('switch', { name: 'Enable Agent chat' });
+    await view.user.click(toggle.closest('label')!);
+    await view.user.click(
+      screen
+        .getAllByRole('button', { name: 'Save' })
+        .find((button) => !button.hasAttribute('disabled'))!,
+    );
+    await waitFor(() => expect(toggle).toBeDisabled());
+    await view.user.click(toggle.closest('label')!);
+    expect(toggle).toBeChecked();
+    await act(async () => finish({ ...settings, revision: '2', chat_enabled: true }));
+    expect(toggle).toBeChecked();
   });
   it('saves custom tool instructions without changing other tools or message templates', async () => {
     const view = await mount();

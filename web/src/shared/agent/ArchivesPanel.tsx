@@ -207,23 +207,24 @@ export function ArchivesPanel({ account, active }: { account: string; active: bo
                 { value: 'messages', label: t('common.agent.originalMessages') },
                 { value: 'results', label: t('common.agent.modelResults') },
               ]}
-            />
-            <div hidden={view !== 'messages'}>
-              <ArchiveMessages
-                key={owner}
-                account={account}
-                owner={owner}
-                active={active && view === 'messages'}
-              />
-            </div>
-            <div hidden={view !== 'results'}>
-              <ArchiveResults
-                key={owner}
-                account={account}
-                owner={owner}
-                active={active && view === 'results'}
-              />
-            </div>
+            >
+              <div hidden={view !== 'messages'}>
+                <ArchiveMessages
+                  key={owner}
+                  account={account}
+                  owner={owner}
+                  active={active && view === 'messages'}
+                />
+              </div>
+              <div hidden={view !== 'results'}>
+                <ArchiveResults
+                  key={owner}
+                  account={account}
+                  owner={owner}
+                  active={active && view === 'results'}
+                />
+              </div>
+            </Tabs>
           </div>
         ) : query.isPending ? (
           <LoadingState />

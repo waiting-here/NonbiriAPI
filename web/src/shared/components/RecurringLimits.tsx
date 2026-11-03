@@ -1,8 +1,9 @@
+import { SuggestInput } from '@shared/components/ui/SuggestInput';
 import { FormActions } from '@shared/components/ui/Fields';
 import { Fields } from '@shared/components/ui/Fields';
 import { Field } from '@shared/components/ui/Field';
 import { Button } from '@shared/components/ui/Button';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useRetainedOperation } from '../../admin/features/operations/useRetainedOperation';
@@ -67,6 +68,7 @@ interface RuleComparison {
 }
 
 interface RecurringLimitsProps {
+  disabled?: boolean;
   role: RecurringLimitRole;
   donationId: string;
   keyId: string;
@@ -470,7 +472,6 @@ function RuleCard({
   onMove,
 }: RuleCardProps) {
   const { t } = useTranslation();
-  const zoneListId = useId();
   const ruleLabel = copy.rule(index + 1);
   const summaryState = view?.state;
   const summary = ruleSummary(copy, ruleLabel, draft, view);
@@ -745,21 +746,16 @@ function RuleCard({
               >
                 {(field) => (
                   <>
-                    <input
+                    <SuggestInput
                       {...field}
                       value={draft.time_zone}
-                      list={zoneListId}
+                      suggestions={zones}
                       maxLength={64}
                       autoComplete="off"
                       placeholder={copy.selectZone}
                       disabled={disabled}
-                      onChange={(event) => onChange({ time_zone: event.target.value })}
+                      onChange={(value) => onChange({ time_zone: value })}
                     />
-                    <datalist id={zoneListId}>
-                      {zones.map((zone) => (
-                        <option key={zone} value={zone} />
-                      ))}
-                    </datalist>
                   </>
                 )}
               </Field>
@@ -933,6 +929,7 @@ function scopeChanged(
 }
 
 export function RecurringLimits({
+  disabled = false,
   role,
   donationId,
   keyId,
@@ -1477,7 +1474,7 @@ export function RecurringLimits({
             total={draftRules.length}
             view={rule.id ? viewByID.get(rule.id) : undefined}
             editable={editable}
-            disabled={save.isPending || unresolvedCommand}
+            disabled={disabled || save.isPending || unresolvedCommand}
             expanded={expanded.has(rule.draftId)}
             zones={currentZones}
             serverNow={serverNow}
@@ -1621,7 +1618,7 @@ export function RecurringLimits({
               <Button
                 type="button"
                 variant="ghost"
-                disabled={save.isPending || unresolvedCommand}
+                disabled={disabled || save.isPending || unresolvedCommand}
                 onClick={discardChanges}
               >
                 {copy.discardChanges}

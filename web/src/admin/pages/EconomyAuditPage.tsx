@@ -664,30 +664,31 @@ export function EconomyAuditPage() {
             { value: 'channels', label: t('渠道', 'Channels') },
             { value: 'operations', label: t('分录', 'Ledger') },
           ]}
-        />
-        <div className="audit-actions">
-          {filter.kind && (
-            <button
-              className="nb-btn nb-btn--secondary"
-              onClick={() => setFilter((v) => ({ ...v, kind: undefined, channel: undefined }))}
-            >
-              {t('清除操作筛选', 'Clear operation filter')}: {filter.kind}
-            </button>
+        >
+          <div className="audit-actions">
+            {filter.kind && (
+              <button
+                className="nb-btn nb-btn--secondary"
+                onClick={() => setFilter((v) => ({ ...v, kind: undefined, channel: undefined }))}
+              >
+                {t('清除操作筛选', 'Clear operation filter')}: {filter.kind}
+              </button>
+            )}
+          </div>
+          {view === 'series' ? (
+            <Trend filter={filter} />
+          ) : view === 'channels' ? (
+            <ChannelDetails
+              filter={filter}
+              select={(kind, channel) => {
+                setFilter((v) => ({ ...v, kind, channel }));
+                setView('operations');
+              }}
+            />
+          ) : (
+            <LedgerDetails key={JSON.stringify(filter)} filter={filter} />
           )}
-        </div>
-        {view === 'series' ? (
-          <Trend filter={filter} />
-        ) : view === 'channels' ? (
-          <ChannelDetails
-            filter={filter}
-            select={(kind, channel) => {
-              setFilter((v) => ({ ...v, kind, channel }));
-              setView('operations');
-            }}
-          />
-        ) : (
-          <LedgerDetails key={JSON.stringify(filter)} filter={filter} />
-        )}
+        </Tabs>
       </Card>
     </div>
   );

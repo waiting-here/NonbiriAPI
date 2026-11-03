@@ -1,3 +1,5 @@
+import { FocusScope } from 'react-aria';
+import { useDrawerOverlay } from '@shared/components/OverlaySurface';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { NavLink, Outlet, useLocation } from 'react-router';
@@ -182,7 +184,7 @@ export function AdminLayout() {
   }, []);
   const closeMenu = useCallback(() => {
     setMenuOpen(false);
-    restoreMenuFocus();
+    requestAnimationFrame(restoreMenuFocus);
   }, [restoreMenuFocus]);
 
   useEffect(() => {
@@ -197,38 +199,7 @@ export function AdminLayout() {
 
   useBrandFavicon(siteLogoURL);
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    const firstLink = sidebarRef.current?.querySelector<HTMLElement>(
-      'a[href], button:not([disabled])',
-    );
-    firstLink?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closeMenu();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-      const focusable = Array.from(
-        sidebarRef.current?.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), select:not([disabled])',
-        ) ?? [],
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [closeMenu, menuOpen]);
+  const drawerProps = useDrawerOverlay(menuOpen, closeMenu, sidebarRef);
 
   useEffect(() => {
     if (!menuOpen || typeof window === 'undefined' || typeof window.matchMedia !== 'function')
@@ -342,6 +313,7 @@ export function AdminLayout() {
           type="button"
           ref={menuButtonRef}
           className="nb-btn nb-btn--secondary mobile-menu-btn admin-menu-btn nb-menu-button"
+          style={menuOpen ? { visibility: 'hidden' } : undefined}
           aria-expanded={menuOpen}
           aria-controls="admin-navigation"
           aria-label={t(menuOpen ? 'shell.closeMenu' : 'shell.openMenu')}
@@ -369,83 +341,98 @@ export function AdminLayout() {
         />
       ) : null}
       <div className="nb-admin-shell">
-        <aside
-          ref={sidebarRef}
-          id="admin-navigation"
-          className={`nb-admin-sidebar${menuOpen ? ' is-open' : ''}`}
-          aria-label={t('admin.shell.navLabel')}
-        >
-          <nav className="nb-admin-sidebar__nav">
-            {ADMIN_NAV_GROUPS.map((group) => {
-              const items = ADMIN_PRIMARY_NAV.filter((item) => item.group === group);
-              if (items.length === 0) return null;
-              const groupTitle = t(ADMIN_GROUP_LABEL_KEYS[group], {
-                defaultValue: t('admin.settings.nav'),
-              });
-              // A one-item group would only repeat its own label as a heading.
-              const titled = items.length > 1;
-              const current = group === currentGroup;
-              const open = current || !navGroups.collapsed.includes(group);
-              const listID = `admin-nav-${group}`;
-              return (
-                <section className="nb-admin-sidebar__group" key={group}>
-                  {titled ? (
-                    <h2 className="nb-admin-sidebar__group-title">
-                      {current ? (
-                        <span>{groupTitle}</span>
-                      ) : (
-                        <button
-                          type="button"
-                          aria-expanded={open}
-                          aria-controls={listID}
-                          onClick={() => navGroups.toggle(group)}
-                        >
+        <FocusScope contain={menuOpen}>
+          <aside
+            {...drawerProps}
+            role={menuOpen ? 'dialog' : undefined}
+            aria-modal={menuOpen || undefined}
+            ref={sidebarRef}
+            id="admin-navigation"
+            className={`nb-admin-sidebar${menuOpen ? ' is-open' : ''}`}
+            aria-label={t('admin.shell.navLabel')}
+          >
+            <nav className="nb-admin-sidebar__nav">
+              {ADMIN_NAV_GROUPS.map((group) => {
+                const items = ADMIN_PRIMARY_NAV.filter((item) => item.group === group);
+                if (items.length === 0) return null;
+                const groupTitle = t(ADMIN_GROUP_LABEL_KEYS[group], {
+                  defaultValue: t('admin.settings.nav'),
+                });
+                // A one-item group would only repeat its own label as a heading.
+                const titled = items.length > 1;
+                const current = group === currentGroup;
+                const open = current || !navGroups.collapsed.includes(group);
+                const listID = `admin-nav-${group}`;
+                return (
+                  <section className="nb-admin-sidebar__group" key={group}>
+                    {titled ? (
+                      <h2 className="nb-admin-sidebar__group-title">
+                        {current ? (
                           <span>{groupTitle}</span>
-                          <Icon name="chevron-down" />
-                        </button>
-                      )}
-                    </h2>
-                  ) : null}
-                  <div className="nb-admin-sidebar__items" id={listID} hidden={titled && !open}>
-                    {items.map((item) => {
-                      const label = item.labelKey
-                        ? t(item.labelKey, {
-                            defaultValue: item.fallbackLabelKey
-                              ? t(item.fallbackLabelKey)
-                              : item.labelKey,
-                          })
-                        : t(`admin.${item.key}.nav`);
-                      const link = (
-                        <NavLink
-                          className="nb-admin-sidebar__link"
-                          to={item.to}
-                          end={item.end}
-                          onClick={closeMenu}
-                        >
-                          {item.icon ? <Icon name={item.icon} /> : null}
-                          <span className="nb-admin-sidebar__label">{label}</span>
-                        </NavLink>
-                      );
-                      return item.to === '/charity' ? (
-                        <div className="nb-admin-sidebar__row" key={item.key}>
-                          {link}
-                          <DonationPendingBadge
-                            key={toastIdentity}
-                            role="admin"
-                            accountID={toastIdentity}
-                            onNavigate={closeMenu}
-                          />
-                        </div>
-                      ) : (
-                        <Fragment key={item.key}>{link}</Fragment>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
-          </nav>
-        </aside>
+                        ) : (
+                          <button
+                            type="button"
+                            aria-expanded={open}
+                            aria-controls={listID}
+                            onClick={() => navGroups.toggle(group)}
+                          >
+                            <span>{groupTitle}</span>
+                            <Icon name="chevron-down" />
+                          </button>
+                        )}
+                      </h2>
+                    ) : null}
+                    <div className="nb-admin-sidebar__items" id={listID} hidden={titled && !open}>
+                      {items.map((item) => {
+                        const label = item.labelKey
+                          ? t(item.labelKey, {
+                              defaultValue: item.fallbackLabelKey
+                                ? t(item.fallbackLabelKey)
+                                : item.labelKey,
+                            })
+                          : t(`admin.${item.key}.nav`);
+                        const link = (
+                          <NavLink
+                            className="nb-admin-sidebar__link"
+                            to={item.to}
+                            end={item.end}
+                            onClick={closeMenu}
+                          >
+                            {item.icon ? <Icon name={item.icon} /> : null}
+                            <span className="nb-admin-sidebar__label">{label}</span>
+                          </NavLink>
+                        );
+                        return item.to === '/charity' ? (
+                          <div className="nb-admin-sidebar__row" key={item.key}>
+                            {link}
+                            <DonationPendingBadge
+                              key={toastIdentity}
+                              role="admin"
+                              accountID={toastIdentity}
+                              onNavigate={closeMenu}
+                            />
+                          </div>
+                        ) : (
+                          <Fragment key={item.key}>{link}</Fragment>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
+            </nav>
+            {menuOpen && (
+              <button
+                type="button"
+                className="nb-btn nb-btn--secondary nb-drawer-close"
+                aria-label={t('shell.closeMenu')}
+                onClick={closeMenu}
+              >
+                <Icon name="close" />
+              </button>
+            )}
+          </aside>
+        </FocusScope>
         <main id="main" className="nb-admin-content" tabIndex={-1}>
           {logoutError ? <ErrorState error={logoutError} /> : null}
           {/* Keep route-local mutation and form state scoped to one admin. */}

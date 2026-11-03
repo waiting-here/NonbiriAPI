@@ -14,6 +14,7 @@ import { switchPriceMode, type PriceDraft } from './priceDraft';
 
 export function PriceConfigFields({
   value,
+  disabled = false,
   role,
   onChange,
   modeRef,
@@ -22,6 +23,7 @@ export function PriceConfigFields({
   recurringError = false,
   allowSearchUnits = true,
 }: {
+  disabled?: boolean;
   value: PriceDraft;
   role: CharityRole;
   onChange: (fields: Partial<PriceDraft>) => void;
@@ -200,18 +202,20 @@ export function PriceConfigFields({
       {value.mode === 'per_token' && (
         <>
           <ModalityPricingFields
+            disabled={disabled}
             title={t('common.modalityPricing.user')}
             value={value.userModalities}
             onChange={(userModalities) => set({ userModalities })}
           />
           <ModalityPricingFields
+            disabled={disabled}
             title={t('common.modalityPricing.donor')}
             value={value.donorModalities}
             onChange={(donorModalities) => set({ donorModalities })}
           />
         </>
       )}
-      <ContextPricingFields value={value} role={role} onChange={set} />
+      <ContextPricingFields disabled={disabled} value={value} role={role} onChange={set} />
       <Fold
         title={t('common.recurringDiscount.fixedTitle')}
         summary={
@@ -225,6 +229,7 @@ export function PriceConfigFields({
         <Fields>
           <TimeContextNotice station={role === 'admin' ? 'admin' : 'steward'} />
           <Toggle
+            disabled={disabled}
             label={t(charityCopyKey(role, 'discountEnabled'))}
             checked={value.discountEnabled}
             onChange={(discountEnabled) => set({ discountEnabled })}
@@ -273,6 +278,7 @@ export function PriceConfigFields({
         lazy
       >
         <RecurringDiscountFields
+          disabled={disabled}
           value={value.recurringDiscount}
           role={role}
           fixedEnabled={value.discountEnabled}

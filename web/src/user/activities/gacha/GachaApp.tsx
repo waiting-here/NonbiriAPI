@@ -463,6 +463,7 @@ export function GachaApp({
             tabs={[
               {
                 value: 'pools',
+                id: 'gacha-tab-pools',
                 label: (
                   <>
                     <Icon name="spark" />
@@ -472,6 +473,7 @@ export function GachaApp({
               },
               {
                 value: 'collection',
+                id: 'gacha-tab-collection',
                 label: (
                   <>
                     <Icon name="book" />
@@ -482,6 +484,7 @@ export function GachaApp({
               },
               {
                 value: 'shop',
+                id: 'gacha-tab-shop',
                 label: (
                   <>
                     <Icon name="resources" />
@@ -490,6 +493,7 @@ export function GachaApp({
                 ),
               },
             ]}
+            panelId="gacha-panel-0"
           />
           <div className="gacha-wallet">
             <Button
@@ -524,336 +528,364 @@ export function GachaApp({
             </Button>
           </div>
         </div>
-        {error && <Note tone="bad">{error}</Note>}
-        {recovery}
-        {page === 'pools' && (
-          <>
-            <div className="gacha-pool-nav">
-              <Tabs
-                label={t('选择奖池', 'Choose a pool')}
-                value={pool.id}
-                onChange={(id) => {
-                  setPoolId(id);
-                  setHeroIndex(0);
-                }}
-                tabs={state.pools.map((p) => ({
-                  value: p.id,
-                  label: (
-                    <>
-                      <span>{english && p.name_en ? p.name_en : p.name}</span>
-                      <ArtworkBadge
-                        artworkKey={['cover:' + p.cover, ...p.featured.map((id) => 'card:' + id)]}
-                      />
-                    </>
-                  ),
-                }))}
-              />
-              <div
-                className="gacha-checkins"
-                role="group"
-                aria-label={t('每日签到', 'Daily check-in')}
-              >
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    void act(
-                      { action: 'check-in' },
-                      t('签到成功，常驻抽奖券 +1', 'Checked in · +1 standard ticket'),
-                    )
-                  }
-                  disabled={busy || state.checked_in}
-                >
-                  <Icon name={state.checked_in ? 'check' : 'credits'} />
-                  {state.checked_in
-                    ? t('常驻券已领取', 'Standard claimed')
-                    : t('签到 · 常驻券 +1', 'Check in · +1 standard')}
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    void act(
-                      { action: 'limited-check-in' },
-                      t('签到成功，限定抽奖券 +1', 'Checked in · +1 limited ticket'),
-                    )
-                  }
-                  disabled={busy || state.limited_checked_in}
-                >
-                  <Icon name={state.limited_checked_in ? 'check' : 'credits'} />
-                  {state.limited_checked_in
-                    ? t('限定券已领取', 'Limited claimed')
-                    : t('签到 · 限定券 +1', 'Check in · +1 limited')}
-                </Button>
-              </div>
-            </div>
-            <section
-              className={'gacha-banner gacha-banner--' + pool.cover}
-              aria-labelledby="gacha-pool-title"
-            >
-              <ArtworkImage
-                artworkKey={'cover:' + pool.cover}
-                fallbackSrc="/assets/gacha/covers/permanent.webp"
-                className="gacha-banner__back"
-                src={'/assets/gacha/covers/' + pool.cover + '.webp'}
-                srcSet={artSourceSet(
-                  '/assets/gacha/covers/' + pool.cover + '.webp',
-                  ['l', 'm'].includes(pool.cover) ? 1600 : 1672,
-                )}
-                sizes="(width < 80rem) 100vw, 80rem"
-                alt=""
-              />
-              <div className="gacha-banner__haze" />
-              <div className="gacha-banner__copy">
-                <span className="gacha-kicker">
-                  {pool.kind === 'permanent'
-                    ? t('常驻召唤 · 永久开放', 'STANDARD · ALWAYS OPEN')
-                    : upcoming
-                      ? t('限定召唤 · 尚未开始', 'LIMITED · NOT STARTED')
-                      : t('限定召唤 · 期间开放', 'LIMITED · FOR A MOMENT')}
-                </span>
-                <ArtworkBadge artworkKey={'cover:' + pool.cover} />
-                <ArtworkUnavailable artworkKey={'cover:' + pool.cover} />
-                <h2 id="gacha-pool-title">{english && pool.name_en ? pool.name_en : pool.name}</h2>
-                <p className="gacha-banner__tagline">
-                  {pool.kind === 'permanent'
-                    ? t('让每一次相遇，都闪闪发光。', 'Let every encounter shine.')
-                    : t(themeById[hero.theme].tagline, themeById[hero.theme].tagline_en)}
-                </p>
-                <div className="gacha-banner__divider">
-                  <Icon name="spark" />
-                </div>
-                <p className="gacha-banner__description">
-                  {pool.kind === 'permanent'
-                    ? t(
-                        '五位少女，万千日常。收藏属于你的悠哉时光。',
-                        'Five companions. Countless little moments. Start a collection of your own.',
-                      )
-                    : t(
-                        '本期限定角色登场，与常驻卡牌共同回应你的期待。',
-                        'Meet the featured companions alongside the permanent collection.',
-                      )}
-                </p>
-                <span className="gacha-banner__tag">
-                  {pool.kind === 'permanent'
-                    ? t('全部常驻卡牌', 'All permanent cards')
-                    : t('同规则奖池共享保底', 'Shared pity within this rule group')}
-                </span>
-                {upcoming && (
-                  <p className="gacha-banner__time">
-                    {t('开始时间 ', 'Starts ')}
-                    {formatDateTime(pool.starts_at)}
-                  </p>
-                )}
-                {pool.ends_at && (
-                  <p className="gacha-banner__time">
-                    {t('开放至 ', 'Until ')}
-                    {formatDateTime(pool.ends_at)}
-                  </p>
-                )}
-                {state.newcomer && pool.kind === 'permanent' && (
-                  <p className="gacha-newcomer">
-                    <Icon name="spark" />
-                    {t(
-                      '见面礼 10 券已到账 · 首次十连必得 SSR',
-                      '10 welcome tickets · your first ten-pull guarantees SSR',
-                    )}
-                  </p>
-                )}
-              </div>
-              <div className="gacha-banner__art">
-                <div className="gacha-halo" />
-                <button
-                  className={'gacha-hero-card gacha-card--' + hero.rarity}
-                  onClick={() => inspect(hero)}
-                  aria-label={t('查看 ', 'Inspect ') + (english ? hero.name_en : hero.name)}
-                >
-                  <Artwork key={hero.id} card={hero} full />
-                  <ArtworkBadge artworkKey={'card:' + hero.id} />
-                  <span className="gacha-hero-card__rank">{hero.rarity}</span>
-                  <span className="gacha-hero-card__name">
-                    <small>{t(themeById[hero.theme].name, themeById[hero.theme].name_en)}</small>
-                    <strong>{hero.character}</strong>
-                  </span>
-                </button>
+        <div
+          className="nb-tab-content"
+          role="tabpanel"
+          id="gacha-panel-0"
+          aria-labelledby={'gacha-tab-' + page}
+          tabIndex={0}
+        >
+          {error && <Note tone="bad">{error}</Note>}
+          {recovery}
+          {page === 'pools' && (
+            <>
+              <div className="gacha-pool-nav">
+                <Tabs
+                  label={t('选择奖池', 'Choose a pool')}
+                  value={pool.id}
+                  onChange={(id) => {
+                    setPoolId(id);
+                    setHeroIndex(0);
+                  }}
+                  tabs={state.pools.map((p) => ({
+                    value: p.id,
+                    id: 'gacha-pool-tab-' + p.id,
+                    label: (
+                      <>
+                        <span>{english && p.name_en ? p.name_en : p.name}</span>
+                        <ArtworkBadge
+                          artworkKey={['cover:' + p.cover, ...p.featured.map((id) => 'card:' + id)]}
+                        />
+                      </>
+                    ),
+                  }))}
+                  panelId="gacha-panel-1"
+                />
                 <div
-                  className="gacha-character-picker"
-                  aria-label={t('展示角色', 'Featured characters')}
+                  className="gacha-checkins"
+                  role="group"
+                  aria-label={t('每日签到', 'Daily check-in')}
                 >
-                  {highlighted.map((c, index) => (
-                    <button
-                      key={c.id}
-                      onClick={() => setHeroIndex(index)}
-                      aria-pressed={hero.id === c.id}
-                      aria-label={c.character}
-                      title={c.character}
-                    >
-                      <ArtworkImage artworkKey={'card:' + c.id} src={c.thumb} alt={c.character} />
-                      <ArtworkBadge artworkKey={'card:' + c.id} />
-                    </button>
-                  ))}
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      void act(
+                        { action: 'check-in' },
+                        t('签到成功，常驻抽奖券 +1', 'Checked in · +1 standard ticket'),
+                      )
+                    }
+                    disabled={busy || state.checked_in}
+                  >
+                    <Icon name={state.checked_in ? 'check' : 'credits'} />
+                    {state.checked_in
+                      ? t('常驻券已领取', 'Standard claimed')
+                      : t('签到 · 常驻券 +1', 'Check in · +1 standard')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      void act(
+                        { action: 'limited-check-in' },
+                        t('签到成功，限定抽奖券 +1', 'Checked in · +1 limited ticket'),
+                      )
+                    }
+                    disabled={busy || state.limited_checked_in}
+                  >
+                    <Icon name={state.limited_checked_in ? 'check' : 'credits'} />
+                    {state.limited_checked_in
+                      ? t('限定券已领取', 'Limited claimed')
+                      : t('签到 · 限定券 +1', 'Check in · +1 limited')}
+                  </Button>
                 </div>
-              </div>
-            </section>
-            <div className="gacha-drawbar">
-              <div className="gacha-pity">
-                <div>
-                  <span>{t('距离必得 SR 或以上', 'SR or better within')}</span>
-                  <strong>
-                    {Math.max(1, Math.min(pity.sr_limit, pool.rules.sr_pity) - pity.sr)}{' '}
-                    <small>{t('抽', 'pulls')}</small>
-                  </strong>
-                </div>
-                <div>
-                  <span>{t('距离必得 SSR', 'SSR within')}</span>
-                  <strong>
-                    {Math.max(1, Math.min(pity.ssr_limit, pool.rules.ssr_pity) - pity.ssr)}{' '}
-                    <small>{t('抽', 'pulls')}</small>
-                  </strong>
-                </div>
-                {pool.kind === 'limited' && (pool.rules.ssr_guarantee_misses ?? 1) > 1 && (
-                  <p className="gacha-special-progress">
-                    {t('SP 大保底：连续未中 ', 'SP guarantee: consecutive misses ')}
-                    <strong>
-                      {pity.ssr_misses ?? 0} / {pool.rules.ssr_guarantee_misses}
-                    </strong>
-                    {t(' · 与普通限定池独立', ' · independent of regular limited pools')}
-                  </p>
-                )}
-                {pool.kind === 'limited' && (pity.sr_featured || pity.ssr_featured) && (
-                  <p>
-                    {[pity.sr_featured && 'SR', pity.ssr_featured && 'SSR']
-                      .filter(Boolean)
-                      .join(' / ')}{' '}
-                    {t('下次同档必为限定', 'next hit guaranteed featured')}
-                  </p>
-                )}
               </div>
               <div
-                ref={measureDrawActions}
-                className={'gacha-draw-actions' + (upcoming ? ' gacha-draw-actions--upcoming' : '')}
+                className="nb-tab-content"
+                role="tabpanel"
+                id="gacha-panel-1"
+                aria-labelledby={'gacha-pool-tab-' + pool.id}
+                tabIndex={0}
               >
-                {upcoming && (
-                  <p className="gacha-draw-actions__notice" id="gacha-upcoming-notice">
+                <section
+                  className={'gacha-banner gacha-banner--' + pool.cover}
+                  aria-labelledby="gacha-pool-title"
+                >
+                  <ArtworkImage
+                    artworkKey={'cover:' + pool.cover}
+                    fallbackSrc="/assets/gacha/covers/permanent.webp"
+                    className="gacha-banner__back"
+                    src={'/assets/gacha/covers/' + pool.cover + '.webp'}
+                    srcSet={artSourceSet(
+                      '/assets/gacha/covers/' + pool.cover + '.webp',
+                      ['l', 'm'].includes(pool.cover) ? 1600 : 1672,
+                    )}
+                    sizes="(width < 80rem) 100vw, 80rem"
+                    alt=""
+                  />
+                  <div className="gacha-banner__haze" />
+                  <div className="gacha-banner__copy">
+                    <span className="gacha-kicker">
+                      {pool.kind === 'permanent'
+                        ? t('常驻召唤 · 永久开放', 'STANDARD · ALWAYS OPEN')
+                        : upcoming
+                          ? t('限定召唤 · 尚未开始', 'LIMITED · NOT STARTED')
+                          : t('限定召唤 · 期间开放', 'LIMITED · FOR A MOMENT')}
+                    </span>
+                    <ArtworkBadge artworkKey={'cover:' + pool.cover} />
+                    <ArtworkUnavailable artworkKey={'cover:' + pool.cover} />
+                    <h2 id="gacha-pool-title">
+                      {english && pool.name_en ? pool.name_en : pool.name}
+                    </h2>
+                    <p className="gacha-banner__tagline">
+                      {pool.kind === 'permanent'
+                        ? t('让每一次相遇，都闪闪发光。', 'Let every encounter shine.')
+                        : t(themeById[hero.theme].tagline, themeById[hero.theme].tagline_en)}
+                    </p>
+                    <div className="gacha-banner__divider">
+                      <Icon name="spark" />
+                    </div>
+                    <p className="gacha-banner__description">
+                      {pool.kind === 'permanent'
+                        ? t(
+                            '五位少女，万千日常。收藏属于你的悠哉时光。',
+                            'Five companions. Countless little moments. Start a collection of your own.',
+                          )
+                        : t(
+                            '本期限定角色登场，与常驻卡牌共同回应你的期待。',
+                            'Meet the featured companions alongside the permanent collection.',
+                          )}
+                    </p>
+                    <span className="gacha-banner__tag">
+                      {pool.kind === 'permanent'
+                        ? t('全部常驻卡牌', 'All permanent cards')
+                        : t('同规则奖池共享保底', 'Shared pity within this rule group')}
+                    </span>
+                    {upcoming && (
+                      <p className="gacha-banner__time">
+                        {t('开始时间 ', 'Starts ')}
+                        {formatDateTime(pool.starts_at)}
+                      </p>
+                    )}
+                    {pool.ends_at && (
+                      <p className="gacha-banner__time">
+                        {t('开放至 ', 'Until ')}
+                        {formatDateTime(pool.ends_at)}
+                      </p>
+                    )}
+                    {state.newcomer && pool.kind === 'permanent' && (
+                      <p className="gacha-newcomer">
+                        <Icon name="spark" />
+                        {t(
+                          '见面礼 10 券已到账 · 首次十连必得 SSR',
+                          '10 welcome tickets · your first ten-pull guarantees SSR',
+                        )}
+                      </p>
+                    )}
+                  </div>
+                  <div className="gacha-banner__art">
+                    <div className="gacha-halo" />
+                    <button
+                      className={'gacha-hero-card gacha-card--' + hero.rarity}
+                      onClick={() => inspect(hero)}
+                      aria-label={t('查看 ', 'Inspect ') + (english ? hero.name_en : hero.name)}
+                    >
+                      <Artwork key={hero.id} card={hero} full />
+                      <ArtworkBadge artworkKey={'card:' + hero.id} />
+                      <span className="gacha-hero-card__rank">{hero.rarity}</span>
+                      <span className="gacha-hero-card__name">
+                        <small>
+                          {t(themeById[hero.theme].name, themeById[hero.theme].name_en)}
+                        </small>
+                        <strong>{hero.character}</strong>
+                      </span>
+                    </button>
+                    <div
+                      className="gacha-character-picker"
+                      aria-label={t('展示角色', 'Featured characters')}
+                    >
+                      {highlighted.map((c, index) => (
+                        <button
+                          key={c.id}
+                          onClick={() => setHeroIndex(index)}
+                          aria-pressed={hero.id === c.id}
+                          aria-label={c.character}
+                          title={c.character}
+                        >
+                          <ArtworkImage
+                            artworkKey={'card:' + c.id}
+                            src={c.thumb}
+                            alt={c.character}
+                          />
+                          <ArtworkBadge artworkKey={'card:' + c.id} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+                <div className="gacha-drawbar">
+                  <div className="gacha-pity">
+                    <div>
+                      <span>{t('距离必得 SR 或以上', 'SR or better within')}</span>
+                      <strong>
+                        {Math.max(1, Math.min(pity.sr_limit, pool.rules.sr_pity) - pity.sr)}{' '}
+                        <small>{t('抽', 'pulls')}</small>
+                      </strong>
+                    </div>
+                    <div>
+                      <span>{t('距离必得 SSR', 'SSR within')}</span>
+                      <strong>
+                        {Math.max(1, Math.min(pity.ssr_limit, pool.rules.ssr_pity) - pity.ssr)}{' '}
+                        <small>{t('抽', 'pulls')}</small>
+                      </strong>
+                    </div>
+                    {pool.kind === 'limited' && (pool.rules.ssr_guarantee_misses ?? 1) > 1 && (
+                      <p className="gacha-special-progress">
+                        {t('SP 大保底：连续未中 ', 'SP guarantee: consecutive misses ')}
+                        <strong>
+                          {pity.ssr_misses ?? 0} / {pool.rules.ssr_guarantee_misses}
+                        </strong>
+                        {t(' · 与普通限定池独立', ' · independent of regular limited pools')}
+                      </p>
+                    )}
+                    {pool.kind === 'limited' && (pity.sr_featured || pity.ssr_featured) && (
+                      <p>
+                        {[pity.sr_featured && 'SR', pity.ssr_featured && 'SSR']
+                          .filter(Boolean)
+                          .join(' / ')}{' '}
+                        {t('下次同档必为限定', 'next hit guaranteed featured')}
+                      </p>
+                    )}
+                  </div>
+                  <div
+                    ref={measureDrawActions}
+                    className={
+                      'gacha-draw-actions' + (upcoming ? ' gacha-draw-actions--upcoming' : '')
+                    }
+                  >
+                    {upcoming && (
+                      <p className="gacha-draw-actions__notice" id="gacha-upcoming-notice">
+                        {t(
+                          '奖池尚未开始，暂不可召唤。',
+                          'Pool not started yet. Summoning unavailable.',
+                        )}
+                      </p>
+                    )}
+                    <Button
+                      aria-describedby={upcoming ? 'gacha-upcoming-notice' : undefined}
+                      disabled={busy || !poolOpen(pool, currentTime)}
+                      onClick={() =>
+                        state.tickets[pool.kind] < 1
+                          ? (setTicket(pool.kind), setQuantity('1'), setDialog('buy'))
+                          : void act({ action: 'draw', pool_id: pool.id, quantity: 1 })
+                      }
+                    >
+                      <Icon name="spark" />
+                      <span>
+                        {t('召唤一次', 'Summon once')}
+                        <small>
+                          1{' '}
+                          {pool.kind === 'permanent'
+                            ? t('常驻券', 'standard ticket')
+                            : t('限定券', 'limited ticket')}
+                        </small>
+                      </span>
+                    </Button>
+                    <Button
+                      variant="primary"
+                      aria-describedby={upcoming ? 'gacha-upcoming-notice' : undefined}
+                      disabled={busy || !poolOpen(pool, currentTime)}
+                      onClick={() =>
+                        state.tickets[pool.kind] < 10
+                          ? (setTicket(pool.kind),
+                            setQuantity(String(10 - state.tickets[pool.kind])),
+                            setDialog('buy'))
+                          : void act({ action: 'draw', pool_id: pool.id, quantity: 10 })
+                      }
+                    >
+                      <Icon name="spark" />
+                      <span>
+                        {working ? t('召唤中…', 'Summoning…') : t('十次召唤', 'Summon ten')}
+                        <small>
+                          10{' '}
+                          {pool.kind === 'permanent'
+                            ? t('常驻券', 'standard tickets')
+                            : t('限定券', 'limited tickets')}
+                        </small>
+                      </span>
+                    </Button>
+                  </div>
+                </div>
+                <div className="gacha-underbar">
+                  <p>
                     {t(
-                      '奖池尚未开始，暂不可召唤。',
-                      'Pool not started yet. Summoning unavailable.',
+                      '每抽必得 1 张卡牌 · 重复卡自动转为同稀有度碎片',
+                      'One card every pull · duplicates become matching shards',
                     )}
                   </p>
-                )}
-                <Button
-                  aria-describedby={upcoming ? 'gacha-upcoming-notice' : undefined}
-                  disabled={busy || !poolOpen(pool, currentTime)}
-                  onClick={() =>
-                    state.tickets[pool.kind] < 1
-                      ? (setTicket(pool.kind), setQuantity('1'), setDialog('buy'))
-                      : void act({ action: 'draw', pool_id: pool.id, quantity: 1 })
-                  }
-                >
-                  <Icon name="spark" />
-                  <span>
-                    {t('召唤一次', 'Summon once')}
-                    <small>
-                      1{' '}
-                      {pool.kind === 'permanent'
-                        ? t('常驻券', 'standard ticket')
-                        : t('限定券', 'limited ticket')}
-                    </small>
-                  </span>
-                </Button>
-                <Button
-                  variant="primary"
-                  aria-describedby={upcoming ? 'gacha-upcoming-notice' : undefined}
-                  disabled={busy || !poolOpen(pool, currentTime)}
-                  onClick={() =>
-                    state.tickets[pool.kind] < 10
-                      ? (setTicket(pool.kind),
-                        setQuantity(String(10 - state.tickets[pool.kind])),
-                        setDialog('buy'))
-                      : void act({ action: 'draw', pool_id: pool.id, quantity: 10 })
-                  }
-                >
-                  <Icon name="spark" />
-                  <span>
-                    {working ? t('召唤中…', 'Summoning…') : t('十次召唤', 'Summon ten')}
-                    <small>
-                      10{' '}
-                      {pool.kind === 'permanent'
-                        ? t('常驻券', 'standard tickets')
-                        : t('限定券', 'limited tickets')}
-                    </small>
-                  </span>
-                </Button>
-              </div>
-            </div>
-            <div className="gacha-underbar">
-              <p>
-                {t(
-                  '每抽必得 1 张卡牌 · 重复卡自动转为同稀有度碎片',
-                  'One card every pull · duplicates become matching shards',
-                )}
-              </p>
-              <Button variant="link" size="sm" onClick={() => setDialog('rules')}>
-                {t('查看概率与保底规则', 'Rates & guarantees')}
-              </Button>
-            </div>
-            <div className="gacha-home-bottom">
-              <div>
-                <span className="gacha-eyebrow">YOUR NEXT CHAPTER</span>
-                <h3>{t('有些美好，要一起才完整', 'Some memories need everyone')}</h3>
-                <p>
-                  {t(
-                    '集齐一个主题，解锁主题插画与特别回馈。',
-                    'Complete a theme to unlock its illustration and rewards.',
-                  )}
-                </p>
-              </div>
-              <div className="gacha-collection-summary">
-                <Button onClick={() => setPage('collection')}>
-                  <Icon name="book" />
-                  {t('翻开收藏册', 'Open your collection')}
-                  <span>
-                    {collection.collected} / {collection.total}
-                  </span>
-                </Button>
-                {collection.restricted && (
-                  <p className="gacha-collection-progress-note">
-                    {t(
-                      '未开放的分级卡牌不计入收藏进度。',
-                      'Restricted cards are not included in collection progress.',
+                  <Button variant="link" size="sm" onClick={() => setDialog('rules')}>
+                    {t('查看概率与保底规则', 'Rates & guarantees')}
+                  </Button>
+                </div>
+                <div className="gacha-home-bottom">
+                  <div>
+                    <span className="gacha-eyebrow">YOUR NEXT CHAPTER</span>
+                    <h3>{t('有些美好，要一起才完整', 'Some memories need everyone')}</h3>
+                    <p>
+                      {t(
+                        '集齐一个主题，解锁主题插画与特别回馈。',
+                        'Complete a theme to unlock its illustration and rewards.',
+                      )}
+                    </p>
+                  </div>
+                  <div className="gacha-collection-summary">
+                    <Button onClick={() => setPage('collection')}>
+                      <Icon name="book" />
+                      {t('翻开收藏册', 'Open your collection')}
+                      <span>
+                        {collection.collected} / {collection.total}
+                      </span>
+                    </Button>
+                    {collection.restricted && (
+                      <p className="gacha-collection-progress-note">
+                        {t(
+                          '未开放的分级卡牌不计入收藏进度。',
+                          'Restricted cards are not included in collection progress.',
+                        )}
+                      </p>
                     )}
-                  </p>
-                )}
+                  </div>
+                </div>
               </div>
-            </div>
-          </>
-        )}
-        {page === 'collection' && (
-          <Collection
-            state={state}
-            english={english}
-            busy={busy}
-            act={(a, m) => void act(a, m)}
-            inspect={inspect}
-            viewGroup={setGroup}
-          />
-        )}
-        {page === 'shop' && (
-          <Shop
-            state={currentState}
-            english={english}
-            busy={busy}
-            act={(a, m) => void act(a, m)}
-            inspect={inspect}
-          />
-        )}
-        <footer className="gacha-footer">
-          <p>
-            {t(
-              '卡牌仅供收藏，不能交易或兑换积分。抽卡没有常规积分收益，集齐主题可领取一次性奖励。',
-              'Cards are collectibles and cannot be traded or redeemed for credits. Draws have no regular credit income; complete themes for one-time rewards.',
-            )}
-          </p>
-          <span>NONBIRI · COLLECT A LITTLE JOY</span>
-        </footer>
+            </>
+          )}
+          {page === 'collection' && (
+            <Collection
+              state={state}
+              english={english}
+              busy={busy}
+              act={(a, m) => void act(a, m)}
+              inspect={inspect}
+              viewGroup={setGroup}
+            />
+          )}
+          {page === 'shop' && (
+            <Shop
+              state={currentState}
+              english={english}
+              busy={busy}
+              act={(a, m) => void act(a, m)}
+              inspect={inspect}
+            />
+          )}
+          <footer className="gacha-footer">
+            <p>
+              {t(
+                '卡牌仅供收藏，不能交易或兑换积分。抽卡没有常规积分收益，集齐主题可领取一次性奖励。',
+                'Cards are collectibles and cannot be traded or redeemed for credits. Draws have no regular credit income; complete themes for one-time rewards.',
+              )}
+            </p>
+            <span>NONBIRI · COLLECT A LITTLE JOY</span>
+          </footer>
+        </div>
       </div>
       {notice && (
         <div className="gacha-toast" role="status">
@@ -1001,79 +1033,80 @@ export function GachaApp({
               { value: 'permanent', label: t('常驻抽奖券', 'Standard tickets') },
               { value: 'limited', label: t('限定抽奖券', 'Limited tickets') },
             ]}
-          />
-          <div className="gacha-buy-icon">
-            <TicketIcon limited={ticket === 'limited'} />
-          </div>
-          <p>
-            <CreditNumber value={formatCredits(unitPrice)} /> {t('积分 / 张', 'credits / ticket')}
-          </p>
-          <Field
-            label={t('兑换数量', 'Quantity')}
-            help={t('每次 1–100 张', '1–100 tickets per exchange')}
           >
-            {(props) => (
-              <input
-                {...props}
-                type="number"
-                min="1"
-                max="100"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                onBlur={() => setQuantity(String(quantityValue))}
-              />
-            )}
-          </Field>
-          <dl className="gacha-buy-summary">
-            <dt>{t('游戏积分余额', 'Game credits')}</dt>
-            <dd>
-              <CreditNumber value={formatCredits(state.credits.game)} /> {t('积分', 'credits')}
-            </dd>
-            <dt>{t('通用积分余额', 'General credits')}</dt>
-            <dd>
-              <CreditNumber value={formatCredits(state.credits.general)} /> {t('积分', 'credits')}
-            </dd>
-            <dt>{t('本次花费', 'Total cost')}</dt>
-            <dd>
-              <CreditNumber value={pointText(totalMilli)} /> {t('积分', 'credits')}
-            </dd>
-          </dl>
-          <p>
-            {ticket === 'permanent' ? (
-              <>
-                {t('优先消耗游戏积分：', 'Game credits first: ')}
-                <CreditNumber value={pointText(gameSpend)} />
-                {t(' 游戏积分 + ', ' game + ')}
-                <CreditNumber value={pointText(generalSpend)} />
-                {t(' 通用积分', ' general')}
-              </>
-            ) : (
-              t('仅消耗通用积分。', 'Uses general credits only.')
-            )}
-          </p>
-          <p>
-            {t(
-              '票券永久有效，兑换后不能换回积分。',
-              'Tickets never expire and cannot be exchanged back for credits.',
-            )}
-          </p>
-          {error && <Note tone="bad">{error}</Note>}
-          {recovery}
-          <Button
-            variant="primary"
-            block
-            disabled={busy || !quantity || generalSpend > availableGeneral}
-            onClick={() =>
-              void act(
-                { action: 'buy', ticket, quantity: quantityValue, revision: state.shop.revision },
-                t('抽奖券已到账', 'Tickets added'),
-              )
-            }
-          >
-            {generalSpend > availableGeneral
-              ? t('积分不足', 'Not enough credits')
-              : t('兑换 ', 'Exchange for ') + quantityValue + t(' 张', ' tickets')}
-          </Button>
+            <div className="gacha-buy-icon">
+              <TicketIcon limited={ticket === 'limited'} />
+            </div>
+            <p>
+              <CreditNumber value={formatCredits(unitPrice)} /> {t('积分 / 张', 'credits / ticket')}
+            </p>
+            <Field
+              label={t('兑换数量', 'Quantity')}
+              help={t('每次 1–100 张', '1–100 tickets per exchange')}
+            >
+              {(props) => (
+                <input
+                  {...props}
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  onBlur={() => setQuantity(String(quantityValue))}
+                />
+              )}
+            </Field>
+            <dl className="gacha-buy-summary">
+              <dt>{t('游戏积分余额', 'Game credits')}</dt>
+              <dd>
+                <CreditNumber value={formatCredits(state.credits.game)} /> {t('积分', 'credits')}
+              </dd>
+              <dt>{t('通用积分余额', 'General credits')}</dt>
+              <dd>
+                <CreditNumber value={formatCredits(state.credits.general)} /> {t('积分', 'credits')}
+              </dd>
+              <dt>{t('本次花费', 'Total cost')}</dt>
+              <dd>
+                <CreditNumber value={pointText(totalMilli)} /> {t('积分', 'credits')}
+              </dd>
+            </dl>
+            <p>
+              {ticket === 'permanent' ? (
+                <>
+                  {t('优先消耗游戏积分：', 'Game credits first: ')}
+                  <CreditNumber value={pointText(gameSpend)} />
+                  {t(' 游戏积分 + ', ' game + ')}
+                  <CreditNumber value={pointText(generalSpend)} />
+                  {t(' 通用积分', ' general')}
+                </>
+              ) : (
+                t('仅消耗通用积分。', 'Uses general credits only.')
+              )}
+            </p>
+            <p>
+              {t(
+                '票券永久有效，兑换后不能换回积分。',
+                'Tickets never expire and cannot be exchanged back for credits.',
+              )}
+            </p>
+            {error && <Note tone="bad">{error}</Note>}
+            {recovery}
+            <Button
+              variant="primary"
+              block
+              disabled={busy || !quantity || generalSpend > availableGeneral}
+              onClick={() =>
+                void act(
+                  { action: 'buy', ticket, quantity: quantityValue, revision: state.shop.revision },
+                  t('抽奖券已到账', 'Tickets added'),
+                )
+              }
+            >
+              {generalSpend > availableGeneral
+                ? t('积分不足', 'Not enough credits')
+                : t('兑换 ', 'Exchange for ') + quantityValue + t(' 张', ' tickets')}
+            </Button>
+          </Tabs>
         </GachaDialog>
       )}
       {dialog === 'settings' && (

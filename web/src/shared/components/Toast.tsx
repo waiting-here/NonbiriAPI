@@ -5,6 +5,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  useRef,
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -43,8 +44,8 @@ const ICON_BY_TONE: Record<ToastTone, 'info' | 'check' | 'warning' | 'error'> = 
  * stay longer than ordinary success/info confirmations.
  */
 export const TOAST_DEFAULT_DURATIONS = {
-  info: 4_000,
-  success: 4_000,
+  info: 5_000,
+  success: 5_000,
   warning: 8_000,
   error: null,
 } as const satisfies Readonly<Record<ToastTone, number | null>>;
@@ -61,14 +62,31 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
   const { t } = useTranslation();
   const tone = toast.tone ?? 'info';
   const duration = durationFor(toast);
+  const remaining = useRef(duration);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const paused = hovered || focused;
   useEffect(() => {
-    if (duration === null) return undefined;
-    const timer = window.setTimeout(() => onDismiss(toast.id), duration);
-    return () => window.clearTimeout(timer);
-  }, [duration, onDismiss, toast.id]);
+    if (duration === null || paused) return undefined;
+    const started = Date.now();
+    const timer = window.setTimeout(() => onDismiss(toast.id), remaining.current ?? duration);
+    return () => {
+      window.clearTimeout(timer);
+      remaining.current = Math.max(0, (remaining.current ?? duration) - (Date.now() - started));
+    };
+  }, [duration, onDismiss, paused, toast.id]);
 
   return (
-    <div className={`nb-toast nb-toast--${tone}`} role={tone === 'error' ? 'alert' : 'status'}>
+    <div
+      className={['nb-toast', 'nb-toast--' + tone].join(' ')}
+      role={tone === 'error' ? 'alert' : 'status'}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onFocusCapture={() => setFocused(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
+      }}
+    >
       <Icon name={ICON_BY_TONE[tone]} />
       <div>
         {toast.title ? <strong>{toast.title}</strong> : null}
@@ -94,7 +112,7 @@ export function ToastViewport({
   onDismiss: (id: string) => void;
 }) {
   return (
-    <div className="nb-toast-viewport" aria-live="polite" aria-atomic="false">
+    <div className="nb-toast-viewport">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onDismiss={onDismiss} />
       ))}

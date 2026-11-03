@@ -287,9 +287,11 @@ test('complete templates keep false, zero and empty periods through conflict rec
     );
     const level6 = await steward.newPage();
     await openModel(level6, 6, data.request_model_id);
-    await expect(level6.locator('.nb-recurring-discount datalist option[value="UTC"]')).toHaveCount(
-      1,
-    );
+    const scheduleZone = level6.locator('.nb-recurring-discount').getByRole('combobox');
+    await scheduleZone.click();
+    await scheduleZone.press('ArrowDown');
+    await expect(level6.getByRole('option', { name: 'UTC', exact: true })).toBeVisible();
+    await scheduleZone.press('Escape');
     await level6.getByRole('button', { name: workflow.openPriceReference, exact: true }).click();
     const templates = level6
       .locator('summary')

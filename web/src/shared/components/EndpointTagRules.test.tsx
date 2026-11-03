@@ -108,7 +108,11 @@ describe('endpoint wildcard tag rules', () => {
     await view.user.type(screen.getByRole('textbox', { name: 'Domain pattern' }), '*.example.com');
     await view.user.click(screen.getByRole('radio', { name: 'Clear tags' }));
     await view.user.click(screen.getByRole('button', { name: 'Save rule' }));
-    await view.user.click(await screen.findByRole('button', { name: 'Retry' }));
+    await screen.findByRole('button', { name: 'Retry' });
+    const add = screen.getByRole('radio', { name: 'Add tags' });
+    await view.user.click(add.closest('label')!);
+    expect(screen.getByRole('radio', { name: 'Clear tags' })).toBeChecked();
+    await view.user.click(screen.getByRole('button', { name: 'Retry' }));
     await screen.findByText('*.example.com');
     expect(writes).toHaveLength(2);
     expect(writes[1]).toEqual(writes[0]);

@@ -111,71 +111,72 @@ export function MomentPicker() {
             value,
             label: t(kindKeys[value]),
           }))}
-        />
-        <FilterBar
-          activeCount={search ? 1 : 0}
-          ariaLabel={t('user.appearance.moments.search')}
-          onSubmit={() => setSearch(searchDraft.trim())}
-          onReset={() => {
-            setSearch('');
-            setSearchDraft('');
-            setKind('all');
-          }}
-          search={
-            <Field label={t('user.appearance.moments.search')}>
-              {(props) => (
-                <input
-                  {...props}
-                  value={searchDraft}
-                  placeholder={t('user.appearance.moments.searchHint')}
-                  onChange={(event) => setSearchDraft(event.target.value)}
-                />
-              )}
-            </Field>
-          }
-        />
-        <div
-          className="nb-moment-picker__grid"
-          role="radiogroup"
-          aria-label={t('user.appearance.moments.choose')}
         >
-          {filtered.map((item) => (
-            <label
-              key={item.key}
-              className="nb-moment-option"
-              data-selected={choice === item.key}
-              data-unavailable={!policy.allowed(momentArtworkKeys(item))}
-            >
-              <input
-                type="radio"
-                name="heart-moment"
-                value={item.key}
-                checked={choice === item.key}
-                disabled={appearance.saving || !policy.allowed(momentArtworkKeys(item))}
-                onChange={() => {
-                  setChoice(item.key);
-                  setError(null);
-                }}
-              />
-              <ArtworkImage
-                artworkKey={momentArtworkKeys(item)}
-                src={item.thumb}
-                alt=""
-                loading="lazy"
-              />
-              <ArtworkBadge artworkKey={momentArtworkKeys(item)} />
-              <ArtworkUnavailable artworkKey={momentArtworkKeys(item)} />
-              <span>{name(item)}</span>
-              <small>{item.card?.rarity ?? t(kindKeys[item.kind])}</small>
-            </label>
-          ))}
-        </div>
-        {!filtered.length && !appearance.pending && (
-          <EmptyState
-            title={t('user.appearance.moments.empty')}
-            body={t('user.appearance.moments.emptyHint')}
+          <FilterBar
+            activeCount={search ? 1 : 0}
+            ariaLabel={t('user.appearance.moments.search')}
+            onSubmit={() => setSearch(searchDraft.trim())}
+            onReset={() => {
+              setSearch('');
+              setSearchDraft('');
+              setKind('all');
+            }}
+            search={
+              <Field label={t('user.appearance.moments.search')}>
+                {(props) => (
+                  <input
+                    {...props}
+                    value={searchDraft}
+                    placeholder={t('user.appearance.moments.searchHint')}
+                    onChange={(event) => setSearchDraft(event.target.value)}
+                  />
+                )}
+              </Field>
+            }
           />
-        )}
+          <div
+            className="nb-moment-picker__grid"
+            role="radiogroup"
+            aria-label={t('user.appearance.moments.choose')}
+          >
+            {filtered.map((item) => (
+              <label
+                key={item.key}
+                className="nb-moment-option"
+                data-selected={choice === item.key}
+                data-unavailable={!policy.allowed(momentArtworkKeys(item))}
+              >
+                <input
+                  type="radio"
+                  name="heart-moment"
+                  value={item.key}
+                  checked={choice === item.key}
+                  disabled={appearance.saving || !policy.allowed(momentArtworkKeys(item))}
+                  onChange={() => {
+                    setChoice(item.key);
+                    setError(null);
+                  }}
+                />
+                <ArtworkImage
+                  artworkKey={momentArtworkKeys(item)}
+                  src={item.thumb}
+                  alt=""
+                  loading="lazy"
+                />
+                <ArtworkBadge artworkKey={momentArtworkKeys(item)} />
+                <ArtworkUnavailable artworkKey={momentArtworkKeys(item)} />
+                <span>{name(item)}</span>
+                <small>{item.card?.rarity ?? t(kindKeys[item.kind])}</small>
+              </label>
+            ))}
+          </div>
+          {!filtered.length && !appearance.pending && (
+            <EmptyState
+              title={t('user.appearance.moments.empty')}
+              body={t('user.appearance.moments.emptyHint')}
+            />
+          )}
+        </Tabs>
       </PanelBody>
       <PanelFoot>
         <Note>
