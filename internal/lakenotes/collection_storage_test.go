@@ -16,6 +16,10 @@ func TestProfileCloningPreservesPriorActiveCast(t *testing.T) {
 	testCompatibleActiveCast(t, cloningPriorRulesID)
 }
 
+func TestProfileCodecPreservesPriorActiveCast(t *testing.T) {
+	testCompatibleActiveCast(t, profileCodecPriorRulesID)
+}
+
 func testCompatibleActiveCast(t *testing.T, savedRulesID string) {
 	t.Helper()
 	f := newFixture(t)

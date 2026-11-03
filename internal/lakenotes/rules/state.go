@@ -286,40 +286,32 @@ func DecodeCast(raw []byte) (Cast, error) {
 	return c, nil
 }
 
+// storedProfile overrides only the clock's storage representation; all other
+// fields retain the profile's JSON tags and optional/null behavior.
+type storedProfile struct {
+	Profile
+	ClockMinutes string `json:"clockMinutes"`
+}
+
 // EncodeProfile preserves the game clock as binary64 bits. Financial values
 // remain decimal strings and are never converted to floating point.
 func EncodeProfile(p Profile) ([]byte, error) {
 	if e := ValidateProfile(p); e != nil {
 		return nil, e
 	}
-	raw, e := json.Marshal(p)
-	if e != nil {
-		return nil, e
-	}
-	var fields map[string]json.RawMessage
-	if e = json.Unmarshal(raw, &fields); e != nil {
-		return nil, e
-	}
 	var bits [8]byte
 	binary.LittleEndian.PutUint64(bits[:], math.Float64bits(p.ClockMinutes))
-	fields["clockMinutes"], e = json.Marshal("f64:" + hex.EncodeToString(bits[:]))
-	if e != nil {
-		return nil, e
-	}
-	return json.Marshal(fields)
+	return json.Marshal(storedProfile{Profile: p, ClockMinutes: "f64:" + hex.EncodeToString(bits[:])})
 }
 func DecodeProfile(raw []byte) (Profile, error) {
 	if len(raw) > 65536 {
 		return Profile{}, ErrInvalid
 	}
-	var fields map[string]json.RawMessage
-	if e := json.Unmarshal(raw, &fields); e != nil {
+	var stored storedProfile
+	if e := json.Unmarshal(raw, &stored); e != nil {
 		return Profile{}, e
 	}
-	var s string
-	if e := json.Unmarshal(fields["clockMinutes"], &s); e != nil {
-		return Profile{}, e
-	}
+	s := stored.ClockMinutes
 	if len(s) != 20 || s[:4] != "f64:" {
 		return Profile{}, ErrInvalid
 	}
@@ -327,22 +319,8 @@ func DecodeProfile(raw []byte) (Profile, error) {
 	if e != nil || hex.EncodeToString(bits) != s[4:] {
 		return Profile{}, ErrInvalid
 	}
-	clock := math.Float64frombits(binary.LittleEndian.Uint64(bits))
-	if !finite(clock) {
-		return Profile{}, ErrInvalid
-	}
-	fields["clockMinutes"], e = json.Marshal(clock)
-	if e != nil {
-		return Profile{}, e
-	}
-	raw, e = json.Marshal(fields)
-	if e != nil {
-		return Profile{}, e
-	}
-	var p Profile
-	if e = json.Unmarshal(raw, &p); e != nil {
-		return Profile{}, e
-	}
+	p := stored.Profile
+	p.ClockMinutes = math.Float64frombits(binary.LittleEndian.Uint64(bits))
 	if e = ValidateProfile(p); e != nil {
 		return Profile{}, e
 	}
