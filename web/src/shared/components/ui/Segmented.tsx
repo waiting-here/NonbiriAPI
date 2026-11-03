@@ -1,4 +1,5 @@
-import { useId, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { RadioGroup, Radio } from 'react-aria-components';
 
 export function Segmented<V extends string>({
   label,
@@ -15,22 +16,21 @@ export function Segmented<V extends string>({
   disabled?: boolean;
   describedBy?: string;
 }) {
-  const name = useId();
   return (
-    <div className="nb-seg" role="radiogroup" aria-label={label} aria-describedby={describedBy}>
+    <RadioGroup
+      className="nb-seg"
+      aria-label={label}
+      aria-describedby={describedBy}
+      value={value}
+      isDisabled={disabled}
+      onChange={(next) => onChange(next as V)}
+      orientation="horizontal"
+    >
       {options.map((option) => (
-        <label key={option.value}>
-          <input
-            type="radio"
-            name={name}
-            value={option.value}
-            checked={value === option.value}
-            disabled={disabled}
-            onChange={() => onChange(option.value)}
-          />
+        <Radio key={option.value} value={option.value}>
           <span>{option.label}</span>
-        </label>
+        </Radio>
       ))}
-    </div>
+    </RadioGroup>
   );
 }

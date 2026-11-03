@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from 'react';
+import { Switch } from 'react-aria-components';
 
 export function Toggle({
   label,
@@ -15,22 +16,19 @@ export function Toggle({
 }) {
   const id = useId();
   return (
-    <label className="nb-toggle" htmlFor={id}>
+    <Switch
+      className="nb-toggle"
+      isSelected={checked}
+      isDisabled={disabled}
+      onChange={onChange}
+      aria-labelledby={id}
+      aria-describedby={description ? id + '-description' : undefined}
+    >
       <span className="nb-toggle__text">
-        <strong id={`${id}-label`}>{label}</strong>
-        {description ? <span id={`${id}-description`}>{description}</span> : null}
+        <strong id={id}>{label}</strong>
+        {description ? <span id={id + '-description'}>{description}</span> : null}
       </span>
-      <input
-        id={id}
-        type="checkbox"
-        role="switch"
-        checked={checked}
-        disabled={disabled}
-        aria-checked={checked}
-        aria-labelledby={`${id}-label`}
-        aria-describedby={description ? `${id}-description` : undefined}
-        onChange={(event) => onChange(event.target.checked)}
-      />
-    </label>
+      <span className="nb-toggle__indicator" aria-hidden="true" />
+    </Switch>
   );
 }

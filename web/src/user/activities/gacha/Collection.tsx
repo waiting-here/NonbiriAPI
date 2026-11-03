@@ -87,208 +87,212 @@ export function Collection({
             ? [{ value: 'moments' as const, label: t('心动时刻', 'Heartfelt moments') }]
             : []),
         ]}
-      />
-      {view === 'moments' ? (
-        <MomentPicker />
-      ) : view === 'cards' ? (
-        <>
-          <FilterBar
-            ariaLabel={t('查找卡牌', 'Find cards')}
-            search={
-              <Field label={t('搜索', 'Search')}>
-                {(props) => (
-                  <input
-                    {...props}
-                    value={searchDraft}
-                    placeholder={t('搜索主题或角色', 'Search a theme or character')}
-                    onChange={(e) => setSearchDraft(e.target.value)}
-                  />
-                )}
-              </Field>
-            }
-            activeCount={[search, character, rarity, owned].filter(Boolean).length}
-            onSubmit={() => setSearch(searchDraft.trim())}
-            onReset={clearFilters}
-            secondary={
-              <>
-                <Field label={t('角色', 'Character')}>
+      >
+        {view === 'moments' ? (
+          <MomentPicker />
+        ) : view === 'cards' ? (
+          <>
+            <FilterBar
+              ariaLabel={t('查找卡牌', 'Find cards')}
+              search={
+                <Field label={t('搜索', 'Search')}>
                   {(props) => (
-                    <select
+                    <input
                       {...props}
-                      value={character}
-                      onChange={(e) => setCharacter(e.target.value)}
-                    >
-                      <option value="">{t('全部角色', 'All characters')}</option>
-                      {characters.map((c) => (
-                        <option key={c}>{c}</option>
-                      ))}
-                    </select>
+                      value={searchDraft}
+                      placeholder={t('搜索主题或角色', 'Search a theme or character')}
+                      onChange={(e) => setSearchDraft(e.target.value)}
+                    />
                   )}
                 </Field>
-                <Field label={t('稀有度', 'Rarity')}>
-                  {(props) => (
-                    <select {...props} value={rarity} onChange={(e) => setRarity(e.target.value)}>
-                      <option value="">{t('全部稀有度', 'All rarities')}</option>
-                      {displayRarities.map((r) => (
-                        <option key={r}>{r}</option>
-                      ))}
-                    </select>
-                  )}
-                </Field>
-                <Field label={t('收集状态', 'Collection status')}>
-                  {(props) => (
-                    <select {...props} value={owned} onChange={(e) => setOwned(e.target.value)}>
-                      <option value="">{t('全部', 'All')}</option>
-                      <option value="yes">{t('已拥有', 'Owned')}</option>
-                      <option value="no">{t('未收集', 'Not collected')}</option>
-                    </select>
-                  )}
-                </Field>
-              </>
-            }
-          />
-          <div className="gacha-catalog">
-            {filtered.map((card) => (
-              <CardTile
-                key={card.id}
-                card={card}
-                english={english}
-                owned={!!state.owned[card.id]}
-                note={
-                  state.owned[card.id] ? t('已珍藏', 'Collected') : t('未收集', 'Not collected')
-                }
-                onClick={() => inspect(card)}
-              />
-            ))}
-          </div>
-          {!filtered.length && (
-            <div className="gacha-empty">
-              <Icon name="search" />
-              <h3>{t('没有找到这张卡', 'No cards found')}</h3>
-              <p>{t('试试其他角色或主题名称。', 'Try another character or theme.')}</p>
-              <Button onClick={clearFilters}>{t('清除筛选', 'Clear filters')}</Button>
-            </div>
-          )}
-        </>
-      ) : (
-        <div className="gacha-themes">
-          {visibleThemes.map((theme) => {
-            const members = cards.filter((c) => c.theme === theme.id),
-              collected = members.filter((c) => state.owned[c.id]).length;
-            const complete = collected === members.length,
-              claimed = state.claimed.includes(theme.id);
-            return (
-              <article className={'gacha-theme' + (complete ? ' is-complete' : '')} key={theme.id}>
-                <button
-                  className="gacha-theme__image"
-                  disabled={!complete}
-                  onClick={() => viewGroup(theme)}
-                  aria-label={t('欣赏 ' + theme.name, 'View ' + theme.name_en)}
-                >
-                  <ArtworkImage
-                    artworkKey={'illustration:' + theme.id}
-                    src={theme.art}
-                    alt=""
-                    loading="lazy"
-                    className={complete ? '' : 'is-locked'}
-                  />
-                  {!complete && (
-                    <span>
-                      <Icon name="shield" />
-                      {t('集齐后解锁插画', 'Complete the theme to reveal')}
-                      <strong>
-                        {collected} / {members.length}
-                      </strong>
-                    </span>
-                  )}
-                  {complete && (
-                    <span className="gacha-theme__unlocked">
-                      <Icon name="spark" />
-                      {t('欣赏插画', 'View memory')}
-                    </span>
-                  )}
-                </button>
-                <div className="gacha-theme__body">
-                  <ArtworkBadge artworkKey={'illustration:' + theme.id} />
-                  <ArtworkUnavailable artworkKey={'illustration:' + theme.id} />
-                  <span className="gacha-eyebrow">
-                    {theme.rarity} ·{' '}
-                    {theme.source === 'permanent'
-                      ? t('常驻主题', 'Permanent theme')
-                      : theme.source === 'limited'
-                        ? t('限定主题', 'Limited theme')
-                        : t('商店专属', 'Shop exclusive')}
-                  </span>
-                  <h3>{t(theme.name, theme.name_en)}</h3>
-                  <p>{t(theme.tagline, theme.tagline_en)}</p>
-                  {theme.appearance && (
-                    <p className="gacha-appearance-reward">
-                      <Icon name="spark" />
-                      {complete
-                        ? t('主题装扮已解锁', 'Appearance unlocked')
-                        : t('获得即解锁同名站点装扮', 'Collect to unlock its site appearance')}
-                    </p>
-                  )}
-                  <div className="gacha-theme__members">
-                    {members.map((c) => (
-                      <button
-                        key={c.id}
-                        title={c.character}
-                        aria-label={t(c.name, c.name_en)}
-                        className={state.owned[c.id] ? 'is-owned' : ''}
-                        onClick={() => inspect(c)}
+              }
+              activeCount={[search, character, rarity, owned].filter(Boolean).length}
+              onSubmit={() => setSearch(searchDraft.trim())}
+              onReset={clearFilters}
+              secondary={
+                <>
+                  <Field label={t('角色', 'Character')}>
+                    {(props) => (
+                      <select
+                        {...props}
+                        value={character}
+                        onChange={(e) => setCharacter(e.target.value)}
                       >
-                        <ArtworkImage
-                          artworkKey={'card:' + c.id}
-                          src={c.thumb}
-                          alt={c.character}
-                          loading="lazy"
-                        />
-                        <ArtworkBadge artworkKey={'card:' + c.id} />
-                        {state.owned[c.id] && <Icon name="check" />}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="gacha-theme__reward">
-                    <span>
-                      {t('集齐奖励', 'Completion reward')}
-                      <strong>
-                        1{' '}
-                        {theme.source === 'permanent'
-                          ? t('常驻券', 'standard ticket')
-                          : t('限定券', 'limited ticket')}{' '}
-                        + 10 {t('捐赠回馈', 'donation credit')}
-                      </strong>
-                      <strong className="gacha-theme__credits">
-                        + <ExactCredits value="10000" />{' '}
-                        {theme.source === 'permanent'
-                          ? t('游戏积分', 'game credits')
-                          : t('通用积分', 'general credits')}
-                      </strong>
+                        <option value="">{t('全部角色', 'All characters')}</option>
+                        {characters.map((c) => (
+                          <option key={c}>{c}</option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
+                  <Field label={t('稀有度', 'Rarity')}>
+                    {(props) => (
+                      <select {...props} value={rarity} onChange={(e) => setRarity(e.target.value)}>
+                        <option value="">{t('全部稀有度', 'All rarities')}</option>
+                        {displayRarities.map((r) => (
+                          <option key={r}>{r}</option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
+                  <Field label={t('收集状态', 'Collection status')}>
+                    {(props) => (
+                      <select {...props} value={owned} onChange={(e) => setOwned(e.target.value)}>
+                        <option value="">{t('全部', 'All')}</option>
+                        <option value="yes">{t('已拥有', 'Owned')}</option>
+                        <option value="no">{t('未收集', 'Not collected')}</option>
+                      </select>
+                    )}
+                  </Field>
+                </>
+              }
+            />
+            <div className="gacha-catalog">
+              {filtered.map((card) => (
+                <CardTile
+                  key={card.id}
+                  card={card}
+                  english={english}
+                  owned={!!state.owned[card.id]}
+                  note={
+                    state.owned[card.id] ? t('已珍藏', 'Collected') : t('未收集', 'Not collected')
+                  }
+                  onClick={() => inspect(card)}
+                />
+              ))}
+            </div>
+            {!filtered.length && (
+              <div className="gacha-empty">
+                <Icon name="search" />
+                <h3>{t('没有找到这张卡', 'No cards found')}</h3>
+                <p>{t('试试其他角色或主题名称。', 'Try another character or theme.')}</p>
+                <Button onClick={clearFilters}>{t('清除筛选', 'Clear filters')}</Button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="gacha-themes">
+            {visibleThemes.map((theme) => {
+              const members = cards.filter((c) => c.theme === theme.id),
+                collected = members.filter((c) => state.owned[c.id]).length;
+              const complete = collected === members.length,
+                claimed = state.claimed.includes(theme.id);
+              return (
+                <article
+                  className={'gacha-theme' + (complete ? ' is-complete' : '')}
+                  key={theme.id}
+                >
+                  <button
+                    className="gacha-theme__image"
+                    disabled={!complete}
+                    onClick={() => viewGroup(theme)}
+                    aria-label={t('欣赏 ' + theme.name, 'View ' + theme.name_en)}
+                  >
+                    <ArtworkImage
+                      artworkKey={'illustration:' + theme.id}
+                      src={theme.art}
+                      alt=""
+                      loading="lazy"
+                      className={complete ? '' : 'is-locked'}
+                    />
+                    {!complete && (
+                      <span>
+                        <Icon name="shield" />
+                        {t('集齐后解锁插画', 'Complete the theme to reveal')}
+                        <strong>
+                          {collected} / {members.length}
+                        </strong>
+                      </span>
+                    )}
+                    {complete && (
+                      <span className="gacha-theme__unlocked">
+                        <Icon name="spark" />
+                        {t('欣赏插画', 'View memory')}
+                      </span>
+                    )}
+                  </button>
+                  <div className="gacha-theme__body">
+                    <ArtworkBadge artworkKey={'illustration:' + theme.id} />
+                    <ArtworkUnavailable artworkKey={'illustration:' + theme.id} />
+                    <span className="gacha-eyebrow">
+                      {theme.rarity} ·{' '}
+                      {theme.source === 'permanent'
+                        ? t('常驻主题', 'Permanent theme')
+                        : theme.source === 'limited'
+                          ? t('限定主题', 'Limited theme')
+                          : t('商店专属', 'Shop exclusive')}
                     </span>
-                    <Button
-                      size="sm"
-                      disabled={busy || !complete || claimed}
-                      onClick={() =>
-                        act(
-                          { action: 'claim', theme: theme.id },
-                          t('主题奖励已领取', 'Theme reward claimed'),
-                        )
-                      }
-                    >
-                      {claimed
-                        ? t('已领取', 'Claimed')
-                        : complete
-                          ? t('领取奖励', 'Claim reward')
-                          : t('待集齐', 'Complete the theme')}
-                    </Button>
+                    <h3>{t(theme.name, theme.name_en)}</h3>
+                    <p>{t(theme.tagline, theme.tagline_en)}</p>
+                    {theme.appearance && (
+                      <p className="gacha-appearance-reward">
+                        <Icon name="spark" />
+                        {complete
+                          ? t('主题装扮已解锁', 'Appearance unlocked')
+                          : t('获得即解锁同名站点装扮', 'Collect to unlock its site appearance')}
+                      </p>
+                    )}
+                    <div className="gacha-theme__members">
+                      {members.map((c) => (
+                        <button
+                          key={c.id}
+                          title={c.character}
+                          aria-label={t(c.name, c.name_en)}
+                          className={state.owned[c.id] ? 'is-owned' : ''}
+                          onClick={() => inspect(c)}
+                        >
+                          <ArtworkImage
+                            artworkKey={'card:' + c.id}
+                            src={c.thumb}
+                            alt={c.character}
+                            loading="lazy"
+                          />
+                          <ArtworkBadge artworkKey={'card:' + c.id} />
+                          {state.owned[c.id] && <Icon name="check" />}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="gacha-theme__reward">
+                      <span>
+                        {t('集齐奖励', 'Completion reward')}
+                        <strong>
+                          1{' '}
+                          {theme.source === 'permanent'
+                            ? t('常驻券', 'standard ticket')
+                            : t('限定券', 'limited ticket')}{' '}
+                          + 10 {t('捐赠回馈', 'donation credit')}
+                        </strong>
+                        <strong className="gacha-theme__credits">
+                          + <ExactCredits value="10000" />{' '}
+                          {theme.source === 'permanent'
+                            ? t('游戏积分', 'game credits')
+                            : t('通用积分', 'general credits')}
+                        </strong>
+                      </span>
+                      <Button
+                        size="sm"
+                        disabled={busy || !complete || claimed}
+                        onClick={() =>
+                          act(
+                            { action: 'claim', theme: theme.id },
+                            t('主题奖励已领取', 'Theme reward claimed'),
+                          )
+                        }
+                      >
+                        {claimed
+                          ? t('已领取', 'Claimed')
+                          : complete
+                            ? t('领取奖励', 'Claim reward')
+                            : t('待集齐', 'Complete the theme')}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </Tabs>
     </div>
   );
 }

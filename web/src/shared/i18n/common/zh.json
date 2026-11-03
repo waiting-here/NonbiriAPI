@@ -3095,6 +3095,7 @@
     "callerUnavailable": "资料不可用",
     "time": "时间",
     "routeKind": "请求类型",
+    "operation": "服务类型",
     "endpointBaseUrl": "端点地址",
     "upstreamModel": "所用模型",
     "tokens": "Token 用量",

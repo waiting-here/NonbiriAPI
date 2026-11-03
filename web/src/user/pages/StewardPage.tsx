@@ -191,106 +191,112 @@ function StewardPageContent() {
             value,
             label: t(sectionKeys[value]),
           }))}
-        />
-        {!sectionAllowed ? <StewardPermissionNotice /> : null}
-        {sectionAllowed && section === 'logs' ? (
-          <>
-            {has('logs.read') ? (
-              <RoleLogPanel
-                key={`logs:${authority.data.id}:${authority.data.effective_level}`}
+        >
+          {!sectionAllowed ? <StewardPermissionNotice /> : null}
+          {sectionAllowed && section === 'logs' ? (
+            <>
+              {has('logs.read') ? (
+                <RoleLogPanel
+                  key={`logs:${authority.data.id}:${authority.data.effective_level}`}
+                  role="steward"
+                  accountId={`${authority.data.id}:${authority.data.effective_level}`}
+                  scopeReady={allowed}
+                  enabled
+                  onAuthorityLoss={authorityLoss}
+                />
+              ) : (
+                <StewardPermissionNotice />
+              )}
+              {has('diagnostics.read') ? (
+                <IndependentDiagnostics
+                  role="steward"
+                  accountId={`${authority.data.id}:${authority.data.effective_level}`}
+                  scopeReady={allowed}
+                  enabled
+                />
+              ) : (
+                <StewardPermissionNotice />
+              )}
+            </>
+          ) : null}
+          {sectionAllowed && section === 'risk' ? (
+            <RiskAuditPanel
+              role="steward"
+              scopeKey={authority.data.id}
+              enabled={allowed}
+              embedded
+            />
+          ) : null}
+          {sectionAllowed && section === 'charity' ? (
+            <CharityManagement
+              key={`charity:${authority.data.id}`}
+              frame="steward"
+              accountId={authority.data.id}
+              actorLevel={authority.data.effective_level === 5 ? 5 : 6}
+              permissions={authority.data.steward_permissions}
+              onCapabilityLoss={authorityLoss}
+            />
+          ) : null}
+          {sectionAllowed && section === 'users' ? (
+            <UserManagement
+              key={`users:${authority.data.id}:${authority.data.effective_level}`}
+              role="steward"
+              actorLevel={authority.data.effective_level === 5 ? 5 : 6}
+              permissions={authority.data.steward_permissions}
+              account={authority.data.id}
+              scopeReady={allowed}
+              sessionError={authority.error}
+              onAuthorityLoss={authorityLoss}
+              embedded
+            />
+          ) : null}
+          {sectionAllowed && section === 'blacklist' ? (
+            <BlacklistManagement
+              key={`blacklist:${authority.data.id}`}
+              role="steward"
+              accountID={`steward:${authority.data.id}`}
+              sessionError={authority.error}
+              sessionFetching={authority.isFetching}
+              refreshSession={() => void authority.refetch()}
+              onAuthorityLoss={authorityLoss}
+              embedded
+            />
+          ) : null}
+          {sectionAllowed && section === 'announcements' ? (
+            announcement ? (
+              <AnnouncementEditor
+                key={`announcement:${authority.data.id}:${announcement}`}
                 role="steward"
-                accountId={`${authority.data.id}:${authority.data.effective_level}`}
-                scopeReady={allowed}
-                enabled
+                account={authority.data.id}
+                announcementId={announcement}
+                backTo={
+                  listReturnPath(location.state, '/steward') === '/steward'
+                    ? '/steward?tab=announcements'
+                    : listReturnPath(location.state, '/steward')
+                }
+                onAuthorityLoss={authorityLoss}
+                embedded
+              />
+            ) : (
+              <AnnouncementManagement
+                key={`announcements:${authority.data.id}`}
+                role="steward"
+                account={authority.data.id}
+                onAuthorityLoss={authorityLoss}
+                embedded
+              />
+            )
+          ) : null}
+          {sectionAllowed && section === 'maintenance' ? (
+            <Panel tone="danger">
+              <MaintenancePanel
+                key={`maintenance:${authority.data.id}`}
+                role="steward"
                 onAuthorityLoss={authorityLoss}
               />
-            ) : (
-              <StewardPermissionNotice />
-            )}
-            {has('diagnostics.read') ? (
-              <IndependentDiagnostics
-                role="steward"
-                accountId={`${authority.data.id}:${authority.data.effective_level}`}
-                scopeReady={allowed}
-                enabled
-              />
-            ) : (
-              <StewardPermissionNotice />
-            )}
-          </>
-        ) : null}
-        {sectionAllowed && section === 'risk' ? (
-          <RiskAuditPanel role="steward" scopeKey={authority.data.id} enabled={allowed} embedded />
-        ) : null}
-        {sectionAllowed && section === 'charity' ? (
-          <CharityManagement
-            key={`charity:${authority.data.id}`}
-            frame="steward"
-            accountId={authority.data.id}
-            actorLevel={authority.data.effective_level === 5 ? 5 : 6}
-            permissions={authority.data.steward_permissions}
-            onCapabilityLoss={authorityLoss}
-          />
-        ) : null}
-        {sectionAllowed && section === 'users' ? (
-          <UserManagement
-            key={`users:${authority.data.id}:${authority.data.effective_level}`}
-            role="steward"
-            actorLevel={authority.data.effective_level === 5 ? 5 : 6}
-            permissions={authority.data.steward_permissions}
-            account={authority.data.id}
-            scopeReady={allowed}
-            sessionError={authority.error}
-            onAuthorityLoss={authorityLoss}
-            embedded
-          />
-        ) : null}
-        {sectionAllowed && section === 'blacklist' ? (
-          <BlacklistManagement
-            key={`blacklist:${authority.data.id}`}
-            role="steward"
-            accountID={`steward:${authority.data.id}`}
-            sessionError={authority.error}
-            sessionFetching={authority.isFetching}
-            refreshSession={() => void authority.refetch()}
-            onAuthorityLoss={authorityLoss}
-            embedded
-          />
-        ) : null}
-        {sectionAllowed && section === 'announcements' ? (
-          announcement ? (
-            <AnnouncementEditor
-              key={`announcement:${authority.data.id}:${announcement}`}
-              role="steward"
-              account={authority.data.id}
-              announcementId={announcement}
-              backTo={
-                listReturnPath(location.state, '/steward') === '/steward'
-                  ? '/steward?tab=announcements'
-                  : listReturnPath(location.state, '/steward')
-              }
-              onAuthorityLoss={authorityLoss}
-              embedded
-            />
-          ) : (
-            <AnnouncementManagement
-              key={`announcements:${authority.data.id}`}
-              role="steward"
-              account={authority.data.id}
-              onAuthorityLoss={authorityLoss}
-              embedded
-            />
-          )
-        ) : null}
-        {sectionAllowed && section === 'maintenance' ? (
-          <Panel tone="danger">
-            <MaintenancePanel
-              key={`maintenance:${authority.data.id}`}
-              role="steward"
-              onAuthorityLoss={authorityLoss}
-            />
-          </Panel>
-        ) : null}
+            </Panel>
+          ) : null}
+        </Tabs>
       </div>
     </TimeContextProvider>
   );

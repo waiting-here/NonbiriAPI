@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { NativeDialog } from '@shared/components/NativeDialog';
+import { useState, type ReactNode } from 'react';
 import { Icon } from '@shared/components/Icon';
 import type { Phrase } from './engine';
 import notes from './catalog-notes.json';
@@ -21,24 +22,18 @@ export function CatchDialog({
   eyebrow?: string;
   count?: number;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
   const t = useCatchText();
-  useEffect(() => {
-    const dialog = ref.current!;
-    if (open && !dialog.open) dialog.showModal();
-    else if (!open && dialog.open) dialog.close();
-  }, [open]);
   return (
-    <dialog
-      ref={ref}
+    <NativeDialog
+      open={open}
+      onDismiss={onClose}
       className={className}
       aria-label={title}
-      onClose={onClose}
       onClick={(e) => {
         if (e.target !== e.currentTarget) return;
         const r = e.currentTarget.getBoundingClientRect();
         if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)
-          e.currentTarget.close();
+          onClose();
       }}
     >
       <div className="dialog-top">
@@ -55,13 +50,13 @@ export function CatchDialog({
         <button
           className="close-dialog icon-button"
           aria-label={t('关闭', 'Close')}
-          onClick={() => ref.current?.close()}
+          onClick={onClose}
         >
           ×
         </button>
       </div>
       {children}
-    </dialog>
+    </NativeDialog>
   );
 }
 
@@ -105,8 +100,8 @@ export function CatchCatalog({
   const observed = phrases.filter((phrase) => metadata[phrase.id]?.evidence === 'observed').length;
   return (
     <CatchDialog
-      open={open}
       onClose={onClose}
+      open={open}
       title={t('八股梗图鉴', 'Phrase catalog')}
       eyebrow={t('接物机的语料仓库', 'The catcher’s phrase library')}
       count={phrases.length}

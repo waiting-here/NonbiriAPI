@@ -208,7 +208,7 @@
 }
 
 @media (width <= 48rem) {
-  .charity-management > .nb-tabs [role='tab'] {
+  .charity-management > .nb-tabs-root > .nb-tabs [role='tab'] {
     flex: 0 0 auto;
     min-width: max-content;
     padding-inline: var(--nb-space-3);

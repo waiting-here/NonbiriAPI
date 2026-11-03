@@ -120,8 +120,12 @@ describe('Model source settings', () => {
     await act(async () => {
       complete(['late-old-provider-model']);
     });
+    const model = within(editor).getByRole('combobox', { name: common.common.connections.model });
+    await view.user.clear(model);
+    await view.user.type(model, 'late-');
+    await view.user.keyboard('{ArrowDown}');
     expect(
-      editor.querySelector('datalist option[value="late-old-provider-model"]'),
+      screen.queryByRole('option', { name: 'late-old-provider-model' }),
     ).not.toBeInTheDocument();
     expect(within(editor).getByLabelText(text.provider)).toHaveValue('responses');
   });
@@ -172,7 +176,11 @@ describe('Model source settings', () => {
     expect(within(editor).getByLabelText(common.common.connections.model)).toHaveValue(
       'synthetic-model',
     );
-    expect(editor.querySelector('datalist option[value="new-model"]')).toBeInTheDocument();
+    const model = within(editor).getByRole('combobox', { name: common.common.connections.model });
+    await view.user.clear(model);
+    await view.user.type(model, 'new-');
+    await view.user.keyboard('{ArrowDown}');
+    expect(await screen.findByRole('option', { name: 'new-model' })).toBeVisible();
   });
   it('keeps a conflicting draft until the administrator adopts the current revision', async () => {
     mocks.save.mockImplementation(async () => {

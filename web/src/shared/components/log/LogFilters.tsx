@@ -1,3 +1,4 @@
+import { SuggestInput } from '@shared/components/ui/SuggestInput';
 import { Button, Field, FilterBar } from '@shared/components/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -108,7 +109,7 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
     setInvalidRange(false);
     apply({ filters: {}, fromUnix: undefined, toUnix: undefined });
   };
-  const primaryNames = ['user_id', 'discord_id', 'model', 'charity_model'];
+  const primaryNames = ['operation', 'user_id', 'discord_id', 'model', 'charity_model'];
   const renderFields = (values: readonly LogFilterField[]) =>
     values.map((field) => (
       <Field
@@ -138,6 +139,16 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
                   </option>
                 ))}
               </select>
+            ) : field.suggestions?.length ? (
+              <SuggestInput
+                {...props}
+                value={drafts[field.name] ?? ''}
+                suggestions={field.suggestions}
+                maxLength={field.maxLength ?? 512}
+                onChange={(value) => setDrafts((old) => ({ ...old, [field.name]: value }))}
+                aria-label={field.ariaLabel}
+                placeholder={field.placeholder ?? field.label}
+              />
             ) : (
               <input
                 {...props}
@@ -145,7 +156,6 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
                 value={drafts[field.name] ?? ''}
                 maxLength={field.maxLength ?? 512}
                 inputMode={field.inputType === 'number' ? 'numeric' : undefined}
-                list={field.suggestions?.length ? `log-filter-${field.name}-options` : undefined}
                 onChange={(event) =>
                   setDrafts((old) => ({ ...old, [field.name]: event.target.value }))
                 }
@@ -153,13 +163,6 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
                 placeholder={field.placeholder ?? field.label}
               />
             )}
-            {field.suggestions?.length ? (
-              <datalist id={`log-filter-${field.name}-options`}>
-                {field.suggestions.map((option) => (
-                  <option key={option} value={option} />
-                ))}
-              </datalist>
-            ) : null}
           </>
         )}
       </Field>

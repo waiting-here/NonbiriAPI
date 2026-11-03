@@ -23,7 +23,7 @@ it('keeps sound and music independent and returns keyboard focus to their menu t
   await waitFor(() => expect(sound).toHaveFocus());
   expect(sound).toHaveAttribute('aria-checked', 'true');
   await view.user.keyboard('{Enter}');
-  expect(trigger).toHaveFocus();
+  await waitFor(() => expect(trigger).toHaveFocus());
   await view.user.click(trigger);
   expect(screen.getByRole('menuitemcheckbox', { name: 'Sound: off' })).toHaveAttribute(
     'aria-checked',
@@ -44,7 +44,7 @@ it('keeps sound and music independent and returns keyboard focus to their menu t
     'true',
   );
   await view.user.keyboard('{Escape}');
-  expect(trigger).toHaveFocus();
+  await waitFor(() => expect(trigger).toHaveFocus());
 });
 
 it('orders main tools and keeps extra links and disabled actions in input order', async () => {
@@ -72,10 +72,12 @@ it('orders main tools and keeps extra links and disabled actions in input order'
   const menu = screen.getByRole('menu', { name: 'More' });
   const catalog = within(menu).getByRole('menuitem', { name: 'Catalog' }),
     account = within(menu).getByRole('menuitem', { name: 'Account' });
-  expect(catalog).toBeDisabled();
+  expect(catalog).toHaveAttribute('aria-disabled', 'true');
+  await view.user.click(catalog);
+  expect(disabled).not.toHaveBeenCalled();
   expect(account).toHaveAttribute('href', '/account');
   await waitFor(() => expect(account).toHaveFocus());
   expect(disabled).not.toHaveBeenCalled();
   await view.user.keyboard('{Escape}');
-  expect(more).toHaveFocus();
+  await waitFor(() => expect(more).toHaveFocus());
 });

@@ -1,3 +1,4 @@
+import { Tabs } from '@shared/components/ui/Tabs';
 import { CreditNumber } from '@shared/components/CreditNumber';
 import { CreditText } from '@shared/components/CreditText';
 import { Fold } from '@shared/components/ui/Fold';
@@ -571,45 +572,22 @@ function FishingSingleBoards() {
   const selected = board === 'single' ? historical : recent;
   return (
     <div className="fishing-board-switch">
-      <div
+      <Tabs
         className="fishing-board-switch__tabs"
-        role="tablist"
-        aria-label={text('fishing.leaderboard.single')}
-        onKeyDown={(event) => {
-          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-          event.preventDefault();
-          const next =
-            event.key === 'Home'
-              ? 'recent_single'
-              : event.key === 'End'
-                ? 'single'
-                : board === 'single'
-                  ? 'recent_single'
-                  : 'single';
-          setBoard(next);
-          event.currentTarget.querySelector<HTMLButtonElement>(`#fishing-tab-${next}`)?.focus();
-        }}
-      >
-        {(['recent_single', 'single'] as const).map((value) => (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            id={`fishing-tab-${value}`}
-            aria-controls="fishing-length-board"
-            tabIndex={board === value ? 0 : -1}
-            aria-selected={board === value}
-            className={board === value ? 'is-selected' : undefined}
-            onClick={() => setBoard(value)}
-          >
-            {text(
-              value === 'single'
-                ? 'fishing.leaderboard.windowHistorical'
-                : 'fishing.leaderboard.windowRecent',
-            )}
-          </button>
-        ))}
-      </div>
+        label={text('fishing.leaderboard.single')}
+        value={board}
+        onChange={setBoard}
+        tabs={(['recent_single', 'single'] as const).map((value) => ({
+          value,
+          id: 'fishing-tab-' + value,
+          panelId: 'fishing-length-board',
+          label: text(
+            value === 'single'
+              ? 'fishing.leaderboard.windowHistorical'
+              : 'fishing.leaderboard.windowRecent',
+          ),
+        }))}
+      />
       <div role="tabpanel" id="fishing-length-board" aria-labelledby={`fishing-tab-${board}`}>
         <LeaderboardCard board={board} query={selected} />
       </div>

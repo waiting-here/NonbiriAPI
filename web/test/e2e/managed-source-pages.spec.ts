@@ -494,7 +494,7 @@ async function assertNoHorizontalOverflow(page: Page): Promise<void> {
           element.getClientRects().length &&
           element.getBoundingClientRect().right > innerWidth + 1 &&
           !(
-            element.matches('.ops-page > .nb-tabs > button[role="tab"]') &&
+            element.matches('.ops-page > .nb-tabs-root > .nb-tabs > [role="tab"]') &&
             ['用户管理', '黑名单', '公告管理', '维护模式'].includes(
               element.textContent?.trim() ?? '',
             )
@@ -510,7 +510,7 @@ async function assertNoHorizontalOverflow(page: Page): Promise<void> {
   expect(layout.scrollWidth, JSON.stringify(layout)).toBeLessThanOrEqual(layout.width);
   expect(layout.overflowing, JSON.stringify(layout)).toEqual([]);
   if (layout.width === 390 && page.url().includes('/steward')) {
-    const tabs = page.locator('.ops-page > .nb-tabs').first();
+    const tabs = page.locator('.ops-page > .nb-tabs-root > .nb-tabs').first();
     const bounds = (await tabs.boundingBox())!;
     expect(bounds.x).toBeGreaterThanOrEqual(0);
     expect(bounds.x + bounds.width).toBeLessThanOrEqual(layout.width);

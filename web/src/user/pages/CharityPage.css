@@ -2,7 +2,7 @@
   display: grid;
   gap: var(--nb-space-4);
 }
-.economy-charity-page > .nb-tabs {
+.economy-charity-page > .nb-tabs-root > .nb-tabs {
   margin-bottom: var(--nb-space-5);
 }
 .charity-donation-stats {
@@ -107,7 +107,7 @@
     gap: var(--nb-space-2);
     padding: var(--nb-space-3);
   }
-  .economy-charity-page > .nb-tabs > button {
+  .economy-charity-page > .nb-tabs-root > .nb-tabs > [role='tab'] {
     flex: 0 0 auto;
     min-width: max-content;
     padding-inline: var(--nb-space-3);

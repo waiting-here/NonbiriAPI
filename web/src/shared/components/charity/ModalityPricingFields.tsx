@@ -6,9 +6,11 @@ import { emptyPrices } from './priceDraft';
 
 export function ModalityPricingFields({
   value,
+  disabled = false,
   onChange,
   title,
 }: {
+  disabled?: boolean;
   value: ModalityPricing;
   onChange: (value: ModalityPricing) => void;
   title: string;
@@ -19,11 +21,13 @@ export function ModalityPricingFields({
       <div className="nb-form">
         <p className="nb-sub">{t('common.modalityPricing.help')}</p>
         <Toggle
+          disabled={disabled}
           label={t('common.modalityPricing.input')}
           checked={value.input_enabled}
           onChange={(input_enabled) => onChange({ ...value, input_enabled })}
         />
         <Toggle
+          disabled={disabled}
           label={t('common.modalityPricing.output')}
           checked={value.output_enabled}
           onChange={(output_enabled) => onChange({ ...value, output_enabled })}
@@ -33,6 +37,7 @@ export function ModalityPricingFields({
             <fieldset key={modality} className="nb-price-fields-section">
               <legend>{t(modalityNameKeys[modality])}</legend>
               <Toggle
+                disabled={disabled}
                 label={t('common.modalityPricing.configure')}
                 description={t('common.modalityPricing.configureHelp')}
                 checked={value[modality] !== undefined}

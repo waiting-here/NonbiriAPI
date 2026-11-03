@@ -102,6 +102,19 @@ test('user management separates identifiers and copies Discord IDs exactly at de
   await page.keyboard.press('Escape');
   await expect(sidebar).toBeHidden();
   await expect(toggle).toBeFocused();
+  await toggle.click();
+  const close = sidebar.getByRole('button', { name: 'Close navigation', exact: true });
+  await expect(close).toBeVisible();
+  if (process.env.NONBIRI_VISUAL_DIR)
+    await page.screenshot({ path: process.env.NONBIRI_VISUAL_DIR + '/aria-admin-drawer.png' });
+  await close.click();
+  await expect(sidebar).toBeHidden();
+  await expect(toggle).toBeFocused();
+  await toggle.click();
+  await close.focus();
+  await close.press('Enter');
+  await expect(sidebar).toBeHidden();
+  await expect(toggle).toBeFocused();
   errors.assertNone();
 });
 
@@ -182,6 +195,24 @@ for (const locale of ['en', 'zh'] as const) {
             .evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().top));
           expect(new Set(tops).size).toBe(tops.length);
           await page.keyboard.press('Escape');
+          await expect(nav).toBeHidden();
+          await expect(toggle).toBeFocused();
+          await toggle.click();
+          const close = nav.getByRole('button', {
+            name: locale === 'zh' ? '关闭导航' : 'Close navigation',
+            exact: true,
+          });
+          await expect(close).toBeVisible();
+          if (process.env.NONBIRI_VISUAL_DIR && width === 390 && locale === 'en' && role === 'user')
+            await page.screenshot({
+              path: process.env.NONBIRI_VISUAL_DIR + '/aria-user-drawer.png',
+            });
+          await close.click();
+          await expect(nav).toBeHidden();
+          await expect(toggle).toBeFocused();
+          await toggle.click();
+          await close.focus();
+          await close.press('Enter');
           await expect(nav).toBeHidden();
           await expect(toggle).toBeFocused();
           const actions = page.locator('[data-component="page-header"] .nb-page-header__actions');

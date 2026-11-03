@@ -250,131 +250,136 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
             return next;
           })
         }
-      />
-      <FilterBar
-        onReset={() => {
-          setDraft({ source: '', value: '', invalid: false });
-          setParams((previous) => {
-            const next = new URLSearchParams(previous);
-            next.delete('donation_q');
-            next.delete('donation_status');
-            next.delete('donations_page');
-            return next;
-          });
-        }}
-        activeCount={status ? 1 : 0}
-        secondaryAlwaysVisible
-        onSubmit={search}
-        search={
-          <>
-            <Field
-              label={t('user.charity.ownerPages.search')}
-              error={shownDraft.invalid ? t('user.charity.ownerPages.invalidSearch') : undefined}
-            >
+      >
+        <FilterBar
+          onReset={() => {
+            setDraft({ source: '', value: '', invalid: false });
+            setParams((previous) => {
+              const next = new URLSearchParams(previous);
+              next.delete('donation_q');
+              next.delete('donation_status');
+              next.delete('donations_page');
+              return next;
+            });
+          }}
+          activeCount={status ? 1 : 0}
+          secondaryAlwaysVisible
+          onSubmit={search}
+          search={
+            <>
+              <Field
+                label={t('user.charity.ownerPages.search')}
+                error={shownDraft.invalid ? t('user.charity.ownerPages.invalidSearch') : undefined}
+              >
+                {(props) => (
+                  <input
+                    {...props}
+                    type="search"
+                    placeholder={t('user.charity.ownerPages.searchPlaceholder')}
+                    maxLength={256}
+                    value={shownDraft.value}
+                    onChange={(event) =>
+                      setDraft({ source: q, value: event.target.value, invalid: false })
+                    }
+                  />
+                )}
+              </Field>
+            </>
+          }
+          secondary={
+            <Field label={t('user.charity.ownerPages.status')}>
               {(props) => (
-                <input
+                <select
                   {...props}
-                  type="search"
-                  placeholder={t('user.charity.ownerPages.searchPlaceholder')}
-                  maxLength={256}
-                  value={shownDraft.value}
-                  onChange={(event) =>
-                    setDraft({ source: q, value: event.target.value, invalid: false })
-                  }
-                />
+                  value={status}
+                  onChange={(event) => setFilter('donation_status', event.target.value)}
+                >
+                  {statuses.map((value) => (
+                    <option key={value} value={value}>
+                      {value ? t(`common.connections.donationStates.${value}`) : t('common.all')}
+                    </option>
+                  ))}
+                </select>
               )}
             </Field>
-          </>
-        }
-        secondary={
-          <Field label={t('user.charity.ownerPages.status')}>
-            {(props) => (
-              <select
-                {...props}
-                value={status}
-                onChange={(event) => setFilter('donation_status', event.target.value)}
-              >
-                {statuses.map((value) => (
-                  <option key={value} value={value}>
-                    {value ? t(`common.connections.donationStates.${value}`) : t('common.all')}
-                  </option>
-                ))}
-              </select>
-            )}
-          </Field>
-        }
-      />
-      {view === 'history' || view === 'hidden' ? (
-        <DonationHistoryBatch
-          accountID={accountID}
-          scope={{
-            action: view === 'hidden' ? 'restore' : 'hide',
-            q,
-            status:
-              status === 'deleted' || status === 'expired' || status === 'rejected' ? status : null,
-          }}
-          disabled={
-            !enabled || query.isFetching || Boolean(query.error) || !query.data?.data.length
           }
         />
-      ) : null}
-      {query.error ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : null}
-      {query.isPending ? <LoadingState /> : null}
-      {query.data && !accessLost(query.error) ? (
-        <>
-          <PagePagination
-            alwaysShowJump
-            metadata={query.data.pagination}
-            requestedPage={pager.page}
-            onPageChange={pager.setPage}
-            onPageSizeChange={pager.setPageSize}
-            busy={query.isFetching}
-          />
-          {!query.data.data.length ? (
-            <EmptyState
-              title={t('user.charity.noDonations')}
-              body={t('user.charity.ownerPages.noMatches')}
-            />
-          ) : null}
-          <div className="economy-donation-list nb-list" aria-busy={query.isFetching}>
-            {query.data.data.map((item) => (
-              <DonationSummary
-                key={item.id}
-                item={item}
-                disabled={query.isFetching || Boolean(query.error)}
-                returnTo={`${location.pathname}${location.search}`}
-                onOpenKeys={() => select(item.id)}
-              />
-            ))}
-          </div>
-        </>
-      ) : null}
-      {expanded && !accessLost(query.error) ? (
-        <Panel aria-label={t('user.charity.ownerPages.keys')}>
-          <PanelHead
-            level={3}
-            title={t('user.charity.donationNumber', { id: expanded })}
-            actions={
-              <Button type="button" variant="ghost" onClick={() => select('')}>
-                {t('common.close')}
-              </Button>
+        {view === 'history' || view === 'hidden' ? (
+          <DonationHistoryBatch
+            accountID={accountID}
+            scope={{
+              action: view === 'hidden' ? 'restore' : 'hide',
+              q,
+              status:
+                status === 'deleted' || status === 'expired' || status === 'rejected'
+                  ? status
+                  : null,
+            }}
+            disabled={
+              !enabled || query.isFetching || Boolean(query.error) || !query.data?.data.length
             }
           />
-          <PanelBody>
-            <OwnerDonationKeys
-              key={`${accountID}:${expanded}`}
-              accountID={accountID}
-              donationID={expanded}
-              enabled={enabled && !query.isPending}
-              summary={query.data?.data.find((item) => item.id === expanded)?.useSummary}
-              status={
-                query.data?.data.find((item) => item.id === expanded)?.status ??
-                (view === 'history' || view === 'hidden' ? 'deleted' : undefined)
+        ) : null}
+        {query.error ? (
+          <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+        ) : null}
+        {query.isPending ? <LoadingState /> : null}
+        {query.data && !accessLost(query.error) ? (
+          <>
+            <PagePagination
+              alwaysShowJump
+              metadata={query.data.pagination}
+              requestedPage={pager.page}
+              onPageChange={pager.setPage}
+              onPageSizeChange={pager.setPageSize}
+              busy={query.isFetching}
+            />
+            {!query.data.data.length ? (
+              <EmptyState
+                title={t('user.charity.noDonations')}
+                body={t('user.charity.ownerPages.noMatches')}
+              />
+            ) : null}
+            <div className="economy-donation-list nb-list" aria-busy={query.isFetching}>
+              {query.data.data.map((item) => (
+                <DonationSummary
+                  key={item.id}
+                  item={item}
+                  disabled={query.isFetching || Boolean(query.error)}
+                  returnTo={`${location.pathname}${location.search}`}
+                  onOpenKeys={() => select(item.id)}
+                />
+              ))}
+            </div>
+          </>
+        ) : null}
+        {expanded && !accessLost(query.error) ? (
+          <Panel aria-label={t('user.charity.ownerPages.keys')}>
+            <PanelHead
+              level={3}
+              title={t('user.charity.donationNumber', { id: expanded })}
+              actions={
+                <Button type="button" variant="ghost" onClick={() => select('')}>
+                  {t('common.close')}
+                </Button>
               }
             />
-          </PanelBody>
-        </Panel>
-      ) : null}
+            <PanelBody>
+              <OwnerDonationKeys
+                key={`${accountID}:${expanded}`}
+                accountID={accountID}
+                donationID={expanded}
+                enabled={enabled && !query.isPending}
+                summary={query.data?.data.find((item) => item.id === expanded)?.useSummary}
+                status={
+                  query.data?.data.find((item) => item.id === expanded)?.status ??
+                  (view === 'history' || view === 'hidden' ? 'deleted' : undefined)
+                }
+              />
+            </PanelBody>
+          </Panel>
+        ) : null}
+      </Tabs>
     </div>
   );
 }
@@ -551,65 +556,68 @@ export function OwnerDonationKeys({
             return next;
           })
         }
-      />
-      {query.error ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : null}
-      {query.isPending ? <LoadingState /> : null}
-      {query.data && !accessLost(query.error) ? (
-        <>
-          <PagePagination
-            alwaysShowJump
-            metadata={query.data.pagination}
-            requestedPage={pager.page}
-            onPageChange={pager.setPage}
-            onPageSizeChange={pager.setPageSize}
-            busy={query.isFetching}
-          />
-          {!query.data.data.length ? <p>{t('user.charity.noRemainingKeys')}</p> : null}
-          <fieldset
-            className="ops-unframed"
-            disabled={query.isFetching || Boolean(query.error)}
-            aria-busy={query.isFetching}
-          >
-            {query.data.data.map((key) => (
-              <DonationKeyPanel
-                key={key.id}
-                donationKey={key}
-                donationId={donationID}
-                donationStatus={status}
-                donationSummary={summary}
-                donationRevision={key.donationRevision}
-                accountID={accountID}
-                returnTo={returnTo}
-                ruleSummary={
-                  key.ruleCount !== '0' ? (
-                    <div className="economy-owner-rule-preview">
-                      <strong>{copy.ruleCount(Number(key.ruleCount))}</strong>
-                      {key.rules.map((rule) => (
-                        <p key={rule.id}>
-                          {copy.modeValue[rule.mode]} · {copy.intervalValue[rule.interval]} ·{' '}
-                          {copy.metricValue[rule.metric]} · {copy.state[rule.state]}
-                          <br />
-                          {copy.limit}: {rule.limit} · {copy.used}: {rule.used} · {copy.reserved}:{' '}
-                          {rule.reserved} · {copy.remaining}: {rule.remaining}
-                        </p>
-                      ))}
-                      {BigInt(key.ruleCount) > BigInt(key.rules.length) ? (
-                        <p className="muted">
-                          {t('user.charity.ownerPages.rulesPreview', {
-                            shown: key.rules.length,
-                            total: key.ruleCount,
-                          })}
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : null
-                }
-                compact
-              />
-            ))}
-          </fieldset>
-        </>
-      ) : null}
+      >
+        {query.error ? (
+          <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+        ) : null}
+        {query.isPending ? <LoadingState /> : null}
+        {query.data && !accessLost(query.error) ? (
+          <>
+            <PagePagination
+              alwaysShowJump
+              metadata={query.data.pagination}
+              requestedPage={pager.page}
+              onPageChange={pager.setPage}
+              onPageSizeChange={pager.setPageSize}
+              busy={query.isFetching}
+            />
+            {!query.data.data.length ? <p>{t('user.charity.noRemainingKeys')}</p> : null}
+            <fieldset
+              className="ops-unframed"
+              disabled={query.isFetching || Boolean(query.error)}
+              aria-busy={query.isFetching}
+            >
+              {query.data.data.map((key) => (
+                <DonationKeyPanel
+                  key={key.id}
+                  donationKey={key}
+                  donationId={donationID}
+                  donationStatus={status}
+                  donationSummary={summary}
+                  donationRevision={key.donationRevision}
+                  accountID={accountID}
+                  returnTo={returnTo}
+                  ruleSummary={
+                    key.ruleCount !== '0' ? (
+                      <div className="economy-owner-rule-preview">
+                        <strong>{copy.ruleCount(Number(key.ruleCount))}</strong>
+                        {key.rules.map((rule) => (
+                          <p key={rule.id}>
+                            {copy.modeValue[rule.mode]} · {copy.intervalValue[rule.interval]} ·{' '}
+                            {copy.metricValue[rule.metric]} · {copy.state[rule.state]}
+                            <br />
+                            {copy.limit}: {rule.limit} · {copy.used}: {rule.used} · {copy.reserved}:{' '}
+                            {rule.reserved} · {copy.remaining}: {rule.remaining}
+                          </p>
+                        ))}
+                        {BigInt(key.ruleCount) > BigInt(key.rules.length) ? (
+                          <p className="muted">
+                            {t('user.charity.ownerPages.rulesPreview', {
+                              shown: key.rules.length,
+                              total: key.ruleCount,
+                            })}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null
+                  }
+                  compact
+                />
+              ))}
+            </fieldset>
+          </>
+        ) : null}
+      </Tabs>
     </div>
   );
 }

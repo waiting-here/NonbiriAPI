@@ -303,7 +303,7 @@
   display: none;
 }
 .nb-more__menu {
-  position: fixed;
+  position: relative;
   inset: auto;
   margin: 0;
   min-width: 12rem;
@@ -315,26 +315,26 @@
   border: 1px solid var(--nb-color-border);
   border-radius: var(--nb-radius-card);
   box-shadow: var(--nb-elevation-overlay);
-  display: none;
+  display: grid;
 }
 .nb-more__menu:popover-open {
   display: grid;
 }
-.nb-more__menu :is(button, a) {
+.nb-more__menu [role^='menuitem'] {
   all: unset;
   padding: 0.55rem 0.75rem;
   border-radius: var(--nb-radius-sm);
   cursor: pointer;
   font-size: var(--nb-font-size-sm);
 }
-.nb-more__menu :is(button, a):hover,
-.nb-more__menu :is(button, a):focus-visible {
+.nb-more__menu [role^='menuitem']:hover,
+.nb-more__menu [role^='menuitem']:focus-visible {
   background: var(--nb-color-accent-quiet);
 }
 .nb-more__menu .is-danger {
   color: var(--nb-color-danger);
 }
-.nb-more__menu hr {
+.nb-more__menu [role='separator'] {
   border: 0;
   border-top: 1px solid var(--nb-color-border);
   margin: var(--nb-space-1) 0;
@@ -690,7 +690,7 @@
   font-size: var(--nb-font-size-sm);
   color: var(--nb-color-text-muted);
 }
-.nb-toggle input {
+.nb-toggle__indicator {
   appearance: none;
   flex: 0 0 auto;
   width: 2.6rem;
@@ -701,10 +701,10 @@
   cursor: pointer;
   transition: background var(--nb-motion-micro);
 }
-.nb-toggle input::before {
+.nb-toggle__indicator::before {
   content: none;
 }
-.nb-toggle input::after {
+.nb-toggle__indicator::after {
   content: '';
   position: absolute;
   top: 3px;
@@ -716,13 +716,13 @@
   box-shadow: 0 1px 2px rgb(0 0 0/0.25);
   transition: transform var(--nb-motion-micro);
 }
-.nb-toggle input:checked {
+.nb-toggle[data-selected] .nb-toggle__indicator {
   background: var(--nb-color-accent);
 }
-.nb-toggle input:checked::after {
+.nb-toggle[data-selected] .nb-toggle__indicator::after {
   transform: translateX(1.1rem);
 }
-.nb-toggle input:focus-visible {
+.nb-toggle[data-focus-visible] .nb-toggle__indicator {
   outline: none;
   box-shadow: var(--nb-focus-ring);
 }
@@ -761,7 +761,7 @@
   color: var(--nb-color-text-muted);
   cursor: pointer;
 }
-.nb-seg input:checked + span {
+.nb-seg label[data-selected] > span {
   background: var(--nb-color-surface-raised);
   color: var(--nb-color-text);
   box-shadow:
@@ -771,7 +771,7 @@
 .nb-seg span:hover {
   color: var(--nb-color-text);
 }
-.nb-seg input:focus-visible + span {
+.nb-seg label[data-focus-visible] > span {
   box-shadow: var(--nb-focus-ring);
 }
 @media (width <= 32rem) {
@@ -802,7 +802,7 @@
     border-color var(--nb-motion-micro) var(--nb-motion-ease),
     background-color var(--nb-motion-micro) var(--nb-motion-ease);
 }
-.nb-option:hover:not(:has(input:disabled)) {
+.nb-option:hover:not([data-disabled]) {
   border-color: color-mix(in srgb, var(--nb-color-accent) 45%, var(--nb-color-border-strong));
 }
 .nb-option input {
@@ -816,12 +816,12 @@
   font-size: var(--nb-font-size-sm);
   color: var(--nb-color-text-muted);
 }
-.nb-option:has(input:checked) {
+.nb-option[data-selected] {
   border-color: var(--nb-color-accent);
   background: var(--nb-color-accent-quiet);
   box-shadow: inset 0 0 0 1px var(--nb-color-accent);
 }
-.nb-option:has(input:focus-visible) {
+.nb-option[data-focus-visible] {
   box-shadow: var(--nb-focus-ring);
 }
 
@@ -1525,6 +1525,7 @@ button.nb-row:hover {
   margin-bottom: -1px;
   cursor: pointer;
   white-space: nowrap;
+  user-select: none;
   transition: color var(--nb-motion-micro) var(--nb-motion-ease);
 }
 .nb-tabs [role='tab']:hover {
@@ -1825,7 +1826,7 @@ button.nb-row:hover {
 .nb-tabs {
   min-width: 0;
 }
-.nb-more__menu :is(button:disabled, a[aria-disabled='true']) {
+.nb-more__menu [data-disabled] {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -1835,8 +1836,8 @@ button.nb-row:hover {
   outline: none;
   box-shadow: var(--nb-focus-ring);
 }
-.nb-toggle input:disabled,
-.nb-option:has(input:disabled) {
+.nb-toggle[data-disabled] .nb-toggle__indicator,
+.nb-option[data-disabled] {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -1846,7 +1847,7 @@ button.nb-row:hover {
     height: 2.5rem;
   }
   .nb-pager__pages button,
-  .nb-more__menu :is(button, a),
+  .nb-more__menu [role^='menuitem'],
   .nb-tabs [role='tab'] {
     min-height: 2.5rem;
   }
@@ -1887,7 +1888,7 @@ button.nb-row:hover {
 @media (width <= 48rem), (pointer: coarse) {
   .nb-btn--sm,
   .nb-more > summary,
-  .nb-more__menu :is(button, a),
+  .nb-more__menu [role^='menuitem'],
   .nb-chip button,
   .nb-seg span,
   .nb-tabs [role='tab'],
@@ -1918,4 +1919,81 @@ button.nb-row:hover {
 }
 .nb-fold > summary::after {
   flex-shrink: 0;
+}
+
+.nb-tabs-root {
+  display: contents;
+}
+
+.nb-more__popover,
+.nb-account-popover {
+  z-index: var(--nb-z-dialog);
+}
+.nb-popover-underlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--nb-z-dialog);
+}
+.nb-account-popover .nb-account-menu {
+  position: relative;
+  inset: auto;
+}
+.nb-more__menu [data-focused] {
+  background: var(--nb-color-accent-quiet);
+}
+.nb-more__menu [role^='menuitem'] {
+  display: block;
+}
+.nb-more__menu [role='separator'] {
+  height: 1px;
+  background: var(--nb-color-border);
+}
+
+.nb-suggestions {
+  min-width: 0;
+}
+.nb-suggestions > input {
+  width: 100%;
+}
+.nb-suggestions-popover {
+  z-index: var(--nb-z-dialog);
+  min-width: min(18rem, calc(100vw - var(--nb-space-4)));
+  max-width: calc(100vw - var(--nb-space-4));
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-control);
+  background: var(--nb-color-surface-raised);
+  box-shadow: var(--nb-elevation-overlay);
+}
+.nb-suggestions-list {
+  max-height: 18rem;
+  overflow-y: auto;
+  padding: var(--nb-space-1);
+  outline: none;
+}
+.nb-suggestions-list [role='option'] {
+  padding: var(--nb-space-2) var(--nb-space-3);
+  overflow-wrap: anywhere;
+  border-radius: var(--nb-radius-sm);
+  cursor: pointer;
+}
+.nb-suggestions-list [data-focused],
+.nb-suggestions-list [data-selected] {
+  background: var(--nb-color-accent-quiet);
+}
+
+.nb-tab-content {
+  display: grid;
+  gap: inherit;
+  min-width: 0;
+}
+
+.nb-drawer-close {
+  position: absolute;
+  inset-block-start: 0.5rem;
+  inset-inline-end: 0.5rem;
+}
+
+.nb-user-header .nb-user-header__nav.is-open,
+.nb-admin-sidebar.is-open {
+  padding-block-start: 3.5rem;
 }

@@ -511,7 +511,12 @@ test('connected Codex retains its catalogue, saves a model and recovers quota af
       modelA,
       modelB,
     ]);
-    await expect(form.locator('datalist option')).toHaveCount(2);
+    await model.fill('');
+    await model.press('ArrowDown');
+    await expect(page.getByRole('option')).toHaveCount(2);
+    await model.press('Escape');
+    await model.fill(modelA);
+    await model.press('Escape');
     const catalogue = form.locator('p').filter({
       hasText: copy.quota.catalogueUpdated.replace('{{count}}', '2'),
     });
@@ -529,14 +534,20 @@ test('connected Codex retains its catalogue, saves a model and recovers quota af
     await safeFailure(modelError.operation_diagnostic, form);
     await expect(model).toHaveValue(modelA);
     await expect(form.getByLabel(copy.drivers.name, { exact: true })).toHaveValue(sourceName);
-    await expect(form.locator('datalist option')).toHaveCount(2);
+    await model.fill('');
+    await model.press('ArrowDown');
+    await expect(page.getByRole('option')).toHaveCount(2);
+    await model.press('Escape');
+    await model.fill(modelA);
+    await model.press('Escape');
     await expect(catalogue.locator('.agent-number')).toHaveText(catalogueTime);
     await expect(catalogue).toContainText(copy.quota.stale);
     await inspectLayouts(page, 'codex-catalogue-failure', form);
 
-    const cachedChoice = await form.locator('datalist option').nth(1).getAttribute('value');
-    expect(cachedChoice).toBe(modelB);
-    await model.fill(cachedChoice!);
+    await model.fill(modelB);
+    await model.press('ArrowDown');
+    await page.getByRole('option', { name: modelB, exact: true }).click();
+    await expect(model).toHaveValue(modelB);
     await form.getByRole('button', { name: common.common.save, exact: true }).click();
     await expect
       .poll(

@@ -4,7 +4,7 @@ import { createMemoryRouter, RouterProvider, useLocation, useNavigate } from 're
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useLogUrlState, type LogUrlState } from './useLogUrlState';
 
-const fields = ['model'] as const;
+const fields = ['model', 'operation'] as const;
 const now = 1_800_000_000;
 
 function mount(search = '') {
@@ -48,6 +48,37 @@ const query = () => new URLSearchParams(screen.getByTestId('query').textContent 
 afterEach(() => vi.restoreAllMocks());
 
 describe('log time range', () => {
+  it.each(['images_generations', 'chat_completions', 'model_discovery'])(
+    'preserves service operation %s through range updates and history',
+    async (operation) => {
+      mount('?operation=' + operation + '&page=3&anchor=keep');
+      expect(JSON.parse(screen.getByTestId('range').textContent!).filters.operation).toBe(
+        operation,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Set range' }));
+      expect(query().get('operation')).toBe(operation);
+      expect(query().get('page')).toBe('1');
+      expect(query().get('anchor')).toBe('keep');
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+      await waitFor(() => expect(query().get('page')).toBe('3'));
+      expect(query().get('operation')).toBe(operation);
+    },
+  );
+  it.each([
+    '',
+    'unknown',
+    'CHAT_COMPLETIONS',
+    '%20chat_completions',
+    'chat_completions&operation=chat_completions',
+  ])('ignores malformed operation from URL: %s', (value) => {
+    mount('?operation=' + value);
+    expect(JSON.parse(screen.getByTestId('range').textContent!).filters).not.toHaveProperty(
+      'operation',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(query().has('operation')).toBe(false);
+  });
+
   it('leaves the initial request unbounded when the URL has no time range', () => {
     const { observations } = mount('?model=demo&page=3&anchor=keep');
     expect(query().has('from')).toBe(false);
@@ -55,8 +86,9 @@ describe('log time range', () => {
     expect(query().get('model')).toBe('demo');
     expect(query().get('page')).toBe('3');
     expect(query().get('anchor')).toBe('keep');
-    expect(observations.every((state) => state.fromUnix === undefined && state.toUnix === undefined))
-      .toBe(true);
+    expect(
+      observations.every((state) => state.fromUnix === undefined && state.toUnix === undefined),
+    ).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
     expect(screen.getByText('Before logs')).toBeVisible();
   });

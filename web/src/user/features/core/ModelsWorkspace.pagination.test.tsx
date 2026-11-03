@@ -481,7 +481,12 @@ describe('ModelsWorkspace numbered pagination', () => {
     await rendered.user.click(
       within(row).getByRole('button', { name: 'Source actions for upstream-11' }),
     );
-    await rendered.user.click(within(row).getByRole('menuitem', { name: 'Move down' }));
+    await rendered.user.click(
+      within(screen.getByRole('menu', { name: 'Source actions for upstream-11' })).getByRole(
+        'menuitem',
+        { name: 'Move down' },
+      ),
+    );
     await rendered.user.click(
       within(section!).getByRole('button', { name: 'Save complete order' }),
     );

@@ -3095,6 +3095,7 @@
     "callerUnavailable": "Profile unavailable",
     "time": "Time",
     "routeKind": "Request type",
+    "operation": "Service type",
     "endpointBaseUrl": "Endpoint URL",
     "upstreamModel": "Model used",
     "tokens": "Token usage",

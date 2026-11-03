@@ -1953,103 +1953,121 @@ function RiskBody({
             ['users', 'associations', 'clients', 'rules', 'config', 'access'] as PrimaryTab[]
           ).map((value) => ({
             value,
+            id: 'risk-audit-tab-' + value,
             label: value === 'associations' ? t('common.audit.associations') : c[value],
           }))}
           onChange={(value) => selectTab(value === 'associations' ? 'browsers' : value)}
+          panelId="risk-audit-results"
         />
         {associationTab ? (
           <Tabs<Tab>
             label={t('common.audit.associations')}
             value={tab}
             tabs={[
-              { value: 'browsers', label: t('common.audit.browsers.tab') },
-              { value: 'ips', label: c.ips },
-              { value: 'user_ips', label: t('common.audit.userIPsTab') },
+              {
+                value: 'browsers',
+                id: 'risk-audit-tab-browsers',
+                label: t('common.audit.browsers.tab'),
+              },
+              { value: 'ips', id: 'risk-audit-tab-ips', label: c.ips },
+              {
+                value: 'user_ips',
+                id: 'risk-audit-tab-user_ips',
+                label: t('common.audit.userIPsTab'),
+              },
             ]}
             onChange={selectTab}
+            panelId="risk-audit-results"
           />
         ) : null}
-        {tab !== 'rules' && tab !== 'config' && tab !== 'browsers' ? (
-          <>
-            <FilterBar
-              activeCount={Number(customRange) + Number(filters.kind !== 'total')}
-              onSubmit={() => handleApply(range, draft.kind, Date.now())}
-              onReset={() => {
-                setRange('default');
-                setDraft((v) => ({ ...v, kind: 'total' }));
-                handleApply('default', 'total', Date.now());
-              }}
-              search={
-                <>
-                  <Field label={c.range} size="short">
-                    {(field) => (
-                      <select
-                        {...field}
-                        value={range}
-                        onChange={(e) => {
-                          setRange(e.target.value);
-                          setRangeError(false);
-                          handleApply(e.target.value, draft.kind, Date.now());
-                        }}
-                      >
-                        <option value="default">{c.defaultRange}</option>
-                        <option value="1">{c.lastHour}</option>
-                        <option value="24">{c.lastDay}</option>
-                        <option value="168">{c.lastWeek}</option>
-                        <option value="custom">{c.custom}</option>
-                      </select>
-                    )}
-                  </Field>
-                  {range === 'custom' && (
-                    <>
-                      <TimeInput
-                        label={c.from}
-                        station={role}
-                        showZoneHint={false}
-                        required
-                        draft={draft.from}
-                        onChange={(update) => setDraft((v) => ({ ...v, from: update(v.from) }))}
-                      />
-                      <TimeInput
-                        label={c.to}
-                        station={role}
-                        showZoneHint={false}
-                        required
-                        draft={draft.to}
-                        onChange={(update) => setDraft((v) => ({ ...v, to: update(v.to) }))}
-                      />
-                    </>
-                  )}
-                  {tab !== 'access' && (
-                    <Field label={c.kind} size="short">
+        <div className="nb-tab-content">
+          {tab !== 'rules' && tab !== 'config' && tab !== 'browsers' ? (
+            <>
+              <FilterBar
+                activeCount={Number(customRange) + Number(filters.kind !== 'total')}
+                onSubmit={() => handleApply(range, draft.kind, Date.now())}
+                onReset={() => {
+                  setRange('default');
+                  setDraft((v) => ({ ...v, kind: 'total' }));
+                  handleApply('default', 'total', Date.now());
+                }}
+                search={
+                  <>
+                    <Field label={c.range} size="short">
                       {(field) => (
                         <select
                           {...field}
-                          value={draft.kind}
+                          value={range}
                           onChange={(e) => {
-                            setDraft((v) => ({ ...v, kind: e.target.value }));
-                            handleApply(range, e.target.value, Date.now());
+                            setRange(e.target.value);
+                            setRangeError(false);
+                            handleApply(e.target.value, draft.kind, Date.now());
                           }}
                         >
-                          {(['total', 'self', 'charity', 'unclassified'] as const).map((v) => (
-                            <option key={v} value={v}>
-                              {c[v]}
-                            </option>
-                          ))}
+                          <option value="default">{c.defaultRange}</option>
+                          <option value="1">{c.lastHour}</option>
+                          <option value="24">{c.lastDay}</option>
+                          <option value="168">{c.lastWeek}</option>
+                          <option value="custom">{c.custom}</option>
                         </select>
                       )}
                     </Field>
-                  )}
-                </>
-              }
-            />
-            {range === 'custom' && <TimeContextNotice station={role} />}
-            {rangeError && <p role="alert">{c.invalidRange}</p>}
-            <small className="audit-muted">{c.rangeHelp}</small>
-          </>
-        ) : null}
+                    {range === 'custom' && (
+                      <>
+                        <TimeInput
+                          label={c.from}
+                          station={role}
+                          showZoneHint={false}
+                          required
+                          draft={draft.from}
+                          onChange={(update) => setDraft((v) => ({ ...v, from: update(v.from) }))}
+                        />
+                        <TimeInput
+                          label={c.to}
+                          station={role}
+                          showZoneHint={false}
+                          required
+                          draft={draft.to}
+                          onChange={(update) => setDraft((v) => ({ ...v, to: update(v.to) }))}
+                        />
+                      </>
+                    )}
+                    {tab !== 'access' && (
+                      <Field label={c.kind} size="short">
+                        {(field) => (
+                          <select
+                            {...field}
+                            value={draft.kind}
+                            onChange={(e) => {
+                              setDraft((v) => ({ ...v, kind: e.target.value }));
+                              handleApply(range, e.target.value, Date.now());
+                            }}
+                          >
+                            {(['total', 'self', 'charity', 'unclassified'] as const).map((v) => (
+                              <option key={v} value={v}>
+                                {c[v]}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </Field>
+                    )}
+                  </>
+                }
+              />
+              {range === 'custom' && <TimeContextNotice station={role} />}
+              {rangeError && <p role="alert">{c.invalidRange}</p>}
+              <small className="audit-muted">{c.rangeHelp}</small>
+            </>
+          ) : null}
+        </div>
       </Card>
-      <div>
+      <div
+        role="tabpanel"
+        id="risk-audit-results"
+        aria-labelledby={'risk-audit-tab-' + tab}
+        tabIndex={0}
+      >
         {selectedUser ? (
           <UserDetail
             key={selectedUser}

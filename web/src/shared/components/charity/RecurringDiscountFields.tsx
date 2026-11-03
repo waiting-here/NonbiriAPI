@@ -1,4 +1,5 @@
-import { useId, useRef } from 'react';
+import { SuggestInput } from '@shared/components/ui/SuggestInput';
+import { useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { fetchTimeZones } from '@shared/time';
@@ -14,17 +15,18 @@ import { ErrorState } from '../States';
 
 export function RecurringDiscountFields({
   value,
+  disabled = false,
   role,
   fixedEnabled,
   onChange,
 }: {
+  disabled?: boolean;
   value: RecurringDiscount;
   role: CharityRole;
   fixedEnabled: boolean;
   onChange: (value: RecurringDiscount) => void;
 }) {
   const { t } = useTranslation();
-  const listId = useId();
   const registry = useQuery({
     queryKey: ['time-zones', role],
     queryFn: ({ signal }) => fetchTimeZones(role === 'admin' ? 'admin' : 'user', signal),
@@ -50,6 +52,7 @@ export function RecurringDiscountFields({
   return (
     <div className="nb-form nb-recurring-discount">
       <Toggle
+        disabled={disabled}
         label={t('common.recurringDiscount.enabled')}
         checked={value.enabled}
         onChange={(enabled) => set({ enabled })}
@@ -62,22 +65,18 @@ export function RecurringDiscountFields({
         >
           {(props) => (
             <>
-              <input
+              <SuggestInput
+                disabled={disabled}
                 {...props}
-                list={listId}
+                suggestions={registry.data?.zones ?? []}
                 value={value.time_zone}
                 maxLength={64}
                 autoComplete="off"
-                onChange={(event) => set({ time_zone: event.target.value })}
+                onChange={(value) => set({ time_zone: value })}
                 aria-invalid={
                   registry.data ? !registry.data.zones.includes(value.time_zone) : undefined
                 }
               />
-              <datalist id={listId}>
-                {registry.data?.zones.map((zone) => (
-                  <option key={zone} value={zone} />
-                ))}
-              </datalist>
             </>
           )}
         </Field>

@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { NativeDialog } from '@shared/components/NativeDialog';
+import { type ReactNode } from 'react';
 import { Button } from '@shared/components/ui/Button';
 import { Icon } from '@shared/components/Icon';
 
@@ -19,31 +20,12 @@ export function GachaDialog({
   closeLabel?: string;
   closeDisabled?: boolean;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const handler = useRef(onClose);
-  useEffect(() => {
-    handler.current = onClose;
-  });
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    node.showModal();
-    return () => {
-      node.close();
-      active?.focus();
-    };
-  }, []);
   return (
-    <dialog
-      ref={ref}
+    <NativeDialog
+      onDismiss={onClose}
+      busy={closeDisabled}
       className={'gacha-dialog ' + className}
       aria-label={title}
-      onCancel={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        handler.current();
-      }}
       onClick={(event) => {
         if (onSurfaceClick) {
           if (
@@ -52,7 +34,7 @@ export function GachaDialog({
           ) {
             onSurfaceClick();
           }
-        } else if (event.target === event.currentTarget) handler.current();
+        } else if (event.target === event.currentTarget) onClose();
       }}
     >
       <div className="gacha-dialog__inner">
@@ -70,6 +52,6 @@ export function GachaDialog({
         </header>
         {children}
       </div>
-    </dialog>
+    </NativeDialog>
   );
 }

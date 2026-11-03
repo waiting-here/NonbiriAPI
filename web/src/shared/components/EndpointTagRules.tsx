@@ -194,6 +194,7 @@ export function EndpointTagRules({
                 )}
               </Field>
               <Segmented
+                disabled={busy}
                 label={t('management.endpoints.rules.action')}
                 value={editor.rule.action}
                 onChange={(action) => update({ action })}

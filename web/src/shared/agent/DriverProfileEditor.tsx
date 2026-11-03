@@ -1,4 +1,5 @@
-import { useId, useRef, useState } from 'react';
+import { SuggestInput } from '@shared/components/ui/SuggestInput';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Field, Fields, FormActions, Fold, Note } from '@shared/components/ui';
 import { useOperation } from '@shared/operations/useOperation';
@@ -50,7 +51,6 @@ export function DriverProfileEditor({
   const [candidates, setCandidates] = useState<DriverProfile[]>([]);
   const [deleting, setDeleting] = useState(false);
   const keyRef = useRef<string | undefined>(undefined);
-  const listID = useId();
   const root = agentRoot('admin', account);
   const accept = (value: DriverProfile) => {
     setBase(value);
@@ -303,19 +303,15 @@ export function DriverProfileEditor({
           )}
           <Field label={t('common.connections.model')} help={t('common.agent.drivers.modelHelp')}>
             {(props) => (
-              <input
+              <SuggestInput
+                disabled={save.isPending || read.isPending}
                 {...props}
-                list={listID}
+                suggestions={models}
                 value={draft.settings.model}
-                onChange={(event) => field('model', event.target.value)}
+                onChange={(value) => field('model', value)}
               />
             )}
           </Field>
-          <datalist id={listID}>
-            {models.map((model) => (
-              <option key={model} value={model} />
-            ))}
-          </datalist>
         </Fields>
         <FormActions>
           <Button

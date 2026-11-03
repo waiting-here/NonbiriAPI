@@ -13,9 +13,11 @@ type ContextDraft = PriceDraft;
 
 export function ContextPricingFields({
   value,
+  disabled = false,
   role,
   onChange,
 }: {
+  disabled?: boolean;
   value: ContextDraft;
   role: CharityRole;
   onChange: (fields: Partial<ContextDraft>) => void;
@@ -30,6 +32,7 @@ export function ContextPricingFields({
         <p className="nb-sub">{t('common.operations.charity.context.help')}</p>
         {value.mode !== 'per_search_unit' && (
           <Toggle
+            disabled={disabled}
             label={t('common.operations.charity.context.long')}
             description={t('common.operations.charity.context.longHelp')}
             checked={value.longEnabled}
@@ -101,6 +104,7 @@ export function ContextPricingFields({
         {value.longEnabled && value.mode !== 'per_search_unit' && (
           <>
             <Toggle
+              disabled={disabled}
               label={t('common.modalityPricing.longReward')}
               description={t('common.modalityPricing.longRewardHelp')}
               checked={value.longDonorOverride}
@@ -144,11 +148,13 @@ export function ContextPricingFields({
             {value.mode === 'per_token' && (
               <>
                 <ModalityPricingFields
+                  disabled={disabled}
                   title={t('common.modalityPricing.longUser')}
                   value={value.longUserModalities}
                   onChange={(longUserModalities) => onChange({ longUserModalities })}
                 />
                 <Toggle
+                  disabled={disabled}
                   label={t('common.modalityPricing.longDonorOverride')}
                   description={t('common.modalityPricing.longDonorHelp')}
                   checked={value.longDonorModalities !== null}
@@ -158,6 +164,7 @@ export function ContextPricingFields({
                 />
                 {value.longDonorModalities && (
                   <ModalityPricingFields
+                    disabled={disabled}
                     title={t('common.modalityPricing.longDonor')}
                     value={value.longDonorModalities}
                     onChange={(longDonorModalities) => onChange({ longDonorModalities })}
@@ -168,6 +175,7 @@ export function ContextPricingFields({
           </>
         )}
         <Toggle
+          disabled={disabled}
           label={t('common.operations.charity.context.penalty')}
           description={t('common.operations.charity.context.penaltyHelp')}
           checked={value.penaltyEnabled}

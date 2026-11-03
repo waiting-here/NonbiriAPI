@@ -165,6 +165,26 @@ async function renderAdmin(
 afterEach(() => vi.unstubAllGlobals());
 
 describe('RecurringLimits', () => {
+  it('closes a rule timezone portal when its ancestor donation read becomes locked', async () => {
+    const { requests } = installQuotaFetch();
+    const rendered = await renderAdmin();
+    const zone = await screen.findByRole('combobox', { name: 'Time zone' });
+    await rendered.user.clear(zone);
+    await rendered.user.type(zone, 'U');
+    await rendered.user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('option', { name: 'UTC' })).toBeVisible();
+    rendered.rerender(
+      <AdminSessionFixture>
+        <RecurringLimits role="admin" donationId="7" keyId="8" accountId="account-a" disabled />
+      </AdminSessionFixture>,
+    );
+    expect(zone).toBeDisabled();
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    await rendered.user.keyboard('{Enter}');
+    expect(zone).toHaveValue('U');
+    expect(putRequests(requests)).toHaveLength(0);
+  });
+
   it('previews exact resets in the rule zone and saves the original second-precision anchor', async () => {
     const { requests } = installQuotaFetch({
       reads: [
