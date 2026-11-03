@@ -167,166 +167,170 @@ function RewardsContent() {
                 { value: 'code', label: t('common.rewards.code') },
               ]}
               onChange={(kind) => setDraft({ ...draft, kind })}
-            />
-            <Field label={t('common.rewards.title')}>
-              {(props) => (
-                <input
-                  {...props}
-                  required
-                  maxLength={80}
-                  value={draft.title}
-                  onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-                />
-              )}
-            </Field>
-            <div className="reward-stack">
-              {draft.rewards.map((item, index) => (
-                <div className="reward-item" key={index}>
-                  <Field label={t('common.rewards.asset')}>
-                    {(props) => (
-                      <select
-                        {...props}
-                        value={item.asset}
-                        onChange={(e) =>
-                          setDraft({
-                            ...draft,
-                            rewards: draft.rewards.map((r, i) =>
-                              i === index ? { asset: e.target.value, quantity: '1' } : r,
-                            ),
-                          })
-                        }
-                      >
-                        {assets
-                          .filter(
-                            (a) =>
-                              a.id === item.asset || !draft.rewards.some((r) => r.asset === a.id),
-                          )
-                          .map((a) => (
-                            <option key={a.id} value={a.id}>
-                              {assetName(assets, a.id, english)}
-                            </option>
-                          ))}
-                      </select>
-                    )}
-                  </Field>
-                  <Field label={t('common.rewards.quantity')}>
-                    {(props) => (
-                      <input
-                        {...props}
-                        required
-                        inputMode="decimal"
-                        value={item.quantity}
-                        onChange={(e) =>
-                          setDraft({
-                            ...draft,
-                            rewards: draft.rewards.map((r, i) =>
-                              i === index ? { ...r, quantity: e.target.value } : r,
-                            ),
-                          })
-                        }
-                      />
-                    )}
-                  </Field>
+            >
+              <Field label={t('common.rewards.title')}>
+                {(props) => (
+                  <input
+                    {...props}
+                    required
+                    maxLength={80}
+                    value={draft.title}
+                    onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                  />
+                )}
+              </Field>
+              <div className="reward-stack">
+                {draft.rewards.map((item, index) => (
+                  <div className="reward-item" key={index}>
+                    <Field label={t('common.rewards.asset')}>
+                      {(props) => (
+                        <select
+                          {...props}
+                          value={item.asset}
+                          onChange={(e) =>
+                            setDraft({
+                              ...draft,
+                              rewards: draft.rewards.map((r, i) =>
+                                i === index ? { asset: e.target.value, quantity: '1' } : r,
+                              ),
+                            })
+                          }
+                        >
+                          {assets
+                            .filter(
+                              (a) =>
+                                a.id === item.asset || !draft.rewards.some((r) => r.asset === a.id),
+                            )
+                            .map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {assetName(assets, a.id, english)}
+                              </option>
+                            ))}
+                        </select>
+                      )}
+                    </Field>
+                    <Field label={t('common.rewards.quantity')}>
+                      {(props) => (
+                        <input
+                          {...props}
+                          required
+                          inputMode="decimal"
+                          value={item.quantity}
+                          onChange={(e) =>
+                            setDraft({
+                              ...draft,
+                              rewards: draft.rewards.map((r, i) =>
+                                i === index ? { ...r, quantity: e.target.value } : r,
+                              ),
+                            })
+                          }
+                        />
+                      )}
+                    </Field>
+                    <Button
+                      type="button"
+                      disabled={draft.rewards.length === 1}
+                      onClick={() =>
+                        setDraft({ ...draft, rewards: draft.rewards.filter((_, i) => i !== index) })
+                      }
+                    >
+                      {t('common.rewards.remove')}
+                    </Button>
+                  </div>
+                ))}
+                <div>
                   <Button
                     type="button"
-                    disabled={draft.rewards.length === 1}
-                    onClick={() =>
-                      setDraft({ ...draft, rewards: draft.rewards.filter((_, i) => i !== index) })
-                    }
+                    disabled={draft.rewards.length >= 32}
+                    onClick={() => {
+                      const a = assets.find((a) => !draft.rewards.some((r) => r.asset === a.id));
+                      if (a)
+                        setDraft({
+                          ...draft,
+                          rewards: [...draft.rewards, { asset: a.id, quantity: '1' }],
+                        });
+                    }}
                   >
-                    {t('common.rewards.remove')}
+                    {t('common.rewards.addReward')}
                   </Button>
                 </div>
-              ))}
+              </div>
+              <Fold title={t('common.rewards.conditions')}>
+                <p>{t('common.rewards.conditionHelp')}</p>
+                <ConditionEditor
+                  value={draft.conditions}
+                  onChange={(conditions) => setDraft({ ...draft, conditions })}
+                  assets={assets}
+                />
+              </Fold>
+              <p className="reward-summary-text">
+                {conditionSummary(draft.conditions, assets, english, t, time)}
+              </p>
+              {draft.kind === 'code' && (
+                <>
+                  <div className="reward-fields">
+                    <Field label={t('common.rewards.codeText')} help={t('common.rewards.codeHelp')}>
+                      {(props) => (
+                        <input
+                          {...props}
+                          maxLength={64}
+                          autoComplete="off"
+                          value={draft.code ?? ''}
+                          onChange={(e) => setDraft({ ...draft, code: e.target.value })}
+                        />
+                      )}
+                    </Field>
+                    <Field
+                      label={t('common.rewards.quota')}
+                      help={t('common.rewards.optionalLimit')}
+                    >
+                      {(props) => (
+                        <input
+                          {...props}
+                          inputMode="numeric"
+                          value={quota}
+                          onChange={(e) => setQuota(e.target.value)}
+                        />
+                      )}
+                    </Field>
+                    <TimeInput
+                      label={t('common.rewards.starts')}
+                      station="admin"
+                      draft={start}
+                      onChange={setStart}
+                    />
+                    <TimeInput
+                      label={t('common.rewards.ends')}
+                      station="admin"
+                      draft={end}
+                      onChange={setEnd}
+                    />
+                  </div>
+                  <Toggle
+                    label={t('common.rewards.enabled')}
+                    checked={draft.enabled}
+                    onChange={(enabled) => setDraft({ ...draft, enabled })}
+                  />
+                </>
+              )}
+              {draft.kind === 'code' && !windowValid && (
+                <Note tone="warn">{t('common.rewards.invalidWindow')}</Note>
+              )}
+              <Note>
+                {draft.kind === 'broadcast'
+                  ? t('common.rewards.broadcastHelp')
+                  : t('common.rewards.codeRule')}
+              </Note>
               <div>
                 <Button
-                  type="button"
-                  disabled={draft.rewards.length >= 32}
-                  onClick={() => {
-                    const a = assets.find((a) => !draft.rewards.some((r) => r.asset === a.id));
-                    if (a)
-                      setDraft({
-                        ...draft,
-                        rewards: [...draft.rewards, { asset: a.id, quantity: '1' }],
-                      });
-                  }}
+                  type="submit"
+                  variant="primary"
+                  disabled={busy || (draft.kind === 'code' && !windowValid)}
                 >
-                  {t('common.rewards.addReward')}
+                  {t('common.rewards.preview')}
                 </Button>
               </div>
-            </div>
-            <Fold title={t('common.rewards.conditions')}>
-              <p>{t('common.rewards.conditionHelp')}</p>
-              <ConditionEditor
-                value={draft.conditions}
-                onChange={(conditions) => setDraft({ ...draft, conditions })}
-                assets={assets}
-              />
-            </Fold>
-            <p className="reward-summary-text">
-              {conditionSummary(draft.conditions, assets, english, t, time)}
-            </p>
-            {draft.kind === 'code' && (
-              <>
-                <div className="reward-fields">
-                  <Field label={t('common.rewards.codeText')} help={t('common.rewards.codeHelp')}>
-                    {(props) => (
-                      <input
-                        {...props}
-                        maxLength={64}
-                        autoComplete="off"
-                        value={draft.code ?? ''}
-                        onChange={(e) => setDraft({ ...draft, code: e.target.value })}
-                      />
-                    )}
-                  </Field>
-                  <Field label={t('common.rewards.quota')} help={t('common.rewards.optionalLimit')}>
-                    {(props) => (
-                      <input
-                        {...props}
-                        inputMode="numeric"
-                        value={quota}
-                        onChange={(e) => setQuota(e.target.value)}
-                      />
-                    )}
-                  </Field>
-                  <TimeInput
-                    label={t('common.rewards.starts')}
-                    station="admin"
-                    draft={start}
-                    onChange={setStart}
-                  />
-                  <TimeInput
-                    label={t('common.rewards.ends')}
-                    station="admin"
-                    draft={end}
-                    onChange={setEnd}
-                  />
-                </div>
-                <Toggle
-                  label={t('common.rewards.enabled')}
-                  checked={draft.enabled}
-                  onChange={(enabled) => setDraft({ ...draft, enabled })}
-                />
-              </>
-            )}
-            {draft.kind === 'code' && !windowValid && (
-              <Note tone="warn">{t('common.rewards.invalidWindow')}</Note>
-            )}
-            <Note>
-              {draft.kind === 'broadcast'
-                ? t('common.rewards.broadcastHelp')
-                : t('common.rewards.codeRule')}
-            </Note>
-            <div>
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={busy || (draft.kind === 'code' && !windowValid)}
-              >
-                {t('common.rewards.preview')}
-              </Button>
-            </div>
+            </Tabs>
           </form>
         </PanelBody>
       </Panel>

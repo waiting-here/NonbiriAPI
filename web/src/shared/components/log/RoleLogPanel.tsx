@@ -7,7 +7,7 @@ import {
   failurePhaseKey,
 } from '@shared/observability/failure';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
-import { MODEL_TYPE_LABEL_KEYS, type ModelType } from '@shared/modelTypes';
+import { MODEL_TYPES, MODEL_TYPE_LABEL_KEYS, type ModelType } from '@shared/modelTypes';
 import { Button } from '@shared/components/ui/Button';
 import { Link, useLocation } from 'react-router';
 import { charityManagementPath } from './managementNavigation';
@@ -448,8 +448,9 @@ function ScopedRoleLogPanel({
   const textParams = useMemo(
     () =>
       role === 'user'
-        ? (['model', 'error_code', 'status', 'phase'] as const)
+        ? (['operation', 'model', 'error_code', 'status', 'phase'] as const)
         : ([
+            'operation',
             'user_id',
             'discord_id',
             'endpoint_key_id',
@@ -561,6 +562,16 @@ function ScopedRoleLogPanel({
 
   const fields = useMemo<readonly LogFilterField[]>(() => {
     const values: LogFilterField[] = [
+      {
+        name: 'operation',
+        label: t('logs.operation'),
+        ariaLabel: t('logs.operation'),
+        options: [
+          { value: '', label: t('common.all') },
+          ...MODEL_TYPES.map((value) => ({ value, label: t(MODEL_TYPE_LABEL_KEYS[value]) })),
+          { value: 'model_discovery', label: t('common.operations.logs.route.modelDiscovery') },
+        ],
+      },
       {
         name: 'phase',
         label: t('logs.phase'),

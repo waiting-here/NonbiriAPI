@@ -1,3 +1,4 @@
+import { MODEL_TYPES, type ModelType } from '@shared/modelTypes';
 import {
   normalizeFailure,
   normalizeDelivery,
@@ -234,7 +235,14 @@ export interface StewardLogDetail {
 }
 export type RoleLogDetail = UserLogDetail | AdminLogDetail | StewardLogDetail;
 
+export const LOG_OPERATIONS = [...MODEL_TYPES, 'model_discovery'] as const;
+export type LogOperation = ModelType | 'model_discovery';
+export function isLogOperation(value: unknown): value is LogOperation {
+  return LOG_OPERATIONS.some((operation) => operation === value);
+}
+
 export interface LogFiltersValue {
+  operation?: LogOperation;
   error_category?: string;
   error_phase?: string;
   phase?: 'handler' | 'pre_handler';
@@ -957,6 +965,7 @@ export function validLogDiscordID(value: string): boolean {
 
 export function validateLogFilter(role: LogRole, raw: Record<string, string>): LogFiltersValue {
   const result: LogFiltersValue = {};
+  if (isLogOperation(raw.operation)) result.operation = raw.operation;
   if (raw.phase === 'handler' || raw.phase === 'pre_handler') result.phase = raw.phase;
   const assign = (key: keyof LogFiltersValue, max: number) => {
     const value = raw[key]?.trim();

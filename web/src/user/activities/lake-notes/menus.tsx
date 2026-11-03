@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { NativeDialog } from '@shared/components/NativeDialog';
+import { useState, type ReactNode } from 'react';
 import {
   catalog,
   caught,
@@ -39,24 +40,10 @@ function MenuDialog({
   children: ReactNode;
   text: LakeText;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const dialog = ref.current,
-      previous = document.activeElement;
-    dialog?.showModal();
-    return () => {
-      dialog?.close();
-      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
-    };
-  }, []);
   return (
-    <dialog
-      ref={ref}
+    <NativeDialog
+      onDismiss={close}
       className="lake-menu"
-      onCancel={(event) => {
-        event.preventDefault();
-        close();
-      }}
       onClick={(event) => {
         if (event.target === event.currentTarget) close();
       }}
@@ -77,7 +64,7 @@ function MenuDialog({
         </div>
         {children}
       </div>
-    </dialog>
+    </NativeDialog>
   );
 }
 export function LakeMenus({ menu, profile: p, blocked, text, onAction, close }: MenuProps) {

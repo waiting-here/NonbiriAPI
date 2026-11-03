@@ -30,6 +30,11 @@ export interface FishingPondReceipt {
   readonly returnedAt: number;
 }
 
+export interface FishingPondBatchReceipt {
+  readonly batchID: string;
+  readonly receipts: readonly FishingPondReceipt[];
+}
+
 export type FishingPondBoard = 'cleanup' | 'gifts';
 export type FishingPondPeriod = '7d' | '30d' | 'all';
 

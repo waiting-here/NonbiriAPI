@@ -152,11 +152,11 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 45. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts 23 exact registered schema 16–26 and 33–44 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`, including for 44-to-45. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 47. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts 25 exact registered schema 16–26 and 33–46 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`, including for 45-to-47. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
 
-`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=45`, `minimum_schema_version=45`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its 23 supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
+`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=47`, `minimum_schema_version=47`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its 25 supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
 
-Current account export `schema_version=32` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v32.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
+Current account export `schema_version=33` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v33.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
 ### 1.5 Display time context
 
@@ -395,7 +395,7 @@ Personal requests reserve no general credits and remain available with a negativ
 | `GET /api/caller-key` | Returns null or `{display,created_at,updated_at,generation}`, plus `X-Nonbiri-CallerKey-Generation`; the body generation must match the header. `display` is masked and cannot be used for calls, and GET never returns the full secret. |
 | `POST /api/caller-key/regenerate` | Accepts `{expected_generation}`; on success returns `{secret,metadata}` once, with `metadata.generation = expected_generation + 1`. The full secret is present only in this successful response; generate a replacement again if it was not saved. |
 | `GET /api/home/game-summary` | Safe resumable-game and pending-result route identities. No arbitrary URL is returned. |
-| `GET /api/logs` | Filters `model,error_code,status,from,to`; legacy `cursor,limit` or numbered `page,page_size`; returns owner rows and numbered `pagination`. |
+| `GET /api/logs` | Filters `operation,model,error_code,status,from,to`; legacy `cursor,limit` or numbered `page,page_size`; returns owner rows and numbered `pagination`. |
 | `GET /api/logs/{id}` | Legacy `attempt_cursor,attempt_limit` or numbered `attempt_page,attempt_page_size`; numbered detail returns `attempt_pagination`. |
 | `GET /api/logs/options` | Closed query; returns retained owner model-name options. |
 | `GET /api/issues` | Required `state=current|closed`, plus legacy `cursor,limit` or numbered `page,page_size`; returns the owner's bounded issue page and numbered `pagination`. |
@@ -405,6 +405,40 @@ Personal requests reserve no general credits and remain available with a negativ
 `balance` always means general credits; `game_balance` is the separate signed game-credit wallet. Both use exact decimal strings. New accounts start both at zero. API calls, donations and Thursday use general credits. Administrators can adjust either wallet, including below zero; cumulative donation credit remains nonnegative and is a separate lifetime statistic.
 
 `UserEnvelope` contains safe identity/profile, raw and effective resource limits, balances, resolved level/display name, language, suspension/ban state and independent game/charity public preferences. `automatic_restrictions` is an array of safe `{kind,reason_code,reason,started_at,ends_at}` summaries, without thresholds, counters or evidence. It contains no manual-level provenance, credential, session token, or internal ledger encoding.
+
+### Browser association audit
+
+Successful user website sign-ins and session reads may issue the host-only
+`nb_browser_audit` cookie: HttpOnly, SameSite=Lax, Path=/api, and Secure on HTTPS.
+Its signed random identifier expires 30 days after issue without sliding renewal.
+Logout retains it. Only its digest and bounded observation times are persisted;
+administrator sessions and CallerKey inference requests do not collect it.
+Each user/browser pair is updated at most once per hour, each user retains at
+most 32 associations, and collection has a 250 ms budget without blocking login
+on failure. Expired associations are immediately excluded from reads and exports,
+then removed by bounded retention cleanup.
+
+Both shared-browser GET routes require a current administrator session or a
+level-5/6 steward session with `risk.read`, including current MFA checks. They
+accept only `page` (default `1`) and `page_size` (10/20/50/100, default 20), have
+a five-second budget, and return no-store responses. Page numbers and totals are
+decimal strings. A page beyond the end resolves to the last page. Lists return
+`items,page,page_size,total_items,total_pages,has_more,from,to,coverage`; coverage
+is `authenticated_browser_sessions`. Each item contains an opaque `browser_id`,
+integer `users`, and Unix-second `first_seen,last_seen`. Only groups with at least
+two current accounts appear. Members are loaded separately on expansion.
+
+The detail route uses that `browser_id` and returns
+`browser_id,users,first_seen,last_seen,associations,page,page_size,total_items,total_pages`.
+Each association contains decimal-string `user_id` and Unix-second
+`first_seen,last_seen`, ordered by user ID. An expired, missing or no-longer-shared
+group returns 404. Invalid query/ID gives 400; absent or revoked authorization
+returns 401/403; unavailable reads return 503. CallerKeys have no access.
+
+Shared devices and copied cookies can link different people; clearing cookies,
+private windows and separate browser profiles can hide links. These observations
+are manual review leads and trigger no automatic punishment. They do not replace
+IP audits, identify a person, fingerprint devices or follow users across sites.
 
 ### Request failure observations
 
@@ -1175,6 +1209,7 @@ New game entries spend positive game credits first, then positive general credit
 | `POST /api/games/fishing/batches/{id}/recover` | Idempotent owner recovery of the same exhausted batch; 200 or 202. |
 | `GET /api/games/fishing/leaderboard` | `board=single|recent_single|total`; top 20 plus the caller when eligible. |
 | `POST /api/games/fishing/batches/{id}/outcomes/{ordinal}/return` | No body; owner-only, naturally idempotent. Returns `{batch_id,ordinal,return_state,returned_at}` with `return_state=returned|released`. |
+| `POST /api/games/fishing/batches/{id}/return` | No query or body; returns `{batch_id,receipts:[single-item receipt]}` for the batch's eligible junk and fry. |
 | `GET /api/games/fishing/pond/leaderboard` | `board=cleanup|gifts`, `period=7d|30d|all` (default `7d`); `{board,period,window_start,entries,me}`. Rows contain `rank,item_count,identity,is_me`; counts are exact decimal strings. |
 
 A start creates all 1 or 10 CSPRNG outcomes and the reservation atomically. A failed settlement retains the same batch and outcomes for automatic recovery; it never redraws or charges again. After ten consecutive failures, only owner recovery continues. Committed or released batches replay without another economic write. Acknowledgement affects presentation only. Terminal batches/outcomes are retained for 30 days; the personal best has the account lifetime.
@@ -1194,9 +1229,20 @@ are released without entering the queue or either board. Received gifts cannot
 be returned. Successful repeats return the same receipt even after anonymity is
 enabled; current account authority still applies.
 
+The batch return processes at most ten outcomes in one transaction, skipping
+valuable catches, received gifts and historical results without return metadata.
+It includes prior receipts on retry and does not enqueue or count them twice.
+Any new return requires the current public identity; a fully completed replay
+remains available after enabling anonymity. A failed transaction changes none
+of the items. The result page offers one action when multiple items are available,
+while preserving individual returns and the same return-time signature disclosure.
+
 The base draw and payout settle unchanged. For each junk result, an independent
-draw consumes the FIFO head with probability `n/(n+20)`, where `n` is the remaining
-queue size. The displayed `species_key` becomes the donated item's kind, with
+draw chooses a gift with probability `n/(n+20)`, where `n` is the remaining full
+queue size, including the recipient's own items. On a hit, skip their own returns
+and consume the earliest other donor's item. If none is available, keep the new
+junk without another draw or changing the queue. Only consumed gifts reduce `n`
+for subsequent results in the batch. The displayed `species_key` becomes the donated item's kind, with
 zero payout and `pond.gift` holding the return-time Discord name/avatar. Results
 do not display the displaced junk kind. Later anonymity affects leaderboards,
 but not the signature; donor-account deletion removes queued gifts and anonymizes
@@ -1445,7 +1491,7 @@ Administrator and steward log list/detail/export entries contain nullable `user_
 
 Each management attempt displays its persisted nullable `endpoint_key_id` routing snapshot, including separate IDs for retries. It never returns the key secret. The logical request's `usage.charge` is the authoritative total charge shown in both list and detail. Attempt `usage.charge` remains a compatibility zero, not an independently settled fee; the page does not present it as a charge. CSV and JSON exports share the management row fields and existing 10,000-row/16 MiB all-or-error limits. CSV additionally includes `caller_discord_nickname,caller_discord_id` with spreadsheet-safe escaping. Steward export reads recheck authority in the export snapshot, and all exports are no-store.
 
-`GET /api/steward/logs` accepts `user_id,discord_id,endpoint_key_id,error_code,status,from,to,endpoint_base_url,upstream_model,charity_model,usage_total_mismatch,phase` plus legacy `cursor,limit` or numbered `page,page_size`; `GET /api/steward/logs/{id}` accepts the corresponding `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size`. The numbered list/detail responses carry `pagination`/`attempt_pagination`. Export accepts the same filters without pagination; cursors remain bound to role, actor and filters.
+`GET /api/steward/logs` accepts `operation,user_id,discord_id,endpoint_key_id,error_code,status,from,to,endpoint_base_url,upstream_model,charity_model,usage_total_mismatch,phase` plus legacy `cursor,limit` or numbered `page,page_size`; `GET /api/steward/logs/{id}` accepts the corresponding `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size`. The numbered list/detail responses carry `pagination`/`attempt_pagination`. Export accepts the same filters without pagination; cursors remain bound to role, actor and filters.
 
 Log reads have a five-second budget, including connection waits. Timeouts and canceled reads return `503 service_unavailable`; callers may narrow the filters and retry the read without resending the original model request. Read-only queries use a bounded two-connection pool, with current session, role and MFA authority checked in the same snapshot. Reads that record access to legally held diagnostics retain a write transaction.
 
@@ -1570,7 +1616,17 @@ The generic site-config patch rejects maintenance, announcement epoch, and all a
 
 The administrator list reads retain cursor mode and also accept numbered `page,page_size` with the shared metadata, except where noted: `GET /admin/api/users` accepts `is_banned=true|false`, `q`, and `level=1|2|3|4|5|6`; `GET /admin/api/usage?group_by=user` is paginated, while `group_by=site` is a complete non-paginated snapshot and rejects all page/cursor parameters; `GET /admin/api/activity` is paginated; and `GET /admin/api/overview/endpoints` accepts `q`, `tag`, and an exact positive `user_id`, combined with AND, and is paginated. The user filter selects base URLs used by that user; row totals and expanded user lists still cover all users of each base URL. Numbered endpoint-overview rows contain at most three user previews; the complete group can be read with `GET /admin/api/overview/endpoints/users?base_url=<exact>&page=<page>&page_size=<size>`, which is numbered-only and returns `{data,next_cursor:null,pagination}`. `base_url` is an exact canonical value, not a pattern.
 
-`GET /admin/api/logs` accepts `error_code,status,from,to,user_id,discord_id,endpoint_key_id,endpoint_base_url,upstream_model,charity_model,usage_total_mismatch,phase` plus cursor or numbered page parameters; `GET /admin/api/logs/{id}` accepts `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size` and returns `attempt_pagination` in numbered mode. `GET /admin/api/alerts` accepts `resolved=true|false` plus either pagination mode. Log exports accept the same role-scoped non-pagination filters but reject `cursor,limit,page,page_size`.
+`GET /admin/api/logs` accepts `operation,error_code,status,from,to,user_id,discord_id,endpoint_key_id,endpoint_base_url,upstream_model,charity_model,usage_total_mismatch,phase` plus cursor or numbered page parameters; `GET /admin/api/logs/{id}` accepts `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size` and returns `attempt_pagination` in numbered mode. `GET /admin/api/alerts` accepts `resolved=true|false` plus either pagination mode. Log exports accept the same role-scoped non-pagination filters but reject `cursor,limit,page,page_size`.
+
+The optional `operation` filter on user, administrator and authorized steward
+log lists accepts one of the 16 operation names in §3.4, or `model_discovery`.
+For example, `operation=images_generations` matches both personal and charity
+image-generation requests under the caller's existing scope. Omission includes
+all operations; empty, repeated, unknown or differently cased values return 400.
+It intersects other filters and applies to numbered counts, cursor identity and
+existing JSON/CSV exports. Response `route_kind` values remain unchanged. A
+`charity_model` condition narrows the selected operation to matching charity
+calls; combining it with `model_discovery` returns no rows.
 
 The optional management `discord_id` filter is a canonical positive decimal string
 from 1 through 18446744073709551615. It exactly matches the immutable
@@ -2380,7 +2436,7 @@ not proof that deletion has finished; read its cleanup status.
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v32.json`, with `schema_version:32` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside format 32.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v33.json`, with `schema_version:33` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside format 33.
 Structured failure/delivery snapshots and restricted raw diagnostics are also
 excluded; the export retains its existing safe request summaries.
 
@@ -2393,6 +2449,11 @@ request. This export contains no per-request price decisions, donor decisions,
 model/endpoint/key identity or request content.
 
 The top-level `steward_permissions` contains the owner's current `effective` policy, nullable `stored` configuration and retained `history`. Each history entry contains `previous,next,created_at` without editor identities. Policy changes are retained for 90 days by bounded cleanup; account deletion removes the target policy/history. Existing export bounds apply.
+
+Format 33 adds `browser_associations`, at most 32 currently retained observations
+for the owner. Each contains only `first_seen,last_seen,expires_at` as Unix seconds.
+Browser tokens, grouping digests and other accounts are excluded. Account deletion
+removes the owner's associations; delayed session observations cannot recreate them.
 
 Connection metadata adds `connections,credentials,credential_versions,grants,discovery_sources,source_revisions,binding_targets,native_service_evidence,donation_uses`. These owner-scoped collections expose public versions and revision numbers, safe settings, review snapshots and current approved health. They exclude secret material, fingerprints, review HMACs and internal authorization identities. See [service connections](service-connections.md) for rotation, approval and deletion semantics.
 
@@ -2427,7 +2488,7 @@ The following fields are top-level (an excerpt, not a complete export):
 
 ```json
 {
-  "schema_version": 32,
+  "schema_version": 33,
   "request_adaptations": [],
   "continuity": [],
   "fat_fish": {"summaries": [], "progress": []}
@@ -2512,6 +2573,8 @@ Management log and raw-diagnostic browser-session reads require a current admini
 | `GET {prefix}/logs/diagnostic-capacity` | Raw-body capacity and omissions; administrator or level-5/6 steward. |
 | `GET {prefix}/abuse-audit/users`, `GET {prefix}/abuse-audit/users/{id}` | Risk candidates and bounded supporting observations. |
 | `GET {prefix}/abuse-audit/shared-ips` | Qualified shared-address observations. |
+| `GET {prefix}/abuse-audit/shared-browsers` | Current shared-browser group summaries, with numbered pagination. |
+| `GET {prefix}/abuse-audit/shared-browsers/{id}` | Complete current members of one shared-browser group, with numbered pagination. |
 | `GET / POST {prefix}/abuse-audit/client-rules`; `PATCH / DELETE {prefix}/abuse-audit/client-rules/{id}` | Manual client-clue rules and evidence. |
 | `POST / GET {prefix}/abuse-audit/client-scans` | Start/replay a frozen background scan; list the actor's ten most recent retained scans. |
 | `GET {prefix}/abuse-audit/client-scans/{id}`; `GET .../{id}/results`; `POST .../{id}/cancel` | Read progress, page matching logical requests, or stop while retaining committed results. |
@@ -2636,7 +2699,7 @@ For current administrator or appropriately granted steward sessions, the followi
 
 Each task freezes a UTC interval, the highest source-log ID and relevant filters/rule or threshold revision. Two scan workers claim different tasks and process bounded batches (at most 500 candidates or two seconds). Limits are one million scanned candidates and 100,000 results per task, two running tasks per actor, 20 globally, 200 unexpired tasks globally, and 24 hours of task/result retention. A reached cap is explicitly partial/limited and includes a reason; it does not imply a complete scan. Cancels, restarts, permission loss, source retirement and account deletion respect committed checkpoints. A removed contributor removes associated result links and marks coverage changed; a pending group never becomes a stale published result. Scans neither create penalties nor prove a client identity.
 
-The six navigation entries are client matches, user summary (all/high RPM/high concurrency), user request detail, shared IP, access events, and client rules. They support 20/50/100 page sizes, current/last/direct-page navigation, explicit total or range coverage, URL-preserved filters and a return to the same list state. `GET {prefix}/abuse-audit/users/{id}` and `GET .../access-events` use bounded synchronous pages with a fixed `from,to` and source watermark; changed source counts are reported rather than inventing earlier rows. Rules use a current content revision and reset to page one if it changes. Existing list/cursor forms remain available where documented; page/cursor modes cannot be mixed. All underlying target and return-page reads recheck the current administrator or steward session and the corresponding `risk.read`, `risk.manage` or `access_events.read` grant; CallerKeys gain no audit access.
+The audit navigation includes user summaries, account links (shared browsers, shared IPs and one identity using multiple IPs), client matches, rules, thresholds and access events. User request details remain available from the corresponding summaries. They support 20/50/100 page sizes, current/last/direct-page navigation, explicit total or range coverage, URL-preserved filters and a return to the same list state. `GET {prefix}/abuse-audit/users/{id}` and `GET .../access-events` use bounded synchronous pages with a fixed `from,to` and source watermark; changed source counts are reported rather than inventing earlier rows. Rules use a current content revision and reset to page one if it changes. Existing list/cursor forms remain available where documented; page/cursor modes cannot be mixed. All underlying target and return-page reads recheck the current administrator or steward session and the corresponding `risk.read`, `risk.manage` or `access_events.read` grant; CallerKeys gain no audit access.
 
 Risk signals include both personal and charity calls. RPM and concurrency are measured at authoritative admission, associated with the logical request rather than retries; pre-parse observations remain unclassified rather than guessed. Defaults flag at least 80% of the effective user limit for five complete consecutive minutes. Concurrency retains actual occupancy time and peak counts. New total-minute observations additionally store nullable `saturation_micros_millis`: the time integral of the larger light/heavy pool utilization, scaled by 1,000,000 and capped at full utilization. Its range is 0–60,000,000,000 per minute; explicit zero is observed idle. Risk thresholds compare this integral with the configured percentage of a full minute, so one saturated pool remains visible. Historical null values use the previous occupancy-time/effective-limit calculation. Personal/charity category rows do not infer separate pool utilization. Missing coverage, quota changes or unlimited quotas break a sustained chain. Shared-IP defaults are at least three distinct Discord identities over rolling 24 hours. `user_ips` flags one Discord identity using at least three distinct trusted API addresses in a rolling 24-hour window, aggregating its old and current accounts. Administrator configuration adds `user_ip_window_hours` (1–720, default 24) and `user_ip_min_ips` (2–1000, default 3). Administrators may change the thresholds; full stewards may read them. Client rules use bounded equals/contains/prefix comparisons, at most eight AND clauses per rule and OR across rules, with suspected/confirmed status and evidence notes or links. Rules do not execute scripts or regex. A historical scan match is a review lead, not identity proof, and creates no penalty. The separate administrator-bound live model-call action above and existing configured anti-abuse penalties continue independently.
 

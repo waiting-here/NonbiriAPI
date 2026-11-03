@@ -237,12 +237,14 @@ function modelDraftError(draft: ModelDraft): ModelValidation | null {
 
 function ModelForm({
   role,
+  disabled = false,
   model,
   refresh,
   onDeleted,
   onCapabilityLoss,
   onCreated,
 }: {
+  disabled?: boolean;
   role: CharityRole;
   model?: CharityModel;
   refresh: () => Promise<unknown>;
@@ -323,17 +325,15 @@ function ModelForm({
     );
   }
   const copy = charityControlCopy(i18n.language);
+  const fieldsDisabled =
+    disabled ||
+    (!model && save.isPending) ||
+    remove.isPending ||
+    Boolean(unknownSave) ||
+    save.outcome === 'refresh-failed';
   const content = (
     <>
-      <fieldset
-        className="ops-unframed"
-        disabled={
-          (!model && save.isPending) ||
-          remove.isPending ||
-          Boolean(unknownSave) ||
-          save.outcome === 'refresh-failed'
-        }
-      >
+      <fieldset className="ops-unframed" disabled={fieldsDisabled}>
         {model ? <h3>{model.full_name}</h3> : null}
         <p>{t('common.operations.charity.namingHelp')}</p>
         <p className="ops-model-preview">
@@ -381,6 +381,7 @@ function ModelForm({
             )}
           </Field>
           <Toggle
+            disabled={fieldsDisabled}
             label={t('common.operations.charity.enableCharityModel')}
             checked={draft.enabled}
             onChange={(enabled) => setDraft((current) => ({ ...current, enabled }))}
@@ -389,13 +390,13 @@ function ModelForm({
         <ModelTypesField
           value={draft.modelTypes}
           onChange={(modelTypes) => setDraft((current) => ({ ...current, modelTypes }))}
-          disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
+          disabled={save.isPending || fieldsDisabled}
           showError
         />
         <CloudflareProxyField
           enabled={draft.cloudflareProxy}
           mode={model?.cloudflare_proxy_mode}
-          disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
+          disabled={save.isPending || fieldsDisabled}
           onChange={(cloudflareProxy) => setDraft((current) => ({ ...current, cloudflareProxy }))}
         />
         <SessionHeaderFields
@@ -469,12 +470,14 @@ function ModelForm({
             draft.modelTypes.includes('responses') ? (
               <>
                 <TransportRuleField
+                  disabled={fieldsDisabled}
                   value={draft.transportRule}
                   onChange={(transportRule) =>
                     setDraft((current) => ({ ...current, transportRule }))
                   }
                 />
                 <Toggle
+                  disabled={fieldsDisabled}
                   label={t(charityCopyKey(role, 'flattenExperimental'))}
                   checked={draft.flatten}
                   onChange={(flatten) => setDraft((current) => ({ ...current, flatten }))}
@@ -497,6 +500,7 @@ function ModelForm({
           </Fields>
           <Fields legend={t('common.operations.charity.accessSettings')} columns={1}>
             <Toggle
+              disabled={fieldsDisabled}
               label={copy.mainstream}
               checked={draft.isMainstream}
               onChange={(isMainstream) => setDraft((current) => ({ ...current, isMainstream }))}
@@ -583,12 +587,13 @@ function ModelForm({
               setDraft((current) => ({ ...current, rolePolicy }));
               save.reset();
             }}
-            disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
+            disabled={save.isPending || fieldsDisabled}
           />
         ) : null}
         <div className={`nb-workflow-price-workspace${referenceOpen ? ' is-reference-open' : ''}`}>
           <div className="nb-workflow-price-editor">
             <PriceConfigFields
+              disabled={fieldsDisabled}
               allowSearchUnits={draft.modelTypes.length === 1 && draft.modelTypes[0] === 'rerank'}
               value={draft}
               role={role}
@@ -1268,6 +1273,7 @@ export function ModelsPanel({
   onCapabilityLoss,
 }: {
   renderScopedKeys: (props: {
+    disabled?: boolean;
     modelID: string;
     accountId: string;
     onCapabilityLoss?: () => void;
@@ -1664,6 +1670,7 @@ export function ModelsPanel({
           ) : selected ? (
             <fieldset className="ops-stack ops-unframed" disabled={detail.isFetching}>
               <ModelForm
+                disabled={detail.isFetching}
                 key={`model:${selected.id}`}
                 role={role}
                 model={selected}
@@ -1679,11 +1686,18 @@ export function ModelsPanel({
                 refresh={refresh}
                 onCapabilityLoss={onCapabilityLoss}
                 showAdaptation
-                renderKeyManager={renderKeyManager}
+                renderKeyManager={(props) =>
+                  renderKeyManager({ ...props, disabled: detail.isFetching })
+                }
               />
               {role === 'steward' ? (
                 <CharityModelScope modelID={selected.id}>
-                  {renderScopedKeys({ modelID: selected.id, accountId, onCapabilityLoss })}
+                  {renderScopedKeys({
+                    modelID: selected.id,
+                    accountId,
+                    onCapabilityLoss,
+                    disabled: detail.isFetching,
+                  })}
                 </CharityModelScope>
               ) : null}
             </fieldset>

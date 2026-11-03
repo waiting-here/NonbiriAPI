@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -24,6 +24,28 @@ import {
 afterEach(() => sessionStorage.clear());
 
 describe('shared UI patterns', () => {
+  it('keeps a focused radio draft locked for visible-label and arrow-key attempts', async () => {
+    const user = userEvent.setup();
+    const changed = vi.fn();
+    const options = [
+      { value: 'add', label: 'Add' },
+      { value: 'clear', label: 'Clear' },
+    ];
+    const view = render(
+      <Segmented label="Rule action" value="add" options={options} onChange={changed} />,
+    );
+    await user.click(screen.getByRole('radio', { name: 'Clear' }).closest('label')!);
+    expect(changed).toHaveBeenLastCalledWith('clear');
+    changed.mockClear();
+    view.rerender(
+      <Segmented disabled label="Rule action" value="clear" options={options} onChange={changed} />,
+    );
+    await user.keyboard('{ArrowLeft}{ArrowRight}');
+    await user.click(screen.getByRole('radio', { name: 'Add' }).closest('label')!);
+    expect(screen.getByRole('radio', { name: 'Clear' })).toBeChecked();
+    expect(changed).not.toHaveBeenCalled();
+  });
+
   it('gives panels a named region, heading, body controls and footer actions', () => {
     render(
       <Panel aria-label="Account" tone="danger">
@@ -116,7 +138,7 @@ describe('shared UI patterns', () => {
       <Toggle label="Enabled" description="Accept calls" checked={false} onChange={onChange} />,
     );
     const toggle = screen.getByRole('switch', { name: 'Enabled' });
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(toggle).not.toBeChecked();
     expect(toggle).toHaveAccessibleDescription('Accept calls');
     await user.click(toggle);
     expect(onChange).toHaveBeenCalledWith(true);
@@ -185,7 +207,7 @@ describe('shared UI patterns', () => {
       />,
     );
     const trigger = screen.getByRole('button', { name: 'More service actions' });
-    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    expect(trigger).toHaveAttribute('aria-haspopup', 'true');
     await user.click(trigger);
     const edit = screen.getByRole('menuitem', { name: 'Edit' });
     await waitFor(() => expect(edit).toHaveFocus());
@@ -197,9 +219,9 @@ describe('shared UI patterns', () => {
     await user.keyboard('{ArrowUp}');
     expect(screen.getByRole('menuitem', { name: 'Delete' })).toHaveFocus();
     await user.keyboard('{Escape}');
-    expect(trigger).toHaveFocus();
+    await waitFor(() => expect(trigger).toHaveFocus());
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    expect(trigger.closest('details')).not.toHaveAttribute('open');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('opens a menu by keyboard and closes after selection or an outside pointer', async () => {
@@ -217,12 +239,12 @@ describe('shared UI patterns', () => {
     await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Edit' })).toHaveFocus());
     await user.keyboard('{Enter}');
     expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(trigger).toHaveFocus();
+    await waitFor(() => expect(trigger).toHaveFocus());
     await user.click(trigger);
     await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Edit' })).toHaveFocus());
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Outside' }));
-    expect(trigger.closest('details')).not.toHaveAttribute('open');
-    expect(trigger).toHaveFocus();
+    await user.click(screen.getByRole('button', { name: 'Outside' }));
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it('renders the save region only for changes and disables actions while busy', async () => {
@@ -467,4 +489,44 @@ describe('shared UI patterns', () => {
       expect(onSubmit).toHaveBeenCalledTimes(1);
     },
   );
+});
+
+it('isolates nested tab selection and preserves mounted panel drafts', async () => {
+  const user = userEvent.setup();
+  function NestedTabs() {
+    const [outer, setOuter] = useState('users');
+    const [inner, setInner] = useState('overview');
+    return (
+      <Tabs
+        label="Sections"
+        value={outer}
+        onChange={setOuter}
+        tabs={[
+          { value: 'users', label: 'Users' },
+          { value: 'logs', label: 'Logs' },
+        ]}
+      >
+        <input aria-label="Draft" defaultValue="retained" />
+        <Tabs
+          label="User details"
+          value={inner}
+          onChange={setInner}
+          tabs={[
+            { value: 'overview', label: 'Overview' },
+            { value: 'penalties', label: 'Penalties' },
+          ]}
+        >
+          <p>{inner}</p>
+        </Tabs>
+      </Tabs>
+    );
+  }
+  render(<NestedTabs />);
+  const draft = screen.getByLabelText('Draft');
+  await user.type(draft, '-edited');
+  await user.click(screen.getByRole('tab', { name: 'Penalties' }));
+  expect(screen.getByRole('tab', { name: 'Users' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('tab', { name: 'Penalties' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByLabelText('Draft')).toBe(draft);
+  expect(draft).toHaveValue('retained-edited');
 });

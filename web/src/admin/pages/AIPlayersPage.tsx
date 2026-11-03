@@ -25,8 +25,9 @@ export function AIPlayersPage() {
           { value: 'bidding', label: t('竞标对决', 'Bidding Duel') },
           { value: 'gwent', label: t('AI 昆特牌', 'AI Gwent') },
         ]}
-      />
-      {game === 'gwent' ? <GwentAIAdmin /> : <AIPlayersAdmin />}
+      >
+        {game === 'gwent' ? <GwentAIAdmin /> : <AIPlayersAdmin />}
+      </Tabs>
     </div>
   );
 }

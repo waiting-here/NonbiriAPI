@@ -497,103 +497,120 @@ export function ManagementHistory({ account }: { account: string }) {
               value={query.data?.view ?? view}
               onChange={changeView}
               tabs={[
-                { value: 'groups', label: t('admin.managementHistory.groups') },
-                { value: 'operations', label: t('admin.managementHistory.individual') },
+                {
+                  value: 'groups',
+                  id: 'management-history-tab-groups',
+                  label: t('admin.managementHistory.groups'),
+                },
+                {
+                  value: 'operations',
+                  id: 'management-history-tab-operations',
+                  label: t('admin.managementHistory.individual'),
+                },
               ]}
+              panelId="management-history-results"
             />
             <Button variant="secondary" onClick={() => void refresh()} disabled={query.isFetching}>
               {t('common.refresh')}
             </Button>
           </div>
-          {filter.group_key ? (
-            <Note>
-              {t('admin.managementHistory.selectedGroup')}{' '}
-              <Button variant="ghost" size="sm" onClick={() => changeView('groups')}>
-                {t('admin.managementHistory.backToGroups')}
-              </Button>
-            </Note>
-          ) : null}
-          {query.isPending ? (
-            <LoadingState />
-          ) : query.error ? (
-            <ErrorState error={query.error} onRetry={() => void query.refetch()} />
-          ) : (
-            <>
-              {query.data.total === '0' ? (
-                <EmptyState
-                  title={t('admin.managementHistory.empty')}
-                  body={t('admin.managementHistory.emptyHelp')}
+          <div
+            className="nb-tab-content"
+            role="tabpanel"
+            id="management-history-results"
+            aria-labelledby={'management-history-tab-' + (query.data?.view ?? view)}
+            tabIndex={0}
+          >
+            {filter.group_key ? (
+              <Note>
+                {t('admin.managementHistory.selectedGroup')}{' '}
+                <Button variant="ghost" size="sm" onClick={() => changeView('groups')}>
+                  {t('admin.managementHistory.backToGroups')}
+                </Button>
+              </Note>
+            ) : null}
+            {query.isPending ? (
+              <LoadingState />
+            ) : query.error ? (
+              <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+            ) : (
+              <>
+                {query.data.total === '0' ? (
+                  <EmptyState
+                    title={t('admin.managementHistory.empty')}
+                    body={t('admin.managementHistory.emptyHelp')}
+                  />
+                ) : query.data.view === 'groups' ? (
+                  <DataTable
+                    caption={t('admin.managementHistory.groups')}
+                    rows={query.data.groups}
+                    rowKey={(row) => row.key}
+                    columns={columns}
+                  />
+                ) : (
+                  <DataTable
+                    caption={t('admin.managementHistory.individual')}
+                    rows={query.data.operations}
+                    rowKey={(row) => row.id}
+                    selectedKey={selected}
+                    columns={[
+                      {
+                        key: 'action',
+                        header: t('admin.managementHistory.action'),
+                        cell: 'title',
+                        render: (row) => <ActionTitle {...row} />,
+                      },
+                      {
+                        key: 'time',
+                        header: t('admin.managementHistory.time'),
+                        cell: 'meta',
+                        render: (row) => <AgentTime value={row.created_at} />,
+                      },
+                      {
+                        key: 'actor',
+                        header: t('admin.managementHistory.executor'),
+                        cell: 'meta',
+                        render: (row) => <Executor {...row} />,
+                      },
+                      {
+                        key: 'outcome',
+                        header: t('admin.managementHistory.fields.outcome'),
+                        cell: 'status',
+                        render: (row) => <OutcomeBadge outcome={row.outcome} />,
+                      },
+                      {
+                        key: 'counts',
+                        header: t('admin.managementHistory.targetResults'),
+                        cell: 'meta',
+                        render: (row) => <CountDetails value={row} />,
+                      },
+                      {
+                        key: 'detail',
+                        header: t('admin.managementHistory.details'),
+                        cell: 'action',
+                        render: (row) => (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => update('mh_detail', row.id)}
+                          >
+                            {t('admin.managementHistory.details')} · {row.id}
+                          </Button>
+                        ),
+                      },
+                    ]}
+                  />
+                )}
+                <PagePagination
+                  metadata={pageMetadata(query.data)}
+                  requestedPage={pager.page}
+                  busy={query.isFetching}
+                  onPageChange={pager.setPage}
+                  onPageSizeChange={pager.setPageSize}
                 />
-              ) : query.data.view === 'groups' ? (
-                <DataTable
-                  caption={t('admin.managementHistory.groups')}
-                  rows={query.data.groups}
-                  rowKey={(row) => row.key}
-                  columns={columns}
-                />
-              ) : (
-                <DataTable
-                  caption={t('admin.managementHistory.individual')}
-                  rows={query.data.operations}
-                  rowKey={(row) => row.id}
-                  selectedKey={selected}
-                  columns={[
-                    {
-                      key: 'action',
-                      header: t('admin.managementHistory.action'),
-                      cell: 'title',
-                      render: (row) => <ActionTitle {...row} />,
-                    },
-                    {
-                      key: 'time',
-                      header: t('admin.managementHistory.time'),
-                      cell: 'meta',
-                      render: (row) => <AgentTime value={row.created_at} />,
-                    },
-                    {
-                      key: 'actor',
-                      header: t('admin.managementHistory.executor'),
-                      cell: 'meta',
-                      render: (row) => <Executor {...row} />,
-                    },
-                    {
-                      key: 'outcome',
-                      header: t('admin.managementHistory.fields.outcome'),
-                      cell: 'status',
-                      render: (row) => <OutcomeBadge outcome={row.outcome} />,
-                    },
-                    {
-                      key: 'counts',
-                      header: t('admin.managementHistory.targetResults'),
-                      cell: 'meta',
-                      render: (row) => <CountDetails value={row} />,
-                    },
-                    {
-                      key: 'detail',
-                      header: t('admin.managementHistory.details'),
-                      cell: 'action',
-                      render: (row) => (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => update('mh_detail', row.id)}
-                        >
-                          {t('admin.managementHistory.details')} · {row.id}
-                        </Button>
-                      ),
-                    },
-                  ]}
-                />
-              )}
-              <PagePagination
-                metadata={pageMetadata(query.data)}
-                requestedPage={pager.page}
-                busy={query.isFetching}
-                onPageChange={pager.setPage}
-                onPageSizeChange={pager.setPageSize}
-              />
-            </>
-          )}
+              </>
+            )}
+          </div>
         </PanelBody>
       </Panel>
       {selected ? (

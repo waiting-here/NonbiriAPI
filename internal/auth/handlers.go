@@ -273,6 +273,7 @@ func (r *Runtime) completeLogin(w http.ResponseWriter, req *http.Request, login 
 		}
 		clearDenialCookie(w)
 		setUserSessionCookie(w, token, timeFromUnix(expiry), r.now(), secureCookieForRequest(req, r.siteOrigin))
+		r.observeUserBrowser(w, req, userID, sessionLookupHash(token))
 		clearElevatedCookie(w, secureCookieForRequest(req, r.siteOrigin))
 		noStoreRedirect(w, req, target)
 		return
@@ -315,6 +316,7 @@ func (r *Runtime) completeLogin(w http.ResponseWriter, req *http.Request, login 
 	}
 	clearDenialCookie(w)
 	setUserSessionCookie(w, token, timeFromUnix(expiry), r.now(), secureCookieForRequest(req, r.siteOrigin))
+	r.observeUserBrowser(w, req, userID, sessionLookupHash(token))
 	clearElevatedCookie(w, secureCookieForRequest(req, r.siteOrigin))
 	noStoreRedirect(w, req, target)
 }
@@ -402,6 +404,7 @@ func (r *Runtime) userSession(w http.ResponseWriter, req *http.Request) {
 		writeStableError(w, httperr.CodeInternal, "user unavailable")
 		return
 	}
+	r.observeUserBrowser(w, req, actor.UserID, actor.SessionTokenHash)
 	httpmwWriteJSON(w, http.StatusOK, envelope)
 }
 func (r *Runtime) userMe(w http.ResponseWriter, req *http.Request) { r.userSession(w, req) }

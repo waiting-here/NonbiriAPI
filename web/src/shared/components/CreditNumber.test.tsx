@@ -102,10 +102,8 @@ describe('Credit number display', () => {
       />,
       { station: 'user' },
     );
-    expect(view.container.querySelector('.nb-toast-viewport')).toHaveAttribute(
-      'aria-live',
-      'polite',
-    );
+    // Each item announces once through status/alert; the viewport must not duplicate it.
+    expect(view.container.querySelector('.nb-toast-viewport')).not.toHaveAttribute('aria-live');
     const toasts = screen.getAllByRole('status');
     expect(toasts[0]).toHaveTextContent('Net catch: +0.001 general credits');
     expect(toasts[0].querySelectorAll('.credit-number__fraction')).toHaveLength(2);

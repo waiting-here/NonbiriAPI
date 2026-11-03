@@ -1,5 +1,6 @@
+import { NativeDialog } from '@shared/components/NativeDialog';
 import './duel.css';
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useId, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 export function DuelDialog({
   title,
@@ -16,23 +17,12 @@ export function DuelDialog({
   readonly closeLabel?: string;
   readonly closeOnBackdrop?: boolean;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const titleID = useId();
   const { t } = useTranslation();
-  useEffect(() => {
-    const previous = document.activeElement;
-    const node = dialog.current;
-    node?.showModal();
-    closeButton.current?.focus();
-    return () => {
-      node?.close();
-      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
-    };
-  }, []);
   return (
-    <dialog
-      ref={dialog}
+    <NativeDialog
+      onDismiss={onClose}
       className={`duel-dialog ${className}`}
       aria-labelledby={titleID}
       onClick={(event) => {
@@ -45,27 +35,6 @@ export function DuelDialog({
           event.clientY > bounds.bottom
         )
           onClose();
-      }}
-      onKeyDown={(event) => {
-        if (event.key !== 'Tab') return;
-        const items = Array.from(
-          event.currentTarget.querySelectorAll<HTMLElement>(
-            'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]',
-          ),
-        ).filter((item) => !item.closest('[inert]') && item.getClientRects().length > 0);
-        const target = event.shiftKey ? items.at(-1) : items[0];
-        if (!target) {
-          event.preventDefault();
-          return;
-        }
-        if (document.activeElement === (event.shiftKey ? items[0] : items.at(-1))) {
-          event.preventDefault();
-          target.focus();
-        }
-      }}
-      onCancel={(event) => {
-        event.preventDefault();
-        onClose();
       }}
     >
       <header>
@@ -80,6 +49,6 @@ export function DuelDialog({
         </button>
       </header>
       <div className="duel-dialog__body">{children}</div>
-    </dialog>
+    </NativeDialog>
   );
 }

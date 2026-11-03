@@ -121,6 +121,33 @@ afterEach(() => {
 });
 
 describe('numbered log wire', () => {
+  it.each(['user', 'admin', 'steward'] as const)(
+    'sends operation for %s and rejects invalid values before network',
+    async (role) => {
+      const root = role === 'admin' ? '/admin/api' : role === 'steward' ? '/api/steward' : '/api';
+      const fetchMock = installJsonFetchFixtures([
+        {
+          method: 'GET',
+          path: root + '/logs?operation=images_generations&page=1&page_size=20',
+          body: list([], pagination('1', 20, 0)),
+        },
+      ]);
+      await getRoleLogsPage(role, '1', 20, { operation: 'images_generations' });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      for (const operation of ['', 'unknown', 'IMAGES_GENERATIONS', ' images_generations']) {
+        await expect(
+          getRoleLogsPage(role, '1', 20, { operation: operation as never }),
+        ).rejects.toThrow();
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(
+        numberedLogKeys.list(role, 'viewer', '1', 20, { operation: 'images_generations' }),
+      ).not.toEqual(
+        numberedLogKeys.list(role, 'viewer', '1', 20, { operation: 'chat_completions' }),
+      );
+    },
+  );
+
   it.each(['admin', 'steward'] as const)(
     'binds %s pages and cache identities to the physical key',
     async (role) => {

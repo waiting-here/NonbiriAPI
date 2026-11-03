@@ -366,9 +366,9 @@ test('fishing uses desktop space, fits mobile results, and retains the anonymity
   await expect(anonymity).toHaveCount(0);
   await page.getByRole('link', { name: 'Manage game anonymity' }).click();
   await expect(page).toHaveURL(`${USER_ORIGIN}/games#game-privacy`);
-  await expect(anonymity).toBeInViewport();
+  await expect(anonymity.locator('xpath=ancestor::label[1]')).toBeInViewport();
   await expect(anonymity).toBeChecked();
-  await anonymity.click();
+  await anonymity.locator('xpath=ancestor::label[1]').click();
   await expect.poll(() => writes).toBe(1);
   await expect(anonymity).not.toBeChecked();
   await page.reload();
@@ -630,7 +630,10 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
   expect(scrollBeforeMenu).toBeGreaterThan(100);
   await page.getByRole('button', { name: '打开导航' }).click();
   await expect(page.getByRole('link', { name: '账号' })).toBeVisible();
-  await expect(page.locator('.nb-menu-button')).toBeInViewport();
+  const closeNavigation = page
+    .getByRole('dialog')
+    .getByRole('button', { name: '关闭导航', exact: true });
+  await expect(closeNavigation).toBeInViewport();
   expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(scrollBeforeMenu, 0);
   const drawer = page.locator('.nb-user-header__nav');
   const drawerBox = await drawer.boundingBox();
@@ -651,7 +654,7 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
   expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(scrollBeforeMenu, 0);
   await page.getByRole('button', { name: '打开导航' }).click();
   await expect(page.getByRole('link', { name: '首页', exact: true })).toBeInViewport();
-  await page.locator('.nb-menu-button').click();
+  await closeNavigation.click();
   await expect(drawer).not.toBeVisible();
   expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(scrollBeforeMenu, 0);
   await page.evaluate(() => {
@@ -676,7 +679,9 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
 
 for (const theme of ['light', 'dark'] as const)
   for (const width of [390, 1440]) {
-    test(`Pond gifts, return recovery and boards ${theme} ${width}`, async ({ page }) => {
+    test(`Pond gifts, single and batch return recovery and boards ${theme} ${width}`, async ({
+      page,
+    }) => {
       const faults: string[] = [];
       page.on('pageerror', (error) => faults.push(error.message));
       await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
@@ -695,11 +700,11 @@ for (const theme of ['light', 'dark'] as const)
         reward: '0',
         net_reward: '0',
         rake: { platform: '0', welfare: '0', thursday: '0' },
-        ...(ordinal === 0 || ordinal === 1
+        ...([0, 1, 4, 5].includes(ordinal)
           ? { pond: { return_state: 'available', gift: null } }
           : {}),
         ...(ordinal === 0 ? { species_key: 'boot' } : {}),
-        ...(ordinal === 1 ? { species_key: 'fry' } : {}),
+        ...([1, 5].includes(ordinal) ? { species_key: 'fry' } : {}),
         ...(ordinal === 2
           ? {
               species_key: 'old_tire',
@@ -751,6 +756,29 @@ for (const theme of ['light', 'dark'] as const)
           }),
         );
       });
+      let batchReturns = 0;
+      await page.route(`**/api/games/fishing/batches/${BATCH_ID}/return`, async (route) => {
+        const request = route.request();
+        expect(request.method()).toBe('POST');
+        expect(request.postData()).toBeNull();
+        expect(request.headers()['idempotency-key']).toBeUndefined();
+        batchReturns += 1;
+        if (batchReturns === 1) {
+          await route.abort('failed');
+          return;
+        }
+        const receipts = [0, 1, 4, 5].map((ordinal) => {
+          const state = ordinal === 1 || ordinal === 5 ? 'released' : 'returned';
+          Object.assign(outcomes[ordinal], { pond: { return_state: state, gift: null } });
+          return {
+            batch_id: BATCH_ID,
+            ordinal,
+            return_state: state,
+            returned_at: ordinal < 2 ? 1_800_000_000 : 1_800_000_001,
+          };
+        });
+        await route.fulfill(jsonResponse({ batch_id: BATCH_ID, receipts }));
+      });
       const boardRequests: string[] = [];
       await page.route('**/api/games/fishing/pond/leaderboard?*', async (route) => {
         const url = new URL(route.request().url());
@@ -799,6 +827,12 @@ for (const theme of ['light', 'dark'] as const)
       await expect(gift).not.toContainText('原本');
       await gift.scrollIntoViewIfNeeded();
       await capture('gift');
+      const batchAction = page.locator('.fishing-pond-batch-return');
+      await expect(
+        batchAction.getByRole('button', { name: '全部投回／放生（4 件）' }),
+      ).toBeEnabled();
+      await batchAction.scrollIntoViewIfNeeded();
+      await capture('batch-mixed');
       const junk = page.locator('.fishing-outcome[data-ordinal="0"]');
       await junk.getByRole('button', { name: '投回池塘', exact: true }).click();
       await expect(junk.getByRole('alert')).toContainText('尚未确认结果');
@@ -810,6 +844,19 @@ for (const theme of ['light', 'dark'] as const)
       const fry = page.locator('.fishing-outcome[data-ordinal="1"]');
       await fry.getByRole('button', { name: '放生', exact: true }).click();
       await expect(fry).toContainText('已放生');
+      await batchAction.getByRole('button', { name: '全部投回／放生（2 件）' }).click();
+      await expect(batchAction.getByRole('alert')).toContainText('尚未确认结果');
+      await expect(
+        page.locator('.fishing-outcome[data-ordinal="4"]').getByRole('button'),
+      ).toBeEnabled();
+      await batchAction.scrollIntoViewIfNeeded();
+      await capture('batch-retry');
+      await batchAction.getByRole('button', { name: '重试这批收获' }).click();
+      await expect(batchAction).toHaveCount(0);
+      await expect(page.locator('.fishing-outcome[data-ordinal="4"]')).toContainText('已投回池塘');
+      await expect(page.locator('.fishing-outcome[data-ordinal="5"]')).toContainText('已放生');
+      expect(batchReturns).toBe(2);
+      expect(resources).toHaveLength(3);
       expect(boardRequests).toEqual([]);
       await page.getByRole('tab', { name: '环保榜', exact: true }).click();
       const board = page.locator('.fishing-pond-board');
@@ -869,10 +916,10 @@ for (const theme of ['light', 'dark'] as const)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
-      await anonymity.click();
+      await anonymity.locator('xpath=ancestor::label[1]').click();
       await expect(privacy.getByRole('alert')).toContainText('Synthetic retryable profile save');
       await expect(page.getByRole('button', { name: '投回池塘', exact: true })).toBeDisabled();
-      await anonymity.click();
+      await anonymity.locator('xpath=ancestor::label[1]').click();
       await expect(page.getByRole('button', { name: '投回池塘', exact: true })).toBeEnabled();
       await expect(page.getByText(/之后开启游戏匿名.*保留署名/)).toHaveCount(1);
       await expect(page).toHaveURL(`${USER_ORIGIN}/games/fishing`);

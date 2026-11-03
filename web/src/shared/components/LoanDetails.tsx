@@ -1,5 +1,6 @@
+import { NativeDialog } from '@shared/components/NativeDialog';
 import { Button } from '@shared/components/ui/Button';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   captureStationSession,
@@ -73,28 +74,10 @@ export function HistoryDialog({
   onClose: () => void;
   children: ReactNode;
 }) {
-  const ref = useRef<HTMLDialogElement>(null),
-    id = useId();
+  const id = useId();
   const text = useLoanText();
-  useEffect(() => {
-    const previous = document.activeElement,
-      dialog = ref.current;
-    dialog?.showModal();
-    return () => {
-      dialog?.close();
-      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
-    };
-  }, []);
   return (
-    <dialog
-      ref={ref}
-      className="loan-dialog"
-      aria-labelledby={id}
-      onCancel={(event) => {
-        event.preventDefault();
-        onClose();
-      }}
-    >
+    <NativeDialog onDismiss={onClose} className="loan-dialog" aria-labelledby={id}>
       <header>
         <h2 id={id}>{title}</h2>
         <Button onClick={onClose} autoFocus>
@@ -102,7 +85,7 @@ export function HistoryDialog({
         </Button>
       </header>
       {children}
-    </dialog>
+    </NativeDialog>
   );
 }
 

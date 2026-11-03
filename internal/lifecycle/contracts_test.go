@@ -8,7 +8,7 @@ import (
 )
 
 func TestFrozenBoundsAndHeldObjectKinds(t *testing.T) {
-	if SchemaVersion != 32 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
+	if SchemaVersion != 33 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
 		t.Fatalf("frozen bounds changed: schema=%d collection=%d bytes=%d batch=%d",
 			SchemaVersion, CollectionLimit, MaxExportBytes, WorkerBatchLimit)
 	}
@@ -47,7 +47,7 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 	sort.Strings(got)
 	want := []string{
 		"connections", "credentials", "credential_versions", "grants", "discovery_sources", "source_revisions", "binding_targets", "donation_uses", "native_service_evidence",
-		"request_adaptations", "continuity", "fat_fish",
+		"request_adaptations", "continuity", "fat_fish", "browser_associations",
 		"limited_activities", "image_tasks", "inactivity", "lake_notes", "gacha", "appearance", "rewards",
 		"game_onboarding_holds", "loans", "game_rankings", "penalties",
 		"bidding", "likes", "steadycatch", "gwent", "blackjack", "randomness",
@@ -62,6 +62,7 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 }
 
 func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
+	assertClosedJSONKeys(t, BrowserAssociationExport{}, "first_seen", "last_seen", "expires_at")
 	assertClosedJSONKeys(t, PersonalAutomationBatchExport{}, "id", "kind", "target_id", "item_count", "created_at", "expires_at", "results")
 	assertClosedJSONKeys(t, PersonalAutomationStepExport{Outcome: "imported", EndpointKeyID: "key", BindingID: "binding", Code: "code", Message: "message"}, "index", "status", "outcome", "endpoint_key_id", "binding_id", "code", "message")
 	assertClosedJSONKeys(t, GovernanceExport{LakeNotes: testLakeNotesExport()}, "limited_activities", "image_tasks", "inactivity", "lake_notes", "gacha", "appearance", "rewards")

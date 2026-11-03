@@ -456,7 +456,6 @@ test('original Gwent AI plays a paid legal match, restores results, resumes afte
         observedPhase: surrenderState?.phase_seq,
         observedDecision: surrenderState?.decision_id,
         sent: surrenderResponse.request().postDataJSON(),
-        response: await surrenderResponse.text(),
       }),
     ).toBe(200);
     await expect(arena.locator('#result-overlay')).toBeVisible();

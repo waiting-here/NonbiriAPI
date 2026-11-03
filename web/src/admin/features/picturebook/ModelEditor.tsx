@@ -150,7 +150,7 @@ export const ModelEditor = forwardRef<
           <Toggle
             label={t('向用户开放此模型', 'Make this model available')}
             checked={enabled}
-            disabled={!available && !enabled}
+            disabled={save.locked || saved || disabled || (!available && !enabled)}
             onChange={setEnabled}
           />
           <PriceFields model={value} value={prices} onChange={setPrices} />

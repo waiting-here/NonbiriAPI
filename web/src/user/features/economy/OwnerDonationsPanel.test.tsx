@@ -262,13 +262,20 @@ describe('owner donation pages', () => {
     expect(await screen.findByRole('button', { name: 'Retry' })).toBeVisible();
     expect(screen.getByText('Submission 1')).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Donation actions' }));
-    expect(screen.getByRole('menuitem', { name: 'View donated keys' })).toBeDisabled();
+    const keysAction = screen.getByRole('menuitem', { name: 'View donated keys' });
+    expect(keysAction).toHaveAttribute('aria-disabled', 'true');
+    await view.user.click(keysAction);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await view.user.keyboard('{Escape}');
     status = 200;
     await view.user.click(screen.getByRole('button', { name: 'Retry' }));
     await view.user.click(screen.getByRole('button', { name: 'Donation actions' }));
     await waitFor(() =>
-      expect(screen.getByRole('menuitem', { name: 'View donated keys' })).toBeEnabled(),
+      expect(screen.getByRole('menuitem', { name: 'View donated keys' })).not.toHaveAttribute(
+        'aria-disabled',
+      ),
     );
+    await view.user.keyboard('{Escape}');
     status = 401;
     await view.queryClient.invalidateQueries({ queryKey: economyKeys.donations });
     await screen.findByText('Session closed');

@@ -1,3 +1,4 @@
+import { setControlChecked } from '../controls';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -396,7 +397,7 @@ test('workbench edits survive save and reload, and library deletion preserves pu
   try {
     await page.goto(fixture().admin_url + '/limited-activities/fat-fish');
     await page.getByLabel('Title', { exact: true }).fill('Workbench layout regression');
-    await page.getByLabel('Snap to 8-pixel grid').uncheck();
+    await setControlChecked(page.getByLabel('Snap to 8-pixel grid'), false);
     await page.getByRole('button', { name: 'Memory module', exact: true }).click();
     const map = page.getByLabel('Level canvas', { exact: true });
     await map.scrollIntoViewIfNeeded();
@@ -762,9 +763,9 @@ test('a local season publishes explicitly and the original user tab resumes, set
     };
     await periodEditor.getByLabel('Title', { exact: true }).fill(periodInput.title);
     await periodEditor.getByLabel('Description', { exact: true }).fill(periodInput.description);
-    await periodEditor.getByLabel('Visible in directory', { exact: true }).check();
-    await periodEditor.getByLabel('Pause challenges', { exact: true }).uncheck();
-    await periodEditor.getByLabel('Public after close', { exact: true }).check();
+    await setControlChecked(periodEditor.getByLabel('Visible in directory', { exact: true }), true);
+    await setControlChecked(periodEditor.getByLabel('Pause challenges', { exact: true }), false);
+    await setControlChecked(periodEditor.getByLabel('Public after close', { exact: true }), true);
     await periodEditor
       .getByLabel('Start time', { exact: true })
       .fill(new Date(periodInput.starts_at * 1000).toISOString().slice(0, 19).replace(/:00$/, ''));
@@ -818,7 +819,7 @@ test('a local season publishes explicitly and the original user tab resumes, set
       await nodeEditor
         .getByRole('combobox', { name: /^Published version/ })
         .selectOption(nodeInput.version_id);
-      await nodeEditor.getByLabel('Hide until eligible', { exact: true }).uncheck();
+      await setControlChecked(nodeEditor.getByLabel('Hide until eligible', { exact: true }), false);
       await nodeEditor
         .getByRole('combobox', { name: /^Condition/ })
         .selectOption(index ? 'passed' : 'none');

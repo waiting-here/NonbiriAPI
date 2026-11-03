@@ -159,106 +159,107 @@ export function ServiceModelSetup({
           { value: 'manual', label: t('user.services.manualModels') },
         ]}
         onChange={setView}
-      />
-      {catalog.isPending ? (
-        <CoreLoading compact />
-      ) : catalog.error ? (
-        <CoreErrorPanel compact error={catalog.error} onRetry={() => void catalog.refetch()} />
-      ) : (
-        <div className="nb-stack">
-          {models?.length ? (
-            models.map((row) => (
-              <Field key={row.id} label={row.upstream_model_id}>
-                {(props) => (
-                  <input
-                    {...props}
-                    type="checkbox"
-                    disabled={batchLocked}
-                    checked={selected.some(
-                      (item) => item.upstream_model_id === row.upstream_model_id,
-                    )}
-                    onChange={(event) =>
-                      setSelected((previous) =>
-                        event.target.checked
-                          ? [
-                              ...previous.filter(
+      >
+        {catalog.isPending ? (
+          <CoreLoading compact />
+        ) : catalog.error ? (
+          <CoreErrorPanel compact error={catalog.error} onRetry={() => void catalog.refetch()} />
+        ) : (
+          <div className="nb-stack">
+            {models?.length ? (
+              models.map((row) => (
+                <Field key={row.id} label={row.upstream_model_id}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="checkbox"
+                      disabled={batchLocked}
+                      checked={selected.some(
+                        (item) => item.upstream_model_id === row.upstream_model_id,
+                      )}
+                      onChange={(event) =>
+                        setSelected((previous) =>
+                          event.target.checked
+                            ? [
+                                ...previous.filter(
+                                  (item) => item.upstream_model_id !== row.upstream_model_id,
+                                ),
+                                {
+                                  id: entry.id + ':' + entryKey.id + ':' + row.upstream_model_id,
+                                  upstream_model_id: row.upstream_model_id,
+                                  provider: row.provider,
+                                  native_services:
+                                    detail.data?.data.find(
+                                      (item) => item.upstream_model_id === row.upstream_model_id,
+                                    )?.native_services ??
+                                    entryKey.native_services ??
+                                    [],
+                                  service_evidence: 'selected',
+                                  needs_service_selection:
+                                    detail.data?.data.find(
+                                      (item) => item.upstream_model_id === row.upstream_model_id,
+                                    )?.needs_service_selection ??
+                                    entryKey.native_services?.length !== 1,
+                                },
+                              ]
+                            : previous.filter(
                                 (item) => item.upstream_model_id !== row.upstream_model_id,
                               ),
-                              {
-                                id: entry.id + ':' + entryKey.id + ':' + row.upstream_model_id,
-                                upstream_model_id: row.upstream_model_id,
-                                provider: row.provider,
-                                native_services:
-                                  detail.data?.data.find(
-                                    (item) => item.upstream_model_id === row.upstream_model_id,
-                                  )?.native_services ??
-                                  entryKey.native_services ??
-                                  [],
-                                service_evidence: 'selected',
-                                needs_service_selection:
-                                  detail.data?.data.find(
-                                    (item) => item.upstream_model_id === row.upstream_model_id,
-                                  )?.needs_service_selection ??
-                                  entryKey.native_services?.length !== 1,
-                              },
-                            ]
-                          : previous.filter(
-                              (item) => item.upstream_model_id !== row.upstream_model_id,
-                            ),
-                      )
-                    }
-                  />
+                        )
+                      }
+                    />
+                  )}
+                </Field>
+              ))
+            ) : (
+              <Note>
+                {t(
+                  view === 'manual'
+                    ? 'user.services.manualListEmpty'
+                    : 'user.services.pulledListEmpty',
                 )}
-              </Field>
-            ))
-          ) : (
-            <Note>
-              {t(
-                view === 'manual'
-                  ? 'user.services.manualListEmpty'
-                  : 'user.services.pulledListEmpty',
-              )}
-            </Note>
-          )}
-          {catalog.data ? (
-            <PagePagination
-              metadata={catalog.data.pagination}
-              requestedPage={pager.page}
-              busy={catalog.isFetching}
-              onPageChange={pager.setPage}
-              onPageSizeChange={pager.setPageSize}
-            />
-          ) : null}
-        </div>
-      )}
-      <Fold lazy title={t('user.services.manualModels')}>
-        <PairManualCatalog
-          accountId={accountId}
-          endpointId={entry.id}
-          keyId={entryKey.id}
-          visible
-        />
-      </Fold>
-      {selected.length ? (
-        <div className="nb-stack">
-          <Note>{t('user.services.selectedModels', { count: selected.length })}</Note>
-          <button
-            type="button"
-            className="nb-btn nb-btn--ghost"
-            disabled={batchLocked}
-            onClick={() => setSelected([])}
-          >
-            {t('user.services.clearSelected')}
-          </button>
-          <DirectoryBatch
-            key={entry.id + ':' + entryKey.id}
-            onLockChange={setBatchLocked}
+              </Note>
+            )}
+            {catalog.data ? (
+              <PagePagination
+                metadata={catalog.data.pagination}
+                requestedPage={pager.page}
+                busy={catalog.isFetching}
+                onPageChange={pager.setPage}
+                onPageSizeChange={pager.setPageSize}
+              />
+            ) : null}
+          </div>
+        )}
+        <Fold lazy title={t('user.services.manualModels')}>
+          <PairManualCatalog
             accountId={accountId}
-            rows={selected}
-            initialTarget={{ entry, key: entryKey }}
+            endpointId={entry.id}
+            keyId={entryKey.id}
+            visible
           />
-        </div>
-      ) : null}
+        </Fold>
+        {selected.length ? (
+          <div className="nb-stack">
+            <Note>{t('user.services.selectedModels', { count: selected.length })}</Note>
+            <button
+              type="button"
+              className="nb-btn nb-btn--ghost"
+              disabled={batchLocked}
+              onClick={() => setSelected([])}
+            >
+              {t('user.services.clearSelected')}
+            </button>
+            <DirectoryBatch
+              key={entry.id + ':' + entryKey.id}
+              onLockChange={setBatchLocked}
+              accountId={accountId}
+              rows={selected}
+              initialTarget={{ entry, key: entryKey }}
+            />
+          </div>
+        ) : null}
+      </Tabs>
     </div>
   );
 }

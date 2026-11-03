@@ -457,6 +457,7 @@ function PriceTemplateEditor({
               )}
             </Field>
             <Toggle
+              disabled={locked}
               label={t('common.workflow.templateEnabled')}
               checked={metadata.enabled}
               onChange={(enabled) => {
@@ -465,6 +466,7 @@ function PriceTemplateEditor({
               }}
             />
             <PriceConfigFields
+              disabled={locked}
               role="admin"
               value={draft}
               onChange={(fields) => {

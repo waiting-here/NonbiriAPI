@@ -97,6 +97,7 @@ export const UpstreamForm = forwardRef<
             </Field>
             {value.secret_set ? (
               <Toggle
+                disabled={save.locked || saved || disabled}
                 label={t('替换已保存的密钥', 'Replace stored key')}
                 checked={replace}
                 onChange={setReplace}

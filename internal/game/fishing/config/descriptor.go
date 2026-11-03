@@ -15,6 +15,7 @@ func Descriptor() game.ModuleDescriptor {
 		{Station: "user", Method: "POST", Pattern: "/api/games/fishing/batches/{id}/recover"},
 		{Station: "user", Method: "GET", Pattern: "/api/games/fishing/leaderboard"},
 		{Station: "user", Method: "POST", Pattern: "/api/games/fishing/batches/{id}/outcomes/{ordinal}/return"},
+		{Station: "user", Method: "POST", Pattern: "/api/games/fishing/batches/{id}/return"},
 		{Station: "user", Method: "GET", Pattern: "/api/games/fishing/pond/leaderboard"},
 	}}
 }

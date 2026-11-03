@@ -34,9 +34,11 @@ type Text = ReturnType<typeof useAIText>;
 const label = (key: NumericParameter, t: Text) => t(...parameterNames[key]);
 function Parameters({
   value,
+  disabled = false,
   onChange,
   override = false,
 }: {
+  disabled?: boolean;
   value: Partial<AIParameters>;
   onChange: (value: Partial<AIParameters>) => void;
   override?: boolean;
@@ -103,6 +105,7 @@ function Parameters({
         </Field>
       ) : (
         <Toggle
+          disabled={disabled}
           label={t('残局保胜', 'Protect certain endgame wins')}
           description={t(
             '最后两轮优先保留可以确保获胜的出牌。',
@@ -636,6 +639,7 @@ function PolicyEditor({
           )}
         </Field>
         <Toggle
+          disabled={disabled}
           label={t('启用策略', 'Enable strategy')}
           description={t(
             '停用后，绑定它的 AI 玩家不再接受新对局。',
@@ -666,6 +670,7 @@ function PolicyEditor({
         ))}
       </div>
       <Parameters
+        disabled={disabled}
         value={value.definition.parameters}
         onChange={(parameters) =>
           change({ ...value.definition, parameters: parameters as AIParameters })
@@ -857,6 +862,7 @@ function BotEditor({
           )}
         </Field>
         <Toggle
+          disabled={disabled}
           label={t('启用玩家', 'Enable player')}
           checked={b.enabled}
           onChange={(enabled) => edit({ enabled })}
@@ -941,6 +947,7 @@ function BotEditor({
       </Note>
       {b.id && (
         <Toggle
+          disabled={disabled}
           label={t('建立新挑战', 'Create a new challenge')}
           description={t(
             '保存后所有玩家均可重新获得一次首通奖励。',

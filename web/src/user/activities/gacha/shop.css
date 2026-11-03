@@ -1,4 +1,4 @@
-.gacha-shop > .nb-tabs {
+.gacha-shop > .nb-tabs-root > .nb-tabs {
   margin-bottom: var(--nb-space-5);
 }
 

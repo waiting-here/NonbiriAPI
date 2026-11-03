@@ -149,8 +149,12 @@ func TestPondFIFOIndependentBaseDrawsAndReplay(t *testing.T) {
 
 func TestPondSettlementRollbackDoesNotLoseQueueOrCount(t *testing.T) {
 	f := newGameFixture(t, nil)
+	f.service.pondRandom = &scriptedSource{max: true}
 	donor := f.seedUser("rollback-donor", fixtureFunding)
 	receiver := f.seedUser("rollback-recipient", fixtureFunding)
+	pondPublic(t, f, receiver, true)
+	own := pondCatch(t, f, receiver, 919, 0)
+	pondReturn(t, f, receiver, own, 0)
 	pondPublic(t, f, donor, true)
 	donation := pondCatch(t, f, donor, 920, 1)
 	pondReturn(t, f, donor, donation, 0)
@@ -162,16 +166,18 @@ func TestPondSettlementRollbackDoesNotLoseQueueOrCount(t *testing.T) {
 	if err != nil || pending == nil {
 		t.Fatalf("rollback: %#v %v", pending, err)
 	}
-	if f.scalar(`SELECT item_count FROM game_fishing_pond_queue_state WHERE id=1`) != 1 || f.scalar(`SELECT COUNT(*) FROM game_fishing_pond_outcomes WHERE batch_id=? AND gift_species_key IS NOT NULL`, pending.BatchID) != 0 || f.scalar(`SELECT COUNT(*) FROM game_fishing_pond_totals WHERE user_id=?`, receiver) != 0 {
+	if f.scalar(`SELECT item_count FROM game_fishing_pond_queue_state WHERE id=1`) != 2 || f.scalar(`SELECT COUNT(*) FROM game_fishing_pond_outcomes WHERE batch_id=? AND gift_species_key IS NOT NULL`, pending.BatchID) != 0 || f.scalar(`SELECT item_count FROM game_fishing_pond_totals WHERE user_id=? AND board='cleanup'`, receiver) != 1 {
 		t.Fatal("rollback lost gift or committed counts")
 	}
+	assertPondHeadsMatchQueue(t, f)
 	if _, err = f.database.Exec(`DROP TRIGGER pond_fail_terminal`); err != nil {
 		t.Fatal(err)
 	}
 	result, err := f.service.settle(context.Background(), pending.BatchID, receiver, f.clock.Load(), false)
-	if err != nil || result.Outcomes[0].SpeciesKey != "seaweed" || f.scalar(`SELECT item_count FROM game_fishing_pond_queue_state WHERE id=1`) != 0 {
+	if err != nil || result.Outcomes[0].SpeciesKey != "seaweed" || f.scalar(`SELECT item_count FROM game_fishing_pond_queue_state WHERE id=1`) != 1 || f.scalar(`SELECT COUNT(*) FROM game_fishing_pond_queue WHERE donor_user_id=?`, receiver) != 1 {
 		t.Fatalf("recovery=%#v %v", result, err)
 	}
+	assertPondHeadsMatchQueue(t, f)
 }
 
 func TestPondConcurrentReturnsAndConsumptionExactlyOnce(t *testing.T) {
@@ -435,8 +441,12 @@ func TestPondCurrentPreferencesAndPreUpgradePending(t *testing.T) {
 
 func TestPondReturnRollbackAndDonorDeletionRace(t *testing.T) {
 	f := newGameFixture(t, nil)
+	f.service.pondRandom = &scriptedSource{max: true}
 	donor := f.seedUser("delete-race-donor", fixtureFunding)
 	receiver := f.seedUser("delete-race-recipient", fixtureFunding)
+	pondPublic(t, f, receiver, true)
+	own := pondCatch(t, f, receiver, 989, 0)
+	pondReturn(t, f, receiver, own, 0)
 	pondPublic(t, f, donor, true)
 	donation := pondCatch(t, f, donor, 990, 2)
 	if _, err := f.database.Exec(`CREATE TRIGGER pond_fail_return BEFORE UPDATE OF returned_at ON game_fishing_pond_outcomes WHEN NEW.returned_at IS NOT NULL BEGIN SELECT RAISE(ABORT,'injected'); END`); err != nil {
@@ -445,7 +455,7 @@ func TestPondReturnRollbackAndDonorDeletionRace(t *testing.T) {
 	if _, err := f.service.ReturnPondOutcome(context.Background(), donor, donation.BatchID, 0); err == nil {
 		t.Fatal("return fault ignored")
 	}
-	if f.scalar(`SELECT item_count FROM game_fishing_pond_queue_state WHERE id=1`) != 0 || f.scalar(`SELECT COUNT(*) FROM game_fishing_pond_totals WHERE user_id=? AND board='gifts'`, donor) != 0 {
+	if f.scalar(`SELECT item_count FROM game_fishing_pond_queue_state WHERE id=1`) != 1 || f.scalar(`SELECT COUNT(*) FROM game_fishing_pond_totals WHERE user_id=? AND board='gifts'`, donor) != 0 {
 		t.Fatal("failed return left queue/count")
 	}
 	if _, err := f.database.Exec(`DROP TRIGGER pond_fail_return`); err != nil {
@@ -499,9 +509,10 @@ func TestPondReturnRollbackAndDonorDeletionRace(t *testing.T) {
 	if pond.Gift != nil && pond.Gift.Kind != "anonymous" {
 		t.Fatal("donor race left public snapshot")
 	}
-	if f.scalar(`SELECT item_count FROM game_fishing_pond_queue_state WHERE id=1`) != 0 || f.scalar(`SELECT COUNT(*) FROM game_fishing_pond_outcomes WHERE donor_user_id=?`, donor) != 0 {
+	if f.scalar(`SELECT item_count FROM game_fishing_pond_queue_state WHERE id=1`) != 1 || f.scalar(`SELECT COUNT(*) FROM game_fishing_pond_queue WHERE donor_user_id=?`, receiver) != 1 || f.scalar(`SELECT COUNT(*) FROM game_fishing_pond_outcomes WHERE donor_user_id=?`, donor) != 0 {
 		t.Fatal("donor race left identity or queue")
 	}
+	assertPondHeadsMatchQueue(t, f)
 }
 
 func TestPondDailyAggregationMatchesExactWindowsAndExport(t *testing.T) {

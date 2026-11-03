@@ -772,6 +772,7 @@ function DonationDetail(props: DonationDetailProps) {
         <DonationReview key={props.item.revision} {...props} onPendingChange={setReviewPending} />
       ) : null}
       <DonationKeyPages
+        disabled={props.busy || reviewPending}
         item={props.item}
         role={props.role}
         accountId={props.accountId}
@@ -1094,6 +1095,7 @@ function DonationReview({
                         }
                       />
                       <Toggle
+                        disabled={busy || review.isPending}
                         label={t('common.operations.charity.enableForCharity')}
                         checked={draft.enabled}
                         onChange={(enabled) =>
@@ -1241,11 +1243,13 @@ function DonationReview({
 
 function DonationKeyPages({
   item,
+  disabled = false,
   role,
   accountId,
   refresh,
   onCapabilityLoss,
 }: {
+  disabled?: boolean;
   item: ManagedDonation;
   role: CharityRole;
   accountId: string;
@@ -1470,6 +1474,7 @@ function DonationKeyPages({
                       onCapabilityLoss={onCapabilityLoss}
                     />
                     <RecurringLimitsDisclosure
+                      disabled={disabled || keys.isFetching || Boolean(keys.error) || staleRevision}
                       accountId={accountId}
                       role={role}
                       donationId={item.id}
@@ -2472,10 +2477,12 @@ function CharityManagementAccount({
 }
 
 function ScopedKeyBrowser({
+  disabled = false,
   modelID,
   accountId,
   onCapabilityLoss,
 }: {
+  disabled?: boolean;
   modelID: string;
   accountId: string;
   onCapabilityLoss?: () => void;
@@ -2596,6 +2603,7 @@ function ScopedKeyBrowser({
               onCapabilityLoss={onCapabilityLoss}
             />
             <RecurringLimitsDisclosure
+              disabled={disabled}
               role="steward"
               accountId={accountId}
               donationId={detail.data.donation_id}
@@ -2611,6 +2619,7 @@ function ScopedKeyBrowser({
 }
 
 function PickerKeyManager({
+  disabled = false,
   backLabel,
   modelID,
   donationID,
@@ -2726,6 +2735,7 @@ function PickerKeyManager({
             onCapabilityLoss={onCapabilityLoss}
           />
           <RecurringLimitsDisclosure
+            disabled={disabled}
             role={role}
             accountId={accountId}
             donationId={donationID}

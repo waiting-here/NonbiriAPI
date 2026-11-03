@@ -44,7 +44,7 @@ async function layout(
             buttons.filter(
               (button) =>
                 !button.matches(
-                  '.btn, .nb-btn, .nb-more__menu button, .nb-pager button, .nb-tabs button',
+                  '.btn, .nb-btn, .nb-more__menu [role^="menuitem"], .nb-pager button, .nb-tabs [role="tab"]',
                 ),
             ).length,
         ),

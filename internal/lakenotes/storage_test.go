@@ -2,11 +2,40 @@ package lakenotes
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/lakenotes/rules"
 )
+
+func TestCurrentCastDecoderRequiresMatchingStoredIdentity(t *testing.T) {
+	_, cast, err := rules.Start(rules.InitialProfile(), &fixedRandom{value: .5}, 123)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := rules.EncodeCast(cast)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
+	fields["rules_id"], _ = json.Marshal(cloningPriorRulesID)
+	prior, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		identity string
+		raw      []byte
+	}{{rules.RulesID, prior}, {cloningPriorRulesID, raw}, {rules.RulesID, []byte(`{}`)}} {
+		if _, err := decodeStoredCast(castStorageVersion, row.identity, row.raw); err == nil {
+			t.Fatal("mismatched or incomplete checkpoint accepted")
+		}
+	}
+}
 
 func TestProfileStorageSurvivesCompatibleRuleIdentityChange(t *testing.T) {
 	f := newFixture(t)

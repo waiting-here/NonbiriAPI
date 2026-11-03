@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test, type Browser, type BrowserContext } from '@playwright/test';
 
 type Cookie = { Name: string; Value: string };
@@ -48,7 +49,7 @@ async function api(
   });
 }
 
-test('real pond return keeps one receipt and current anonymity on both count boards', async ({
+test('real pond batch return recovers a lost response and keeps single receipts and anonymity', async ({
   browser,
 }) => {
   test.setTimeout(180_000);
@@ -105,7 +106,7 @@ test('real pond return keeps one receipt and current anonymity on both count boa
     expect(enabled.status(), await enabled.text()).toBe(200);
     await privacy(false);
     const before = await myCount();
-    for (let attempt = 0; attempt < 6; attempt += 1) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
       const started = await api(user, origin, '/api/games/fishing/batches', 'POST', {
         bait: 'worm',
         count: 10,
@@ -125,6 +126,8 @@ test('real pond return keeps one receipt and current anonymity on both count boa
         )
         .toBe(true);
       if (
+        settled!.outcomes.filter((outcome) => outcome.pond?.return_state === 'available').length >=
+          2 &&
         settled!.outcomes.some(
           (outcome) => outcome.pond?.return_state === 'available' && outcome.species_key !== 'fry',
         )
@@ -138,7 +141,10 @@ test('real pond return keeps one receipt and current anonymity on both count boa
         ).status(),
       ).toBe(204);
     }
-    expect(batch, 'An eligible new junk catch from bounded real batches').toBeTruthy();
+    expect(
+      batch,
+      'Multiple eligible new catches including junk from bounded real batches',
+    ).toBeTruthy();
     const target = batch!.outcomes.find(
       (outcome) => outcome.pond?.return_state === 'available' && outcome.species_key !== 'fry',
     )!;
@@ -157,28 +163,84 @@ test('real pond return keeps one receipt and current anonymity on both count boa
     );
     await page
       .locator('.fishing-pond-disclosure')
-      .getByRole('switch', { name: 'Stay anonymous on leaderboards' })
+      .getByText('Stay anonymous on leaderboards', { exact: true })
       .click();
     expect((await changedPrivacy).status()).toBe(200);
     await expect(item.getByRole('button', { name: 'Return to pond', exact: true })).toBeEnabled();
     await expect(page.getByText(/The signature stays/)).toHaveCount(1);
     await expect(page).toHaveURL(origin + '/games/fishing');
-    const resource = `/api/games/fishing/batches/${batch!.batch_id}/outcomes/${target.ordinal}/return`;
+    const resource = `/api/games/fishing/batches/${batch!.batch_id}/return`;
+    const candidates = batch!.outcomes.filter(
+      (outcome) => outcome.pond?.return_state === 'available',
+    );
+    const junkCount = BigInt(candidates.filter((outcome) => outcome.species_key !== 'fry').length);
+    type Receipt = { ordinal: number; return_state: string; returned_at: number; batch_id: string };
+    let committed: { batch_id: string; receipts: Receipt[] } | undefined;
+    let dropResponse = true;
+    await page.route('**' + resource, async (route) => {
+      if (!dropResponse) {
+        await route.continue();
+        return;
+      }
+      dropResponse = false;
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      committed = await response.json();
+      await route.abort('failed');
+    });
+    const batchAction = page.locator('.fishing-pond-batch-return');
+    await expect(batchAction.getByRole('button')).toBeEnabled();
+    await batchAction.getByRole('button').click();
+    await expect(batchAction).toContainText('Retry this batch to recover');
+    await expect(item.getByRole('button', { name: 'Return to pond', exact: true })).toBeEnabled();
+    expect(await myCount()).toBe(before + junkCount);
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate((value) => {
+          document.documentElement.dataset.theme = value;
+        }, theme);
+        await batchAction.scrollIntoViewIfNeeded();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        if (process.env.NONBIRI_VISUAL_DIR) {
+          mkdirSync(process.env.NONBIRI_VISUAL_DIR, { recursive: true });
+          await page.screenshot({
+            path: join(process.env.NONBIRI_VISUAL_DIR, `pond-batch-retry-${width}-${theme}.png`),
+          });
+        }
+      }
+    }
+    await privacy(false);
     const returned = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname === resource && response.request().method() === 'POST',
     );
-    await item.getByRole('button', { name: 'Return to pond', exact: true }).click();
-    const first = await returned;
-    expect(first.status()).toBe(200);
-    const receipt = await first.json();
-    await expect(item).toContainText('Returned to pond');
-    expect(await myCount()).toBe(before + 1n);
-    await privacy(false);
+    await batchAction.getByRole('button', { name: 'Retry this batch', exact: true }).click();
+    const recovered = await returned;
+    expect(recovered.status()).toBe(200);
+    const receipt = (await recovered.json()) as { batch_id: string; receipts: Receipt[] };
+    expect(receipt).toEqual(committed);
+    expect(receipt.receipts).toHaveLength(candidates.length);
+    await expect(batchAction).toHaveCount(0);
+    for (const value of receipt.receipts) {
+      await expect(page.locator(`.fishing-outcome[data-ordinal="${value.ordinal}"]`)).toContainText(
+        value.return_state === 'released' ? 'Released' : 'Returned to pond',
+      );
+    }
     const repeat = await user.request.post(origin + resource, { headers: { Origin: origin } });
     expect(repeat.status()).toBe(200);
     expect(await repeat.json()).toEqual(receipt);
-    expect(await myCount()).toBe(before + 1n);
+    const singleResource = `/api/games/fishing/batches/${batch!.batch_id}/outcomes/${target.ordinal}/return`;
+    const singleRepeat = await user.request.post(origin + singleResource, {
+      headers: { Origin: origin },
+    });
+    expect(singleRepeat.status()).toBe(200);
+    expect(await singleRepeat.json()).toEqual(
+      receipt.receipts.find((value) => value.ordinal === target.ordinal),
+    );
+    expect(await myCount()).toBe(before + junkCount);
     for (const kind of ['cleanup', 'gifts'] as const) {
       const value = await board(kind);
       const mine = value.entries.find((row) => row.is_me) ?? value.me;

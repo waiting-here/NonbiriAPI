@@ -1,3 +1,4 @@
+import { setControlChecked } from '../controls';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { expect, test } from './test';
@@ -386,7 +387,7 @@ for (const width of [1440, 390]) {
         await page.getByLabel('Choose a model to configure').selectOption(ids[index]);
         await editor.getByLabel('Sketch paper per image').fill('2');
         await editor.getByLabel('Brushes per image').fill('1');
-        await editor.getByLabel('Make this model available').check();
+        await setControlChecked(editor.getByLabel('Make this model available'), true);
         if (index === 0) {
           await editor.getByText('Optional size prices', { exact: true }).click();
           await editor.getByRole('button', { name: 'Add tier price' }).click();

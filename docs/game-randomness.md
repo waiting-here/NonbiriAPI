@@ -12,7 +12,7 @@
 
 随机种子不用于会话、加密 nonce、身份、防作弊令牌、游标、匿名化或其他对局。知道一局的公开种子不能推导其他局的种子。开局承诺使已经保存承诺的玩家能发现终局更换种子；它不证明可信运营者从未事先筛选种子，也不证明所有日志完整或单局必定获利。
 
-池塘馈赠在原抽取之后独立决定，只替换零积分垃圾的展示。现有凭证核验原抽取及经济结果，不包含共享队列与投入者署名，也不能用它重建当时的馈赠队列。
+池塘馈赠在原抽取之后独立决定，只替换零积分垃圾的展示。馈赠概率仍按含本人投回物品的完整队列计算；命中后取最早的他人物品，没有则保留本次新垃圾，不再抽取、不移动本人队列。现有凭证核验原抽取及经济结果，不包含共享队列与投入者署名，也不能用它重建当时的馈赠队列。
 
 ## English
 
@@ -26,7 +26,7 @@ Once a terminal seed is disclosed, including after cancellation, the complete Bi
 
 Seeds never derive login tokens, encryption nonces, other games, cursors or anonymization keys. Saving the opening commitment lets a player detect a later seed substitution. This is not a proof that a trusted operator never selected among seeds, that the transcript is complete, or that a player will profit.
 
-Pond gifts use an independent draw after the original outcome and only replace zero-credit junk presentation. Existing proofs verify the original economic draw; they do not include the shared gift queue or donor signatures and cannot reconstruct that queue.
+Pond gifts use an independent draw after the original outcome and only replace zero-credit junk presentation. The probability uses the full queue, including the recipient's own returns. A hit consumes the earliest other donor's item; if none exists, the new junk remains without another draw or moving the recipient's queue entries. Existing proofs verify the original economic draw; they do not include the shared gift queue or donor signatures and cannot reconstruct that queue.
 
 ## Wire protocol
 

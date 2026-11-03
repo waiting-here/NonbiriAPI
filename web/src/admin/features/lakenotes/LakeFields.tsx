@@ -65,6 +65,7 @@ export function LakeFields({
   return (
     <fieldset className="lake-period-form" disabled={disabled}>
       <Toggle
+        disabled={disabled}
         label={lakeText('enabled')}
         checked={draft.lakenotes.enabled}
         onChange={(enabled) => edit((c) => ({ ...c, lakenotes: { ...c.lakenotes, enabled } }))}
@@ -97,6 +98,7 @@ export function LakeFields({
             <section className="lake-exchange-setting" key={d}>
               <h3>{lakeText(d)}</h3>
               <Toggle
+                disabled={disabled}
                 label={lakeText('enabled')}
                 checked={value.enabled}
                 onChange={(enabled) => change('enabled', enabled)}

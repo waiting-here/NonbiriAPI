@@ -1,11 +1,11 @@
 import { describe, expect, test, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { AccountMenu } from '../../src/shared/components/AccountMenu';
 import { LanguageSwitcher } from '../../src/shared/components/LanguageSwitcher';
 import { renderWithProviders } from './support';
 
 describe('AccountMenu keyboard contract', () => {
-  test('uses a non-modal dialog, focuses its first control, traps Tab, and restores focus on Escape', async () => {
+  test('uses an account dialog, focuses its first control, traps Tab, and restores focus on Escape', async () => {
     const rendered = await renderWithProviders(
       <AccountMenu displayName="fixture-user" signOutLabel="Sign out" onSignOut={vi.fn()} />,
       { station: 'user', role: 'user' },
@@ -22,7 +22,7 @@ describe('AccountMenu keyboard contract', () => {
 
     await rendered.user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(trigger).toHaveFocus();
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   test('uses the station registry for the administrator settings destination', async () => {
@@ -37,7 +37,10 @@ describe('AccountMenu keyboard contract', () => {
       { station: 'admin', role: 'admin' },
     );
     await rendered.user.click(screen.getByRole('button', { name: 'fixture-admin' }));
-    expect(screen.getByRole('link', { name: 'Site settings' })).toHaveAttribute('href', '/settings');
+    expect(screen.getByRole('link', { name: 'Site settings' })).toHaveAttribute(
+      'href',
+      '/settings',
+    );
     expect(screen.getByRole('group', { name: 'Language' })).toBeInTheDocument();
   });
 });

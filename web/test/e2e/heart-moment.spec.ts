@@ -148,9 +148,10 @@ for (const mode of ['light', 'dark'])
       const openAppearance = async () => {
         if (width < 1024) {
           const navigation = page.locator('button[aria-controls="user-navigation"]');
-          await expect(navigation).toBeVisible();
-          if ((await navigation.getAttribute('aria-expanded')) === 'false')
+          if ((await navigation.getAttribute('aria-expanded')) === 'false') {
+            await expect(navigation).toBeVisible();
             await navigation.click();
+          }
         }
         await page.getByRole('button', { name: '外观', exact: true }).click();
       };

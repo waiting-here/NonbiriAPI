@@ -149,6 +149,12 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, claimID, kind, grant.OwnerUser
 // RevalidateDispatchTargetTx runs inside the transaction that marks dispatch.
 // The stored immutable target is checked again against live grants and targets.
 func RevalidateDispatchTargetTx(ctx context.Context, tx *sql.Tx, claimID string, at int64) error {
+	_, err := revalidateDispatchTargetTx(ctx, tx, claimID, at)
+	return err
+}
+
+// The result is valid only in the dispatch transaction that checked it.
+func revalidateDispatchTargetTx(ctx context.Context, tx *sql.Tx, claimID string, at int64) (authorizedTarget, error) {
 	var input ClaimInput
 	var kind string
 	var operationRoute RouteKind
@@ -156,10 +162,10 @@ func RevalidateDispatchTargetTx(ctx context.Context, tx *sql.Tx, claimID string,
 	var secretRefID int64
 	a := &input.Candidate.Authorization
 	if err := tx.QueryRowContext(ctx, `SELECT authorization_kind FROM dispatch_claim_targets WHERE claim_id=?`, claimID).Scan(&kind); err != nil {
-		return authorizationError(err)
+		return authorizedTarget{}, authorizationError(err)
 	}
 	if kind == "discovery" {
-		return revalidateDiscoveryTargetTx(ctx, tx, claimID, at)
+		return authorizedTarget{}, revalidateDiscoveryTargetTx(ctx, tx, claimID, at)
 	}
 	err := tx.QueryRowContext(ctx, `SELECT c.logical_request_id,c.purpose,COALESCE(c.donation_key_id,0),c.secret_ref_id,r.user_id,r.route_kind,
 t.authorization_kind,t.endpoint_id_snapshot,t.endpoint_key_id_snapshot,t.credential_id_snapshot,t.credential_version_id,t.credential_version,
@@ -171,14 +177,14 @@ WHERE c.id=? AND c.state='claimed'`, claimID).Scan(&input.RequestID, &input.Purp
 		&a.GrantRevisionID, &a.GrantRevision, &a.TargetID, &a.TargetRevision, &serviceMask, &a.ConfiguredType, &input.Candidate.ConnectorType,
 		&input.Candidate.CanonicalBaseURL, &input.Candidate.UpstreamModelID, &a.RerankFormat, &a.UseID, &a.UseRevisionID)
 	if err != nil {
-		return authorizationError(err)
+		return authorizedTarget{}, authorizationError(err)
 	}
 	if kind != "self" && kind != "charity" {
-		return ErrNotFound
+		return authorizedTarget{}, ErrNotFound
 	}
 	services, err := connectorcontract.NativeServicesFromMask(serviceMask)
 	if err != nil || len(services.Services()) != 1 {
-		return ErrInvariant
+		return authorizedTarget{}, ErrInvariant
 	}
 	a.NativeService = services.Services()[0]
 	if kind == "charity" {
@@ -190,16 +196,19 @@ WHERE c.id=? AND c.state='claimed'`, claimID).Scan(&input.RequestID, &input.Purp
 		err = tx.QueryRowContext(ctx, `SELECT b.id,b.model_id FROM model_binding_targets t JOIN model_bindings b ON b.id=t.binding_id WHERE t.id=?`, a.TargetID).Scan(&a.BindingID, &input.PersonalModelID)
 	}
 	if err != nil {
-		return authorizationError(err)
+		return authorizedTarget{}, authorizationError(err)
 	}
 	target, err := resolveInferenceTargetTx(ctx, tx, input, operationRoute.Operation())
 	if err != nil {
-		return err
+		return authorizedTarget{}, err
 	}
 	if target.grant.SecretRefID != secretRefID {
-		return ErrInvariant
+		return authorizedTarget{}, ErrInvariant
 	}
-	return requireActiveUser(ctx, tx, input.ActorUserID, at, kind == "charity")
+	if err := requireActiveUser(ctx, tx, input.ActorUserID, at, kind == "charity" || operationRoute.IsCharity()); err != nil {
+		return authorizedTarget{}, err
+	}
+	return target, nil
 }
 
 func persistAttemptServiceFactsTx(ctx context.Context, tx *sql.Tx, claimID string) error {

@@ -339,20 +339,20 @@ own status in the details and do not acquire the site's login/session semantics.
 
 ## Database compatibility and version changes
 
-The service initializes absent storage as schema **45** and opens only the exact
+The service initializes absent storage as schema **48** and opens only the exact
 current schema. Older, newer, unknown and incomplete databases are rejected
 before migration, repair, WAL checkpoint or recovery writes. Exact registered
-schema **16–26** and **33–44** sources use the matching standalone
+schema **16–26** and **33–47** sources use the matching standalone
 [v1 upgrader](../cmd/nonbiri-upgrade-v1/README.md). Other intermediate structures,
 including schema 27–32, are unsupported. SQLite identity remains Generation 2;
-exports use format **32**. See [database upgrades](database-upgrades.md) for
+exports use format **33**. See [database upgrades](database-upgrades.md) for
 manifests, preserved data and content versions.
 
 Run `./nonbiriapi maintenance schema-info --json` and the matching tool's
 `--schema-info --json` without application configuration or a database.
 The service declares `startup_policy="exact"`,
-`upgrade_tool="nonbiri-upgrade-v1"`, current/minimum schema 45 and empty source
-and conversion arrays. The tool declares its 23 exact offline sources.
+`upgrade_tool="nonbiri-upgrade-v1"`, current/minimum schema 48 and empty source
+and conversion arrays. The tool declares its 26 exact offline sources.
 Deployment scripts must honor that policy and stop on mismatches, leaving the
 operator time to preserve the old database and deliberately invoke the tool.
 Do not run `--apply` from a service, startup hook or automatic deployment path.

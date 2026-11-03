@@ -511,6 +511,7 @@ test.describe('recurring limits in the complete charity pages', () => {
       editor.getByRole('button', { name: 'Save recurring limits', exact: true }),
     ).toBeDisabled();
     await editor.getByLabel('Time zone', { exact: true }).fill('Asia/Kolkata');
+    await page.getByRole('option', { name: 'Asia/Kolkata', exact: true }).click();
     await expect(editor).toContainText('UTC+5:30');
     await expect(editor).toContainText('changes structure');
     await editor.getByRole('button', { name: 'Save recurring limits', exact: true }).click();

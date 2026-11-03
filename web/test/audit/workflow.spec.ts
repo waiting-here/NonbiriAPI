@@ -1,3 +1,4 @@
+import { setControlChecked } from '../controls';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
@@ -647,9 +648,10 @@ test('edit keeps its identity through complete template and model-reference fill
     await templateEditor
       .getByLabel(workflow.templateDescription, { exact: true })
       .fill('Browser complete price snapshot');
-    await templateEditor
-      .getByRole('switch', { name: workflow.templateEnabled, exact: true })
-      .uncheck();
+    await setControlChecked(
+      templateEditor.getByRole('switch', { name: workflow.templateEnabled, exact: true }),
+      false,
+    );
     await templateEditor
       .getByLabel('Request user price', { exact: true })
       .fill(request.pricing.user_price);
@@ -669,9 +671,10 @@ test('edit keeps its identity through complete template and model-reference fill
     const template = await madeResponse.json();
     expect(template.enabled).toBe(false);
     expect(template.pricing).toEqual(request.pricing);
-    await templateEditor
-      .getByRole('switch', { name: workflow.templateEnabled, exact: true })
-      .check();
+    await setControlChecked(
+      templateEditor.getByRole('switch', { name: workflow.templateEnabled, exact: true }),
+      true,
+    );
     const priceLabels = adminEn.admin.charity;
     await templateEditor
       .getByLabel(priceLabels.pricingMode, { exact: true })
@@ -709,9 +712,10 @@ test('edit keeps its identity through complete template and model-reference fill
       .locator('summary')
       .filter({ hasText: operations.context.settings })
       .click();
-    await templateEditor
-      .getByRole('switch', { name: operations.context.long, exact: true })
-      .check();
+    await setControlChecked(
+      templateEditor.getByRole('switch', { name: operations.context.long, exact: true }),
+      true,
+    );
     await templateEditor
       .getByLabel(operations.context.longThreshold, { exact: true })
       .fill(referenceModel.pricing.long_context.input_threshold);
@@ -724,9 +728,10 @@ test('edit keeps its identity through complete template and model-reference fill
       await templateEditor
         .getByLabel(workflow.longPriceField.replace('{{field}}', label), { exact: true })
         .fill(referenceModel.pricing.long_context.user_prices[field]);
-    await templateEditor
-      .getByRole('switch', { name: operations.context.penalty, exact: true })
-      .check();
+    await setControlChecked(
+      templateEditor.getByRole('switch', { name: operations.context.penalty, exact: true }),
+      true,
+    );
     await templateEditor
       .getByLabel(operations.context.penaltyThreshold, { exact: true })
       .fill(referenceModel.pricing.context_penalty.input_threshold);
@@ -737,9 +742,10 @@ test('edit keeps its identity through complete template and model-reference fill
       .locator('summary')
       .filter({ has: page.getByText(common.common.recurringDiscount.fixedTitle, { exact: true }) })
       .click();
-    await templateEditor
-      .getByRole('switch', { name: priceLabels.discountEnabled, exact: true })
-      .check();
+    await setControlChecked(
+      templateEditor.getByRole('switch', { name: priceLabels.discountEnabled, exact: true }),
+      true,
+    );
     await templateEditor.getByLabel(priceLabels.discountPercent, { exact: true }).fill('80');
 
     const changed = page.waitForResponse(

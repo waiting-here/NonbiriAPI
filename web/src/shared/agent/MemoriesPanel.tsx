@@ -224,38 +224,39 @@ export function MemoriesPanel({
             { value: 'chat', label: t('common.agent.chatMemory') },
             { value: 'auto_review', label: t('common.agent.reviewMemory') },
           ]}
-        />
-        {role === 'admin' ? (
-          <div hidden={kind !== 'personal'}>
-            <MemoryOwnerPicker
-              account={account}
-              active={active && kind === 'personal'}
-              owner={owner}
-              onSelect={selectOwner}
-              onCurrentOwner={setCurrentOwner}
-            />
-          </div>
-        ) : null}
-        {[...new Set([currentEditor, ...retainedEditors])].map((id) => {
-          const [editorKind, editorOwner] = id.split(':') as [MemoryKind, string];
-          return (
-            <div key={id} hidden={id !== currentEditor}>
-              {id === currentEditor && !ownerReady ? (
-                <LoadingState />
-              ) : (
-                <MemoryEditor
-                  role={role}
-                  account={account}
-                  kind={editorKind}
-                  owner={editorOwner}
-                  active={active && id === currentEditor}
-                  onRetain={(retain) => retainEditor(id, retain)}
-                  onCurrentOwner={setCurrentOwner}
-                />
-              )}
+        >
+          {role === 'admin' ? (
+            <div hidden={kind !== 'personal'}>
+              <MemoryOwnerPicker
+                account={account}
+                active={active && kind === 'personal'}
+                owner={owner}
+                onSelect={selectOwner}
+                onCurrentOwner={setCurrentOwner}
+              />
             </div>
-          );
-        })}
+          ) : null}
+          {[...new Set([currentEditor, ...retainedEditors])].map((id) => {
+            const [editorKind, editorOwner] = id.split(':') as [MemoryKind, string];
+            return (
+              <div key={id} hidden={id !== currentEditor}>
+                {id === currentEditor && !ownerReady ? (
+                  <LoadingState />
+                ) : (
+                  <MemoryEditor
+                    role={role}
+                    account={account}
+                    kind={editorKind}
+                    owner={editorOwner}
+                    active={active && id === currentEditor}
+                    onRetain={(retain) => retainEditor(id, retain)}
+                    onCurrentOwner={setCurrentOwner}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </Tabs>
       </PanelBody>
     </Panel>
   );

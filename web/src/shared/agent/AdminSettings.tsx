@@ -1,3 +1,4 @@
+import { SuggestInput } from '@shared/components/ui/SuggestInput';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -33,6 +34,7 @@ import {
 } from './api';
 import { AgentError } from './AgentParts';
 import { DriverPanel } from './DriverPanel';
+import { ReasoningEffortField } from './ReasoningEffortField';
 
 const toolLabels: Record<string, string> = {
   donations: 'common.agent.tools.donations',
@@ -380,11 +382,12 @@ function DriverForm({ initial, account }: { initial: DriverSettings; account: st
               <div className="agent-template-row">
                 <Field label={t('common.connections.model')}>
                   {(props) => (
-                    <input
+                    <SuggestInput
+                      disabled={busy}
                       {...props}
-                      list="agent-driver-models"
+                      suggestions={models}
                       value={draft.model}
-                      onChange={(event) => patch({ model: event.target.value })}
+                      onChange={(value) => patch({ model: value })}
                     />
                   )}
                 </Field>
@@ -396,12 +399,13 @@ function DriverForm({ initial, account }: { initial: DriverSettings; account: st
                 >
                   {t('common.agent.discoverModels')}
                 </Button>
-                <datalist id="agent-driver-models">
-                  {models.map((model) => (
-                    <option key={model} value={model} />
-                  ))}
-                </datalist>
               </div>
+              <ReasoningEffortField
+                provider="chat_completions"
+                value={extra}
+                onChange={setExtra}
+                disabled={busy}
+              />
               <Fields>
                 <Field size="short" label={t('common.agent.contextWindow')}>
                   {(props) => (
@@ -610,6 +614,7 @@ function AgentConfigForm({ initial, account }: { initial: AgentSettings; account
           <fieldset className="nb-stack" disabled={busy}>
             <Fields>
               <Toggle
+                disabled={busy}
                 label={t('common.agent.chatEnabled')}
                 description={t('common.agent.chatEnabledHelp')}
                 checked={draft.chat_enabled}
@@ -673,6 +678,7 @@ function AgentConfigForm({ initial, account }: { initial: AgentSettings; account
                   {AGENT_TOOLS.map((name) => (
                     <div key={name} className="nb-stack nb-stack--sm">
                       <Toggle
+                        disabled={busy}
                         label={t(toolLabels[name]!)}
                         checked={draft.tools[name] ?? true}
                         onChange={(checked) =>

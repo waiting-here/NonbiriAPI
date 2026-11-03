@@ -59,7 +59,7 @@ test('account page downloads the current export with personal session-header set
     const page = await context.newPage();
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    const filename = 'nonbiriapi-account-export-v32.json';
+    const filename = 'nonbiriapi-account-export-v33.json';
     const [, download] = await Promise.all([
       page
         .waitForResponse(
@@ -82,7 +82,7 @@ test('account page downloads the current export with personal session-header set
       user: { id: string };
       models: { id: string; session_headers: unknown }[];
     };
-    expect(exported.schema_version).toBe(32);
+    expect(exported.schema_version).toBe(33);
     expect(exported.user.id).toBe(account.user_id);
     expect(exported.models.find((entry) => entry.id === model.id)?.session_headers).toEqual(
       sessionHeaders,

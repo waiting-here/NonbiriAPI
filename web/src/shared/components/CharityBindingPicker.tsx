@@ -171,6 +171,7 @@ function pagePlaceholder<T>(
 }
 
 export interface CharityPickerKeyManagerProps {
+  disabled?: boolean;
   modelID: string;
   donationID: string;
   keyID: string;

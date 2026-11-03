@@ -13,6 +13,7 @@ const (
 	castStorageVersion     = 2
 	priorCastRulesID       = "lake-notes-d1be1134679327c43a38766d857cb0d3131659d2049cf7ea667034bcf727255e"
 	collectionPriorRulesID = "lake-notes-ad5825786cb2c4ac97648df2cfa865457de7dd141f51fdc95abcb99b2aec1d97"
+	cloningPriorRulesID    = "lake-notes-69248b547d87b06e1d6279bfbfb27937c0015d514cbdd6040d11ad796977dba3"
 )
 
 func decodeStoredProfile(version int, raw []byte) (rules.Profile, error) {
@@ -23,6 +24,11 @@ func decodeStoredProfile(version int, raw []byte) (rules.Profile, error) {
 }
 
 func decodeStoredCast(version int, identity string, raw []byte) (rules.Cast, error) {
+	if version == castStorageVersion && identity == rules.RulesID {
+		// The typed decoder already checks the current identity and every state
+		// invariant. Older identities alone need a compatibility projection.
+		return rules.DecodeCast(raw)
+	}
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil {
 		return rules.Cast{}, ErrInvariant
@@ -45,11 +51,11 @@ func decodeStoredCast(version int, identity string, raw []byte) (rules.Cast, err
 			return rules.Cast{}, err
 		}
 	case castStorageVersion:
-		if identity != rules.RulesID && identity != collectionPriorRulesID {
+		if identity != collectionPriorRulesID && identity != cloningPriorRulesID {
 			return rules.Cast{}, ErrInvariant
 		}
-		if identity == collectionPriorRulesID {
-			// Collection receipts add profile state without changing cast physics.
+		if identity == collectionPriorRulesID || identity == cloningPriorRulesID {
+			// Compatible profile changes preserve the saved cast physics.
 			fields["rules_id"], _ = json.Marshal(rules.RulesID)
 			var err error
 			raw, err = json.Marshal(fields)

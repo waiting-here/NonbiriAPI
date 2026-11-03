@@ -94,6 +94,7 @@ test('administrator configures a source, edits personal memory and cleans retain
     await form.getByLabel(copy.drivers.provider, { exact: true }).selectOption('chatgpt');
     await form.getByLabel(copy.drivers.name, { exact: true }).fill('Browser ChatGPT source');
     await form.getByLabel(common.common.connections.model, { exact: true }).fill('fixture-model');
+    await form.getByLabel(copy.reasoningEffort.label, { exact: true }).selectOption('high');
     await form.getByRole('button', { name: common.common.save, exact: true }).click();
     await expect(
       page
@@ -106,8 +107,21 @@ test('administrator configures a source, edits personal memory and cleans retain
     const profile = config.profiles.find(
       (item: { name: string }) => item.name === 'Browser ChatGPT source',
     );
-    expect(profile.settings.extra_parameters).toEqual({});
+    expect(profile.settings.extra_parameters).toEqual({ reasoning: { effort: 'high' } });
     expect(profile.settings.max_output_tokens).toBe(0);
+    await page.reload();
+    await page
+      .getByRole('table', { name: copy.drivers.sources, exact: true })
+      .getByRole('row')
+      .filter({ hasText: 'Browser ChatGPT source' })
+      .getByRole('button', { name: common.common.edit, exact: true })
+      .click();
+    await expect(form.getByLabel(copy.reasoningEffort.label, { exact: true })).toHaveValue('high');
+    await inspectLayouts(
+      page,
+      'assistant-reasoning',
+      form.getByLabel(copy.reasoningEffort.label, { exact: true }),
+    );
     const assignment = page
       .locator('form')
       .filter({ has: page.getByLabel(copy.drivers.scopes.admin_chat, { exact: true }) });
@@ -208,6 +222,11 @@ test('administrator assigns Codex individually and retains readable changes afte
     await form.getByLabel(copy.drivers.provider, { exact: true }).selectOption('codex');
     await form.getByLabel(copy.drivers.name, { exact: true }).fill(originalName);
     await form.getByLabel(common.common.connections.model, { exact: true }).fill('original-model');
+    const reasoningEffort = form.getByLabel(copy.reasoningEffort.label, { exact: true });
+    await expect(
+      reasoningEffort.getByRole('option', { name: copy.reasoningEffort.max }),
+    ).toHaveCount(0);
+    await reasoningEffort.selectOption('xhigh');
     await expect(form.getByLabel(common.common.connections.entryURL, { exact: true })).toHaveCount(
       0,
     );
@@ -225,6 +244,7 @@ test('administrator assigns Codex individually and retains readable changes afte
       (entry: { name: string }) => entry.name === originalName,
     );
     expect(profile.settings.provider).toBe('codex');
+    expect(profile.settings.extra_parameters).toEqual({ reasoning: { effort: 'xhigh' } });
     const bindings = page.getByRole('region', { name: copy.drivers.bindings, exact: true });
     for (const scope of ['default', 'auto_review', 'steward_chat'] as const) {
       await expect(
@@ -511,7 +531,12 @@ test('connected Codex retains its catalogue, saves a model and recovers quota af
       modelA,
       modelB,
     ]);
-    await expect(form.locator('datalist option')).toHaveCount(2);
+    await model.fill('');
+    await model.press('ArrowDown');
+    await expect(page.getByRole('listbox').getByRole('option')).toHaveCount(2);
+    await model.press('Escape');
+    await model.fill(modelA);
+    await model.press('Escape');
     const catalogue = form.locator('p').filter({
       hasText: copy.quota.catalogueUpdated.replace('{{count}}', '2'),
     });
@@ -529,14 +554,20 @@ test('connected Codex retains its catalogue, saves a model and recovers quota af
     await safeFailure(modelError.operation_diagnostic, form);
     await expect(model).toHaveValue(modelA);
     await expect(form.getByLabel(copy.drivers.name, { exact: true })).toHaveValue(sourceName);
-    await expect(form.locator('datalist option')).toHaveCount(2);
+    await model.fill('');
+    await model.press('ArrowDown');
+    await expect(page.getByRole('listbox').getByRole('option')).toHaveCount(2);
+    await model.press('Escape');
+    await model.fill(modelA);
+    await model.press('Escape');
     await expect(catalogue.locator('.agent-number')).toHaveText(catalogueTime);
     await expect(catalogue).toContainText(copy.quota.stale);
     await inspectLayouts(page, 'codex-catalogue-failure', form);
 
-    const cachedChoice = await form.locator('datalist option').nth(1).getAttribute('value');
-    expect(cachedChoice).toBe(modelB);
-    await model.fill(cachedChoice!);
+    await model.fill(modelB);
+    await model.press('ArrowDown');
+    await page.getByRole('option', { name: modelB, exact: true }).click();
+    await expect(model).toHaveValue(modelB);
     await form.getByRole('button', { name: common.common.save, exact: true }).click();
     await expect
       .poll(

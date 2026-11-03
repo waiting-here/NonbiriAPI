@@ -1,3 +1,4 @@
+import { setControlChecked } from '../controls';
 import { resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -398,7 +399,11 @@ async function riskEvidence(page: Page, sustained = true) {
   ).toHaveText(sustained ? '5 / 0' : '0 / 5');
   await card.getByRole('button', { name: 'Inspect', exact: true }).click();
   await expect(page.getByText('Minute observations', { exact: true })).toBeVisible();
-  await group.getByRole('tab', { name: 'Shared IPs', exact: true }).click();
+  await group.getByRole('tab', { name: 'Account links', exact: true }).click();
+  await page
+    .getByRole('tablist', { name: 'Account links', exact: true })
+    .getByRole('tab', { name: 'Shared IPs', exact: true })
+    .click();
   await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
   await expect(page.getByText('Completed', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: f.source_ip, exact: true })).toBeVisible();
@@ -788,7 +793,7 @@ test('administrator check-in choice persists and both cards follow real daily el
       exact: true,
     });
     await expect(choice).not.toBeChecked();
-    await choice.check();
+    await setControlChecked(choice, true);
     await settingsPage.getByRole('button', { name: 'Save all changes', exact: true }).click();
     await expect(settingsPage.getByText('Settings saved.', { exact: true })).toBeVisible();
     await settingsPage.reload();
@@ -848,7 +853,7 @@ test('administrator check-in choice persists and both cards follow real daily el
     await expect(gameButton).toHaveCount(0);
     await expect(game.getByText('Available tomorrow', { exact: true })).toBeVisible();
 
-    await choice.uncheck();
+    await setControlChecked(choice, false);
     await settingsPage.getByRole('button', { name: 'Save all changes', exact: true }).click();
     await expect(settingsPage.getByText('Settings saved.', { exact: true })).toBeVisible();
     await page.reload();
@@ -901,10 +906,17 @@ test('audit presentation keeps folds, role tabs and mobile content within the vi
         await expect(page.locator('main h1')).toBeVisible();
         if (path === '/abuse-audit') {
           const tabs = page.getByRole('tablist', { name: 'Abuse audit', exact: true });
-          await expect(tabs.getByRole('tab')).toHaveCount(7);
-          for (let index = 0; index < 7; index++) {
+          await expect(tabs.getByRole('tab')).toHaveCount(6);
+          for (let index = 0; index < 6; index++) {
             await tabs.getByRole('tab').nth(index).click();
             await expect(tabs.getByRole('tab').nth(index)).toHaveAttribute('aria-selected', 'true');
+          }
+          await tabs.getByRole('tab', { name: 'Account links', exact: true }).click();
+          const accountTabs = page.getByRole('tablist', { name: 'Account links', exact: true });
+          await expect(accountTabs.getByRole('tab')).toHaveCount(3);
+          for (const tab of await accountTabs.getByRole('tab').all()) {
+            await tab.click();
+            await expect(tab).toHaveAttribute('aria-selected', 'true');
           }
           await tabs.getByRole('tab').first().click();
           await expect(
@@ -956,7 +968,7 @@ test('audit presentation keeps folds, role tabs and mobile content within the vi
       const page = await context.newPage();
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.goto(f.user_url + '/steward?tab=charity');
-      const tabs = page.locator('.page > .nb-tabs').first();
+      const tabs = page.locator('.page > .nb-tabs-root > .nb-tabs').first();
       await expect(tabs.getByRole('tab')).toHaveCount(7);
       for (const width of [1440, 768, 390]) {
         await page.setViewportSize({ width, height: 900 });

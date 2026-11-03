@@ -78,14 +78,14 @@ func connectionFactQuery(table string, sourceColumns map[string][]string) (strin
 	return "SELECT " + strings.Join(selected, ",") + " FROM " + from, true
 }
 
-func assertExactPublishedSource(t *testing.T, database *sql.DB, version int, manifest string, rows map[string][]string) {
+func assertExactPublishedSource(t *testing.T, database *sql.DB, version int, manifest string, rows map[string][]string, fullFacts ...bool) {
 	t.Helper()
 	gotVersion, versionErr := readSchemaVersion(t.Context(), database)
 	gotManifest, manifestErr := db.SchemaManifestHash(t.Context(), database)
 	if versionErr != nil || manifestErr != nil || gotVersion != version || gotManifest != manifest {
 		t.Fatalf("source identity changed: version=%d manifest=%s errors=%v/%v", gotVersion, gotManifest, versionErr, manifestErr)
 	}
-	if !reflect.DeepEqual(gatewayRows(t, database), rows) {
+	if !reflect.DeepEqual(gatewayRows(t, database, fullFacts...), rows) {
 		t.Fatal("rollback changed original rows or identity high-water marks")
 	}
 	plan, err := storageSchema.plan(t.Context(), database)
@@ -93,7 +93,7 @@ func assertExactPublishedSource(t *testing.T, database *sql.DB, version int, man
 		t.Fatalf("restored source has no published conversion path: %+v, %v", plan, err)
 	}
 	for _, step := range plan.steps {
-		if step.from > 26 && step.from != 33 && step.from != 34 && step.from != 35 && step.from != 36 && step.from != 37 && step.from != 38 && step.from != 39 && step.from != 40 && step.from != 41 && step.from != 42 && step.from != 43 && step.from != 44 || step.version > 26 && step.version != 33 && step.version != 34 && step.version != 35 && step.version != 36 && step.version != 37 && step.version != 38 && step.version != 39 && step.version != 40 && step.version != 41 && step.version != 42 && step.version != 43 && step.version != 44 && step.version != 45 {
+		if step.from > 26 && step.from != 33 && step.from != 34 && step.from != 35 && step.from != 36 && step.from != 37 && step.from != 38 && step.from != 39 && step.from != 40 && step.from != 41 && step.from != 42 && step.from != 43 && step.from != 44 && step.from != 45 && step.from != 46 && step.from != 47 || step.version > 26 && step.version != 33 && step.version != 34 && step.version != 35 && step.version != 36 && step.version != 37 && step.version != 38 && step.version != 39 && step.version != 40 && step.version != 41 && step.version != 42 && step.version != 43 && step.version != 44 && step.version != 45 && step.version != 46 && step.version != 47 && step.version != 48 {
 			t.Fatalf("unreleased intermediate schema became a supported source: %+v", step)
 		}
 	}

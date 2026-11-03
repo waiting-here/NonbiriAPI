@@ -1,3 +1,4 @@
+import { setControlChecked } from '../controls';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -635,7 +636,7 @@ test('real linked size editors preserve drafts and quote all four modes without 
       await expect(page.getByLabel(/JSON|catalog_type_pointer/)).toHaveCount(0);
       await editor.getByLabel('Sketch paper per image').fill('2');
       await editor.getByLabel('Brushes per image', { exact: true }).fill('1');
-      await editor.getByLabel('Make this model available').check();
+      await setControlChecked(editor.getByLabel('Make this model available'), true);
       if (!(await editor.getByRole('button', { name: 'Add tier price', exact: true }).isVisible()))
         await editor.getByText('Optional size prices', { exact: true }).click();
       if (hasTier) {

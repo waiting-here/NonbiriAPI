@@ -123,7 +123,7 @@ for (const { width, theme } of [390, 1440].flatMap((width) =>
         });
       }
       const toggle = page.getByRole('switch', { name: 'Use match memory' });
-      await toggle.click();
+      await toggle.locator('xpath=ancestor::label[1]').click();
       await expect(toggle).not.toBeChecked();
       await page.getByRole('button', { name: 'Challenge', exact: true }).click();
       await expect(page.getByText('WAITING FOR AI MATCH')).toBeVisible();

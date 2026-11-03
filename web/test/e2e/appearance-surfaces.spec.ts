@@ -96,7 +96,7 @@ for (const design of ['celestial', 'wandering', 'heart-moment'])
           await list.locator('summary').first().click();
           await list.locator('summary').first().scrollIntoViewIfNeeded();
           await capture(page, 'donation-details-' + suffix);
-          await list.locator('.nb-more > summary').first().click();
+          await list.getByRole('button', { name: '捐赠操作', exact: true }).first().click();
           await expect(page.getByRole('menu')).toBeVisible();
           await capture(page, 'donation-menu-' + suffix);
           await page.keyboard.press('Escape');

@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../test/unit/support';
@@ -55,7 +55,7 @@ it.each([false, true])(
     expect(close).toHaveFocus();
     fireEvent(dialog, new Event('cancel', { bubbles: false, cancelable: true }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(trigger).toHaveFocus();
+    await waitFor(() => expect(trigger).toHaveFocus());
   },
 );
 
@@ -91,7 +91,7 @@ it('cycles focus between the close control and tutorial actions', async () => {
   await view.user.tab();
   expect(close).toHaveFocus();
   await view.user.click(close);
-  expect(trigger).toHaveFocus();
+  await waitFor(() => expect(trigger).toHaveFocus());
 });
 
 it('keeps clicks inside the panel open and closes on a backdrop click', async () => {
@@ -104,5 +104,5 @@ it('keeps clicks inside the panel open and closes on a backdrop click', async ()
   expect(dialog).toBeInTheDocument();
   fireEvent.click(dialog, { clientX: 10, clientY: 10 });
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  expect(trigger).toHaveFocus();
+  await waitFor(() => expect(trigger).toHaveFocus());
 });

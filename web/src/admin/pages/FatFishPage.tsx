@@ -30,8 +30,9 @@ export function FatFishPage() {
             { value: 'levels', label: text('common.levelsAndVersions') },
             { value: 'periods', label: text('common.periodsAndNodes') },
           ]}
-        />
-        {tab === 'levels' ? <LevelManager /> : <PeriodManager />}
+        >
+          {tab === 'levels' ? <LevelManager /> : <PeriodManager />}
+        </Tabs>
       </Card>
     </div>
   );

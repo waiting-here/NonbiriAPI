@@ -26,7 +26,7 @@ func TestConnectionsUpgradePreservesPublishedHistoryAndCredentials(t *testing.T)
 	defer database.Close()
 	mustExec(t, database, "PRAGMA foreign_keys=ON")
 	plan, err := storageSchema.plan(ctx, database)
-	if err != nil || len(plan.steps) != 13 || plan.steps[0].version != 33 || plan.steps[1].version != 34 || plan.steps[2].version != 35 || plan.steps[3].version != 36 || plan.steps[4].version != 37 || plan.steps[5].version != 38 || plan.steps[6].version != 39 || plan.steps[7].version != 40 || plan.steps[8].version != 41 || plan.steps[9].version != 42 || plan.steps[10].version != 43 || plan.steps[11].version != 44 || plan.steps[12].version != db.CurrentSchemaVersion || !plan.auditsCredentials() {
+	if err != nil || len(plan.steps) != 16 || plan.steps[0].version != 33 || plan.steps[1].version != 34 || plan.steps[2].version != 35 || plan.steps[3].version != 36 || plan.steps[4].version != 37 || plan.steps[5].version != 38 || plan.steps[6].version != 39 || plan.steps[7].version != 40 || plan.steps[8].version != 41 || plan.steps[9].version != 42 || plan.steps[10].version != 43 || plan.steps[11].version != 44 || plan.steps[12].version != 45 || plan.steps[13].version != 46 || plan.steps[14].version != 47 || plan.steps[15].version != db.CurrentSchemaVersion || !plan.auditsCredentials() {
 		t.Fatalf("connection migration plan: %+v, %v", plan, err)
 	}
 	owner := hostileInsertUser(t, database, "connection-owner", 0, 1)
@@ -208,8 +208,9 @@ func assertPublishedConnectionRows(t *testing.T, database *sql.DB, columns map[s
 
 // Snapshot complete rows, including opaque IDs, blobs and high-water marks.
 // schema_state is the only domain row intentionally changed by this migration.
-func gatewayRows(t *testing.T, database *sql.DB) map[string][]string {
+func gatewayRows(t *testing.T, database *sql.DB, fullFacts ...bool) map[string][]string {
 	t.Helper()
+	includeDerived := len(fullFacts) > 0 && fullFacts[0]
 	rows, err := database.Query(`SELECT name FROM sqlite_schema WHERE type='table' AND name<>'schema_state' ORDER BY name`)
 	if err != nil {
 		t.Fatal(err)
@@ -227,11 +228,18 @@ func gatewayRows(t *testing.T, database *sql.DB) map[string][]string {
 	}
 	result := make(map[string][]string, len(tables))
 	for _, table := range tables {
-		if table == "game_fishing_recent_order" {
+		if !includeDerived && table == "browser_associations" {
+			var count int
+			if err := database.QueryRow("SELECT COUNT(*) FROM browser_associations").Scan(&count); err != nil || count != 0 {
+				t.Fatal("browser history was unexpectedly backfilled", count, err)
+			}
+			continue
+		}
+		if !includeDerived && table == "game_fishing_recent_order" {
 			assertFishingRecentOrderProjectionForTest(t, database)
 			continue
 		}
-		if isFishingPondTableForTest(table) {
+		if !includeDerived && isFishingPondTableForTest(table) {
 			assertInitialFishingPondTableForTest(t, database, table)
 			continue
 		}

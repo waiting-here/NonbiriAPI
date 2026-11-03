@@ -870,7 +870,7 @@ test('RPS result follows the real language and theme settings on a narrow phone 
   await page.locator('.nb-menu-button').click();
   await page.locator('.nb-user-drawer-actions .theme-select').selectOption('dark');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await page.locator('.nb-menu-button').click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Close navigation' }).click();
 
   await page.goto(`${USER_ORIGIN}/privacy`);
   const chinese = page.locator('.lang-switcher button').filter({ hasText: '中文' });

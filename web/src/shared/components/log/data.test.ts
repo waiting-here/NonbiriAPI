@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LOG_OPERATIONS,
   normalizeLogUsage,
   normalizeAdminLogAttempt,
   normalizeAdminLogRow,
@@ -584,4 +585,27 @@ it('keeps diagnostic filters and exports within management roles', () => {
   expect(roleLogExportPath('admin', filters, 'json')).toContain('error_category=network');
   expect(roleLogExportPath('steward', filters, 'csv')).toContain('error_phase=read_response');
   expect(roleLogExportPath('user', filters, 'json')).not.toContain('error_');
+});
+
+describe('log operation filter', () => {
+  it.each(['user', 'admin', 'steward'] as const)(
+    'preserves all service types in %s lists and exports',
+    (role) => {
+      for (const operation of LOG_OPERATIONS) {
+        const filter = validateLogFilter(role, { operation, charity_model: 'shared' });
+        expect(filter.operation).toBe(operation);
+        for (const format of ['csv', 'json'] as const) {
+          const query = new URL(roleLogExportPath(role, filter, format), 'https://fixture.invalid')
+            .searchParams;
+          expect(query.get('operation')).toBe(operation);
+          if (role !== 'user') expect(query.get('charity_model')).toBe('shared');
+        }
+      }
+      for (const operation of ['', 'unknown', 'CHAT_COMPLETIONS', ' chat_completions']) {
+        const filter = validateLogFilter(role, { operation });
+        expect(filter).not.toHaveProperty('operation');
+        expect(roleLogExportPath(role, filter, 'csv')).not.toContain('operation=');
+      }
+    },
+  );
 });

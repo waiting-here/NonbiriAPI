@@ -81,6 +81,29 @@ async function mount() {
   return view;
 }
 describe('Agent administrator settings', () => {
+  it('saves default-source reasoning effort without editing its advanced JSON', async () => {
+    mocks.driver.mockResolvedValue({
+      ...driver,
+      extra_parameters: { reasoning_effort: 'low', seed: 7 },
+    });
+    mocks.putDriver.mockImplementation(async (input) => ({ ...driver, ...input, revision: '1' }));
+    const view = await mount();
+    const effort = await screen.findByRole('combobox', {
+      name: common.common.agent.reasoningEffort.label,
+    });
+    expect(effort).toHaveValue('low');
+    await view.user.selectOptions(effort, 'high');
+    await view.user.click(
+      within(effort.closest('form')!).getByRole('button', { name: common.common.save }),
+    );
+    await waitFor(() => expect(mocks.putDriver).toHaveBeenCalledOnce());
+    expect(mocks.putDriver.mock.calls[0]?.[0].extra_parameters).toEqual({
+      reasoning_effort: 'high',
+      seed: 7,
+    });
+    expect(effort).toHaveValue('high');
+  });
+
   it('saves endpoint credentials before discovery and keeps the plaintext key out of query caches', async () => {
     const order: string[] = [];
     mocks.putDriver.mockImplementation(async (input) => {
@@ -104,7 +127,11 @@ describe('Agent administrator settings', () => {
     );
     await view.user.click(screen.getByRole('button', { name: 'Fetch models' }));
     await waitFor(() => expect(order).toEqual(['save', 'discover']));
-    expect(document.querySelector('datalist option')).toHaveAttribute('value', 'synthetic-model');
+    const model = screen.getByRole('combobox', { name: common.common.connections.model });
+    await view.user.click(model);
+    await view.user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('option', { name: 'synthetic-model' })).toBeVisible();
+    await view.user.keyboard('{Escape}');
     expect(mocks.putDriver.mock.calls[0]![0]).toMatchObject({
       api_key: 'synthetic-driver-secret',
       expected_revision: '0',
@@ -145,6 +172,27 @@ describe('Agent administrator settings', () => {
     );
     await waitFor(() => expect(mocks.putSettings).toHaveBeenCalledTimes(1));
     expect(mocks.putSettings.mock.calls[0]![0].chat_enabled).toBe(true);
+  });
+  it('does not change the visible switch label while settings save is pending', async () => {
+    let finish!: (value: AgentSettings) => void;
+    mocks.putSettings.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const view = await mount();
+    const toggle = await screen.findByRole('switch', { name: 'Enable Agent chat' });
+    await view.user.click(toggle.closest('label')!);
+    await view.user.click(
+      screen
+        .getAllByRole('button', { name: 'Save' })
+        .find((button) => !button.hasAttribute('disabled'))!,
+    );
+    await waitFor(() => expect(toggle).toBeDisabled());
+    await view.user.click(toggle.closest('label')!);
+    expect(toggle).toBeChecked();
+    await act(async () => finish({ ...settings, revision: '2', chat_enabled: true }));
+    expect(toggle).toBeChecked();
   });
   it('saves custom tool instructions without changing other tools or message templates', async () => {
     const view = await mount();

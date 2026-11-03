@@ -79,11 +79,15 @@ func (repository *Repository) beginStewardReadOn(
 	if repository == nil || database == nil || ctx == nil || stewardUserID <= 0 || authorizer == nil {
 		return nil, false, ErrInvalid
 	}
+	acquired := observeLogRead(ctx, "acquire")
 	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	acquired(err)
 	if err != nil {
 		return nil, false, translateReadError(ctx, err)
 	}
+	authorized := observeLogRead(ctx, "authorize")
 	redact, err := authorizer.AuthorizeStewardLogRead(ctx, tx, stewardUserID)
+	authorized(err)
 	if err != nil {
 		_ = tx.Rollback()
 		if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -108,6 +112,7 @@ func (repository *Repository) authorizeStewardRead(
 	if repository == nil || ctx == nil {
 		return ErrInvalid
 	}
+	ctx = logReadContext(ctx, "steward_precheck")
 	ctx, cancel := context.WithTimeout(ctx, logPageTimeout)
 	defer cancel()
 	tx, _, err := repository.beginStewardReadOn(ctx, repository.readDB, stewardUserID, authorizer)
@@ -150,6 +155,9 @@ type listCursor struct {
 }
 
 func normalizeListFilter(filter ListFilter, role string) (ListFilter, error) {
+	if filter.Operation != "" && !validLogOperation(filter.Operation) {
+		return ListFilter{}, ErrInvalid
+	}
 	if filter.ErrorCategory != "" && !validSafeCode(filter.ErrorCategory) || filter.ErrorPhase != "" && !validSafeCode(filter.ErrorPhase) {
 		return ListFilter{}, ErrInvalid
 	}
@@ -357,6 +365,9 @@ func filterOwner(role string, actorID int64, filter ListFilter) string {
 	}
 	writePart(role)
 	writePart(strconv.FormatInt(actorID, 10))
+	if filter.Operation != "" {
+		writePart("operation=" + string(filter.Operation))
+	}
 	writePart(optionalInt64(filter.UserID))
 	writePart(optionalString(filter.EndpointBaseURL))
 	writePart(optionalString(filter.UpstreamModel))

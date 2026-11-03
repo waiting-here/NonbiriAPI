@@ -4,6 +4,61 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.3.5 — 2026-11-03
+
+### Added
+
+- Return all eligible junk and release fry from a Fishing batch in one action.
+  Keep individual actions and recover the same results after a retry without
+  duplicating gifts or leaderboard counts.
+- Add shared-browser account associations to manual abuse auditing. Use a
+  server-issued first-party cookie, bounded observations and a 30-day lifetime;
+  store only irreversible identifiers. Shared devices and copied or cleared
+  cookies limit the evidence, and associations never trigger automatic penalties.
+- Provide paginated account groups for administrators and authorized stewards,
+  with first/last observations, account deletion and safe personal export.
+- Filter request logs by service operation, such as chat completions or image
+  generation. Each choice includes matching personal and charity requests;
+  pagination, saved filters and existing exports use the same selection.
+
+### Interface
+
+- Choose assistant reasoning effort from a labeled control in administrator
+  model-source settings, with protocol-aware parameters and provider defaults.
+- Use React Aria Components for shared dialogs, sheets, menus, tabs, switches,
+  radio groups and input suggestions across both stations and game shells.
+  Preserve the existing appearance, native form controls and game visuals.
+- Improve keyboard navigation, focus restoration, field labels and error
+  descriptions. Nested overlays continue to work in native game dialogs and
+  fullscreen, while visited panels and dismissed sheets retain their drafts.
+- Pause temporary notifications while hovered or focused, and keep error
+  notifications available until dismissed.
+
+### Compatibility
+
+- Advance the database to schema 48 and account export to format 33. Existing
+  databases require the explicit offline upgrade before this version starts.
+  The new audit starts with empty history; a derived donor-head index is built
+  from retained pond gifts. An operation index supports filtered log counts and
+  pages. Existing business data and queue order are preserved.
+
+### Fixed
+
+- Skip the recipient's own returned junk when a pond gift is drawn. Take the
+  earliest other donor's item, or keep the new catch when none is available.
+  Bound candidate reads even behind a long queue of the recipient's own items;
+  preserve the original gift probability and atomic settlement.
+- Reduce Lake Notes checkpoint copying and repeated JSON decoding while keeping
+  saved casts, replay, randomness and economic rules compatible.
+- Reuse immutable request-source facts and the authorization already checked
+  within each dispatch transaction. Preserve source backfill, account retirement
+  and current access checks while removing duplicate SQL and serialization.
+- Speed up historical charity-model log searches by resolving matching names
+  once within the authorized read snapshot, then using the existing model
+  index. Preserve substring matching, pagination, retention and query limits.
+- Separate log-read connection waits, authorization, model lookup, counting
+  and row consumption in anonymous performance metrics.
+
 ## 1.3.4 — 2026-11-02
 
 ### Pond interaction
