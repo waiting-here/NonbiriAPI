@@ -52,6 +52,11 @@ export function NativeDialog({
         data-nb-focus-boundary=""
         aria-modal={open || undefined}
         aria-busy={busy}
+        onKeyDown={(event) => {
+          props.onKeyDown?.(event);
+          // Native cancel runs after keydown; keep an ancestor RAC overlay from consuming Escape first.
+          if (event.key === 'Escape') event.stopPropagation();
+        }}
         onCancel={(event) => {
           event.preventDefault();
           event.stopPropagation();
