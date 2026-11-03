@@ -140,7 +140,14 @@ function AttendanceCard({
             </div>
             {period.mode === 'consecutive' && (
               <p>
-                {t('user.attendance.best', { amount: formatCount(period.best_streak).display })}
+                {t(
+                  period.best_streak === 1
+                    ? 'user.attendance.best_one'
+                    : 'user.attendance.best_other',
+                  {
+                    amount: formatCount(period.best_streak).display,
+                  },
+                )}
               </p>
             )}
           </div>

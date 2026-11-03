@@ -152,11 +152,11 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 47. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts 25 exact registered schema 16–26 and 33–46 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`, including for 45-to-47. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 49. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts 27 exact registered schema 16–26 and 33–48 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`, including for 48-to-49. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
 
-`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=47`, `minimum_schema_version=47`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its 25 supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
+`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=49`, `minimum_schema_version=49`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its 27 supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
 
-Current account export `schema_version=33` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v33.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
+Current account export `schema_version=34` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v34.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
 ### 1.5 Display time context
 
@@ -1123,6 +1123,15 @@ revision. A missing eligible approved service has the same explicit 409 reason.
 Successful changes and bounded skip details are reflected in management history
 when performed within a management operation, in addition to the existing
 no-secret review audit for key resets.
+
+`POST {prefix}/donations/{id}/uses/{useId}/rate-limit-release` uses the same
+three session prefixes, current scoped authorization, `{expected_revision}`
+and idempotency rules. It clears that approved service's Retry-After wait,
+smart backoff and trial ownership, plus legacy waits shared by the key. A
+backoff-generation fence prevents older dispatched observations from restoring
+the cleared wait. Failure count/generation, manual disablement, expiry, usage,
+quota, RPM and concurrency limits remain unchanged. The updated use is returned;
+this operation is independent of failure reset and has no CallerKey entry.
 
 Before processing all matching results, `POST {prefix}/donation-keys/failure-streak-reset/selection` accepts `{selection:{view,...filters},cursor:null|string}`. The cursor is required; start with null. Views are `donations|donation_keys|sources|source_keys`. Donation filters are `q,status,review_status,handling,user_id,discord_id`; donor filters use the exact nonempty identifiers in §6.2. `donation_keys` requires only `donation_id`. Source filters are `q,scope,handling,key_state`; source-key filters additionally require `source_key` and accept `idle`. They use the corresponding list values, including §7.4.3 key states; supplied source `scope,handling,idle,key_state` must be nonempty. Pagination and fields belonging to another view are rejected. Each call has a five-second budget, scans at most 100 saved key IDs and returns `{items:[{donation_id,key_id,expected_revision}],next_cursor}`; an empty item page may still have a next cursor. The signed cursor fixes the upper key-ID boundary, role, actor and filters for one hour. This read-only operation writes no selection, job or replay record. The browser gathers the fixed selection before sending batches of at most 100, yields between steps, supports interruption and retains the exact batch and idempotency key when a response is uncertain.
 
@@ -2436,7 +2445,7 @@ not proof that deletion has finished; read its cleanup status.
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v33.json`, with `schema_version:33` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside format 33.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v34.json`, with `schema_version:34` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside format 34.
 Structured failure/delivery snapshots and restricted raw diagnostics are also
 excluded; the export retains its existing safe request summaries.
 
@@ -2449,6 +2458,13 @@ request. This export contains no per-request price decisions, donor decisions,
 model/endpoint/key identity or request content.
 
 The top-level `steward_permissions` contains the owner's current `effective` policy, nullable `stored` configuration and retained `history`. Each history entry contains `previous,next,created_at` without editor identities. Policy changes are retained for 90 days by bounded cleanup; account deletion removes the target policy/history. Existing export bounds apply.
+
+Format 34 adds `attendance` with participated period definitions, personal
+progress, dated sign-ins and automatic milestone receipts. Records remain for
+the account lifetime and are removed during account deletion. Retry hashes,
+creator identities and other participants are excluded. The collection and
+16 MiB bounds still apply. See [attendance activities](attendance.md) for the
+independent user/admin APIs and transactional grant semantics.
 
 Format 33 adds `browser_associations`, at most 32 currently retained observations
 for the owner. Each contains only `first_seen,last_seen,expires_at` as Unix seconds.
@@ -2488,7 +2504,7 @@ The following fields are top-level (an excerpt, not a complete export):
 
 ```json
 {
-  "schema_version": 33,
+  "schema_version": 34,
   "request_adaptations": [],
   "continuity": [],
   "fat_fish": {"summaries": [], "progress": []}

@@ -20,8 +20,8 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh/exact-current schema 48 startup and explicit offline conversion
-  of registered schema 16–26 and 33–47 sources: target equality,
+- Validate fresh/exact-current schema 49 startup and explicit offline conversion
+  of registered schema 16–26 and 33–48 sources: target equality,
   rollback/cancellation, re-entry and upgrade-then-start. Verify older, newer,
   unknown and incomplete storage is rejected by the service before migration,
   repair, checkpoint or recovery writes. Check descriptor source coverage and
@@ -35,7 +35,14 @@ has passed.
 - Keep content-only catalog/template/period edits free of DDL and preserve administrator
   edits, historical eligibility, pity and claims. Recheck exports and deletion
   for every new user-associated record.
-- Check account export 33 includes own stored/effective steward permissions,
+- Verify independent attendance periods, sparse cumulative/consecutive tiers,
+  automatic grant rollback, concurrent and cross-midnight retries, a rebuilt
+  streak without repeat rewards, future site-calendar ranges and immutable
+  started rules. Include owner export/deletion and the primary-page cards.
+- Check service-health and reset-receipt times with an EST browser and UTC+08:00
+  site. Exercise separate rate-limit release as donor, administrator and permitted
+  steward, including late-request fencing and preserved failures/limits.
+- Check account export 34 includes own stored/effective steward permissions,
   retained policy history and personal-model header configuration, but excludes
   temporary generated values, shared charity settings, pressure samples and
   caller-parameter receipts. Include own pond queue/statistics and safe browser

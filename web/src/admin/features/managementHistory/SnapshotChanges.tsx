@@ -2,13 +2,14 @@ import { useTranslation } from 'react-i18next';
 import { Amount } from '@shared/components/Amount';
 import { Fold, Note } from '@shared/components/ui';
 import { formatCount } from '@shared/utils/formatNumber';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { FAILURE_RESET_REASON_KEYS } from '@shared/operations/failureReset';
 import { NATIVE_SERVICE_LABEL_KEYS, type NativeService } from '@shared/nativeServices';
 import type { Change, Item } from './api';
 
 function ChangeValue({ value, change }: { value?: string; change: Change }) {
   const { t } = useTranslation();
+  const formatDateTime = useDateTimeFormatter();
   if (value === undefined)
     return <span className="nb-muted">{t('admin.managementHistory.snapshot.notSet')}</span>;
   if (change.field === 'reset_skip_reason')

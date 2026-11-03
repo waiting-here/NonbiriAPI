@@ -4,6 +4,40 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.3.6 — Unreleased
+
+### Added
+
+- Independent attendance periods on the user activity page, with cumulative or
+  consecutive counting, sparse milestone bundles and automatic rewards in the
+  sign-in transaction. Multiple periods may run together; each milestone is
+  awarded once per account even after a broken streak. Administrators configure
+  future site-calendar dates, titles, Markdown descriptions and existing reward
+  assets. Started periods preserve their dates, rules and rewards.
+- A separate manual rate-limit release beside failure recovery for donors,
+  administrators and authorized stewards. It clears upstream waits and fences
+  late observations while preserving failures, manual pauses and configured limits.
+
+### Fixed and improved
+
+- Recovery receipts use the same station time context as service health.
+  Administrator and steward views follow site time even in an EST browser.
+- Charity tabs hide the model catalog when viewing or creating donations, retain
+  drafts and keep the charity leaderboard visible.
+- Reuse one authoritative seat snapshot while advancing elapsed Blackjack
+  decision batches. Idle idempotency cleanup checks the read pool before taking
+  a writer, while work found by the probe is rechecked in its transaction.
+
+### Compatibility
+
+- Advance storage to schema 49 and account export to format 34. The explicit
+  offline upgrader accepts registered schemas 16–26 and 33–48, including the
+  deployed v1.3.5 layout. Attendance history starts empty. Existing balances,
+  configuration, activity history and receipts are preserved.
+- Attendance dates, progress and award receipts are exported for their owner
+  and removed with the account. Shared period definitions remain; no new
+  retention worker or production deployment is implied by these source changes.
+
 ## 1.3.5 — 2026-11-03
 
 ### Added

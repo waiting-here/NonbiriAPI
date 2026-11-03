@@ -11,6 +11,21 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
+// Registered historical sources have no attendance history. Successful
+// conversion adds these tables without inventing user progress or rewards.
+func assertEmptyAttendanceTableForTest(t *testing.T, database *sql.DB, table string) bool {
+	t.Helper()
+	switch table {
+	case "attendance_periods", "attendance_tiers", "attendance_progress", "attendance_sign_ins", "attendance_awards":
+		var count int
+		if err := database.QueryRow("SELECT COUNT(*) FROM " + quoteSQLiteIdentifier(table)).Scan(&count); err != nil || count != 0 {
+			t.Fatal("attendance history was unexpectedly backfilled", table, count, err)
+		}
+		return true
+	}
+	return false
+}
+
 // The original columns are captured before conversion. Relocated fields still
 // participate in the comparison through their exact compatibility projection.
 func connectionFactQuery(table string, sourceColumns map[string][]string) (string, bool) {

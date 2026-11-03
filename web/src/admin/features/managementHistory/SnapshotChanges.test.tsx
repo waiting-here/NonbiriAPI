@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { renderWithProviders } from '../../../../test/unit/support';
 import { SnapshotChanges } from './SnapshotChanges';
 import type { Item } from './api';
+import { DisplayTimeContext } from '@shared/components/timeContextValue';
 
 const item: Item = {
   ordinal: '1',
@@ -16,6 +17,29 @@ const item: Item = {
 };
 
 describe('transaction snapshot details', () => {
+  it('uses site time for retained cooldown values in management history', async () => {
+    await renderWithProviders(
+      <DisplayTimeContext.Provider value={{ mode: 'site', offset_minutes: 480 }}>
+        <SnapshotChanges
+          item={{
+            ...item,
+            changes: [
+              {
+                field: 'retry_after_until',
+                operation: 'retained',
+                unit: 'unix_seconds',
+                after: String(Date.parse('2026-11-04T06:41:00Z') / 1000),
+              },
+            ],
+          }}
+        />
+      </DisplayTimeContext.Provider>,
+      { station: 'admin', locale: 'en' },
+    );
+    expect(screen.getByText('11/04/2026, 02:41 PM')).toBeVisible();
+    expect(screen.queryByText('11/04/2026, 01:41 AM')).not.toBeInTheDocument();
+  });
+
   it('distinguishes legacy missing details from retained deletion and permission values', async () => {
     await renderWithProviders(
       <>

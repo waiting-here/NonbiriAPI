@@ -228,14 +228,7 @@ func gatewayRows(t *testing.T, database *sql.DB, fullFacts ...bool) map[string][
 	}
 	result := make(map[string][]string, len(tables))
 	for _, table := range tables {
-		// Registered historical sources contain no attendance facts. Assert
-		// that conversion did not invent any before comparing original rows.
-		switch table {
-		case "attendance_periods", "attendance_tiers", "attendance_progress", "attendance_sign_ins", "attendance_awards":
-			var count int
-			if err := database.QueryRow("SELECT COUNT(*) FROM " + quoteSQLiteIdentifier(table)).Scan(&count); err != nil || count != 0 {
-				t.Fatal("attendance history was unexpectedly backfilled", table, count, err)
-			}
+		if assertEmptyAttendanceTableForTest(t, database, table) {
 			continue
 		}
 		if !includeDerived && table == "browser_associations" {

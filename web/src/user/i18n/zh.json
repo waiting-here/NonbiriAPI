@@ -3806,7 +3806,8 @@
       },
       "days_one": "{{amount}} 天",
       "days_other": "{{amount}} 天",
-      "best": "最长连续 {{amount}} 天",
+      "best_one": "最长连续 {{amount}} 天",
+      "best_other": "最长连续 {{amount}} 天",
       "siteDate": "站点日期：{{date}}（UTC{{zone}}）",
       "actions": {
         "retry": "重试本次签到",

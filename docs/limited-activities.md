@@ -1,6 +1,6 @@
 # Limited-time activities
 
-Limited-time activities use separate pages under `/activities/{activity_key}`. Permanent activities keep their existing APIs and rules.
+The activity-key system described here uses separate pages under `/activities/{activity_key}`. [Attendance periods](attendance.md) instead operate entirely in cards on the main activities page and use independent sign-in APIs without tickets. Permanent activities keep their existing APIs and rules.
 
 The first activity key is `picture-book`. It starts hidden and has no opening or closing time. Both timestamps must be configured, with the opening strictly before the closing, before new exchanges or tasks can be accepted. The interval includes the opening time and excludes the closing time. Times are Unix seconds; the administration form explicitly displays UTC.
 

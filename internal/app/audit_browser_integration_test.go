@@ -90,7 +90,11 @@ func TestAuditBrowserFixture(t *testing.T) {
 			t.Error(err)
 		}
 	}()
-	if _, err := f.store.DB().Exec("INSERT INTO site_config(key,value,updated_at) VALUES('site_timezone_offset_minutes','0',0) ON CONFLICT(key) DO UPDATE SET value='0'"); err != nil {
+	timezone := "0"
+	if os.Getenv("NONBIRI_V136_BROWSER") == "1" {
+		timezone = "480"
+	}
+	if _, err := f.store.DB().Exec("INSERT INTO site_config(key,value,updated_at) VALUES('site_timezone_offset_minutes',?,0) ON CONFLICT(key) DO UPDATE SET value=excluded.value", timezone); err != nil {
 		t.Fatal(err)
 	}
 	f.initialize()
@@ -210,6 +214,9 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 	control := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+controlToken {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if os.Getenv("NONBIRI_V136_BROWSER") == "1" && v136BrowserControl(w, r, f, management) {
 			return
 		}
 		if f.codexUpstream != nil && f.codexUpstream.control(w, r, f) {

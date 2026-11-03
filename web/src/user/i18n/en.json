@@ -3806,7 +3806,8 @@
       },
       "days_one": "{{amount}} day",
       "days_other": "{{amount}} days",
-      "best": "Best streak: {{amount}} days",
+      "best_one": "Best streak: {{amount}} day",
+      "best_other": "Best streak: {{amount}} days",
       "siteDate": "Site date: {{date}} (UTC{{zone}})",
       "actions": {
         "retry": "Retry this sign-in",

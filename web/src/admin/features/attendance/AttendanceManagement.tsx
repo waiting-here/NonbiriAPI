@@ -371,7 +371,7 @@ export function AttendanceManagement({ account, enabled }: { account: string; en
       )}
       <div className="attendance-management__list">
         {query.data?.items.map((period) => (
-          <Panel key={period.id}>
+          <Panel key={period.id} aria-label={period.title}>
             <PanelHead
               level={3}
               title={period.title}
