@@ -163,7 +163,7 @@ test('real pond batch return recovers a lost response and keeps single receipts 
     );
     await page
       .locator('.fishing-pond-disclosure')
-      .getByRole('switch', { name: 'Stay anonymous on leaderboards' })
+      .getByText('Stay anonymous on leaderboards', { exact: true })
       .click();
     expect((await changedPrivacy).status()).toBe(200);
     await expect(item.getByRole('button', { name: 'Return to pond', exact: true })).toBeEnabled();

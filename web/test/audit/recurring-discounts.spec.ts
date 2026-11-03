@@ -248,7 +248,8 @@ test('complete templates keep false, zero and empty periods through conflict rec
       state.admin_url + '/charity?charity_section=templates&price_template=' + data.template_id,
     );
     const editor = page.locator('.nb-recurring-discount');
-    await editor.getByRole('switch', { name: copy.enabled, exact: true }).uncheck();
+    await expect(editor.getByRole('switch', { name: copy.enabled, exact: true })).toBeChecked();
+    await editor.getByText(copy.enabled, { exact: true }).click();
     await editor.getByLabel(copy.defaultPercent, { exact: true }).fill('0');
     const before = await read<CharityPriceTemplate>(admin, state.admin_url, path);
     const concurrent = await admin.request.put(state.admin_url + path, {
@@ -288,9 +289,12 @@ test('complete templates keep false, zero and empty periods through conflict rec
     const level6 = await steward.newPage();
     await openModel(level6, 6, data.request_model_id);
     const scheduleZone = level6.locator('.nb-recurring-discount').getByRole('combobox');
-    await scheduleZone.click();
+    const originalZone = await scheduleZone.inputValue();
+    await scheduleZone.fill('');
     await scheduleZone.press('ArrowDown');
     await expect(level6.getByRole('option', { name: 'UTC', exact: true })).toBeVisible();
+    await scheduleZone.press('Escape');
+    await scheduleZone.fill(originalZone);
     await scheduleZone.press('Escape');
     await level6.getByRole('button', { name: workflow.openPriceReference, exact: true }).click();
     const templates = level6

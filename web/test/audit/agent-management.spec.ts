@@ -117,6 +117,11 @@ test('administrator configures a source, edits personal memory and cleans retain
       .getByRole('button', { name: common.common.edit, exact: true })
       .click();
     await expect(form.getByLabel(copy.reasoningEffort.label, { exact: true })).toHaveValue('high');
+    await inspectLayouts(
+      page,
+      'assistant-reasoning',
+      form.getByLabel(copy.reasoningEffort.label, { exact: true }),
+    );
     const assignment = page
       .locator('form')
       .filter({ has: page.getByLabel(copy.drivers.scopes.admin_chat, { exact: true }) });
@@ -528,7 +533,7 @@ test('connected Codex retains its catalogue, saves a model and recovers quota af
     ]);
     await model.fill('');
     await model.press('ArrowDown');
-    await expect(page.getByRole('option')).toHaveCount(2);
+    await expect(page.getByRole('listbox').getByRole('option')).toHaveCount(2);
     await model.press('Escape');
     await model.fill(modelA);
     await model.press('Escape');
@@ -551,7 +556,7 @@ test('connected Codex retains its catalogue, saves a model and recovers quota af
     await expect(form.getByLabel(copy.drivers.name, { exact: true })).toHaveValue(sourceName);
     await model.fill('');
     await model.press('ArrowDown');
-    await expect(page.getByRole('option')).toHaveCount(2);
+    await expect(page.getByRole('listbox').getByRole('option')).toHaveCount(2);
     await model.press('Escape');
     await model.fill(modelA);
     await model.press('Escape');
