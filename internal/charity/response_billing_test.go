@@ -11,6 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -20,7 +21,7 @@ func (billingAcceptance) AuthorizeChatAcceptance(context.Context, *sql.Tx, int64
 	return nil
 }
 
-func (e *charityTestEnv) billingRail(t *testing.T) *claim.Service {
+func (e *charityTestEnv) billingRail(t *testing.T, observations ...*observability.Repository) *claim.Service {
 	t.Helper()
 	ctx := context.Background()
 	vault, err := secret.New(bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes))
@@ -47,7 +48,11 @@ func (e *charityTestEnv) billingRail(t *testing.T) *claim.Service {
 		}
 	}
 	commitTestTx(t, tx)
-	rail, err := claim.New(claim.Dependencies{DB: e.store.DB(), Secrets: vault, Charity: e.service, Accounting: claim.NewLedgerAccounting(), Acceptance: billingAcceptance{}, Now: func() time.Time { return time.Unix(charityTestNow+30, 0) }})
+	var observer *observability.Repository
+	if len(observations) > 0 {
+		observer = observations[0]
+	}
+	rail, err := claim.New(claim.Dependencies{Observations: observer, DB: e.store.DB(), Secrets: vault, Charity: e.service, Accounting: claim.NewLedgerAccounting(), Acceptance: billingAcceptance{}, Now: func() time.Time { return time.Unix(charityTestNow+30, 0) }})
 	if err != nil {
 		t.Fatal(err)
 	}
