@@ -570,7 +570,7 @@ for (const width of [390, 1440])
         .screenshot({
           path: join(process.env.NONBIRI_TEST_SCREENSHOT_DIR, `milk-stage-${width}.png`),
         });
-      await board.screenshot({
+      await page.locator('.fishing-board-switch').screenshot({
         path: join(process.env.NONBIRI_TEST_SCREENSHOT_DIR, `milk-board-${width}.png`),
       });
     }
