@@ -12,6 +12,7 @@ import (
 
 func restoreSchema45LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema46LayoutForTest(t, database)
 	hostileMustExec(t, database, "DROP TABLE browser_associations")
 	assertRetainedManifest(t, database, db.Schema45ManifestHash)
 }
@@ -27,7 +28,7 @@ func TestBrowserAssociationSchema45UpgradeIsExplicitAndAtomic(t *testing.T) {
 	hostileInsertUser(t, store.DB(), "retained-browser-user", 0, 0)
 	before := gatewayRows(t, store.DB())
 	plan, err := storageSchema.plan(t.Context(), store.DB())
-	if err != nil || len(plan.steps) != 1 || plan.steps[0].from != 45 || plan.steps[0].version != 46 || plan.auditsCredentials() {
+	if err != nil || len(plan.steps) != 2 || plan.steps[0].from != 45 || plan.steps[0].version != 46 || plan.steps[1].version != 47 || plan.auditsCredentials() {
 		t.Fatal("plan", plan, err)
 	}
 	if err = store.Close(); err != nil {
@@ -48,7 +49,7 @@ func TestBrowserAssociationSchema45UpgradeIsExplicitAndAtomic(t *testing.T) {
 	}
 	checkSource()
 	checked, err := Run(t.Context(), path, vault, Options{})
-	if err != nil || checked.Status != "ready" || checked.SourceSchemaVersion != 45 || checked.TargetSchemaVersion != 46 {
+	if err != nil || checked.Status != "ready" || checked.SourceSchemaVersion != 45 || checked.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal("check", checked, err)
 	}
 	checkSource()
@@ -78,7 +79,7 @@ func TestBrowserAssociationSchema45UpgradeIsExplicitAndAtomic(t *testing.T) {
 	}
 	storageSchema.versions[index].apply = original
 	result, err := Run(t.Context(), path, vault, Options{Apply: true})
-	if err != nil || result.Status != "converted" || result.TargetSchemaVersion != 46 {
+	if err != nil || result.Status != "converted" || result.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal("upgrade", result, err)
 	}
 	store, err = db.Open(path, vault)

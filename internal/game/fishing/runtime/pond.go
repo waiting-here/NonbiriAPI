@@ -73,6 +73,16 @@ func projectPondOutcome(species string, returned sql.NullInt64, gift, donor, ava
 	return out
 }
 
+// The first K eligible queue entries can only belong to the first K donor
+// heads. Reading K entries per donor bounds the candidate set by K*K, even
+// when every earlier queue entry belongs to the recipient. CROSS JOIN keeps
+// the bounded donor set outside the indexed queue lookups.
+const pondGiftCandidatesSQL = `SELECT q.id,q.donor_user_id,q.species_key,q.donor_display_name,q.donor_avatar_url
+FROM (SELECT donor_user_id FROM game_fishing_pond_queue_heads WHERE donor_user_id<>? ORDER BY queue_id LIMIT ?) h
+CROSS JOIN game_fishing_pond_queue q ON q.id IN (
+ SELECT id FROM game_fishing_pond_queue WHERE donor_user_id=h.donor_user_id ORDER BY id LIMIT ?)
+ORDER BY q.id LIMIT ?`
+
 // settlePondTx runs only on the reserved -> committed transition, after the
 // complete ordinary batch has been drawn, decorated and economically fixed.
 // Queue consumption, gift snapshots and counts share that terminal transaction.
@@ -117,7 +127,7 @@ WHERE p.batch_id=? AND o.tier='junk' AND o.payout_milli=0 ORDER BY o.ordinal`, r
 	}
 	queue := make([]queuedGift, 0, len(catches))
 	if queueSize > 0 {
-		rows, err = tx.QueryContext(ctx, `SELECT id,donor_user_id,species_key,donor_display_name,donor_avatar_url FROM game_fishing_pond_queue ORDER BY id LIMIT ?`, len(catches))
+		rows, err = tx.QueryContext(ctx, pondGiftCandidatesSQL, record.UserID, len(catches), len(catches), len(catches))
 		if err != nil {
 			return classifyDB(err)
 		}
@@ -136,7 +146,7 @@ WHERE p.batch_id=? AND o.tier='junk' AND o.payout_milli=0 ORDER BY o.ordinal`, r
 		if err = rows.Close(); err != nil {
 			return classifyDB(err)
 		}
-		if uint64(len(queue)) != min(queueSize, uint64(len(catches))) {
+		if uint64(len(queue)) > min(queueSize, uint64(len(catches))) {
 			return ErrInvariant
 		}
 	}
@@ -149,7 +159,7 @@ WHERE p.batch_id=? AND o.tier='junk' AND o.payout_milli=0 ORDER BY o.ordinal`, r
 		if randomErr != nil {
 			return ErrServiceUnavailable
 		}
-		if hit {
+		if hit && consumed < len(queue) {
 			gift := queue[consumed]
 			value.species = gift.species
 			if _, err = tx.ExecContext(ctx, `UPDATE game_fishing_pond_outcomes SET gift_species_key=?,donor_user_id=?,donor_display_name=?,donor_avatar_url=? WHERE batch_id=? AND ordinal=?`, gift.species, gift.donorID, gift.name, gift.avatar, record.ID, value.ordinal); err != nil {
@@ -163,7 +173,11 @@ WHERE p.batch_id=? AND o.tier='junk' AND o.payout_milli=0 ORDER BY o.ordinal`, r
 		}
 	}
 	if consumed > 0 {
-		result, err := tx.ExecContext(ctx, `DELETE FROM game_fishing_pond_queue WHERE id<=?`, queue[consumed-1].id)
+		ids := make([]any, consumed)
+		for i := range ids {
+			ids[i] = queue[i].id
+		}
+		result, err := tx.ExecContext(ctx, `DELETE FROM game_fishing_pond_queue WHERE id IN (`+placeholders(consumed)+`)`, ids...)
 		if err != nil {
 			return classifyDB(err)
 		}
