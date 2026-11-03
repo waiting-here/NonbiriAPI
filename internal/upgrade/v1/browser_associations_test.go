@@ -28,7 +28,7 @@ func TestBrowserAssociationSchema45UpgradeIsExplicitAndAtomic(t *testing.T) {
 	hostileInsertUser(t, store.DB(), "retained-browser-user", 0, 0)
 	before := gatewayRows(t, store.DB())
 	plan, err := storageSchema.plan(t.Context(), store.DB())
-	if err != nil || len(plan.steps) != 2 || plan.steps[0].from != 45 || plan.steps[0].version != 46 || plan.steps[1].version != 47 || plan.auditsCredentials() {
+	if err != nil || len(plan.steps) != 3 || plan.steps[0].from != 45 || plan.steps[0].version != 46 || plan.steps[1].version != 47 || plan.auditsCredentials() {
 		t.Fatal("plan", plan, err)
 	}
 	if err = store.Close(); err != nil {

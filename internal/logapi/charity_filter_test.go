@@ -162,7 +162,7 @@ func TestCharityModelLookupCancellationReturnsReader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, complete, err := matchingCharityModelNames(ctx, cancelModelQuery{tx, cancel}, "model-001")
+	_, complete, err := matchingCharityModelNames(ctx, cancelModelQuery{tx, cancel}, "model-001", "")
 	if err == nil || complete || !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled enumeration=%v complete=%v", err, complete)
 	}

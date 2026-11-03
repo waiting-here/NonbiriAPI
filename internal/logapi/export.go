@@ -77,8 +77,9 @@ func (repository *Repository) exportManagement(ctx context.Context, reader logRe
 		return nil, ErrInvalid
 	}
 	normalized, err := normalizeListFilter(ListFilter{
-		Phase:  filter.Phase,
-		UserID: filter.UserID, DiscordID: filter.DiscordID, EndpointKeyID: filter.EndpointKeyID, EndpointBaseURL: filter.EndpointBaseURL,
+		Operation: filter.Operation,
+		Phase:     filter.Phase,
+		UserID:    filter.UserID, DiscordID: filter.DiscordID, EndpointKeyID: filter.EndpointKeyID, EndpointBaseURL: filter.EndpointBaseURL,
 		UpstreamModel: filter.UpstreamModel, CharityModel: filter.CharityModel, ErrorCode: filter.ErrorCode,
 		ErrorCategory: filter.ErrorCategory, ErrorPhase: filter.ErrorPhase,
 		Status: filter.Status, UsageTotalMismatch: filter.UsageTotalMismatch,
@@ -95,6 +96,10 @@ func (repository *Repository) exportManagement(ctx context.Context, reader logRe
 WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
 	args = append(args, now-requestLogRetentionSeconds)
+	if useOperationRange(normalized) {
+		query += " AND " + logOperationSQL + "=?"
+		args = append(args, normalized.Operation)
+	}
 	query += phaseFilter(normalized.Phase)
 	query, args = diagnosisFilter(query, args, normalized)
 	if normalized.UserID != nil {

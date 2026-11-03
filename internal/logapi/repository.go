@@ -155,6 +155,9 @@ type listCursor struct {
 }
 
 func normalizeListFilter(filter ListFilter, role string) (ListFilter, error) {
+	if filter.Operation != "" && !validLogOperation(filter.Operation) {
+		return ListFilter{}, ErrInvalid
+	}
 	if filter.ErrorCategory != "" && !validSafeCode(filter.ErrorCategory) || filter.ErrorPhase != "" && !validSafeCode(filter.ErrorPhase) {
 		return ListFilter{}, ErrInvalid
 	}
@@ -362,6 +365,9 @@ func filterOwner(role string, actorID int64, filter ListFilter) string {
 	}
 	writePart(role)
 	writePart(strconv.FormatInt(actorID, 10))
+	if filter.Operation != "" {
+		writePart("operation=" + string(filter.Operation))
+	}
 	writePart(optionalInt64(filter.UserID))
 	writePart(optionalString(filter.EndpointBaseURL))
 	writePart(optionalString(filter.UpstreamModel))

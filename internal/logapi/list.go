@@ -60,6 +60,10 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 	}
 	query := `WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)`
 	args := []any{userID, now - requestLogRetentionSeconds}
+	if useOperationRange(filter) {
+		query += " AND " + logOperationSQL + "=?"
+		args = append(args, filter.Operation)
+	}
 	query += phaseFilter(filter.Phase)
 	query, args = diagnosisFilter(query, args, filter)
 	if filter.Model != nil {
@@ -200,6 +204,10 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 	query := `WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
 	args = append(args, now-requestLogRetentionSeconds)
+	if useOperationRange(filter) {
+		query += " AND " + logOperationSQL + "=?"
+		args = append(args, filter.Operation)
+	}
 	query += phaseFilter(filter.Phase)
 	query, args = diagnosisFilter(query, args, filter)
 	if filter.UserID != nil {
@@ -352,6 +360,10 @@ func (repository *Repository) ListSteward(
 	query := `WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
 	args = append(args, now-requestLogRetentionSeconds)
+	if useOperationRange(filter) {
+		query += " AND " + logOperationSQL + "=?"
+		args = append(args, filter.Operation)
+	}
 	query += phaseFilter(filter.Phase)
 	query, args = diagnosisFilter(query, args, filter)
 	if filter.UserID != nil {

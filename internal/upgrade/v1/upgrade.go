@@ -90,8 +90,9 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 		controlTables: []string{"game_fishing_pond_queue_state"}, relationTables: []string{"game_fishing_recent_order"}, indexedTables: []string{"lake_notes_casts"}, credentials: credentialsUnchanged}},
 	{from: 45, version: 46, manifest: db.Schema46ManifestHash, sql: db.BrowserAssociationsSQL, impact: &migrationImpact{
 		addedTables: []string{"browser_associations"}, credentials: credentialsUnchanged}},
-	{from: 46, version: 47, manifest: db.PinnedGenerationTwoManifestHash, sql: db.FishingPondHeadsSQL, impact: &migrationImpact{
+	{from: 46, version: 47, manifest: db.Schema47ManifestHash, sql: db.FishingPondHeadsSQL, impact: &migrationImpact{
 		relationTables: []string{"game_fishing_pond_queue_heads"}, constraintTables: []string{"game_fishing_pond_queue"}, credentials: credentialsUnchanged}},
+	{from: 47, version: 48, manifest: db.PinnedGenerationTwoManifestHash, sql: db.RequestLogOperationIndexSQL, impact: &migrationImpact{indexedTables: []string{"request_logs"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {
@@ -140,6 +141,7 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{44, db.Schema44ManifestHash, "d7cd4f3a9204adba79c62b3f3cf32671cc2ed884"},
 		{45, db.Schema45ManifestHash, "34afb7524eb7e1d7583dcf88352b15a5b233dc5d"},
 		{46, db.Schema46ManifestHash, "7189abc4f574df069608b7be6c59e06c7cfd1cfb"},
+		{47, db.Schema47ManifestHash, "b3b0dbfda01d3d22140c0c0a74e28afc2f2baa58"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,

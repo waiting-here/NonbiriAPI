@@ -3,7 +3,6 @@ package logapi
 import (
 	"context"
 	"errors"
-	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"io"
 	"net/http"
 	"net/url"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
@@ -279,6 +280,7 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 	}
 	filter := ListFilter{}
 	allowed := map[string]bool{
+		"operation":  true,
 		"phase":      true,
 		"error_code": true, "status": true, "from": true, "to": true,
 	}
@@ -314,6 +316,11 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 		}
 		value := entries[0]
 		switch name {
+		case "operation":
+			filter.Operation = contract.Operation(value)
+			if !validLogOperation(filter.Operation) {
+				return ListFilter{}, ErrInvalid
+			}
 		case "phase":
 			if value != "pre_handler" && value != "handler" {
 				return ListFilter{}, ErrInvalid

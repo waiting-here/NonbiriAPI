@@ -14,6 +14,7 @@ import (
 
 func restoreSchema46LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema47LayoutForTest(t, database)
 	hostileMustExec(t, database, `DROP TRIGGER fishing_pond_queue_head_insert;
 DROP TRIGGER fishing_pond_queue_head_delete;
 DROP TABLE game_fishing_pond_queue_heads;`)
@@ -61,7 +62,7 @@ func TestPondHeadSchema46UpgradePreservesQueueAndRollsBack(t *testing.T) {
 	t.Log("backfill plan:", backfillPlan)
 	before := gatewayRows(t, store.DB(), true)
 	plan, err := storageSchema.plan(t.Context(), store.DB())
-	if err != nil || len(plan.steps) != 1 || plan.steps[0].from != 46 || plan.steps[0].version != 47 || plan.auditsCredentials() || plan.rebuildsTables() {
+	if err != nil || len(plan.steps) != 2 || plan.steps[0].from != 46 || plan.steps[0].version != 47 || plan.auditsCredentials() || plan.rebuildsTables() {
 		t.Fatal("head upgrade plan", plan, err)
 	}
 	if err = store.Close(); err != nil {
@@ -82,7 +83,7 @@ func TestPondHeadSchema46UpgradePreservesQueueAndRollsBack(t *testing.T) {
 	}
 	checkSource()
 	checked, err := Run(t.Context(), path, vault, Options{})
-	if err != nil || checked.Status != "ready" || checked.SourceSchemaVersion != 46 || checked.TargetSchemaVersion != 47 {
+	if err != nil || checked.Status != "ready" || checked.SourceSchemaVersion != 46 || checked.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal("check", checked, err)
 	}
 	checkSource()
@@ -113,7 +114,7 @@ func TestPondHeadSchema46UpgradePreservesQueueAndRollsBack(t *testing.T) {
 	}
 	storageSchema.versions[index].apply = original
 	result, err := Run(t.Context(), path, vault, Options{Apply: true})
-	if err != nil || result.Status != "converted" || result.TargetSchemaVersion != 47 {
+	if err != nil || result.Status != "converted" || result.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal("upgrade", result, err)
 	}
 	store, err = db.Open(path, vault)

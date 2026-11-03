@@ -9,4 +9,4 @@ var generationTwoBaseSchema string
 //go:embed agent_workflow.sql
 var AgentWorkflowSQL string
 
-var generationTwoSchema = generationTwoBaseSchema + "\n" + AgentWorkflowSQL + "\n" + endpointTagRulesSchema + "\n" + ServiceKeyScopeSQL + "\n" + GachaStatisticsSQL + "\n" + GachaShopStatisticsSQL + "\n" + CurrentAgentDriversSQL + "\n" + AgentPersonalMemorySQL + "\n" + ManagementOperationsSQL + "\n" + OperatorDiagnosticsSQL + "\n" + OperatorFollowupSQL + "\n" + FishingPondSQL + "\n" + FishingRecentOrderSQL + "\n" + LakeNotesLiveLeaseIndexSQL + "\n" + BrowserAssociationsSQL + "\n" + FishingPondHeadsSQL
+var generationTwoSchema = generationTwoBaseSchema + "\n" + AgentWorkflowSQL + "\n" + endpointTagRulesSchema + "\n" + ServiceKeyScopeSQL + "\n" + GachaStatisticsSQL + "\n" + GachaShopStatisticsSQL + "\n" + CurrentAgentDriversSQL + "\n" + AgentPersonalMemorySQL + "\n" + ManagementOperationsSQL + "\n" + OperatorDiagnosticsSQL + "\n" + OperatorFollowupSQL + "\n" + FishingPondSQL + "\n" + FishingRecentOrderSQL + "\n" + LakeNotesLiveLeaseIndexSQL + "\n" + BrowserAssociationsSQL + "\n" + FishingPondHeadsSQL + "\n" + RequestLogOperationIndexSQL

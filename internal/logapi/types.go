@@ -8,9 +8,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"net/http"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -252,6 +253,7 @@ type StewardLogDetail struct {
 }
 
 type ListFilter struct {
+	Operation          contract.Operation
 	ErrorCategory      string
 	ErrorPhase         string
 	CharityModel       *string
