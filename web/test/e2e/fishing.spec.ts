@@ -366,7 +366,7 @@ test('fishing uses desktop space, fits mobile results, and retains the anonymity
   await expect(anonymity).toHaveCount(0);
   await page.getByRole('link', { name: 'Manage game anonymity' }).click();
   await expect(page).toHaveURL(`${USER_ORIGIN}/games#game-privacy`);
-  await expect(anonymity).toBeInViewport();
+  await expect(anonymity.locator('xpath=ancestor::label[1]')).toBeInViewport();
   await expect(anonymity).toBeChecked();
   await anonymity.locator('xpath=ancestor::label[1]').click();
   await expect.poll(() => writes).toBe(1);
