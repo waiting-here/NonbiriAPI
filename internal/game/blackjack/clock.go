@@ -220,15 +220,20 @@ func (s *Service) advanceDecisions(ctx context.Context, tx *sql.Tx, v *sessionRe
 	if err != nil {
 		return facts, err
 	}
+	if v.LastBatch >= min(now, v.StartedAt+engine.DecisionEnd) {
+		return facts, nil
+	}
+	// The writer owns every seat for this advance. Reuse its snapshot across
+	// elapsed seconds, clearing consumed actions locally as well as in storage.
+	list, err := sessionEntries(ctx, tx, v.ID)
+	if err != nil {
+		return facts, err
+	}
 	for batch := v.LastBatch + 1; batch <= min(now, v.StartedAt+engine.DecisionEnd); batch++ {
-		list, err := sessionEntries(ctx, tx, v.ID)
-		if err != nil {
-			return facts, err
-		}
 		actions := []engine.Action{}
 		stop := []int{}
 		changed := false
-		for _, e := range list {
+		for i, e := range list {
 			if e.Pending.Valid && e.Batch.Int64 <= batch {
 				var a engine.Action
 				if json.Unmarshal([]byte(e.Pending.String), &a) != nil || a.Seat != int(e.Seat.Int64) {
@@ -238,6 +243,8 @@ func (s *Service) advanceDecisions(ctx context.Context, tx *sql.Tx, v *sessionRe
 				if _, err := tx.ExecContext(ctx, `UPDATE game_blackjack_entries SET pending_json=NULL,pending_batch=NULL WHERE id=?`, e.ID); err != nil {
 					return facts, err
 				}
+				list[i].Pending = sql.NullString{}
+				list[i].Batch = sql.NullInt64{}
 			}
 			if e.Stopped || batch == v.StartedAt+engine.DecisionEnd {
 				stop = append(stop, int(e.Seat.Int64))
