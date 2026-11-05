@@ -867,7 +867,7 @@ function UserAuthority({
                     <Affix
                       {...field}
                       aria-label={t('management.users.economyPositiveAmount')}
-                      unit={t('management.users.creditsBalance')}
+                      unit={t(economyTargetLabels[draft.economyTarget])}
                       inputMode="decimal"
                       value={draft.economyAmount}
                       disabled={economyLocked}
