@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"io"
 	"net/http"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charityreserve"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
@@ -138,7 +138,7 @@ func (s *Service) GetAdaptation(ctx context.Context, role roleKind, actorID, mod
 	}
 	defer tx.Rollback()
 	if role != roleAdmin {
-		if err := authz.RequireStewardPermission(ctx, tx, scope.ActorID, "charity.model_settings"); err != nil {
+		if err := authz.RequireStewardPermission(ctx, tx, scope.ActorID, "charity.request_adaptation.read"); err != nil {
 			return adaptationConfigurationView{}, err
 		}
 	}
@@ -148,6 +148,15 @@ func (s *Service) GetAdaptation(ctx context.Context, role roleKind, actorID, mod
 	if bindingID > 0 {
 		if err := requireBindingTx(ctx, tx, modelID, bindingID); err != nil {
 			return adaptationConfigurationView{}, err
+		}
+		if scope.RestrictedKeys() {
+			now, err := s.nowUnix()
+			if err != nil {
+				return adaptationConfigurationView{}, err
+			}
+			if err := scope.RequireBinding(ctx, tx, bindingID, now); err != nil {
+				return adaptationConfigurationView{}, managementScopeError(err)
+			}
 		}
 	}
 	view, err := s.adaptationConfigurationViewTx(ctx, tx, modelID, bindingID)
@@ -202,13 +211,22 @@ func (s *Service) validateModelAdaptationsTx(ctx context.Context, tx *sql.Tx, mo
 }
 
 func (s *Service) PutAdaptation(ctx context.Context, modelID, bindingID int64, mutation resources.ControlMutation, patch requestadaptation.Patch) (resources.MutationResult[adaptationView], error) {
+	return s.putAdaptation(ctx, roleAdmin, 0, modelID, bindingID, mutation, patch)
+}
+func (s *Service) putAdaptation(ctx context.Context, role roleKind, actorID, modelID, bindingID int64, mutation resources.ControlMutation, patch requestadaptation.Patch) (resources.MutationResult[adaptationView], error) {
 	if s == nil || s.adaptations == nil || ctx == nil || modelID <= 0 || bindingID < 0 {
 		return resources.MutationResult[adaptationView]{}, ErrInvalidRequest
 	}
 	route := routeAdminModelAdaptation
+	if role == roleSteward {
+		route = routeStewardModelAdaptation
+	}
 	ids := []int64{modelID}
 	if bindingID > 0 {
 		route = routeAdminBindingAdaptation
+		if role == roleSteward {
+			route = routeStewardBindingAdaptation
+		}
 		ids = append(ids, bindingID)
 	}
 	if !validMutation(mutation, http.MethodPut, route, ids...) {
@@ -218,18 +236,17 @@ func (s *Service) PutAdaptation(ctx context.Context, modelID, bindingID int64, m
 	if err != nil {
 		return resources.MutationResult[adaptationView]{}, err
 	}
-	tx, actorID, err := s.beginRoleTx(ctx, roleAdmin, 0)
+	tx, scope, err := s.beginManagementTx(ctx, role, actorID, modelID, false, false)
 	if err != nil {
 		return resources.MutationResult[adaptationView]{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
-	decision, err := beginMutation(ctx, tx, roleAdmin, actorID, mutation, now)
-	if err != nil {
-		return resources.MutationResult[adaptationView]{}, err
-	}
-	if decision.Kind == idempotency.Replay {
-		return replay[adaptationView](decision)
+	actorID = scope.ActorID
+	if role != roleAdmin {
+		if err := authz.RequireStewardPermission(ctx, tx, actorID, "charity.request_adaptation"); err != nil {
+			return resources.MutationResult[adaptationView]{}, err
+		}
 	}
 	model, err := readStoredModelTx(ctx, tx, modelID)
 	if err != nil {
@@ -239,6 +256,16 @@ func (s *Service) PutAdaptation(ctx context.Context, modelID, bindingID int64, m
 		if err := requireBindingTx(ctx, tx, modelID, bindingID); err != nil {
 			return resources.MutationResult[adaptationView]{}, err
 		}
+	}
+	if err := requireBindingSourceScope(ctx, tx, scope, modelID, bindingID, now); err != nil {
+		return resources.MutationResult[adaptationView]{}, err
+	}
+	decision, err := beginMutation(ctx, tx, roleKind(scope.AuditRole(role == roleAdmin)), actorID, mutation, now)
+	if err != nil {
+		return resources.MutationResult[adaptationView]{}, err
+	}
+	if decision.Kind == idempotency.Replay {
+		return replay[adaptationView](decision)
 	}
 	ref := requestadaptation.Ref{Scope: requestadaptation.ScopeCharityModel, ID: modelID}
 	if bindingID > 0 {
@@ -279,7 +306,7 @@ func (s *Service) PutAdaptation(ctx context.Context, modelID, bindingID int64, m
 			return resources.MutationResult[adaptationView]{}, ErrConflict
 		}
 	}
-	if _, err := s.adaptations.SaveTx(ctx, tx, ref, patch.ExpectedRevision, next, actorID, now); err != nil {
+	if _, err := s.adaptations.SaveWithActorRoleTx(ctx, tx, ref, patch.ExpectedRevision, next, actorID, now, scope.AuditRole(role == roleAdmin)); err != nil {
 		return resources.MutationResult[adaptationView]{}, routingAdaptationError(err)
 	}
 	view, err := s.adaptationViewTx(ctx, tx, modelID, bindingID)
@@ -337,19 +364,28 @@ func (api *httpAPI) getAdaptation(w http.ResponseWriter, r *http.Request, role r
 }
 
 func (api *httpAPI) putAdminModelAdaptation(w http.ResponseWriter, r *http.Request) {
-	api.putAdaptation(w, r, false)
+	api.putAdaptation(w, r, roleAdmin, 0, false)
 }
 func (api *httpAPI) putAdminBindingAdaptation(w http.ResponseWriter, r *http.Request) {
-	api.putAdaptation(w, r, true)
+	api.putAdaptation(w, r, roleAdmin, 0, true)
 }
 
-func (api *httpAPI) putAdaptation(w http.ResponseWriter, r *http.Request, binding bool) {
+func (api *httpAPI) putStewardModelAdaptation(w http.ResponseWriter, r *http.Request, p UserPrincipal) {
+	api.putAdaptation(w, r, roleSteward, p.UserID, false)
+}
+func (api *httpAPI) putStewardBindingAdaptation(w http.ResponseWriter, r *http.Request, p UserPrincipal) {
+	api.putAdaptation(w, r, roleSteward, p.UserID, true)
+}
+func (api *httpAPI) putAdaptation(w http.ResponseWriter, r *http.Request, role roleKind, actorID int64, binding bool) {
 	modelID, ok := parsePathID(w, r, "id")
 	if !ok || !requireEmptyQuery(w, r) {
 		return
 	}
 	bindingID := int64(0)
 	route := routeAdminModelAdaptation
+	if role == roleSteward {
+		route = routeStewardModelAdaptation
+	}
 	ids := []int64{modelID}
 	if binding {
 		bindingID, ok = parsePathID(w, r, "bindingId")
@@ -357,6 +393,9 @@ func (api *httpAPI) putAdaptation(w http.ResponseWriter, r *http.Request, bindin
 			return
 		}
 		route = routeAdminBindingAdaptation
+		if role == roleSteward {
+			route = routeStewardBindingAdaptation
+		}
 		ids = append(ids, bindingID)
 	}
 	data, err := io.ReadAll(io.LimitReader(r.Body, requestadaptation.MaxConfigurationBytes+1))
@@ -374,7 +413,7 @@ func (api *httpAPI) putAdaptation(w http.ResponseWriter, r *http.Request, bindin
 	if !ok {
 		return
 	}
-	result, err := api.service.PutAdaptation(r.Context(), modelID, bindingID, mutation, patch)
+	result, err := api.service.putAdaptation(r.Context(), role, actorID, modelID, bindingID, mutation, patch)
 	if err != nil {
 		writeRoutingError(w, err)
 		return

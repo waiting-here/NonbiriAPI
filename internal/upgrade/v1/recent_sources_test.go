@@ -71,7 +71,7 @@ func migrationIndex(t *testing.T, from int) int {
 func oldStewardPolicyForTest(t *testing.T) string {
 	t.Helper()
 	grants := authz.DefaultStewardPermissions(5).Permissions
-	for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit"} {
+	for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit", "charity.request_adaptation", "charity.affinity", "charity.price_templates.manage"} {
 		delete(grants, key)
 	}
 	i := 0
@@ -723,7 +723,7 @@ func TestAgentPolicyOfflineMigrationPreservesAuthorityAndAudit(t *testing.T) {
 				t.Fatal("authority changed", key)
 			}
 		}
-		for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit"} {
+		for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit", "charity.request_adaptation", "charity.affinity", "charity.price_templates.manage"} {
 			if after[key] {
 				t.Fatal("new grant enabled", key)
 			}

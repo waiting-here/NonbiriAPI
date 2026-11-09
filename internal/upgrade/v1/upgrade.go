@@ -97,8 +97,8 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 	{from: 49, version: 50, manifest: db.Schema50ManifestHash, sql: db.ModelQuotaSQL + db.LakeExchangeDailyIndexSQL, impact: &migrationImpact{
 		addedTables: []string{"donation_model_quotas"}, constraintTables: []string{"donation_quota_rules", "donation_usage_reservations"},
 		indexedTables: []string{"donation_quota_rules", "donation_usage_reservations", "lake_notes_exchange_receipts"}, credentials: credentialsUnchanged}},
-	{from: 50, version: 51, manifest: db.PinnedGenerationTwoManifestHash, sql: db.RerankPathSQL + db.CallerParameterLengthSQL, impact: &migrationImpact{
-		controlTables: []string{"endpoints", "donation_uses", "donation_use_revisions", "dispatch_claim_targets"}, rebuiltTables: []string{"dispatch_caller_parameter_errors"}, credentials: credentialsUnchanged}},
+	{from: 50, version: 51, manifest: db.PinnedGenerationTwoManifestHash, sql: db.RerankPathSQL + db.CallerParameterLengthSQL + db.StewardCharityPermissionsSQL + db.CharityAdaptationAuditSQL, apply: func(ctx context.Context, tx *sql.Tx) error { return db.UpgradeStewardCharityPermissions(ctx, tx) }, impact: &migrationImpact{
+		controlTables: []string{"endpoints", "donation_uses", "donation_use_revisions", "dispatch_claim_targets", "steward_permissions"}, rebuiltTables: []string{"dispatch_caller_parameter_errors", "request_adaptation_audits"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {

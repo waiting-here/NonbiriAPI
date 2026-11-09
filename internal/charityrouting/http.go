@@ -101,6 +101,9 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodPut, routeStewardEndpointBackoffPolicy, api.stewardSaveEndpointBackoffPolicy},
 		{http.MethodGet, routeStewardPriceTemplates, api.listStewardPriceTemplates},
 		{http.MethodGet, routeStewardPriceTemplate, api.getStewardPriceTemplate},
+		{http.MethodPost, routeStewardPriceTemplates, api.mutateStewardPriceTemplate},
+		{http.MethodPut, routeStewardPriceTemplate, api.mutateStewardPriceTemplate},
+		{http.MethodDelete, routeStewardPriceTemplate, api.mutateStewardPriceTemplate},
 		{http.MethodGet, routeStewardModels, api.listStewardModels},
 		{http.MethodGet, routeStewardKeyModels, api.stewardKeyModels},
 		{http.MethodPost, routeStewardManual, api.stewardAddManual},
@@ -111,6 +114,7 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodPatch, routeStewardModel, api.patchStewardModel},
 		{http.MethodDelete, routeStewardModel, api.deleteStewardModel},
 		{http.MethodGet, routeStewardModelAdaptation, api.getStewardModelAdaptation},
+		{http.MethodPut, routeStewardModelAdaptation, api.putStewardModelAdaptation},
 		{http.MethodGet, routeStewardCandidates, api.stewardCandidates},
 		{http.MethodGet, routeStewardBindingDonations, api.stewardBindingDonations},
 		{http.MethodGet, routeStewardBindingKeys, api.stewardBindingKeys},
@@ -121,6 +125,7 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodPut, routeStewardBindingTargets, api.putStewardBindingTargets},
 		{http.MethodDelete, routeStewardBinding, api.deleteStewardBinding},
 		{http.MethodGet, routeStewardBindingAdaptation, api.getStewardBindingAdaptation},
+		{http.MethodPut, routeStewardBindingAdaptation, api.putStewardBindingAdaptation},
 	}
 	for _, route := range routes {
 		if err := registrar.RegisterUserRoute(route.method, route.pattern, route.handler); err != nil {

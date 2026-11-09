@@ -298,6 +298,21 @@ func (s *Store) LoadMany(ctx context.Context, refs []Ref) (map[Ref]Snapshot, err
 // SaveTx performs an optimistic, monotonic revision write. The caller owns
 // transaction authorization, resource existence, idempotency, and commit.
 func (s *Store) SaveTx(ctx context.Context, tx *sql.Tx, ref Ref, expectedRevision int64, doc Document, actorID, now int64) (Projection, error) {
+	role := "admin"
+	if ref.Scope == ScopeEndpoint || ref.Scope == ScopePersonalModel {
+		role = "owner"
+	}
+	return s.SaveWithActorRoleTx(ctx, tx, ref, expectedRevision, doc, actorID, now, role)
+}
+
+// SaveWithActorRoleTx accepts the role established by the management transaction.
+// It is not an authorization entry point and never accepts a role from the wire.
+func (s *Store) SaveWithActorRoleTx(ctx context.Context, tx *sql.Tx, ref Ref, expectedRevision int64, doc Document, actorID, now int64, role string) (Projection, error) {
+	personal := ref.Scope == ScopeEndpoint || ref.Scope == ScopePersonalModel
+	if personal && role != "owner" || !personal && role != "admin" && role != "trainee5" && role != "level6" {
+		return Projection{}, ErrInvalid
+	}
+
 	if s == nil || tx == nil || !ref.valid() || expectedRevision < 0 || expectedRevision == int64(^uint64(0)>>1) || actorID <= 0 || now < 0 || now > 253402300799 || ValidateDocument(doc, ref.Scope) != nil {
 		return Projection{}, ErrInvalid
 	}
@@ -361,10 +376,6 @@ func (s *Store) SaveTx(ctx context.Context, tx *sql.Tx, ref Ref, expectedRevisio
 		if updated != 1 {
 			return Projection{}, ErrConflict
 		}
-	}
-	role := "admin"
-	if ref.Scope == ScopeEndpoint || ref.Scope == ScopePersonalModel {
-		role = "owner"
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO request_adaptation_audits(
 scope,resource_id,actor_user_id,actor_role,revision,changed_partitions,created_at)

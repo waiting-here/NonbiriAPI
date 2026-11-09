@@ -42,6 +42,7 @@ var stewardDefaults = map[string]bool{
 	"donations.handle": true, "donations.manage_keys": true, "donations.discover": true, "donations.recurring": true,
 	"charity.read": true, "charity.manage": true, "charity.non_mainstream": false,
 	"charity.create": false, "charity.delete": false, "charity.model_settings": false, "charity.pricing": false,
+	"charity.request_adaptation": false, "charity.affinity": false, "charity.price_templates.manage": false,
 	"charity.presets": false, "charity.backoff": false, "charity.price_templates.read": false,
 	"logs.read": true, "logs.unredacted": false, "diagnostics.read": true, "pressure.read": true,
 	"access_events.read": false, "risk.read": false, "risk.manage": false,
@@ -335,10 +336,16 @@ func StewardRoutePermission(method, path string) string {
 	case strings.Contains(p, "backoff"):
 		return "charity.backoff"
 	case strings.Contains(p, "price-template"):
-		return "charity.price_templates.read"
+		if read {
+			return "charity.price_templates.read"
+		}
+		return "charity.price_templates.manage"
 	case strings.HasPrefix(p, "charity-models"):
 		if strings.HasSuffix(p, "/request-adaptation") {
-			return "charity.model_settings"
+			if read {
+				return "charity.request_adaptation.read"
+			}
+			return "charity.request_adaptation"
 		}
 		if !read && p == "charity-models" {
 			return "charity.create"
@@ -392,8 +399,14 @@ func (p StewardPermissions) AllowsOperation(key string) bool {
 		return false
 	}
 	switch key {
+	case "charity.read":
+		return p.Permissions[key] || p.Permissions["charity.affinity"] || p.Permissions["charity.request_adaptation"]
+	case "charity.request_adaptation.read":
+		return p.Permissions["charity.model_settings"] || p.Permissions["charity.request_adaptation"]
+	case "charity.price_templates.read":
+		return p.Permissions[key] || p.Permissions["charity.price_templates.manage"]
 	case "model_fields":
-		return p.Permissions["charity.manage"] || p.Permissions["charity.model_settings"] || p.Permissions["charity.pricing"]
+		return p.Permissions["charity.manage"] || p.Permissions["charity.model_settings"] || p.Permissions["charity.pricing"] || p.Permissions["charity.affinity"]
 	case "user_fields":
 		for _, k := range []string{"users.profile", "users.limits", "users.level", "users.balance", "users.game_balance"} {
 			if p.Permissions[k] {
