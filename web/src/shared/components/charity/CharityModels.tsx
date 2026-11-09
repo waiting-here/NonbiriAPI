@@ -43,6 +43,7 @@ import {
   PanelBody,
   PanelFoot,
   PanelHead,
+  Sheet,
 } from '@shared/components/ui';
 import { PriceConfigBrief } from './PriceConfigSummary';
 import { GatewayCapabilitySummary } from '@shared/gateway/GatewayCapabilitySummary';
@@ -237,6 +238,8 @@ function modelDraftError(draft: ModelDraft): ModelValidation | null {
 
 function ModelForm({
   role,
+  canEditAffinity = role === 'admin',
+  canManageTemplates = role === 'admin',
   disabled = false,
   model,
   refresh,
@@ -245,6 +248,8 @@ function ModelForm({
   onCreated,
 }: {
   disabled?: boolean;
+  canEditAffinity?: boolean;
+  canManageTemplates?: boolean;
   role: CharityRole;
   model?: CharityModel;
   refresh: () => Promise<unknown>;
@@ -334,7 +339,7 @@ function ModelForm({
   const content = (
     <>
       <fieldset className="ops-unframed" disabled={fieldsDisabled}>
-        {model ? <h3>{model.full_name}</h3> : null}
+        {model ? <h3 id={`charity-model-settings-${model.id}`}>{model.full_name}</h3> : null}
         <p>{t('common.operations.charity.namingHelp')}</p>
         <p className="ops-model-preview">
           <span>{t('common.operations.charity.namePreview')}</span>
@@ -380,29 +385,20 @@ function ModelForm({
               />
             )}
           </Field>
-          <Toggle
-            disabled={fieldsDisabled}
-            label={t('common.operations.charity.enableCharityModel')}
-            checked={draft.enabled}
-            onChange={(enabled) => setDraft((current) => ({ ...current, enabled }))}
-          />
         </Fields>
+        <Toggle
+          disabled={fieldsDisabled}
+          label={t('common.operations.charity.enableCharityModel')}
+          checked={draft.enabled}
+          onChange={(enabled) => setDraft((current) => ({ ...current, enabled }))}
+        />
         <ModelTypesField
           value={draft.modelTypes}
           onChange={(modelTypes) => setDraft((current) => ({ ...current, modelTypes }))}
           disabled={save.isPending || fieldsDisabled}
           showError
         />
-        <CloudflareProxyField
-          enabled={draft.cloudflareProxy}
-          mode={model?.cloudflare_proxy_mode}
-          disabled={save.isPending || fieldsDisabled}
-          onChange={(cloudflareProxy) => setDraft((current) => ({ ...current, cloudflareProxy }))}
-        />
-        <SessionHeaderFields
-          value={draft.sessionHeaders}
-          onChange={(sessionHeaders) => setDraft((value) => ({ ...value, sessionHeaders }))}
-        />
+
         <p className="nb-sub">{t('common.operations.charity.operationHelp')}</p>
         {draft.modelTypes.includes('embeddings') ? (
           <p className="nb-sub">{t('common.operations.charity.embeddingBillingHelp')}</p>
@@ -444,7 +440,7 @@ function ModelForm({
                 </select>
               )}
             </Field>
-            {role === 'admin' ? (
+            {canEditAffinity ? (
               <Field
                 label={t('common.operations.charity.routeAffinityTTL')}
                 size="short"
@@ -466,37 +462,6 @@ function ModelForm({
                 )}
               </Field>
             ) : null}
-            {draft.modelTypes.includes('chat_completions') ||
-            draft.modelTypes.includes('responses') ? (
-              <>
-                <TransportRuleField
-                  disabled={fieldsDisabled}
-                  value={draft.transportRule}
-                  onChange={(transportRule) =>
-                    setDraft((current) => ({ ...current, transportRule }))
-                  }
-                />
-                <Toggle
-                  disabled={fieldsDisabled}
-                  label={t(charityCopyKey(role, 'flattenExperimental'))}
-                  checked={draft.flatten}
-                  onChange={(flatten) => setDraft((current) => ({ ...current, flatten }))}
-                />
-              </>
-            ) : null}
-
-            <Field label={copy.excluded} help={copy.excludedHint} size="long">
-              {(field) => (
-                <textarea
-                  {...field}
-                  value={draft.excluded}
-                  onChange={(event) => {
-                    const excluded = event.target.value;
-                    setDraft((current) => ({ ...current, excluded }));
-                  }}
-                />
-              )}
-            </Field>
           </Fields>
           <Fields legend={t('common.operations.charity.accessSettings')} columns={1}>
             <Toggle
@@ -579,17 +544,7 @@ function ModelForm({
             </Field>
           </Fields>
         </Fields>
-        {draft.modelTypes.includes('chat_completions') || draft.modelTypes.includes('responses') ? (
-          <RolePolicyEditor
-            value={draft.rolePolicy}
-            onChange={(rolePolicy) => {
-              if (save.isPending || remove.isPending || unknownSave) return;
-              setDraft((current) => ({ ...current, rolePolicy }));
-              save.reset();
-            }}
-            disabled={save.isPending || fieldsDisabled}
-          />
-        ) : null}
+
         <div className={`nb-workflow-price-workspace${referenceOpen ? ' is-reference-open' : ''}`}>
           <div className="nb-workflow-price-editor">
             <PriceConfigFields
@@ -655,6 +610,7 @@ function ModelForm({
               <PanelBody>
                 <div className="nb-workflow-price-reference-body">
                   <PriceTools
+                    canManageTemplates={canManageTemplates}
                     role={role}
                     onCapabilityLoss={onCapabilityLoss}
                     onApply={(config, name, revision) => {
@@ -676,6 +632,70 @@ function ModelForm({
             </Panel>
           </div>
         </div>
+
+        <Fold
+          title={t('common.operations.charity.advancedRequests')}
+          defaultOpen={Boolean(
+            draft.sessionHeaders.length ||
+            draft.excluded ||
+            draft.flatten ||
+            draft.transportRule !== 'passthrough' ||
+            draft.cloudflareProxy ||
+            draft.rolePolicy.defaultAction !== 'native' ||
+            draft.rolePolicy.rules.length,
+          )}
+        >
+          <CloudflareProxyField
+            enabled={draft.cloudflareProxy}
+            mode={model?.cloudflare_proxy_mode}
+            disabled={save.isPending || fieldsDisabled}
+            onChange={(cloudflareProxy) => setDraft((current) => ({ ...current, cloudflareProxy }))}
+          />
+          <SessionHeaderFields
+            value={draft.sessionHeaders}
+            onChange={(sessionHeaders) => setDraft((value) => ({ ...value, sessionHeaders }))}
+          />
+          {draft.modelTypes.includes('chat_completions') ||
+          draft.modelTypes.includes('responses') ? (
+            <>
+              <TransportRuleField
+                disabled={fieldsDisabled}
+                value={draft.transportRule}
+                onChange={(transportRule) => setDraft((current) => ({ ...current, transportRule }))}
+              />
+              <Toggle
+                disabled={fieldsDisabled}
+                label={t(charityCopyKey(role, 'flattenExperimental'))}
+                checked={draft.flatten}
+                onChange={(flatten) => setDraft((current) => ({ ...current, flatten }))}
+              />
+            </>
+          ) : null}
+          <Field label={copy.excluded} help={copy.excludedHint} size="long">
+            {(field) => (
+              <textarea
+                {...field}
+                value={draft.excluded}
+                onChange={(event) => {
+                  const excluded = event.target.value;
+                  setDraft((current) => ({ ...current, excluded }));
+                }}
+              />
+            )}
+          </Field>
+          {draft.modelTypes.includes('chat_completions') ||
+          draft.modelTypes.includes('responses') ? (
+            <RolePolicyEditor
+              value={draft.rolePolicy}
+              onChange={(rolePolicy) => {
+                if (save.isPending || remove.isPending || unknownSave) return;
+                setDraft((current) => ({ ...current, rolePolicy }));
+                save.reset();
+              }}
+              disabled={save.isPending || fieldsDisabled}
+            />
+          ) : null}
+        </Fold>
       </fieldset>
       {save.error ? (
         <ErrorState error={save.error} />
@@ -718,10 +738,10 @@ function ModelForm({
               const candidate = modelBody(
                 draft,
                 !model || draft.tokenReserveCredits !== (model.token_reserve_credits ?? null),
-                role === 'admin',
+                canEditAffinity,
               );
               const baseline = model
-                ? modelBody(modelDraft(model), true, role === 'admin')
+                ? modelBody(modelDraft(model), true, canEditAffinity)
                 : undefined;
               const body = baseline
                 ? Object.fromEntries(
@@ -830,7 +850,7 @@ function ModelForm({
           const next = new URLSearchParams(nextLocation.search);
           const current = new URLSearchParams(currentLocation.search);
           return (
-            role === 'admin' &&
+            canManageTemplates &&
             nextLocation.pathname === currentLocation.pathname &&
             ['models', 'templates'].includes(next.get('charity_section') ?? '') &&
             ['charity_model', 'model_workspace'].every((key) => next.get(key) === current.get(key))
@@ -852,6 +872,7 @@ function BindingsPanel({
   model,
   onCapabilityLoss,
   showAdaptation,
+  canEditAdaptation = role === 'admin',
   renderKeyManager,
 }: {
   role: CharityRole;
@@ -860,6 +881,7 @@ function BindingsPanel({
   model: CharityModel;
   onCapabilityLoss?: () => void;
   showAdaptation: boolean;
+  canEditAdaptation?: boolean;
   renderKeyManager: (props: CharityPickerKeyManagerProps) => ReactNode;
 }) {
   const { t } = useTranslation();
@@ -969,12 +991,14 @@ function BindingsPanel({
                 )
                 .every((type) => type !== undefined && isAISDKGateway(type)),
             )}
-            editable={role === 'admin'}
+            editable={canEditAdaptation}
           />
         </Fold>
       ) : null}
       <Card>
-        <h3>{t('common.operations.charity.orderedBindings')}</h3>
+        <h3 id={`charity-model-connections-${model.id}`}>
+          {t('common.operations.charity.orderedBindings')}
+        </h3>
         {bindings.isPending ? (
           <LoadingState />
         ) : bindings.error ? (
@@ -1144,12 +1168,7 @@ function BindingsPanel({
         {showAdaptation &&
         adaptationBinding &&
         bindings.data?.bindings.some((entry) => entry.id === adaptationBinding) ? (
-          <Fold
-            lazy
-            title={t('common.operations.charity.adaptationSettings', {
-              defaultValue: 'Request adaptation',
-            })}
-          >
+          <Fold lazy title={t('common.operations.charity.adaptationSettings')}>
             <RequestAdaptationEditor
               key={`${accountId}:${model.id}:${adaptationBinding}`}
               url={`${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-models/${encodeURIComponent(model.id)}/bindings/${encodeURIComponent(adaptationBinding)}/request-adaptation`}
@@ -1166,7 +1185,7 @@ function BindingsPanel({
                   ? connectors[0]
                   : undefined;
               })()}
-              editable={role === 'admin'}
+              editable={canEditAdaptation}
             />
           </Fold>
         ) : null}
@@ -1195,20 +1214,16 @@ function BindingsPanel({
         {visitedBindings
           .filter((id) => bindings.data?.bindings.some((row) => row.id === id))
           .map((id) => (
-            <section
+            <Sheet
               key={id}
-              hidden={editingBinding !== id}
-              className="nb-stack"
-              aria-label={t('common.connections.editBindingSources')}
+              open={editingBinding === id}
+              keepMounted
+              size="lg"
+              title={t('common.connections.editBindingSources') + ' · ' + model.full_name}
+              description={t('common.connections.bindingEditScope')}
+              closeLabel={t('common.connections.returnToBindings')}
+              onClose={() => setEditingBinding('')}
             >
-              <h3>{t('common.connections.editBindingSources')}</h3>
-              <button
-                className="nb-btn nb-btn--ghost"
-                type="button"
-                onClick={() => setEditingBinding('')}
-              >
-                {t('common.connections.returnToBindings')}
-              </button>
               <CharityTargets
                 role={role}
                 accountId={accountId}
@@ -1216,7 +1231,7 @@ function BindingsPanel({
                 bindingId={id}
                 inline
               />
-            </section>
+            </Sheet>
           ))}
         <section hidden={Boolean(editingBinding)} className="nb-stack">
           <Field
@@ -1270,6 +1285,10 @@ export function ModelsPanel({
   role,
   accountId,
   canRead = true,
+  canEditAffinity = role === 'admin',
+  canEditAdaptation = role === 'admin',
+  canManageTemplates = role === 'admin',
+  canReadAdaptation = true,
   onCapabilityLoss,
 }: {
   renderScopedKeys: (props: {
@@ -1282,6 +1301,10 @@ export function ModelsPanel({
   role: CharityRole;
   accountId: string;
   canRead?: boolean;
+  canEditAffinity?: boolean;
+  canEditAdaptation?: boolean;
+  canManageTemplates?: boolean;
+  canReadAdaptation?: boolean;
   onCapabilityLoss?: () => void;
 }) {
   const { t } = useTranslation();
@@ -1486,6 +1509,8 @@ export function ModelsPanel({
       {creating ? (
         <ModelForm
           role={role}
+          canEditAffinity={canEditAffinity}
+          canManageTemplates={canManageTemplates}
           refresh={refresh}
           onCapabilityLoss={onCapabilityLoss}
           onCreated={(model) => {
@@ -1669,10 +1694,26 @@ export function ModelsPanel({
             </CharityModelScope>
           ) : selected ? (
             <fieldset className="ops-stack ops-unframed" disabled={detail.isFetching}>
+              <nav className="nb-actions" aria-label={t('common.operations.charity.modelSections')}>
+                <a
+                  className="nb-btn nb-btn--secondary"
+                  href={`#charity-model-settings-${selected.id}`}
+                >
+                  {t('common.operations.charity.modelSettings')}
+                </a>
+                <a
+                  className="nb-btn nb-btn--secondary"
+                  href={`#charity-model-connections-${selected.id}`}
+                >
+                  {t('common.operations.charity.orderedBindings')}
+                </a>
+              </nav>
               <ModelForm
                 disabled={detail.isFetching}
                 key={`model:${selected.id}`}
                 role={role}
+                canEditAffinity={canEditAffinity}
+                canManageTemplates={canManageTemplates}
                 model={selected}
                 refresh={refresh}
                 onDeleted={() => setSelected('')}
@@ -1685,7 +1726,8 @@ export function ModelsPanel({
                 model={selected}
                 refresh={refresh}
                 onCapabilityLoss={onCapabilityLoss}
-                showAdaptation
+                showAdaptation={canReadAdaptation}
+                canEditAdaptation={canEditAdaptation}
                 renderKeyManager={(props) =>
                   renderKeyManager({ ...props, disabled: detail.isFetching })
                 }

@@ -867,7 +867,11 @@ export function CharitySourceBrowser({
     <Card className="charity-source-browser">
       <header className="charity-source-browser__header">
         <div>
-          <h2>{t('common.operations.charity.sourceBrowser.title')}</h2>
+          <h2>
+            {charityModelID
+              ? t('common.operations.charity.sourceBrowser.modelTitle')
+              : t('common.operations.charity.sourceBrowser.title')}
+          </h2>
           <p>{t('common.operations.charity.sourceBrowser.description')}</p>
         </div>
         {sourceKey ? (

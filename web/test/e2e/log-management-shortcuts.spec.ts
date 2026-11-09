@@ -152,7 +152,7 @@ for (const role of ['admin', 'level6', 'level5'] as const) {
       );
       await link.click();
       await expect(
-        page.getByRole('heading', { name: `Manage key #${index + 11}`, exact: true }),
+        page.getByRole('heading', { name: `Manage donated key #${index + 11}`, exact: true }),
       ).toBeVisible();
       await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
       if (role === 'admin' && index === 0)

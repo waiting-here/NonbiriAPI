@@ -1392,7 +1392,7 @@ test('administrator charity provenance grouping and report lineage expose safe d
   });
 
   await page.goto(`${ADMIN_ORIGIN}/charity`);
-  await page.getByRole('tab', { name: 'Browse by source' }).click();
+  await page.getByRole('tab', { name: 'Donated resources' }).click();
   await page.getByRole('button', { name: /Hosted channel/ }).click();
   const sourceRow = page.locator('.charity-source-browser__source');
   await expect(sourceRow).toContainText('Hosted channel');

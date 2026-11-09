@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { charityKeys } from '@shared/operations/charity';
+import { charityKeys, type CharityRole } from '@shared/operations/charity';
 import { validManagementSearch } from '@shared/operations/charityModelPages';
 import {
   deletePriceTemplate,
@@ -36,16 +36,19 @@ import { PriceConfigBrief } from './PriceConfigSummary';
 import { draftPriceConfig, priceDraft, priceDraftError, priceDraftSignature } from './priceDraft';
 import { oneParam, selectedID } from './managementFields';
 
-const root = [...charityKeys.root('admin'), 'price-templates'] as const;
+const templateRoot = (role: CharityRole) => [...charityKeys.root(role), 'price-templates'] as const;
 
 export function PriceTemplateManagement({
   accountId,
+  role = 'admin',
   onCapabilityLoss,
 }: {
   accountId: string;
+  role?: CharityRole;
   onCapabilityLoss?: () => void;
 }) {
   const { t } = useTranslation();
+  const root = templateRoot(role);
   const formatTime = useDateTimeFormatter();
   const [params, setParams] = useSearchState();
   const rawQuery = oneParam(params, 'template_q');
@@ -57,7 +60,7 @@ export function PriceTemplateManagement({
   const [search, setSearch] = useState({ q, text: q });
   const searchText = search.q === q ? search.text : q;
   const pager = useUrlPagePager({
-    station: 'admin',
+    station: role === 'admin' ? 'admin' : 'user',
     listType: 'price-template-management',
     scopeKey: accountId,
     pageParam: 'templates_page',
@@ -65,13 +68,12 @@ export function PriceTemplateManagement({
   });
   const list = useQuery({
     queryKey: [...root, 'list', accountId, q, state, pager.page, pager.pageSize],
-    queryFn: ({ signal }) =>
-      getPriceTemplates('admin', q, state, pager.page, pager.pageSize, signal),
+    queryFn: ({ signal }) => getPriceTemplates(role, q, state, pager.page, pager.pageSize, signal),
     retry: false,
   });
   const detail = useQuery({
     queryKey: [...root, 'detail', accountId, target],
-    queryFn: ({ signal }) => getPriceTemplate('admin', target, signal),
+    queryFn: ({ signal }) => getPriceTemplate(role, target, signal),
     enabled: Boolean(target && target !== 'new'),
     retry: false,
   });
@@ -124,7 +126,12 @@ export function PriceTemplateManagement({
   if (lost) return <Note tone="bad">{t('common.operations.charity.accessLost')}</Note>;
   if (target)
     return target === 'new' ? (
-      <PriceTemplateEditor key="new" onBack={back} onCapabilityLoss={onCapabilityLoss} />
+      <PriceTemplateEditor
+        role={role}
+        key="new"
+        onBack={back}
+        onCapabilityLoss={onCapabilityLoss}
+      />
     ) : detail.isPending ? (
       <LoadingState />
     ) : detail.error ? (
@@ -134,6 +141,7 @@ export function PriceTemplateManagement({
       </>
     ) : (
       <PriceTemplateEditor
+        role={role}
         key={target}
         initial={detail.data}
         onBack={back}
@@ -243,7 +251,7 @@ export function PriceTemplateManagement({
                   key: 'price',
                   header: t('common.operations.charity.pricing'),
                   cell: 'meta',
-                  render: (row) => <PriceConfigBrief config={row} role="admin" />,
+                  render: (row) => <PriceConfigBrief config={row} role={role} />,
                 },
                 {
                   key: 'updated',
@@ -288,16 +296,19 @@ export function PriceTemplateManagement({
 }
 
 function PriceTemplateEditor({
+  role,
   initial,
   onBack,
   onCapabilityLoss,
 }: {
+  role: CharityRole;
   initial?: CharityPriceTemplate;
   onBack: () => void;
   onCapabilityLoss?: () => void;
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
+  const root = templateRoot(role);
   const [base, setBase] = useState(initial);
   const [draft, setDraft] = useState(() => priceDraft(initial));
   const [metadata, setMetadata] = useState(() => ({
@@ -338,21 +349,21 @@ function PriceTemplateEditor({
     );
   };
   const save = useRetainedOperation<Parameters<typeof savePriceTemplate>[1], CharityPriceTemplate>(
-    (input, key) => savePriceTemplate('admin', input, key),
+    (input, key) => savePriceTemplate(role, input, key),
     refresh,
-    charityKeys.root('admin'),
+    charityKeys.root(role),
   );
   const remove = useRetainedOperation<{ id: string; revision: string }, void>(
-    (input, key) => deletePriceTemplate('admin', input.id, input.revision, key),
+    (input, key) => deletePriceTemplate(role, input.id, input.revision, key),
     refreshAfterDelete,
-    charityKeys.root('admin'),
+    charityKeys.root(role),
   );
   useEffect(() => {
     if (remove.outcome === 'confirmed') onBack();
   }, [remove.outcome, onBack]);
   const latest = useQuery({
     queryKey: [...root, 'reload', base?.id],
-    queryFn: ({ signal }) => getPriceTemplate('admin', base!.id, signal),
+    queryFn: ({ signal }) => getPriceTemplate(role, base!.id, signal),
     enabled: false,
     retry: false,
   });
@@ -467,7 +478,7 @@ function PriceTemplateEditor({
             />
             <PriceConfigFields
               disabled={locked}
-              role="admin"
+              role={role}
               value={draft}
               onChange={(fields) => {
                 const next = { ...draft, ...fields };

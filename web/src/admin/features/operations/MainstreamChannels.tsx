@@ -231,6 +231,7 @@ function ChannelForm({
         <ErrorState error={nativeOptions.error} onRetry={() => void nativeOptions.refetch()} />
       ) : null}
       <MainstreamEntries
+        showErrors={invalid || Boolean(error)}
         connectorLabels={CONNECTOR_LABEL_KEYS}
         options={nativeOptions.data ?? []}
         disabled={!canEdit || busy}

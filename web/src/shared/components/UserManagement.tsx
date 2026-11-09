@@ -841,27 +841,33 @@ function UserAuthority({
             <Card>
               <h2>{t('management.users.economyTitle')}</h2>
               <p>{t('management.users.economyPositiveHint')}</p>
-              <Fields>
-                <Segmented
-                  label={t('management.users.economyTarget')}
-                  value={draft.economyTarget}
-                  disabled={economyLocked}
-                  options={(role === 'admin'
-                    ? (['balance', 'game_balance', 'donation_credit'] as const)
-                    : (['balance', 'game_balance'] as const)
-                  ).map((value) => ({ value, label: t(economyTargetLabels[value]) }))}
-                  onChange={(economyTarget) => setDraft({ ...draft, economyTarget })}
-                />
-                <Segmented
-                  label={t('management.users.economyDirection')}
-                  value={draft.economyDirection}
-                  disabled={economyLocked}
-                  options={[
-                    { value: 'increase', label: t('management.users.economyIncrease') },
-                    { value: 'decrease', label: t('management.users.economyDecrease') },
-                  ]}
-                  onChange={(economyDirection) => setDraft({ ...draft, economyDirection })}
-                />
+              <Fields columns={2}>
+                <Fields columns={1} legend={t('management.users.economyTarget')}>
+                  <Segmented
+                    label={t('management.users.economyTarget')}
+                    value={draft.economyTarget}
+                    disabled={economyLocked}
+                    options={(role === 'admin'
+                      ? (['balance', 'game_balance', 'donation_credit'] as const)
+                      : (['balance', 'game_balance'] as const)
+                    ).map((value) => ({ value, label: t(economyTargetLabels[value]) }))}
+                    onChange={(economyTarget) => setDraft({ ...draft, economyTarget })}
+                  />
+                </Fields>
+                <Fields columns={1} legend={t('management.users.economyDirection')}>
+                  <Segmented
+                    label={t('management.users.economyDirection')}
+                    value={draft.economyDirection}
+                    disabled={economyLocked}
+                    options={[
+                      { value: 'increase', label: t('management.users.economyIncrease') },
+                      { value: 'decrease', label: t('management.users.economyDecrease') },
+                    ]}
+                    onChange={(economyDirection) => setDraft({ ...draft, economyDirection })}
+                  />
+                </Fields>
+              </Fields>
+              <Fields columns={1}>
                 <Field label={t('management.users.economyPositiveAmount')} size="medium">
                   {(field) => (
                     <Affix

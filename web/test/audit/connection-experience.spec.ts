@@ -1439,7 +1439,7 @@ async function openTargetEditor(page: Page, title: string, charity: boolean) {
     .first()
     .getByRole('button', { name: c.editBindingSources, exact: true })
     .click();
-  return page.getByRole('region', { name: c.editBindingSources, exact: true });
+  return page.getByRole('dialog', { name: new RegExp('^' + c.editBindingSources) });
 }
 async function addGroup(
   page: Page,
@@ -1902,11 +1902,12 @@ test('connection lists return to the requested page and mainstream mappings use 
     await form.getByRole('button', { name: c.addEntry, exact: true }).click();
     await form.getByRole('button', { name: c.addEntry, exact: true }).click();
     for (const index of [0, 1]) {
-      const group = form.getByRole('group', {
-        name: c.presetEntry.replace('{{number}}', String(index + 1)),
-        exact: true,
-      });
+      const group = form
+        .locator('details')
+        .filter({ has: form.getByLabel(c.entryURL, { exact: true }) })
+        .nth(index);
       await group.getByLabel(c.name, { exact: true }).fill(name + ' ' + String(index + 1));
+      await openFold(group, c.protocolSettings);
       const protocol = group.getByLabel(c.protocol, { exact: true });
       await protocol.selectOption({ label: channels.connector.openaiCompatible });
       await expect(protocol.locator('option:checked')).toHaveText(
@@ -1924,6 +1925,20 @@ test('connection lists return to the requested page and mainstream mappings use 
     await suggestion.getByLabel(c.addDiscoverySuggestion, { exact: true }).check();
     await suggestion.getByLabel(c.discoveryBaseURL, { exact: true }).fill(base);
     await suggestion.getByLabel(c.listFormat, { exact: true }).selectOption('openai');
+    const firstEntry = form
+      .locator('details')
+      .filter({ has: form.getByLabel(c.entryURL, { exact: true }) })
+      .first();
+    const entryURL = firstEntry.getByLabel(c.entryURL, { exact: true });
+    await entryURL.fill('invalid-url');
+    await firstEntry.locator(':scope > summary').click();
+    await form.getByRole('button', { name: channels.actions.create, exact: true }).click();
+    await expect(firstEntry).toHaveAttribute('open');
+    await expect(entryURL).toBeFocused();
+    expect(await entryURL.evaluate((input: HTMLInputElement) => input.validationMessage)).not.toBe(
+      '',
+    );
+    await entryURL.fill(base);
     const created = responseFor(manager, 'POST', '/admin/api/mainstream-channels');
     await form.getByRole('button', { name: channels.actions.create, exact: true }).click();
     const createdResponse = await created;
@@ -1968,6 +1983,29 @@ test('connection lists return to the requested page and mainstream mappings use 
       .nth(1);
     for (const option of await secondSelection.getByRole('checkbox').all()) await option.uncheck();
     await secondSelection.getByLabel(native.responses, { exact: true }).check();
+    expect(await firstSelection.getByRole('checkbox').count()).toBeGreaterThan(4);
+    for (const theme of ['light', 'dark'] as const)
+      for (const width of [1440, 390]) {
+        await screenshot(
+          manager,
+          info,
+          'mainstream-all-native-interfaces',
+          width,
+          theme,
+          firstSelection,
+          { options: await firstSelection.getByRole('checkbox').count() },
+        );
+        const boxes = await firstSelection
+          .locator('.model-types-field__choices > .nb-field')
+          .evaluateAll((nodes) =>
+            nodes.map((node) => {
+              const { x, y, width, height } = node.getBoundingClientRect();
+              return { x, y, width, height };
+            }),
+          );
+        expect(boxes.every((box) => box.width > 150 && box.height > 40)).toBe(true);
+        if (width === 390) expect(new Set(boxes.map((box) => Math.round(box.x))).size).toBe(1);
+      }
     const edited = responseFor(manager, 'PATCH', '/admin/api/mainstream-channels/' + channel.id);
     await form.getByRole('button', { name: channels.actions.save, exact: true }).click();
     const savedResponse = await edited;

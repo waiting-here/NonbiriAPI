@@ -31,8 +31,23 @@ export function SessionHeaderFields({
           {t('common.operations.charity.sessionHeaders.idleHelp')}
         </p>
         {value.map((row, i) => (
-          <Fields key={i}>
-            <Field label={t('common.operations.charity.sessionHeaders.name', { n: i + 1 })}>
+          <Fields
+            key={i}
+            columns={2}
+            legend={
+              <span className="nb-actions">
+                <span>{t('common.operations.charity.sessionHeaders.rule', { n: i + 1 })}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => onChange(value.filter((_, n) => i !== n))}
+                >
+                  {t('common.operations.charity.sessionHeaders.remove', { n: i + 1 })}
+                </Button>
+              </span>
+            }
+          >
+            <Field span label={t('common.operations.charity.sessionHeaders.name', { n: i + 1 })}>
               {(props) => (
                 <input
                   {...props}
@@ -88,15 +103,6 @@ export function SessionHeaderFields({
                 </select>
               )}
             </Field>
-            <FormActions>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => onChange(value.filter((_, n) => i !== n))}
-              >
-                {t('common.operations.charity.sessionHeaders.remove', { n: i + 1 })}
-              </Button>
-            </FormActions>
           </Fields>
         ))}
         <FormActions>

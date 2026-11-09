@@ -812,7 +812,7 @@ describe('CharityManagement corrective controls', () => {
         await screen.findByRole('tab', { name: 'Charity models and bindings' }),
       );
       await view.user.click(await screen.findByRole('button', { name: 'Manage' }));
-      await screen.findByRole('heading', { name: 'Service connection order' });
+      await screen.findByRole('heading', { name: 'Connected services and models' });
       expect(
         screen.queryByRole('button', { name: 'Save request adaptation' }),
       ).not.toBeInTheDocument();
@@ -878,7 +878,7 @@ describe('CharityManagement corrective controls', () => {
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       'Donation review queue',
       'Charity models and sources',
-      'Browse by source',
+      'Donated resources',
     ]);
     expect(
       fetchMock.mock.calls.every(([input]) => !String(input).includes('/donation-sources')),
@@ -1340,6 +1340,7 @@ describe('CharityManagement corrective controls', () => {
       target: { value: '200000' },
     });
     fireEvent.change(editor.getByLabelText('One-time fine (credits)'), { target: { value: '50' } });
+    await view.user.click(editor.getByText('Advanced request settings', { exact: true }));
     await view.user.click(editor.getByText('Managed session headers', { exact: true }));
     await view.user.click(editor.getByRole('button', { name: 'Add managed header' }));
     expect(patchBodies).toHaveLength(0);
@@ -1490,7 +1491,7 @@ describe('CharityManagement corrective controls', () => {
       if (!(card instanceof HTMLElement)) throw new Error('Expected model editor card.');
       const editor = within(card);
       if (fixture.frame === 'steward') {
-        expect(editor.queryByLabelText('关联有效时长（秒）')).not.toBeInTheDocument();
+        expect(editor.getByLabelText('关联有效时长（秒）')).toBeInTheDocument();
       }
       await view.user.click(
         editor.getByText(fixture.locale === 'zh' ? '额度与预留' : 'Quota and reserve', {
@@ -1994,7 +1995,7 @@ describe('CharityManagement candidate key shortcuts', () => {
       await view.user.click(await picker.findByRole('button', { name: /Shortcut key/ }));
       await view.user.click(await picker.findByRole('checkbox', { name: /shortcut-model/ }));
       await view.user.click(picker.getByRole('button', { name: 'Manage key' }));
-      await screen.findByRole('heading', { name: 'Manage key #11' });
+      await screen.findByRole('heading', { name: 'Manage donated key #11' });
       const save = await screen.findByRole('button', { name: 'Save key limits' });
       expect(save).toBeEnabled();
       expect(screen.getByRole('button', { name: 'Add 1 connections' })).toBeDisabled();

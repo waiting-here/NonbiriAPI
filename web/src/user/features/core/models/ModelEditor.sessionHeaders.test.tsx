@@ -35,6 +35,8 @@ async function editor(initial?: Model, onSaved = vi.fn()) {
     { station: 'user' },
   );
   view.queryClient.setQueryData(coreKeys.session, { user });
+  const advanced = screen.getByText('Advanced behavior', { selector: 'strong' });
+  if (!advanced.closest('details')?.open) await view.user.click(advanced);
   return { ...view, saved: onSaved };
 }
 afterEach(() => vi.unstubAllGlobals());
