@@ -2304,7 +2304,7 @@
       "sourceSearch": "搜索来源名称或地址",
       "staleCatalog": "保留的上次成功结果",
       "status": "状态",
-      "targetOrderNote": "一个逻辑绑定可包含多个有序入口。每个入口的型号和原生服务均需明确选择。",
+      "targetOrderNote": "这条连接可使用多个上游服务，按顺序尝试。请为每个服务选择模型和支持的接口。",
       "title": "我的服务",
       "unavailableReasons": {
         "disabled": "此用途已暂停。",

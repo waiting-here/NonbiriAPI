@@ -1382,6 +1382,7 @@ test('additional services stay pending with their old budget and redacted stewar
       expect(row.capabilities).toEqual({
         can_review: false,
         can_manage: false,
+        can_edit_rerank_path: false,
         can_reset_failures: false,
         can_discover: false,
         can_bind: false,
@@ -1904,7 +1905,7 @@ test('connection lists return to the requested page and mainstream mappings use 
     for (const index of [0, 1]) {
       const group = form
         .locator('details')
-        .filter({ has: form.getByLabel(c.entryURL, { exact: true }) })
+        .filter({ has: manager.getByLabel(c.entryURL, { exact: true }) })
         .nth(index);
       await group.getByLabel(c.name, { exact: true }).fill(name + ' ' + String(index + 1));
       await openFold(group, c.protocolSettings);
@@ -1927,7 +1928,7 @@ test('connection lists return to the requested page and mainstream mappings use 
     await suggestion.getByLabel(c.listFormat, { exact: true }).selectOption('openai');
     const firstEntry = form
       .locator('details')
-      .filter({ has: form.getByLabel(c.entryURL, { exact: true }) })
+      .filter({ has: manager.getByLabel(c.entryURL, { exact: true }) })
       .first();
     const entryURL = firstEntry.getByLabel(c.entryURL, { exact: true });
     await entryURL.fill('invalid-url');

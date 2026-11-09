@@ -2304,7 +2304,7 @@
       "sourceSearch": "Search source names or URLs",
       "staleCatalog": "Retained last successful result",
       "status": "Status",
-      "targetOrderNote": "One logical binding can contain ordered entries. Select each entry's model name and native services explicitly.",
+      "targetOrderNote": "This connection can use several upstream services in order. Choose a model and supported interfaces for each service.",
       "title": "My services",
       "unavailableReasons": {
         "disabled": "This use is paused.",

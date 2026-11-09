@@ -432,7 +432,11 @@ test('level 5 saves only message-role fields, reads logs and cannot open abuse a
         state.management.charity_model_id,
     );
     const fallback = page.getByLabel('Default action for unlisted roles');
-    await page.locator('details').filter({ has: fallback }).locator('summary').click();
+    await expect(fallback).toBeAttached();
+    for (const fold of await page.locator('details').filter({ has: fallback }).all()) {
+      if ((await fold.getAttribute('open')) === null)
+        await fold.locator(':scope > summary').click();
+    }
     await expect(fallback).toBeVisible();
     await expect(fallback).toHaveValue('native');
     await page.getByRole('button', { name: 'Add a role rule', exact: true }).click();
@@ -1211,6 +1215,12 @@ test('charity settings keep grouped controls, readable model sources, and action
       );
       const settings = page.locator('.charity-model-access-routing');
       await expect(settings).toBeVisible();
+      const advanced = page
+        .locator('details')
+        .filter({ has: page.getByText(copy.operations.charity.advancedRequests, { exact: true }) })
+        .last();
+      if ((await advanced.getAttribute('open')) === null)
+        await advanced.locator(':scope > summary').click();
       await capture('groups', async () => {
         await settings.scrollIntoViewIfNeeded();
         const groups = await settings
@@ -1236,7 +1246,10 @@ test('charity settings keep grouped controls, readable model sources, and action
               .map((node) => node.tagName),
           );
         expect(overflow).toEqual([]);
-        const segmented = settings.getByRole('radiogroup');
+        const segmented = page.getByRole('radiogroup', {
+          name: copy.transportRule.label,
+          exact: true,
+        });
         await segmented.scrollIntoViewIfNeeded();
         const choices = await segmented.evaluate((node) => {
           const bounds = node.getBoundingClientRect();

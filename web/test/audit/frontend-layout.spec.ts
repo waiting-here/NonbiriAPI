@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
+import { setControlChecked } from '../controls';
 import {
   expect,
   test,
@@ -138,8 +139,9 @@ async function saveAdaptation(page: Page, modelID: string, bindingID?: string) {
       : common.requestAdaptation.model.title,
   );
   const defaults = fold.getByRole('group', { name: adaptation.bodyDefaults, exact: true });
+  await expect(defaults).toBeVisible();
   const mode = defaults.getByLabel(adaptation.mode, { exact: true });
-  if (await mode.count()) await mode.selectOption('replace');
+  if (bindingID) await mode.selectOption('replace');
   await defaults.getByRole('button', { name: adaptation.add, exact: true }).click();
   await defaults
     .getByRole('textbox', { name: adaptation.name, exact: true })
@@ -159,7 +161,10 @@ async function maintainTemplate(page: Page, origin: string, suffix: string) {
   await page.goto(origin + '/steward?tab=charity&charity_section=templates&price_template=new');
   const name = 'Synthetic layout ' + suffix;
   await page.getByLabel(workflow.templateName, { exact: true }).fill(name);
-  await page.getByRole('switch', { name: workflow.templateEnabled, exact: true }).uncheck();
+  await setControlChecked(
+    page.getByRole('switch', { name: workflow.templateEnabled, exact: true }),
+    false,
+  );
   const root = '/api/steward/charity-price-templates';
   const created = await saveResponse(page, 'POST', root, () =>
     page.getByRole('button', { name: workflow.createTemplate, exact: true }).click(),
@@ -468,7 +473,7 @@ test('personal model sheets preserve dismissed drafts and create two fresh model
   try {
     const page = await owner.newPage();
     await page.goto(state.user_url + '/models');
-    const create = page.getByRole('button', { name: 'Create model', exact: true });
+    const create = page.getByRole('button', { name: 'Create model', exact: true }).first();
     await create.click();
     let dialog = page.getByRole('dialog', { name: 'Create model', exact: true });
     const tag = 'layout-' + randomUUID().slice(0, 8);
@@ -590,9 +595,17 @@ test('gacha management groups prices and lays out one, two and five member roste
         )
       ).find((item) => item.count === count);
       expect(match, `catalog includes a ${count}-member theme`).toBeTruthy();
-      await visuals(page, `gacha-roster-${count}`, match!.item, async () => {
+      await visuals(page, `gacha-roster-${count}`, match!.item, async (width) => {
         const grid = match!.item.locator(':scope > div');
         expect(await grid.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+        const cards = await grid.locator(':scope > label').evaluateAll((nodes) =>
+          nodes.map((node) => {
+            const bounds = node.getBoundingClientRect();
+            return { y: Math.round(bounds.y), width: bounds.width };
+          }),
+        );
+        expect(cards.every((card) => card.width <= (width === 390 ? 160 : 192))).toBe(true);
+        if (width === 1440) expect(new Set(cards.map((card) => card.y)).size).toBe(1);
       });
     }
     await dialog.getByRole('button', { name: 'Close', exact: true }).first().click();
