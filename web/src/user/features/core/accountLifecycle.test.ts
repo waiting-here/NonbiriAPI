@@ -268,9 +268,9 @@ describe('production account lifecycle adapter', () => {
       .mockResolvedValueOnce(exportResponse({ ...exportDocument(), schema_version: 30 }))
       .mockResolvedValueOnce(
         exportResponse(
-          { ...exportDocument(), schema_version: 35 },
+          { ...exportDocument(), schema_version: 36 },
           {
-            'Content-Disposition': 'attachment; filename="nonbiriapi-account-export-v35.json"',
+            'Content-Disposition': 'attachment; filename="nonbiriapi-account-export-v36.json"',
           },
         ),
       )
@@ -291,7 +291,7 @@ describe('production account lifecycle adapter', () => {
   });
 
   it.each([
-    12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34,
+    12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
   ])(
     'downloads a v%s attachment and rejects a version mismatch in its filename',
     async (version) => {
