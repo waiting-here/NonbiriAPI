@@ -1261,7 +1261,9 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findAllByText(`${provider}/${name}`);
     await waitFor(() => expect(modelReads).toBeGreaterThan(1));
-    expect(screen.queryByLabelText('Model name')).toBeNull();
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Create model' })).not.toBeInTheDocument(),
+    );
     const original = fetchMock.mock.calls.find(
       (call) => requestPath(call[0]) === '/api/models' && call[1]?.method === 'POST',
     )!;
