@@ -108,6 +108,7 @@ type LogSummaryExport struct {
 }
 
 type EndpointExport struct {
+	RerankPath     string               `json:"rerank_path"`
 	ConnectionID   *string              `json:"connection_id"`
 	NativeServices []string             `json:"native_services"`
 	RerankFormat   string               `json:"rerank_format"`

@@ -219,7 +219,7 @@ func (h Handle) EndpointKeyID() int64                       { return h.candidate
 func (h Handle) DonationKeyID() int64                       { return h.donationKeyID }
 func (h Handle) Authorization() routing.TargetAuthorization { return h.candidate.Authorization }
 func (h Handle) Target() connectorcontract.Target {
-	return connectorcontract.NewTarget(h.candidate.ConnectorType, h.candidate.CanonicalBaseURL, h.candidate.UpstreamModelID)
+	return connectorcontract.NewTarget(h.candidate.ConnectorType, h.candidate.CanonicalBaseURL, h.candidate.UpstreamModelID).WithRerankPath(h.candidate.Authorization.RerankPath)
 }
 func (h Handle) Policy() connectorcontract.AttemptPolicy { return h.candidate.Policy }
 func (Handle) String() string                            { return "[redacted dispatch claim]" }

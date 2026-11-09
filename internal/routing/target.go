@@ -23,6 +23,7 @@ type TargetAuthorization struct {
 	UseRevision         int64                           `json:"-"`
 	ConfiguredType      connectorcontract.Type          `json:"-"`
 	NativeService       connectorcontract.NativeService `json:"-"`
+	RerankPath          string                          `json:"-"`
 	RerankFormat        connectorcontract.RerankFormat  `json:"-"`
 }
 
@@ -31,7 +32,7 @@ func (c Candidate) Authorization() TargetAuthorization {
 		BindingID: c.bindingID, TargetID: c.targetID, TargetRevision: c.targetRevision,
 		CredentialID: c.credentialID, CredentialVersionID: c.credentialVersionID, CredentialVersion: c.credentialVersion,
 		GrantRevisionID: c.grantRevisionID, GrantRevision: c.grantRevision,
-		ConfiguredType: connectorcontract.Type(c.connectorType), RerankFormat: c.rerankFormat,
+		ConfiguredType: connectorcontract.Type(c.connectorType), RerankFormat: c.rerankFormat, RerankPath: c.rerankPath,
 	}
 }
 

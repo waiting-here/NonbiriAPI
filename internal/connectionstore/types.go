@@ -31,6 +31,7 @@ type GrantAuthorization struct {
 	EndpointServices    connectorcontract.NativeServiceSet `json:"-"`
 	GrantedServices     connectorcontract.NativeServiceSet `json:"-"`
 	EffectiveServices   connectorcontract.NativeServiceSet `json:"-"`
+	RerankPath          string                             `json:"-"`
 	RerankFormat        connectorcontract.RerankFormat     `json:"-"`
 }
 

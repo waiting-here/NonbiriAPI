@@ -25,6 +25,22 @@ func TestGrantQueriesBoundAuthorizationMaterialization(t *testing.T) {
 		t.Fatal(err)
 	}
 	// This plan-only fixture loads the base DDL without db's Go extensions.
+	extension, err := os.ReadFile(filepath.Join("..", "db", "rerank_path.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, extensionSQL, ok := strings.Cut(string(extension), "`")
+	if !ok {
+		t.Fatal("missing routing extension SQL")
+	}
+	routingSQL, _, ok := strings.Cut(extensionSQL, "\nDROP TRIGGER management_capture_donation_uses_update;")
+	if !ok {
+		t.Fatal("missing management extension boundary")
+	}
+	if _, err = database.ExecContext(t.Context(), routingSQL); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := database.ExecContext(t.Context(), `CREATE TABLE discovery_source_keys (
  source_id INTEGER PRIMARY KEY REFERENCES discovery_sources(id) ON DELETE CASCADE,
  endpoint_key_id INTEGER NOT NULL REFERENCES endpoint_keys(id) ON DELETE CASCADE

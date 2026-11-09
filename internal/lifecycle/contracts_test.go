@@ -8,7 +8,7 @@ import (
 )
 
 func TestFrozenBoundsAndHeldObjectKinds(t *testing.T) {
-	if SchemaVersion != 35 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
+	if SchemaVersion != 36 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
 		t.Fatalf("frozen bounds changed: schema=%d collection=%d bytes=%d batch=%d",
 			SchemaVersion, CollectionLimit, MaxExportBytes, WorkerBatchLimit)
 	}
@@ -79,7 +79,7 @@ func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
 	assertClosedJSONKeys(t, PenaltyExport{}, "id", "kind", "reason_code", "started_at", "ends_at", "ended_at", "state", "result", "actions")
 	assertClosedJSONKeys(t, PenaltyActionExport{}, "action", "occurred_at", "reason_code", "previous_ends_at", "ends_at", "request_id", "operation_id")
 	assertClosedJSONKeys(t, EndpointExport{},
-		"id", "connector_type", "base_url", "origin", "note", "enabled", "created_at", "updated_at", "keys", "connection_id", "native_services", "rerank_format")
+		"id", "connector_type", "base_url", "origin", "note", "enabled", "created_at", "updated_at", "keys", "connection_id", "native_services", "rerank_format", "rerank_path")
 	assertClosedJSONKeys(t, EndpointOriginExport{Kind: "custom"}, "kind")
 	assertClosedJSONKeys(t, EndpointOriginExport{
 		Kind: "mainstream", ChannelID: "mch_safe", Name: "Safe channel",

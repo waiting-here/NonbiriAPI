@@ -47,6 +47,7 @@ func (v *optionalTime) UnmarshalJSON(data []byte) error {
 }
 
 type endpointInput struct {
+	RerankPath     string                 `json:"rerank_path,omitempty"`
 	NativeServices nativeServiceSelection `json:"native_services,omitempty"`
 	RerankFormat   rerankSelection        `json:"rerank_format,omitempty"`
 	ConnectorType  string                 `json:"connector_type"`

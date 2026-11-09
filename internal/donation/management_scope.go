@@ -79,7 +79,7 @@ func scopedDonationRoute(route string) bool {
 		routeStewardRecurring, routeStewardModelLimits, routeStewardFailurePolicy, routeStewardFailureReset,
 		routeStewardFailureReset + "/selection", routeStewardDiscoverySelection:
 		return true
-	case routeStewardUses, routeStewardUses + "/{useId}/failure-streak-reset", routeStewardUses + "/{useId}/rate-limit-release":
+	case routeStewardUses, routeStewardUses + "/{useId}", routeStewardUses + "/{useId}/failure-streak-reset", routeStewardUses + "/{useId}/rate-limit-release":
 		return true
 	}
 	return false

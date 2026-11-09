@@ -6,6 +6,8 @@ import (
 )
 
 type UseRevision struct {
+	RerankPath              string                       `json:"rerank_path"`
+	RerankURL               string                       `json:"rerank_url"`
 	CredentialID            string                       `json:"credential_id"`
 	CredentialVersion       string                       `json:"credential_version"`
 	GrantRevision           string                       `json:"grant_revision"`
@@ -30,6 +32,7 @@ type UseHealth struct {
 }
 
 type UseCapabilities struct {
+	CanEditRerankPath bool    `json:"can_edit_rerank_path"`
 	CanReview         bool    `json:"can_review"`
 	CanManage         bool    `json:"can_manage"`
 	CanResetFailures  bool    `json:"can_reset_failures"`
@@ -39,20 +42,24 @@ type UseCapabilities struct {
 }
 
 type Use struct {
-	FailureReset     *ServiceFailureReset   `json:"failure_reset,omitempty"`
-	ID               string                 `json:"id"`
-	DonationID       string                 `json:"donation_id"`
-	DonationKeyID    string                 `json:"donation_key_id"`
-	EndpointKeyID    *string                `json:"endpoint_key_id"`
-	NativeService    contract.NativeService `json:"native_service"`
-	Enabled          bool                   `json:"enabled"`
-	DiscoveryEnabled bool                   `json:"discovery_enabled"`
-	Revision         string                 `json:"revision"`
-	Approved         *UseRevision           `json:"approved"`
-	Pending          *UseRevision           `json:"pending"`
-	Latest           *UseRevision           `json:"latest"`
-	Health           *UseHealth             `json:"health"`
-	Capabilities     UseCapabilities        `json:"capabilities"`
+	RerankPathOverride  *string                `json:"rerank_path_override"`
+	EffectiveRerankPath string                 `json:"effective_rerank_path"`
+	EffectiveRerankURL  string                 `json:"effective_rerank_url"`
+	DefaultRerankURL    string                 `json:"default_rerank_url"`
+	FailureReset        *ServiceFailureReset   `json:"failure_reset,omitempty"`
+	ID                  string                 `json:"id"`
+	DonationID          string                 `json:"donation_id"`
+	DonationKeyID       string                 `json:"donation_key_id"`
+	EndpointKeyID       *string                `json:"endpoint_key_id"`
+	NativeService       contract.NativeService `json:"native_service"`
+	Enabled             bool                   `json:"enabled"`
+	DiscoveryEnabled    bool                   `json:"discovery_enabled"`
+	Revision            string                 `json:"revision"`
+	Approved            *UseRevision           `json:"approved"`
+	Pending             *UseRevision           `json:"pending"`
+	Latest              *UseRevision           `json:"latest"`
+	Health              *UseHealth             `json:"health"`
+	Capabilities        UseCapabilities        `json:"capabilities"`
 }
 
 type UseFilter struct {
@@ -62,6 +69,7 @@ type UseFilter struct {
 }
 
 type UsePatch struct {
+	RerankPathOverride        **string
 	ExpectedRevision          int64
 	Enabled, DiscoveryEnabled *bool
 }

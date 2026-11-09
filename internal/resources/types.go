@@ -28,22 +28,25 @@ type MutationResult[T any] struct {
 }
 
 type Endpoint struct {
-	ConnectionID      *string                           `json:"connection_id"`
-	ConnectionName    string                            `json:"connection_name"`
-	ConfigurationType string                            `json:"configuration_type"`
-	NativeServices    []connectorcontract.NativeService `json:"native_services"`
-	RerankFormat      connectorcontract.RerankFormat    `json:"rerank_format"`
-	ID                string                            `json:"id"`
-	ConnectorType     string                            `json:"connector_type"`
-	BaseURL           string                            `json:"base_url"`
-	Origin            EndpointOrigin                    `json:"origin"`
-	Note              string                            `json:"note"`
-	Enabled           bool                              `json:"enabled"`
-	Revision          string                            `json:"revision"`
-	KeyCount          string                            `json:"key_count"`
-	Browse            *EndpointBrowse                   `json:"browse,omitempty"`
-	CreatedAt         int64                             `json:"created_at"`
-	UpdatedAt         int64                             `json:"updated_at"`
+	ConnectionID           *string                           `json:"connection_id"`
+	ConnectionName         string                            `json:"connection_name"`
+	ConfigurationType      string                            `json:"configuration_type"`
+	NativeServices         []connectorcontract.NativeService `json:"native_services"`
+	RerankPath             string                            `json:"rerank_path"`
+	RerankURL              string                            `json:"rerank_url"`
+	RerankPathConfigurable bool                              `json:"rerank_path_configurable"`
+	RerankFormat           connectorcontract.RerankFormat    `json:"rerank_format"`
+	ID                     string                            `json:"id"`
+	ConnectorType          string                            `json:"connector_type"`
+	BaseURL                string                            `json:"base_url"`
+	Origin                 EndpointOrigin                    `json:"origin"`
+	Note                   string                            `json:"note"`
+	Enabled                bool                              `json:"enabled"`
+	Revision               string                            `json:"revision"`
+	KeyCount               string                            `json:"key_count"`
+	Browse                 *EndpointBrowse                   `json:"browse,omitempty"`
+	CreatedAt              int64                             `json:"created_at"`
+	UpdatedAt              int64                             `json:"updated_at"`
 }
 
 // EndpointOrigin is deliberately a small, closed public projection. Internal
@@ -244,6 +247,7 @@ type CreateEndpointInput struct {
 	ChannelRevision int64
 	NativeServices  *[]connectorcontract.NativeService
 	RerankFormat    connectorcontract.RerankFormat
+	RerankPath      string
 	Source          string
 	ChannelID       string
 	ConnectorType   string
@@ -279,6 +283,7 @@ type PatchEndpointInput struct {
 	ConnectionID     *int64
 	NativeServices   *[]connectorcontract.NativeService
 	RerankFormat     *connectorcontract.RerankFormat
+	RerankPath       *string
 	Note             *string
 	Enabled          *bool
 	ExpectedRevision int64
