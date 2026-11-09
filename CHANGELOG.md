@@ -4,7 +4,11 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## 1.3.8 — 2026-11-09
+## 1.3.7 — 2026-11-09
+
+This release includes the pending v1.3.7 fixes and the changes briefly published
+as v1.3.8. The premature v1.3.8 release is withdrawn; all changes are consolidated
+here. Installations already running that build retain schema 50 and their data.
 
 ### Added
 
