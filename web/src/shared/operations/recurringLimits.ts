@@ -69,6 +69,7 @@ export interface RecurringLimitsWriteReceipt {
 export interface RecurringLimitsWritePayload {
   expected_revision: string;
   rules: RecurringLimitRuleInput[];
+  upstream_model_id?: string;
 }
 
 const U128_MAX = (1n << 128n) - 1n;
@@ -293,7 +294,12 @@ function normalizeWritePayload(payload: RecurringLimitsWritePayload): RecurringL
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new ApiError('invalid_request', 'Recurring limits payload is invalid.', 400);
   }
-  const root = exactRecord(payload, ['expected_revision', 'rules'], 'recurring limits payload');
+  const root = exactRecord(
+    payload,
+    ['expected_revision', 'rules', 'upstream_model_id'],
+    'recurring limits payload',
+    ['expected_revision', 'rules'],
+  );
   const expectedRevision = decimal(root.expected_revision, 'expected donation revision', {
     positive: true,
   });
@@ -303,7 +309,13 @@ function normalizeWritePayload(payload: RecurringLimitsWritePayload): RecurringL
   const rules = root.rules.map((rule, index) =>
     normalizeRuleInput(rule, `recurring limit rule ${index + 1}`),
   );
-  return { expected_revision: expectedRevision, rules };
+  return {
+    expected_revision: expectedRevision,
+    rules,
+    ...(root.upstream_model_id === undefined
+      ? {}
+      : { upstream_model_id: string(root.upstream_model_id, 'upstream model', { min: 1 }) }),
+  };
 }
 
 export function recurringLimitsBase(role: RecurringLimitRole): string {
@@ -350,9 +362,14 @@ export function getRecurringLimits(
   keyId: string,
   signal?: AbortSignal,
   modelID?: string,
+  upstreamModelID?: string,
 ): Promise<RecurringLimitsResponse> {
   return decoded(
-    charityScopePath(recurringLimitsPath(role, donationId, keyId), modelID),
+    charityScopePath(
+      recurringLimitsPath(role, donationId, keyId) +
+        (upstreamModelID ? `?upstream_model_id=${encodeURIComponent(upstreamModelID)}` : ''),
+      modelID,
+    ),
     normalizeRecurringLimits,
     {
       signal,

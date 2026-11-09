@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ModelLimits } from './ModelLimits';
 import { useTranslation } from 'react-i18next';
 import { RecurringLimits, type RecurringLimitsProps } from './RecurringLimits';
 import { copyForRecurringLimits } from './recurringLimitsCopy';
@@ -13,21 +14,24 @@ export function RecurringLimitsDisclosure({
   const [loaded, setLoaded] = useState(false);
   const copy = copyForRecurringLimits(i18n.language);
   return (
-    <details
-      className="nb-fold recurring-limits-disclosure"
-      onToggle={(event) => {
-        if (event.currentTarget.open) setLoaded(true);
-      }}
-    >
-      <summary>
-        <span className="nb-fold__title">
-          <strong>
-            {copy.title}
-            {label ? ` · ${label}` : ''}
-          </strong>
-        </span>
-      </summary>
-      <div className="nb-fold__body">{loaded ? <RecurringLimits {...props} /> : null}</div>
-    </details>
+    <>
+      <details
+        className="nb-fold recurring-limits-disclosure"
+        onToggle={(event) => {
+          if (event.currentTarget.open) setLoaded(true);
+        }}
+      >
+        <summary>
+          <span className="nb-fold__title">
+            <strong>
+              {copy.title}
+              {label ? ` · ${label}` : ''}
+            </strong>
+          </span>
+        </summary>
+        <div className="nb-fold__body">{loaded ? <RecurringLimits {...props} /> : null}</div>
+      </details>
+      <ModelLimits {...props} />
+    </>
   );
 }

@@ -356,21 +356,22 @@ type ExportDonationKey struct {
 	Review       ReviewState         `json:"review"`
 	ManualModels []ManualModelExport `json:"manual_models"`
 	TokenBreakdown
-	FailureDisableThreshold string                   `json:"failure_disable_threshold"`
-	RecurringLimits         []donationquota.RuleView `json:"recurring_limits"`
-	ID                      string                   `json:"id"`
-	EndpointKeyID           *string                  `json:"endpoint_key_id"`
-	DisplayHead             string                   `json:"display_head"`
-	DisplayTail             string                   `json:"display_tail"`
-	SafeSource              SafeSource               `json:"safe_source"`
-	PhysicalEnabled         bool                     `json:"physical_enabled"`
-	CharityState            string                   `json:"charity_state"`
-	RateLimitedUntil        *int64                   `json:"rate_limited_until"`
-	Limits                  DonationLimits           `json:"limits"`
-	Usage                   DonationUsage            `json:"usage"`
-	TokenReserve            int64                    `json:"token_reserve"`
-	AuthorizedExpiresAt     *int64                   `json:"authorized_expires_at"`
-	ExpiresAt               *int64                   `json:"expires_at"`
-	Streak                  DonationStreak           `json:"streak"`
-	EndedReason             *string                  `json:"ended_reason"`
+	FailureDisableThreshold string                      `json:"failure_disable_threshold"`
+	RecurringLimits         []donationquota.RuleView    `json:"recurring_limits"`
+	ModelLimits             []donationquota.ModelExport `json:"model_limits"`
+	ID                      string                      `json:"id"`
+	EndpointKeyID           *string                     `json:"endpoint_key_id"`
+	DisplayHead             string                      `json:"display_head"`
+	DisplayTail             string                      `json:"display_tail"`
+	SafeSource              SafeSource                  `json:"safe_source"`
+	PhysicalEnabled         bool                        `json:"physical_enabled"`
+	CharityState            string                      `json:"charity_state"`
+	RateLimitedUntil        *int64                      `json:"rate_limited_until"`
+	Limits                  DonationLimits              `json:"limits"`
+	Usage                   DonationUsage               `json:"usage"`
+	TokenReserve            int64                       `json:"token_reserve"`
+	AuthorizedExpiresAt     *int64                      `json:"authorized_expires_at"`
+	ExpiresAt               *int64                      `json:"expires_at"`
+	Streak                  DonationStreak              `json:"streak"`
+	EndedReason             *string                     `json:"ended_reason"`
 }

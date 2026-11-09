@@ -132,3 +132,13 @@ func TestAIPermissionsDefaultsCurrentFormatAndRoutes(t *testing.T) {
 		t.Fatal("review write mapping")
 	}
 }
+
+func TestModelQuotaRoutesRequireRecurringPermission(t *testing.T) {
+	for _, method := range []string{"GET", "PUT"} {
+		for _, path := range []string{"/api/steward/donations/{id}/keys/{keyId}/model-limits", "/api/steward/donations/1/keys/2/model-limits"} {
+			if got := StewardRoutePermission(method, path); got != "donations.recurring" {
+				t.Fatal(method, path, got)
+			}
+		}
+	}
+}

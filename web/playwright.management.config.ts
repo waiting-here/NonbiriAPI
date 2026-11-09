@@ -28,6 +28,7 @@ export default defineConfig({
     'donation-compatibility.spec.ts',
     'donation-context.spec.ts',
     'recurring-discounts.spec.ts',
+    'model-quotas.spec.ts',
     'charity-binding-batch.spec.ts',
     'connection-experience.spec.ts',
     'closeout-controls.spec.ts',

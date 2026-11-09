@@ -354,6 +354,10 @@ func (s *Service) Claim(ctx context.Context, tx *sql.Tx, input claim.CharityClai
 		return claim.CharityReservation{}, err
 	}
 
+	if err := donationquota.ReplaceModelReservation(ctx, tx, row.donationKeyID, input.ClaimedAt, input.UpstreamModelID, donationquota.TokenVector{}, tokenBudget.Reservation); err != nil {
+		return claim.CharityReservation{}, err
+	}
+
 	result, err := tx.ExecContext(ctx, `UPDATE donation_keys SET
 price_reserved_mag=?,calls_reserved=?,tokens_reserved=?,next_claim_seq=?,updated_at=?
 WHERE id=? AND endpoint_key_id=? AND ended_at IS NULL
@@ -367,9 +371,9 @@ WHERE id=? AND endpoint_key_id=? AND ended_at IS NULL
 		return claim.CharityReservation{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_usage_reservations(
-claim_id,donation_key_id,streak_generation,claim_seq,price_reserved_milli,calls_reserved,tokens_reserved,state,created_at,input_tokens_reserved,output_tokens_reserved)
-VALUES(?,?,?,?,?,?,?,'reserved',?,?,?)`, input.ClaimID, row.donationKeyID, db.EncodeU128(generation),
-		db.EncodeU128(claimSeq), priceReserve, 1, row.tokenReserve, input.ClaimedAt, tokenBudget.Reservation.Input, tokenBudget.Reservation.Output); err != nil {
+claim_id,donation_key_id,streak_generation,claim_seq,price_reserved_milli,calls_reserved,tokens_reserved,state,created_at,input_tokens_reserved,output_tokens_reserved,upstream_model_id)
+VALUES(?,?,?,?,?,?,?,'reserved',?,?,?,?)`, input.ClaimID, row.donationKeyID, db.EncodeU128(generation),
+		db.EncodeU128(claimSeq), priceReserve, 1, row.tokenReserve, input.ClaimedAt, tokenBudget.Reservation.Input, tokenBudget.Reservation.Output, input.UpstreamModelID); err != nil {
 		return claim.CharityReservation{}, fmt.Errorf("charity: persist claim reservation: %w", err)
 	}
 
@@ -578,6 +582,9 @@ func (s *Service) ReleaseUndispatched(ctx context.Context, tx *sql.Tx, input cla
 		if err := releaseKeyCapacity(ctx, tx, *row.keyID, row.priceReserved, row.callsReserved, row.tokensReserved, input.ReleasedAt); err != nil {
 			return err
 		}
+		if err := donationquota.SettleModelTokens(ctx, tx, *row.keyID, row.upstreamModel, row.tokenVector(), donationquota.TokenVector{}); err != nil {
+			return err
+		}
 		if err := donationquota.SettleTokenVector(ctx, tx, *row.keyID, row.tokenVector(), donationquota.TokenVector{}); err != nil {
 			return err
 		}
@@ -602,6 +609,7 @@ SET state='released',finalized_at=?,streak_disposition='neutral',failure_origin=
 type usageReservation struct {
 	keyID                                     *int64
 	state                                     string
+	upstreamModel                             string
 	generation, seq                           db.U128
 	priceReserved                             int64
 	callsReserved                             int
@@ -618,11 +626,11 @@ func readUsageReservation(ctx context.Context, tx *sql.Tx, requestID, claimID st
 	var key sql.NullInt64
 	var generation, seq []byte
 	err := tx.QueryRowContext(ctx, `SELECT u.donation_key_id,u.state,u.streak_generation,u.claim_seq,
-u.price_reserved_milli,u.calls_reserved,u.tokens_reserved,u.input_tokens_reserved,u.output_tokens_reserved
+u.price_reserved_milli,u.calls_reserved,u.tokens_reserved,u.input_tokens_reserved,u.output_tokens_reserved,u.upstream_model_id
 FROM donation_usage_reservations u
 JOIN dispatch_claims c ON c.id=u.claim_id
 WHERE u.claim_id=? AND c.logical_request_id=?`, claimID, requestID).Scan(
-		&key, &row.state, &generation, &seq, &row.priceReserved, &row.callsReserved, &row.tokensReserved, &row.inputTokensReserved, &row.outputTokensReserved)
+		&key, &row.state, &generation, &seq, &row.priceReserved, &row.callsReserved, &row.tokensReserved, &row.inputTokensReserved, &row.outputTokensReserved, &row.upstreamModel)
 	if errors.Is(err, sql.ErrNoRows) {
 		return usageReservation{}, claim.ErrNotFound
 	}
@@ -839,6 +847,9 @@ func (s *Service) CompleteAttempt(ctx context.Context, tx *sql.Tx, completion cl
 	}
 
 	if err := settleKeyCapacity(ctx, tx, *row.keyID, row, completion.Actual, callsActual, tokensActual, input.CompletedAt); err != nil {
+		return err
+	}
+	if err := donationquota.SettleModelTokens(ctx, tx, *row.keyID, row.upstreamModel, row.tokenVector(), tokenActual); err != nil {
 		return err
 	}
 	if err := donationquota.SettleTokenVector(ctx, tx, *row.keyID, row.tokenVector(), tokenActual); err != nil {

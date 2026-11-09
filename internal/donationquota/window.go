@@ -238,10 +238,14 @@ func view(ctx context.Context, q Reader, e epoch, now int64) (RuleView, error) {
 
 // Views is read-only and uses the caller's snapshot and one decision time.
 func Views(ctx context.Context, q Reader, keyID, now int64) ([]RuleView, error) {
+	return ModelViews(ctx, q, keyID, now, "")
+}
+
+func ModelViews(ctx context.Context, q Reader, keyID, now int64, model string) ([]RuleView, error) {
 	if ctx == nil || q == nil || keyID <= 0 || !validNow(now) {
 		return nil, ErrInvalid
 	}
-	epochs, err := currentEpochs(ctx, q, keyID)
+	epochs, err := currentEpochs(ctx, q, keyID, model)
 	if err != nil {
 		return nil, err
 	}

@@ -68,6 +68,7 @@ interface RuleComparison {
 }
 
 interface RecurringLimitsProps {
+  upstreamModelID?: string;
   disabled?: boolean;
   role: RecurringLimitRole;
   donationId: string;
@@ -79,6 +80,7 @@ interface RecurringLimitsProps {
 }
 
 interface RuleCardProps {
+  tokensOnly?: boolean;
   copy: RecurringLimitsCopy;
   draft: DraftRule;
   index: number;
@@ -454,6 +456,7 @@ function ruleSummary(
 }
 
 function RuleCard({
+  tokensOnly = false,
   copy,
   draft,
   index,
@@ -479,13 +482,9 @@ function RuleCard({
     ? ['first_success']
     : ['first_success', 'calendar', 'exact_time'];
   const intervalOptions: RecurringLimitInterval[] = ['1h', '5h', 'day', 'week', 'month'];
-  const metricOptions: RecurringLimitMetric[] = [
-    'calls',
-    'tokens',
-    'input_tokens',
-    'output_tokens',
-    'credits',
-  ];
+  const metricOptions: RecurringLimitMetric[] = tokensOnly
+    ? ['tokens', 'input_tokens', 'output_tokens']
+    : ['calls', 'tokens', 'input_tokens', 'output_tokens', 'credits'];
   const modeOptions: RecurringLimitMode[] = ['reset', 'sliding'];
   const exact = draft.mode === 'reset' && draft.alignment === 'exact_time';
   const preview = useQuery({
@@ -910,6 +909,7 @@ function scopeChanged(
     donationId: string;
     keyId: string;
     modelID?: string;
+    upstreamModelID?: string;
   },
   current: {
     role: RecurringLimitRole;
@@ -917,6 +917,7 @@ function scopeChanged(
     donationId: string;
     keyId: string;
     modelID?: string;
+    upstreamModelID?: string;
   },
 ): boolean {
   return (
@@ -924,11 +925,13 @@ function scopeChanged(
     previous.accountId !== current.accountId ||
     previous.donationId !== current.donationId ||
     previous.keyId !== current.keyId ||
-    previous.modelID !== current.modelID
+    previous.modelID !== current.modelID ||
+    previous.upstreamModelID !== current.upstreamModelID
   );
 }
 
 export function RecurringLimits({
+  upstreamModelID,
   disabled = false,
   role,
   donationId,
@@ -951,12 +954,15 @@ export function RecurringLimits({
   const locale: 'en' | 'zh' = i18n.language.toLowerCase().startsWith('zh') ? 'zh' : 'en';
   const editable = !readOnly && (role === 'admin' || role === 'steward');
   const client = useQueryClient();
-  const accountScope = modelID ? `${accountId}:model:${modelID}` : accountId;
+  const managementAccountScope = modelID ? `${accountId}:model:${modelID}` : accountId;
+  const accountScope = upstreamModelID
+    ? `${managementAccountScope}:upstream:${upstreamModelID}`
+    : managementAccountScope;
   const scope = recurringLimitsDraftKey(role, accountScope, donationId, keyId);
   const [renderedScope, setRenderedScope] = useState(scope);
   const identity = useMemo(
-    () => ({ role, accountId, donationId, keyId, modelID }),
-    [accountId, donationId, keyId, role, modelID],
+    () => ({ role, accountId, donationId, keyId, modelID, upstreamModelID }),
+    [accountId, donationId, keyId, role, modelID, upstreamModelID],
   );
   const scopeRef = useRef(identity);
   const loadedDataRef = useRef<RecurringLimitsResponse | null>(null);
@@ -984,7 +990,8 @@ export function RecurringLimits({
   const notifiedReceiptRef = useRef<RecurringLimitsWriteReceipt | null>(null);
   const read = useQuery({
     queryKey: recurringLimitsKeys.detail(role, accountScope, donationId, keyId),
-    queryFn: ({ signal }) => getRecurringLimits(role, donationId, keyId, signal, modelID),
+    queryFn: ({ signal }) =>
+      getRecurringLimits(role, donationId, keyId, signal, modelID, upstreamModelID),
     enabled:
       !capabilityRevoked &&
       role !== undefined &&
@@ -1107,7 +1114,14 @@ export function RecurringLimits({
     (payload, idempotencyKey) => {
       if (role === 'owner')
         return Promise.reject(new ApiError('forbidden', 'This action is read-only.', 403));
-      return putRecurringLimits(role, donationId, keyId, payload, idempotencyKey, modelID);
+      return putRecurringLimits(
+        role,
+        donationId,
+        keyId,
+        { ...payload, ...(upstreamModelID ? { upstream_model_id: upstreamModelID } : {}) },
+        idempotencyKey,
+        modelID,
+      );
     },
     reconcile,
     authorityRoot,
@@ -1146,6 +1160,7 @@ export function RecurringLimits({
     draftID.current += 1;
     const zone = browserTimeZone() ?? 'UTC';
     const item = newDraftRule(`new-${draftID.current}`, zone);
+    if (upstreamModelID) item.metric = 'tokens';
     setDraftRules((current) => (current ? [...current, item] : current));
     setExpanded((current) => new Set(current).add(item.draftId));
     setSaveFeedback(false);
@@ -1467,6 +1482,7 @@ export function RecurringLimits({
       <div className="recurring-limits__rules">
         {draftRules.map((rule, index) => (
           <RuleCard
+            tokensOnly={Boolean(upstreamModelID)}
             key={rule.draftId}
             copy={copy}
             draft={rule}

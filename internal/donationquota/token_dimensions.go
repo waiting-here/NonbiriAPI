@@ -41,15 +41,18 @@ type TokenBudget struct {
 	limits      [2]*db.U128
 }
 
+const tokenBudgetQuery = `SELECT token_reserve,input_token_reserve,output_token_reserve,
+input_tokens_used,output_tokens_used,input_tokens_reserved,output_tokens_reserved,input_token_limit_mag,output_token_limit_mag,
+EXISTS(SELECT 1 FROM donation_quota_rules r JOIN donation_quota_epochs e ON e.rule_id=r.id AND e.epoch=r.current_epoch
+ WHERE r.donation_key_id=donation_keys.id AND e.metric IN ('input_tokens','output_tokens'))
+ OR EXISTS(SELECT 1 FROM donation_model_quotas mq WHERE mq.donation_key_id=donation_keys.id AND (mq.input_token_limit_mag IS NOT NULL OR mq.output_token_limit_mag IS NOT NULL))
+FROM donation_keys WHERE id=?`
+
 func ReadTokenBudget(ctx context.Context, q Reader, keyID int64) (TokenBudget, error) {
 	var b TokenBudget
 	var used, reserved, limits [2][]byte
 	var required bool
-	err := q.QueryRowContext(ctx, `SELECT token_reserve,input_token_reserve,output_token_reserve,
-input_tokens_used,output_tokens_used,input_tokens_reserved,output_tokens_reserved,input_token_limit_mag,output_token_limit_mag,
-EXISTS(SELECT 1 FROM donation_quota_rules r JOIN donation_quota_epochs e ON e.rule_id=r.id AND e.epoch=r.current_epoch
- WHERE r.donation_key_id=donation_keys.id AND e.metric IN ('input_tokens','output_tokens'))
-FROM donation_keys WHERE id=?`, keyID).Scan(&b.Reservation.Total, &b.Reservation.Input, &b.Reservation.Output,
+	err := q.QueryRowContext(ctx, tokenBudgetQuery, keyID).Scan(&b.Reservation.Total, &b.Reservation.Input, &b.Reservation.Output,
 		&used[0], &used[1], &reserved[0], &reserved[1], &limits[0], &limits[1], &required)
 	if errors.Is(err, sql.ErrNoRows) {
 		return b, ErrConflict

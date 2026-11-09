@@ -43,7 +43,11 @@ func (s *Service) RecurringSteward(ctx context.Context, userID, donationID, keyI
 	return s.recurring(ctx, reviewerSteward, userID, donationID, keyID)
 }
 
-func (s *Service) recurring(ctx context.Context, role reviewerRole, userID, donationID, keyID int64) (RecurringLimits, error) {
+func (s *Service) recurring(ctx context.Context, role reviewerRole, userID, donationID, keyID int64, selected ...string) (RecurringLimits, error) {
+	model := ""
+	if len(selected) > 0 {
+		model = selected[0]
+	}
 	if ctx == nil || donationID <= 0 || keyID <= 0 {
 		return RecurringLimits{}, ErrInvalidRequest
 	}
@@ -54,7 +58,7 @@ func (s *Service) recurring(ctx context.Context, role reviewerRole, userID, dona
 	if role == recurringOwner {
 		tx, err = s.beginBrowseTx(ctx, recurringOwner, userID)
 	} else {
-		tx, _, err = s.beginScopedTx(ctx, role, userID, false)
+		tx, _, err = s.beginScopedTx(ctx, role, userID, true)
 	}
 	if err != nil {
 		return RecurringLimits{}, err
@@ -68,7 +72,12 @@ func (s *Service) recurring(ctx context.Context, role reviewerRole, userID, dona
 	if err != nil {
 		return RecurringLimits{}, err
 	}
-	rules, err := donationquota.Views(ctx, tx, keyID, now)
+	if model != "" {
+		if err := requireQuotaModel(ctx, tx, keyID, model); err != nil {
+			return RecurringLimits{}, err
+		}
+	}
+	rules, err := donationquota.ModelViews(ctx, tx, keyID, now, model)
 	if err != nil {
 		return RecurringLimits{}, quotaError(err)
 	}
@@ -147,7 +156,11 @@ func (s *Service) ReplaceRecurringSteward(ctx context.Context, userID, donationI
 	return s.replaceRecurring(ctx, reviewerSteward, userID, donationID, keyID, mutation, expected, rules)
 }
 
-func (s *Service) replaceRecurring(ctx context.Context, role reviewerRole, userID, donationID, keyID int64, mutation resources.ControlMutation, expected int64, rules []donationquota.RuleInput) (resources.MutationResult[RecurringReceipt], error) {
+func (s *Service) replaceRecurring(ctx context.Context, role reviewerRole, userID, donationID, keyID int64, mutation resources.ControlMutation, expected int64, rules []donationquota.RuleInput, selected ...string) (resources.MutationResult[RecurringReceipt], error) {
+	model := ""
+	if len(selected) > 0 {
+		model = selected[0]
+	}
 	var empty resources.MutationResult[RecurringReceipt]
 	route := routeAdminRecurring
 	if role == reviewerSteward {
@@ -191,7 +204,12 @@ func (s *Service) replaceRecurring(ctx context.Context, role reviewerRole, userI
 	if err := requireOne(result); err != nil {
 		return empty, err
 	}
-	if err := donationquota.Replace(ctx, tx, keyID, now, rules); err != nil {
+	if model != "" {
+		if err := requireQuotaModel(ctx, tx, keyID, model); err != nil {
+			return empty, err
+		}
+	}
+	if err := donationquota.ReplaceModel(ctx, tx, keyID, now, model, rules); err != nil {
 		return empty, quotaError(err)
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO donation_reviews(donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at) VALUES(?,?,?,?,'limit_update','',?)`, donationID, expected+1, actorID, auditRole, now)

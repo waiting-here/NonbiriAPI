@@ -46,7 +46,7 @@ func availableCandidateCountSQL(bindingID string, callerScoped bool, memberID ..
 	// token dimension nor current rules restrict it. CASE keeps the original
 	// calculation lazy for that common case.
 	quota := `(CASE WHEN dk.input_token_limit_mag IS NULL AND dk.output_token_limit_mag IS NULL
- AND NOT EXISTS(SELECT 1 FROM donation_quota_rules qr WHERE qr.donation_key_id=dk.id AND qr.current_epoch IS NOT NULL)
+ AND NOT EXISTS(SELECT 1 FROM donation_quota_rules qr WHERE qr.donation_key_id=dk.id AND qr.current_epoch IS NOT NULL AND qr.upstream_model_id='')
  THEN 1 ELSE ` + donationquota.AvailabilityPredicate("dk.id", "cx.decision_now", price, "dk.token_reserve") + ` END)`
 	// Count each binding once and stop at its first eligible target. A binding
 	// can hold many equivalent keys/models; testing every target before DISTINCT
@@ -73,6 +73,7 @@ func availableCandidateCountSQL(bindingID string, callerScoped bool, memberID ..
  AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>nbi_u128(0)
  AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>=nbi_u128(COALESCE(dk.input_token_reserve+dk.output_token_reserve,dk.token_reserve))
  AND ` + quota + `
+ AND ` + donationquota.ModelAvailabilityPredicate("dk.id", "target.upstream_model_id", "cx.decision_now", "dk.token_reserve") + `
 	` + scope + `)
 	 LIMIT ` + strconv.Itoa(MaxRuntimeCandidates+1) + `)) ELSE 0 END)`
 }

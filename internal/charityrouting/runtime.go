@@ -401,7 +401,10 @@ k.force_store_false,dk.token_reserve,dk.expires_at,
 dk.price_limit_mag,dk.call_limit_mag,dk.token_limit_mag,
 dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.tokens_used,dk.tokens_reserved,
 `+smartbackoff.EffectiveUntilSQL("dk.id")+`,
-EXISTS(SELECT 1 FROM donation_quota_rules qr WHERE qr.donation_key_id=dk.id AND qr.current_epoch IS NOT NULL)
+EXISTS(SELECT 1 FROM donation_quota_rules qr WHERE qr.donation_key_id=dk.id AND qr.upstream_model_id='' AND qr.current_epoch IS NOT NULL),
+(EXISTS(SELECT 1 FROM donation_model_quotas mq WHERE mq.donation_key_id=dk.id AND mq.upstream_model_id=t.upstream_model_id
+ AND (mq.token_limit_mag IS NOT NULL OR mq.input_token_limit_mag IS NOT NULL OR mq.output_token_limit_mag IS NOT NULL))
+ OR EXISTS(SELECT 1 FROM donation_quota_rules qr WHERE qr.donation_key_id=dk.id AND qr.upstream_model_id=t.upstream_model_id AND qr.current_epoch IS NOT NULL))
 FROM charity_model_bindings b
 JOIN charity_binding_targets t ON t.binding_id=b.id
 JOIN donation_keys dk ON dk.id=t.donation_key_id
@@ -432,13 +435,18 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 	// Price, decision time and quota amounts are fixed for each key in this
 	// snapshot. Reuse only after reaching the same eligibility stage.
 	quotas := make(map[int64]keyQuota)
+	type modelQuotaKey struct {
+		key   int64
+		model string
+	}
+	modelQuotas := make(map[modelQuotaKey]bool)
 	sawRecurringLimit := false
 	for rows.Next() {
 		var candidate RuntimeCandidate
 		var connector string
 		var forceStore int
 		var nativeMask int64
-		var hasCurrentQuotaRules bool
+		var hasCurrentQuotaRules, hasModelQuotaLimits bool
 		var tokenReserve int64
 		var expiresAt, rateLimitedUntil sql.NullInt64
 		var priceLimit, callLimit, tokenLimit []byte
@@ -446,7 +454,7 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 		if err := rows.Scan(&candidate.BindingID, &candidate.Authorization.TargetID, &candidate.Authorization.TargetRevision, &candidate.TargetOrder, &candidate.Order, &nativeMask, &candidate.DonationKeyID, &candidate.EndpointID, &candidate.EndpointKeyID,
 			&connector, &candidate.CanonicalBaseURL, &candidate.UpstreamModelID, &forceStore, &tokenReserve, &expiresAt,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceInflight, &callsUsed, &callsInflight,
-			&tokensUsed, &tokensInflight, &rateLimitedUntil, &hasCurrentQuotaRules); err != nil {
+			&tokensUsed, &tokensInflight, &rateLimitedUntil, &hasCurrentQuotaRules, &hasModelQuotaLimits); err != nil {
 			return RuntimeSnapshot{}, fmt.Errorf("charity routing: scan runtime candidate: %w", err)
 		}
 		candidate.ConnectorType = connectorcontract.Type(connector)
@@ -525,6 +533,22 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			quotas[candidate.DonationKeyID] = quota
 		}
 		if !quota.recurringAvailable {
+			sawRecurringLimit = true
+			continue
+		}
+		modelKey := modelQuotaKey{candidate.DonationKeyID, candidate.UpstreamModelID}
+		modelAvailable, checked := modelQuotas[modelKey]
+		if !checked {
+			modelAvailable = true
+			if hasModelQuotaLimits {
+				modelAvailable, err = donationquota.ModelAvailable(ctx, tx, candidate.DonationKeyID, decisionNow, candidate.UpstreamModelID, quota.reservation)
+				if err != nil {
+					return RuntimeSnapshot{}, err
+				}
+			}
+			modelQuotas[modelKey] = modelAvailable
+		}
+		if !modelAvailable {
 			sawRecurringLimit = true
 			continue
 		}

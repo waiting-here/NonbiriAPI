@@ -610,6 +610,7 @@ ORDER BY id LIMIT ?`, userID, cutoff, limit+1)
 		return nil, ErrResourceLimit
 	}
 	items := make([]ExportDonation, 0, len(ids))
+	modelsRemaining := limit
 	for _, id := range ids {
 		if _, err := materializeDonationExpiryTx(ctx, tx, id, decisionNow); err != nil {
 			return nil, err
@@ -650,6 +651,14 @@ ORDER BY id LIMIT ?`, userID, cutoff, limit+1)
 			if err != nil {
 				return nil, quotaError(err)
 			}
+			keys[index].ModelLimits, err = donationquota.ModelExports(ctx, tx, keyID, decisionNow, modelsRemaining)
+			if err != nil {
+				if errors.Is(err, donationquota.ErrCapacity) {
+					return nil, ErrResourceLimit
+				}
+				return nil, quotaError(err)
+			}
+			modelsRemaining -= len(keys[index].ModelLimits)
 		}
 		hidden, err := ownerHiddenAtTx(ctx, tx, id)
 		if err != nil {
