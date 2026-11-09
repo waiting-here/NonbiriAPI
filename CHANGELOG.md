@@ -20,6 +20,14 @@ Each version entry describes its source and compatibility boundary; a release ta
   around related settings, with responsive interface choices and member grids.
 - Clarify donated resources and connection editing, preserve drafts in task
   drawers, and separate common model settings from advanced request options.
+- Check idle Rock Paper Scissors matching and ranking expiry through the read
+  pool before acquiring the writer. Work found by a probe retains the existing
+  transaction checks and atomic settlement.
+- Reuse a closed connection-store schema fixture with a private database for
+  each test, avoiding repeated schema compilation without sharing mutable state.
+- Refresh CI timing weights from measured runs and rebalance long race groups
+  within the existing runner budget. Two serial historical-schema rejection
+  matrices keep full ordinary coverage; cancellation and recovery stay in race.
 - Advance the database to schema 51 and account export to format 36. Existing
   databases require an explicit offline upgrade; existing rerank behavior is
   preserved by default.

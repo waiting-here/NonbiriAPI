@@ -348,3 +348,26 @@ data-preservation matrices run in the ordinary suite; race coverage retains
 competing operations, upgrade progress and interrupted transactions. CI may
 skip duplicate vet in prepared race shards only because its required ordinary
 Go job vets the same package set. Standalone race commands retain vet by default.
+
+RPS matching probes for three unexpired queue entries before acquiring the
+writer. Ranking expiry probes for due, applied facts; both paths reselect and
+validate work in their original writer transactions. Later queue arrivals are
+handled on the next pass. Held-writer and concurrent maintenance-change tests
+cover empty passes and the read-to-write boundary; matching cancellation,
+rollback and exact ranking expiry remain covered separately. Measure reader
+waiting alongside writer savings when evaluating this change under load.
+
+Connection-store tests also reuse a closed schema image, retaining the exact
+test DDL. Each fixture opens its own private file with foreign keys enabled and
+an in-memory journal. The cache stores bytes, not a live database handle or a
+temporary path whose owner may finish first. Isolation and rollback regressions
+cover use after the image builder's temporary directory has been removed.
+
+CI timing updates must identify the successful run and use each command's own
+test interval; separate upgrade checks must not overwrite ordinary package
+timings. Existing per-package group caps can separate long race matrices without
+adding runners or workers. Evaluate the longest scheduled group, command count
+and cold fixture cost, not only equal shard weights. A scheduling simulation is
+an estimate until a later authorized CI run measures the changed layout. Exact
+serial exclusions retain ordinary coverage, and the live catalog continues to
+include new tests even when no historical weight exists.
