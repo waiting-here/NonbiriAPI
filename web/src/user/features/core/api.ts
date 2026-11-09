@@ -483,6 +483,9 @@ function endpointScopeInput(source: Record<string, unknown>) {
     ...(source.rerank_format === undefined
       ? {}
       : { rerank_format: normalizeRerankFormat(source.rerank_format) }),
+    ...(source.rerank_path === undefined
+      ? {}
+      : { rerank_path: validateScalarInput(source.rerank_path, 2048, 'rerank path') }),
   };
 }
 function endpointCreatePayload(input: EndpointCreateInput): EndpointCreateInput {
@@ -500,6 +503,7 @@ function endpointCreatePayload(input: EndpointCreateInput): EndpointCreateInput 
       'connection_id',
       'native_services',
       'rerank_format',
+      'rerank_path',
     ],
     'endpoint creation input',
   );
@@ -508,6 +512,7 @@ function endpointCreatePayload(input: EndpointCreateInput): EndpointCreateInput 
     'connection_id',
     'native_services',
     'rerank_format',
+    'rerank_path',
     'channel_entry_id',
     'channel_revision',
   ])
@@ -561,12 +566,12 @@ export async function patchEndpoint(
   const record = exactInput(
     input,
     ['expected_revision'],
-    ['note', 'enabled', 'connection_id', 'native_services', 'rerank_format'],
+    ['note', 'enabled', 'connection_id', 'native_services', 'rerank_format', 'rerank_path'],
     'endpoint update input',
   );
   if (
-    !['note', 'enabled', 'connection_id', 'native_services', 'rerank_format'].some((key) =>
-      Object.hasOwn(record, key),
+    !['note', 'enabled', 'connection_id', 'native_services', 'rerank_format', 'rerank_path'].some(
+      (key) => Object.hasOwn(record, key),
     )
   ) {
     throw new ApiError('invalid_request', 'Invalid endpoint update input.', 400);

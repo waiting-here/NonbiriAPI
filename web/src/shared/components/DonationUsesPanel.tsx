@@ -17,6 +17,8 @@ import {
 } from '@shared/operations/donationUses';
 import type { ReviewedUseLabel } from '@shared/operations/donationUsesReview';
 import { charityKeys } from '@shared/operations/charity';
+import { DonationRerankSettings } from './DonationRerankSettings';
+import { RerankURL } from './RerankPathField';
 
 export function DonationUsesPanel({
   role,
@@ -169,41 +171,63 @@ export function DonationUsesPanel({
                 value.discovery_source_id,
                 value.discovery_source_revision,
               ]);
-            const versions = (kind: 'approved' | 'pending' | 'latest') => [
-              ...new Map(
-                group.rows.flatMap((row) =>
-                  row[kind] ? ([[materialKey(row[kind]!), row[kind]!]] as const) : [],
-                ),
-              ).values(),
-            ];
+            const versions = (kind: 'approved' | 'pending' | 'latest') => {
+              const unique = new Map<string, { value: UseVersion; rerankURL?: string }>();
+              for (const row of group.rows) {
+                const value = row[kind];
+                if (!value) continue;
+                const key = materialKey(value);
+                const material = unique.get(key) ?? { value };
+                if (row.native_service === 'rerank') material.rerankURL = value.rerank_url;
+                unique.set(key, material);
+              }
+              return [...unique.values()];
+            };
             return (
               <div key={group.id} className="nb-stack nb-stack--sm">
                 <strong className="nb-mono">
                   {material?.display_head}…{material?.display_tail}
                 </strong>
-                {versions('approved').map((value) => (
+                {role !== 'owner'
+                  ? group.rows
+                      .filter((row) => row.native_service === 'rerank')
+                      .map((row) => (
+                        <DonationRerankSettings
+                          key={row.id}
+                          role={role}
+                          donationId={donationId}
+                          use={row}
+                          refresh={refresh}
+                          disabled={locked}
+                        />
+                      ))
+                  : null}
+                {versions('approved').map(({ value, rerankURL }) => (
                   <VersionMaterial
                     key={'approved:' + materialKey(value)}
                     label={t('common.connections.approvedVersion')}
                     value={value}
+                    rerankURL={rerankURL}
                     showDiscovery
                   />
                 ))}
-                {versions('pending').map((value) => (
+                {versions('pending').map(({ value, rerankURL }) => (
                   <VersionMaterial
                     key={'pending:' + materialKey(value)}
                     label={t('common.connections.pendingVersion')}
                     value={value}
+                    rerankURL={rerankURL}
                     showDiscovery
                   />
                 ))}
                 {versions('latest')
-                  .filter((value) => value.status !== 'pending' && value.status !== 'approved')
-                  .map((value) => (
+                  .filter(({ value }) => value.status !== 'pending' && value.status !== 'approved')
+                  .map(({ value, rerankURL }) => (
                     <VersionMaterial
                       key={'latest:' + materialKey(value)}
                       label={t('common.operations.charity.review')}
                       value={value}
+                      rerankURL={rerankURL}
                     />
                   ))}
               </div>
@@ -230,10 +254,12 @@ function VersionMaterial({
   label,
   value,
   showDiscovery = true,
+  rerankURL,
 }: {
   label: string;
   value: UseVersion;
   showDiscovery?: boolean;
+  rerankURL?: string;
 }) {
   const { t } = useTranslation();
   return (
@@ -245,6 +271,7 @@ function VersionMaterial({
       </p>
       <p>{t(`common.connections.useStates.${value.status}`)}</p>
       {value.review_note ? <Note>{value.review_note}</Note> : null}
+      {rerankURL ? <RerankURL value={rerankURL} /> : null}
       <p className="nb-sub">
         {value.review.required
           ? t('common.connections.bodyReviewRequired')

@@ -74,6 +74,30 @@ async function setup(extra?: React.ReactNode) {
   return view;
 }
 describe('normal donation review details', () => {
+  it('adds approved and pending rerank snapshot URLs to the corresponding shared materials', async () => {
+    const first = row('6', '9');
+    const rerank = {
+      ...row('7', '9'),
+      native_service: 'rerank',
+      approved: {
+        ...first.approved,
+        rerank_path: '/approved/reranks',
+        rerank_url: 'https://api.example/approved/reranks',
+      },
+      pending: {
+        ...first.pending,
+        rerank_path: '/pending/reranks',
+        rerank_url: 'https://api.example/pending/reranks',
+      },
+    };
+    mocks.get.mockResolvedValue(page([first, rerank]));
+    const view = await setup();
+    await view.user.click(screen.getByText('Review material'));
+    expect(await screen.findByText('https://api.example/approved/reranks')).toBeVisible();
+    expect(screen.getByText('https://api.example/pending/reranks')).toBeVisible();
+    expect(screen.getAllByText('Approved version')).toHaveLength(1);
+    expect(screen.getAllByText('Pending version')).toHaveLength(1);
+  });
   it('keeps historical materials accessible without offering a new review', async () => {
     mocks.get.mockResolvedValue(page([]));
     const view = await renderWithProviders(

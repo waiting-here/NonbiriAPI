@@ -31,8 +31,14 @@ export interface UseVersion {
   display_tail: string;
   review: { required: boolean; revision: string | null; material_available: boolean };
   discovery: DiscoveryEvidence | null;
+  rerank_path?: string;
+  rerank_url?: string;
 }
 export interface DonationUse {
+  rerank_path_override?: string | null;
+  effective_rerank_path?: string;
+  effective_rerank_url?: string;
+  default_rerank_url?: string;
   failure_reset?: ServiceFailureReset;
   id: string;
   donation_id: string;
@@ -57,6 +63,7 @@ export interface DonationUse {
     can_reset_failures: boolean;
     can_discover: boolean;
     can_bind: boolean;
+    can_edit_rerank_path?: boolean;
     unavailable_reason: string | null;
   };
 }
@@ -152,8 +159,25 @@ function version(value: unknown): UseVersion | null {
       'display_tail',
       'review',
       'discovery',
+      'rerank_path',
+      'rerank_url',
     ],
     'use version',
+    [
+      'credential_id',
+      'credential_version',
+      'grant_revision',
+      'status',
+      'review_note',
+      'reviewed_at',
+      'expected_review_revision',
+      'discovery_source_id',
+      'discovery_source_revision',
+      'display_head',
+      'display_tail',
+      'review',
+      'discovery',
+    ],
   );
   const review = record(
     row.review,
@@ -185,6 +209,12 @@ function version(value: unknown): UseVersion | null {
       material_available: boolean(review.material_available, 'body material available'),
     },
     discovery: row.discovery === null ? null : normalizeManagedDiscovery(row.discovery),
+    ...(row.rerank_path === undefined
+      ? {}
+      : { rerank_path: string(row.rerank_path, 'snapshot rerank path') }),
+    ...(row.rerank_url === undefined
+      ? {}
+      : { rerank_url: string(row.rerank_url, 'snapshot rerank URL') }),
   };
 }
 export function normalizeDonationUse(value: unknown): DonationUse {
@@ -203,7 +233,19 @@ export function normalizeDonationUse(value: unknown): DonationUse {
     'health',
     'capabilities',
   ] as const;
-  const row = record(value, [...required, 'failure_reset'], 'donation use', required);
+  const row = record(
+    value,
+    [
+      ...required,
+      'failure_reset',
+      'rerank_path_override',
+      'effective_rerank_path',
+      'effective_rerank_url',
+      'default_rerank_url',
+    ],
+    'donation use',
+    required,
+  );
   const caps = record(
     row.capabilities,
     [
@@ -213,8 +255,17 @@ export function normalizeDonationUse(value: unknown): DonationUse {
       'can_discover',
       'can_bind',
       'unavailable_reason',
+      'can_edit_rerank_path',
     ],
     'use capabilities',
+    [
+      'can_review',
+      'can_manage',
+      'can_reset_failures',
+      'can_discover',
+      'can_bind',
+      'unavailable_reason',
+    ],
   );
   const health =
     row.health === null
@@ -226,6 +277,18 @@ export function normalizeDonationUse(value: unknown): DonationUse {
         );
   return {
     failure_reset: row.failure_reset == null ? undefined : serviceFailureReset(row.failure_reset),
+    ...(row.rerank_path_override === undefined
+      ? {}
+      : { rerank_path_override: nullableString(row.rerank_path_override, 'charity rerank path') }),
+    ...(row.effective_rerank_path === undefined
+      ? {}
+      : { effective_rerank_path: string(row.effective_rerank_path, 'effective rerank path') }),
+    ...(row.effective_rerank_url === undefined
+      ? {}
+      : { effective_rerank_url: string(row.effective_rerank_url, 'effective rerank URL') }),
+    ...(row.default_rerank_url === undefined
+      ? {}
+      : { default_rerank_url: string(row.default_rerank_url, 'default rerank URL') }),
     id: decimalID(row.id, 'use'),
     donation_id: decimalID(row.donation_id, 'donation'),
     donation_key_id: decimalID(row.donation_key_id, 'donation key'),
@@ -252,6 +315,9 @@ export function normalizeDonationUse(value: unknown): DonationUse {
       can_reset_failures: boolean(caps.can_reset_failures, 'reset failures'),
       can_discover: boolean(caps.can_discover, 'discover'),
       can_bind: boolean(caps.can_bind, 'bind'),
+      ...(caps.can_edit_rerank_path === undefined
+        ? {}
+        : { can_edit_rerank_path: boolean(caps.can_edit_rerank_path, 'edit rerank path') }),
       unavailable_reason: nullableString(caps.unavailable_reason, 'unavailable reason'),
     },
   };

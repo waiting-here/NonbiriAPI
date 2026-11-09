@@ -40,6 +40,78 @@ const emptyPage = {
   pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
 };
 describe('persistent entry metadata drafts', () => {
+  it.each(['custom', 'mainstream'] as const)(
+    'edits a %s service rerank path and restores the original suffix without changing its request format',
+    async (source) => {
+      let endpoint = {
+        ...endpointWire(),
+        origin:
+          source === 'mainstream'
+            ? { kind: 'mainstream', channel_id: 'mch_' + 'A'.repeat(22), name: 'Preset service' }
+            : { kind: 'custom' },
+        native_services: ['rerank'],
+        rerank_format: 'cohere',
+        rerank_path: '/saved/reranks',
+        rerank_path_configurable: true,
+      };
+      const writes: Record<string, unknown>[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn<typeof fetch>(async (input, init) => {
+          const url = new URL(String(input), 'https://app.example');
+          if (url.pathname === '/api/endpoint-create-options')
+            return json({
+              base_connector_types: ['openai-compatible'],
+              mainstream_channels: [],
+              native_service_options: [
+                {
+                  connector_type: 'openai-compatible',
+                  configuration_type: 'openai-compatible',
+                  native_services: ['rerank'],
+                  default_native_services: ['rerank'],
+                  rerank_formats: ['generic', 'cohere'],
+                },
+              ],
+            });
+          if (url.pathname === '/api/endpoints/11') {
+            if (init?.method === 'PATCH') {
+              const body = JSON.parse(String(init.body));
+              writes.push(body);
+              endpoint = { ...endpoint, ...body, revision: String(Number(endpoint.revision) + 1) };
+            }
+            return json(endpoint);
+          }
+          throw Error('Unexpected ' + url.pathname);
+        }),
+      );
+      const view = await renderWithProviders(
+        <EntryScope accountId="1" endpoint={normalizeEndpoint(endpoint)} />,
+        { station: 'user' },
+      );
+      view.queryClient.setQueryData(['user', 'session'], {
+        user: { id: '1', username: 'fixture', effective_level: 1 },
+      });
+      await view.user.click(screen.getByText('Endpoint settings', { exact: true }));
+      const path = await screen.findByRole('textbox', { name: /Rerank interface path/ });
+      expect(path).toBeVisible();
+      await view.user.clear(path);
+      await view.user.type(path, '/compatible-api/v1/reranks');
+      await view.user.click(screen.getByRole('button', { name: 'Save' }));
+      await screen.findByText('Saved');
+      await view.user.clear(path);
+      await view.user.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(writes).toHaveLength(2));
+      expect(writes).toEqual([
+        {
+          expected_revision: '1',
+          native_services: ['rerank'],
+          rerank_path: '/compatible-api/v1/reranks',
+        },
+        { expected_revision: '2', native_services: ['rerank'], rerank_path: '' },
+      ]);
+      expect(screen.getByRole('combobox', { name: 'Rerank format' })).toHaveValue('cohere');
+    },
+  );
   it.each([
     ['typesafe-systemone', 'systemone', 'openai'],
     ['anthropic-compatible', 'anthropic_messages', 'anthropic'],

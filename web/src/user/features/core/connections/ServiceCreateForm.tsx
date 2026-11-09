@@ -53,6 +53,7 @@ export function ServiceCreateForm({
   const [address, setAddress] = useState('');
   const [name, setName] = useState<string | null>(null);
   const [format, setFormat] = useState<RerankFormat | null>(null);
+  const [rerankPath, setRerankPath] = useState('');
   const [discoveryOverride, setDiscoveryOverride] = useState<DiscoveryPreset | null | undefined>();
   const [selected, setSelected] = useState<Record<string, NativeService[]>>({});
   const [skipCatalog, setSkipCatalog] = useState<Record<string, boolean>>({});
@@ -141,6 +142,7 @@ export function ServiceCreateForm({
               native_services: services,
               rerank_format:
                 format ?? (chosenProtocol?.rerank_formats.includes('generic') ? 'generic' : ''),
+              ...(chosenProtocol?.rerank_formats.length ? { rerank_path: rerankPath.trim() } : {}),
             },
           },
         ]
@@ -607,6 +609,7 @@ export function ServiceCreateForm({
                   onChange={(event) => {
                     setConnector(event.target.value);
                     setFormat(null);
+                    setRerankPath('');
                     setDiscoveryOverride(undefined);
                   }}
                 >
@@ -630,6 +633,9 @@ export function ServiceCreateForm({
               formats={chosenProtocol?.rerank_formats}
               value={format}
               onChange={setFormat}
+              path={rerankPath}
+              onPathChange={setRerankPath}
+              baseURL={address}
               disabled={locked || started}
             />
             <Fold title={t('common.connections.discoveryOptional')}>

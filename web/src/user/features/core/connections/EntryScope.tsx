@@ -46,6 +46,7 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
   const services = allowed?.native_services ?? [];
   const [note, setNote] = useState(endpoint.note);
   const [format, setFormat] = useState<RerankFormat | null>(endpoint.rerank_format || null);
+  const [rerankPath, setRerankPath] = useState(endpoint.rerank_path ?? '');
   const selectedFormat = format ?? (allowed?.rerank_formats.includes('generic') ? 'generic' : '');
   const [expectedRevision, setExpectedRevision] = useState(endpoint.revision);
   const [baseline, setBaseline] = useState(endpoint);
@@ -60,6 +61,7 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
       setBaseline(saved);
       setNote(saved.note);
       setFormat(saved.rerank_format || null);
+      setRerankPath(saved.rerank_path ?? '');
     },
   );
   const locked =
@@ -69,7 +71,8 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
   const dirty =
     note !== baseline.note ||
     JSON.stringify(services) !== JSON.stringify(baseline.native_services ?? []) ||
-    selectedFormat !== (baseline.rerank_format ?? '');
+    selectedFormat !== (baseline.rerank_format ?? '') ||
+    rerankPath.trim() !== (baseline.rerank_path ?? '');
   return (
     <div className="nb-stack">
       <form
@@ -82,6 +85,9 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
               native_services: services,
               ...(selectedFormat !== (baseline.rerank_format ?? '')
                 ? { rerank_format: selectedFormat }
+                : {}),
+              ...(rerankPath.trim() !== (baseline.rerank_path ?? '')
+                ? { rerank_path: rerankPath.trim() }
                 : {}),
               expected_revision: expectedRevision,
             })
@@ -110,6 +116,10 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
           formats={allowed?.rerank_formats}
           value={format}
           onChange={setFormat}
+          path={rerankPath}
+          onPathChange={setRerankPath}
+          baseURL={endpoint.base_url}
+          pathConfigurable={endpoint.rerank_path_configurable}
           disabled={locked}
         />
         <ConnectionOperationNotice operation={operation} />
