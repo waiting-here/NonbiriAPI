@@ -35,6 +35,7 @@ export function EntryForm({
   const [baseURL, setBaseURL] = useState('');
   const [note, setNote] = useState('');
   const [format, setFormat] = useState<RerankFormat | null>(null);
+  const [rerankPath, setRerankPath] = useState('');
   const [channelId, setChannelId] = useState('');
   const [selected, setSelected] = useState<Record<string, NativeService[]>>({});
   const [saved, setSaved] = useState<Record<string, Endpoint>>({});
@@ -75,6 +76,7 @@ export function EntryForm({
   const chooseConnector = (item: NativeServiceOption | undefined) => {
     setConnector(item?.connector_type ?? '');
     setFormat(null);
+    setRerankPath('');
   };
   const save = async () => {
     const inputs: { row: string; input: EndpointCreateInput }[] =
@@ -92,6 +94,9 @@ export function EntryForm({
                 native_services: services,
                 rerank_format:
                   format ?? (selectedOption?.rerank_formats.includes('generic') ? 'generic' : ''),
+                ...(selectedOption?.rerank_formats.length
+                  ? { rerank_path: rerankPath.trim() }
+                  : {}),
               },
             },
           ]
@@ -217,6 +222,9 @@ export function EntryForm({
                   formats={selectedOption.rerank_formats}
                   value={format}
                   onChange={setFormat}
+                  path={rerankPath}
+                  onPathChange={setRerankPath}
+                  baseURL={baseURL}
                   disabled={locked || Boolean(saved.custom)}
                 />
               ) : null}

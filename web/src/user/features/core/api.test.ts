@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createEndpoint,
+  patchEndpoint,
   createManualEntries,
   getBindingCandidates,
   getCatalog,
@@ -180,6 +181,45 @@ describe('core API wire contract', () => {
       code: 'invalid_request',
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sends a custom rerank path and preserves an explicit empty path when clearing it', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (_input, init) =>
+      jsonResponse(
+        {
+          ...(fixture('internal/resources/testdata/endpoint.json') as Record<string, unknown>),
+          rerank_path: '/compatible-api/v1/reranks',
+          rerank_url: 'https://example.com/compatible-api/v1/reranks',
+          rerank_path_configurable: true,
+        },
+        init?.method === 'POST' ? 201 : 200,
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const created = await createEndpoint(
+      {
+        source: 'custom',
+        connector_type: 'openai-compatible',
+        base_url: 'https://example.com/v1',
+        note: 'Rerank service',
+        enabled: true,
+        rerank_path: '/compatible-api/v1/reranks',
+      },
+      operation,
+    );
+    expect(created).toMatchObject({
+      rerank_path: '/compatible-api/v1/reranks',
+      rerank_url: 'https://example.com/compatible-api/v1/reranks',
+      rerank_path_configurable: true,
+    });
+    await patchEndpoint('11', { expected_revision: '1', rerank_path: '' }, operation);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]?.body)).rerank_path).toBe(
+      '/compatible-api/v1/reranks',
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[1]![1]?.body))).toEqual({
+      expected_revision: '1',
+      rerank_path: '',
+    });
   });
 
   it('sends the mainstream union without client connector or URL fields', async () => {
