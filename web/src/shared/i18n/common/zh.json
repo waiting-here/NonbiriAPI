@@ -3112,6 +3112,7 @@
       "emptyHelp": "先发现或手动添加上游模型，再配置额度。",
       "trackingNew": "首次保存累计额度或首次调用后开始累计统计。",
       "trackingSince": "累计统计始于 {{time}}；此前用量不计入模型额度。",
+      "unattributed": "总用量中有 {{tokens}} Token 未区分输入与输出。",
       "cumulative": "累计额度",
       "recurring": "周期额度",
       "usage": "已用 {{used}} · 预留 {{reserved}} · 剩余 {{remaining}}",

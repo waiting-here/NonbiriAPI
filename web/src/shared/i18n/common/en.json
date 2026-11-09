@@ -3112,6 +3112,7 @@
       "emptyHelp": "Discover or manually add upstream models before configuring quotas.",
       "trackingNew": "Cumulative tracking starts when cumulative limits are first saved or the first request is made.",
       "trackingSince": "Cumulative tracking started {{time}}. Earlier usage is excluded from model quotas.",
+      "unattributed": "{{tokens}} tokens are included in total usage without an input/output breakdown.",
       "cumulative": "Cumulative quotas",
       "recurring": "Recurring quotas",
       "usage": "Used {{used}} · Reserved {{reserved}} · Remaining {{remaining}}",

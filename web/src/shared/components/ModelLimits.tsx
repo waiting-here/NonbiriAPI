@@ -25,7 +25,11 @@ import { Fold } from './ui/Fold';
 import { EmptyState, ErrorState, LoadingState } from './States';
 import './modelLimits.css';
 
-const metrics: ModelMetric[] = ['tokens', 'input_tokens', 'output_tokens'];
+const metrics: { key: ModelMetric; labelKey: string }[] = [
+  { key: 'tokens', labelKey: 'common.modelLimits.tokens' },
+  { key: 'input_tokens', labelKey: 'common.modelLimits.input_tokens' },
+  { key: 'output_tokens', labelKey: 'common.modelLimits.output_tokens' },
+];
 
 export function ModelLimits(props: RecurringLimitsProps) {
   const { t } = useTranslation();
@@ -134,9 +138,9 @@ function ModelLimitList(props: RecurringLimitsProps) {
                 cell: 'meta',
                 render: (item) => (
                   <div className="nb-stack nb-stack--sm">
-                    {metrics.map((metric) => (
+                    {metrics.map(({ key: metric, labelKey }) => (
                       <span key={metric}>
-                        {t(`common.modelLimits.${metric}`)}: {count(item.remaining[metric])}
+                        {t(labelKey)}: {count(item.remaining[metric])}
                       </span>
                     ))}
                   </div>
@@ -262,6 +266,13 @@ function ModelLimitEditor({
               time: formatDateTime(value.tracking_started_at),
             })}
       </p>
+      {value.unattributed_total_tokens !== '0' ? (
+        <p className="field-help">
+          {t('common.modelLimits.unattributed', {
+            tokens: count(value.unattributed_total_tokens),
+          })}
+        </p>
+      ) : null}
       {read.error ? <ErrorState error={read.error} onRetry={() => void read.refetch()} /> : null}
       <form
         onSubmit={(event) => {
@@ -283,10 +294,10 @@ function ModelLimitEditor({
         }}
       >
         <Fields columns={1} legend={t('common.modelLimits.cumulative')}>
-          {metrics.map((metric) => (
+          {metrics.map(({ key: metric, labelKey }) => (
             <Field
               key={metric}
-              label={t(`common.modelLimits.${metric}`)}
+              label={t(labelKey)}
               help={t('common.modelLimits.usage', {
                 used: count(value.used[metric]),
                 reserved: count(value.reserved[metric]),
