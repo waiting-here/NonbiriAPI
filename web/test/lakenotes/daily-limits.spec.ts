@@ -48,12 +48,12 @@ test('daily exchange spending, configuration and remaining allowance in both scr
   ).json();
   try {
     await cap(admin, '1000000');
-    const before = await (
-      await api(user, base + '/exchange/quote', 'POST', {
-        direction: 'general_to_coins',
-        quantity: '1',
-      })
-    ).json();
+    const beforeResponse = await api(user, base + '/exchange/quote', 'POST', {
+      direction: 'general_to_coins',
+      quantity: '1',
+    });
+    expect(beforeResponse.status(), await beforeResponse.text()).toBe(200);
+    const before = await beforeResponse.json();
     const exchange = await api(user, base + '/exchange', 'POST', {
       direction: 'general_to_coins',
       quantity: '1',
@@ -86,6 +86,9 @@ test('daily exchange spending, configuration and remaining allowance in both scr
         await adminContext.addInitScript((theme) => localStorage.setItem('nb.theme', theme), theme);
         const management = await adminContext.newPage();
         await management.goto(fixture().admin_url + '/games');
+        await management
+          .getByRole('button', { name: 'Lake Notes Game settings', exact: true })
+          .click();
         const fields = management.locator('.lake-period-form');
         await expect(fields.getByPlaceholder('Unlimited')).toHaveCount(4);
         await fields.scrollIntoViewIfNeeded();
@@ -93,6 +96,9 @@ test('daily exchange spending, configuration and remaining allowance in both scr
           await management.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
         ).toBe(true);
         await fields.screenshot({ path: join(folder, `lake-daily-admin-${width}-${theme}.png`) });
+        await management.screenshot({
+          path: join(folder, `lake-daily-admin-${width}-${theme}-viewport.png`),
+        });
         await adminContext.close();
         const userContext = await context(browser, false, 0, 'en', width);
         await userContext.addInitScript((theme) => localStorage.setItem('nb.theme', theme), theme);
@@ -117,6 +123,7 @@ test('daily exchange spending, configuration and remaining allowance in both scr
     }
     const management = await admin.newPage();
     await management.goto(fixture().admin_url + '/games');
+    await management.getByRole('button', { name: 'Lake Notes Game settings', exact: true }).click();
     const section = management.locator('.lake-exchange-setting').filter({
       has: management.getByRole('heading', { name: c.general_to_coins, exact: true }),
     });
@@ -128,6 +135,8 @@ test('daily exchange spending, configuration and remaining allowance in both scr
     );
     await management.getByRole('button', { name: 'Save all changes', exact: true }).click();
     expect((await saved).status()).toBe(200);
+    await expect(management.locator('.lake-period-form')).toHaveCount(0);
+    await management.getByRole('button', { name: 'Lake Notes Game settings', exact: true }).click();
     await expect(section.getByLabel(/Daily spending limit/)).toHaveValue('0');
     const page = await user.newPage();
     await page.goto(fixture().user_url + '/games/lake-notes');

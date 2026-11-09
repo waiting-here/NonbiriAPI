@@ -173,6 +173,9 @@ func TestImageBrowserFixture(t *testing.T) {
 		users.Close()
 		admins.Close()
 	}()
+	if err := f.store.SetSiteTimezoneOffsetMinutes(0); err != nil {
+		t.Fatal(err)
+	}
 	f.initialize()
 	stop := make(chan struct{})
 	var stopOnce sync.Once
