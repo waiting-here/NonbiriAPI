@@ -4,6 +4,26 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## Unreleased
+
+- Add optional same-origin paths for HTTP rerank, including Aliyun Bailian's
+  `/compatible-api/v1/reranks`. Existing entries retain their default paths.
+- Keep donated rerank settings separate from personal settings. Authorized
+  administrators and stewards can override the charity path and restore the
+  submitted setting from approval or management details.
+- Recognize explicit input-length errors for messages, input, and prompts without
+  increasing donated-key consecutive failures, including adapted requests.
+- Give level-6 stewards administrator-equivalent charity configuration controls.
+  New permissions for request adaptation, affinity duration, and price-template
+  management are disabled for level-5 stewards by default.
+- Reorganize model, pricing, managed-header, account-credit and activity forms
+  around related settings, with responsive interface choices and member grids.
+- Clarify donated resources and connection editing, preserve drafts in task
+  drawers, and separate common model settings from advanced request options.
+- Advance the database to schema 51 and account export to format 36. Existing
+  databases require an explicit offline upgrade; existing rerank behavior is
+  preserved by default.
+
 ## 1.3.7 — 2026-11-09
 
 This release includes the pending v1.3.7 fixes and the changes briefly published

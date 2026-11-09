@@ -70,9 +70,10 @@ fields are rejected. The configuration is limited to 4 KiB, within the existing
 request-body limit. Disabled configurations are validated too.
 
 Administrators and stewards with the applicable `charity.create` or
-`charity.pricing` grant can save these settings. Template maintenance remains
-administrator-only, with enabled-template reads requiring
-`charity.price_templates.read` for steward sessions. Applying a template copies
+`charity.pricing` grant can save these settings. Administrators and stewards with
+`charity.price_templates.manage` can maintain templates. Steward sessions need
+that grant or `charity.price_templates.read` to read enabled templates; reading
+disabled templates requires the management grant. Applying a template copies
 both discount configurations completely; later template edits do not change a
 model.
 

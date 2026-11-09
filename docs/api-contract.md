@@ -152,11 +152,11 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 50. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts 28 exact registered schema 16–26 and 33–49 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`, including for 49-to-50. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 51. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts 29 exact registered schema 16–26 and 33–50 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`, including for 50-to-51. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
 
-`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=50`, `minimum_schema_version=50`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its 28 supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
+`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=51`, `minimum_schema_version=51`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its 29 supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
 
-Current account export `schema_version=35` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v35.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
+Current account export `schema_version=36` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v36.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
 ### 1.5 Display time context
 
@@ -502,9 +502,9 @@ After verified Discord OAuth refuses sign-in for an active ban or blacklist, `GE
 | --- | --- |
 | `GET /api/endpoint-create-options` | `{base_connector_types,native_service_options,mainstream_channels}`; active, enabled channels and their current presets. Optional `match_base_url` adds `matching_mainstream_entries`. |
 | `GET /api/endpoints` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode optionally accepts `q,connector_type,source,state` and returns `Endpoint` with `pagination`. |
-| `POST /api/endpoints` | Strict union `{source:"mainstream",channel_id,note,enabled}` or `{source:"custom",connector_type,base_url,note,enabled}`; returns 201. |
+| `POST /api/endpoints` | Strict union `{source:"mainstream",channel_id,note,enabled,rerank_path?}` or `{source:"custom",connector_type,base_url,note,enabled,rerank_path?}`; returns 201. |
 | `GET /api/endpoints/{id}` | One owner endpoint. |
-| `PATCH /api/endpoints/{id}` | `{note?,enabled?,expected_revision}`; origin and Connector are immutable. |
+| `PATCH /api/endpoints/{id}` | `{note?,enabled?,rerank_path?,expected_revision}`; origin and Connector are immutable. |
 | `DELETE /api/endpoints/{id}` | `{expected_revision}`; 204. Report locks return `resource_locked`. |
 | `GET /api/endpoints/{id}/keys` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode optionally accepts `q,enabled,donated,suspension_state,credential_available` and returns safe `EndpointKey` with `pagination`. |
 | `POST /api/endpoints/{id}/keys` | `{secret,note,enabled,force_store_false,ownership_confirmed:true,max_concurrency?,max_rpm?}`; returns 201 safe metadata. |
@@ -550,6 +550,42 @@ In the editor, header names have no slash or colon: `User-Agent` with plain-text
 The complete configuration is limited to 64 KiB and depth 16, at most 64 header names and 128 body paths. Each header name is at most 128 bytes, each value 4,096 bytes, added headers 16 KiB in total, and each JSON Pointer at most 512 bytes. Protected protocol/authentication headers and server-owned model, safety, stream, usage, tool structure, routing, accounting and credential fields cannot be overridden. Header matching is case-insensitive; an unlisted client header is never forwarded. Defaults fill only absent object fields, forced values replace their leaves, and the resulting request is validated again before dispatch. Unsupported native fields require an explicit declared path for Anthropic-compatible or Gateway v3 conversion; no adaptation expands picture-book or discovery request bodies. A 409 means the revision or effective rules conflict; refetch before retrying with a new body. The same key and identical body replay under the existing control-plane rules.
 
 Authorized donation-key projections include numeric `max_concurrency,max_rpm` and decimal-string `key_limits_revision`; all three are null after the physical key is gone. Their shared binding menu/candidate/binding `source` includes the current integer limits. Management PATCH accepts either or both limits, as integers 0–2147483647, plus required `expected_key_limits_revision` whenever either is present and the ordinary donation `expected_revision`. Null is invalid for these new fields. Omitted limits stay unchanged; 0 adds no per-key limit. The final transaction compares both donation and physical-key revisions, updates the shared `endpoint_key_limits`, advances both revisions and records safe old/new limit values in the donation audit. An owner edit to the physical key can therefore produce a 409; refetch both revisions. Suspended physical resources return `resource_locked`. Administrators and stewards with `donations.manage_keys` may use this capability; the whole-donation scope in §6.4 applies. Standard, enhanced and full scopes permit direct maintenance of qualifying donations; an optional model selector cannot expand source authority. The shared physical limits affect personal and charity calls using the key. The mutation grants no secret, endpoint or private-note access. Ordinary charity callers do not receive underlying key configuration. Owner resource exports include the values; key deletion cascades to its configuration. Historical idempotent responses may omit these additive fields; an authoritative read returns current values.
+
+### Custom HTTP rerank paths
+
+Endpoint creation and PATCH accept optional `rerank_path`. An empty string uses
+the base URL plus `/rerank`; PATCH omission preserves the current setting. The
+response adds `rerank_path`, `rerank_url` and `rerank_path_configurable`. The
+last field identifies HTTP rerank support; Gateway native RPC is excluded.
+A nonempty path replaces only the rerank path on the endpoint's existing origin.
+It is limited to 2048 bytes and cannot contain an authority, query, fragment,
+backslash, whitespace/control characters, dot segments or encoded separators.
+Other operations, payload formats and credential-origin grants are unchanged.
+
+Donation use revisions capture `rerank_path` when submitted and expose their
+resolved `rerank_url`. A later personal endpoint edit does not change an
+existing submitted revision. A use adds nullable `rerank_path_override`,
+`effective_rerank_path`, `effective_rerank_url` and `default_rerank_url`.
+Null inherits the approved revision, or the pending revision when no approval
+exists. An empty override explicitly uses the default suffix; a nonempty value
+uses that absolute path. The default URL is resolved from the same revision.
+
+Administrator and steward cookie sessions can PATCH
+`{prefix}/donations/{id}/uses/{useId}`, with `/admin/api` or `/api/steward` as the
+prefix. The body contains only `expected_revision` and `rerank_path_override`;
+`Idempotency-Key`, current `donations.manage_keys`, resource scope and use state
+remain required. `capabilities.can_edit_rerank_path` reports current eligibility.
+The request accepts only the existing steward `charity_model_id` scope selector,
+uses the 256 KiB control-body limit and returns HTTP 200 with the current role's
+use projection.
+Owners cannot set this charity override. The operation does not change the
+donor's personal endpoint or add a CallerKey route.
+
+All calls retain the common outbound boundary. Static Cloudflare routing still
+matches the original base URL and enforces its source-path prefix. A custom path
+outside that prefix fails without a direct-network fallback. A pending dispatch
+claim captures and rechecks the effective rerank path before sending; an
+intervening change invalidates that stale claim.
 
 ### 3.2 Personal models and bindings
 
@@ -1050,13 +1086,17 @@ ordinary users and CallerKeys cannot manage these policies; level-5 sessions req
 
 ### 4.1.4 Verified caller-parameter errors
 
-A narrowly verified caller-parameter error leaves the donated key's consecutive-failure count unchanged: it neither increments nor clears it. The request still fails and retains its normal sanitized error, diagnostics, retry and accounting behavior. HTTP 400/422 alone, generic `invalid_request_error` or message wording cannot establish this result. Existing retry-header and quota-backoff rules retain priority.
+A recognized caller-parameter or input-length error leaves the donated key's consecutive-failure count unchanged: it neither increments nor clears it. The request still fails and retains its normal sanitized error, diagnostics, retry and accounting behavior. HTTP 400/422 or a generic `invalid_request_error` alone does not qualify. Existing retry-header and quota-backoff rules retain priority.
 
-Recognition requires a complete, bounded `application/json` response with no duplicate keys, an `error` object, a nonempty string message, and exact string `type`, `code` and `param`. The message is not used for classification. HTTP 400/422 with `type:"invalid_request_error"` accepts codes `invalid_value`, `invalid_type`, `unsupported_parameter` and `unsupported_value`. HTTP 400 also accepts the exact `type:"BadRequest"` and `code:"InvalidParameter"` pair used by Ark. This pair still requires an eligible named parameter; missing or empty `param`, code suffixes and HTTP 422 do not qualify.
+Both categories require a complete, bounded `application/json` response with no duplicate keys, an `error` object and a nonempty string message. For generation parameters, exact string `type`, `code` and `param` are required and the message is not used for classification. HTTP 400/422 with `type:"invalid_request_error"` accepts codes `invalid_value`, `invalid_type`, `unsupported_parameter` and `unsupported_value`. HTTP 400 also accepts the exact `type:"BadRequest"` and `code:"InvalidParameter"` pair used by Ark. This pair still requires an eligible named parameter; missing or empty `param`, code suffixes and HTTP 422 do not qualify.
 
 The exact top-level parameter allowlist is `temperature`, `top_p`, `top_k`, `frequency_penalty`, `presence_penalty`, `seed`, `stop`, `n`, `logprobs`, `top_logprobs`, `logit_bias`, `max_tokens`, `max_completion_tokens`, `max_output_tokens`, `reasoning_effort`, `reasoning`, `verbosity`, `response_format`, `dimensions`, `encoding_format`, `size`, `quality`, `style`, `output_format`, `output_compression`, `partial_images`, `aspect_ratio`, `resolution`, `steps`, `cfg_scale`, `negative_prompt`, `async`, `speed` and `language`. Extension names only expand error recognition; they do not add asynchronous task or result-retrieval support.
 
-Only supported native OpenAI JSON paths can supply the proof. The named parameter must come from the original caller and have the same raw JSON value in the final upstream body. Request adaptation, additional or managed headers, native extensions and protocol conversion exclude recognition. Changing the reported parameter's raw JSON value, even by equivalent normalization, also excludes it. Nested/unknown parameters, model/resource/identity/store/service-tier errors, other protocols, rerank and multipart are outside this classification. Authorization, billing, platform, network and ambiguous failures retain their existing handling. Personal calls are unchanged.
+For those generation parameters, only supported native OpenAI JSON paths can supply the proof. The named parameter must come from the original caller and have the same raw JSON value in the final upstream body. Request adaptation, additional or managed headers, native extensions and protocol conversion exclude this proof. Changing the reported parameter's raw JSON value, even by equivalent normalization, also excludes it.
+
+Input-length recognition uses HTTP 400/422 and `type:"invalid_request_error"`. Codes `context_length_exceeded`, `input_too_long` and `prompt_too_long` qualify when `param` is absent, null, or exactly `messages`, `input` or `prompt`. The generic code `string_above_max_length` requires one of those three input parameters. Code `invalid_value` also requires one of those input parameters and an explicit input-length limit message, such as `system/developer 消息字符数超限：6001，最多 5000`; an ordinary invalid message structure or content error does not qualify. An explicit parameter outside that input set is rejected.
+
+Input-length recognition covers existing OpenAI JSON outbound paths even when input is adapted, headers are configured, native extensions are used or the request is converted. It does not compare original and outgoing input. Multipart, unsupported error protocols and unrelated model/resource/identity/store/service-tier errors remain outside this category. Authorization, billing, platform, network and ambiguous failures retain their existing handling. Personal calls are unchanged.
 
 The same completion transaction saves a minimal claim-bound receipt before accepting the neutral outcome. The receipt contains only its claim reference, HTTP status and recognized code, with no parameter name/value, body or upstream message. It follows the claim lifecycle and is excluded from account export.
 
@@ -1064,7 +1104,7 @@ The same completion transaction saves a minimal claim-bound receipt before accep
 
 Each key's `failure_disable_threshold` is a canonical decimal U128 string, default `"10"` on creation and migration. Owners, administrators and current stewards can independently `PATCH {prefix}/donations/{id}/keys/{keyId}/failure-policy`, using `/api`, `/admin/api` or `/api/steward` respectively. The strict body requires `{expected_revision,failure_disable_threshold}` with `Idempotency-Key`. The safe response includes `donation_id,donation_key_id,failure_disable_threshold,failure_streak,failure_disabled,revision` and nullable `smart_backoff` (§4.1.3). New donations need no smart-backoff configuration.
 
-Saving retains the current count and generation and atomically recalculates error-disablement: `0` clears it; a positive threshold disables when the count reaches that threshold. Zero still records failures. Upstream HTTP 200 or a protocol-complete success clears the count, regardless of later errors. Without either, a non-200 response with a valid retry hint, an error recognized by its smart-backoff policy, or a narrowly verified caller-parameter error leaves the count unchanged without clearing it; other upstream response/protocol/DNS/connect/timeout failures increase it; caller cancellation, downstream failure, Debug stop, platform rejection and internal failure leave it unchanged. A confirmed upstream failure still counts after a later cancellation. Recovery uses a persisted HTTP 200 acceptance checkpoint when available; an unknown outcome is neutral. Fees and quotas follow the billing rules above. Ordered in-flight results use the latest saved threshold; old-generation completions cannot change current state. Manual disablement, expiry, withdrawal, bans, quotas and ownership checks continue to apply. Pages warn when zero is entered or saved, without extra confirmation. Each real save has a no-secret review audit; replay repeats no write or alarm. Only a transition into error-disablement alerts; clearing and later disabling can alert again.
+Saving retains the current count and generation and atomically recalculates error-disablement: `0` clears it; a positive threshold disables when the count reaches that threshold. Zero still records failures. Upstream HTTP 200 or a protocol-complete success clears the count, regardless of later errors. Without either, a non-200 response with a valid retry hint, an error recognized by its smart-backoff policy, or a recognized caller-parameter or input-length error leaves the count unchanged without clearing it; other upstream response/protocol/DNS/connect/timeout failures increase it; caller cancellation, downstream failure, Debug stop, platform rejection and internal failure leave it unchanged. A confirmed upstream failure still counts after a later cancellation. Recovery uses a persisted HTTP 200 acceptance checkpoint when available; an unknown outcome is neutral. Fees and quotas follow the billing rules above. Ordered in-flight results use the latest saved threshold; old-generation completions cannot change current state. Manual disablement, expiry, withdrawal, bans, quotas and ownership checks continue to apply. Pages warn when zero is entered or saved, without extra confirmation. Each real save has a no-secret review audit; replay repeats no write or alarm. Only a transition into error-disablement alerts; clearing and later disabling can alert again.
 
 Owners can `POST /api/donations/{id}/keys/{keyId}/failure-streak-reset` with
 `{expected_revision}` and `Idempotency-Key`. The key must remain their own,
@@ -1600,9 +1640,11 @@ Both administrator and steward charity model projections include `route_strategy
 
 `cache_balanced` also exposes `affinity_ttl_seconds` on administrator/steward model reads and management creates/patches. It defaults to 300, accepts integers 1–86400, and rejects null, zero and fractions; an omitted patch preserves it. An eligible same-user/same-public-model physical key is tried while its dispatch-based affinity remains valid. Otherwise the server groups eligible keys by their actual dispatched model requests in the preceding 300 seconds and draws among the least-loaded group using the same exact expiry weighting; it moves to the next group if the first cannot admit the request. This is a routing preference, not a provider cache hit or promise of lower charges. Real dispatch attempts across personal and public models share each physical key's load count, including ordered and random routes; discovery is excluded. Affinity remains separate for each owner/model and personal/public scope. Proven pre-transport failures retract their provisional count and association idempotently; actual upstream failures remain counted. Affinity and recent load survive a restart until their original expiry. Capacity exhaustion refuses new work before dispatch and charge rather than discarding still-valid affinity or load facts.
 
+Stewards need `charity.affinity` to explicitly set `affinity_ttl_seconds`, including through existing management-assistant model operations. Creation also requires `charity.create`. Omitting the field uses the default on creation and preserves the current value on PATCH; it does not require the affinity grant. No CallerKey model-setting write route is added.
+
 Each role also has `GET {prefix}/charity-models/{id}/binding-donations` and `GET {prefix}/charity-models/{id}/binding-donations/{donationId}/keys`, where `{prefix}` is `/admin/api` or `/api/steward`. Both retain legacy `cursor,limit` and accept numbered `page,page_size`; numbered responses include `pagination` and `next_cursor:null`. Donation menu entries contain only `{id,description,key_count}`. Key menu entries contain only `{donation_key_id,source,note}`; `source` has the same safe address, connector and masked fragments as binding candidates, and `note` is the reviewed shared note. They list approved, unexpired shared resources with at least one unbound catalog model. Cursors are bound to the role, actor, model, and donation. These menus never expose donor account identity or private endpoint/key notes and do not expand the steward's donation management permissions.
 
-All routes below are available only on the administrator host with an administrator session. Mutations use idempotency and expected revisions as specified by §1.2, and sensitive final transactions reauthenticate the actor.
+Unless an authorized steward counterpart is specified, routes below are available only on the administrator host with an administrator session. Mutations use idempotency and expected revisions as specified by §1.2, and sensitive final transactions reauthenticate the actor.
 
 ### 7.1 Session, configuration, users, and observability
 
@@ -1774,15 +1816,19 @@ Administrator donation and source reads use the management filters and paginatio
 | `PUT /admin/api/charity-models/{id}/bindings/order` | `{expected_binding_revision,order}` with the exact current binding-ID permutation. |
 | `DELETE /admin/api/charity-models/{id}/bindings/{bindingId}` | `{expected_binding_revision}`. |
 
-Request-adaptation reads are `GET /admin/api/charity-models/{id}/request-adaptation` and `GET /admin/api/charity-models/{id}/bindings/{bindingId}/request-adaptation`, with matching `PUT` routes for administrators only. A steward with `charity.model_settings` can use the corresponding `/api/steward` configuration GET routes within current model scope, including a binding's effective partition sources; no steward PUT route exists. The independent canonical-string `expected_revision`, `Idempotency-Key`, five closed partitions, whole-partition `inherit|replace` binding choice, configuration GET projection, budgets and conflict rules are described in §3.1. A binding's `effective` projection shows which partition came from its model or binding and follows the same value-visibility rules: unmarked items are readable, and any protection marker hides the whole item. These six configuration GETs retain their existing owner/administrator/steward session and action gates; no CallerKey automation route is added. Only administrators can change these shared charity rules; donor-owned endpoint rules are not inherited into charity.
+Request-adaptation GET/PUT routes are `/admin/api/charity-models/{id}/request-adaptation` and `/admin/api/charity-models/{id}/bindings/{bindingId}/request-adaptation`, with corresponding `/api/steward` routes. Steward reads require `charity.model_settings` or `charity.request_adaptation`; writes require `charity.request_adaptation`. Reads check current model scope, and binding reads also require that connection's source visibility. Writes and receipt replays check affected binding sources; model-level writes check all attached sources. The independent canonical-string `expected_revision`, `Idempotency-Key`, five closed partitions, whole-partition `inherit|replace` binding choice, configuration GET projection, budgets and conflict rules are described in §3.1. A binding's `effective` projection shows which partition came from its model or binding and follows the same value-visibility rules: unmarked items are readable, and any protection marker hides the whole item. These configuration routes require the applicable owner, administrator or steward browser session; no CallerKey automation route is added. Donor-owned endpoint rules are not inherited into charity.
+
+Level-6 stewards can perform all charity-model configuration operations available to administrators. The additional `charity.request_adaptation`, `charity.affinity`, and `charity.price_templates.manage` grants default to false for level-5 stewards, including existing saved policies. Explicit grants retain the existing model and donation scopes. Request-adaptation or affinity permission also permits reading the model and its connections within those scopes so the configuration can be edited.
 
 For administrator and authorized steward charity management, an existing binding may have `source_types:[]` when no current source confirms it. The binding remains readable and the page presents its source as unavailable. A new binding candidate requires at least one known source type (`automatic` or `manual`); empty, repeated, or unknown values are invalid. Deleting a charity binding compacts the order. Reordering preserves each binding ID and its binding-scoped request-adaptation settings and revision.
 
 ### 7.4.1 Price templates
 
-Templates contain pricing settings, not model definitions. Administrators maintain
-them; steward browser sessions with `charity.price_templates.read` can read enabled
-templates. CallerKeys have no template access. Applying a template fills the open model
+Templates contain pricing settings, not model definitions. Administrators and
+steward browser sessions with `charity.price_templates.manage` can maintain them.
+Stewards with either that grant or `charity.price_templates.read` can read enabled
+templates; reading disabled templates requires the management grant. CallerKeys
+have no template access. Applying a template fills the open model
 create/edit pricing form; it does not save the model. The next ordinary model
 mutation checks its current authority, revision and values. Later template edits,
 disablement or deletion never change models that previously copied it.
@@ -1794,7 +1840,8 @@ disablement or deletion never change models that previously copied it.
 | `GET /admin/api/charity-price-templates/{id}` | One template. |
 | `PUT /admin/api/charity-price-templates/{id}` | Complete replacement plus `expected_revision`; HTTP 200. |
 | `DELETE /admin/api/charity-price-templates/{id}` | `{expected_revision}`; HTTP 204. |
-| `GET /api/steward/charity-price-templates` and `GET .../{id}` | Steward session with `charity.price_templates.read`; list state must be `enabled`; disabled detail returns 404. |
+| `GET /api/steward/charity-price-templates` and `GET .../{id}` | Steward session with `charity.price_templates.read` or `charity.price_templates.manage`. Without management permission, list state must be `enabled` and disabled detail returns 404. |
+| `POST /api/steward/charity-price-templates`, `PUT/DELETE .../{id}` | Steward session with `charity.price_templates.manage`; same input, revision, idempotency and response contract as the administrator routes. |
 
 Lists return `{data,pagination}`. A template has `id,name,description,enabled,
 revision,pricing,token_reserve_credits,discount,recurring_discount,created_at,updated_at`. IDs and
@@ -2491,9 +2538,13 @@ not proof that deletion has finished; read its cleanup status.
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v35.json`, with `schema_version:35` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside format 35.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v36.json`, with `schema_version:36` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside format 36.
 Structured failure/delivery snapshots and restricted raw diagnostics are also
 excluded; the export retains its existing safe request summaries.
+
+Format 36 includes the owner's endpoint rerank paths, submitted donation-use
+paths and nullable charity overrides. They follow the existing resource lifetime
+and deletion rules; dispatch-claim snapshots remain internal.
 
 `user` includes the five nullable inference limits and their effective values
 from §7.1. The safe `charity` aggregate may include `usage_details` with optional

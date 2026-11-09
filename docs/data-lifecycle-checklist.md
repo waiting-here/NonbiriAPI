@@ -13,13 +13,21 @@ and bilingual privacy text are covered by their implementation and contract test
 Schema presence alone never creates a route or expands a response.
 
 Personal-model `cloudflare_proxy_enabled` belongs to the owner's model, is
-included in account export 35, and is deleted with that model or account.
+included in account export 36, and is deleted with that model or account.
 Charity-model preferences are shared platform configuration and excluded from
 personal exports. The read-only deployment mode is not persisted per account.
 Worker and legacy gateway tokens remain private deployment configuration and
 never enter account exports. Routing preferences do not extend log retention.
 
-Current account export format 35 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v35.json`; SQLite `user_version` remains 2 and the current storage schema is 50. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+Current account export format 36 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v36.json`; SQLite `user_version` remains 2 and the current storage schema is 51. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+
+Optional rerank paths belong to endpoints and submitted donation-use revisions;
+nullable management overrides belong to the donated use. Account export 36
+includes these owner-scoped settings. Endpoint and donation deletion remove them
+with their existing rows, and account deletion follows the same authorization and
+retention rules. Dispatch-target path snapshots remain internal, are excluded
+from account export and follow the existing claim cleanup/anonymization rules.
+These fields contain no separate credentials and do not extend retention.
 
 ## Structured request failure observations
 
@@ -29,7 +37,7 @@ observations under the existing request/attempt roots. Each payload is at most
 and protocol/usage flags, counters and allowlisted correlation identifiers.
 Request details apply existing owner/charity and administrator/steward privacy
 projections. They contain no new request/response body store, authentication
-material or raw error/stack text. Personal account export 35 keeps its existing
+material or raw error/stack text. Personal account export 36 keeps its existing
 safe request summaries and excludes these snapshots.
 
 These rows cascade with their request/attempt, follow the same 30-day terminal
@@ -148,7 +156,7 @@ role gates, edit/replay rules, cleanup selection and queue behavior.
 
 ## Connections and versioned authorization
 
-Account export 35 includes owned services, safe credential/version
+Account export 36 includes owned services, safe credential/version
 metadata, current endpoint grants, model targets, independent discovery sources
 and donation-use approval snapshots. Credential ciphertext, secret references,
 fingerprints, review HMACs and internal authorization rows are excluded. Export
@@ -493,14 +501,14 @@ only addresses already retained by endpoints, donation keys or manual tags, and
 is removed when its final source address is removed. Neither rules nor the index
 add credentials or change account export format or donation-history retention.
 
-Normal startup initializes absent storage or opens only exact current schema 50.
+Normal startup initializes absent storage or opens only exact current schema 51.
 Older, newer, unknown and incomplete databases are rejected before migration,
 repair, WAL checkpoint or recovery writes. Exact registered schema 16–26 and
-33–49 sources require a deliberate standalone-converter invocation after the
+33–50 sources require a deliberate standalone-converter invocation after the
 matching recovery set is preserved; service startup and deployment helpers must
 not apply upgrades implicitly. Atomic conversion preserves the relevant indexes,
 authorization, steward policy/audit/tag data and assistant storage. Pending
-catalog reads do not grant inference access. Current export format is 35.
+catalog reads do not grant inference access. Current export format is 36.
 Upgrades are one-way;
 there is no old-server startup on an upgraded database or reverse migration.
 Fresh creation requires the main database and sidecars to be absent. Conversion
@@ -625,7 +633,7 @@ Reward receipts are included in current account exports under `rewards`. They co
 ## Shared pricing, owner history and header facts
 
 Smart backoff runs automatically for charity calls. Current safe state is included
-in account export 35 and authorized key projections. Runtime state contains a
+in account export 36 and authorized key projections. Runtime state contains a
 limited reason, source and retry time; it does not copy raw upstream errors.
 The current episode follows the donated key; internal trial and classification
 facts follow the claim.
@@ -637,10 +645,10 @@ and rule fields are removed from replay responses without repeating the mutation
 
 | Family | Access and export | Deletion, retention and late work |
 | --- | --- | --- |
-| `donation_key_backoffs` | Owner and authorized management may read safe current state, also included in account export 35. Internal generation, episode and trial identifiers are excluded. There is no per-key recognition configuration. | Current state cascades with the key. Schema 26 discards old profiles and supplemental-rule text while preserving active recovery facts. Account deletion removes the state. |
+| `donation_key_backoffs` | Owner and authorized management may read safe current state, also included in account export 36. Internal generation, episode and trial identifiers are excluded. There is no per-key recognition configuration. | Current state cascades with the key. Schema 26 discards old profiles and supplemental-rule text while preserving active recovery facts. Account deletion removes the state. |
 | `endpoint_backoff_policies` | Platform configuration readable and writable by administrators and stewards with `charity.backoff`; exact connector/base identity, revision and at most eight rules. No personal export or account identifier. | Retained with platform configuration and complete deployment backups. Clearing rules keeps the revision; account deletion does not delete shared endpoint policy. |
 | `dispatch_smart_backoff_facts` | Internal per-claim recovery identity, trial ownership, HTTP acceptance, finite quota classification and bounded endpoint rule snapshot/revision/matched index; no raw error and no personal export. | Claim deletion cascades; key deletion clears its key reference. Existing request retention and holds apply. Generation and episode checks prevent late results from changing a newer episode. Historical supplemental-rule classifications remain valid recovery facts after configuration removal. |
-| `charity_price_templates` and `charity_price_template_audits` | Shared price/reward/reserve/context/fixed and recurring discount settings; administrator maintenance and enabled-only steward session reads with `charity.price_templates.read`. No CallerKey access or personal export. Applying copies values, never links a model to future changes. | Templates persist until deleted; safe audits expire after 90 days and actor deletion sets identity null. No credentials or caller content. |
+| `charity_price_templates` and `charity_price_template_audits` | Shared price/reward/reserve/context/fixed and recurring discount settings; administrators and steward sessions with `charity.price_templates.manage` may maintain and read all templates. That grant or `charity.price_templates.read` permits enabled-template reads. No CallerKey access or personal export. Applying copies values, never links a model to future changes. | Templates persist until deleted; safe audits expire after 90 days and actor deletion sets identity null. No credentials or caller content. |
 | `donation_owner_preferences` | Nullable `owner_hidden_at` is included for every owned donation in account exports, including hidden history. Authorized target-user donation-history reads also receive it through a safe summary; other management donation projections omit it. | Cascades with user/donation deletion. Hide/restore does not delete records, change the donation revision or reset its 400-day terminal clock. Resumable batches use fixed time and ID boundaries and expire after one hour. |
 | `donation_key_cooldowns` and `dispatch_retry_after_observations` | Safe owner/authorized key projections expose `rate_limited_until`; raw observations are internal. No header body or secret is exported. | Cooldown follows the donation key; observations follow the claim. Atomic writes preserve the latest valid deadline. Neither can recreate a retired key, claim or account. Elapsed deadlines stop limiting immediately. |
 | `request_header_facts` | Separate explicit administrator/L5/L6 log GETs only; no ordinary log list/export or owner export. Recognized credential values are redacted before storage. L5 without `logs.unredacted` additionally redacts IPv4 in names and values, including bytes represented as base64; the separately authorized source IP remains unchanged. | Request-root cascade, completion-plus-30-day expiry and existing legal holds apply, including deidentified retained logs after account deletion. Insert-from-live-root prevents late capture resurrection. Each physical capture is at most 1 MiB, a collection at most 20 responses/8 MiB. Encoded payloads have a separate default 1024 MiB budget including held rows; omissions are explicit and unexpired rows are not evicted. |

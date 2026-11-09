@@ -51,9 +51,16 @@ selection. Omitted legacy API fields never expand existing grants.
 
 For OpenAI-shaped direct calls, configure the complete upstream API mount: a base
 such as `https://provider.example/v1` receives `/responses`, `/rerank` or the
-corresponding resource suffix. The platform does not insert another `/v1` or
-accept arbitrary upstream paths. Rerank providers may use a different versioned
-mount; select both their explicit connector and their correct base.
+corresponding resource suffix. The platform does not insert another `/v1`.
+HTTP rerank also accepts an optional absolute path on the same origin. For example,
+Aliyun Bailian's OpenAI-compatible text rerank uses
+`/compatible-api/v1/reranks`; select the generic rerank format and set that path
+without changing the base URL used for other operations. See the
+[provider's rerank documentation](https://help.aliyun.com/zh/model-studio/rerank).
+An empty path retains the usual base URL plus `/rerank`. This setting changes
+the destination path only; DashScope's native nested request/response format
+and multimodal rerank are not added. Personal settings and management overrides
+for donated uses are independent; see [service connections](service-connections.md).
 
 Gateway endpoints also require their complete native mount. Their text, image,
 embedding and rerank suffixes and version/model headers are listed in the

@@ -6,6 +6,11 @@ NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. U
 
 **v1.3.7** adds independent token limits for each upstream model in a donated key, precise request-rejection diagnostics, and per-user daily Lake Notes exchange limits. The barbed hook follows common fish only. Background maintenance and charity routing reduce repeated database work. Database schema is 50 and account export is format 35; existing databases on an earlier schema require the explicit offline upgrade before starting this version. Build instructions are below; version history is in [CHANGELOG](CHANGELOG.md). Source availability does not establish instance deployment status.
 
+The unreleased source adds optional HTTP rerank paths and independent charity
+overrides. It uses schema 51 and account export format 36; see
+[service connections](docs/service-connections.md) and
+[database upgrades](docs/database-upgrades.md).
+
 ## Architecture
 
 One Go process serves two embedded React stations and one local SQLite database. User and administrator stations have separate hosts and authorization boundaries. Production targets Linux/amd64; Windows supports development and build verification.
@@ -47,7 +52,7 @@ Attempt and request completion use small synchronous transaction batches when
 work overlaps. Success still requires a durable commit, and anonymous queue
 metrics distinguish application waiting from database pool waiting.
 
-Level-5 stewards have 51 per-account action permissions, six numeric limits and
+Level-5 stewards have 54 per-account action permissions, six numeric limits and
 a four-position donation scope, configured by administrators or actual level-6
 stewards. Standard scope, the default, requires at least one live donated key and every live
 key to have a mainstream source or a current binding to a mainstream charity
@@ -68,9 +73,14 @@ User details provide complete retained donation history, including hidden owner
 history, through a safe summary without credentials or key controls. Source
 browsers initially show all retained sources, with an active-only filter.
 
-Administrators manage complete price templates in a dedicated charity workspace,
-with search, pagination, creation, editing and deletion. Administrators and
-stewards with price-template read permission can copy a template into a model
+Level-6 stewards have the same charity-model configuration controls as
+administrators. Request adaptation, affinity duration and price-template
+management require separate grants that default off for level 5.
+
+Administrators and stewards with price-template management permission can manage
+complete templates in a dedicated charity workspace, with search, pagination,
+creation, editing and deletion. Administrators and stewards with price-template
+read or management permission can copy a template into a model
 form and adjust it before saving.
 Models and templates support [recurring weekly discounts](docs/charity-discounts.md)
 with configurable time zones and percentages. An enabled fixed-window discount
@@ -291,14 +301,14 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 50.
+Fresh databases start in maintenance with public features closed and use schema 51.
 The service opens only the exact current schema; older, newer, unknown or
 incomplete storage is rejected before migration, repair or recovery writes.
-For exact registered schema 16–26 and 33–49 sources, preserve a complete recovery
+For exact registered schema 16–26 and 33–50 sources, preserve a complete recovery
 set before deliberately running the matching standalone
 [upgrader](cmd/nonbiri-upgrade-v1/README.md) with `--check` or `--apply`.
 The service, startup scripts and deployment helpers must not apply upgrades
-implicitly. Account export uses format 35. Schema versions change when
+implicitly. Account export uses format 36. Schema versions change when
 storage requires it, independently of software patch releases.
 Use the matching binaries' schema descriptors to check accepted sources.
 Upgrades are one-way: a server expecting an older or different schema cannot

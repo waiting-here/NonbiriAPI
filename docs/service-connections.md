@@ -44,6 +44,25 @@ Sharing a `/rerank` path does not make these payload formats interchangeable. Ga
 v3 and v4 each offer text, image generation, embeddings and rerank. Select the
 upstream's actual version; there is no automatic probing or version fallback.
 
+HTTP rerank entries have an optional **Custom rerank path** in the advanced
+rerank settings. Enter an absolute path on the entry's existing origin, such as
+`/compatible-api/v1/reranks` for Aliyun Bailian's OpenAI-compatible text rerank,
+and check the displayed final URL. Leaving it empty uses the base URL followed
+by `/rerank`. Other operations keep their existing paths. Full URLs, query
+strings, fragments and ambiguous path segments are rejected. The setting is
+unavailable for Gateway's native RPC protocol and does not convert a provider's
+payload format.
+
+Donation submission or rotation captures the entry's rerank path. Later edits
+to the personal entry do not change that donation snapshot. Administrators and
+stewards with permission to manage the donated use can set a separate charity
+override from its approval or management details. They can use the saved donation
+setting, the default suffix or a custom path; the final charity URL is shown.
+These changes do not affect the donor's personal calls. Existing ownership,
+approval and outbound protections still apply. A configured Cloudflare route
+continues to enforce its source-path prefix; a custom path outside that prefix
+is rejected rather than sent directly.
+
 System One is a separate **Typesafe System One** protocol in **Add entry**.
 Its service is `/v1/systemone`; the **Decisions** native service in the
 OpenAI-compatible protocol uses `/v1/decisions`. Choose the applicable service
