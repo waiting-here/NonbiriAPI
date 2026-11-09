@@ -552,9 +552,15 @@ test('administrator saves changed binding order, removes a connection and delete
     await first
       .getByRole('button', { name: copy.operations.charity.moveDown, exact: true })
       .click();
+    const savedOrder = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PUT' &&
+        new URL(response.url()).pathname === bindingsPath + '/order',
+    );
     await ordered
       .getByRole('button', { name: copy.operations.charity.saveOrder, exact: true })
       .click();
+    expect((await savedOrder).status()).toBe(200);
     await expect(ordered.locator('tbody tr').first()).toContainText('browser-order-two');
     expect(
       (await read(admin, state.admin_url, bindingsPath)).bindings.map(
