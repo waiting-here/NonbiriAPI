@@ -693,7 +693,7 @@ async function exerciseSourceToDonationNavigation(
   await expect(sourceDetail.getByRole('heading', { name: /detail-source-20/ })).toBeVisible();
 
   const manageKey = sourceDetail.getByRole('button', {
-    name: 'Manage key #1019',
+    name: 'Manage donated key #1019',
     exact: true,
   });
   await expect(manageKey).toBeVisible();
@@ -1226,7 +1226,7 @@ for (const station of ['admin', 'user'] as const) {
           path +
           'charity_section=models&models_page=2&models_page_size=10&model_q=detail&charity_model=20',
       );
-      const manageKey = page.getByRole('button', { name: 'Manage key #1020', exact: true });
+      const manageKey = page.getByRole('button', { name: 'Manage donated key #1020', exact: true });
       await manageKey.scrollIntoViewIfNeeded();
       if (EVIDENCE_DIR) {
         await mkdir(EVIDENCE_DIR, { recursive: true });
@@ -1782,7 +1782,7 @@ for (const station of ['admin', 'user'] as const) {
       await expect(refresh).toBeEnabled();
       await manage.click();
       await expect(
-        page.getByRole('heading', { name: '管理密钥 #1000', exact: true }),
+        page.getByRole('heading', { name: '管理捐赠密钥 #1000', exact: true }),
       ).toBeVisible();
       await expect(page.locator('.donation-key-editor')).toHaveCount(1);
       await expect(picker).toBeHidden();

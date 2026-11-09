@@ -10,6 +10,7 @@ import {
   DataTable,
   FormActions,
   Fold,
+  Sheet,
   Panel,
   PanelBody,
   PanelHead,
@@ -385,6 +386,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
   const session = useCoreSession(false);
   const [searchParams, setSearchParams] = useSearchState();
   const [creating, setCreating] = useState(false);
+  const [creationVersion, setCreationVersion] = useState(0);
   const [permissionLost, setPermissionLost] = useState<PermissionLoss | null>(null);
   const deletedModelRef = useRef<{ accountId: string; id: string } | null>(null);
   const selectedModelId = selectedModelID(searchParams);
@@ -581,19 +583,27 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
         }
       />
       <SectionTabs group="own" />
-      {creating ? (
+      <Sheet
+        open={creating}
+        keepMounted
+        size="lg"
+        title={t('models.create')}
+        closeLabel={t('common.cancel')}
+        onClose={() => setCreating(false)}
+      >
         <ModelEditor
-          key={user.id}
+          key={`${user.id}:${creationVersion}`}
           accountId={user.id}
           onCancel={() => setCreating(false)}
           onCapabilityLoss={(error) => setPermissionLost({ scope: user.id, error })}
           onSaved={(saved) => {
             setCreating(false);
+            setCreationVersion((version) => version + 1);
             setSourceFocusId(saved.id);
             setSelectedModelID(saved.id);
           }}
         />
-      ) : null}
+      </Sheet>
       {/* Filters are hidden until there is something to filter. */}
       {filters.active || (models.data && models.data.pagination.total_items !== '0') ? (
         <ResourceFilterBar control={filters} />

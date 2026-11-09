@@ -11,9 +11,24 @@ import {
 import { parseStewardLimitInput } from '../components/StewardPermissionEditor';
 
 describe('per-user steward permissions', () => {
+  it('defaults the three new charity configuration grants off for level 5 and on for level 6', () => {
+    for (const key of [
+      'charity.request_adaptation',
+      'charity.affinity',
+      'charity.price_templates.manage',
+    ] as const) {
+      expect(defaultStewardPermissions(5).permissions[key]).toBe(false);
+      expect(defaultStewardPermissions(6).permissions[key]).toBe(true);
+      const policy = defaultStewardPermissions(0);
+      policy.permissions[key] = true;
+      expect(hasStewardPermission({ effective_level: 5, steward_permissions: policy }, key)).toBe(
+        true,
+      );
+    }
+  });
   it('keeps default review and history access while full diagnostic and delegation scopes stay absent', () => {
     const policy = defaultStewardPermissions(5);
-    expect(stewardPermissionKeys).toHaveLength(51);
+    expect(stewardPermissionKeys).toHaveLength(54);
     expect(policy.permissions['ai.chat']).toBe(true);
     expect(policy.permissions['ai.review.read']).toBe(false);
     expect(policy.permissions['ai.memory.edit']).toBe(false);

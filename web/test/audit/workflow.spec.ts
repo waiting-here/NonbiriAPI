@@ -197,7 +197,10 @@ test('charity request and attempt shortcuts preserve the log window for administ
             : undefined;
         await link.click();
         await expect(
-          page.getByRole('heading', { name: `Manage key #${target.donation_key_id}`, exact: true }),
+          page.getByRole('heading', {
+            name: `Manage donated key #${target.donation_key_id}`,
+            exact: true,
+          }),
         ).toBeVisible();
         await expect(
           page.getByLabel(common.common.keyLimits.concurrency, { exact: true }),
@@ -1136,12 +1139,12 @@ test('level 5 with full donation scope handles four custom-source keys and edits
     expect(pendingDonation.keys[0].charity_state).toBe('pending');
     await expect(
       sourceKeys.getByRole('button', {
-        name: `Manage key #${state.management.automatic_backoff_key_ids[1]}`,
+        name: `Manage donated key #${state.management.automatic_backoff_key_ids[1]}`,
         exact: true,
       }),
     ).toBeVisible();
     await expect(
-      sourceKeys.getByRole('button', { name: `Manage key #${pendingKeyID}`, exact: true }),
+      sourceKeys.getByRole('button', { name: `Manage donated key #${pendingKeyID}`, exact: true }),
     ).toHaveCount(0);
     const pendingSource = pendingDonation.keys[0].safe_source;
     await sourceState.selectOption('pending');
@@ -1170,14 +1173,16 @@ test('level 5 with full donation scope handles four custom-source keys and edits
     );
     await expect(browserSource).toHaveCount(1);
     await expect(
-      sourceKeys.getByRole('button', { name: `Manage key #${pendingKeyID}`, exact: true }),
+      sourceKeys.getByRole('button', { name: `Manage donated key #${pendingKeyID}`, exact: true }),
     ).toBeVisible();
     await expect(
-      sourceKeys.getByRole('button', { name: `Manage key #${pausedID}`, exact: true }),
+      sourceKeys.getByRole('button', { name: `Manage donated key #${pausedID}`, exact: true }),
     ).toHaveCount(0);
     await sourceState.selectOption('disabled');
     await browserSource.click();
-    await sourceKeys.getByRole('button', { name: `Manage key #${pausedID}`, exact: true }).click();
+    await sourceKeys
+      .getByRole('button', { name: `Manage donated key #${pausedID}`, exact: true })
+      .click();
     const concurrency = page.getByLabel(common.common.keyLimits.concurrency, { exact: true });
     const rpm = page.getByLabel(common.common.keyLimits.rpm, { exact: true });
     await concurrency.fill('-1');

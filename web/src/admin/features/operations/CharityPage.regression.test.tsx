@@ -86,8 +86,8 @@ describe('administrator charity page composition', () => {
 
     expect(await screen.findByRole('combobox', { name: 'Handling status' })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Review' })).toBeInTheDocument();
-    await rendered.user.click(screen.getByRole('tab', { name: 'Browse by source' }));
-    expect(await screen.findByRole('heading', { name: 'No source groups' })).toBeInTheDocument();
+    await rendered.user.click(screen.getByRole('tab', { name: 'Donated resources' }));
+    expect(await screen.findByRole('heading', { name: 'No service sources' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Source scope' })).toHaveValue('all');
     expect(screen.getByRole('combobox', { name: 'Key state' })).toHaveValue('all');
     expect(screen.queryByRole('combobox', { name: 'Handling status' })).not.toBeInTheDocument();

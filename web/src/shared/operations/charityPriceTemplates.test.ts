@@ -41,34 +41,39 @@ describe('charity price template contract', () => {
     expect(page.data[0]).toEqual(template);
   });
 
-  it('writes complete replacement prices and metadata with template revision, then deletes by the same scope', async () => {
-    const fetchMock = vi.fn<typeof fetch>(async () => response(template));
-    vi.stubGlobal('fetch', fetchMock);
-    const input = {
-      name: 'Renamed',
-      description: '',
-      enabled: false,
-      pricing: template.pricing as {
-        mode: 'per_request';
-        user_price: string;
-        donor_reward: string;
-      },
-      token_reserve_credits: null,
-      discount: template.discount,
-      recurring_discount: template.recurring_discount,
-    };
-    await savePriceTemplate('admin', { id: '3', expected_revision: '4', ...input }, 'original-key');
-    const [path, options] = fetchMock.mock.calls[0]!;
-    expect(path).toBe('/admin/api/charity-price-templates/3');
-    expect(options?.method).toBe('PUT');
-    expect(JSON.parse(String(options?.body))).toEqual({ expected_revision: '4', ...input });
-    expect(new Headers(options?.headers).get('Idempotency-Key')).toBe('original-key');
-    await deletePriceTemplate('admin', '3', '4', 'delete-key');
-    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe('DELETE');
-    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
-      expected_revision: '4',
-    });
-  });
+  it.each(['admin', 'steward'] as const)(
+    'writes complete replacement prices and metadata as %s with template revision, then deletes by the same scope',
+    async (role) => {
+      const fetchMock = vi.fn<typeof fetch>(async () => response(template));
+      vi.stubGlobal('fetch', fetchMock);
+      const input = {
+        name: 'Renamed',
+        description: '',
+        enabled: false,
+        pricing: template.pricing as {
+          mode: 'per_request';
+          user_price: string;
+          donor_reward: string;
+        },
+        token_reserve_credits: null,
+        discount: template.discount,
+        recurring_discount: template.recurring_discount,
+      };
+      await savePriceTemplate(role, { id: '3', expected_revision: '4', ...input }, 'original-key');
+      const [path, options] = fetchMock.mock.calls[0]!;
+      expect(path).toBe(
+        `${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-price-templates/3`,
+      );
+      expect(options?.method).toBe('PUT');
+      expect(JSON.parse(String(options?.body))).toEqual({ expected_revision: '4', ...input });
+      expect(new Headers(options?.headers).get('Idempotency-Key')).toBe('original-key');
+      await deletePriceTemplate(role, '3', '4', 'delete-key');
+      expect(fetchMock.mock.calls[1]?.[1]?.method).toBe('DELETE');
+      expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+        expected_revision: '4',
+      });
+    },
+  );
 
   it('requires an explicit reserve field and keeps model identity out of the normalized template DTO', () => {
     const missing: Record<string, unknown> = { ...template };

@@ -148,7 +148,7 @@ describe('prices inside a model workspace', () => {
     expect(screen.queryByRole('button', { name: 'Fill all prices' })).not.toBeInTheDocument();
   });
 
-  it('gives level 6 only enabled template reads and local filling', async () => {
+  it('keeps a read-only steward on enabled template reads and local filling', async () => {
     const paths: string[] = [];
     vi.stubGlobal(
       'fetch',
@@ -183,6 +183,26 @@ describe('prices inside a model workspace', () => {
     expect(paths).toEqual([
       '/api/steward/charity-price-templates?state=enabled&page=1&page_size=20',
     ]);
+  });
+
+  it('offers disabled-template browsing and management to a granted steward', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => json(page([])));
+    vi.stubGlobal('fetch', fetchMock);
+    const view = await renderWithProviders(
+      <PriceTools role="steward" canManageTemplates onApply={vi.fn()} />,
+      { station: 'user' },
+    );
+    await view.user.click(screen.getByText('Price templates', { selector: 'strong' }));
+    await view.user.selectOptions(
+      await screen.findByRole('combobox', { name: 'Template state' }),
+      'disabled',
+    );
+    expect(screen.getByRole('button', { name: 'Maintain price templates' })).toBeVisible();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes('/api/steward/charity-price-templates?state=disabled'),
+      ),
+    ).toBe(true);
   });
 
   it('browses 240 reference models by numbered pages and fills prices without copying model identity', async () => {

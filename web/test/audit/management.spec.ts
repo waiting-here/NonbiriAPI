@@ -1023,7 +1023,9 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
       );
       await expect(row).toContainText(commonEn.gatewayCapabilities.cacheOptions.anthropic);
       await row.getByRole('button', { name: 'Request headers and body', exact: true }).click();
-      await page.getByText('Request adaptation', { exact: true }).last().click();
+      await page
+        .getByText(commonEn.common.operations.charity.adaptationSettings, { exact: true })
+        .click();
       const editor = page.locator('section.core-card').last();
       const defaults = editor.getByRole('group', {
         name: 'Body defaults (only when absent)',
@@ -1064,15 +1066,14 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
       await stewardRow
         .getByRole('button', { name: 'Request headers and body', exact: true })
         .click();
-      await stewardPage.getByText('Request adaptation', { exact: true }).last().click();
-      const readOnly = stewardPage.locator('section.core-card').last();
+      await stewardPage
+        .getByText(commonEn.common.operations.charity.adaptationSettings, { exact: true })
+        .click();
+      const stewardEditor = stewardPage.locator('section.core-card').last();
+      await expect(stewardEditor.getByLabel(commonEn.requestAdaptation.cache.label)).toBeEnabled();
       await expect(
-        readOnly.getByText('This setting is read-only for your role.', { exact: true }),
+        stewardEditor.getByRole('button', { name: 'Save request adaptation', exact: true }),
       ).toBeVisible();
-      await expect(readOnly.getByLabel(commonEn.requestAdaptation.cache.label)).toBeDisabled();
-      await expect(
-        readOnly.getByRole('button', { name: 'Save request adaptation', exact: true }),
-      ).toHaveCount(0);
       expect(
         await read(
           steward,

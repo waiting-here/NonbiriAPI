@@ -9,6 +9,7 @@ import { Link } from 'react-router';
 import {
   Button,
   Field as SharedField,
+  Fields,
   Fold,
   Note,
   Panel,
@@ -299,7 +300,7 @@ function SettingsForm({
         />
         <PanelBody>
           <fieldset disabled={busy} className="gacha-admin-fieldset">
-            <div className="gacha-admin-grid">
+            <Fields columns={2} legend={t('票券积分价格', 'Ticket prices')}>
               {(['permanent', 'limited'] as const).map((ticket) => (
                 <Field
                   key={ticket}
@@ -325,19 +326,43 @@ function SettingsForm({
                   />
                 </Field>
               ))}
-              {fields.map(([key, zh, en]) => (
-                <Field key={key} label={t(zh, en)}>
-                  <input
-                    required
-                    type="number"
-                    min={key.endsWith('_cap') ? '0' : '1'}
-                    step="1"
-                    value={shop[key]}
-                    onChange={(e) => setShop({ ...shop, [key]: Number(e.target.value) })}
-                  />
-                </Field>
-              ))}
-            </div>
+            </Fields>
+            {[
+              {
+                title: t('每月兑换上限', 'Monthly exchange limits'),
+                keys: ['permanent_cap', 'limited_cap'],
+              },
+              {
+                title: t('碎片兑换票券', 'Shards for tickets'),
+                keys: ['n_ticket', 'r_ticket', 'sr_ticket', 'ssr_tickets'],
+              },
+              {
+                title: t('限定卡兑换成本', 'Limited card costs'),
+                keys: ['sr_card', 'ssr_card', 'sp_card'],
+              },
+              { title: t('Q版卡兑换成本', 'Chibi card costs'), keys: ['chibi_n', 'chibi_r'] },
+            ].map((group) => (
+              <Fields
+                key={group.title}
+                columns={group.keys.length === 2 || group.keys.length === 4 ? 2 : undefined}
+                legend={group.title}
+              >
+                {fields
+                  .filter(([key]) => group.keys.includes(key))
+                  .map(([key, zh, en]) => (
+                    <Field key={key} label={t(zh, en)}>
+                      <input
+                        required
+                        type="number"
+                        min={key.endsWith('_cap') ? '0' : '1'}
+                        step="1"
+                        value={shop[key]}
+                        onChange={(e) => setShop({ ...shop, [key]: Number(e.target.value) })}
+                      />
+                    </Field>
+                  ))}
+              </Fields>
+            ))}
           </fieldset>
           <p>
             {t(

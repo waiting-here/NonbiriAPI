@@ -1,4 +1,5 @@
 .model-types-field {
+  container: nb-api-options / inline-size;
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -13,8 +14,11 @@
 }
 .model-types-field__choices {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
   gap: var(--nb-space-3);
+}
+.model-types-field__choices:where([data-count='4']) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .model-types-field__choices > .nb-field:has(> input[type='checkbox']) {
   min-width: 0;
@@ -83,8 +87,13 @@
   color: var(--nb-color-text-muted);
   white-space: nowrap;
 }
-@media (width < 48rem) {
+@container nb-api-options (width < 32rem) {
   .model-types-field__choices {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+@container nb-api-options (width >= 64rem) {
+  .model-types-field__choices:where([data-count='4']) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }

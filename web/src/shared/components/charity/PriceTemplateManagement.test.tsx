@@ -71,15 +71,50 @@ function fixtures(write: (body: Record<string, unknown>, init: RequestInit) => P
   return writes;
 }
 afterEach(() => vi.unstubAllGlobals());
-async function open(route = '/?charity_section=templates&price_template=3') {
-  const view = await renderWithProviders(<PriceTemplateManagement accountId="fixture-admin" />, {
-    station: 'admin',
-    route,
-  });
-  view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } });
+async function open(
+  route = '/?charity_section=templates&price_template=3',
+  role: 'admin' | 'steward' = 'admin',
+) {
+  const view = await renderWithProviders(
+    <PriceTemplateManagement role={role} accountId="fixture-admin" />,
+    {
+      station: role === 'admin' ? 'admin' : 'user',
+      route,
+    },
+  );
+  view.queryClient.setQueryData(
+    role === 'admin' ? ['admin', 'session'] : ['user', 'session'],
+    role === 'admin'
+      ? { admin: { username: 'fixture-admin' } }
+      : { user: { id: '1', username: 'fixture', effective_level: 6 } },
+  );
   return view;
 }
 describe('independent price-template management', () => {
+  it('edits and saves the same complete template through the steward station', async () => {
+    const writes = fixtures(async (body) => json({ ...template, ...body, revision: '5' }));
+    const view = await open(
+      '/steward?tab=charity&charity_section=templates&price_template=3',
+      'steward',
+    );
+    await screen.findByDisplayValue('Full token prices');
+    await view.user.type(screen.getByLabelText('Template name'), ' updated');
+    await view.user.click(
+      screen.getByRole('button', { name: 'Save template “Full token prices”' }),
+    );
+    await waitFor(() => expect(writes).toHaveLength(1));
+    const calls = vi.mocked(fetch).mock.calls;
+    expect(
+      calls.some(
+        ([path, init]) =>
+          String(path) === '/api/steward/charity-price-templates/3' && init?.method === 'PUT',
+      ),
+    ).toBe(true);
+    expect(JSON.parse(String(writes[0]!.body))).toMatchObject({
+      expected_revision: '4',
+      name: 'Full token prices updated',
+    });
+  });
   it('edits every complete-price field independently, then deletes its fixed target', async () => {
     const writes = fixtures(async (body, init) =>
       init.method === 'DELETE'

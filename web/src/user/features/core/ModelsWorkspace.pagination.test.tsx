@@ -207,6 +207,39 @@ afterEach(() => {
 });
 
 describe('ModelsWorkspace numbered pagination', () => {
+  it('preserves a dismissed new-model draft, list filters and focus across reopening', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = requestURL(input);
+        if (url.pathname === '/api/models')
+          return jsonResponse(numbered([modelRecord('1')], '2', 20, 21));
+        throw Error('Unexpected ' + url.pathname);
+      }),
+    );
+    const view = await renderWorkspace('/models?q=provider&page=2&page_size=20');
+    const create = await screen.findByRole('button', { name: 'Create model' });
+    await view.user.click(create);
+    const dialog = screen.getByRole('dialog', { name: 'Create model' });
+    await view.user.type(within(dialog).getByRole('textbox', { name: 'Prefix' }), 'draft-prefix');
+    await view.user.type(
+      within(dialog).getByRole('textbox', { name: 'Model name' }),
+      'draft-model',
+    );
+    await view.user.click(within(dialog).getAllByRole('button', { name: 'Cancel' })[0]!);
+    await waitFor(() => expect(create).toHaveFocus());
+    const params = new URLSearchParams(screen.getByTestId('location-search').textContent ?? '');
+    expect(params.get('q')).toBe('provider');
+    expect(params.get('page')).toBe('2');
+    expect(params.get('page_size')).toBe('20');
+    await view.user.click(create);
+    expect(within(screen.getByRole('dialog')).getByRole('textbox', { name: 'Prefix' })).toHaveValue(
+      'draft-prefix',
+    );
+    expect(
+      within(screen.getByRole('dialog')).getByRole('textbox', { name: 'Model name' }),
+    ).toHaveValue('draft-model');
+  });
   it('keeps active filters reachable when the first model query fails', async () => {
     vi.stubGlobal(
       'fetch',

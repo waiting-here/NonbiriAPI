@@ -86,11 +86,17 @@ function fixture(
   );
   return { sent, requests };
 }
-async function editor(role: 'admin' | 'steward', create = false, trainee = false) {
+async function editor(
+  role: 'admin' | 'steward',
+  create = false,
+  trainee = false,
+  affinity?: boolean,
+) {
   const view = await renderWithProviders(
     <ModelsPanel
       role={role}
       accountId="1"
+      canEditAffinity={affinity}
       renderKeyManager={() => null}
       renderScopedKeys={() => null}
     />,
@@ -107,10 +113,22 @@ async function editor(role: 'admin' | 'steward', create = false, trainee = false
       ? { admin: { username: 'fixture-admin' } }
       : { user: { id: '1', username: 'fixture-steward', effective_level: trainee ? 5 : 6 } },
   );
+  const advanced = await screen.findByText('Advanced request settings', { selector: 'strong' });
+  if (!advanced.closest('details')?.open) await view.user.click(advanced);
   return view;
 }
 afterEach(() => vi.unstubAllGlobals());
 describe('managed model Cloudflare setting', () => {
+  it('saves only affinity changes from an explicitly granted steward editor', async () => {
+    const f = fixture('steward');
+    const view = await editor('steward', false, true, true);
+    const ttl = screen.getByRole('spinbutton', { name: /Association duration/ });
+    await view.user.clear(ttl);
+    await view.user.type(ttl, '600');
+    await view.user.click(screen.getByRole('button', { name: /^Save model / }));
+    await waitFor(() => expect(f.sent).toHaveLength(1));
+    expect(f.sent[0]).toEqual({ expected_revision: '1', affinity_ttl_seconds: 600 });
+  });
   it.each(['admin', 'steward'] as const)(
     '%s reads, saves, reloads and recovers a conflicting draft',
     async (role) => {

@@ -347,7 +347,7 @@ async function openManagement(
       .click();
     await page
       .locator('.charity-source-browser')
-      .getByRole('button', { name: 'Manage key #' + data.keyID, exact: true })
+      .getByRole('button', { name: 'Manage donated key #' + data.keyID, exact: true })
       .click();
   } else
     await page.goto(

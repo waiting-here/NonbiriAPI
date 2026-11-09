@@ -69,7 +69,7 @@ export function NativeServicesField({
         </p>
       ) : null}
       <div className="nb-stack">
-        <div className="model-types-field__choices">
+        <div className="model-types-field__choices" data-count={options.length}>
           {options.map((service) => (
             <Field key={service} label={t(NATIVE_SERVICE_LABEL_KEYS[service])}>
               {(props) => (

@@ -41,6 +41,9 @@ export const STEWARD_PERMISSION_DEFAULTS = {
   'charity.presets': false,
   'charity.backoff': false,
   'charity.price_templates.read': false,
+  'charity.request_adaptation': false,
+  'charity.affinity': false,
+  'charity.price_templates.manage': false,
   'logs.read': true,
   'logs.unredacted': false,
   'diagnostics.read': true,
@@ -103,13 +106,29 @@ export function normalizeStewardPermissions(value: unknown): StewardPermissions 
     ['revision', 'donation_scope', 'permissions', 'limits'],
     'steward permissions',
   );
-  const permissions = record(root.permissions, stewardPermissionKeys, 'steward grants');
+  const added = [
+    'charity.request_adaptation',
+    'charity.affinity',
+    'charity.price_templates.manage',
+  ];
+  const permissions = record(
+    root.permissions,
+    stewardPermissionKeys,
+    'steward grants',
+    stewardPermissionKeys.filter((key) => !added.includes(key)),
+  );
   const limits = record(root.limits, stewardLimitKeys, 'steward limits');
   return {
     revision: decimal(root.revision, 'permission revision'),
     donation_scope: oneOf(root.donation_scope, DONATION_SCOPES, 'donation scope'),
     permissions: Object.fromEntries(
-      stewardPermissionKeys.map((key) => [key, boolean(permissions[key], key)]),
+      stewardPermissionKeys.map((key) => [
+        key,
+        boolean(
+          permissions[key] === undefined && added.includes(key) ? false : permissions[key],
+          key,
+        ),
+      ]),
     ) as StewardPermissions['permissions'],
     limits: Object.fromEntries(
       stewardLimitKeys.map((key) => [key, decimal(limits[key], key)]),
