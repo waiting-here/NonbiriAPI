@@ -39,6 +39,15 @@ func NewWithReader(database, reader *sql.DB, authorizer resources.FinalTxAuthori
 // call. Request handlers recheck readiness and authorization in their final
 // read snapshot; a settlement in between cannot expose stale totals.
 func (s *Service) Advance(ctx context.Context, now int64) (bool, error) {
+	if ctx == nil || now < 0 {
+		return false, ErrInvalid
+	}
+	if s.readDB != s.database {
+		ready, err := s.readReady(ctx, now, false)
+		if err != nil || ready {
+			return ready, err
+		}
+	}
 	tx, err := s.database.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
@@ -82,6 +91,12 @@ func (s *Service) AdvanceBidding(ctx context.Context, now int64) (bool, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, biddingBatchTime)
 	defer cancel()
+	if s.readDB != s.database {
+		ready, err := s.readReady(ctx, now, true)
+		if err != nil || ready {
+			return ready, err
+		}
+	}
 	tx, err := s.database.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
@@ -92,6 +107,29 @@ func (s *Service) AdvanceBidding(ctx context.Context, now int64) (bool, error) {
 		return false, err
 	}
 	return ready, tx.Commit()
+}
+
+// Skip idle catch-up without taking the writer. New work after this snapshot
+// is handled on the next pass; readers still recheck readiness and identity in
+// their final snapshot. Pending work is reselected by the write transaction.
+func (s *Service) readReady(ctx context.Context, now int64, bidding bool) (bool, error) {
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var ready bool
+	err = tx.QueryRowContext(ctx, `SELECT phase=2
+AND NOT EXISTS(SELECT 1 FROM game_rank_expiry_work)
+AND NOT EXISTS(SELECT 1 FROM game_rank_events WHERE charity_expires_at<=?)
+AND NOT EXISTS(SELECT 1 FROM game_rank_events WHERE profit_7d_expires_at<=?)
+AND NOT EXISTS(SELECT 1 FROM game_rank_events WHERE profit_30d_expires_at<=?)
+FROM game_rank_net_rebuild WHERE id=1`, now, now, now).Scan(&ready)
+	if err != nil || !ready || !bidding {
+		return ready, err
+	}
+	rebuild, err := readBiddingRebuild(ctx, tx)
+	return rebuild.state == "completed", err
 }
 
 func (s *Service) Read(ctx context.Context, user int64, board, window string, page pagination.Request) (Board, error) {

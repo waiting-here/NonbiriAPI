@@ -41,6 +41,70 @@ test separately queues actions in different seconds, advances across the gap
 and checks that each action, revision and settlement occurs once. Production
 impact remains to be measured after an explicitly authorized deployment.
 
+## Idle projection and balanced dispatch samples
+
+These opt-in experiments use real temporary SQLite databases and the application
+connection pools. Use the project's Go 1.26.10 toolchain and run them serially:
+
+```sh
+NONBIRI_PERFORMANCE_SAMPLE=1 NONBIRI_PREWARM_READERS=1 \
+  GOTOOLCHAIN=local CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 \
+  ./internal/economyaudit -run '^TestIdleProjectionMixedLoadSample$' \
+  -count=1 -v -timeout=5m
+NONBIRI_PERFORMANCE_SAMPLE=1 NONBIRI_SAMPLE_LABEL=candidate \
+  GOTOOLCHAIN=local CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 \
+  ./internal/claim -run '^TestBalancedDispatchLoadSample$' \
+  -count=1 -v -timeout=5m
+```
+
+The projection experiment retains 1,000 or 100,000 recent ranking events. Three
+workers perform ranking reads, real ledger/ranking writes and the three background
+projection advances. The probe-heavy case uses 600 background rounds and 120
+requests of each HTTP method; the write-heavy case uses 60 rounds and 600 requests
+of each method. Both modes use identical foreground code. The writer mode passes
+the same pool to the background services to exercise their original transaction
+path; the reader mode uses separate pools. Final ledger and ranking projections
+must match the submitted writes. This isolates background contention through
+loopback test handlers; it is not a complete inference or production load test.
+
+Pool waits, writer holds, full-operation percentiles and allocations are reported
+separately. One Windows/amd64 run reduced probe-heavy writer holds from 1,920 to
+164/180 for the two history sizes, and elapsed time from 239/276 to 196/237 ms.
+GET p95 increased from about 1 to 2 ms. Write-heavy elapsed time was roughly
+unchanged at 1,000 rows and fell from 1,051 to 1,005 ms at 100,000 rows. These
+fixed synthetic observations do not establish a production speedup or an
+improvement in every latency percentile.
+
+The optional reader prewarm borrows both connections simultaneously and executes
+a schema query on each; its cost is logged outside the measurement. Sequential
+queries can warm only one connection. Omit `NONBIRI_PREWARM_READERS` when measuring
+cold pool behavior, and preserve that result separately. An earlier cold-pool
+diagnostic showed a slow first read when a second connection initialized; warming
+both readers removed that tail in the diagnostic. Do not extend production
+deadlines or conceal initialization costs based on steady-state results.
+
+The balanced-dispatch sample retains 1,000 or 100,000 synthetic buckets. The
+selected physical credential has 300 active one-second buckets; remaining rows
+belong to unrelated physical identities. It submits 1, 10 or 100 copies of one
+authorized candidate to the real scoring and claim function, retaining each
+candidate's current authorization checks. Twenty transactions per case are rolled
+back to identical inputs. Setup, acceptance and commit durability are outside
+the measured work. Compare the same sample on the original and revised function;
+`NONBIRI_SAMPLE_LABEL` only labels output and does not switch implementations.
+This concentrated duplication measures the opportunity for transaction-local
+load reuse, not a known production candidate distribution or mixed inference
+throughput. Separate regressions retain different-credential isolation, stale
+authorization and target rejection, admission/savepoint fallback, exact expiry,
+saturated counts and visibility of a preceding request's reservation.
+
+In one fixed before/after run, 100 repeated candidates reduced total writer
+holding across the 20 transactions from 192 to 68 ms at 1,000 buckets and from
+250 to 95 ms at 100,000 buckets. Elapsed time fell from 192.5 to 68.7 ms and from
+250.8 to 95.9 ms respectively. The one-candidate case showed no clear benefit
+(about 22–26 ms total in either implementation). The transaction count remained
+20 in every case. These results measure shorter scoring transactions under
+concentrated duplication, excluding commit durability and request concurrency.
+
 ## Running measurements
 
 For a slow test package, record per-test progress before changing its timeout:

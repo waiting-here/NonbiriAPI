@@ -441,15 +441,15 @@ WHERE logical_request_id=?`, endpointKeyID, input.Candidate.UpstreamModelID,
 // TakeForDispatch commits claimed -> dispatched before it decrypts the
 // credential. Consequently, no connector can receive a usable credential
 // while the database still describes an undispatched attempt.
-func (s *Service) TakeForDispatch(ctx context.Context, handle Handle) (*Dispatch, error) {
+func (s *Service) TakeForDispatch(ctx context.Context, handle Handle) (_ *Dispatch, resultErr error) {
 	if s == nil || s.db == nil || ctx == nil || !validHandle(handle) {
 		return nil, ErrInvalidInput
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.db, nil, "claim_dispatch")
 	if err != nil {
 		return nil, fmt.Errorf("claim: begin dispatch: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	if handle.discoveryAuthorize != nil {
 		if handle.purpose != PurposeDiscovery {
 			return nil, ErrInvalidInput
@@ -600,6 +600,7 @@ SET state='dispatched',dispatched_at=? WHERE id=? AND state='claimed'`, at, hand
 		clear(encrypted)
 		return nil, fmt.Errorf("claim: commit dispatch marker: %w", err)
 	}
+	finish(nil)
 	if err := ctx.Err(); err != nil {
 		clear(contextID)
 		clear(encrypted)
