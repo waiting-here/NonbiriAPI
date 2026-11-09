@@ -228,7 +228,7 @@ func gatewayRows(t *testing.T, database *sql.DB, fullFacts ...bool) map[string][
 	}
 	result := make(map[string][]string, len(tables))
 	for _, table := range tables {
-		if assertEmptyAttendanceTableForTest(t, database, table) {
+		if assertEmptyAttendanceTableForTest(t, database, table) || assertEmptyModelQuotaTableForTest(t, database, table) {
 			continue
 		}
 		if !includeDerived && table == "browser_associations" {
