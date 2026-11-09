@@ -138,7 +138,7 @@ func (service *Service) snapshot(
 		if candidate.prepared != nil {
 			policy.NativeExtensions = candidate.prepared.native
 		}
-		target := connectorcontract.NewTarget(candidate.ConnectorType, candidate.CanonicalBaseURL, candidate.UpstreamModelID)
+		target := connectorcontract.NewTarget(candidate.ConnectorType, candidate.CanonicalBaseURL, candidate.UpstreamModelID).WithRerankPath(candidate.Authorization.RerankPath)
 		rejected := candidateRequest.checkTarget(service.registry, target, policy)
 		if rejected == nil {
 			candidate.Policy.FlattenToolCalls = request.chat != nil && admission.flatten

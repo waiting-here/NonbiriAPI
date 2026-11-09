@@ -41,6 +41,12 @@ func (a *Adapter) AttemptInference(ctx context.Context, writer http.ResponseWrit
 		path = "/chat/completions"
 	}
 	url := strings.TrimSuffix(client.BaseURL(), "/") + path
+	if request.operation == contract.OperationRerank {
+		url, err = contract.RerankURL(client.BaseURL(), target.rerankPath)
+		if err != nil {
+			return result
+		}
+	}
 	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil || len(target.credential.bearer) == 0 {
 		return result

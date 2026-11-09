@@ -116,19 +116,20 @@ type NativeServiceEvidenceExport struct {
 	Revision          *string  `json:"revision"`
 }
 type DonationUseExport struct {
-	ID               string                      `json:"id"`
-	DonationID       string                      `json:"donation_id"`
-	DonationKeyID    string                      `json:"donation_key_id"`
-	NativeServices   []string                    `json:"native_services"`
-	Enabled          bool                        `json:"enabled"`
-	DiscoveryEnabled bool                        `json:"discovery_enabled"`
-	Revision         string                      `json:"revision"`
-	ApprovedRevision *string                     `json:"approved_revision"`
-	PendingRevision  *string                     `json:"pending_revision"`
-	CreatedAt        int64                       `json:"created_at"`
-	UpdatedAt        int64                       `json:"updated_at"`
-	Revisions        []DonationUseRevisionExport `json:"revisions"`
-	Health           []DonationUseHealthExport   `json:"health"`
+	RerankPathOverride *string                     `json:"rerank_path_override"`
+	ID                 string                      `json:"id"`
+	DonationID         string                      `json:"donation_id"`
+	DonationKeyID      string                      `json:"donation_key_id"`
+	NativeServices     []string                    `json:"native_services"`
+	Enabled            bool                        `json:"enabled"`
+	DiscoveryEnabled   bool                        `json:"discovery_enabled"`
+	Revision           string                      `json:"revision"`
+	ApprovedRevision   *string                     `json:"approved_revision"`
+	PendingRevision    *string                     `json:"pending_revision"`
+	CreatedAt          int64                       `json:"created_at"`
+	UpdatedAt          int64                       `json:"updated_at"`
+	Revisions          []DonationUseRevisionExport `json:"revisions"`
+	Health             []DonationUseHealthExport   `json:"health"`
 }
 type DonationUseHealthExport struct {
 	CredentialID      string  `json:"credential_id"`
@@ -144,6 +145,7 @@ type DonationUseHealthExport struct {
 }
 
 type DonationUseRevisionExport struct {
+	RerankPath              string  `json:"rerank_path"`
 	Revision                string  `json:"revision"`
 	CredentialID            string  `json:"credential_id"`
 	CredentialVersion       string  `json:"credential_version"`
@@ -260,10 +262,10 @@ func exportConnections(ctx context.Context, tx *sql.Tx, request ExportRequest) (
 	if err != nil {
 		return out, err
 	}
-	out.DonationUses, err = readConnectionExportRows(ctx, tx, request, `SELECT CAST(u.id AS TEXT),CAST(dk.donation_id AS TEXT),CAST(dk.id AS TEXT),u.native_service_bit,u.enabled,u.discovery_enabled,CAST(u.revision AS TEXT),CAST(a.use_revision AS TEXT),CAST(p.use_revision AS TEXT),u.created_at,u.updated_at FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donations d ON d.id=dk.donation_id LEFT JOIN donation_use_revisions a ON a.id=u.current_approved_revision_id LEFT JOIN donation_use_revisions p ON p.id=u.current_pending_revision_id WHERE d.user_id=? ORDER BY dk.donation_id,dk.id,u.native_service_bit LIMIT ?`, func(rows *sql.Rows) (DonationUseExport, error) {
+	out.DonationUses, err = readConnectionExportRows(ctx, tx, request, `SELECT CAST(u.id AS TEXT),CAST(dk.donation_id AS TEXT),CAST(dk.id AS TEXT),u.native_service_bit,u.enabled,u.discovery_enabled,u.rerank_path_override,CAST(u.revision AS TEXT),CAST(a.use_revision AS TEXT),CAST(p.use_revision AS TEXT),u.created_at,u.updated_at FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donations d ON d.id=dk.donation_id LEFT JOIN donation_use_revisions a ON a.id=u.current_approved_revision_id LEFT JOIN donation_use_revisions p ON p.id=u.current_pending_revision_id WHERE d.user_id=? ORDER BY dk.donation_id,dk.id,u.native_service_bit LIMIT ?`, func(rows *sql.Rows) (DonationUseExport, error) {
 		var item DonationUseExport
 		var mask int64
-		if err := rows.Scan(&item.ID, &item.DonationID, &item.DonationKeyID, &mask, &item.Enabled, &item.DiscoveryEnabled, &item.Revision, &item.ApprovedRevision, &item.PendingRevision, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.DonationID, &item.DonationKeyID, &mask, &item.Enabled, &item.DiscoveryEnabled, &item.RerankPathOverride, &item.Revision, &item.ApprovedRevision, &item.PendingRevision, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return item, err
 		}
 		item.NativeServices, err = exportNativeServices(mask)
@@ -324,7 +326,7 @@ func exportUseRevisions(ctx context.Context, tx *sql.Tx, request ExportRequest, 
 	for i, item := range out.DonationUses {
 		positions[item.ID] = i
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT CAST(ur.use_id AS TEXT),CAST(ur.use_revision AS TEXT),CAST(ur.credential_id_snapshot AS TEXT),CAST(ur.credential_version AS TEXT),CAST(ur.grant_revision AS TEXT),ur.display_head,ur.display_tail,CAST(sr.source_id AS TEXT),CAST(sr.source_revision AS TEXT),ur.origin,CASE ur.review_state WHEN 'cancelled' THEN 'withdrawn' ELSE ur.review_state END,ur.review_reason,ur.reviewed_at,ur.created_at
+	rows, err := tx.QueryContext(ctx, `SELECT CAST(ur.use_id AS TEXT),CAST(ur.use_revision AS TEXT),CAST(ur.credential_id_snapshot AS TEXT),CAST(ur.credential_version AS TEXT),CAST(ur.grant_revision AS TEXT),ur.display_head,ur.display_tail,CAST(sr.source_id AS TEXT),CAST(sr.source_revision AS TEXT),ur.origin,CASE ur.review_state WHEN 'cancelled' THEN 'withdrawn' ELSE ur.review_state END,ur.review_reason,ur.reviewed_at,ur.created_at,ur.rerank_path
  FROM donation_use_revisions ur JOIN donation_uses u ON u.id=ur.use_id JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donations d ON d.id=dk.donation_id LEFT JOIN discovery_source_revisions sr ON sr.id=ur.discovery_source_revision_id
  WHERE d.user_id=? ORDER BY ur.use_id,ur.use_revision LIMIT ?`, request.UserID, request.Limit+1)
 	if err != nil {
@@ -339,7 +341,7 @@ func exportUseRevisions(ctx context.Context, tx *sql.Tx, request ExportRequest, 
 		}
 		var id string
 		var item DonationUseRevisionExport
-		if err := rows.Scan(&id, &item.Revision, &item.CredentialID, &item.CredentialVersion, &item.GrantRevision, &item.DisplayHead, &item.DisplayTail, &item.DiscoverySourceID, &item.DiscoverySourceRevision, &item.Origin, &item.ReviewState, &item.ReviewReason, &item.ReviewedAt, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&id, &item.Revision, &item.CredentialID, &item.CredentialVersion, &item.GrantRevision, &item.DisplayHead, &item.DisplayTail, &item.DiscoverySourceID, &item.DiscoverySourceRevision, &item.Origin, &item.ReviewState, &item.ReviewReason, &item.ReviewedAt, &item.CreatedAt, &item.RerankPath); err != nil {
 			rows.Close()
 			return err
 		}

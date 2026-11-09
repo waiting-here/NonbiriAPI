@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
 // StagePendingUseRevisionTx never approves a use. The caller must roll back
@@ -111,7 +113,12 @@ func StagePendingUseRevisionTx(ctx context.Context, tx *sql.Tx, in StagePendingU
 	if in.DiscoverySourceRevisionID != nil {
 		source = *in.DiscoverySourceRevisionID
 	}
-	result, err := tx.ExecContext(ctx, "INSERT INTO donation_use_revisions(use_id,use_revision,grant_revision_id,discovery_source_revision_id,source_grant_revision_id,source_discovery_revision_id,credential_id_snapshot,credential_version,grant_revision,display_head,display_tail,report_fingerprint,key_body_review_hmac,origin,review_state,review_reason,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending','',?)", in.UseID, contentRevision, in.GrantRevisionID, source, in.GrantRevisionID, source, grant.CredentialID, grant.CredentialVersion, grant.GrantRevision, displayHead, displayTail, fingerprint, bodyHMAC, string(in.Origin), in.At)
+	rerankPath := ""
+	service, _ := contract.NativeServicesFromMask(serviceBit)
+	if service.Has(contract.NativeServiceRerank) {
+		rerankPath = grant.RerankPath
+	}
+	result, err := tx.ExecContext(ctx, "INSERT INTO donation_use_revisions(use_id,use_revision,grant_revision_id,discovery_source_revision_id,source_grant_revision_id,source_discovery_revision_id,credential_id_snapshot,credential_version,grant_revision,display_head,display_tail,report_fingerprint,key_body_review_hmac,rerank_path,origin,review_state,review_reason,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending','',?)", in.UseID, contentRevision, in.GrantRevisionID, source, in.GrantRevisionID, source, grant.CredentialID, grant.CredentialVersion, grant.GrantRevision, displayHead, displayTail, fingerprint, bodyHMAC, rerankPath, string(in.Origin), in.At)
 	if err != nil {
 		return UseRevisionIdentity{}, fmt.Errorf("connectionstore: stage use revision: %w", err)
 	}

@@ -113,6 +113,7 @@ type Candidate struct {
 	grantRevisionID     int64
 	grantRevision       int64
 	nativeServices      connectorcontract.NativeServiceSet
+	rerankPath          string
 	rerankFormat        connectorcontract.RerankFormat
 	endpointID          int64
 	endpointKeyID       int64
@@ -515,6 +516,7 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, ownerUserID, ownerUserID, MaxS
 		}
 		candidate.credentialID, candidate.credentialVersionID, candidate.credentialVersion = grant.CredentialID, grant.CredentialVersionID, grant.CredentialVersion
 		candidate.grantRevisionID, candidate.grantRevision, candidate.rerankFormat = grant.GrantRevisionID, grant.GrantRevision, grant.RerankFormat
+		candidate.rerankPath = grant.RerankPath
 		result = append(result, candidate)
 		groups[candidate.bindingID] = struct{}{}
 	}

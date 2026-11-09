@@ -32,6 +32,9 @@ func expandServiceTargets(candidates []RouteCandidate, operation connectorcontra
 			}
 			selected := candidate
 			selected.Authorization.NativeService = route.NativeService
+			if route.NativeService != connectorcontract.NativeServiceRerank {
+				selected.Authorization.RerankPath = ""
+			}
 			selected.ConnectorType, selected.NativeMatch = route.WireType, route.NativeMatch
 			result = append(result, selected)
 		}

@@ -11,6 +11,7 @@ import (
 )
 
 type createEndpointRequest struct {
+	RerankPath      requestField[string]                   `json:"rerank_path,omitempty"`
 	ConnectionID    requestField[string]                   `json:"connection_id"`
 	ChannelEntryID  requestField[string]                   `json:"channel_entry_id"`
 	ChannelRevision requestField[string]                   `json:"channel_revision"`
@@ -25,6 +26,7 @@ type createEndpointRequest struct {
 }
 
 type createEndpointCanonical struct {
+	RerankPath      string                    `json:"rerank_path,omitempty"`
 	ConnectionID    string                    `json:"connection_id,omitempty"`
 	ChannelEntryID  string                    `json:"channel_entry_id,omitempty"`
 	ChannelRevision string                    `json:"channel_revision,omitempty"`
@@ -39,6 +41,7 @@ type createEndpointCanonical struct {
 }
 
 type patchEndpointRequest struct {
+	RerankPath       requestField[string]                   `json:"rerank_path,omitempty"`
 	ConnectionID     requestField[string]                   `json:"connection_id"`
 	NativeServices   requestField[[]contract.NativeService] `json:"native_services"`
 	RerankFormat     requestField[contract.RerankFormat]    `json:"rerank_format"`
@@ -48,6 +51,7 @@ type patchEndpointRequest struct {
 }
 
 type patchEndpointCanonical struct {
+	RerankPath       *string                   `json:"rerank_path,omitempty"`
 	ConnectionID     *string                   `json:"connection_id,omitempty"`
 	NativeServices   *[]contract.NativeService `json:"native_services,omitempty"`
 	RerankFormat     *contract.RerankFormat    `json:"rerank_format,omitempty"`
@@ -152,7 +156,7 @@ func (api *httpAPI) createEndpoint(writer http.ResponseWriter, request *http.Req
 	}
 	canonical := createEndpointCanonical{
 		ConnectionID: body.ConnectionID.Value, ChannelEntryID: body.ChannelEntryID.Value, ChannelRevision: body.ChannelRevision.Value,
-		NativeServices: optionalPointer(body.NativeServices), RerankFormat: body.RerankFormat.Value,
+		NativeServices: optionalPointer(body.NativeServices), RerankFormat: body.RerankFormat.Value, RerankPath: body.RerankPath.Value,
 		Source: body.Source.Value, ChannelID: body.ChannelID.Value,
 		ConnectorType: body.ConnectorType.Value, BaseURL: body.BaseURL.Value,
 		Note: body.Note.Value, Enabled: body.Enabled.Value,
@@ -185,7 +189,7 @@ func (api *httpAPI) createEndpoint(writer http.ResponseWriter, request *http.Req
 	}
 	result, err := api.repository.CreateEndpoint(request.Context(), principal.UserID, mutation, CreateEndpointInput{
 		ConnectionID: optionalIDValue(connectionID), ChannelEntryID: optionalIDValue(entryID), ChannelRevision: optionalIDValue(channelRevision),
-		NativeServices: canonical.NativeServices, RerankFormat: canonical.RerankFormat,
+		NativeServices: canonical.NativeServices, RerankFormat: canonical.RerankFormat, RerankPath: canonical.RerankPath,
 		Source: canonical.Source, ChannelID: canonical.ChannelID,
 		ConnectorType: canonical.ConnectorType, BaseURL: canonical.BaseURL,
 		Note: canonical.Note, Enabled: canonical.Enabled,
@@ -220,12 +224,12 @@ func (api *httpAPI) patchEndpoint(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	revision, ok := canonicalExpectedRevision(body.ExpectedRevision)
-	if !ok || (!body.Note.Set && !body.Enabled.Set && !body.ConnectionID.Set && !body.NativeServices.Set && !body.RerankFormat.Set) {
+	if !ok || (!body.Note.Set && !body.Enabled.Set && !body.ConnectionID.Set && !body.NativeServices.Set && !body.RerankFormat.Set && !body.RerankPath.Set) {
 		writeResourceError(writer, ErrInvalidRequest)
 		return
 	}
 	canonical := patchEndpointCanonical{
-		ConnectionID: optionalPointer(body.ConnectionID), NativeServices: optionalPointer(body.NativeServices), RerankFormat: optionalPointer(body.RerankFormat),
+		ConnectionID: optionalPointer(body.ConnectionID), NativeServices: optionalPointer(body.NativeServices), RerankFormat: optionalPointer(body.RerankFormat), RerankPath: optionalPointer(body.RerankPath),
 		Note: optionalPointer(body.Note), Enabled: optionalPointer(body.Enabled),
 		ExpectedRevision: body.ExpectedRevision.Value,
 	}
@@ -239,7 +243,7 @@ func (api *httpAPI) patchEndpoint(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	result, err := api.repository.PatchEndpoint(request.Context(), principal.UserID, endpointID, mutation, PatchEndpointInput{
-		ConnectionID: connectionID, NativeServices: canonical.NativeServices, RerankFormat: canonical.RerankFormat,
+		ConnectionID: connectionID, NativeServices: canonical.NativeServices, RerankFormat: canonical.RerankFormat, RerankPath: canonical.RerankPath,
 		Note: canonical.Note, Enabled: canonical.Enabled, ExpectedRevision: revision,
 	})
 	if err != nil {

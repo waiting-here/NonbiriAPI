@@ -131,7 +131,7 @@ func (adapter *AccountResources) ExportResources(
 	for _, endpoint := range slice.Endpoints {
 		item := lifecycle.EndpointExport{
 			ID: endpoint.ID, ConnectorType: endpoint.ConnectorType, BaseURL: endpoint.BaseURL,
-			ConnectionID: endpoint.ConnectionID, NativeServices: append([]string{}, endpoint.NativeServices...), RerankFormat: endpoint.RerankFormat,
+			ConnectionID: endpoint.ConnectionID, NativeServices: append([]string{}, endpoint.NativeServices...), RerankFormat: endpoint.RerankFormat, RerankPath: endpoint.RerankPath,
 			Origin: lifecycle.EndpointOriginExport{
 				Kind: endpoint.Origin.Kind, ChannelID: endpoint.Origin.ChannelID, Name: endpoint.Origin.Name,
 			},

@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -15,6 +16,14 @@ func (s *Service) mutateUse(ctx context.Context, role reviewerRole, actorID, don
 	var empty resources.MutationResult[Use]
 	method, route := http.MethodPatch, routeOwnerUse
 	switch action {
+	case "rerank_path":
+		route = useRoute(role) + "/{useId}"
+		if role == recurringOwner || input.RerankPathOverride == nil || input.Enabled != nil || input.DiscoveryEnabled != nil {
+			return empty, ErrInvalidRequest
+		}
+		if path := *input.RerankPathOverride; path != nil && contract.ValidateRerankPath(*path) != nil {
+			return empty, ErrInvalidRequest
+		}
 	case "patch":
 		if role != recurringOwner || input.Enabled == nil && input.DiscoveryEnabled == nil {
 			return empty, ErrInvalidRequest
@@ -53,6 +62,15 @@ func (s *Service) mutateUse(ctx context.Context, role reviewerRole, actorID, don
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
+	}
+	if action == "rerank_path" {
+		allowed, err := keyManagementAllowedTx(ctx, tx, role, access.actorID)
+		if err != nil {
+			return empty, err
+		}
+		if !allowed {
+			return empty, ErrForbidden
+		}
 	}
 	if role != recurringOwner {
 		if err := requireManagedDonationTx(ctx, tx, role, donationID, now); err != nil {
@@ -93,6 +111,17 @@ func (s *Service) mutateUse(ctx context.Context, role reviewerRole, actorID, don
 	var result sql.Result
 	var resetReceipt *ServiceFailureReset
 	switch action {
+	case "rerank_path":
+		var native int64
+		var kind contract.Type
+		if err := tx.QueryRowContext(ctx, "SELECT u.native_service_bit,dk.connector_type FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id WHERE u.id=?", useID).Scan(&native, &kind); err != nil {
+			return empty, err
+		}
+		services, err := contract.NativeServicesFromMask(native)
+		if err != nil || !services.Has(contract.NativeServiceRerank) || !contract.SupportsRerankPath(kind) {
+			return empty, ErrInvalidRequest
+		}
+		result, err = tx.ExecContext(ctx, "UPDATE donation_uses SET rerank_path_override=?,revision=revision+1,updated_at=? WHERE id=? AND revision=?", *input.RerankPathOverride, now, useID, revision)
 	case "patch":
 		if input.DiscoveryEnabled != nil && *input.DiscoveryEnabled {
 			var hasSource bool

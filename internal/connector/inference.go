@@ -75,7 +75,7 @@ func attemptInference(ctx context.Context, input AttemptInput, kind contract.Typ
 	if input.Observer != nil {
 		input.Observer.TryObserve(observation)
 	}
-	result := driver.AttemptInference(ctx, input.Sink, openai.NewTarget(input.Target.BaseURL(), input.Target.UpstreamModel(), openai.NewCredential(key, ciphertext)), input.Inference, kind, input.Policy)
+	result := driver.AttemptInference(ctx, input.Sink, openai.NewTarget(input.Target.BaseURL(), input.Target.UpstreamModel(), openai.NewCredential(key, ciphertext)).WithRerankPath(input.Target.RerankPath()), input.Inference, kind, input.Policy)
 	if input.Observer != nil {
 		observation.Kind = ObservationAttemptFinished
 		observation.Success = result.Success

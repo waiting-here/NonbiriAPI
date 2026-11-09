@@ -60,7 +60,7 @@ func (s *Service) create(ctx context.Context, userID int64, key string, canonica
 	}
 	ep, err := s.resources.CreateEndpointInTransaction(ctx, tx, userID, resources.CreateEndpointInput{
 		Source: "custom", ConnectorType: input.Endpoint.ConnectorType, BaseURL: input.Endpoint.BaseURL, Note: input.Endpoint.Note, Enabled: enabled(input.Endpoint.Enabled),
-		NativeServices: input.Endpoint.NativeServices.pointer(), RerankFormat: contract.RerankFormat(input.Endpoint.RerankFormat),
+		NativeServices: input.Endpoint.NativeServices.pointer(), RerankFormat: contract.RerankFormat(input.Endpoint.RerankFormat), RerankPath: input.Endpoint.RerankPath,
 	})
 	if err != nil {
 		return nil, atStep("endpoint", err)
