@@ -27,7 +27,10 @@ func ValidateRerankPath(value string) error {
 	if value == "" {
 		return nil
 	}
-	if len(value) > 2048 || !utf8.ValidString(value) || !strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") || strings.ContainsAny(value, "?#\\\\") {
+	if !strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") || strings.HasPrefix(value, "/\\") {
+		return ErrInvalidRerankPath
+	}
+	if len(value) > 2048 || !utf8.ValidString(value) || strings.ContainsAny(value, "?#\\") {
 		return ErrInvalidRerankPath
 	}
 	parsed, err := url.ParseRequestURI(value)
