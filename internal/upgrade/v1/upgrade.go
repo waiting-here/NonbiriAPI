@@ -94,9 +94,11 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 		relationTables: []string{"game_fishing_pond_queue_heads"}, constraintTables: []string{"game_fishing_pond_queue"}, credentials: credentialsUnchanged}},
 	{from: 47, version: 48, manifest: db.Schema48ManifestHash, sql: db.RequestLogOperationIndexSQL, impact: &migrationImpact{indexedTables: []string{"request_logs"}, credentials: credentialsUnchanged}},
 	{from: 48, version: 49, manifest: db.Schema49ManifestHash, sql: db.AttendanceSQL, impact: &migrationImpact{addedTables: []string{"attendance_periods", "attendance_tiers", "attendance_progress", "attendance_sign_ins", "attendance_awards"}, credentials: credentialsUnchanged}},
-	{from: 49, version: 50, manifest: db.PinnedGenerationTwoManifestHash, sql: db.ModelQuotaSQL + db.LakeExchangeDailyIndexSQL, impact: &migrationImpact{
+	{from: 49, version: 50, manifest: db.Schema50ManifestHash, sql: db.ModelQuotaSQL + db.LakeExchangeDailyIndexSQL, impact: &migrationImpact{
 		addedTables: []string{"donation_model_quotas"}, constraintTables: []string{"donation_quota_rules", "donation_usage_reservations"},
 		indexedTables: []string{"donation_quota_rules", "donation_usage_reservations", "lake_notes_exchange_receipts"}, credentials: credentialsUnchanged}},
+	{from: 50, version: 51, manifest: db.PinnedGenerationTwoManifestHash, sql: db.RerankPathSQL + db.CallerParameterLengthSQL, impact: &migrationImpact{
+		controlTables: []string{"endpoints", "donation_uses", "donation_use_revisions", "dispatch_claim_targets"}, rebuiltTables: []string{"dispatch_caller_parameter_errors"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {
@@ -148,6 +150,7 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{47, db.Schema47ManifestHash, "b3b0dbfda01d3d22140c0c0a74e28afc2f2baa58"},
 		{48, db.Schema48ManifestHash, "9be4a03b9054f70d8a44ac7389378e4fe93dce0a"},
 		{49, db.Schema49ManifestHash, "4fd81dd0fd48b82e0ee55c562a9ea4f92b18eeca"},
+		{50, db.Schema50ManifestHash, "23afcd9fc058721f649ff352b216578c447f332b"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,

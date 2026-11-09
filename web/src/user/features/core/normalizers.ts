@@ -1786,6 +1786,20 @@ export function normalizeEndpoint(value: unknown): Endpoint {
     ...(Object.hasOwn(source, 'rerank_format')
       ? { rerank_format: normalizeRerankFormat(source.rerank_format) }
       : {}),
+    ...(source.rerank_path === undefined
+      ? {}
+      : { rerank_path: scalarString(source.rerank_path, 'rerank path', { allowEmpty: true }) }),
+    ...(source.rerank_url === undefined
+      ? {}
+      : { rerank_url: scalarString(source.rerank_url, 'rerank URL', { allowEmpty: true }) }),
+    ...(source.rerank_path_configurable === undefined
+      ? {}
+      : {
+          rerank_path_configurable: exactBoolean(
+            source.rerank_path_configurable,
+            'rerank path configurable',
+          ),
+        }),
   };
 }
 export function normalizeEndpointKey(value: unknown): EndpointKey {

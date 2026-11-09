@@ -16,7 +16,7 @@ import userEn from '../../src/user/i18n/en.json' with { type: 'json' };
 import bindingCopy from '../../src/user/features/core/models/binding-copy/en.json' with { type: 'json' };
 import type { NativeService } from '../../src/shared/nativeServices';
 import type { DonationUse } from '../../src/shared/operations/donationUses';
-import { submitService } from '../service-onboarding';
+import { fillService, submitService } from '../service-onboarding';
 
 const c = common.common.connections;
 const native = common.common.modelTypes;
@@ -555,6 +555,220 @@ async function approve(context: BrowserContext, owner: BrowserContext, donation:
   );
   expect(result.status).toBe('approved');
 }
+
+test('dedicated HTTP rerank service creation accepts a custom path without a format choice', async ({
+  browser,
+}) => {
+  const owner = await session(browser, 'owner');
+  const r = common.common.nativeServices;
+  const tag = 'Dedicated rerank ' + randomUUID().slice(0, 8);
+  try {
+    const group = await connection(owner, tag);
+    await credential(owner, group, tag, 'synthetic-dedicated-rerank');
+    const base = await baseURL(owner);
+    const page = await owner.newPage();
+    await page.goto(fixture().user_url + '/endpoints?connection_id=' + group.id);
+    await page.getByRole('button', { name: c.addEntry, exact: true }).click();
+    const form = page.getByRole('dialog', { name: c.addEntry, exact: true });
+    await fillService(form, { name: tag, url: base, discovery: false });
+    await form
+      .getByRole('combobox', { name: c.protocol, exact: true })
+      .selectOption('cohere-rerank');
+    await openFold(form, r.rerankSettings);
+    await form.getByLabel(r.rerankPath, { exact: false }).fill('/custom/reranks');
+    await expect(form.getByRole('combobox', { name: r.rerankFormat, exact: true })).toHaveCount(0);
+    await submitService(form);
+    const endpoint = (
+      await userAPI<Numbered<Entry & { rerank_path: string; rerank_url: string }>>(
+        owner,
+        '/api/connections/' + group.id + '/entries?page=1&page_size=20',
+      )
+    ).data.find((row) => row.note === tag)!;
+    expect(endpoint).toMatchObject({
+      native_services: ['rerank'],
+      rerank_path: '/custom/reranks',
+      rerank_url: new URL(base).origin + '/custom/reranks',
+    });
+  } finally {
+    await owner.close();
+  }
+});
+
+test('custom rerank paths keep self-use separate from charity overrides and donated inheritance', async ({
+  browser,
+}, info) => {
+  const owner = await session(browser, 'owner');
+  const admin = await session(browser, 'admin');
+  const junior = await session(browser, 5);
+  const senior = await session(browser, 6);
+  const r = common.common.nativeServices;
+  const tag = 'Rerank paths ' + randomUUID().slice(0, 8);
+  let donationId: string | undefined;
+  try {
+    const group = await connection(owner, tag);
+    await credential(owner, group, tag, 'synthetic-rerank-credential');
+    const base = await baseURL(owner);
+    const origin = new URL(base).origin;
+    const donatedPath = '/compatible-api/v1/reranks';
+    const page = await owner.newPage();
+    await page.goto(fixture().user_url + '/endpoints?connection_id=' + group.id);
+    await page.getByRole('button', { name: c.addEntry, exact: true }).click();
+    const form = page.getByRole('dialog', { name: c.addEntry, exact: true });
+    await fillService(form, { name: tag, url: base, discovery: false });
+    await openFold(form, r.rerankSettings);
+    await form.getByLabel(r.rerankPath, { exact: false }).fill(donatedPath);
+    await expect(form.getByText(origin + donatedPath, { exact: true })).toBeVisible();
+    await submitService(form);
+    type RerankEntry = Entry & {
+      rerank_path: string;
+      rerank_url: string;
+      rerank_path_configurable: boolean;
+    };
+    const endpoint = (
+      await userAPI<Numbered<RerankEntry>>(
+        owner,
+        '/api/connections/' + group.id + '/entries?page=1&page_size=20',
+      )
+    ).data.find((row) => row.note === tag)!;
+    expect(endpoint).toMatchObject({
+      rerank_path: donatedPath,
+      rerank_url: origin + donatedPath,
+      rerank_path_configurable: true,
+    });
+    const key = (
+      await userAPI<Numbered<Key>>(
+        owner,
+        '/api/endpoints/' + endpoint.id + '/keys?page=1&page_size=20',
+      )
+    ).data[0]!;
+    const donation = await donate(owner, key, ['chat_completions', 'rerank'], tag);
+    donationId = donation.id;
+
+    await page.goto(
+      fixture().user_url +
+        '/endpoints?connection_id=' +
+        group.id +
+        '&connection_view=entries&endpoint_id=' +
+        endpoint.id,
+    );
+    const settings = await openFold(page, services.endpointSettings);
+    const path = settings.getByLabel(r.rerankPath, { exact: false });
+    await expect(path).toHaveValue(donatedPath);
+    await path.fill('/self/reranks');
+    for (const width of [1440, 390])
+      for (const theme of ['light', 'dark'] as const)
+        await screenshot(page, info, 'rerank-service-settings', width, theme, path, {
+          source: 'self',
+          baseURL: base,
+        });
+    const saved = responseFor(page, 'PATCH', '/api/endpoints/' + endpoint.id);
+    await settings.getByRole('button', { name: c.save, exact: true }).click();
+    expect((await saved).status()).toBe(200);
+    expect(
+      (await uses(owner, donation.id)).find((row) => row.native_service === 'rerank'),
+    ).toMatchObject({ rerank_path_override: null, effective_rerank_url: origin + donatedPath });
+
+    const reviewer = await admin.newPage();
+    await reviewer.goto(
+      fixture().admin_url + '/charity?charity_section=donations&donation_id=' + donation.id,
+    );
+    const materials = await openFold(reviewer, c.donationMaterials);
+    const charity = materials
+      .locator('form')
+      .filter({ has: reviewer.getByRole('group', { name: r.charityRerankSettings, exact: true }) });
+    await charity
+      .getByRole('combobox', { name: r.charityRerankSource, exact: true })
+      .selectOption('custom');
+    await charity.getByLabel(r.rerankPath, { exact: false }).fill('/charity/reranks');
+    for (const width of [1440, 390])
+      for (const theme of ['light', 'dark'] as const)
+        await screenshot(reviewer, info, 'rerank-approval-settings', width, theme, charity, {
+          role: 'admin',
+          scope: 'charity',
+        });
+    const rerankUse = (await uses(owner, donation.id)).find(
+      (row) => row.native_service === 'rerank',
+    )!;
+    const overrideSaved = responseFor(
+      reviewer,
+      'PATCH',
+      '/admin/api/donations/' + donation.id + '/uses/' + rerankUse.id,
+    );
+    await charity.getByRole('button', { name: r.saveCharityRerank, exact: true }).click();
+    const overrideReceipt = await overrideSaved;
+    expect(overrideReceipt.status()).toBe(200);
+    expect(overrideReceipt.request().postDataJSON()).toEqual({
+      expected_revision: rerankUse.revision,
+      rerank_path_override: '/charity/reranks',
+    });
+    await expect(
+      charity.getByRole('button', { name: r.saveCharityRerank, exact: true }),
+    ).toBeDisabled();
+    await reviewer.getByRole('button', { name: c.approveAllUses, exact: true }).click();
+    await expect
+      .poll(async () => (await userAPI<Donation>(owner, '/api/donations/' + donation.id)).status)
+      .toBe('approved');
+    await qualifyForSteward(admin, donation, donation.keys[0]!.id, randomUUID().slice(0, 8));
+
+    for (const [context, level] of [
+      [junior, 5],
+      [senior, 6],
+    ] as const) {
+      const manager = await context.newPage();
+      await manager.goto(
+        fixture().user_url +
+          '/steward?tab=charity&charity_section=donations&donation_id=' +
+          donation.id,
+      );
+      const details = await openFold(manager, c.donationMaterials);
+      const control = details.locator('form').filter({
+        has: manager.getByRole('group', { name: r.charityRerankSettings, exact: true }),
+      });
+      const select = control.getByRole('combobox', { name: r.charityRerankSource, exact: true });
+      await expect(select).toHaveValue('custom');
+      await control.getByLabel(r.rerankPath, { exact: false }).fill('');
+      const button = control.getByRole('button', { name: r.saveCharityRerank, exact: true });
+      await button.click();
+      await expect(button).toBeDisabled();
+      const standard = (await uses(owner, donation.id)).find(
+        (row) => row.native_service === 'rerank',
+      )!;
+      expect(standard).toMatchObject({
+        rerank_path_override: '',
+        effective_rerank_url: base.replace(/\/+$/, '') + '/rerank',
+      });
+      for (const width of [1440, 390])
+        for (const theme of ['light', 'dark'] as const)
+          await screenshot(manager, info, 'rerank-steward-' + level, width, theme, control, {
+            role: level,
+            scope: 'charity',
+          });
+      await select.selectOption('inherit');
+      await button.click();
+      await expect(button).toBeDisabled();
+      expect(
+        (await uses(owner, donation.id)).find((row) => row.native_service === 'rerank'),
+      ).toMatchObject({ rerank_path_override: null, effective_rerank_url: origin + donatedPath });
+      if (level === 5) {
+        await select.selectOption('custom');
+        await control.getByLabel(r.rerankPath, { exact: false }).fill('/senior-review/reranks');
+        await button.click();
+        await expect(button).toBeDisabled();
+      }
+    }
+    expect(await userAPI<RerankEntry>(owner, '/api/endpoints/' + endpoint.id)).toMatchObject({
+      rerank_path: '/self/reranks',
+      rerank_url: origin + '/self/reranks',
+    });
+    await noSecrets(page, ['synthetic-rerank-credential']);
+  } finally {
+    try {
+      if (donationId) await endDonation(owner, donationId);
+    } finally {
+      await Promise.all([owner, admin, junior, senior].map((context) => context.close()));
+    }
+  }
+});
 
 for (const configuredCatalog of [false, true]) {
   test(`donation catalog ${configuredCatalog ? 'configured' : 'standard'} works before and after approval without sharing consent`, async ({

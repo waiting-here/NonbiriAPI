@@ -174,7 +174,7 @@ func readUsesTx(ctx context.Context, tx *sql.Tx, access useAccess, donationID in
 	for _, id := range ids {
 		args = append(args, id)
 	}
-	query := `SELECT du.id,dk.id,dk.endpoint_key_id,du.native_service_bit,du.enabled,du.discovery_enabled,du.revision,
+	query := `SELECT du.id,dk.id,dk.endpoint_key_id,du.native_service_bit,du.enabled,du.discovery_enabled,du.revision,du.rerank_path_override,dk.connector_type,dk.canonical_base_url,
 du.current_approved_revision_id,du.current_pending_revision_id,(SELECT lr.id FROM donation_use_revisions lr WHERE lr.use_id=du.id AND lr.review_state IN ('rejected','cancelled','superseded') ORDER BY lr.use_revision DESC LIMIT 1),
 d.status IN ('pending','approved') AND d.terminal_at IS NULL AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?) AND EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id AND m.donation_id=d.id AND m.endpoint_key_id=dk.endpoint_key_id),
 COALESCE((` + discoveryEligibleSQL + `),0),EXISTS(SELECT 1 FROM charity_use_availability av WHERE av.use_id=du.id),h.failure_streak,h.failure_disabled,NULLIF(h.retry_after_until,0),NULLIF((` + smartbackoff.ServiceUntilSQL("h") + `),0),
@@ -189,6 +189,8 @@ WHERE d.id=? AND du.id IN (` + strings.TrimRight(strings.Repeat("?,", len(ids)),
 		return nil, err
 	}
 	type rowState struct {
+		kind                                 contract.Type
+		baseURL                              string
 		approved, pending, latest            sql.NullInt64
 		active, eligible, available, healthy bool
 	}
@@ -203,7 +205,7 @@ WHERE d.id=? AND du.id IN (` + strings.TrimRight(strings.Repeat("?,", len(ids)),
 		var streak []byte
 		var disabled sql.NullBool
 		var retry, backoff sql.NullInt64
-		if err := rows.Scan(&id, &keyID, &endpoint, &bit, &value.Enabled, &value.DiscoveryEnabled, &revision, &state.approved, &state.pending, &state.latest, &state.active, &state.eligible, &state.available, &streak, &disabled, &retry, &backoff, &state.healthy); err != nil {
+		if err := rows.Scan(&id, &keyID, &endpoint, &bit, &value.Enabled, &value.DiscoveryEnabled, &revision, &value.RerankPathOverride, &state.kind, &state.baseURL, &state.approved, &state.pending, &state.latest, &state.active, &state.eligible, &state.available, &streak, &disabled, &retry, &backoff, &state.healthy); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -271,6 +273,26 @@ WHERE d.id=? AND du.id IN (` + strings.TrimRight(strings.Repeat("?,", len(ids)),
 			return nil, ErrInvariant
 		}
 		value.Capabilities.CanManage = canManage && state.active
+		httpRerank := value.NativeService == contract.NativeServiceRerank && contract.SupportsRerankPath(state.kind)
+		value.Capabilities.CanEditRerankPath = httpRerank && canManage && state.active && access.role != recurringOwner
+		selected := value.Approved
+		if selected == nil {
+			selected = value.Pending
+		}
+		if httpRerank && selected != nil {
+			value.EffectiveRerankPath = selected.RerankPath
+			if value.RerankPathOverride != nil {
+				value.EffectiveRerankPath = *value.RerankPathOverride
+			}
+			value.EffectiveRerankURL, err = contract.RerankURL(state.baseURL, value.EffectiveRerankPath)
+			if err != nil {
+				return nil, ErrInvariant
+			}
+			value.DefaultRerankURL, err = contract.RerankURL(state.baseURL, "")
+			if err != nil {
+				return nil, ErrInvariant
+			}
+		}
 		value.Capabilities.CanReview = canReview && access.role != recurringOwner && value.Pending != nil && state.active && value.Pending.Review.MaterialAvailable && value.Pending.available
 		value.Capabilities.CanResetFailures = canManage && state.active && value.Approved != nil && !value.Approved.Review.Required
 		usable := state.active && state.eligible && state.available && state.healthy && value.Approved != nil && !value.Approved.Review.Required
@@ -310,7 +332,7 @@ func readUseRevisionsTx(ctx context.Context, tx *sql.Tx, ids []int64) (map[int64
 	}
 	placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
 	args = append(append([]any{}, args...), args...)
-	rows, err := tx.QueryContext(ctx, `SELECT ur.id,ur.credential_id_snapshot,ur.credential_version,ur.grant_revision,ur.review_state,ur.review_reason,ur.reviewed_at,rr.revision,
+	rows, err := tx.QueryContext(ctx, `SELECT ur.id,ur.rerank_path,dk.connector_type,dk.canonical_base_url,du.native_service_bit,ur.credential_id_snapshot,ur.credential_version,ur.grant_revision,ur.review_state,ur.review_reason,ur.reviewed_at,rr.revision,
 sr.source_id,sr.source_revision,ur.display_head,ur.display_tail,COALESCE(rr.required,0),length(ur.key_body_review_hmac)=32,
 COALESCE(a.available=1 AND a.relationship_valid=1 AND (a.effective_native_service_mask&du.native_service_bit)=du.native_service_bit,0),
 COALESCE(r.state,'unknown'),MAX(COALESCE(st.result_generation,0),1),COALESCE(r.safe_class,'none'),r.started_at,r.completed_at,COALESCE(r.model_count,0)
@@ -326,12 +348,24 @@ WHERE ur.id IN (`+strings.TrimRight(strings.Repeat("?,", len(ids)), ",")+`)`, ar
 	defer rows.Close()
 	for rows.Next() {
 		var v UseRevision
-		var id, credential, version, grant, generation, count int64
+		var id, credential, version, grant, generation, count, serviceBit int64
+		var kind contract.Type
+		var baseURL string
 		var reviewed, requirement, source, sourceRevision, started, completed sql.NullInt64
 		var material sql.NullBool
 		var state, safe string
-		if err := rows.Scan(&id, &credential, &version, &grant, &v.Status, &v.ReviewNote, &reviewed, &requirement, &source, &sourceRevision, &v.DisplayHead, &v.DisplayTail, &v.Review.Required, &material, &v.available, &state, &generation, &safe, &started, &completed, &count); err != nil {
+		if err := rows.Scan(&id, &v.RerankPath, &kind, &baseURL, &serviceBit, &credential, &version, &grant, &v.Status, &v.ReviewNote, &reviewed, &requirement, &source, &sourceRevision, &v.DisplayHead, &v.DisplayTail, &v.Review.Required, &material, &v.available, &state, &generation, &safe, &started, &completed, &count); err != nil {
 			return nil, err
+		}
+		services, err := contract.NativeServicesFromMask(serviceBit)
+		if err != nil || contract.ValidateRerankPath(v.RerankPath) != nil {
+			return nil, ErrInvariant
+		}
+		if services.Has(contract.NativeServiceRerank) && contract.SupportsRerankPath(kind) {
+			v.RerankURL, err = contract.RerankURL(baseURL, v.RerankPath)
+			if err != nil {
+				return nil, ErrInvariant
+			}
 		}
 		v.CredentialID, v.CredentialVersion, v.GrantRevision = strconv.FormatInt(credential, 10), strconv.FormatInt(version, 10), strconv.FormatInt(grant, 10)
 		v.ReviewedAt = unixPointer(reviewed)

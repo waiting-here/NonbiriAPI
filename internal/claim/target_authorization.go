@@ -31,7 +31,7 @@ func authorizationError(err error) error {
 func sameGrant(a routing.TargetAuthorization, grant connectionstore.GrantAuthorization) bool {
 	return a.CredentialID == grant.CredentialID && a.CredentialVersionID == grant.CredentialVersionID &&
 		a.CredentialVersion == grant.CredentialVersion && a.GrantRevisionID == grant.GrantRevisionID &&
-		a.GrantRevision == grant.GrantRevision && a.ConfiguredType == grant.ConfiguredType && a.RerankFormat == grant.RerankFormat
+		a.GrantRevision == grant.GrantRevision && a.ConfiguredType == grant.ConfiguredType && a.RerankFormat == grant.RerankFormat && (a.NativeService != connectorcontract.NativeServiceRerank || a.RerankPath == grant.RerankPath)
 }
 
 func resolveInferenceTargetTx(ctx context.Context, tx *sql.Tx, input ClaimInput, operation connectorcontract.Operation) (authorizedTarget, error) {
@@ -138,11 +138,11 @@ func persistInferenceTargetTx(ctx context.Context, tx *sql.Tx, claimID string, i
 (claim_id,authorization_kind,owner_user_id,endpoint_key_id_snapshot,endpoint_id_snapshot,
 credential_id_snapshot,credential_version_id,credential_version,grant_revision_id_snapshot,grant_revision,
 target_id_snapshot,target_revision,native_service_bit,configured_type,wire_type,canonical_base_url,
-upstream_model_id,rerank_format,use_id_snapshot,use_revision_id_snapshot)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, claimID, kind, grant.OwnerUserID, grant.EndpointKeyID, grant.EndpointID,
+upstream_model_id,rerank_format,use_id_snapshot,use_revision_id_snapshot,rerank_path)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, claimID, kind, grant.OwnerUserID, grant.EndpointKeyID, grant.EndpointID,
 		grant.CredentialID, grant.CredentialVersionID, grant.CredentialVersion, grant.GrantRevisionID, grant.GrantRevision,
 		targetID, targetRevision, service.Mask(), grant.ConfiguredType, input.Candidate.ConnectorType,
-		grant.CanonicalBaseURL, input.Candidate.UpstreamModelID, grant.RerankFormat, useID, useRevisionID)
+		grant.CanonicalBaseURL, input.Candidate.UpstreamModelID, grant.RerankFormat, useID, useRevisionID, a.RerankPath)
 	return err
 }
 
@@ -170,12 +170,12 @@ func revalidateDispatchTargetTx(ctx context.Context, tx *sql.Tx, claimID string,
 	err := tx.QueryRowContext(ctx, `SELECT c.logical_request_id,c.purpose,COALESCE(c.donation_key_id,0),c.secret_ref_id,r.user_id,r.route_kind,
 t.authorization_kind,t.endpoint_id_snapshot,t.endpoint_key_id_snapshot,t.credential_id_snapshot,t.credential_version_id,t.credential_version,
 t.grant_revision_id_snapshot,t.grant_revision,COALESCE(t.target_id_snapshot,0),COALESCE(t.target_revision,0),t.native_service_bit,t.configured_type,t.wire_type,
-t.canonical_base_url,t.upstream_model_id,t.rerank_format,COALESCE(t.use_id_snapshot,0),COALESCE(t.use_revision_id_snapshot,0)
+t.canonical_base_url,t.upstream_model_id,t.rerank_path,t.rerank_format,COALESCE(t.use_id_snapshot,0),COALESCE(t.use_revision_id_snapshot,0)
 FROM dispatch_claims c JOIN logical_requests r ON r.id=c.logical_request_id JOIN dispatch_claim_targets t ON t.claim_id=c.id
 WHERE c.id=? AND c.state='claimed'`, claimID).Scan(&input.RequestID, &input.Purpose, &input.DonationKeyID, &secretRefID, &input.ActorUserID, &operationRoute,
 		&kind, &input.Candidate.EndpointID, &input.Candidate.EndpointKeyID, &a.CredentialID, &a.CredentialVersionID, &a.CredentialVersion,
 		&a.GrantRevisionID, &a.GrantRevision, &a.TargetID, &a.TargetRevision, &serviceMask, &a.ConfiguredType, &input.Candidate.ConnectorType,
-		&input.Candidate.CanonicalBaseURL, &input.Candidate.UpstreamModelID, &a.RerankFormat, &a.UseID, &a.UseRevisionID)
+		&input.Candidate.CanonicalBaseURL, &input.Candidate.UpstreamModelID, &a.RerankPath, &a.RerankFormat, &a.UseID, &a.UseRevisionID)
 	if err != nil {
 		return authorizedTarget{}, authorizationError(err)
 	}

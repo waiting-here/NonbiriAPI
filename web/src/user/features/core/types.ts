@@ -167,6 +167,9 @@ export interface Endpoint {
   configuration_type?: ConnectorType;
   native_services?: NativeService[];
   rerank_format?: RerankFormat | '';
+  rerank_path?: string;
+  rerank_url?: string;
+  rerank_path_configurable?: boolean;
 
   id: string;
   connector_type: ConnectorType;
@@ -379,12 +382,14 @@ export type EndpointCreateInput = (
   connection_id?: string;
   native_services?: NativeService[];
   rerank_format?: RerankFormat | '';
+  rerank_path?: string;
 };
 
 export interface EndpointPatchInput {
   connection_id?: string;
   native_services?: NativeService[];
   rerank_format?: RerankFormat | '';
+  rerank_path?: string;
   note?: string;
   enabled?: boolean;
   expected_revision: string;

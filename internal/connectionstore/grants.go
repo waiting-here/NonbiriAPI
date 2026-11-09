@@ -11,7 +11,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
-const grantReadColumns = "COALESCE(a.owner_user_id,0),COALESCE(a.endpoint_id,0),COALESCE(a.endpoint_key_id,0),COALESCE(a.credential_id,0),COALESCE(a.credential_version_id,0),COALESCE(a.credential_version,0),COALESCE(a.grant_revision_id,0),COALESCE(a.grant_revision,0),COALESCE(a.secret_ref_id,0),COALESCE(a.configured_type,''),COALESCE(a.canonical_base_url,''),COALESCE(a.endpoint_native_service_mask,-1),COALESCE(a.granted_native_service_mask,-1),COALESCE(a.effective_native_service_mask,-1),COALESCE(a.rerank_format,''),COALESCE(a.endpoint_rerank_format,''),COALESCE(a.relationship_valid,0),COALESCE(a.available,0)"
+const grantReadColumns = "COALESCE(a.owner_user_id,0),COALESCE(a.endpoint_id,0),COALESCE(a.endpoint_key_id,0),COALESCE(a.credential_id,0),COALESCE(a.credential_version_id,0),COALESCE(a.credential_version,0),COALESCE(a.grant_revision_id,0),COALESCE(a.grant_revision,0),COALESCE(a.secret_ref_id,0),COALESCE(a.configured_type,''),COALESCE(a.canonical_base_url,''),COALESCE(a.endpoint_native_service_mask,-1),COALESCE(a.granted_native_service_mask,-1),COALESCE(a.effective_native_service_mask,-1),COALESCE(a.rerank_path,''),COALESCE(a.rerank_format,''),COALESCE(a.endpoint_rerank_format,''),COALESCE(a.relationship_valid,0),COALESCE(a.available,0)"
 
 type grantRow struct {
 	grant                                    GrantAuthorization
@@ -21,12 +21,12 @@ type grantRow struct {
 }
 
 func (r *grantRow) destinations() []any {
-	return []any{&r.grant.OwnerUserID, &r.grant.EndpointID, &r.grant.EndpointKeyID, &r.grant.CredentialID, &r.grant.CredentialVersionID, &r.grant.CredentialVersion, &r.grant.GrantRevisionID, &r.grant.GrantRevision, &r.grant.SecretRefID, &r.grant.ConfiguredType, &r.grant.CanonicalBaseURL, &r.endpointMask, &r.grantedMask, &r.effectiveMask, &r.grant.RerankFormat, &r.endpointFormat, &r.relationshipValid, &r.available}
+	return []any{&r.grant.OwnerUserID, &r.grant.EndpointID, &r.grant.EndpointKeyID, &r.grant.CredentialID, &r.grant.CredentialVersionID, &r.grant.CredentialVersion, &r.grant.GrantRevisionID, &r.grant.GrantRevision, &r.grant.SecretRefID, &r.grant.ConfiguredType, &r.grant.CanonicalBaseURL, &r.endpointMask, &r.grantedMask, &r.effectiveMask, &r.grant.RerankPath, &r.grant.RerankFormat, &r.endpointFormat, &r.relationshipValid, &r.available}
 }
 
 func (r *grantRow) facts() (GrantAuthorization, error) {
 	g := r.grant
-	if r.relationshipValid != 1 || !validBool(r.available) || g.OwnerUserID <= 0 || g.EndpointID <= 0 || g.EndpointKeyID <= 0 || g.CredentialID <= 0 || g.CredentialVersionID <= 0 || g.CredentialVersion <= 0 || g.GrantRevisionID <= 0 || g.GrantRevision <= 0 || g.CanonicalBaseURL == "" {
+	if r.relationshipValid != 1 || !validBool(r.available) || g.OwnerUserID <= 0 || g.EndpointID <= 0 || g.EndpointKeyID <= 0 || g.CredentialID <= 0 || g.CredentialVersionID <= 0 || g.CredentialVersion <= 0 || g.GrantRevisionID <= 0 || g.GrantRevision <= 0 || g.CanonicalBaseURL == "" || connectorcontract.ValidateRerankPath(g.RerankPath) != nil || g.RerankPath != "" && !connectorcontract.SupportsRerankPath(g.ConfiguredType) {
 		return GrantAuthorization{}, ErrInvariant
 	}
 	var err error

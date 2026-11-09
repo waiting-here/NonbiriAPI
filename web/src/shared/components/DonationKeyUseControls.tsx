@@ -19,6 +19,7 @@ import { Note } from './ui';
 import './DonationKeyUseControls.css';
 import { FailureResetDetails } from './FailureResetDetails';
 import type { ServiceFailureReset } from '@shared/operations/failureReset';
+import { DonationRerankSettings } from './DonationRerankSettings';
 
 type Write = {
   id: string;
@@ -194,6 +195,18 @@ export function DonationKeyUseControls({
       {operation.isSuccess ? <Note tone="ok">{t('common.outcome.saved')}</Note> : null}
       <FailureResetDetails services={resets} />
       {!confirm ? feedback : null}
+      {rows
+        .filter((row) => row.native_service === 'rerank')
+        .map((row) => (
+          <DonationRerankSettings
+            key={row.id}
+            role={role}
+            donationId={donationId}
+            use={row}
+            refresh={refresh}
+            disabled={locked}
+          />
+        ))}
       <ConfirmDialog
         open={Boolean(confirm)}
         title={t('common.connections.withdrawPendingContent')}

@@ -54,6 +54,36 @@ const use = {
 const response = (value: unknown) =>
   new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
 describe('versioned donation uses', () => {
+  it('preserves effective, default and donated snapshot URLs and independent override authority', () => {
+    const row = normalizeDonationUse({
+      ...use,
+      native_service: 'rerank',
+      rerank_path_override: '',
+      effective_rerank_path: '',
+      effective_rerank_url: 'https://api.example/v1/rerank',
+      default_rerank_url: 'https://api.example/v1/rerank',
+      approved: {
+        ...version('1', 'approved'),
+        rerank_path: '/donated/reranks',
+        rerank_url: 'https://api.example/donated/reranks',
+      },
+      capabilities: { ...use.capabilities, can_edit_rerank_path: true },
+    });
+    expect(row).toMatchObject({
+      rerank_path_override: '',
+      effective_rerank_path: '',
+      effective_rerank_url: 'https://api.example/v1/rerank',
+      default_rerank_url: 'https://api.example/v1/rerank',
+      approved: {
+        rerank_path: '/donated/reranks',
+        rerank_url: 'https://api.example/donated/reranks',
+      },
+      capabilities: { can_edit_rerank_path: true },
+    });
+    expect(
+      normalizeDonationUse({ ...use, rerank_path_override: null }).rerank_path_override,
+    ).toBeNull();
+  });
   it('preserves optional service recovery details through reads and reset receipts', async () => {
     const details = {
       use_id: '6',

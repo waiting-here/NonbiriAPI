@@ -81,6 +81,7 @@ func (Credential) LogValue() slog.Value {
 type Target struct {
 	baseURL       string
 	upstreamModel string
+	rerankPath    string
 	credential    Credential
 }
 
@@ -90,6 +91,8 @@ type Target struct {
 func NewTarget(baseURL, upstreamModel string, credential Credential) Target {
 	return Target{baseURL: baseURL, upstreamModel: upstreamModel, credential: credential}
 }
+
+func (t Target) WithRerankPath(path string) Target { t.rerankPath = path; return t }
 
 func (Target) String() string   { return "[redacted upstream target]" }
 func (Target) GoString() string { return "[redacted upstream target]" }
