@@ -254,6 +254,17 @@ func (service *Service) MatchOnce(ctx context.Context, mode string) (bool, error
 	if err != nil {
 		return false, err
 	}
+	// Fewer than three live entries cannot form a match. New arrivals are
+	// picked up by the next tick; the writer still rechecks the full queue,
+	// configuration and identities before reserving or settling anything.
+	var enough bool
+	if err := service.readDatabase.QueryRowContext(ctx, `SELECT EXISTS(
+SELECT 1 FROM game_rps_queue WHERE mode=? AND deadline>? LIMIT 1 OFFSET 2)`, mode, now).Scan(&enough); err != nil {
+		return false, classifyDB(err)
+	}
+	if !enough {
+		return false, nil
+	}
 	tx, err := service.database.BeginTx(ctx, nil)
 	if err != nil {
 		return false, classifyDB(err)
