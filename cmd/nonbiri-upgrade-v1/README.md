@@ -1,6 +1,6 @@
 # Prepare existing storage
 
-The server initializes an absent database as schema 49 and opens only the exact
+The server initializes an absent database as schema 50 and opens only the exact
 current schema. Older, newer, unknown and incomplete storage is rejected before
 migration, repair or recovery writes. The service, startup scripts and deployment
 helpers must not run this upgrader implicitly. A developer or deployer must
@@ -39,10 +39,11 @@ exact source structures:
 | 46 | `7189abc4f574df069608b7be6c59e06c7cfd1cfb` |
 | 47 | `b3b0dbfda01d3d22140c0c0a74e28afc2f2baa58` |
 | 48 | `9be4a03b9054f70d8a44ac7389378e4fe93dce0a` |
+| 49 | `4fd81dd0fd48b82e0ee55c562a9ea4f92b18eeca` |
 
 The machine-readable descriptor is authoritative for these exact source commits
 and their pinned manifest hashes. All supported sources convert atomically to
-schema 49. Schemas 27–32 and unregistered layouts are not supported sources.
+schema 50. Schemas 27–32 and unregistered layouts are not supported sources.
 
 The executable that last used a database may differ from the listed commit if
 its stored application identity, generation, schema version and complete
@@ -59,13 +60,19 @@ CGO_ENABLED=0 go build -trimpath -o nonbiri-upgrade-v1 ./cmd/nonbiri-upgrade-v1
 ```
 
 Both metadata commands need no database or environment. The converter reports
-its exact sources in `offline_conversions` and target schema 49. The server
-reports current and minimum schema 49, `startup_policy="exact"` and
+its exact sources in `offline_conversions` and target schema 50. The server
+reports current and minimum schema 50, `startup_policy="exact"` and
 `upgrade_tool="nonbiri-upgrade-v1"`, with empty `source_schema_versions`,
 `source_manifest_hashes` and `offline_conversions` arrays. The converter
-retains that target policy and adds its 27 offline-source entries. These describe
+retains that target policy and adds its 28 offline-source entries. These describe
 different executables; the empty server list does not remove the converter or
 authorize a deployment helper to call it automatically.
+
+The 49-to-50 step adds per-key, per-upstream-model token counters and limits,
+model scope on recurring rules and new reservations, and a covering daily
+Lake Notes exchange index. Existing reservations retain the empty legacy scope;
+no historical usage is attributed to a model. Account export 35 includes safe
+own model limits and usage.
 
 The 48-to-49 step creates empty attendance period, tier, progress, daily sign-in
 and milestone-award tables. Existing general/game check-ins are independent and
@@ -186,7 +193,7 @@ Earlier sources receive default-off MFA policies without enrollments or proofs.
 Schema 20 adds four covering indexes for request-log filtering; it changes no
 business records. Schema 21 widens endpoint tags with `noncommercial_gateway`
 and model-discovery outcomes with `region` and `unavailable`, preserving
-existing rows. The current application produces account export format 34, including own
+existing rows. The current application produces account export format 35, including own
 stored/effective steward permissions and retained policy history. Schema 36
 rebuilds the risk-rule/automatic-ban and blacklist audit tables with existing
 rows, labels, indexes and constraints preserved; new actions can record actual
@@ -213,7 +220,7 @@ conversion, remove the retired Gateway variable and `NONBIRI_SMTP_HOST`,
 `NONBIRI_SMTP_FROM` and `NONBIRI_SMTP_TLS` from the deployment environment.
 
 The [rc.7 command](../nonbiri-upgrade-rc7/README.md) remains a narrow wrapper
-accepting schema 16 and current schema 49. Both commands use one engine.
+accepting schema 16 and current schema 50. Both commands use one engine.
 `scripts/check-upgrade.sh` creates a populated synthetic source with the pinned
 rc.7 program, converts it, compares retained facts and resumes economy checks.
 The offline suite also covers the registered schema 17–26 fixtures. No

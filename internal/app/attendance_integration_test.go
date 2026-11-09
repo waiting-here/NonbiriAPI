@@ -93,7 +93,7 @@ func TestAttendanceRoutesAutomaticAwardsExportAndDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	var exported attendance.UserExport
-	if document.SchemaVersion != 34 || json.Unmarshal(document.Attendance, &exported) != nil || len(exported.SignIns) != 1 || len(exported.Periods) != 1 || !exported.Periods[0].Tiers[0].Awarded {
+	if document.SchemaVersion != 35 || json.Unmarshal(document.Attendance, &exported) != nil || len(exported.SignIns) != 1 || len(exported.Periods) != 1 || !exported.Periods[0].Tiers[0].Awarded {
 		t.Fatal("attendance export missing", string(document.Attendance))
 	}
 	account("/api/account/delete", `{"confirm":"DELETE"}`)

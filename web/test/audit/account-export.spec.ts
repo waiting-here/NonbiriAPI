@@ -59,7 +59,7 @@ test('account page downloads the current export with personal session-header set
     const page = await context.newPage();
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    const filename = 'nonbiriapi-account-export-v34.json';
+    const filename = 'nonbiriapi-account-export-v35.json';
     const [, download] = await Promise.all([
       page
         .waitForResponse(
