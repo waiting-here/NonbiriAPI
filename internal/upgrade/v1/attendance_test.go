@@ -11,6 +11,7 @@ import (
 
 func restoreSchema48LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema49LayoutForTest(t, database)
 	hostileMustExec(t, database, "DROP TABLE attendance_awards; DROP TABLE attendance_sign_ins; DROP TABLE attendance_progress; DROP TABLE attendance_tiers; DROP TABLE attendance_periods;")
 	assertRetainedManifest(t, database, db.Schema48ManifestHash)
 }
@@ -63,7 +64,7 @@ func TestAttendanceSchema48UpgradeIsExplicitAndAtomic(t *testing.T) {
 	storageSchema.versions[index].apply = original
 	assertSource()
 	result, err := Run(t.Context(), path, vault, Options{Apply: true})
-	if err != nil || result.Status != "converted" || result.TargetSchemaVersion != 49 {
+	if err != nil || result.Status != "converted" || result.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal(result, err)
 	}
 	store, err = db.Open(path, vault)
