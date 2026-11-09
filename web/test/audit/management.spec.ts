@@ -41,6 +41,7 @@ interface Fixture {
     resource_health: { donation_id: string };
     automatic_backoff_donation_id: string;
     recurring_discount: { donation_id: string };
+    model_quotas: { donation_id: string };
     denials: Record<'client_rules' | 'charity' | 'manual', { cookie: Cookie }>;
   };
 }
@@ -347,6 +348,7 @@ test('owner reads donation keys and details from current API responses', async (
         state.management.resource_health.donation_id,
         state.management.automatic_backoff_donation_id,
         state.management.recurring_discount.donation_id,
+        state.management.model_quotas.donation_id,
       ].sort(),
     );
     expect(

@@ -95,9 +95,20 @@ test('daily exchange spending, configuration and remaining allowance in both scr
         expect(
           await management.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
         ).toBe(true);
-        await fields.screenshot({ path: join(folder, `lake-daily-admin-${width}-${theme}.png`) });
+        await fields.screenshot({
+          path: join(folder, `lake-daily-admin-${width}-${theme}.png`),
+          animations: 'disabled',
+        });
         await management.screenshot({
           path: join(folder, `lake-daily-admin-${width}-${theme}-viewport.png`),
+          animations: 'disabled',
+        });
+        const save = management.getByRole('button', { name: 'Save all changes', exact: true });
+        await save.scrollIntoViewIfNeeded();
+        await expect(save).toBeVisible();
+        await management.screenshot({
+          path: join(folder, `lake-daily-admin-${width}-${theme}-footer.png`),
+          animations: 'disabled',
         });
         await adminContext.close();
         const userContext = await context(browser, false, 0, 'en', width);
@@ -117,7 +128,10 @@ test('daily exchange spending, configuration and remaining allowance in both scr
         expect(
           await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
         ).toBe(true);
-        await page.screenshot({ path: join(folder, `lake-daily-user-${width}-${theme}.png`) });
+        await page.screenshot({
+          path: join(folder, `lake-daily-user-${width}-${theme}.png`),
+          animations: 'disabled',
+        });
         await userContext.close();
       }
     }
