@@ -26,7 +26,7 @@ func TestConnectionsUpgradePreservesPublishedHistoryAndCredentials(t *testing.T)
 	defer database.Close()
 	mustExec(t, database, "PRAGMA foreign_keys=ON")
 	plan, err := storageSchema.plan(ctx, database)
-	if err != nil || len(plan.steps) != 18 || plan.steps[0].version != 33 || plan.steps[1].version != 34 || plan.steps[2].version != 35 || plan.steps[3].version != 36 || plan.steps[4].version != 37 || plan.steps[5].version != 38 || plan.steps[6].version != 39 || plan.steps[7].version != 40 || plan.steps[8].version != 41 || plan.steps[9].version != 42 || plan.steps[10].version != 43 || plan.steps[11].version != 44 || plan.steps[12].version != 45 || plan.steps[13].version != 46 || plan.steps[14].version != 47 || plan.steps[15].version != 48 || plan.steps[16].version != 49 || plan.steps[17].version != db.CurrentSchemaVersion || !plan.auditsCredentials() {
+	if err != nil || len(plan.steps) != 19 || plan.steps[0].version != 33 || plan.steps[1].version != 34 || plan.steps[2].version != 35 || plan.steps[3].version != 36 || plan.steps[4].version != 37 || plan.steps[5].version != 38 || plan.steps[6].version != 39 || plan.steps[7].version != 40 || plan.steps[8].version != 41 || plan.steps[9].version != 42 || plan.steps[10].version != 43 || plan.steps[11].version != 44 || plan.steps[12].version != 45 || plan.steps[13].version != 46 || plan.steps[14].version != 47 || plan.steps[15].version != 48 || plan.steps[16].version != 49 || plan.steps[17].version != 50 || plan.steps[18].version != db.CurrentSchemaVersion || !plan.auditsCredentials() {
 		t.Fatalf("connection migration plan: %+v, %v", plan, err)
 	}
 	owner := hostileInsertUser(t, database, "connection-owner", 0, 1)
@@ -210,6 +210,10 @@ func assertPublishedConnectionRows(t *testing.T, database *sql.DB, columns map[s
 // schema_state is the only domain row intentionally changed by this migration.
 func gatewayRows(t *testing.T, database *sql.DB, fullFacts ...bool) map[string][]string {
 	t.Helper()
+	return gatewayRowsWithColumns(t, database, nil, fullFacts...)
+}
+func gatewayRowsWithColumns(t *testing.T, database *sql.DB, sourceColumns map[string][]string, fullFacts ...bool) map[string][]string {
+	t.Helper()
 	includeDerived := len(fullFacts) > 0 && fullFacts[0]
 	rows, err := database.Query(`SELECT name FROM sqlite_schema WHERE type='table' AND name<>'schema_state' ORDER BY name`)
 	if err != nil {
@@ -246,7 +250,15 @@ func gatewayRows(t *testing.T, database *sql.DB, fullFacts ...bool) map[string][
 			assertInitialFishingPondTableForTest(t, database, table)
 			continue
 		}
-		rows, err := database.Query("SELECT * FROM " + quoteSQLiteIdentifier(table))
+		selected := "*"
+		if names, ok := sourceColumns[table]; ok {
+			quoted := make([]string, len(names))
+			for i, name := range names {
+				quoted[i] = quoteSQLiteIdentifier(name)
+			}
+			selected = strings.Join(quoted, ",")
+		}
+		rows, err := database.Query("SELECT " + selected + " FROM " + quoteSQLiteIdentifier(table))
 		if err != nil {
 			t.Fatal(err)
 		}

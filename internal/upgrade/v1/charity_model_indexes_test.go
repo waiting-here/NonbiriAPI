@@ -60,6 +60,7 @@ func TestSchema37OfflineIndexesPreserveFactsAndRetry(t *testing.T) {
 	for _, failure := range []string{"none", "partial-ddl", "target-mismatch", "cancel-before-commit"} {
 		t.Run(failure, func(t *testing.T) {
 			path, vault, source := schema37Fixture(t)
+			columns := legacyConnectionColumns(t, source.DB())
 			before := gatewayRows(t, source.DB())
 			if err := source.Close(); err != nil {
 				t.Fatal(err)
@@ -103,7 +104,7 @@ func TestSchema37OfflineIndexesPreserveFactsAndRetry(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer upgraded.Close()
-			after := gatewayRows(t, upgraded.DB())
+			after := gatewayRowsWithColumns(t, upgraded.DB(), columns)
 			for table, rows := range before {
 				if table != "schema_state" && !reflect.DeepEqual(rows, after[table]) {
 					t.Fatal("index migration changed rows", table)

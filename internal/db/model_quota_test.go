@@ -7,6 +7,7 @@ import (
 
 func restoreSchema49LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema50LayoutForTest(t, database)
 	hostileMustExec(t, database, `DROP TABLE donation_model_quotas;
 DROP INDEX idx_lake_exchange_daily_source;
 DROP INDEX idx_donation_usage_model_reserved;
