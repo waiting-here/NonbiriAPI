@@ -93,7 +93,10 @@ func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
 		"smart_backoff",
 		"id", "endpoint_key_id", "display_head", "display_tail", "safe_source",
 		"physical_enabled", "charity_state", "rate_limited_until", "limits", "usage", "token_reserve",
-		"authorized_expires_at", "expires_at", "streak", "ended_reason", "recurring_limits", "review", "manual_models")
+		"authorized_expires_at", "expires_at", "streak", "ended_reason", "recurring_limits", "model_limits", "review", "manual_models")
+	assertClosedJSONKeys(t, DonationModelLimitExport{}, "upstream_model_id", "limits", "used", "reserved", "remaining", "unattributed_total_tokens", "tracking_started_at", "recurring_limits")
+	assertClosedJSONKeys(t, ModelTokenLimitsExport{}, "tokens", "input_tokens", "output_tokens")
+	assertClosedJSONKeys(t, ModelTokenAmountsExport{}, "tokens", "input_tokens", "output_tokens")
 	assertClosedJSONKeys(t, DonationKeyReviewExport{}, "required", "revision", "material_available")
 	assertClosedJSONKeys(t, DonationManualModelExport{}, "upstream_model_id", "display_name")
 	assertClosedJSONKeys(t, RecurringLimitExport{}, "id", "mode", "interval", "alignment", "anchor_local", "time_zone", "week_starts_on", "metric", "limit", "used", "reserved", "remaining", "state", "period_start", "period_end", "next_transition_at")

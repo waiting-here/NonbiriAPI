@@ -7,6 +7,10 @@ import "fmt"
 // code, never request text. All tables remain in the caller's authorized read
 // snapshot. Reservation and dispatch continue to use the transactional engine.
 func AvailabilityPredicate(keyID, decisionNow, credits, tokens string) string {
+	return availabilityPredicate(keyID, decisionNow, credits, tokens, "''")
+}
+
+func availabilityPredicate(keyID, decisionNow, credits, tokens, model string) string {
 	return fmt.Sprintf(`EXISTS (
 WITH token_budget AS MATERIALIZED (
  SELECT tk.*,COALESCE(tk.input_token_reserve+tk.output_token_reserve,%[4]s) AS effective_reserve
@@ -15,7 +19,7 @@ WITH token_budget AS MATERIALIZED (
  SELECT e.*,MAX(%[2]s,e.effective_at,COALESCE(e.last_observed_at,0)) AS observed_now
  FROM donation_quota_rules r JOIN donation_quota_epochs e
    ON e.rule_id=r.id AND e.epoch=r.current_epoch
- WHERE r.donation_key_id=%[1]s
+ WHERE r.donation_key_id=%[1]s AND r.upstream_model_id=%[5]s
 ), quota_window AS MATERIALIZED (
  SELECT q.*,
  CASE WHEN q.mode='sliding' THEN nbi_calendar_subtract(q.observed_now,q.interval,q.time_zone) END AS window_start,
@@ -52,7 +56,23 @@ SELECT 1 FROM token_budget b WHERE
  OR (q.metric IN ('input_tokens','output_tokens') AND b.input_token_reserve IS NULL)
  OR q.remaining<nbi_u128(CASE q.metric WHEN 'calls' THEN 1 WHEN 'tokens' THEN b.effective_reserve
  WHEN 'input_tokens' THEN b.input_token_reserve WHEN 'output_tokens' THEN b.output_token_reserve WHEN 'credits' THEN %[3]s ELSE -1 END))
-)`, keyID, decisionNow, credits, tokens)
+)`, keyID, decisionNow, credits, tokens, model)
+}
+
+// ModelAvailabilityPredicate checks one exact upstream target. Arguments are
+// trusted repository expressions, never request text.
+func ModelAvailabilityPredicate(keyID, model, decisionNow, tokens string) string {
+	return fmt.Sprintf(`(CASE WHEN NOT EXISTS(SELECT 1 FROM donation_model_quotas mq WHERE mq.donation_key_id=%[1]s AND mq.upstream_model_id=%[2]s AND (mq.token_limit_mag IS NOT NULL OR mq.input_token_limit_mag IS NOT NULL OR mq.output_token_limit_mag IS NOT NULL))
+ AND NOT EXISTS(SELECT 1 FROM donation_quota_rules mr WHERE mr.donation_key_id=%[1]s AND mr.upstream_model_id=%[2]s AND mr.current_epoch IS NOT NULL)
+ THEN 1 ELSE (NOT EXISTS(SELECT 1 FROM donation_model_quotas mq JOIN donation_keys mk ON mk.id=mq.donation_key_id
+ WHERE mq.donation_key_id=%[1]s AND mq.upstream_model_id=%[2]s AND (
+ (mq.token_limit_mag IS NOT NULL AND (nbi_u128_remaining(mq.token_limit_mag,mq.tokens_used,mq.tokens_reserved,nbi_u128(0))=nbi_u128(0)
+ OR nbi_u128_remaining(mq.token_limit_mag,mq.tokens_used,mq.tokens_reserved,nbi_u128(0))<nbi_u128(COALESCE(mk.input_token_reserve+mk.output_token_reserve,%[3]s))))
+ OR (mq.input_token_limit_mag IS NOT NULL AND (mk.input_token_reserve IS NULL OR nbi_u128_remaining(mq.input_token_limit_mag,mq.input_tokens_used,mq.input_tokens_reserved,nbi_u128(0))=nbi_u128(0)
+ OR nbi_u128_remaining(mq.input_token_limit_mag,mq.input_tokens_used,mq.input_tokens_reserved,nbi_u128(0))<nbi_u128(mk.input_token_reserve)))
+ OR (mq.output_token_limit_mag IS NOT NULL AND (mk.output_token_reserve IS NULL OR nbi_u128_remaining(mq.output_token_limit_mag,mq.output_tokens_used,mq.output_tokens_reserved,nbi_u128(0))=nbi_u128(0)
+ OR nbi_u128_remaining(mq.output_token_limit_mag,mq.output_tokens_used,mq.output_tokens_reserved,nbi_u128(0))<nbi_u128(mk.output_token_reserve)))))
+ AND %[4]s) END)`, keyID, model, tokens, availabilityPredicate(keyID, decisionNow, "0", tokens, model))
 }
 
 // EffectiveTokenReserveSQL supplies the same pair-or-scalar amount to existing

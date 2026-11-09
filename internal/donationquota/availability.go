@@ -9,6 +9,10 @@ func Available(ctx context.Context, q Reader, keyID, now int64, amounts Amounts)
 	if err != nil {
 		return false, err
 	}
+	return viewsAvailable(views, amounts)
+}
+
+func viewsAvailable(views []RuleView, amounts Amounts) (bool, error) {
 	for _, v := range views {
 		if (v.Metric == "input_tokens" || v.Metric == "output_tokens") && !amounts.TokenBreakdown {
 			return false, nil

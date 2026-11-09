@@ -53,6 +53,30 @@ function jsonResponse(value: unknown, status = 200): Response {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('recurring limits operations', () => {
+  it('keeps the upstream scope distinct from the charity management scope', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (_input, init) =>
+      jsonResponse(
+        init?.method === 'PUT'
+          ? { donation_id: '7', key_id: '8', donation_revision: '10' }
+          : response(),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const model = 'provider/model?edition=2';
+    await getRecurringLimits('steward', '7', '8', undefined, '11', model);
+    const url = new URL(String(fetchMock.mock.calls[0]?.[0]), 'https://example.test');
+    expect(url.searchParams.get('upstream_model_id')).toBe(model);
+    expect(url.searchParams.get('charity_model_id')).toBe('11');
+    await putRecurringLimits(
+      'steward',
+      '7',
+      '8',
+      { expected_revision: '9', rules: [], upstream_model_id: model },
+      'AAAAAAAAAAAAAAAAAAAAAA',
+      '11',
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)).upstream_model_id).toBe(model);
+  });
   it('normalizes omitted legacy anchors to null while exact-time responses require an anchor', () => {
     const legacy = normalizeRecurringLimitsResponse(response());
     expect(legacy.rules[0]?.anchor_local).toBeNull();

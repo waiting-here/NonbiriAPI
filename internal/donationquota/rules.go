@@ -9,7 +9,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
-const epochColumns = `r.id,e.epoch,r.donation_key_id,COALESCE(r.display_order,0),e.mode,e.interval,e.alignment,e.anchor_local,e.time_zone,e.week_starts_on,e.metric,e.limit_mag,e.effective_at,e.retired_at,e.last_observed_at,e.current_period_start,e.window_left,e.window_at,e.window_used,e.window_reserved,e.pending_reserved`
+const epochColumns = `r.id,e.epoch,r.donation_key_id,COALESCE(r.display_order,0),e.mode,e.interval,e.alignment,e.anchor_local,e.time_zone,e.week_starts_on,e.metric,e.limit_mag,e.effective_at,e.retired_at,e.last_observed_at,e.current_period_start,e.window_left,e.window_at,e.window_used,e.window_reserved,e.pending_reserved,r.upstream_model_id`
 
 type scanner interface{ Scan(...any) error }
 
@@ -18,7 +18,7 @@ func scanEpoch(row scanner) (epoch, error) {
 	var limit, used, reserved, pending []byte
 	var alignment, anchor sql.NullString
 	var week sql.NullInt64
-	err := row.Scan(&e.id, &e.number, &e.keyID, &e.order, &e.rule.Mode, &e.rule.Interval, &alignment, &anchor, &e.rule.TimeZone, &week, &e.rule.Metric, &limit, &e.effective, &e.retired, &e.observed, &e.period, &e.left, &e.at, &used, &reserved, &pending)
+	err := row.Scan(&e.id, &e.number, &e.keyID, &e.order, &e.rule.Mode, &e.rule.Interval, &alignment, &anchor, &e.rule.TimeZone, &week, &e.rule.Metric, &limit, &e.effective, &e.retired, &e.observed, &e.period, &e.left, &e.at, &used, &reserved, &pending, &e.model)
 	if err != nil {
 		return e, err
 	}
@@ -51,14 +51,18 @@ func scanEpoch(row scanner) (epoch, error) {
 		}
 	}
 	e.rule.Limit = formatMagnitude(e.rule.Metric, e.limit)
-	if Validate(e.rule) != nil {
+	if Validate(e.rule) != nil || (e.model != "" && !tokenMetric(e.rule.Metric)) {
 		return e, ErrInvariant
 	}
 	return e, nil
 }
 
-func currentEpochs(ctx context.Context, q Reader, keyID int64) ([]epoch, error) {
-	rows, err := q.QueryContext(ctx, `SELECT `+epochColumns+` FROM donation_quota_rules r JOIN donation_quota_epochs e ON e.rule_id=r.id AND e.epoch=r.current_epoch WHERE r.donation_key_id=? ORDER BY r.display_order`, keyID)
+func currentEpochs(ctx context.Context, q Reader, keyID int64, scope ...string) ([]epoch, error) {
+	model := ""
+	if len(scope) > 0 {
+		model = scope[0]
+	}
+	rows, err := q.QueryContext(ctx, `SELECT `+epochColumns+` FROM donation_quota_rules r JOIN donation_quota_epochs e ON e.rule_id=r.id AND e.epoch=r.current_epoch WHERE r.donation_key_id=? AND r.upstream_model_id=? ORDER BY r.display_order`, keyID, model)
 	if err != nil {
 		return nil, err
 	}
@@ -84,12 +88,20 @@ func readEpoch(ctx context.Context, q Reader, id string, number int64) (epoch, e
 // Replace changes the complete current set. Its caller must authorize the key,
 // compare the donation revision, and commit the idempotent command in this tx.
 func Replace(ctx context.Context, tx *sql.Tx, keyID, now int64, input []RuleInput) error {
-	if ctx == nil || tx == nil || keyID <= 0 || !validNow(now) || len(input) > MaxRules {
+	return ReplaceModel(ctx, tx, keyID, now, "", input)
+}
+
+// ReplaceModel replaces one exact upstream-model scope; empty means the whole key.
+func ReplaceModel(ctx context.Context, tx *sql.Tx, keyID, now int64, model string, input []RuleInput) error {
+	if ctx == nil || tx == nil || keyID <= 0 || !validNow(now) || len(input) > MaxRules || (model != "" && !ValidModel(model)) {
 		return ErrInvalid
 	}
 	seen := make(map[string]bool)
 	split := false
 	for _, rule := range input {
+		if model != "" && !tokenMetric(rule.Metric) {
+			return ErrInvalid
+		}
 		if err := Validate(rule); err != nil {
 			return err
 		}
@@ -110,7 +122,7 @@ func Replace(ctx context.Context, tx *sql.Tx, keyID, now int64, input []RuleInpu
 			return ErrInvalid
 		}
 	}
-	old, err := currentEpochs(ctx, tx, keyID)
+	old, err := currentEpochs(ctx, tx, keyID, model)
 	if err != nil {
 		return err
 	}
@@ -125,7 +137,7 @@ func Replace(ctx context.Context, tx *sql.Tx, keyID, now int64, input []RuleInpu
 	}
 	// Clear both nullable fields before reordering, avoiding transient collisions
 	// in the partial unique index even for a complete reversal of sixteen rules.
-	if _, err := tx.ExecContext(ctx, `UPDATE donation_quota_rules SET current_epoch=NULL,display_order=NULL WHERE donation_key_id=?`, keyID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE donation_quota_rules SET current_epoch=NULL,display_order=NULL WHERE donation_key_id=? AND upstream_model_id=?`, keyID, model); err != nil {
 		return err
 	}
 	for _, e := range old {
@@ -146,7 +158,7 @@ func Replace(ctx context.Context, tx *sql.Tx, keyID, now int64, input []RuleInpu
 			if err != nil {
 				return err
 			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO donation_quota_rules(id,donation_key_id) VALUES(?,?)`, id, keyID); err != nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO donation_quota_rules(id,donation_key_id,upstream_model_id) VALUES(?,?,?)`, id, keyID, model); err != nil {
 				return err
 			}
 		} else {

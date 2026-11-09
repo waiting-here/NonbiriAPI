@@ -366,7 +366,7 @@ func StewardRoutePermission(method, path string) string {
 			return "donations.discover"
 		case strings.Contains(p, "handled"), strings.Contains(p, "handling"), strings.Contains(p, "processed"), strings.Contains(p, "badge"):
 			return "donations.handle"
-		case strings.Contains(p, "recurring"):
+		case strings.Contains(p, "recurring"), strings.HasSuffix(p, "/model-limits"):
 			return "donations.recurring"
 		case strings.Contains(p, "review"):
 			return "donations.review"

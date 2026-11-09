@@ -60,6 +60,7 @@ type epoch struct {
 	id                        string
 	number                    int64
 	keyID                     int64
+	model                     string
 	order                     int
 	rule                      RuleInput
 	limit                     db.U128

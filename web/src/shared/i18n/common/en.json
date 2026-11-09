@@ -3092,6 +3092,34 @@
         "upstream_error": "The upstream service returned an error"
       },
       "unknownPhase": "Other recorded stage"
+    },
+    "modelLimits": {
+      "title": "Per-model quotas",
+      "scope": "Each upstream model has independent counters and also uses the key-wide quota. All charity bindings for the same upstream model share these quotas.",
+      "model": "Upstream model",
+      "search": "Search upstream model names",
+      "searchAction": "Search",
+      "remaining": "Cumulative remaining",
+      "actions": "Actions",
+      "view": "View",
+      "edit": "Configure",
+      "back": "Back to models",
+      "unlimited": "Unlimited",
+      "tokens": "Total tokens",
+      "input_tokens": "Input tokens",
+      "output_tokens": "Output tokens",
+      "empty": "No matching models",
+      "emptyHelp": "Discover or manually add upstream models before configuring quotas.",
+      "trackingNew": "Cumulative tracking starts when cumulative limits are first saved or the first request is made.",
+      "trackingSince": "Cumulative tracking started {{time}}. Earlier usage is excluded from model quotas.",
+      "cumulative": "Cumulative quotas",
+      "recurring": "Recurring quotas",
+      "usage": "Used {{used}} · Reserved {{reserved}} · Remaining {{remaining}}",
+      "limitHelp": "Leave blank for unlimited, or use 0 to stop new calls in this dimension. Removing a limit preserves usage. Set separate input and output reservation amounts in the key settings before using these limits.",
+      "reload": "Reload current settings",
+      "save": "Save model quotas",
+      "retry": "Retry the same save",
+      "saved": "Model quotas saved."
     }
   },
   "logs": {

@@ -300,6 +300,7 @@ type DonationKeyExport struct {
 	Review              DonationKeyReviewExport     `json:"review"`
 	ManualModels        []DonationManualModelExport `json:"manual_models"`
 	RecurringLimits     []RecurringLimitExport      `json:"recurring_limits"`
+	ModelLimits         []DonationModelLimitExport  `json:"model_limits"`
 	ID                  string                      `json:"id"`
 	EndpointKeyID       *string                     `json:"endpoint_key_id"`
 	DisplayHead         string                      `json:"display_head"`
@@ -315,6 +316,29 @@ type DonationKeyExport struct {
 	ExpiresAt           *int64                      `json:"expires_at"`
 	Streak              DonationStreakExport        `json:"streak"`
 	EndedReason         *string                     `json:"ended_reason"`
+}
+
+type ModelTokenLimitsExport struct {
+	Tokens       *string `json:"tokens"`
+	InputTokens  *string `json:"input_tokens"`
+	OutputTokens *string `json:"output_tokens"`
+}
+
+type ModelTokenAmountsExport struct {
+	Tokens       string `json:"tokens"`
+	InputTokens  string `json:"input_tokens"`
+	OutputTokens string `json:"output_tokens"`
+}
+
+type DonationModelLimitExport struct {
+	UpstreamModelID         string                  `json:"upstream_model_id"`
+	Limits                  ModelTokenLimitsExport  `json:"limits"`
+	Used                    ModelTokenAmountsExport `json:"used"`
+	Reserved                ModelTokenAmountsExport `json:"reserved"`
+	Remaining               ModelTokenLimitsExport  `json:"remaining"`
+	UnattributedTotalTokens string                  `json:"unattributed_total_tokens"`
+	TrackingStartedAt       *int64                  `json:"tracking_started_at"`
+	RecurringLimits         []RecurringLimitExport  `json:"recurring_limits"`
 }
 
 type RecurringLimitExport struct {

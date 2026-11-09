@@ -22,10 +22,19 @@ func (api *httpAPI) recurringRole(w http.ResponseWriter, r *http.Request, p User
 		return
 	}
 	key, ok := parsePathID(w, r, "keyId")
-	if !ok || !requireEmptyQuery(w, r) || !requireNoBody(w, r) {
+	if !ok || !requireNoBody(w, r) {
 		return
 	}
-	out, err := api.service.recurring(r.Context(), role, p.UserID, id, key)
+	values, ok := requestQuery(w, r)
+	if !ok {
+		return
+	}
+	model := values.Get("upstream_model_id")
+	if !exactQuery(values, "upstream_model_id") || (values.Has("upstream_model_id") && !donationquota.ValidModel(model)) {
+		writeDonationError(w, ErrInvalidRequest)
+		return
+	}
+	out, err := api.service.recurring(r.Context(), role, p.UserID, id, key, model)
 	if err != nil {
 		writeDonationError(w, err)
 		return
@@ -45,6 +54,7 @@ type recurringRuleWire struct {
 	Limit        requiredField[string] `json:"limit"`
 }
 type recurringWire struct {
+	UpstreamModelID  requiredField[string]              `json:"upstream_model_id"`
 	ExpectedRevision requiredField[string]              `json:"expected_revision"`
 	Rules            requiredField[[]recurringRuleWire] `json:"rules"`
 }
@@ -92,11 +102,19 @@ func (api *httpAPI) replaceRecurringRole(w http.ResponseWriter, r *http.Request,
 	if role == reviewerSteward {
 		route = routeStewardRecurring
 	}
-	mutation, ok := mutationFor(w, r, route, []int64{id, key}, map[string]any{"expected_revision": wire.ExpectedRevision.Value, "rules": rules})
+	canonical := map[string]any{"expected_revision": wire.ExpectedRevision.Value, "rules": rules}
+	if wire.UpstreamModelID.Set {
+		if !donationquota.ValidModel(wire.UpstreamModelID.Value) {
+			writeDonationError(w, ErrInvalidRequest)
+			return
+		}
+		canonical["upstream_model_id"] = wire.UpstreamModelID.Value
+	}
+	mutation, ok := mutationFor(w, r, route, []int64{id, key}, canonical)
 	if !ok {
 		return
 	}
-	out, err := api.service.replaceRecurring(r.Context(), role, p.UserID, id, key, mutation, revision, rules)
+	out, err := api.service.replaceRecurring(r.Context(), role, p.UserID, id, key, mutation, revision, rules, wire.UpstreamModelID.Value)
 	if err != nil {
 		writeDonationError(w, err)
 		return

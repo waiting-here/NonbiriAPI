@@ -13,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/charity"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 )
 
@@ -24,6 +25,26 @@ type fakeActivityOwner struct {
 	exportUserID            int64
 	exportLimit             int
 	deleteUserID, deleteNow int64
+}
+
+func TestModelQuotaExportProjection(t *testing.T) {
+	limit, started := "42", int64(100)
+	owner := &fakeDonationOwner{export: []donation.ExportDonation{{Keys: []donation.ExportDonationKey{{ModelLimits: []donationquota.ModelExport{{
+		ModelView:       donationquota.ModelView{UpstreamModelID: "exact/model", Limits: donationquota.ModelLimits{Tokens: &limit}, Used: donationquota.ModelAmounts{Tokens: "5", InputTokens: "2", OutputTokens: "3"}, Reserved: donationquota.ModelAmounts{Tokens: "7", InputTokens: "3", OutputTokens: "4"}, Remaining: donationquota.ModelLimits{Tokens: &limit}, UnattributedTotalTokens: "0", TrackingStartedAt: &started},
+		RecurringLimits: []donationquota.RuleView{{RuleInput: donationquota.RuleInput{Metric: "tokens", Limit: "10"}}},
+	}}}}}}}
+	values, err := NewDonation(owner).ExportDonations(t.Context(), nil, lifecycle.ExportRequest{UserID: 1, DecisionNow: 100, Limit: 100})
+	if err != nil || len(values) != 1 || len(values[0].Keys) != 1 || len(values[0].Keys[0].ModelLimits) != 1 {
+		t.Fatal(values, err)
+	}
+	model := values[0].Keys[0].ModelLimits[0]
+	if model.UpstreamModelID != "exact/model" || *model.Limits.Tokens != "42" || model.Used.InputTokens != "2" || model.Reserved.OutputTokens != "4" || *model.TrackingStartedAt != 100 || len(model.RecurringLimits) != 1 || model.RecurringLimits[0].Metric != "tokens" {
+		t.Fatal(model)
+	}
+	limit, started = "9", 101
+	if *model.Limits.Tokens != "42" || *model.TrackingStartedAt != 100 {
+		t.Fatal("mutable domain pointer leaked into export", model)
+	}
 }
 
 func (owner *fakeActivityOwner) ExportUserTx(
@@ -208,6 +229,7 @@ func TestEconomyAdaptersMapClosedExportDTOs(t *testing.T) {
 		Keys: []lifecycle.DonationKeyExport{{
 			Review: lifecycle.DonationKeyReviewExport{Required: true, Revision: &reviewRevision, MaterialAvailable: true}, ManualModels: []lifecycle.DonationManualModelExport{{UpstreamModelID: "own manual model", DisplayName: "own manual model"}},
 			RecurringLimits: []lifecycle.RecurringLimitExport{},
+			ModelLimits:     []lifecycle.DonationModelLimitExport{},
 			ID:              "donation-key", EndpointKeyID: &endpointKeyID, DisplayHead: "sk-a", DisplayTail: "tail",
 			SafeSource: lifecycle.DonationSafeSourceExport{
 				Kind: "mainstream", BaseURL: "https://example.invalid", ConnectorType: "openai-compatible",

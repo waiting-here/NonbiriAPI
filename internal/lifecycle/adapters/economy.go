@@ -263,6 +263,7 @@ func mapDonationKeys(values []donation.ExportDonationKey) []lifecycle.DonationKe
 			SmartBackoff: value.Backoff,
 			Review:       lifecycle.DonationKeyReviewExport{Required: value.Review.Required, Revision: cloneString(value.Review.Revision), MaterialAvailable: value.Review.MaterialAvailable}, ManualModels: manual,
 			RecurringLimits: mapRecurringLimits(value.RecurringLimits),
+			ModelLimits:     mapModelLimits(value.ModelLimits),
 			ID:              value.ID, EndpointKeyID: cloneString(value.EndpointKeyID),
 			DisplayHead: value.DisplayHead, DisplayTail: value.DisplayTail,
 			SafeSource: lifecycle.DonationSafeSourceExport{
@@ -288,6 +289,23 @@ func mapDonationKeys(values []donation.ExportDonationKey) []lifecycle.DonationKe
 				FailureDisabled: value.Streak.FailureDisabled,
 			},
 			EndedReason: cloneString(value.EndedReason),
+		}
+	}
+	return out
+}
+
+func mapModelLimits(values []donationquota.ModelExport) []lifecycle.DonationModelLimitExport {
+	out := make([]lifecycle.DonationModelLimitExport, len(values))
+	limits := func(value donationquota.ModelLimits) lifecycle.ModelTokenLimitsExport {
+		return lifecycle.ModelTokenLimitsExport{Tokens: cloneString(value.Tokens), InputTokens: cloneString(value.InputTokens), OutputTokens: cloneString(value.OutputTokens)}
+	}
+	amounts := func(value donationquota.ModelAmounts) lifecycle.ModelTokenAmountsExport {
+		return lifecycle.ModelTokenAmountsExport{Tokens: value.Tokens, InputTokens: value.InputTokens, OutputTokens: value.OutputTokens}
+	}
+	for index, value := range values {
+		out[index] = lifecycle.DonationModelLimitExport{
+			UpstreamModelID: value.UpstreamModelID, Limits: limits(value.Limits), Used: amounts(value.Used), Reserved: amounts(value.Reserved), Remaining: limits(value.Remaining),
+			UnattributedTotalTokens: value.UnattributedTotalTokens, TrackingStartedAt: cloneInt64(value.TrackingStartedAt), RecurringLimits: mapRecurringLimits(value.RecurringLimits),
 		}
 	}
 	return out

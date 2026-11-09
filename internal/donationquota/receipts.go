@@ -45,7 +45,7 @@ func readReceipts(ctx context.Context, q Reader, claimID string) ([]receipt, err
 				return nil, err
 			}
 		}
-		if len(out) >= MaxRules {
+		if len(out) >= 2*MaxRules {
 			return nil, ErrInvariant
 		}
 		out = append(out, r)
@@ -114,6 +114,17 @@ func Reserve(ctx context.Context, tx *sql.Tx, claimID string, now int64) error {
 	epochs, err := currentEpochs(ctx, tx, keyID)
 	if err != nil {
 		return err
+	}
+	var model string
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT upstream_model_id FROM donation_usage_reservations WHERE claim_id=?),'')`, claimID).Scan(&model); err != nil {
+		return err
+	}
+	if model != "" {
+		modelEpochs, err := currentEpochs(ctx, tx, keyID, model)
+		if err != nil {
+			return err
+		}
+		epochs = append(epochs, modelEpochs...)
 	}
 	for i := range epochs {
 		e := &epochs[i]

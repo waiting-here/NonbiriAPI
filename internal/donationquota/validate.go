@@ -13,6 +13,9 @@ import (
 // Validate checks persistent counters before startup recovery or admission.
 // It is read-only: inconsistent state is never repaired into a zero balance.
 func ValidateState(ctx context.Context, tx *sql.Tx) error {
+	if err := validateModelReservations(ctx, tx); err != nil {
+		return err
+	}
 	if err := validateTokenReservations(ctx, tx); err != nil {
 		return err
 	}

@@ -76,7 +76,7 @@ func scopeHandler(next AuthorizedUserHandler) AuthorizedUserHandler {
 func scopedDonationRoute(route string) bool {
 	switch route {
 	case routeStewardSources, routeStewardSourceKeys, routeStewardKeys, routeStewardKey,
-		routeStewardRecurring, routeStewardFailurePolicy, routeStewardFailureReset,
+		routeStewardRecurring, routeStewardModelLimits, routeStewardFailurePolicy, routeStewardFailureReset,
 		routeStewardFailureReset + "/selection", routeStewardDiscoverySelection:
 		return true
 	case routeStewardUses, routeStewardUses + "/{useId}/failure-streak-reset", routeStewardUses + "/{useId}/rate-limit-release":
