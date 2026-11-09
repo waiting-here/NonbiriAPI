@@ -14,6 +14,7 @@ const (
 	priorCastRulesID         = "lake-notes-d1be1134679327c43a38766d857cb0d3131659d2049cf7ea667034bcf727255e"
 	collectionPriorRulesID   = "lake-notes-ad5825786cb2c4ac97648df2cfa865457de7dd141f51fdc95abcb99b2aec1d97"
 	cloningPriorRulesID      = "lake-notes-69248b547d87b06e1d6279bfbfb27937c0015d514cbdd6040d11ad796977dba3"
+	barbedPriorRulesID       = "lake-notes-b2881b03d0dc7e6fe36fe2aea79dcd67c57e0489fbee6e7e5475232b9768f8de"
 	profileCodecPriorRulesID = "lake-notes-33f47677b8f2d324619d6fa55bcfee0704a7fe5734c90870e0e33911894fd3bd"
 )
 
@@ -45,25 +46,26 @@ func decodeStoredCast(version int, identity string, raw []byte) (rules.Cast, err
 		}
 		// Keep the sampled encounter, motion RNG, progress and earned rewards.
 		// New movement fields start at zero; already hooked fish need no new pause.
-		fields["rules_id"], _ = json.Marshal(rules.RulesID)
-		var err error
-		raw, err = json.Marshal(fields)
-		if err != nil {
-			return rules.Cast{}, err
-		}
 	case castStorageVersion:
-		if identity != collectionPriorRulesID && identity != cloningPriorRulesID && identity != profileCodecPriorRulesID {
+		if identity != collectionPriorRulesID && identity != cloningPriorRulesID && identity != profileCodecPriorRulesID && identity != barbedPriorRulesID {
 			return rules.Cast{}, ErrInvariant
 		}
 		// Compatible profile changes preserve the saved cast physics.
-		fields["rules_id"], _ = json.Marshal(rules.RulesID)
-		var err error
-		raw, err = json.Marshal(fields)
-		if err != nil {
-			return rules.Cast{}, err
-		}
 	default:
 		return rules.Cast{}, ErrInvariant
+	}
+	fields["rules_id"], _ = json.Marshal(rules.RulesID)
+	// Old checkpoints retain the original barbed follow physics. New casts
+	// omit this flag and use the current common-fish-only behavior.
+	var snapshot map[string]json.RawMessage
+	if json.Unmarshal(fields["snapshot"], &snapshot) != nil || snapshot == nil {
+		return rules.Cast{}, ErrInvariant
+	}
+	snapshot["legacyBarbedFollow"] = json.RawMessage("true")
+	fields["snapshot"], _ = json.Marshal(snapshot)
+	raw, err := json.Marshal(fields)
+	if err != nil {
+		return rules.Cast{}, err
 	}
 	return rules.DecodeCast(raw)
 }

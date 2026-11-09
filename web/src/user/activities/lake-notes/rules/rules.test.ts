@@ -34,6 +34,7 @@ describe('Lake Notes source conformance', () => {
         () => vector.samples[at++],
         vector.seed,
       );
+      cast.snapshot.legacyBarbedFollow = true;
       expect(cast.plan).toEqual(vector.plan);
       const hash = createHash('sha256');
       for (const held of vector.held) {
@@ -49,6 +50,7 @@ describe('Lake Notes source conformance', () => {
       expect(JSON.parse(JSON.stringify(cast)), vector.name).toEqual({
         ...vector.finalCast,
         rules_id: RULES_ID,
+        snapshot: { ...vector.finalCast.snapshot, legacyBarbedFollow: true },
       });
       expect(terminal(cast)).toBe(true);
       if (cast.reward) {
@@ -135,4 +137,43 @@ describe('Lake Notes source conformance', () => {
     expect(malformed).toEqual(before);
     expect(profile).toEqual(initialProfile());
   });
+});
+
+it('applies barbed following only to common fish while preserving the independent slowdown', () => {
+  const seen = new Set<string>();
+  for (const f of catalog.FISH_TYPES) {
+    if (seen.has(f.rarity)) continue;
+    seen.add(f.rarity);
+    for (const count of [1, 2]) {
+      for (const legacy of [false, true]) {
+        const profile = initialProfile();
+        const { cast } = start(profile, () => 0.5, 123);
+        cast.phase = 'playing';
+        cast.wasHit = true;
+        cast.barY = 0.5;
+        cast.barVelocity = 0;
+        cast.progress = 0.5;
+        cast.bitePreparationRemaining = 0;
+        cast.snapshot.barHeight = 0.2;
+        cast.snapshot.legacyBarbedFollow = legacy;
+        cast.snapshot.effects.barbedCount = count;
+        cast.plan.fishKind = f.kind;
+        cast.fish = {
+          position: 0.55 * 568,
+          y: 0.55,
+          speed: 0,
+          target: 200,
+          drift: 0.1,
+          dartDirection: 0,
+          reverseRemaining: 0,
+        };
+        step(profile, cast, false);
+        let expected = (((0.25 * 60 * 60) / 568) * 0.3) / 60;
+        if (f.rarity === 'common' || legacy) expected = (count * 0.2 * 60) / 568 + expected;
+        expect(cast.barVelocity, `${f.rarity}/${count}/${legacy}`).toBe(expected);
+      }
+    }
+  }
+  expect([...seen].sort()).toEqual(['common', 'epic', 'legendary', 'rare', 'uncommon']);
+  expect(start(initialProfile(), () => 0.5, 123).cast.snapshot.legacyBarbedFollow).toBeUndefined();
 });

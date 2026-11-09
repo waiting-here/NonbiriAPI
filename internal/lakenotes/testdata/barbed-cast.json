@@ -1,0 +1,166 @@
+{
+  "Profile": {
+    "coins": "0",
+    "xp": "15000",
+    "first": "steady",
+    "second": "control",
+    "third": "reader",
+    "fourth": "master",
+    "location": "lake",
+    "day": 1,
+    "ownedGear": [
+      "trainingRod",
+      "bambooPole",
+      "fiberglassRod",
+      "iridiumRod",
+      "advancedRod",
+      "legendRod",
+      "corkBobber",
+      "corkBobber",
+      "leadBobber",
+      "leadBobber",
+      "trapBobber",
+      "trapBobber",
+      "barbedHook",
+      "barbedHook",
+      "qualityBobber",
+      "qualityBobber",
+      "curiosityLure",
+      "curiosityLure",
+      "spinner",
+      "spinner",
+      "dressedSpinner",
+      "dressedSpinner",
+      "sonarBobber",
+      "sonarBobber"
+    ],
+    "equipped": {
+      "rod": "advancedRod",
+      "tackle1": "barbedHook",
+      "tackle2": "barbedHook"
+    },
+    "baitStock": {
+      "abyss": 0,
+      "basic": 0,
+      "deluxe": 0,
+      "glimmer": 0
+    },
+    "basket": [],
+    "records": {
+      "abyss": {
+        "caught": "10",
+        "maxLength": 150,
+        "bestQuality": 2,
+        "perfectCount": "1"
+      },
+      "gold": {
+        "caught": "10",
+        "maxLength": 25,
+        "bestQuality": 1,
+        "perfectCount": "10"
+      }
+    },
+    "nextCatchId": 1,
+    "savedLoadouts": [
+      null,
+      null,
+      null
+    ],
+    "debrisStock": {
+      "boot": 0,
+      "bottle": 0,
+      "driftwood": 0,
+      "line": 0
+    },
+    "trashRecovered": "0",
+    "treasureOpened": "0",
+    "contracts": [],
+    "contractsDay": 0,
+    "completedContracts": "0",
+    "streak": "0",
+    "clockMinutes": "f64:7766666666c27640"
+  },
+  "Cast": {
+    "barVelocity": "f64:0000000000000000",
+    "barY": "f64:1c48b4c2e640ea3f",
+    "bitePreparationRemaining": "f64:0000000000000000",
+    "currentMissTime": "f64:0000000000000000",
+    "effectiveTime": "f64:0000000000000000",
+    "elapsed": "f64:0000000000000000",
+    "fish": {
+      "dartDirection": 0,
+      "drift": "f64:0000000000000000",
+      "position": "f64:0000000000c07f40",
+      "reverseRemaining": "f64:0000000000000000",
+      "speed": "f64:0000000000000000",
+      "target": "f64:af47e17a142e6340",
+      "y": "f64:d593f1dba59eec3f"
+    },
+    "held": false,
+    "hitTime": "f64:0000000000000000",
+    "longestMissTime": "f64:0000000000000000",
+    "motion": {
+      "draw_count": 0,
+      "state": 123456789
+    },
+    "paused": false,
+    "phase": "playing",
+    "plan": {
+      "biteClockMinutes": "f64:7166666666aa7640",
+      "biteDay": 1,
+      "biteTick": 53,
+      "challenge": {
+        "difficulty": "f64:0000000000005240",
+        "fishSpeed": "f64:000000000000f03f",
+        "gain": "f64:000000000000f03f",
+        "loss": "f64:000000000000f03f",
+        "tempo": "f64:713d0ad7a370ed3f"
+      },
+      "fishKind": "lake_topmouth",
+      "length": 67,
+      "sizeFactor": "f64:2a5c8fc2f528e43f",
+      "treasureY": "f64:000000000000e03f",
+      "waitSeconds": "f64:8b6ce7fba9d1eb3f"
+    },
+    "progress": "f64:333333333333d33f",
+    "rules_id": "lake-notes-b2881b03d0dc7e6fe36fe2aea79dcd67c57e0489fbee6e7e5475232b9768f8de",
+    "snapshot": {
+      "bait": "deluxe",
+      "barHeight": "f64:8edf2ef564fcd63f",
+      "effects": {
+        "acceleration": "f64:000000000000f03f",
+        "barHeight": "f64:0000000000000000",
+        "barbedCount": 2,
+        "biteDelay": "f64:0000000000000000",
+        "bottomBounce": "f64:555555555555e53f",
+        "epicWeight": "f64:0000000000000000",
+        "fishSpeed": "f64:0000000000000000",
+        "legendWeight": "f64:000000000000f03f",
+        "progressGain": "f64:000000000000f03f",
+        "progressLoss": "f64:000000000000f03f",
+        "qualityBonus": 0,
+        "rareWeight": "f64:000000000000f03f",
+        "sonar": false,
+        "spinnerSeconds": "f64:0000000000000000"
+      },
+      "first": "steady",
+      "fourth": "master",
+      "hadCaught": true,
+      "level": 20,
+      "location": "lake",
+      "rod": "advancedRod",
+      "second": "control",
+      "third": "reader"
+    },
+    "tick": 83,
+    "treasure": {
+      "progress": "f64:0000000000000000",
+      "secured": false,
+      "y": "f64:000000000000e03f"
+    },
+    "waitRemaining": "f64:a6f0351792a68cbf",
+    "wasHit": true
+  },
+  "Held": false,
+  "NextHash": "abbda81e01ea9d6fbda531c339146b91c3062bd18abc2ea4182725a194bfe7cb"
+}

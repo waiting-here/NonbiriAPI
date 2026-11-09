@@ -20,12 +20,13 @@ const LeaseDuration = 6 * time.Second
 const maxUnix = int64(253402300799)
 
 var (
-	ErrInvalid   = errors.New("lake notes: invalid request")
-	ErrConflict  = errors.New("lake notes: revision or controller conflict")
-	ErrClosed    = errors.New("lake notes: game closed")
-	ErrNotFound  = errors.New("lake notes: not found")
-	ErrCapacity  = errors.New("lake notes: capacity exceeded")
-	ErrInvariant = errors.New("lake notes: invalid stored state")
+	ErrDailyLimit = errors.New("lake notes: daily exchange limit reached")
+	ErrInvalid    = errors.New("lake notes: invalid request")
+	ErrConflict   = errors.New("lake notes: revision or controller conflict")
+	ErrClosed     = errors.New("lake notes: game closed")
+	ErrNotFound   = errors.New("lake notes: not found")
+	ErrCapacity   = errors.New("lake notes: capacity exceeded")
+	ErrInvariant  = errors.New("lake notes: invalid stored state")
 )
 
 type Config struct {
@@ -112,16 +113,18 @@ type ExchangeInput struct {
 	ExpectedProfileRevision  string `json:"expected_profile_revision"`
 }
 type Quote struct {
-	Direction        Direction `json:"direction"`
-	Quantity         string    `json:"quantity"`
-	SettingsRevision string    `json:"settings_revision"`
-	ProfileRevision  string    `json:"profile_revision"`
-	SourceAmount     string    `json:"source_amount"`
-	TargetAmount     string    `json:"target_amount"`
-	SourceLot        string    `json:"source_lot"`
-	TargetLot        string    `json:"target_lot"`
-	Coins            string    `json:"coins"`
-	Wallet           Wallet    `json:"wallet"`
+	Direction            Direction `json:"direction"`
+	Quantity             string    `json:"quantity"`
+	SettingsRevision     string    `json:"settings_revision"`
+	ProfileRevision      string    `json:"profile_revision"`
+	SourceAmount         string    `json:"source_amount"`
+	TargetAmount         string    `json:"target_amount"`
+	SourceLot            string    `json:"source_lot"`
+	TargetLot            string    `json:"target_lot"`
+	Coins                string    `json:"coins"`
+	Wallet               Wallet    `json:"wallet"`
+	DailySourceRemaining *string   `json:"daily_source_remaining"`
+	DailyResetAt         int64     `json:"daily_reset_at,omitempty"`
 }
 type ExchangeReceipt struct {
 	PeriodID       string `json:"period_id,omitempty"`

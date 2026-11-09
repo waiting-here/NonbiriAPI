@@ -1529,7 +1529,7 @@ export function mountLake(root, bridge) {
       name: '倒刺鱼钩',
       slot: 'tackle',
       cost: 1000,
-      description: '鱼在捕捉条内时，捕捉条会轻微追随鱼；乱窜鱼仍需手动控制。',
+      description: '常见鱼在捕捉条内时，捕捉条会轻微追随鱼；其它鱼需手动控制。',
     },
     qualityBobber: {
       name: '品质浮漂',

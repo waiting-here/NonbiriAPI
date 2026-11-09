@@ -135,6 +135,8 @@ func respond(w http.ResponseWriter, v any, e error, operation ...string) {
 		code, message = httperr.CodeNotFound, "The saved game or period was not found."
 	case errors.Is(e, ErrClosed):
 		code, message = httperr.CodeFeatureDisabled, "This game is closed. Your progress is saved."
+	case errors.Is(e, ErrDailyLimit):
+		code, message = httperr.CodeResourceLimitExceeded, "The daily exchange allowance is too low. Choose a smaller amount or try again tomorrow."
 	case errors.Is(e, ErrCapacity):
 		code, message = httperr.CodeResourceLimitExceeded, "Please wait briefly and try again."
 	case errors.Is(e, ledger.ErrInsufficientBalance), errors.Is(e, rules.ErrFunds):

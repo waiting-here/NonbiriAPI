@@ -21,6 +21,7 @@ export interface ExchangeSetting {
   enabled: boolean;
   source_amount: string;
   target_amount: string;
+  daily_source_limit?: string;
 }
 export interface Period {
   id: string;
