@@ -7,6 +7,7 @@ import (
 
 func restoreSchema44LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema49LayoutForTest(t, database)
 	hostileMustExec(t, database, "DROP TABLE attendance_awards; DROP TABLE attendance_sign_ins; DROP TABLE attendance_progress; DROP TABLE attendance_tiers; DROP TABLE attendance_periods;")
 	hostileMustExec(t, database, "DROP INDEX idx_request_logs_operation_started")
 	hostileMustExec(t, database, `DROP TRIGGER fishing_pond_queue_head_insert;

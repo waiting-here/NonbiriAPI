@@ -76,7 +76,7 @@ func TestFishingPondSchema44UpgradeIsAdditiveAndAtomic(t *testing.T) {
 	hostileMustExec(t, store.DB(), `INSERT INTO game_fishing_rank_facts VALUES(?,?,100,2592100,zeroblob(16),1)`, batch, owner)
 	hostileMustExec(t, store.DB(), `INSERT INTO game_fishing_length_facts VALUES(?,0,'boot','junk',0,0,NULL,NULL)`, batch)
 	plan, err := storageSchema.plan(t.Context(), store.DB())
-	if err != nil || len(plan.steps) != 5 || plan.steps[0].from != 44 || plan.steps[0].version != 45 || plan.auditsCredentials() {
+	if err != nil || len(plan.steps) != 6 || plan.steps[0].from != 44 || plan.steps[0].version != 45 || plan.auditsCredentials() {
 		t.Fatal("additive upgrade plan", plan, err)
 	}
 	before := gatewayRows(t, store.DB())
