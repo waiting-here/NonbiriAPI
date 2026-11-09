@@ -200,6 +200,8 @@ func TestThinkingContinuationRejectionsKeepOwnerFieldsAndLocalizedReasons(t *tes
 	f := newNumberedLogFixture(t)
 	f.mustExec("UPDATE request_logs SET rejection_stage='preflight',rejection_reason='invalid_request',caller_result_class='failed',caller_status=400,caller_error_code='invalid_request',attempt_count=0 WHERE logical_request_id=?", f.charityID)
 	for _, tc := range []struct{ field, reason, chinese string }{
+		{"logit_bias", "unsupported top-level field", "不支持此顶层字段"},
+		{"request.fields[3]", "unsupported top-level field", "不支持此顶层字段"},
 		{"extra_content.anthropic", "tool thinking requires the original signed content blocks", "工具调用中的思考内容需要原始签名内容块"},
 		{"thinking", "expected a supported thinking configuration", "需要受支持的思考配置"},
 		{"thinking.display", "expected summarized, omitted, or updates", "需要 summarized、omitted 或 updates"},

@@ -96,6 +96,13 @@ var rejectionFieldsAllowed = map[string]bool{
 	"seed":                             true,
 	"stop":                             true,
 	"logprobs":                         true,
+	"logit_bias":                       true,
+	"top_logprobs":                     true,
+	"service_tier":                     true,
+	"verbosity":                        true,
+	"modalities":                       true,
+	"prediction":                       true,
+	"web_search_options":               true,
 	"n":                                true,
 	"request controls":                 true,
 	"messages[role=tool].content":      true,
@@ -281,10 +288,28 @@ func NewDetail(field, reason string) *RejectionDetail {
 	if !rejectionReasonsAllowed[reason] && !validContentLengthReason(reason) {
 		return nil
 	}
-	if !rejectionFieldsAllowed[field] {
+	if !rejectionFieldsAllowed[field] && !validTopLevelPosition(field) {
 		field = "request"
 	}
 	return &RejectionDetail{Field: field, Reason: reason, Suggestion: rejectionSuggestion(field, reason)}
+}
+
+// TopLevelField identifies a known API field or its one-based position without
+// retaining arbitrary caller-controlled names, which can contain secrets.
+func TopLevelField(name string, position int) string {
+	if rejectionFieldsAllowed[name] {
+		return name
+	}
+	if position >= 1 && position <= 1024 {
+		return fmt.Sprintf("request.fields[%d]", position)
+	}
+	return "request"
+}
+
+func validTopLevelPosition(field string) bool {
+	var position int
+	n, err := fmt.Sscanf(field, "request.fields[%d]", &position)
+	return err == nil && n == 1 && position >= 1 && position <= 1024 && field == fmt.Sprintf("request.fields[%d]", position)
 }
 func Detail(ctx context.Context, detail *RejectionDetail) {
 	if detail == nil {

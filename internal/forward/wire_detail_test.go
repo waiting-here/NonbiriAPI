@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
@@ -77,6 +78,40 @@ func TestFailureDetailUsesOnlySafeServerChecks(t *testing.T) {
 		writeFailure(httperr.WithLanguage(writer, language), failure)
 		if strings.Contains(writer.Body.String(), "PRIVATE_") || writer.Code != 400 {
 			t.Fatal(writer.Code, writer.Body)
+		}
+	}
+}
+
+func TestUnsupportedFieldIsRecordedBeforeAnyDispatch(t *testing.T) {
+	for _, charity := range []bool{false, true} {
+		f := newServiceFixture(t, nil)
+		model := "provider/model"
+		candidate := f.personal.snapshot.Candidates[0]
+		if charity {
+			model = "[公益]care/model"
+			candidate = f.charity.snapshot.Candidates[0]
+		}
+		candidate.ConnectorType = contract.TypeAnthropicCompatible
+		if charity {
+			f.charity.snapshot.Candidates = []RouteCandidate{candidate}
+		} else {
+			f.personal.snapshot.Candidates = []RouteCandidate{candidate}
+		}
+		request := decodeChatForTest(t, `{"model":"`+model+`","messages":[{"role":"user","content":"PRIVATE_INPUT"}],"logit_bias":{"PRIVATE_VALUE":1}}`)
+		defer request.Clear()
+		ctx, _, err := requestattempt.New(t.Context(), 1, "POST", "/v1/chat/completions")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var recorded requestattempt.Fact
+		writer := httptest.NewRecorder()
+		wrapped := requestattempt.Wrap(writer, ctx, func(_ context.Context, _ int64, fact requestattempt.Fact) error { recorded = fact; return nil })
+		f.service.Chat(ctx, wrapped, 1, request, nil, "application/json", "en")
+		if writer.Code != 400 || len(f.claims.events) != 0 || recorded.Detail == nil || recorded.Detail.Field != "logit_bias" || recorded.Detail.Reason != "unsupported top-level field" {
+			t.Fatal(charity, writer.Code, writer.Body.String(), f.claims.events, recorded)
+		}
+		if strings.Contains(writer.Body.String(), "PRIVATE") || strings.Contains(requestattempt.EncodeDetail(recorded.Detail), "PRIVATE") || !strings.Contains(writer.Body.String(), "logit_bias") {
+			t.Fatal("missing field or leaked request content", writer.Body.String(), recorded.Detail)
 		}
 	}
 }

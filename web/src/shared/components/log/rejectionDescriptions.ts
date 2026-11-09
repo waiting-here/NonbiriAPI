@@ -1,4 +1,8 @@
 export const rejectionDescriptionKeys: Record<string, string> = {
+  'This entry did not record the unsupported field name. Retry the request to capture its location.':
+    'logs.rejectionDescriptions.This entry did not record the unsupported field name. Retry the request to capture its location.',
+  'The field name is omitted for privacy. Check its position in the top-level request fields after configured overrides; numbering starts at 1.':
+    'logs.rejectionDescriptions.The field name is omitted for privacy. Check its position in the top-level request fields after configured overrides; numbering starts at 1.',
   'tool thinking requires the original signed content blocks':
     'logs.rejectionDescriptions.tool thinking requires the original signed content blocks',
   'expected a supported thinking configuration':

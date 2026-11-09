@@ -181,7 +181,7 @@ func compileRequestWithDefaultResolver(request *openai.ChatRequest, upstreamMode
 	}()
 	for _, name := range fields {
 		if !allowed[name] {
-			return nil, fieldRejection("request", "unsupported top-level field")
+			return nil, fieldRejection(request.DiagnosticField(name), "unsupported top-level field")
 		}
 		value, ok := request.RawField(name)
 		if !ok || validateJSON(value) != nil {

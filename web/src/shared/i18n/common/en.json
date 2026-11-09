@@ -3301,7 +3301,9 @@
       "variations do not support streaming": "variations do not support streaming",
       "expected valid and consistent output-token limits": "expected valid and consistent output-token limits",
       "no usable model resource is available for this request": "no usable model resource is available for this request",
-      "shared model resources are temporarily at capacity": "shared model resources are temporarily at capacity"
+      "shared model resources are temporarily at capacity": "shared model resources are temporarily at capacity",
+      "This entry did not record the unsupported field name. Retry the request to capture its location.": "This entry did not record the unsupported field name. Retry the request to capture its location.",
+      "The field name is omitted for privacy. Check its position in the top-level request fields after configured overrides; numbering starts at 1.": "The field name is omitted for privacy. Check its position in the top-level request fields after configured overrides; numbering starts at 1."
     },
     "rejectionContentLength": "Content has {{actual}} characters; minimum is {{minimum}}.",
     "rejectionSuggestion": "How to correct it",
@@ -3322,7 +3324,8 @@
       "Correct the field type or value according to the stated requirement.": "Correct the field type or value according to the stated requirement.",
       "No upstream request was sent. Retry later or choose another available model.": "No upstream request was sent. Retry later or choose another available model.",
       "The specific cause was not recorded. Share the request ID with support if the problem persists.": "The specific cause was not recorded. Share the request ID with support if the problem persists."
-    }
+    },
+    "rejectionTopLevelField": "Top-level field {{position}}"
   },
   "management": {
     "users": {

@@ -328,6 +328,9 @@ var chineseMessages = map[string]string{
 	"shared model resources are temporarily at capacity":                                                        "共享模型资源暂时已满",
 	"No upstream request was sent. Retry later or choose another available model.":                              "请求未发送到上游。请稍后重试，或选择其他可用模型。",
 	"The specific cause was not recorded. Share the request ID with support if the problem persists.":           "当时未记录具体原因。如问题持续，请提供请求编号以便排查。",
+	"This entry did not record the unsupported field name. Retry the request to capture its location.":          "此条日志未记录不支持的字段名。重新发起请求后可记录字段位置。",
+	"The field name is omitted for privacy. Check its position in the top-level request fields after configured overrides; numbering starts at 1.": "为保护隐私，未保存自定义字段名。请检查应用参数覆盖后的请求中对应的顶层字段，序号从 1 开始。",
+	"The daily exchange allowance is too low. Choose a smaller amount or try again tomorrow.":                                                      "今日剩余额度不足，请减少兑换数量或明天再试。",
 
 	"log query timed out; narrow the filters and retry":                                       "日志查询超时，请缩小筛选范围后重试。",
 	"log query was canceled":                                                                  "日志查询已取消。",

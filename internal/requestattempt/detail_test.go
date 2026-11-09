@@ -32,6 +32,29 @@ func TestPreviouslyRecordedContentLengthRemainsReadable(t *testing.T) {
 	}
 }
 
+func TestTopLevelLocationRetainsPositionWithoutArbitraryNames(t *testing.T) {
+	for _, position := range []int{1, 1024} {
+		field := TopLevelField("PRIVATE_KEY", position)
+		detail := NewDetail(field, "unsupported top-level field")
+		decoded := DecodeDetail(EncodeDetail(detail))
+		if decoded == nil || decoded.Field != field || !strings.Contains(decoded.Suggestion, "numbering starts at 1") || strings.Contains(EncodeDetail(detail), "PRIVATE") {
+			t.Fatal(decoded)
+		}
+	}
+	if got := TopLevelField("logit_bias", 3); got != "logit_bias" {
+		t.Fatal(got)
+	}
+	for _, field := range []string{"request.fields[0]", "request.fields[1025]", "request.fields[01]", "request.fields[+1]", "request.fields[1]PRIVATE", "request.fields[PRIVATE]"} {
+		if detail := NewDetail(field, "unsupported top-level field"); detail.Field != "request" {
+			t.Fatal(detail)
+		}
+	}
+	legacy := DecodeDetail(`{"field":"request","reason":"unsupported top-level field"}`)
+	if legacy == nil || !strings.Contains(legacy.Suggestion, "did not record") {
+		t.Fatal(legacy)
+	}
+}
+
 func TestHistoricalUnknownReasonRebuildsSuggestion(t *testing.T) {
 	detail := DecodeDetail(`{"field":"request","reason":"request validation failed without a recorded field","suggestion":"Check the request format and selected model capabilities. If it persists, share the request ID with support."}`)
 	if detail == nil || detail.Suggestion != "The specific cause was not recorded. Share the request ID with support if the problem persists." {

@@ -343,6 +343,42 @@ for (const role of ['admin', 'steward'] as const) {
 }
 
 describe('preflight rejection details', () => {
+  it('explains an unknown top-level field by its safe position', async () => {
+    const row = {
+      ...stewardRow(null),
+      phase: 'pre_handler',
+      rejection_stage: 'preflight',
+      rejection_reason: 'invalid_request',
+      request_method: 'POST',
+      request_path: '/v1/chat/completions',
+      caller_result_class: 'failed',
+      caller_status: 400,
+      caller_error_code: 'invalid_request',
+      attempt_count: '0',
+      usage: { ...usage, output_tokens: '0', total_tokens: '0' },
+      rejection_detail: {
+        field: 'request.fields[3]',
+        reason: 'unsupported top-level field',
+        suggestion:
+          'The field name is omitted for privacy. Check its position in the top-level request fields after configured overrides; numbering starts at 1.',
+      },
+    };
+    installFixtures('admin', row);
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="admin" />, {
+      station: 'admin',
+      role: 'admin',
+      locale: 'zh',
+    });
+    await view.user.click(await screen.findByRole('button', { name: '详情' }));
+    expect(await screen.findByText('第 3 个顶层字段: 不支持此顶层字段')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        '为保护隐私，未保存自定义字段名。请检查应用参数覆盖后的请求中对应的顶层字段，序号从 1 开始。',
+      ),
+    ).toBeInTheDocument();
+    view.unmount();
+  });
+
   it.each(['admin', 'steward'] as const)(
     'shows the recorded check for %s and keeps markup as text',
     async (role) => {

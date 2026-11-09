@@ -427,6 +427,10 @@ function ScopedRoleLogPanel({
         ? t(rejectionDescriptionKeys[reason])
         : reason;
   };
+  const rejectionFieldDescription = (field: string) => {
+    const position = /^request\.fields\[(\d+)\]$/.exec(field);
+    return position ? t('logs.rejectionTopLevelField', { position: position[1] }) : field;
+  };
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchState();
   const station = role === 'admin' ? 'admin' : role === 'steward' ? 'steward' : 'user';
@@ -1007,7 +1011,7 @@ function ScopedRoleLogPanel({
                 {
                   label: t('logs.rejectionDetail'),
                   value: detailRequest.rejection_detail
-                    ? `${detailRequest.rejection_detail.field}: ${rejectionDescription(detailRequest.rejection_detail.reason)}`
+                    ? `${rejectionFieldDescription(detailRequest.rejection_detail.field)}: ${rejectionDescription(detailRequest.rejection_detail.reason)}`
                     : t('logs.rejectionDetailMissing'),
                 },
                 ...(detailRequest.rejection_detail?.suggestion
