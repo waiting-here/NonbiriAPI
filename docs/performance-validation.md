@@ -363,11 +363,18 @@ an in-memory journal. The cache stores bytes, not a live database handle or a
 temporary path whose owner may finish first. Isolation and rollback regressions
 cover use after the image builder's temporary directory has been removed.
 
-CI timing updates must identify the successful run and use each command's own
-test interval; separate upgrade checks must not overwrite ordinary package
-timings. Existing per-package group caps can separate long race matrices without
+CI timing updates must identify the successful measured suite and use each
+command's own test interval; report unrelated failures in its workflow separately.
+Separate upgrade checks must not overwrite ordinary package timings. Existing
+per-package group caps can separate long race matrices without
 adding runners or workers. Evaluate the longest scheduled group, command count
 and cold fixture cost, not only equal shard weights. A scheduling simulation is
 an estimate until a later authorized CI run measures the changed layout. Exact
 serial exclusions retain ordinary coverage, and the live catalog continues to
 include new tests even when no historical weight exists.
+
+Independent rollback scenarios may use separate top-level tests so the existing
+planner can distribute them across shards. Each must keep its own database,
+vault, cleanup and complete rollback/retry assertions; splitting does not add
+in-process parallelism. Schema33 partial DDL, target mismatch, index cancellation
+and pre-commit cancellation follow this arrangement.

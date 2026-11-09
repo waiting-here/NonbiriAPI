@@ -58,7 +58,7 @@
     "github.com/waiting-here/NonbiriAPI/internal/charity": 88,
     "github.com/waiting-here/NonbiriAPI/internal/connectionstore": 13,
     "github.com/waiting-here/NonbiriAPI/internal/game/duel": 62,
-    "github.com/waiting-here/NonbiriAPI/internal/upgrade/v1": 43
+    "github.com/waiting-here/NonbiriAPI/internal/upgrade/v1": 46
   },
   "split_group_caps": {
     "github.com/waiting-here/NonbiriAPI/internal/db": 1,
@@ -2239,7 +2239,10 @@
       "TestOperatorFollowupSchema42UpgradeIsAdditiveAndAtomic": 171.77,
       "TestPondHeadSchema46UpgradePreservesQueueAndRollsBack": 239.73,
       "TestSchema33OfflineUpgradePreservesHistoryAndDeletion": 250.32,
-      "TestSchema33OfflineUpgradeRollsBackAndRetries": 840.08,
+      "TestSchema33OfflineUpgradeRollsBackAndRetriesPartialDDL": 421.2,
+      "TestSchema33OfflineUpgradeRollsBackAndRetriesTargetMismatch": 533.29,
+      "TestSchema33OfflineUpgradeRollsBackAndRetriesCancelDuringIndex": 424.62,
+      "TestSchema33OfflineUpgradeRollsBackAndRetriesCancelBeforeCommit": 349.17,
       "TestSchema34OfflineCatalogUpgradePreservesRowsAndRetries": 621.95,
       "TestSchema37OfflineIndexesPreserveFactsAndRetry": 1126.79,
       "TestServiceKeyScopeAssignsLegacyUnscopedEndpointAndSource": 209.37,
@@ -4960,6 +4963,6 @@
     "attempt": 1,
     "measured_packages": 146,
     "measured_tests": 4211,
-    "note": "Observed Linux risk-race durations before fixture reuse changes. Unobserved entries retain prior estimates; live discovery defines coverage."
+    "note": "Observed Linux risk-race durations before fixture reuse changes. The four Schema33 rollback case weights use the successful race job 129449968140 in run 42701651800 at commit 15bf2abd82e69a20c9d58a075da93d94ddb80af0; that workflow's Web checks failed. Unobserved entries retain prior estimates; live discovery defines coverage."
   }
 }

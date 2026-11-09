@@ -555,12 +555,20 @@ func testSchema33OfflineUpgradeRollback(t *testing.T, failure string) {
 	store.Close()
 }
 
-func TestSchema33OfflineUpgradeRollsBackAndRetries(t *testing.T) {
-	for _, failure := range []string{"partial-ddl", "target-mismatch", "cancel-during-index", "cancel-before-commit"} {
-		t.Run(failure, func(t *testing.T) {
-			testSchema33OfflineUpgradeRollback(t, failure)
-		})
-	}
+func TestSchema33OfflineUpgradeRollsBackAndRetriesPartialDDL(t *testing.T) {
+	testSchema33OfflineUpgradeRollback(t, "partial-ddl")
+}
+
+func TestSchema33OfflineUpgradeRollsBackAndRetriesTargetMismatch(t *testing.T) {
+	testSchema33OfflineUpgradeRollback(t, "target-mismatch")
+}
+
+func TestSchema33OfflineUpgradeRollsBackAndRetriesCancelDuringIndex(t *testing.T) {
+	testSchema33OfflineUpgradeRollback(t, "cancel-during-index")
+}
+
+func TestSchema33OfflineUpgradeRollsBackAndRetriesCancelBeforeCommit(t *testing.T) {
+	testSchema33OfflineUpgradeRollback(t, "cancel-before-commit")
 }
 
 func TestSchema34OfflineCatalogUpgradePreservesRowsAndRetries(t *testing.T) {
