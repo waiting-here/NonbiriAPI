@@ -715,7 +715,7 @@ func TestAgentPolicyOfflineMigrationPreservesAuthorityAndAudit(t *testing.T) {
 		var before, after map[string]bool
 		json.Unmarshal([]byte(original), &before)
 		json.Unmarshal([]byte(body), &after)
-		if len(after) != 51 {
+		if len(after) != 54 {
 			t.Fatal("not current", after)
 		}
 		for key, value := range before {

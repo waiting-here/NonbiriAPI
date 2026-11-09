@@ -2,11 +2,13 @@ package charityrouting
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -101,8 +103,21 @@ func TestManagementPureReadsAvoidWriterAndUseCurrentAuthority(t *testing.T) {
 	if _, err := held.ExecContext(ctx, "UPDATE charity_price_templates SET enabled=0 WHERE id=?", templateID); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := e.service.priceTemplate(ctx, roleSteward, steward, templateID); err != nil {
+		t.Fatal("manager disabled template read", err)
+	}
+	if _, err := held.ExecContext(ctx, "UPDATE users SET level=5 WHERE id=?", steward); err != nil {
+		t.Fatal(err)
+	}
+	policy := authz.DefaultStewardPermissions(5)
+	policy.Permissions["charity.price_templates.read"] = true
+	permissions, _ := json.Marshal(policy.Permissions)
+	limits, _ := json.Marshal(policy.Limits)
+	if _, err := held.ExecContext(ctx, "INSERT INTO steward_permissions(user_id,revision,permissions,limits,created_at,updated_at) VALUES(?,1,?,?,?,?)", steward, string(permissions), string(limits), routingTestNow, routingTestNow); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := e.service.priceTemplate(ctx, roleSteward, steward, templateID); !errors.Is(err, ErrNotFound) {
-		t.Fatal("disabled template exposed", err)
+		t.Fatal("read-only disabled template exposed", err)
 	}
 	list, err := e.service.priceTemplates(ctx, roleSteward, steward, "", "enabled", pagination.Default())
 	if err != nil || len(list.Data) != 0 {

@@ -34,7 +34,7 @@ VALUES(?,?,'provider/retained','charity_responses',1,2,'success',200,200)`, requ
 	restoreSchema47LayoutForTest(t, store.DB())
 	hostileMustExec(t, store.DB(), "UPDATE schema_state SET version=47")
 	plan, err := storageSchema.plan(t.Context(), store.DB())
-	if err != nil || len(plan.steps) != 3 || plan.steps[0].from != 47 || plan.steps[0].version != 48 || plan.auditsCredentials() {
+	if err != nil || len(plan.steps) != db.CurrentSchemaVersion-47 || plan.steps[0].from != 47 || plan.steps[0].version != 48 || plan.auditsCredentials() {
 		t.Fatal("index-only upgrade plan changed", plan, err)
 	}
 	if !reflect.DeepEqual(plan.steps[0].impact.indexedTables, []string{"request_logs"}) {
