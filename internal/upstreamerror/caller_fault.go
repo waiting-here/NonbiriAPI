@@ -2,12 +2,14 @@ package upstreamerror
 
 import "encoding/json"
 
-// CallerFault is evidence from a complete parameter error and a connector's
-// unchanged caller-field check. Its zero value never exempts a failed attempt.
+// CallerFault is evidence from a complete input-length error or a parameter
+// error with the connector's unchanged caller-field proof. Its zero value
+// never exempts a failed attempt.
 // It retains no parameter name, value, request body or upstream message.
 type CallerFault struct {
-	status int
-	code   string
+	status      int
+	code        string
+	inputLength bool
 }
 
 func (f CallerFault) Matches(status int, code string) bool {
@@ -15,16 +17,20 @@ func (f CallerFault) Matches(status int, code string) bool {
 }
 
 func (c Context) callerFault(fields map[string]json.RawMessage) CallerFault {
-	if !c.CharityCall || c.UnchangedCallerParameter == nil || c.responseStatus != 400 && c.responseStatus != 422 {
+	if !c.CharityCall || c.responseStatus != 400 && c.responseStatus != 422 {
 		return CallerFault{}
 	}
 	var kind, code, param, message string
 	if json.Unmarshal(fields["type"], &kind) != nil ||
-		json.Unmarshal(fields["code"], &code) != nil || json.Unmarshal(fields["param"], &param) != nil ||
+		json.Unmarshal(fields["code"], &code) != nil ||
 		json.Unmarshal(fields["message"], &message) != nil || message == "" {
 		return CallerFault{}
 	}
-	if !parameterErrorKind(c.responseStatus, kind, code) {
+	if c.InputLengthErrors && inputLengthError(kind, code, fields["param"], message) {
+		return CallerFault{status: c.responseStatus, code: code, inputLength: true}
+	}
+	if c.UnchangedCallerParameter == nil || json.Unmarshal(fields["param"], &param) != nil ||
+		!parameterErrorKind(c.responseStatus, kind, code) {
 		return CallerFault{}
 	}
 	// Resource references, model selection, identity, storage and service tiers

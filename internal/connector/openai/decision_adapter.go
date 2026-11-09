@@ -54,7 +54,7 @@ func (a *Adapter) AttemptDecision(ctx context.Context, writer http.ResponseWrite
 	errorGuard := newSensitiveGuard(materials...)
 	defer errorGuard.Clear()
 	clear(identifier)
-	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), Rules: smartbackoff.RulesFromContext(ctx), BaseURL: target.baseURL, PrivateModel: target.upstreamModel, ContainsSecret: func(value []byte) bool {
+	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), InputLengthErrors: true, Rules: smartbackoff.RulesFromContext(ctx), BaseURL: target.baseURL, PrivateModel: target.upstreamModel, ContainsSecret: func(value []byte) bool {
 		scanner := errorGuard.clone()
 		defer scanner.Clear()
 		return scanner.Contains(value)
@@ -99,7 +99,7 @@ func (a *Adapter) AttemptDecision(ctx context.Context, writer http.ResponseWrite
 	if response.StatusCode != http.StatusOK {
 		result = contract.UpstreamFailed(upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode), contract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.ReadResponse(ctx, response, a.maxJSONResponseBytes)
-		return result
+		return callerParameterFailure(result)
 	}
 	if !validResponseMediaType(response, "application/json") {
 		return upstreamFailure("upstream response content type was invalid", response.StatusCode)

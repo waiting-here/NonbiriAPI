@@ -26,7 +26,26 @@ func TestCallerParameterFaultPreservesStreakAndFailureAccounting(t *testing.T) {
 	}
 }
 
+func TestInputLengthFaultPreservesStreakAndFailureAccounting(t *testing.T) {
+	for _, tc := range []struct{ code, param, message string }{
+		{"invalid_value", "messages", "system/developer 消息字符数超限：6001，最多 5000"},
+		{"context_length_exceeded", "", "Input exceeds the context limit."},
+		{"input_too_long", "input", "Input is too long."},
+		{"prompt_too_long", "prompt", "Prompt is too long."},
+		{"string_above_max_length", "input", "Input is too long."},
+	} {
+		t.Run(tc.code, func(t *testing.T) {
+			testCallerFaultAccounting(t, "invalid_request_error", tc.code, tc.param, tc.message, true)
+		})
+	}
+}
+
 func testCallerParameterFaultAccounting(t *testing.T, kind, code, param string) {
+	t.Helper()
+	testCallerFaultAccounting(t, kind, code, param, "Invalid value.", false)
+}
+
+func testCallerFaultAccounting(t *testing.T, kind, code, param, message string, inputLength bool) {
 	t.Helper()
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)
@@ -37,8 +56,15 @@ func testCallerParameterFaultAccounting(t *testing.T, kind, code, param string) 
 	request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
 	handle := e.billingDispatch(t, rail, request.ID, 1)
 	e.seedServiceStreak(t, handle, 2)
-	errorContext := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }, UnchangedCallerParameter: func(name string) bool { return name == param }}
-	payload := fmt.Sprintf(`{"error":{"type":%q,"code":%q,"param":%q,"message":"Invalid value."}}`, kind, code, param)
+	errorContext := upstreamerror.Context{CharityCall: true, InputLengthErrors: inputLength, ContainsSecret: func([]byte) bool { return false }}
+	if !inputLength {
+		errorContext.UnchangedCallerParameter = func(name string) bool { return name == param }
+	}
+	paramJSON := fmt.Sprintf("%q", param)
+	if inputLength && param == "" {
+		paramJSON = "null"
+	}
+	payload := fmt.Sprintf(`{"error":{"type":%q,"code":%q,"param":%s,"message":%q}}`, kind, code, paramJSON, message)
 	detail := errorContext.ReadResponse(ctx, &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(payload))})
 	outcome := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 400, UpstreamCode: detail.Code(), Diagnostic: "upstream returned HTTP 400", FailureOrigin: contract.OriginUpstreamResponse, StreakDisposition: contract.StreakNeutral, CallerFault: detail.CallerFault()}
 	for _, tc := range []struct {
@@ -176,6 +202,15 @@ func TestCallerParameterReceiptConstraints(t *testing.T) {
 }
 
 func TestCallerParameterReceiptRollsBackWithCompletion(t *testing.T) {
+	testCallerReceiptRollback(t, `{"error":{"type":"invalid_request_error","code":"invalid_value","param":"temperature","message":"Invalid value."}}`, false)
+}
+
+func TestInputLengthReceiptRollsBackWithCompletion(t *testing.T) {
+	testCallerReceiptRollback(t, `{"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"Input exceeds the context limit."}}`, true)
+}
+
+func testCallerReceiptRollback(t *testing.T, payload string, inputLength bool) {
+	t.Helper()
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)
 	request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
@@ -183,8 +218,8 @@ func TestCallerParameterReceiptRollsBackWithCompletion(t *testing.T) {
 	if _, err := e.store.DB().Exec(`CREATE TRIGGER reject_caller_terminal BEFORE UPDATE ON dispatch_claims WHEN NEW.state='committed' BEGIN SELECT RAISE(ABORT,'injected terminal failure'); END;`); err != nil {
 		t.Fatal(err)
 	}
-	errorContext := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }, UnchangedCallerParameter: func(string) bool { return true }}
-	detail := errorContext.ReadResponse(t.Context(), &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"type":"invalid_request_error","code":"invalid_value","param":"temperature","message":"Invalid value."}}`))})
+	errorContext := upstreamerror.Context{CharityCall: true, InputLengthErrors: inputLength, ContainsSecret: func([]byte) bool { return false }, UnchangedCallerParameter: func(string) bool { return true }}
+	detail := errorContext.ReadResponse(t.Context(), &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(payload))})
 	outcome := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 400, UpstreamCode: detail.Code(), StreakDisposition: contract.StreakNeutral, FailureOrigin: contract.OriginUpstreamResponse, CallerFault: detail.CallerFault()}
 	if _, err := rail.CompleteAttempt(t.Context(), handle, outcome); err == nil || !strings.Contains(err.Error(), "injected terminal failure") {
 		t.Fatal("completion did not reach injected failure", err)

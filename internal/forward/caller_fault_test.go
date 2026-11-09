@@ -21,9 +21,16 @@ import (
 )
 
 func TestForwardCallerParameterFailureKeepsErrorAndRetryContract(t *testing.T) {
-	for _, tc := range []struct{ charity, stream, adapted bool }{{false, false, false}, {false, true, false}, {true, false, false}, {true, true, false}, {true, false, true}} {
+	for _, tc := range []struct{ charity, stream, adapted, inputLength bool }{
+		{false, false, false, false}, {false, true, false, false}, {true, false, false, false}, {true, true, false, false}, {true, false, true, false},
+		{false, false, false, true}, {true, false, false, true}, {true, true, false, true}, {true, false, true, true},
+	} {
 		charity, stream := tc.charity, tc.stream
-		t.Run(fmt.Sprintf("charity=%t/stream=%t/adapted=%t", charity, stream, tc.adapted), func(t *testing.T) {
+		t.Run(fmt.Sprintf("charity=%t/stream=%t/adapted=%t/inputLength=%t", charity, stream, tc.adapted, tc.inputLength), func(t *testing.T) {
+			code := "unsupported_parameter"
+			if tc.inputLength {
+				code = "invalid_value"
+			}
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var sent map[string]json.RawMessage
 				expected := "0.25"
@@ -35,7 +42,11 @@ func TestForwardCallerParameterFailureKeepsErrorAndRetryContract(t *testing.T) {
 				}
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(400)
-				_, _ = io.WriteString(w, `{"error":{"type":"invalid_request_error","code":"unsupported_parameter","param":"temperature","message":"Parameter is unsupported."}}`)
+				if tc.inputLength {
+					_, _ = io.WriteString(w, `{"error":{"type":"invalid_request_error","code":"invalid_value","param":"messages","message":"system/developer 消息字符数超限：6001，最多 5000"}}`)
+				} else {
+					_, _ = io.WriteString(w, `{"error":{"type":"invalid_request_error","code":"unsupported_parameter","param":"temperature","message":"Parameter is unsupported."}}`)
+				}
 			}))
 			defer server.Close()
 			stack, err := egress.NewStack(egress.StackOptions{AllowedOrigins: []string{server.URL}, Resolver: errorTestResolver{}, RequestTimeout: 3 * time.Second, Concurrency: egress.ConcurrencyLimits{Global: 2, PerEndpoint: 2}})
@@ -94,15 +105,15 @@ func TestForwardCallerParameterFailureKeepsErrorAndRetryContract(t *testing.T) {
 			request := decodeChatForTest(t, fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"hello"}],"temperature":0.25,"stream":%t}`, model, stream))
 			writer := httptest.NewRecorder()
 			f.service.Chat(context.Background(), writer, 1, request, []byte(`{}`), "application/json", "en")
-			if writer.Code != 400 || !strings.Contains(writer.Body.String(), "unsupported_parameter") && !tc.adapted || len(f.claims.outcomes) != attempts || len(f.claims.requestResults) != 1 {
+			if writer.Code != 400 || !strings.Contains(writer.Body.String(), code) && !tc.adapted || len(f.claims.outcomes) != attempts || len(f.claims.requestResults) != 1 {
 				t.Fatalf("status=%d body=%s attempts=%d", writer.Code, writer.Body.String(), len(f.claims.outcomes))
 			}
 			outcome, terminal := f.claims.outcomes[0], f.claims.requestResults[0]
 			want := contract.StreakUpstreamFailure
-			if charity && !tc.adapted {
+			if charity && (!tc.adapted || tc.inputLength) {
 				want = contract.StreakNeutral
 			}
-			if outcome.StreakDisposition != want || outcome.CallerFault.Matches(400, "unsupported_parameter") != (charity && !tc.adapted) || outcome.ProtocolSuccess || outcome.ResponseStarted || outcome.UpstreamStatus != 400 || terminal.Caller.Status != 400 || terminal.Disposition != claim.AccountingCommit || terminal.ActualChargeMilli != 0 {
+			if outcome.StreakDisposition != want || outcome.CallerFault.Matches(400, code) != (charity && (!tc.adapted || tc.inputLength)) || outcome.ProtocolSuccess || outcome.ResponseStarted || outcome.UpstreamStatus != 400 || terminal.Caller.Status != 400 || terminal.Disposition != claim.AccountingCommit || terminal.ActualChargeMilli != 0 {
 				t.Fatalf("outcome=%+v terminal=%+v", outcome, terminal)
 			}
 		})
