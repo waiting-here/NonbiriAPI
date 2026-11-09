@@ -207,6 +207,9 @@ func (a *Adapter) attempt(ctx context.Context, w http.ResponseWriter, target con
 	if response != nil && response.Request != nil {
 		response.Request.Header.Del("Authorization")
 	}
+	if err == nil && response != nil && response.StatusCode == http.StatusBadRequest && errorContext.CharityCall {
+		errorContext.GatewayCallerInput = callerInput(chat, body, policy)
+	}
 	clear(body)
 	if response != nil && response.Body != nil {
 		defer response.Body.Close()
@@ -232,6 +235,9 @@ func (a *Adapter) attempt(ctx context.Context, w http.ResponseWriter, target con
 	if response.StatusCode < 200 || response.StatusCode > 299 || stream && response.StatusCode != 200 {
 		result = contract.UpstreamFailed(upstreamFailure("upstream returned an error status", response.StatusCode), contract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.ReadResponse(ctx, response, min(maxJSONBytes, a.backend.MaxResponseBytes()))
+		if result.ErrorDetail.CallerFault().Matches(response.StatusCode, result.ErrorDetail.Code()) {
+			result.StreakDisposition = contract.StreakNeutral
+		}
 		return result
 	}
 	if stream {

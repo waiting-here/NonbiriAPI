@@ -7,7 +7,7 @@ DROP TABLE dispatch_caller_parameter_errors;
 CREATE TABLE dispatch_caller_parameter_errors (
  claim_id TEXT PRIMARY KEY REFERENCES dispatch_claims(id) ON DELETE CASCADE,
  http_status INTEGER NOT NULL CHECK(http_status IN (400,422)),
- error_code TEXT NOT NULL CHECK(error_code IN ('invalid_value','invalid_type','unsupported_parameter','unsupported_value','context_length_exceeded','input_too_long','prompt_too_long','string_above_max_length') OR (http_status=400 AND error_code='InvalidParameter'))
+ error_code TEXT NOT NULL CHECK(error_code IN ('invalid_value','invalid_type','unsupported_parameter','unsupported_value','context_length_exceeded','input_too_long','prompt_too_long','string_above_max_length') OR (http_status=400 AND error_code IN ('InvalidParameter','AI_APICallError')))
 ) STRICT;
 INSERT INTO dispatch_caller_parameter_errors(claim_id,http_status,error_code) SELECT claim_id,http_status,error_code FROM caller_parameter_errors_rebuild;
 DROP TABLE caller_parameter_errors_rebuild;

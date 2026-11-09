@@ -183,11 +183,16 @@ func TestRerankPathUpgradeIsExplicitAtomicAndPreservesFacts(t *testing.T) {
 	if err := store.DB().QueryRow("SELECT error_code FROM dispatch_caller_parameter_errors WHERE claim_id=?", proofClaim).Scan(&proofCode); err != nil || proofCode != "invalid_value" {
 		t.Fatal("retained caller proof", proofCode, err)
 	}
-	for index, code := range []string{"context_length_exceeded", "input_too_long", "prompt_too_long", "string_above_max_length"} {
+	for index, code := range []string{"context_length_exceeded", "input_too_long", "prompt_too_long", "string_above_max_length", "AI_APICallError"} {
 		id := hostileOIDVariant("clm_", byte('a'+index), 'Q')
 		hostileMustExec(t, store.DB(), "INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,endpoint_key_id,secret_ref_id,donation_key_id,claim_now,state,dispatched_at,donor_reward_state) SELECT ?,?,?,'charity',endpoint_key_id,secret_ref_id,?,0,'dispatched',1,'pending' FROM endpoint_grant_authorizations WHERE endpoint_key_id=?", id, proofRequest, index+2, member, key)
 		if _, err := store.DB().Exec("INSERT INTO dispatch_caller_parameter_errors(claim_id,http_status,error_code) VALUES(?,500,?)", id, code); err == nil {
 			t.Fatal("accepted unrelated HTTP status")
+		}
+		if code == "AI_APICallError" {
+			if _, err := store.DB().Exec("INSERT INTO dispatch_caller_parameter_errors(claim_id,http_status,error_code) VALUES(?,422,?)", id, code); err == nil {
+				t.Fatal("accepted unsupported Gateway HTTP status")
+			}
 		}
 		hostileMustExec(t, store.DB(), "INSERT INTO dispatch_caller_parameter_errors(claim_id,http_status,error_code) VALUES(?,?,?)", id, 400+(index%2)*22, code)
 		if _, err := store.DB().Exec("UPDATE dispatch_caller_parameter_errors SET error_code='invalid_value' WHERE claim_id=?", id); err == nil {

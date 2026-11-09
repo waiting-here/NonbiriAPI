@@ -2,8 +2,8 @@ package upstreamerror
 
 import "encoding/json"
 
-// CallerFault is evidence from a complete input-length error or a parameter
-// error with the connector's unchanged caller-field proof. Its zero value
+// CallerFault is evidence from a complete input-length error or a request
+// error with the connector's caller-input proof. Its zero value
 // never exempts a failed attempt.
 // It retains no parameter name, value, request body or upstream message.
 type CallerFault struct {
@@ -19,6 +19,9 @@ func (f CallerFault) Matches(status int, code string) bool {
 func (c Context) callerFault(fields map[string]json.RawMessage) CallerFault {
 	if !c.CharityCall || c.responseStatus != 400 && c.responseStatus != 422 {
 		return CallerFault{}
+	}
+	if c.gatewayCallerFault(fields) {
+		return CallerFault{status: c.responseStatus, code: "AI_APICallError"}
 	}
 	var kind, code, param, message string
 	if json.Unmarshal(fields["type"], &kind) != nil ||

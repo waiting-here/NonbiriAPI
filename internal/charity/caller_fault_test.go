@@ -40,12 +40,39 @@ func TestInputLengthFaultPreservesStreakAndFailureAccounting(t *testing.T) {
 	}
 }
 
+func TestGatewayCallerFaultPreservesStreakAndFailureAccounting(t *testing.T) {
+	for _, message := range []string{
+		"Requests ending with a model turn are not supported.",
+		"Unable to submit request because it has a maxOutputTokens value of 100000 but the supported range is from 1 (inclusive) to 65537 (exclusive). Update the value and try again.",
+	} {
+		t.Run(message, func(t *testing.T) {
+			c := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }, GatewayCallerInput: upstreamerror.GatewayCallerInput{EndsWithAssistant: true, MaxOutputTokens: 100000}}
+			payload := fmt.Sprintf(`{"error":{"type":"AI_APICallError","message":%q,"param":{"type":"AI_APICallError","statusCode":400,"isRetryable":false,"message":%q}}}`, message, message)
+			testCallerFaultCompletion(t, "AI_APICallError", c, payload)
+		})
+	}
+}
+
 func testCallerParameterFaultAccounting(t *testing.T, kind, code, param string) {
 	t.Helper()
 	testCallerFaultAccounting(t, kind, code, param, "Invalid value.", false)
 }
 
 func testCallerFaultAccounting(t *testing.T, kind, code, param, message string, inputLength bool) {
+	t.Helper()
+	errorContext := upstreamerror.Context{CharityCall: true, InputLengthErrors: inputLength, ContainsSecret: func([]byte) bool { return false }}
+	if !inputLength {
+		errorContext.UnchangedCallerParameter = func(name string) bool { return name == param }
+	}
+	paramJSON := fmt.Sprintf("%q", param)
+	if inputLength && param == "" {
+		paramJSON = "null"
+	}
+	payload := fmt.Sprintf(`{"error":{"type":%q,"code":%q,"param":%s,"message":%q}}`, kind, code, paramJSON, message)
+	testCallerFaultCompletion(t, code, errorContext, payload)
+}
+
+func testCallerFaultCompletion(t *testing.T, code string, errorContext upstreamerror.Context, payload string) {
 	t.Helper()
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)
@@ -56,15 +83,6 @@ func testCallerFaultAccounting(t *testing.T, kind, code, param, message string, 
 	request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
 	handle := e.billingDispatch(t, rail, request.ID, 1)
 	e.seedServiceStreak(t, handle, 2)
-	errorContext := upstreamerror.Context{CharityCall: true, InputLengthErrors: inputLength, ContainsSecret: func([]byte) bool { return false }}
-	if !inputLength {
-		errorContext.UnchangedCallerParameter = func(name string) bool { return name == param }
-	}
-	paramJSON := fmt.Sprintf("%q", param)
-	if inputLength && param == "" {
-		paramJSON = "null"
-	}
-	payload := fmt.Sprintf(`{"error":{"type":%q,"code":%q,"param":%s,"message":%q}}`, kind, code, paramJSON, message)
 	detail := errorContext.ReadResponse(ctx, &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(payload))})
 	outcome := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 400, UpstreamCode: detail.Code(), Diagnostic: "upstream returned HTTP 400", FailureOrigin: contract.OriginUpstreamResponse, StreakDisposition: contract.StreakNeutral, CallerFault: detail.CallerFault()}
 	for _, tc := range []struct {
@@ -121,7 +139,7 @@ func testCallerFaultAccounting(t *testing.T, kind, code, param, message string, 
 	// The next unclassified 400 still advances the same streak to its threshold.
 	next := e.billingRequest(t, rail, e.requestModel, 2400, 1)
 	nextHandle := e.billingDispatch(t, rail, next.ID, 1)
-	unknown := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 400, FailureOrigin: contract.OriginUpstreamResponse, StreakDisposition: contract.StreakUpstreamFailure}
+	unknown := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 400, UpstreamCode: code, FailureOrigin: contract.OriginUpstreamResponse, StreakDisposition: contract.StreakUpstreamFailure}
 	if _, err := rail.CompleteAttempt(ctx, nextHandle, unknown); err != nil {
 		t.Fatal(err)
 	}
@@ -151,6 +169,7 @@ func TestCallerParameterReceiptConstraints(t *testing.T) {
 		{200, "invalid_value"}, {401, "invalid_value"}, {429, "invalid_value"},
 		{500, "invalid_value"}, {400, "invalid_request_error"}, {422, "insufficient_quota"},
 		{422, "InvalidParameter"}, {400, "InvalidParameter.Unknown"},
+		{422, "AI_APICallError"}, {200, "AI_APICallError"}, {500, "AI_APICallError"},
 	} {
 		if _, err := tx.Exec(`INSERT INTO dispatch_caller_parameter_errors VALUES(?,?,?)`, handle.ClaimID(), tc.status, tc.code); err == nil {
 			t.Fatal("invalid caller receipt accepted", tc)
@@ -209,7 +228,12 @@ func TestInputLengthReceiptRollsBackWithCompletion(t *testing.T) {
 	testCallerReceiptRollback(t, `{"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"Input exceeds the context limit."}}`, true)
 }
 
-func testCallerReceiptRollback(t *testing.T, payload string, inputLength bool) {
+func TestGatewayCallerReceiptRollsBackWithCompletion(t *testing.T) {
+	const payload = `{"error":{"type":"AI_APICallError","message":"Requests ending with a model turn are not supported.","param":{"type":"AI_APICallError","statusCode":400,"isRetryable":false,"message":"Requests ending with a model turn are not supported."}}}`
+	testCallerReceiptRollback(t, payload, false, upstreamerror.GatewayCallerInput{EndsWithAssistant: true})
+}
+
+func testCallerReceiptRollback(t *testing.T, payload string, inputLength bool, gatewayProof ...upstreamerror.GatewayCallerInput) {
 	t.Helper()
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)
@@ -219,6 +243,9 @@ func testCallerReceiptRollback(t *testing.T, payload string, inputLength bool) {
 		t.Fatal(err)
 	}
 	errorContext := upstreamerror.Context{CharityCall: true, InputLengthErrors: inputLength, ContainsSecret: func([]byte) bool { return false }, UnchangedCallerParameter: func(string) bool { return true }}
+	if len(gatewayProof) != 0 {
+		errorContext.GatewayCallerInput = gatewayProof[0]
+	}
 	detail := errorContext.ReadResponse(t.Context(), &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(payload))})
 	outcome := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 400, UpstreamCode: detail.Code(), StreakDisposition: contract.StreakNeutral, FailureOrigin: contract.OriginUpstreamResponse, CallerFault: detail.CallerFault()}
 	if _, err := rail.CompleteAttempt(t.Context(), handle, outcome); err == nil || !strings.Contains(err.Error(), "injected terminal failure") {

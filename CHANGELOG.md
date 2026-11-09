@@ -13,6 +13,9 @@ Each version entry describes its source and compatibility boundary; a release ta
   submitted setting from approval or management details.
 - Recognize explicit input-length errors for messages, input, and prompts without
   increasing donated-key consecutive failures, including adapted requests.
+- Recognize native Gateway rejections of a final assistant turn or an explicit
+  output budget outside the reported range when the caller input is verified,
+  preserving consecutive failures without hiding other upstream errors.
 - Give level-6 stewards administrator-equivalent charity configuration controls.
   New permissions for request adaptation, affinity duration, and price-template
   management are disabled for level-5 stewards by default.

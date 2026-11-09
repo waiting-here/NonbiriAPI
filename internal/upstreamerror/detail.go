@@ -49,6 +49,9 @@ type Context struct {
 	// UnchangedCallerParameter proves that a supported native parameter came
 	// from the caller and has the same raw JSON value in the final wire body.
 	UnchangedCallerParameter func(string) bool
+	// GatewayCallerInput proves the relevant caller values survived native
+	// Gateway translation without configured request rewriting.
+	GatewayCallerInput GatewayCallerInput
 	// InputLengthErrors enables structured input-length classification for JSON
 	// requests independently of caller-field rewriting.
 	InputLengthErrors bool
