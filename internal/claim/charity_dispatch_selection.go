@@ -45,6 +45,9 @@ func (s *Service) claimBalancedCandidatesTx(ctx context.Context, tx *sql.Tx, cla
 	if err != nil {
 		return Handle{}, err
 	}
+	// Scoring performs no writes. Reuse only the load of an already authorized
+	// physical identity; every candidate still verifies its current grant.
+	loads := make(map[[32]byte]int64, len(input.BalancedCandidates))
 	for index, option := range input.BalancedCandidates {
 		grant, err := physicalGrantTx(ctx, tx, input.ActorUserID, option)
 		if errors.Is(err, ErrNotFound) {
@@ -57,9 +60,13 @@ func (s *Service) claimBalancedCandidatesTx(ctx context.Context, tx *sql.Tx, cla
 		if err != nil {
 			return Handle{}, err
 		}
-		load, err := physicalDispatchLoadTx(ctx, tx, physical, at)
-		if err != nil {
-			return Handle{}, err
+		load, found := loads[physical]
+		if !found {
+			load, err = physicalDispatchLoadTx(ctx, tx, physical, at)
+			if err != nil {
+				return Handle{}, err
+			}
+			loads[physical] = load
 		}
 		choices = append(choices, scored{
 			candidate: option, physical: physical, load: load, order: index,

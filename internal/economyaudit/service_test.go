@@ -41,6 +41,7 @@ func (a testFinalAuthorizer) AuthorizeAdmin(ctx context.Context, tx *sql.Tx, id 
 }
 
 type auditFixture struct {
+	store                         *db.Store
 	reopen                        func(*testing.T)
 	database                      *sql.DB
 	service                       *Service
@@ -86,7 +87,7 @@ func newAuditFixtureFromSource(t *testing.T, source string) *auditFixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	f := &auditFixture{database: store.DB(), actors: map[int64]authz.Actor{}, wallets: map[ledger.Asset]int64{}, external: map[ledger.Asset]int64{}}
+	f := &auditFixture{store: store, database: store.DB(), actors: map[int64]authz.Actor{}, wallets: map[ledger.Asset]int64{}, external: map[ledger.Asset]int64{}}
 	if _, err := f.database.Exec(`INSERT INTO site_config(key,value,updated_at) VALUES(?, '330', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, db.SiteTimezoneKey, auditNow); err != nil {
 		t.Fatal(err)
 	}
@@ -150,6 +151,7 @@ func newAuditFixtureFromSource(t *testing.T, source string) *auditFixture {
 		if err != nil {
 			t.Fatal(err)
 		}
+		f.store = store
 		f.database = store.DB()
 		f.service.database = f.database
 		f.service.readDB = store.ReadDB()

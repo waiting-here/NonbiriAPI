@@ -302,15 +302,15 @@ func (s *Service) SnapshotForCaller(ctx context.Context, userID, modelID, decisi
 	return s.snapshot(ctx, modelID, decisionNow, true, connectorSet, operation, userID)
 }
 
-func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64, freezeOrder bool, connectorSet map[connectorcontract.Type]struct{}, operation connectorcontract.Operation, callers ...int64) (RuntimeSnapshot, error) {
+func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64, freezeOrder bool, connectorSet map[connectorcontract.Type]struct{}, operation connectorcontract.Operation, callers ...int64) (_ RuntimeSnapshot, resultErr error) {
 	if s == nil || s.db == nil || ctx == nil || modelID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond {
 		return RuntimeSnapshot{}, ErrInvalidRequest
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.db, nil, "charity_snapshot")
 	if err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: begin runtime snapshot: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	callerID := int64(0)
 	if len(callers) > 1 || len(callers) == 1 && callers[0] <= 0 {
 		return RuntimeSnapshot{}, ErrInvalidRequest
@@ -324,7 +324,9 @@ func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64
 			return RuntimeSnapshot{}, ErrNotFound
 		}
 	}
+	read := observability.DatabasePhase(ctx, "charity_snapshot", "read")
 	snapshot, admissionErr := s.readSnapshotTx(ctx, tx, modelID, decisionNow, freezeOrder, connectorSet, callerID, operation)
+	read(admissionErr)
 	if admissionErr != nil && !errors.Is(admissionErr, ErrUnavailable) {
 		return RuntimeSnapshot{}, admissionErr
 	}

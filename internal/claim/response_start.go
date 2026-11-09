@@ -7,19 +7,20 @@ import (
 	"fmt"
 
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 // MarkResponseStarted persists the billable-response checkpoint before delivery.
 // The optional status records a received HTTP 200 stream for restart recovery.
-func (s *Service) MarkResponseStarted(ctx context.Context, handle Handle, status ...int) error {
+func (s *Service) MarkResponseStarted(ctx context.Context, handle Handle, status ...int) (resultErr error) {
 	if s == nil || s.db == nil || ctx == nil || !validHandle(handle) || handle.purpose == PurposeDiscovery || len(status) > 1 || len(status) == 1 && status[0] != 0 && status[0] != 200 {
 		return ErrInvalidInput
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.db, nil, "claim_response_start")
 	if err != nil {
 		return fmt.Errorf("claim: begin response checkpoint: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { finish(resultErr) }()
 	record, err := loadClaimTx(ctx, tx, handle.claimID)
 	if err != nil {
 		return err
