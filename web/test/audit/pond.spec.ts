@@ -176,10 +176,16 @@ test('real pond batch return recovers a lost response and keeps single receipts 
     const junkCount = BigInt(candidates.filter((outcome) => outcome.species_key !== 'fry').length);
     type Receipt = { ordinal: number; return_state: string; returned_at: number; batch_id: string };
     let committed: { batch_id: string; receipts: Receipt[] } | undefined;
+    let recoveredReceipt: typeof committed;
     let dropResponse = true;
     await page.route('**' + resource, async (route) => {
       if (!dropResponse) {
-        await route.continue();
+        // Read the real retry receipt before forwarding it; Chromium may discard
+        // its protocol response body after an intercepted request was aborted.
+        const response = await route.fetch();
+        expect(response.status()).toBe(200);
+        recoveredReceipt = await response.json();
+        await route.fulfill({ response });
         return;
       }
       dropResponse = false;
@@ -220,7 +226,8 @@ test('real pond batch return recovers a lost response and keeps single receipts 
     await batchAction.getByRole('button', { name: 'Retry this batch', exact: true }).click();
     const recovered = await returned;
     expect(recovered.status()).toBe(200);
-    const receipt = (await recovered.json()) as { batch_id: string; receipts: Receipt[] };
+    expect(recoveredReceipt).toBeDefined();
+    const receipt = recoveredReceipt!;
     expect(receipt).toEqual(committed);
     expect(receipt.receipts).toHaveLength(candidates.length);
     await expect(batchAction).toHaveCount(0);
