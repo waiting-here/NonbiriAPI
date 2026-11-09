@@ -10,7 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path"
+	"io/fs"
 	"slices"
 	"strings"
 )
@@ -211,7 +211,7 @@ func Parse(data []byte) (*Catalog, error) {
 }
 
 func validPath(value string) bool {
-	return value != "" && value != "." && !strings.HasPrefix(value, "/") && !strings.ContainsRune(value, 92) && !strings.ContainsAny(value, "?#%") && path.Clean(value) == value && value != ".." && !strings.HasPrefix(value, "../")
+	return value != "." && fs.ValidPath(value) && !strings.ContainsAny(value, "\\?#%")
 }
 
 func (c *Catalog) Rating(key string) (ContentRating, bool) {
