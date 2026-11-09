@@ -282,6 +282,9 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 		"json_body": auditBrowserJSON, "text_body": auditBrowserText,
 		"private_markers": []string{auditBrowserIP, auditBrowserClient, "audit-original-only", "audit-text-only"},
 	}
+	if os.Getenv("NONBIRI_REQUEST_REJECTIONS_BROWSER") == "1" {
+		state["request_rejections"] = seedRequestRejectionsBrowser(t, f)
+	}
 	if os.Getenv("NONBIRI_DONATION_CONTEXT_BROWSER") == "1" {
 		state["donation_context"] = seedDonationContextBrowser(t, f, now)
 	}
