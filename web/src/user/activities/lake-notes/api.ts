@@ -62,6 +62,8 @@ export interface Quote extends QuoteInput {
   target_lot: string;
   coins: string;
   wallet: Wallet;
+  daily_source_remaining?: string | null;
+  daily_reset_at?: number;
 }
 export interface ActionInput extends Action {
   expected_profile_revision: string;

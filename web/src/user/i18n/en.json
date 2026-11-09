@@ -2827,6 +2827,11 @@
       "connector.chatCompletions": "OpenAI Chat Completions"
     },
     "lakeNotes": {
+      "dailyRemaining": "Available to spend today: {{amount}} {{unit}}",
+      "dailyLimit": "Daily spending limit: {{amount}} {{unit}}",
+      "dailyUnlimited": "No daily exchange limit",
+      "dailyLimitReached": "Today's remaining allowance is too low. Choose a smaller amount or try again tomorrow.",
+      "dailyReset": "Allowance resets: {{time}}",
       "exchangeAvailable": "Fishing is free. Coin exchange is available below.",
       "exchangeUnavailable": "Fishing is free. Coin exchange is currently closed; catches stay in the game.",
       "back": "Back to game center",
@@ -3400,7 +3405,7 @@
           },
           "barbedHook": {
             "name": "Barbed hook",
-            "description": "The catch bar gently follows fish inside it; darting fish still need control."
+            "description": "The catch bar gently follows common fish inside it; other fish need manual control."
           },
           "qualityBobber": {
             "name": "Quality bobber",

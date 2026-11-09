@@ -5,17 +5,18 @@ import (
 )
 
 type Snapshot struct {
-	First     string  `json:"first,omitempty"`
-	Second    string  `json:"second,omitempty"`
-	Third     string  `json:"third,omitempty"`
-	Fourth    string  `json:"fourth,omitempty"`
-	Level     int     `json:"level"`
-	HadCaught bool    `json:"hadCaught"`
-	Rod       string  `json:"rod"`
-	Bait      string  `json:"bait,omitempty"`
-	Location  string  `json:"location"`
-	Effects   Effects `json:"effects"`
-	BarHeight float64 `json:"barHeight"`
+	LegacyBarbedFollow bool    `json:"legacyBarbedFollow,omitempty"`
+	First              string  `json:"first,omitempty"`
+	Second             string  `json:"second,omitempty"`
+	Third              string  `json:"third,omitempty"`
+	Fourth             string  `json:"fourth,omitempty"`
+	Level              int     `json:"level"`
+	HadCaught          bool    `json:"hadCaught"`
+	Rod                string  `json:"rod"`
+	Bait               string  `json:"bait,omitempty"`
+	Location           string  `json:"location"`
+	Effects            Effects `json:"effects"`
+	BarHeight          float64 `json:"barHeight"`
 }
 type Treasure struct {
 	Y        float64 `json:"y"`
@@ -371,7 +372,8 @@ func step(p *Profile, c *Cast, held bool) error {
 	if held && (c.BarY <= half || c.BarY >= float64(1-half)) {
 		c.BarVelocity = 0
 	}
-	if c.WasHit && e.BarbedCount > 0 {
+	f, _ := Fish(c.Plan.FishKind)
+	if c.WasHit && e.BarbedCount > 0 && (f.Rarity == "common" || s.LegacyBarbedFollow) {
 		sign := 0.0
 		if c.Fish.Y > c.BarY {
 			sign = 1
@@ -390,7 +392,6 @@ func step(p *Profile, c *Cast, held bool) error {
 		c.BarY = float64(1 - half)
 		c.BarVelocity = float64(-c.BarVelocity * e.BottomBounce)
 	}
-	f, _ := Fish(c.Plan.FishKind)
 	c.Fish.Step(&c.Motion, f, challenge)
 	hit := c.Fish.Y >= float64(c.BarY-half) && c.Fish.Y <= float64(c.BarY+half)
 	c.WasHit = hit

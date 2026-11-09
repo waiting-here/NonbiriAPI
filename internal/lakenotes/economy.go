@@ -3,6 +3,7 @@ package lakenotes
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"math/big"
 	"time"
 
@@ -76,6 +77,9 @@ func (s *Service) Quote(ctx context.Context, user int64, in QuoteInput) (Quote, 
 	if e != nil {
 		return q, e
 	}
+	if e = dailyAllowanceTx(ctx, tx, user, p.Exchanges[in.Direction], now.Unix(), &q); e != nil {
+		return q, e
+	}
 	q.Coins, q.ProfileRevision = string(row.profile.Coins), rev(row.revision)
 	q.Wallet, e = walletTx(ctx, tx, user)
 	if e != nil {
@@ -111,6 +115,16 @@ func (s *Service) Exchange(ctx context.Context, user int64, key string, in Excha
 		q, e := quoteAmounts(p, in.QuoteInput)
 		if e != nil {
 			return ExchangeResult{}, e
+		}
+		if e = dailyAllowanceTx(ctx, tx, user, p.Exchanges[in.Direction], now.Unix(), &q); e != nil {
+			return ExchangeResult{}, e
+		}
+		if q.DailySourceRemaining != nil {
+			remaining, _ := rules.ParseAmount(*q.DailySourceRemaining)
+			source, _ := rules.ParseAmount(q.SourceAmount)
+			if source.Cmp(remaining) > 0 {
+				return ExchangeResult{}, ErrDailyLimit
+			}
 		}
 		row, e := profileTx(ctx, tx, user, true, now.Unix())
 		if e != nil {
@@ -169,6 +183,13 @@ func (s *Service) Exchange(ctx context.Context, user int64, key string, in Excha
 		if e != nil {
 			return ExchangeResult{}, e
 		}
+		if q.DailySourceRemaining != nil {
+			// Pin site-day boundaries with the first successful limited exchange,
+			// before an asynchronous audit projection can observe its receipt.
+			if e = db.FreezeSiteTimezoneTx(ctx, tx, now.Unix()); e != nil {
+				return ExchangeResult{}, e
+			}
+		}
 		if e = saveProfileTx(ctx, tx, user, &row, now.Unix()); e != nil {
 			return ExchangeResult{}, e
 		}
@@ -185,6 +206,12 @@ func (s *Service) Exchange(ctx context.Context, user int64, key string, in Excha
 		if e != nil {
 			return ExchangeResult{}, e
 		}
+		if q.DailySourceRemaining != nil {
+			remaining, _ := rules.ParseAmount(*q.DailySourceRemaining)
+			remaining, _ = remaining.Sub(source)
+			value := string(remaining)
+			q.DailySourceRemaining = &value
+		}
 		q.Coins, q.ProfileRevision = string(row.profile.Coins), rev(row.revision)
 		q.Wallet, e = walletTx(ctx, tx, user)
 		if e != nil {
@@ -195,4 +222,63 @@ func (s *Service) Exchange(ctx context.Context, user int64, key string, in Excha
 		v, e := s.profileViewFromTx(ctx, tx, user, now, profileProjection{row: &row, wallet: &q.Wallet, settings: &p})
 		return ExchangeResult{ExchangeReceipt{ID: id, Quote: q, OperationID: op, LedgerSeq: rev(posted.LedgerSeq), CreatedAt: now.Unix()}, v}, e
 	})
+}
+
+const dailyAllowanceBudget = 250 * time.Millisecond
+
+const dailySourceAmountsSQL = `SELECT source_amount_mag FROM lake_notes_exchange_receipts
+WHERE user_id=? AND direction=? AND created_at>=? AND created_at<?
+ORDER BY created_at DESC`
+
+// Receipts retain the actual amount paid at its historical rate. Only the
+// selected user's current site day participates; an exhausted limit can stop
+// as soon as the threshold is reached, without summing any older history.
+func dailyAllowanceTx(ctx context.Context, tx *sql.Tx, user int64, setting ExchangeSetting, now int64, q *Quote) error {
+	if setting.DailySourceLimit == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, dailyAllowanceBudget)
+	defer cancel()
+	offset, e := db.ResolveSiteTimezoneTx(ctx, tx)
+	if e != nil {
+		if errors.Is(e, db.ErrTimezoneUnavailable) {
+			return ErrInvariant
+		}
+		return e
+	}
+	day := db.SiteDayKey(now, int64(offset))
+	q.DailyResetAt = day + 86400
+	remaining, e := db.ParseU128Decimal(setting.DailySourceLimit)
+	if e != nil {
+		return ErrInvariant
+	}
+	available := remaining.Big()
+	if available.Sign() > 0 {
+		rows, e := tx.QueryContext(ctx, dailySourceAmountsSQL, user, q.Direction.Stored(), day, day+86400)
+		if e != nil {
+			return e
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var raw []byte
+			if e = rows.Scan(&raw); e != nil {
+				return e
+			}
+			amount, e := db.DecodeU128(raw)
+			if e != nil {
+				return ErrInvariant
+			}
+			available.Sub(available, amount.Big())
+			if available.Sign() <= 0 {
+				available.SetInt64(0)
+				break
+			}
+		}
+		if e = rows.Err(); e != nil {
+			return e
+		}
+	}
+	value := available.String()
+	q.DailySourceRemaining = &value
+	return nil
 }

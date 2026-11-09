@@ -25,6 +25,9 @@ export function lakeDraft(value: LakeSettings): LakeSettings {
             ...v,
             source_amount: v.source_amount ? unitsToNatural(v.source_amount, pair[0]) : '',
             target_amount: v.target_amount ? unitsToNatural(v.target_amount, pair[1]) : '',
+            daily_source_limit: v.daily_source_limit
+              ? unitsToNatural(v.daily_source_limit, pair[0])
+              : '',
           },
         ];
       }),
@@ -38,13 +41,18 @@ export function lakeWire(value: LakeSettings): LakeSettings {
       directions.map((d) => {
         const v = value.exchanges[d],
           pair = directionUnits[d];
-        if (!v.enabled && !v.source_amount && !v.target_amount) return [d, v];
+        const daily_source_limit = v.daily_source_limit
+          ? naturalToUnits(v.daily_source_limit, pair[0], true)
+          : '';
+        if (!v.enabled && !v.source_amount && !v.target_amount)
+          return [d, { ...v, daily_source_limit }];
         return [
           d,
           {
             ...v,
             source_amount: naturalToUnits(v.source_amount, pair[0]),
             target_amount: naturalToUnits(v.target_amount, pair[1]),
+            daily_source_limit,
           },
         ];
       }),
@@ -81,7 +89,7 @@ export function LakeFields({
           const value = draft.lakenotes.exchanges[d],
             pair = directionUnits[d];
           const change = (
-            field: 'enabled' | 'source_amount' | 'target_amount',
+            field: 'enabled' | 'source_amount' | 'target_amount' | 'daily_source_limit',
             v: string | boolean,
           ) =>
             edit((c) => ({
@@ -125,6 +133,26 @@ export function LakeFields({
                     )}
                   </Field>
                 ))}
+                <Field
+                  size="short"
+                  optional
+                  label={
+                    <>
+                      {lakeText('dailySourceLimit')} · {lakeText(pair[0])}
+                    </>
+                  }
+                  help={lakeText('dailySourceLimitHelp')}
+                >
+                  {(props) => (
+                    <input
+                      {...props}
+                      inputMode={pair[0] === 'coins' ? 'numeric' : 'decimal'}
+                      placeholder={lakeText('unlimited')}
+                      value={value.daily_source_limit ?? ''}
+                      onChange={(e) => change('daily_source_limit', e.target.value)}
+                    />
+                  )}
+                </Field>
               </Fields>
             </section>
           );

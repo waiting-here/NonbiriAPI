@@ -359,7 +359,7 @@ export function step(p: Profile, c: Cast, held: boolean) {
     (c.wasHit ? (e.barbedCount ? 0.3 : 0.6) : 1);
   const halfBar = s.barHeight / 2;
   if (held && (c.barY <= halfBar || c.barY >= 1 - halfBar)) c.barVelocity = 0;
-  if (c.wasHit && e.barbedCount)
+  if (c.wasHit && e.barbedCount && (f.rarity === 'common' || s.legacyBarbedFollow))
     c.barVelocity += (Math.sign(c.fish.y - c.barY) * e.barbedCount * 0.2 * 60) / 568;
   c.barVelocity = clamp(c.barVelocity + acceleration * dt, -2.4, 2.4);
   c.barY += c.barVelocity * dt;

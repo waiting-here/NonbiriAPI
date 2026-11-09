@@ -1,6 +1,6 @@
 {
   "source_sha256": "c1962f3f7278493b3af025488bd866fde8aae45fc69ed3a3ee92cf0acde83d0c",
-  "catalog_sha256": "cf2a1a1af01090aad3bc86c6f2f82fed0a4c2df2c803f62b36d104ee9270a750",
+  "catalog_sha256": "5fe5345f803f567c3af3143c8e7e6ab8a54810803d1163cdd7d01097ba5724a7",
   "protocol": {
     "version": 2,
     "arithmetic": "IEEE754 binary64, JS statement and operator evaluation order, explicit intermediate rounding, no fused multiply-add",
@@ -15,7 +15,7 @@
   "algorithms": {
     "internal/lakenotes/rules/actions.go": "8bf4605eeb6c5661fd7b2b3cd2d23f9d9fe6d3ab31a617bc3ff6b69267d1be8d",
     "internal/lakenotes/rules/amount.go": "724bc88c77e02106fc3b2e2646e7af8d0fa31fa54052d20a9e1128cdd3f83d49",
-    "internal/lakenotes/rules/cast.go": "17a167ecba51042e8fd5545d34e44f1906889a210bd9f2c5fec93788a42df433",
+    "internal/lakenotes/rules/cast.go": "dd5d68864e86609df7d05307bbf871b8e6213068ffd6feccd2b28888d1bb33f1",
     "internal/lakenotes/rules/catalog.go": "3e36764f7d7a8bcbbf7a9899f506c7e1129107688d018825c0f6334df1b406fa",
     "internal/lakenotes/rules/doc.go": "a6025efd001d355971422efc45f8434517b8b712a1627a47a98baab9df1345ad",
     "internal/lakenotes/rules/fish.go": "c30b6bf043f4e2bb44f68fbae39f5cb448f12dde666808e4bb695e3e897908e7",
@@ -24,12 +24,12 @@
     "internal/lakenotes/rules/state.go": "27bc6eb6d5fb45ba8cae72d9186abe95f66c96ab77b063fd035d9964d68868a9",
     "internal/lakenotes/rules/validate.go": "28615e9539cc759dc7f2724f8bba23e3f9c872c41298a8e7cb5978975958d31b",
     "web/src/user/activities/lake-notes/rules/actions.ts": "e1427c8c84dba8e359b43e47ccae55c094b64f59ac07f70202b5ca30a51f0739",
-    "web/src/user/activities/lake-notes/rules/cast.ts": "ad89b74e7af77fa3d0573dc3ae40a2d3b3f9f7fb3a70f9e65d60f9493ed32e8c",
+    "web/src/user/activities/lake-notes/rules/cast.ts": "03aa4a951349c6518de9893736b2d36a2cbe1f1f0573f5ac91b14e5f2de46a29",
     "web/src/user/activities/lake-notes/rules/catalog.ts": "f8df3d476aa23157fa394e8223c96f9b92b149416de8500c30e93e61c4bb87da",
     "web/src/user/activities/lake-notes/rules/index.ts": "f9bed903220db996e4e39970c7ac571ea8be391da9ccedf22ed76fb5b8d189da",
     "web/src/user/activities/lake-notes/rules/profile.ts": "3e41e1bc8f5c92c6eadcea0c5f45593d6168e5c5a071c685c07945daadca5468",
     "web/src/user/activities/lake-notes/rules/state.ts": "6a47f36a37604c436a4f7de53394b33e2cc4471d5606915d7a2c730b85aeae03",
-    "web/src/user/activities/lake-notes/rules/types.ts": "c0ed330c98a43132775c0989fa8adb0ac363285ba8c4cb7a70ab242c967d57c6",
+    "web/src/user/activities/lake-notes/rules/types.ts": "f59e2eb884390cfce9d7a06086101cdc32192d43ea7d93afc6663852bafe6f70",
     "internal/lakenotes/rules/collection.go": "8aa387ccddc52a8b87c50f8a43ee576d7cb38b4938698511cc0665f6474e271e"
   }
 }

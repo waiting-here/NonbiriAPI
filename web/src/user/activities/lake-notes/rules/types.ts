@@ -110,6 +110,7 @@ export interface MotionRandom {
   draw_count: number;
 }
 export interface Snapshot {
+  legacyBarbedFollow?: boolean;
   first?: string;
   second?: string;
   third?: string;

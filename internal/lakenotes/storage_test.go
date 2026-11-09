@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/lakenotes/rules"
@@ -110,5 +111,53 @@ func TestCastStorageRequiresKnownFormatAndExactRules(t *testing.T) {
 	current, err := f.service.Cast(f.ctx(f.user), f.user, id)
 	if err != nil || current.Cast.AckTick != started.Value.Cast.AckTick || current.Cast.State.Plan != started.Value.Cast.State.Plan {
 		t.Fatal("saved checkpoint changed", current, err)
+	}
+}
+
+func TestPriorBarbedCastGoldenRetainsOriginalPhysics(t *testing.T) {
+	raw, err := os.ReadFile("testdata/barbed-cast.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved struct {
+		Profile, Cast json.RawMessage
+		Held          bool
+		NextHash      string
+	}
+	if err = json.Unmarshal(raw, &saved); err != nil {
+		t.Fatal(err)
+	}
+	profile, err := rules.DecodeProfile(saved.Profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cast, err := decodeStoredCast(castStorageVersion, barbedPriorRulesID, saved.Cast)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cast.Snapshot.LegacyBarbedFollow || cast.Phase != "playing" || cast.Snapshot.Effects.BarbedCount != 2 {
+		t.Fatal("compatibility state missing", cast)
+	}
+	fish, _ := rules.Fish(cast.Plan.FishKind)
+	if fish.Rarity == "common" {
+		t.Fatal("golden must exercise changed rarity")
+	}
+	nextProfile, nextCast, err := rules.Advance(profile, cast, []bool{saved.Held})
+	if err != nil || rules.StateHash(nextProfile, nextCast) != saved.NextHash {
+		t.Fatal("old physics changed", err)
+	}
+	currentRules := cast
+	currentRules.Snapshot.LegacyBarbedFollow = false
+	newProfile, newCast, err := rules.Advance(profile, currentRules, []bool{saved.Held})
+	if err != nil || rules.StateHash(newProfile, newCast) == saved.NextHash {
+		t.Fatal("new rule did not change non-common following", err)
+	}
+	encoded, err := rules.EncodeCast(nextCast)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := decodeStoredCast(castStorageVersion, rules.RulesID, encoded)
+	if err != nil || !restored.Snapshot.LegacyBarbedFollow || restored.Motion != nextCast.Motion {
+		t.Fatal("compatibility flag lost on save", err)
 	}
 }

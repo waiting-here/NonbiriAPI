@@ -29,9 +29,10 @@ func (d Direction) Stored() string {
 var Directions = []Direction{CoinsToGeneral, GeneralToCoins, CoinsToGame, GameToCoins}
 
 type ExchangeSetting struct {
-	Enabled      bool   `json:"enabled"`
-	SourceAmount string `json:"source_amount"`
-	TargetAmount string `json:"target_amount"`
+	Enabled          bool   `json:"enabled"`
+	SourceAmount     string `json:"source_amount"`
+	TargetAmount     string `json:"target_amount"`
+	DailySourceLimit string `json:"daily_source_limit,omitempty"`
 }
 type Wire struct {
 	Enabled   bool                          `json:"enabled"`
@@ -58,6 +59,12 @@ func validExchanges(values map[Direction]ExchangeSetting) bool {
 	for d, v := range values {
 		if !slices.Contains(Directions, d) {
 			return false
+		}
+		if v.DailySourceLimit != "" {
+			n, ok := new(big.Int).SetString(v.DailySourceLimit, 10)
+			if !ok || n.Sign() < 0 || n.BitLen() > 128 || n.String() != v.DailySourceLimit {
+				return false
+			}
 		}
 		if !v.Enabled && v.SourceAmount == "" && v.TargetAmount == "" {
 			continue
