@@ -74,11 +74,20 @@ type priceTemplateWire struct {
 }
 
 func (api *httpAPI) mutateAdminPriceTemplate(w http.ResponseWriter, r *http.Request) {
+	api.mutatePriceTemplate(w, r, roleAdmin, 0)
+}
+func (api *httpAPI) mutateStewardPriceTemplate(w http.ResponseWriter, r *http.Request, p UserPrincipal) {
+	api.mutatePriceTemplate(w, r, roleSteward, p.UserID)
+}
+func (api *httpAPI) mutatePriceTemplate(w http.ResponseWriter, r *http.Request, role roleKind, actorID int64) {
 	if !requireEmptyQuery(w, r) {
 		return
 	}
 	id := int64(0)
 	route := routeAdminPriceTemplates
+	if role == roleSteward {
+		route = routeStewardPriceTemplates
+	}
 	var ids []int64
 	if r.Method != http.MethodPost {
 		var ok bool
@@ -88,6 +97,9 @@ func (api *httpAPI) mutateAdminPriceTemplate(w http.ResponseWriter, r *http.Requ
 		}
 		ids = []int64{id}
 		route = routeAdminPriceTemplate
+		if role == roleSteward {
+			route = routeStewardPriceTemplate
+		}
 	}
 	var wire priceTemplateWire
 	var input *PriceTemplateInput
@@ -141,7 +153,7 @@ func (api *httpAPI) mutateAdminPriceTemplate(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	result, err := api.service.mutatePriceTemplate(r.Context(), id, expected, mutation, input)
+	result, err := api.service.mutatePriceTemplateAs(r.Context(), role, actorID, id, expected, mutation, input)
 	if err != nil {
 		writeRoutingError(w, err)
 		return

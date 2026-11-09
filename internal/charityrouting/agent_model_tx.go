@@ -42,9 +42,6 @@ func (s *Service) createModelTx(ctx context.Context, tx *sql.Tx, role roleKind, 
 	if s == nil || ctx == nil || err != nil {
 		return AdminCharityModel{}, ErrInvalidRequest
 	}
-	if role != roleAdmin && input.AffinityTTLSeconds != nil {
-		return AdminCharityModel{}, ErrForbidden
-	}
 	mask := 63
 	if input.AllowedLevels != nil {
 		mask, err = charityaccess.Mask(input.AllowedLevels)
@@ -120,9 +117,6 @@ func (s *Service) patchModelTx(ctx context.Context, tx *sql.Tx, role roleKind, s
 	expected, err := parsePositiveID(input.ExpectedRevision)
 	if err != nil || !validateModelPatch(input) {
 		return AdminCharityModel{}, ErrInvalidRequest
-	}
-	if role != roleAdmin && input.AffinityTTLSeconds != nil {
-		return AdminCharityModel{}, ErrForbidden
 	}
 	actorID := scope.ActorID
 	current, err := readStoredModelTx(ctx, tx, modelID)

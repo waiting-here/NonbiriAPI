@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -39,10 +40,10 @@ func TestPriceTemplatesCompleteReplacementPermissionsAndCAS(t *testing.T) {
 	if err != nil || !repeated.Replayed || string(repeated.Body) != string(made.Body) {
 		t.Fatal(repeated, err)
 	}
-	if _, err = e.service.priceTemplates(ctx, roleSteward, trainee, "", "enabled", pagination.Default()); !errors.Is(err, ErrForbidden) {
+	if _, err = e.service.priceTemplates(ctx, roleSteward, trainee, "", "enabled", pagination.Default()); !errors.Is(err, authz.ErrPermissionDenied) {
 		t.Fatal("level five", err)
 	}
-	if _, err = e.service.priceTemplates(ctx, roleSteward, steward, "", "all", pagination.Default()); !errors.Is(err, ErrForbidden) {
+	if _, err = e.service.priceTemplates(ctx, roleSteward, steward, "", "all", pagination.Default()); err != nil {
 		t.Fatal("all", err)
 	}
 	list, err := e.service.priceTemplates(ctx, roleSteward, steward, "Full", "enabled", pagination.Default())
@@ -56,7 +57,7 @@ func TestPriceTemplatesCompleteReplacementPermissionsAndCAS(t *testing.T) {
 	if err != nil || replaced.Value.Revision != "2" || replaced.Value.Pricing.LongContext != nil || replaced.Value.Pricing.ContextPenalty != nil || replaced.Value.TokenReserveCredits != nil || replaced.Value.Enabled {
 		t.Fatal(replaced, err)
 	}
-	if _, err = e.service.priceTemplate(ctx, roleSteward, steward, id); !errors.Is(err, ErrNotFound) {
+	if _, err = e.service.priceTemplate(ctx, roleSteward, steward, id); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = e.service.mutatePriceTemplate(ctx, id, "1", routingMutation(t, 'C', http.MethodPut, routeAdminPriceTemplate, []int64{id}, input), &input); !errors.Is(err, ErrConflict) {

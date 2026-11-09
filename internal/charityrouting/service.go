@@ -157,9 +157,6 @@ func (s *Service) create(ctx context.Context, role roleKind, actorUserID int64, 
 	if s == nil || ctx == nil || err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
 	}
-	if role != roleAdmin && input.AffinityTTLSeconds != nil {
-		return resources.MutationResult[AdminCharityModel]{}, ErrForbidden
-	}
 	if input.AllowedLevels != nil {
 		_, err = charityaccess.Mask(input.AllowedLevels)
 		if err != nil {
@@ -184,6 +181,11 @@ func (s *Service) create(ctx context.Context, role roleKind, actorUserID int64, 
 	if role != roleAdmin {
 		if err := authz.RequireStewardPermission(ctx, tx, actorID, "charity.create"); err != nil {
 			return resources.MutationResult[AdminCharityModel]{}, err
+		}
+		if input.AffinityTTLSeconds != nil {
+			if err := authz.RequireStewardPermission(ctx, tx, actorID, "charity.affinity"); err != nil {
+				return resources.MutationResult[AdminCharityModel]{}, err
+			}
 		}
 	}
 	if scope.Trainee && !input.IsMainstream {
@@ -237,9 +239,6 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 	_, err := parsePositiveID(input.ExpectedRevision)
 	if s == nil || ctx == nil || modelID <= 0 || err != nil || !validateModelPatch(input) {
 		return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
-	}
-	if role != roleAdmin && input.AffinityTTLSeconds != nil {
-		return resources.MutationResult[AdminCharityModel]{}, ErrForbidden
 	}
 	now, err := s.nowUnix()
 	if err != nil {

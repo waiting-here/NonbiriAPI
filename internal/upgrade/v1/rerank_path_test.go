@@ -14,6 +14,13 @@ import (
 
 func restoreSchema50LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	oldAudit := strings.Replace(db.CharityAdaptationAuditSQL, "actor_role IN ('owner','admin','trainee5','level6')", "actor_role IN ('owner','admin')", 1)
+	hostileMustExec(t, database, oldAudit)
+	for _, body := range strings.Split(db.ManagementDetailsSQL, "\nCREATE TRIGGER ")[1:] {
+		if strings.HasPrefix(body, "management_capture_steward_permissions_") {
+			hostileMustExec(t, database, "DROP TRIGGER "+strings.Fields(body)[0]+"; CREATE TRIGGER "+body)
+		}
+	}
 	table, guards, ok := strings.Cut(callerParameterErrorSchema, "CREATE TRIGGER")
 	if !ok {
 		t.Fatal("missing retained proof schema")
