@@ -968,10 +968,30 @@ const initialGameConfig: GamesConfig = {
   lakenotes: {
     enabled: false,
     exchanges: {
-      coins_to_general: { enabled: false, source_amount: '', target_amount: '' },
-      general_to_coins: { enabled: false, source_amount: '', target_amount: '' },
-      coins_to_game: { enabled: false, source_amount: '', target_amount: '' },
-      game_to_coins: { enabled: false, source_amount: '', target_amount: '' },
+      coins_to_general: {
+        enabled: false,
+        source_amount: '',
+        target_amount: '',
+        daily_source_limit: '',
+      },
+      general_to_coins: {
+        enabled: false,
+        source_amount: '',
+        target_amount: '',
+        daily_source_limit: '',
+      },
+      coins_to_game: {
+        enabled: false,
+        source_amount: '',
+        target_amount: '',
+        daily_source_limit: '',
+      },
+      game_to_coins: {
+        enabled: false,
+        source_amount: '',
+        target_amount: '',
+        daily_source_limit: '',
+      },
     },
   },
   steadycatch: { enabled: false, price: '0', first_clear_reward: '0' },

@@ -58,12 +58,14 @@ func TestOriginalFullGameConformance(t *testing.T) {
 	for _, v := range fixture.Vectors {
 		// The collection receipt protocol preserves these original physics vectors.
 		v.FinalCast.RulesID = RulesID
+		v.FinalCast.Snapshot.LegacyBarbedFollow = true
 		t.Run(v.Name, func(t *testing.T) {
 			rng := &sequenceRandom{Values: v.Samples}
 			p, c, e := Start(v.Profile, rng, v.Seed)
 			if e != nil {
 				t.Fatal(e)
 			}
+			c.Snapshot.LegacyBarbedFollow = true
 			if !reflect.DeepEqual(c.Plan, v.Plan) {
 				t.Fatalf("plan mismatch: got %#v want %#v", c.Plan, v.Plan)
 			}

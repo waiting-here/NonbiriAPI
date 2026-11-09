@@ -32,7 +32,7 @@ func allIndexSourceFacts(t *testing.T, database *sql.DB, sourceColumns map[strin
 	}
 	out := make(map[string][]string, len(tables))
 	for _, table := range tables {
-		if assertEmptyAttendanceTableForTest(t, database, table) {
+		if assertEmptyAttendanceTableForTest(t, database, table) || assertEmptyModelQuotaTableForTest(t, database, table) {
 			continue
 		}
 		if isFishingPondTableForTest(table) {

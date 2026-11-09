@@ -54,6 +54,7 @@ func testCompatibleActiveCast(t *testing.T, savedRulesID string) {
 	if _, err = f.database.Exec("UPDATE lake_notes_profiles SET rules_id=? WHERE user_id=?", savedRulesID, f.user); err != nil {
 		t.Fatal(err)
 	}
+	state.Snapshot.LegacyBarbedFollow = true
 	draws := f.random.draws.Load()
 	current, err := f.service.Cast(f.ctx(f.user), f.user, id)
 	if err != nil || !reflect.DeepEqual(current.Cast.State, state) || !reflect.DeepEqual(current.Profile.Profile, paused.Value.Profile.Profile) {

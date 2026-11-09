@@ -152,11 +152,11 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 49. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts 27 exact registered schema 16–26 and 33–48 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`, including for 48-to-49. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 50. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts 28 exact registered schema 16–26 and 33–49 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`, including for 49-to-50. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
 
-`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=49`, `minimum_schema_version=49`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its 27 supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
+`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=50`, `minimum_schema_version=50`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its 28 supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
 
-Current account export `schema_version=34` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v34.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
+Current account export `schema_version=35` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v35.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
 ### 1.5 Display time context
 
@@ -377,6 +377,14 @@ Request-log list/detail and JSON exports may include safe `rejection_detail:{fie
 These fields describe validated field names, type/format/capability requirements and bounded length facts; they never echo submitted values, request bodies, credentials or raw upstream diagnostics. Typed protocol-conversion refusals retain their actual safe field/reason instead of being flattened to a generic `invalid_request`. CSV exports append `rejection_field,rejection_detail,rejection_suggestion`; the CSV `rejection_detail` cell contains the reason text. Existing `rejection_stage,rejection_reason,caller_error_code` remain stable and separate.
 
 API error messages include the available safe field, reason and next step, localized for a supported `Accept-Language`. A model with no usable resource for the requested operation returns `503 unbound_model`; a healthy resource for an unrelated operation does not make the request invalid. Temporary shared capacity limits retain `429 rate_limited`. Healthy resources that cannot represent the requested features still return a specific `400 invalid_request`. These refusals do not dispatch an upstream request or charge for one.
+
+Known protocol fields retain their exact safe name. An unsupported custom
+top-level name is represented as `request.fields[N]`, with a one-based position
+in the parsed object after configured request overrides. Its name and value are
+not logged. The log detail renders that position and a corrective suggestion.
+Historical generic `field=request,reason=unsupported top-level field` entries
+explicitly say the name was not recorded; retrying after the update can capture
+its location.
 
 An older log without a recorded cause omits `rejection_detail` and leaves these CSV cells empty. Clients should say that the detailed cause was not recorded, never infer one from the route, streaming flag or error code. Generic validation fallbacks state that the specific cause was not recorded and suggest sharing the request ID for investigation. These safe diagnostics follow ordinary request-log ownership, retention and export rules and do not open the restricted raw-error/header routes in §11.
 
@@ -1890,11 +1898,11 @@ a database snapshot across the whole multi-step operation.
 
 ### 7.5 Recurring donation-key limits
 
-`GET /admin/api/donations/{id}/keys/{keyId}/recurring-limits` and the matching `/api/steward/` path return `{donation_id,key_id,donation_revision,server_now,rules}`. The owner-only `/api/donations/{id}/keys/{keyId}/recurring-limits` path reads the same safe rule projection for the caller's own donation. Administrator/owner GET accepts no query or body. Steward reads use the whole-donation scope in §6.4; `charity_model_id` is optional and cannot make an unqualified donation eligible. Administrators and stewards with `donations.recurring` within current scope can PUT the complete set on their management paths; ordinary owners cannot write it. Pending keys may be configured, while ended or expired keys cannot.
+`GET /admin/api/donations/{id}/keys/{keyId}/recurring-limits` and the matching `/api/steward/` path return `{donation_id,key_id,donation_revision,server_now,rules}`. The owner-only `/api/donations/{id}/keys/{keyId}/recurring-limits` path reads the same safe rule projection for the caller's own donation. GET accepts optional `upstream_model_id` to select one exact model, and no body. Omission selects the whole key. Steward reads use the whole-donation scope in §6.4; `charity_model_id` is optional and cannot make an unqualified donation eligible. Administrators and stewards with `donations.recurring` within current scope can PUT the complete set on their management paths; ordinary owners cannot write it. Pending keys may be configured, while ended or expired keys cannot.
 
-PUT requires `Idempotency-Key`, has a 16 KiB body limit, and accepts exactly `{expected_revision,rules}`. Up to 16 rules are replaced atomically under the donation revision; the response is `{donation_id,key_id,donation_revision}`. Rule fields are `{id,mode,interval,alignment,anchor_local,time_zone,week_starts_on,metric,limit}`. `anchor_local` is required for exact-time alignment; other modes accept omission or null. New IDs are `null`; saved IDs are canonical `qlr_` opaque IDs. Omitted old IDs remove those rules. Duplicate IDs or IDs belonging to another key are rejected.
+PUT requires `Idempotency-Key`, has a 16 KiB body limit, and accepts `{expected_revision,rules,upstream_model_id?}`. Omission selects the whole key; a provided model must be nonempty and belong to the key's retained or currently selectable catalog. Up to 16 rules per scope are replaced atomically under the donation revision; the response is `{donation_id,key_id,donation_revision}`. Rule fields are `{id,mode,interval,alignment,anchor_local,time_zone,week_starts_on,metric,limit}`. `anchor_local` is required for exact-time alignment; other modes accept omission or null. New IDs are `null`; saved IDs are canonical `qlr_` opaque IDs. Omitted old IDs remove those rules. Duplicate IDs or IDs belonging to another key or model scope are rejected.
 
-`mode` is `reset|sliding`; `interval` is `1h|5h|day|week|month`. Reset alignment is `first_success|calendar|exact_time`; calendar and exact-time alignment disallow `1h` and `5h`. `1h` and `5h` always mean 3,600 and 18,000 actual seconds, including across daylight-saving transitions. They support first-success reset and sliding windows. Sliding alignment is `null`. `week_starts_on` is 1–7 only for calendar weeks, otherwise `null`. `time_zone` comes from the server's time-zone registry. `metric` is `calls|tokens|input_tokens|output_tokens|credits`. Limits, used, reserved and remaining are canonical U128 decimal strings; credits use at most three fractional digits with no redundant trailing zeroes and must fit U128 after conversion to millicredits. A zero limit blocks new charity calls.
+`mode` is `reset|sliding`; `interval` is `1h|5h|day|week|month`. Reset alignment is `first_success|calendar|exact_time`; calendar and exact-time alignment disallow `1h` and `5h`. `1h` and `5h` always mean 3,600 and 18,000 actual seconds, including across daylight-saving transitions. They support first-success reset and sliding windows. Sliding alignment is `null`. `week_starts_on` is 1–7 only for calendar weeks, otherwise `null`. `time_zone` comes from the server's time-zone registry. `metric` is `calls|tokens|input_tokens|output_tokens|credits`. Limits, used, reserved and remaining are canonical U128 decimal strings; credits use at most three fractional digits with no redundant trailing zeroes and must fit U128 after conversion to millicredits. A zero limit blocks new charity calls in that scope. Model-specific rules accept only `tokens|input_tokens|output_tokens`.
 
 Exact-time resets retain `anchor_local` as `YYYY-MM-DDTHH:mm:ss` in the rule time zone. Creating an exact rule or switching into exact-time alignment requires a future first reset; the initial partial period starts immediately. Later boundaries repeat daily, weekly or monthly from the original wall date. Short months clamp to their last day; later months recover the original day. Existing gap-forward and later-fold rules apply. Editing a limit preserves the anchor and epoch. Structural edits start a new epoch; dispatched requests retain their original settlement periods.
 
@@ -1904,9 +1912,43 @@ Lifetime `limits.tokens`, `limits.input_tokens` and `limits.output_tokens` are i
 
 Each rule view adds `{used,reserved,remaining,state,period_start,period_end,next_transition_at}`. Remaining is clamped at zero. State is `limited` if no capacity remains, otherwise `waiting_first_success` for an unstarted first-success period, or `available`; it is not a guarantee that a particular request fits. Period and transition fields are nullable Unix seconds. Natural periods expose the later of the calendar boundary and rule activation as their start. Sliding rules have no fixed reset; an unproven next transition is `null`.
 
-All current recurring rules and total limits apply together to charity calls, including charity live calls. Personal calls, personal live calls, discovery and dry previews do not consume these rules. Claims reserve one call, the current per-key Token fallback and the existing undiscounted price reservation. Dispatch atomically rechecks current configuration and replaces its own old reservations. Calls already dispatched finish under their captured rules; later sends recheck the new set. Changing only a limit or display order preserves usage; changing mode, interval, alignment, anchor, zone, week start or metric starts a new counting period for subsequent sends without altering historical total usage or balances.
+All applicable recurring rules and total limits apply together to charity calls, including charity live calls. Personal calls, personal live calls, discovery and dry previews do not consume these rules. Claims reserve one call, the current per-key Token fallback and the existing undiscounted price reservation. Dispatch atomically rechecks current configuration and replaces its own old reservations. Calls already dispatched finish under their captured rules; later sends recheck the new set. Changing only a limit or display order preserves usage; changing mode, interval, alignment, anchor, zone, week start or metric starts a new counting period for subsequent sends without altering historical total usage or balances.
 
 Recurring consumption uses the same durable billable-response checkpoint as ordinary donation accounting: upstream HTTP 200 acceptance for a stream, including empty or subsequently failed streams, or a valid non-stream response. Calls count once; tokens and credits settle with the full actual or existing conservative amount. First-success alignment follows that persisted checkpoint, including output buffered before a JSON caller response. Usage exceeding the reservation is never truncated. Without a billable response there is zero recurring consumption. If every unsent candidate is blocked by quota, the caller receives `429 rate_limited`; storage-capacity exhaustion returns `503 service_unavailable` and a deduplicated administrator alert. These failures do not count as upstream failures or disclose physical resources. Later admission failures do not replace the outcome of an earlier dispatched attempt.
+
+### Per-upstream-model token limits
+
+Session routes `GET /admin/api/donations/{id}/keys/{keyId}/model-limits` and the
+matching `/api/steward/` and owner-only `/api/donations/` paths list the key's
+exact upstream models. They accept numbered `page,page_size`, optional `q`
+and an exact `upstream_model_id` filter. Steward scope and authorization are the
+same as recurring-limit reads. The response includes the ordinary page fields
+and `donation_id,key_id,donation_revision`. Each item contains
+`upstream_model_id,limits,used,reserved,remaining,unattributed_total_tokens,tracking_started_at`.
+The four amount objects use `tokens,input_tokens,output_tokens`; nullable limits
+and remaining mean unlimited, while counters are canonical nonnegative U128
+integer strings. Remaining is clamped at zero. `tracking_started_at` is a
+nullable Unix second; historical usage without model attribution is not backfilled.
+
+Administrators and stewards with the existing `donations.recurring` grant may
+PUT `{expected_revision,upstream_model_id,tokens,input_tokens,output_tokens}`
+with `Idempotency-Key`. All three limit fields must be present; null removes a
+limit and zero prevents new admissions for that dimension. Split limits require
+the key's existing input/output reservation pair. Writes use the same donation
+revision, live-key checks, review audit and replay rules as recurring limits.
+Ordinary donors have read access to their own limits. These are session routes;
+the CallerKey automation whitelist is unchanged.
+
+Whole-key limits and the selected model's limits apply together. Aliases and
+different charity bindings to the same key/model share counters; exhausting one
+model does not exhaust another. Counters begin at configuration or the first new
+reservation and continue even when limits are removed. Unknown input/output
+breakdowns remain unattributed rather than being estimated. Dispatch replaces
+its own reservation under current limits; settlement and release apply once in
+the existing accounting transaction. Existing pre-upgrade in-flight work keeps
+its original whole-key scope. Owner export 35 includes `model_limits` with
+current model counters and recurring rules; account/key deletion and existing
+terminal retention govern these records.
 
 ### 7.6 Duel history and bulk export
 
@@ -2449,7 +2491,7 @@ not proof that deletion has finished; read its cleanup status.
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v34.json`, with `schema_version:34` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside format 34.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v35.json`, with `schema_version:35` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside format 35.
 Structured failure/delivery snapshots and restricted raw diagnostics are also
 excluded; the export retains its existing safe request summaries.
 
@@ -2508,7 +2550,7 @@ The following fields are top-level (an excerpt, not a complete export):
 
 ```json
 {
-  "schema_version": 34,
+  "schema_version": 35,
   "request_adaptations": [],
   "continuity": [],
   "fat_fish": {"summaries": [], "progress": []}

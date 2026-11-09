@@ -2827,6 +2827,11 @@
       "connector.chatCompletions": "OpenAI Chat Completions"
     },
     "lakeNotes": {
+      "dailyRemaining": "今日还可支出 {{amount}} {{unit}}",
+      "dailyLimit": "每日支出上限：{{amount}} {{unit}}",
+      "dailyUnlimited": "每日兑换不限额",
+      "dailyLimitReached": "今日剩余额度不足，请减少兑换数量或明天再试。",
+      "dailyReset": "额度重置：{{time}}",
       "exchangeAvailable": "垂钓免费入场。金币兑换已开放，可查看下方兑换。",
       "exchangeUnavailable": "垂钓免费入场。当前金币兑换关闭，收获留在游戏内。",
       "back": "返回游戏中心",
@@ -3400,7 +3405,7 @@
           },
           "barbedHook": {
             "name": "倒刺鱼钩",
-            "description": "鱼在捕捉条内时，捕捉条会轻微追随鱼；乱窜鱼仍需手动控制。"
+            "description": "常见鱼在捕捉条内时，捕捉条会轻微追随鱼；其它鱼需手动控制。"
           },
           "qualityBobber": {
             "name": "品质浮漂",

@@ -103,6 +103,17 @@ func TestCatalogRejectsInvalidDefinitions(t *testing.T) {
 		})
 	}
 }
+
+func TestCatalogPathsRejectURLAndTraversalForms(t *testing.T) {
+	for _, value := range []string{"", ".", "..", "/asset.webp", "//evil.example/asset.webp", `/\evil.example`, `cards\asset.webp`, "cards/../asset.webp", "cards//asset.webp", "cards/./asset.webp", "cards/%2e%2e/asset.webp", "cards/asset.webp?x=1", "cards/asset.webp#x"} {
+		if validPath(value) {
+			t.Fatalf("accepted unsafe resource path %q", value)
+		}
+	}
+	if !validPath("cards/illustrations/asset.webp") {
+		t.Fatal("valid embedded resource path rejected")
+	}
+}
 func TestBuiltInCatalogMatchesProduct(t *testing.T) {
 	var product struct {
 		Cards  []struct{ ID, Theme string }

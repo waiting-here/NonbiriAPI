@@ -6,6 +6,14 @@ import "strings"
 // stored suggestion is never trusted or echoed when decoding an older record.
 func rejectionSuggestion(field, reason string) string {
 	switch reason {
+	case "unsupported top-level field":
+		if field == "request" {
+			return "This entry did not record the unsupported field name. Retry the request to capture its location."
+		}
+		if validTopLevelPosition(field) {
+			return "The field name is omitted for privacy. Check its position in the top-level request fields after configured overrides; numbering starts at 1."
+		}
+		return "Remove or adjust the unsupported option, or choose a model that supports it."
 	case "request validation failed without a recorded field":
 		return "The specific cause was not recorded. Share the request ID with support if the problem persists."
 	case "no usable model resource is available for this request", "shared model resources are temporarily at capacity":

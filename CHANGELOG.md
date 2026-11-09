@@ -4,6 +4,39 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.3.8 — 2026-11-09
+
+### Added
+
+- Independent cumulative and recurring total, input and output token limits for
+  each upstream model in a donated key, with owner-visible usage and remaining
+  capacity. Whole-key limits still apply; aliases and charity bindings share the
+  same underlying model counters.
+- Per-account daily source-spend limits for all four Lake Notes coin/credit
+  exchange directions, resetting in the site time zone. Quotes show remaining
+  capacity; concurrent exchanges and retries preserve exact accounting.
+
+### Fixed and improved
+
+- Preserve the exact safe field or a private custom-field position in request
+  rejection details across connectors. Historical entries that lost this
+  information explicitly explain the limitation.
+- Restrict the barbed hook's fish-following effect to common fish and preserve
+  already-active casts under their captured rules.
+- Avoid idle maintenance writer transactions and repeated physical-key load
+  reads during charity candidate scoring. Add bounded database phase labels
+  for routing snapshots, dispatch and response acceptance.
+- Keep ordinary token counts in whole-token units across donation views.
+- Use standard resource-path validation and verify secure browser-association
+  cookies for TLS and HTTPS proxy deployments.
+
+### Compatibility
+
+- Advance storage to schema 50 and account export to format 35. Run the matching
+  explicit offline upgrader after preserving the recovery set. Model counters
+  start at their new capture boundary; previous usage is not guessed or
+  redistributed. Existing settings, balances, credentials and game saves remain.
+
 ## 1.3.6 — 2026-11-03
 
 ### Added

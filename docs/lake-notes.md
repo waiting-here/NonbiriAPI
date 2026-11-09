@@ -6,9 +6,25 @@ Administrators configure `lakenotes` through `PATCH /admin/api/games/config`, us
 
 ## Exact exchanges
 
-`coins_to_general`, `general_to_coins`, `coins_to_game` and `game_to_coins` each have `enabled,source_amount,target_amount`. Amounts are decimal strings: whole coins on the coin side, millicredits on the credit side (1 credit = 1,000 millicredits). They define one whole lot. The positive integer `quantity` selects the number of lots; no rounding or partial debit occurs.
+`coins_to_general`, `general_to_coins`, `coins_to_game` and `game_to_coins` each have `enabled,source_amount,target_amount,daily_source_limit`. Amounts are decimal strings: whole coins on the coin side, millicredits on the credit side (1 credit = 1,000 millicredits). They define one whole lot. The positive integer `quantity` selects the number of lots; no rounding or partial debit occurs.
 
-Quote before confirming. The quote contains settings and profile revisions. Changed rates or balances require a fresh quote. Closing the game or enabling maintenance pauses casts and stops exchanges while preserving progress. Coins and credits have no cash redemption or user-to-user transfer.
+The optional `daily_source_limit` is a nonnegative integer string in the
+source currency's units. Omission or an empty string means unlimited; zero
+blocks new exchanges. Each account and direction has its own allowance,
+resetting at midnight in the site time zone. Actual source amounts in successful
+receipts count toward the allowance; rate changes do not rewrite past spending.
+Concurrent exchanges check the allowance in the same transaction as the debit,
+and replaying a successful operation does not count it again. Enabling a limit
+also counts that day's earlier exchanges.
+
+Quote before confirming. The quote contains settings and profile revisions and nullable `daily_source_remaining` in source units. When a daily limit is configured, `daily_reset_at` gives its next reset as a Unix second. Changed rates or balances require a fresh quote. Closing the game or enabling maintenance pauses casts and stops exchanges while preserving progress. Coins and credits have no cash redemption or user-to-user transfer.
+
+## Barbed hook
+
+The barbed hook's slight tracking of the fish applies only to common fish.
+Its separate movement-slowing effect is unchanged. Existing active casts retain
+their captured rule behavior when resumed; newly started casts use the updated
+rules.
 
 ## Collection rewards
 
@@ -24,7 +40,7 @@ Routes use the cookie session at `/api/games/lake-notes`. Mutations require the 
 | `GET /rules` | Rule identity and compiled catalog |
 | `POST /collection-claims` | `{location:"lake"|"river"|"coast"|"jungle"}`; returns the updated profile view; incomplete or already-claimed locations return 409 |
 | `POST /actions` | Typed `action`, action fields and `expected_profile_revision`; `buy_bait` accepts optional integer `quantity` (default 1, maximum 999), purchasing the affordable available amount |
-| `POST /exchange/quote` | `direction,quantity`; returns exact lots, totals, `settings_revision,profile_revision` |
+| `POST /exchange/quote` | `direction,quantity`; returns exact lots, totals, `settings_revision,profile_revision,daily_source_remaining,daily_reset_at` |
 | `POST /exchange` | Quote inputs plus `expected_settings_revision,expected_profile_revision` |
 | `POST /casts` | `expected_profile_revision`; starts one authoritative cast |
 | `GET /casts/{id}` | Confirmed cast and profile |

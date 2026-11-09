@@ -93,7 +93,10 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 	{from: 46, version: 47, manifest: db.Schema47ManifestHash, sql: db.FishingPondHeadsSQL, impact: &migrationImpact{
 		relationTables: []string{"game_fishing_pond_queue_heads"}, constraintTables: []string{"game_fishing_pond_queue"}, credentials: credentialsUnchanged}},
 	{from: 47, version: 48, manifest: db.Schema48ManifestHash, sql: db.RequestLogOperationIndexSQL, impact: &migrationImpact{indexedTables: []string{"request_logs"}, credentials: credentialsUnchanged}},
-	{from: 48, version: 49, manifest: db.PinnedGenerationTwoManifestHash, sql: db.AttendanceSQL, impact: &migrationImpact{addedTables: []string{"attendance_periods", "attendance_tiers", "attendance_progress", "attendance_sign_ins", "attendance_awards"}, credentials: credentialsUnchanged}},
+	{from: 48, version: 49, manifest: db.Schema49ManifestHash, sql: db.AttendanceSQL, impact: &migrationImpact{addedTables: []string{"attendance_periods", "attendance_tiers", "attendance_progress", "attendance_sign_ins", "attendance_awards"}, credentials: credentialsUnchanged}},
+	{from: 49, version: 50, manifest: db.PinnedGenerationTwoManifestHash, sql: db.ModelQuotaSQL + db.LakeExchangeDailyIndexSQL, impact: &migrationImpact{
+		addedTables: []string{"donation_model_quotas"}, constraintTables: []string{"donation_quota_rules", "donation_usage_reservations"},
+		indexedTables: []string{"donation_quota_rules", "donation_usage_reservations", "lake_notes_exchange_receipts"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {
@@ -144,6 +147,7 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{46, db.Schema46ManifestHash, "7189abc4f574df069608b7be6c59e06c7cfd1cfb"},
 		{47, db.Schema47ManifestHash, "b3b0dbfda01d3d22140c0c0a74e28afc2f2baa58"},
 		{48, db.Schema48ManifestHash, "9be4a03b9054f70d8a44ac7389378e4fe93dce0a"},
+		{49, db.Schema49ManifestHash, "4fd81dd0fd48b82e0ee55c562a9ea4f92b18eeca"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,

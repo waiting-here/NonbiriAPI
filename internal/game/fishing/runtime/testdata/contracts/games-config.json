@@ -187,22 +187,26 @@
       "coins_to_general": {
         "enabled": false,
         "source_amount": "",
-        "target_amount": ""
+        "target_amount": "",
+        "daily_source_limit": ""
       },
       "general_to_coins": {
         "enabled": false,
         "source_amount": "",
-        "target_amount": ""
+        "target_amount": "",
+        "daily_source_limit": ""
       },
       "coins_to_game": {
         "enabled": false,
         "source_amount": "",
-        "target_amount": ""
+        "target_amount": "",
+        "daily_source_limit": ""
       },
       "game_to_coins": {
         "enabled": false,
         "source_amount": "",
-        "target_amount": ""
+        "target_amount": "",
+        "daily_source_limit": ""
       }
     }
   }

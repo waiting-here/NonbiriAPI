@@ -570,6 +570,13 @@ func (r *Registry) CheckTargetRequest(target connectorcontract.Target, operation
 	}
 	if operation == connectorcontract.OperationChatCompletions {
 		if !descriptor.Capabilities.HasAll(chat.Requirements().Capabilities()) {
+			// Preserve a concrete compiler check even when the broad capability
+			// mask already rejects the request. Admission remains rejected.
+			if descriptor.CheckTarget != nil {
+				if err := descriptor.CheckTarget(target, chat, policy); err != nil {
+					return normalizePreflightError(err)
+				}
+			}
 			return reject("capability preflight", "unsupported request feature or unknown field")
 		}
 		if descriptor.CheckTarget != nil {

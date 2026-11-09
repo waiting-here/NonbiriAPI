@@ -76,11 +76,11 @@ func TestGatewayHTTPPreservesModelControlsBeforeAccounting(t *testing.T) {
 			if detail == nil || strings.Contains(diag, "PRIVATE_") {
 				t.Fatal("missing or unsafe model rejection detail", diag)
 			}
-			expectedFields := []string{"max_completion_tokens/max_tokens", "reasoning_effort", "store", "request"}
+			expectedFields := []string{"max_completion_tokens/max_tokens", "reasoning_effort", "store", "request.fields[6]"}
 			if detail.Field != expectedFields[index] {
 				t.Fatal("incorrect rejection field", detail)
 			}
-			if strings.Contains(bad, `"PRIVATE_UNKNOWN"`) && (detail.Field != "request" || detail.Reason != "unsupported request feature or unknown field") {
+			if strings.Contains(bad, `"PRIVATE_UNKNOWN"`) && (detail.Field != "request.fields[6]" || detail.Reason != "unsupported top-level field") {
 				t.Fatal("unknown name was retained", detail)
 			}
 		}

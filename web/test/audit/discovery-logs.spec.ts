@@ -187,9 +187,12 @@ for (const [language, width, theme] of [
             ),
           ).toBe(true);
           for (const format of ['csv', 'json']) {
-            const href = await page
-              .locator('a[download][href*="export.' + format + '"]')
-              .getAttribute('href');
+            const link = page.locator('a[download][href*="export.' + format + '"]');
+            await expect(link).toHaveAttribute(
+              'href',
+              new RegExp('[?&]operation=' + selected + '(?:&|$)'),
+            );
+            const href = await link.getAttribute('href');
             expect(href).not.toBeNull();
             expect(new URL(href!, origin).searchParams.get('operation')).toBe(selected);
             expect((await context.request.get(new URL(href!, origin).href)).status()).toBe(200);
@@ -233,7 +236,19 @@ for (const [language, width, theme] of [
         diag: null,
       });
     } finally {
-      for (const context of contexts) await context.close();
+      try {
+        const owner = contexts[0];
+        if (owner) {
+          const reset = await owner.request.post(state.control_url + '/openai-discovery', {
+            headers: { Authorization: 'Bearer ' + state.control_token },
+            data: { mode: 'success' },
+            timeout: 5_000,
+          });
+          expect(reset.ok()).toBe(true);
+        }
+      } finally {
+        for (const context of contexts) await context.close();
+      }
     }
   });
 }

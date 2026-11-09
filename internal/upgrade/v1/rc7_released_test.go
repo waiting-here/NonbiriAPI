@@ -125,7 +125,7 @@ func retainedFacts(t *testing.T, database *sql.DB, sourceColumns map[string][]st
 	ignored := map[string]bool{"schema_state": true, "user_continuity_identities": true, "gateway_model_capabilities_state": true, "site_usage_totals": true}
 	result := map[string][32]byte{}
 	for _, table := range tables {
-		if assertEmptyAttendanceTableForTest(t, database, table) {
+		if assertEmptyAttendanceTableForTest(t, database, table) || assertEmptyModelQuotaTableForTest(t, database, table) {
 			continue
 		}
 		if table == "game_fishing_recent_order" {

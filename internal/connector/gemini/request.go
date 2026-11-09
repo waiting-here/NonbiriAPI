@@ -59,8 +59,8 @@ func Compile(request *openai.ChatRequest, model string, policy contract.AttemptP
 	if err != nil {
 		return nil, chatwire.Rejection("request")
 	}
-	if !chatwire.Keys(root, "model", "messages", "stream", "stream_options", "max_tokens", "max_completion_tokens", "temperature", "top_p", "stop", "n", "tools", "tool_choice", "parallel_tool_calls", "response_format", "safety_identifier") {
-		return nil, chatwire.RejectionReason("request", "unsupported top-level field")
+	if err := request.CheckTopLevelFields("model", "messages", "stream", "stream_options", "max_tokens", "max_completion_tokens", "temperature", "top_p", "stop", "n", "tools", "tool_choice", "parallel_tool_calls", "response_format", "safety_identifier"); err != nil {
+		return nil, err
 	}
 	if !chatwire.Null(root["n"]) {
 		n, ok := chatwire.Integer(root["n"])

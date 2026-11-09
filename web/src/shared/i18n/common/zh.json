@@ -3092,6 +3092,35 @@
         "upstream_error": "上游服务返回错误"
       },
       "unknownPhase": "其它已记录环节"
+    },
+    "modelLimits": {
+      "title": "模型独立额度",
+      "scope": "每个上游模型单独计数，同时受整把密钥的总额度限制。同一模型的所有公益绑定共用这里的额度。",
+      "model": "上游模型",
+      "search": "搜索上游模型名称",
+      "searchAction": "搜索",
+      "remaining": "累计剩余",
+      "actions": "操作",
+      "view": "查看",
+      "edit": "配置",
+      "back": "返回模型列表",
+      "unlimited": "不限",
+      "tokens": "总 Token",
+      "input_tokens": "输入 Token",
+      "output_tokens": "输出 Token",
+      "empty": "没有匹配的模型",
+      "emptyHelp": "先发现或手动添加上游模型，再配置额度。",
+      "trackingNew": "首次保存累计额度或首次调用后开始累计统计。",
+      "trackingSince": "累计统计始于 {{time}}；此前用量不计入模型额度。",
+      "unattributed": "总用量中有 {{tokens}} Token 未区分输入与输出。",
+      "cumulative": "累计额度",
+      "recurring": "周期额度",
+      "usage": "已用 {{used}} · 预留 {{reserved}} · 剩余 {{remaining}}",
+      "limitHelp": "留空表示不限，0 表示暂停此维度的新调用。移除限额保留已有用量。输入或输出限额需要先在密钥设置中填写分项预留值。",
+      "reload": "重新载入当前配置",
+      "save": "保存模型额度",
+      "retry": "重试同一次保存",
+      "saved": "模型额度已保存。"
     }
   },
   "logs": {
@@ -3301,7 +3330,9 @@
       "variations do not support streaming": "图像变体不支持流式返回",
       "expected valid and consistent output-token limits": "输出 token 上限须有效，两个上限字段的值须一致",
       "no usable model resource is available for this request": "当前没有可用于此请求的模型资源",
-      "shared model resources are temporarily at capacity": "共享模型资源暂时已满"
+      "shared model resources are temporarily at capacity": "共享模型资源暂时已满",
+      "This entry did not record the unsupported field name. Retry the request to capture its location.": "此条日志未记录不支持的字段名。重新发起请求后可记录字段位置。",
+      "The field name is omitted for privacy. Check its position in the top-level request fields after configured overrides; numbering starts at 1.": "为保护隐私，未保存自定义字段名。请检查应用参数覆盖后的请求中对应的顶层字段，序号从 1 开始。"
     },
     "rejectionContentLength": "内容为{{actual}}个字符，至少需要{{minimum}}个字符。",
     "rejectionSuggestion": "修改建议",
@@ -3322,7 +3353,8 @@
       "Correct the field type or value according to the stated requirement.": "请按上述要求修改字段类型或值。",
       "No upstream request was sent. Retry later or choose another available model.": "请求未发送到上游。请稍后重试，或选择其他可用模型。",
       "The specific cause was not recorded. Share the request ID with support if the problem persists.": "当时未记录具体原因。如问题持续，请提供请求编号以便排查。"
-    }
+    },
+    "rejectionTopLevelField": "第 {{position}} 个顶层字段"
   },
   "management": {
     "users": {

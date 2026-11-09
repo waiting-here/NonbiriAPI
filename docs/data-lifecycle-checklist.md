@@ -13,13 +13,13 @@ and bilingual privacy text are covered by their implementation and contract test
 Schema presence alone never creates a route or expands a response.
 
 Personal-model `cloudflare_proxy_enabled` belongs to the owner's model, is
-included in account export 34, and is deleted with that model or account.
+included in account export 35, and is deleted with that model or account.
 Charity-model preferences are shared platform configuration and excluded from
 personal exports. The read-only deployment mode is not persisted per account.
 Worker and legacy gateway tokens remain private deployment configuration and
 never enter account exports. Routing preferences do not extend log retention.
 
-Current account export format 34 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v34.json`; SQLite `user_version` remains 2 and the current storage schema is 49. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+Current account export format 35 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v35.json`; SQLite `user_version` remains 2 and the current storage schema is 50. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
 
 ## Structured request failure observations
 
@@ -29,7 +29,7 @@ observations under the existing request/attempt roots. Each payload is at most
 and protocol/usage flags, counters and allowlisted correlation identifiers.
 Request details apply existing owner/charity and administrator/steward privacy
 projections. They contain no new request/response body store, authentication
-material or raw error/stack text. Personal account export 34 keeps its existing
+material or raw error/stack text. Personal account export 35 keeps its existing
 safe request summaries and excludes these snapshots.
 
 These rows cascade with their request/attempt, follow the same 30-day terminal
@@ -72,7 +72,7 @@ labels and model output cannot grant authority.
 | `ai_agent_memories`; `ai_agent_memory_history` | Two shared memories, readable in the authorized assistant workspace and editable only by administrators. Model-proposed edits require human approval of the exact diff. History is an administrator asset, excluded from account export. | No automatic expiry or operator-account cascade. Compare-and-swap preserves newer edits. Request cleanup, conversation clear and disabling chat do not delete memory or its change history. |
 | `ai_agent_personal_memories`; `ai_agent_personal_memory_history` | Separate memory per interlocutor, editable by that authorized interlocutor or an administrator. Proposed edits use the same diff approval. Excluded from personal account export. | Administrator assets retained after account deletion or loss of management access. Only administrators maintain an absent interlocutor's memory. No automatic expiry or account cascade; revisions prevent overwriting concurrent edits. |
 | `agent_driver_profiles`; `agent_driver_bindings`; `agent_chatgpt_session` | Administrator-only model sources and inherited assignments. API keys, subscription credentials and transfer private keys are encrypted; responses expose connection status and safe account metadata only. Excluded from account export. | Shared configuration is independent of account deletion. Disconnect clears the subscription credentials and attempts upstream revocation. Per-person assignments do not grant management access. |
-| `agent_codex_session` | One administrator-owned connection with encrypted credentials, revision and safe account metadata. Administrator-only connection management; individual steward assignments permit model use, never credential access. Excluded from account export 34. | Independent of operator-account deletion. Pending device-code login exists only in bounded memory and expires or is canceled. Disconnect clears active credentials and invalidates active/queued work; version checks prevent late login/refresh from restoring a retired connection. Normal renewal keeps connection identity. Protected complete backups retain the stored connection with its encryption root. |
+| `agent_codex_session` | One administrator-owned connection with encrypted credentials, revision and safe account metadata. Administrator-only connection management; individual steward assignments permit model use, never credential access. Excluded from account export 35. | Independent of operator-account deletion. Pending device-code login exists only in bounded memory and expires or is canceled. Disconnect clears active credentials and invalidates active/queued work; version checks prevent late login/refresh from restoring a retired connection. Normal renewal keeps connection identity. Protected complete backups retain the stored connection with its encryption root. |
 | `agent_request_diagnostics` | Safe bounded failure facts in administrator assistant request detail; no authentication material. Excluded from personal export. | Cascades with the associated assistant request and follows its manual cleanup, without a separate expiry. Conversation originals, memory and usage totals remain independent. |
 | `agent_operation_diagnostics` | Administrator-only sanitized connection, credential, catalogue, quota and local-usage failure details; safe source name, operation, status and correlation ID. No raw OAuth response, device code or token; no synthetic inference request. Excluded from personal export. | Independent store bounded to the newest 1,000 records and 30 days, with bounded cleanup after writes and hourly maintenance. Details are at most 16 KiB. Failed persistence preserves the original error and local ID with `saved:false`. Request cleanup and disconnect do not directly delete these records. |
 | `agent_request_drivers` | Safe source, model and configuration snapshot for each model request, excluding credentials. Administrator-only, excluded from account export. | Follows the associated request's bounded manual cleanup. |
@@ -148,7 +148,7 @@ role gates, edit/replay rules, cleanup selection and queue behavior.
 
 ## Connections and versioned authorization
 
-Account export 34 includes owned services, safe credential/version
+Account export 35 includes owned services, safe credential/version
 metadata, current endpoint grants, model targets, independent discovery sources
 and donation-use approval snapshots. Credential ciphertext, secret references,
 fingerprints, review HMACs and internal authorization rows are excluded. Export
@@ -199,7 +199,9 @@ validation or resource-availability facts and fixed corrective guidance, never
 submitted values, prompts or secrets. It is available in the caller's own request logs and authorized
 management list/detail/JSON/CSV views. It follows the request root's existing
 retention, deletion and display-privacy rules, without creating another history
-table or exposing raw upstream diagnostics. Missing historical causes remain
+table or exposing raw upstream diagnostics. Known protocol fields use fixed safe
+names; custom names use a bounded one-based `request.fields[N]` position after
+request overrides. No custom name or value is retained. Missing historical causes remain
 absent; they are not inferred or backfilled from the route or error code.
 
 `request_attempts`, `request_logs` and `charity_reservations` add bounded
@@ -305,7 +307,18 @@ Gemini, Responses and Decisions reuse existing endpoint, credential, request and
 
 `donation_handling` retains shared management state with its donation; processing actors are SET NULL on deletion and their identity is not copied. It is excluded from ordinary owner export. `charity_model_access` stores the current level mask and public plain-text description, cascades with its model and does not add caller records or export privileges.
 
-`donation_quota_rules` and `donation_quota_epochs` hold current recurring settings and the minimum retired settings needed by accepted work. The export includes only each owned key's current `recurring_limits` RuleView from the same snapshot as the rest of the export. Steward access never expands that export scope. `donation_quota_receipts`, `donation_quota_periods`, `donation_quota_buckets` and `donation_quota_capacity` are internal and excluded. Buckets carry no caller, model, content or credential identity.
+`donation_model_quotas` keeps one cumulative row per donated key and exact
+upstream model, including nullable limits, used/reserved totals, unassigned
+input/output usage and the capture start. It follows key/account deletion and
+the existing terminal-key retention. Export 35 includes these safe own records
+and each model's current recurring rules; consumers receive no donor/model
+quota internals. New reservation rows capture the model identity for exact-once
+settlement, while legacy rows retain their empty scope. The model record is
+created at configuration or first reservation, including unlimited models;
+there is no separate per-request model history. Existing Lake Notes exchange
+receipts supply daily allowance totals without another personal record set.
+
+`donation_quota_rules` and `donation_quota_epochs` hold current recurring settings and the minimum retired settings needed by accepted work. The export includes only each owned key's current `recurring_limits` RuleView from the same snapshot as the rest of the export. Steward access never expands that export scope. `donation_quota_receipts`, `donation_quota_periods`, `donation_quota_buckets` and `donation_quota_capacity` are internal and excluded. Buckets carry no caller, content or credential identity. A model-scoped rule links to its exact upstream model; bucket rows remain internal.
 
 The recurring marker, receipt and terminal accounting transitions share the original claim transaction. Caller deletion releases unsent work and deidentifies dispatched work; donor deletion revokes new admission while existing sends settle the original key and rule generation. Neither path rewrites actual usage or transfers it to a new donation instance. Retired rules cannot be removed while their receipts or aggregates remain. Terminal donation retention first retires rules, then bounded quota cleanup releases aggregates and capacity, and only then removes the parent.
 
@@ -480,14 +493,14 @@ only addresses already retained by endpoints, donation keys or manual tags, and
 is removed when its final source address is removed. Neither rules nor the index
 add credentials or change account export format or donation-history retention.
 
-Normal startup initializes absent storage or opens only exact current schema 49.
+Normal startup initializes absent storage or opens only exact current schema 50.
 Older, newer, unknown and incomplete databases are rejected before migration,
 repair, WAL checkpoint or recovery writes. Exact registered schema 16–26 and
-33–48 sources require a deliberate standalone-converter invocation after the
+33–49 sources require a deliberate standalone-converter invocation after the
 matching recovery set is preserved; service startup and deployment helpers must
 not apply upgrades implicitly. Atomic conversion preserves the relevant indexes,
 authorization, steward policy/audit/tag data and assistant storage. Pending
-catalog reads do not grant inference access. Current export format is 34.
+catalog reads do not grant inference access. Current export format is 35.
 Upgrades are one-way;
 there is no old-server startup on an upgraded database or reverse migration.
 Fresh creation requires the main database and sidecars to be absent. Conversion
@@ -612,7 +625,7 @@ Reward receipts are included in current account exports under `rewards`. They co
 ## Shared pricing, owner history and header facts
 
 Smart backoff runs automatically for charity calls. Current safe state is included
-in account export 34 and authorized key projections. Runtime state contains a
+in account export 35 and authorized key projections. Runtime state contains a
 limited reason, source and retry time; it does not copy raw upstream errors.
 The current episode follows the donated key; internal trial and classification
 facts follow the claim.
@@ -624,7 +637,7 @@ and rule fields are removed from replay responses without repeating the mutation
 
 | Family | Access and export | Deletion, retention and late work |
 | --- | --- | --- |
-| `donation_key_backoffs` | Owner and authorized management may read safe current state, also included in account export 34. Internal generation, episode and trial identifiers are excluded. There is no per-key recognition configuration. | Current state cascades with the key. Schema 26 discards old profiles and supplemental-rule text while preserving active recovery facts. Account deletion removes the state. |
+| `donation_key_backoffs` | Owner and authorized management may read safe current state, also included in account export 35. Internal generation, episode and trial identifiers are excluded. There is no per-key recognition configuration. | Current state cascades with the key. Schema 26 discards old profiles and supplemental-rule text while preserving active recovery facts. Account deletion removes the state. |
 | `endpoint_backoff_policies` | Platform configuration readable and writable by administrators and stewards with `charity.backoff`; exact connector/base identity, revision and at most eight rules. No personal export or account identifier. | Retained with platform configuration and complete deployment backups. Clearing rules keeps the revision; account deletion does not delete shared endpoint policy. |
 | `dispatch_smart_backoff_facts` | Internal per-claim recovery identity, trial ownership, HTTP acceptance, finite quota classification and bounded endpoint rule snapshot/revision/matched index; no raw error and no personal export. | Claim deletion cascades; key deletion clears its key reference. Existing request retention and holds apply. Generation and episode checks prevent late results from changing a newer episode. Historical supplemental-rule classifications remain valid recovery facts after configuration removal. |
 | `charity_price_templates` and `charity_price_template_audits` | Shared price/reward/reserve/context/fixed and recurring discount settings; administrator maintenance and enabled-only steward session reads with `charity.price_templates.read`. No CallerKey access or personal export. Applying copies values, never links a model to future changes. | Templates persist until deleted; safe audits expire after 90 days and actor deletion sets identity null. No credentials or caller content. |

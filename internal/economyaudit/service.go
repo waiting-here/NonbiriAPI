@@ -26,6 +26,12 @@ func New(config Config) (*Service, error) {
 }
 
 func (s *Service) Advance(ctx context.Context) (bool, error) {
+	if s.readDB != s.database {
+		ready, err := s.projectionReady(ctx)
+		if err != nil || ready {
+			return ready, err
+		}
+	}
 	tx, err := s.database.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
@@ -36,6 +42,22 @@ func (s *Service) Advance(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	return ready, tx.Commit()
+}
+
+// Read watermarks and their invariants in one snapshot. A new ledger entry
+// after an empty probe is picked up on the next pass; nonempty passes retain
+// the original transaction's authoritative checkpoint and conservation checks.
+func (s *Service) projectionReady(ctx context.Context) (bool, error) {
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	if now := s.now().Unix(); now < 0 || now > maxUnix {
+		return false, ErrInvalid
+	}
+	c, err := readCheckpoint(ctx, tx)
+	return c.last == c.head && err == nil, err
 }
 
 func (s *Service) Run(ctx context.Context) {

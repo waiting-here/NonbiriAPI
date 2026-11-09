@@ -73,7 +73,7 @@ func applySplitTokenControlsTx(ctx context.Context, tx *sql.Tx, keyID int64, inp
 	var inputReserve, outputReserve sql.NullInt64
 	var recurring bool
 	if err := tx.QueryRowContext(ctx, `SELECT input_token_limit_mag,output_token_limit_mag,input_token_reserve,output_token_reserve,
-EXISTS(SELECT 1 FROM donation_quota_rules r JOIN donation_quota_epochs e ON e.rule_id=r.id AND e.epoch=r.current_epoch WHERE r.donation_key_id=donation_keys.id AND e.metric IN ('input_tokens','output_tokens'))
+EXISTS(SELECT 1 FROM donation_quota_rules r JOIN donation_quota_epochs e ON e.rule_id=r.id AND e.epoch=r.current_epoch WHERE r.donation_key_id=donation_keys.id AND e.metric IN ('input_tokens','output_tokens')) OR EXISTS(SELECT 1 FROM donation_model_quotas mq WHERE mq.donation_key_id=donation_keys.id AND (mq.input_token_limit_mag IS NOT NULL OR mq.output_token_limit_mag IS NOT NULL))
 FROM donation_keys WHERE id=?`, keyID).Scan(&inputLimit, &outputLimit, &inputReserve, &outputReserve, &recurring); err != nil {
 		return err
 	}

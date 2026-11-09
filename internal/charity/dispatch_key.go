@@ -90,6 +90,9 @@ WHERE c.id=? AND c.state='claimed'`, input.ClaimID).Scan(&check.DonationKeyID, &
 	// The per-key token fallback is mutable until dispatch. Replace our own
 	// total reservation and its claim snapshot before reconciling the current
 	// recurring rules. A later rejection rolls all three changes back together.
+	if err := donationquota.ReplaceModelReservation(ctx, tx, row.donationKeyID, input.DispatchedAt, reservation.upstreamModel, reservation.tokenVector(), budget.Reservation); err != nil {
+		return err
+	}
 	if err := budget.ReplaceReservation(ctx, tx, row.donationKeyID, reservation.tokenVector()); err != nil {
 		return err
 	}

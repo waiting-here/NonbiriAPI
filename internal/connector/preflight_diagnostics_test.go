@@ -68,6 +68,9 @@ func TestChatPreflightReportsFidelityAndTypedValidation(t *testing.T) {
 		{"stream null", `{"model":"m","messages":[{"role":"user","content":"PRIVATE_INPUT"}],"stream":null}`, "stream", "expected a boolean", contract.TypeOpenAICompatible},
 		{"foreign continuation", `{"model":"m","messages":[{"role":"assistant","content":"PRIVATE_INPUT","extra_content":{"google":{"thoughtSignature":"PRIVATE_SIGNATURE"}}}]}`, "extra_content.google", "field cannot be represented by this connector", contract.TypeOpenAIChatCompletions},
 		{"parallel tools type", `{"model":"m","messages":[{"role":"user","content":"PRIVATE_INPUT"}],"parallel_tool_calls":"PRIVATE_VALUE"}`, "parallel_tool_calls", "expected a boolean or null", contract.TypeAnthropicCompatible},
+		{"gateway logit bias", `{"model":"m","messages":[{"role":"user","content":"PRIVATE_INPUT"}],"logit_bias":{"PRIVATE_VALUE":1}}`, "logit_bias", "field cannot be represented by this connector", contract.TypeAISDKGatewayV4},
+		{"gateway stop", `{"model":"m","messages":[{"role":"user","content":"PRIVATE_INPUT"}],"stop":[17]}`, "stop", "expected supported stop sequences", contract.TypeAISDKGatewayV3},
+		{"gateway multiple outputs", `{"model":"m","messages":[{"role":"user","content":"PRIVATE_INPUT"}],"n":2}`, "n", "expected the integer 1", contract.TypeAISDKGatewayV4},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			request, err := openai.DecodeChatRequest(strings.NewReader(tc.body), 0)
@@ -124,4 +127,22 @@ func TestPreflightNormalizationKeepsOnlyRegisteredValidationDetails(t *testing.T
 		requirePreflightDetail(t, normalizePreflightError(&openai.ValidationError{Detail: detail}), "request", "request cannot be represented by this connector")
 	}
 	requirePreflightDetail(t, normalizePreflightError(&openai.ValidationError{Detail: &requestattempt.RejectionDetail{Field: "PRIVATE_FIELD", Reason: "expected a boolean", Suggestion: "PRIVATE_SUGGESTION"}}), "request", "expected a boolean")
+}
+
+func TestUnsupportedChatFieldsKeepExactNameOrPosition(t *testing.T) {
+	registry := NewDefaultRegistry()
+	for _, kind := range []contract.Type{contract.TypeAnthropicCompatible, contract.TypeGoogleGemini, contract.TypeOpenAIResponses, contract.TypeAISDKGatewayV3, contract.TypeAISDKGatewayV4} {
+		for _, tc := range []struct{ name, field string }{{"top_logprobs", "top_logprobs"}, {"PRIVATE_OPTION", "request.fields[3]"}} {
+			t.Run(string(kind)+"/"+tc.name, func(t *testing.T) {
+				body := `{"model":"m","messages":[{"role":"user","content":"PRIVATE_INPUT"}],"` + tc.name + `":{},"PRIVATE_SECOND":"PRIVATE_VALUE"}`
+				request, err := openai.DecodeChatRequest(strings.NewReader(body), 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer request.Clear()
+				err = registry.CheckTargetRequest(contract.NewTarget(kind, "https://upstream.example", "model"), contract.OperationChatCompletions, request, nil, contract.AttemptPolicy{})
+				requirePreflightDetail(t, err, tc.field, "unsupported top-level field")
+			})
+		}
+	}
 }

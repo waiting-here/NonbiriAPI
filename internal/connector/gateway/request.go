@@ -102,7 +102,8 @@ func compileChatForType(kind contract.Type, request *openai.ChatRequest, attribu
 	}
 	output := map[string]any{}
 	fields := object{}
-	for _, name := range request.Requirements().TopLevelFields() {
+	fieldNames := request.Requirements().TopLevelFields()
+	for _, name := range fieldNames {
 		fields[name], _ = request.RawField(name)
 	}
 	defer func() {
@@ -134,7 +135,8 @@ func compileChatForType(kind contract.Type, request *openai.ChatRequest, attribu
 			return nil, err
 		}
 	}
-	for name, raw := range fields {
+	for _, name := range fieldNames {
+		raw := fields[name]
 		switch name {
 		case "model", "messages", "tools", "tool_choice", "safety_identifier":
 		case "stream":
@@ -220,7 +222,7 @@ func compileChatForType(kind contract.Type, request *openai.ChatRequest, attribu
 				min, max, integer = -9007199254740991, 9007199254740991, true
 			}
 			if !number(raw, min, max, integer) {
-				return nil, errRequest
+				return nil, reject("native compile", name, "expected a number within the supported sampling range")
 			}
 			output[wire] = json.RawMessage(raw)
 		case "stop":
@@ -233,47 +235,47 @@ func compileChatForType(kind contract.Type, request *openai.ChatRequest, attribu
 			} else {
 				var entries []json.RawMessage
 				if json.Unmarshal(raw, &entries) != nil || entries == nil {
-					return nil, errRequest
+					return nil, reject("native compile", "stop", "expected supported stop sequences")
 				}
 				stops = make([]string, len(entries))
 				for i, entry := range entries {
 					value, ok := text(entry)
 					if !ok {
-						return nil, errRequest
+						return nil, reject("native compile", "stop", "expected supported stop sequences")
 					}
 					stops[i] = value
 				}
 			}
 			if len(stops) > 64 {
-				return nil, errRequest
+				return nil, reject("native compile", "stop", "expected supported stop sequences")
 			}
 			for _, value := range stops {
 				if value == "" || !utf8.ValidString(value) {
-					return nil, errRequest
+					return nil, reject("native compile", "stop", "expected supported stop sequences")
 				}
 			}
 			output["stopSequences"] = stops
 		case "n":
 			if !number(raw, 1, 1, true) {
-				return nil, errRequest
+				return nil, reject("native compile", "n", "expected the integer 1")
 			}
 		case "logit_bias":
 			value, err := parseObject(raw)
 			if err != nil || len(value) != 0 {
-				return nil, errRequest
+				return nil, reject("native compile", "logit_bias", "field cannot be represented by this connector")
 			}
 		case "logprobs":
 			if !bytes.Equal(raw, []byte("false")) {
-				return nil, errRequest
+				return nil, reject("native compile", "logprobs", "expected false for this connector")
 			}
 		case "response_format":
 			value, err := parseObject(raw)
 			kind, ok := text(value["type"])
 			if err != nil || !ok || kind != "text" || len(value) != 1 {
-				return nil, errRequest
+				return nil, reject("native compile", "response_format", "field cannot be represented by this connector")
 			}
 		default:
-			return nil, reject("native compile", "request", "unsupported top-level field")
+			return nil, reject("native compile", request.DiagnosticField(name), "unsupported top-level field")
 		}
 	}
 	prompt, err := compilePrompt(fields["messages"], model)

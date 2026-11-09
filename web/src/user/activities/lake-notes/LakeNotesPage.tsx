@@ -1,4 +1,5 @@
 import { CreditText } from '@shared/components/CreditText';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
@@ -51,11 +52,13 @@ function LakeExchange({
   text: LakeText;
 }) {
   const client = useQueryClient(),
+    formatTime = useDateTimeFormatter(),
     settings = view.settings;
   const enabled = directions.filter((d) => settings.exchanges[d].enabled);
   const [direction, setDirection] = useState<Direction>(enabled[0] ?? 'general_to_coins'),
     [quantity, setQuantity] = useState('1'),
     [quote, setQuote] = useState<Quote | null>(null),
+    [allowance, setAllowance] = useState<Quote | null>(null),
     [error, setError] = useState<unknown>(null),
     [quoting, setQuoting] = useState(false),
     [saved, setSaved] = useState(false);
@@ -65,6 +68,7 @@ function LakeExchange({
       context.commit(() => {
         client.setQueryData(lakeKeys(account), result.profile);
         setSaved(true);
+        setAllowance(result.receipt);
         setQuote(null);
       });
       return result;
@@ -95,6 +99,7 @@ function LakeExchange({
         account,
       );
       setQuote(result);
+      setAllowance(result);
     } catch (e) {
       setError(e);
     } finally {
@@ -115,7 +120,11 @@ function LakeExchange({
     });
   };
   if (!enabled.length && !unknown && !saved) return null;
+  const insufficientAllowance =
+    quote?.daily_source_remaining != null &&
+    BigInt(quote.source_amount) > BigInt(quote.daily_source_remaining);
   const pair = quote ? directionUnits[quote.direction] : null;
+  const allowanceUnit = allowance ? directionUnits[allowance.direction][0] : null;
   const rate = actual ? settings.exchanges[actual] : null;
   const rateUnits = actual ? directionUnits[actual] : null;
   return (
@@ -132,6 +141,21 @@ function LakeExchange({
             values={{ sourceUnit: text(rateUnits[0]), targetUnit: text(rateUnits[1]) }}
           />
         </p>
+      ) : null}
+      {rate && rateUnits ? (
+        rate.daily_source_limit ? (
+          <p>
+            <CreditText
+              i18nKey="user.lakeNotes.dailyLimit"
+              amounts={{
+                amount: formatCredits(unitsToNatural(rate.daily_source_limit, rateUnits[0])),
+              }}
+              values={{ unit: text(rateUnits[0]) }}
+            />
+          </p>
+        ) : (
+          <p>{text('dailyUnlimited')}</p>
+        )
       ) : null}
       <form
         className="lake-form"
@@ -154,6 +178,7 @@ function LakeExchange({
               onChange={(e) => {
                 setDirection(e.target.value as Direction);
                 setQuote(null);
+                setAllowance(null);
               }}
             >
               {enabled.map((d) => (
@@ -194,6 +219,23 @@ function LakeExchange({
           />
         </p>
       ) : null}
+      {allowance && allowanceUnit && allowance.daily_source_remaining != null ? (
+        <div className="lake-daily-allowance">
+          <p>
+            <CreditText
+              i18nKey="user.lakeNotes.dailyRemaining"
+              amounts={{
+                amount: formatCredits(
+                  unitsToNatural(allowance.daily_source_remaining, allowanceUnit),
+                ),
+              }}
+              values={{ unit: text(allowanceUnit) }}
+            />
+          </p>
+          <p>{text('dailyReset', { time: formatTime(allowance.daily_reset_at) })}</p>
+          {insufficientAllowance ? <p role="status">{text('dailyLimitReached')}</p> : null}
+        </div>
+      ) : null}
       {error || operation.error ? <ErrorState error={error ?? operation.error} /> : null}
       {operation.outcome === 'conflict' ? <p role="status">{text('exchangeConflict')}</p> : null}
       {unknown ? <p role="status">{text('exchangeUnknown')}</p> : null}
@@ -202,7 +244,9 @@ function LakeExchange({
         type="button"
         className="nb-btn nb-btn--primary"
         onClick={confirm}
-        disabled={operation.isPending || (!unknown && (!quote || view.readonly))}
+        disabled={
+          operation.isPending || (!unknown && (!quote || view.readonly || insufficientAllowance))
+        }
       >
         {unknown ? text('retry') : text('exchangeConfirm')}
       </button>

@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 )
 
 func browserLogin(t *testing.T, f *runtimeFixture, id string, browser *http.Cookie) (*http.Cookie, *httptest.ResponseRecorder) {
@@ -82,6 +84,46 @@ func TestBrowserAssociationLoginLogoutAndExistingSession(t *testing.T) {
 	other := responseCookie(t, existing, BrowserAuditCookieName)
 	if other.Value == browser.Value || browserCount(t, f) != 3 {
 		t.Fatal("existing session did not acquire independent browser cookie")
+	}
+}
+
+func TestBrowserAssociationCookieRespectsSecureTransport(t *testing.T) {
+	for _, tc := range []struct {
+		name, origin, requestURL, forwarded string
+		secure                              bool
+	}{
+		{"TLS", "http://user.example", "https://user.example/api/session", "", true},
+		{"HTTPS origin behind HTTP proxy", "https://user.example", "http://user.example/api/session", "", true},
+		{"trusted HTTPS proxy", "http://user.example", "http://user.example/api/session", "https", true},
+		{"explicit HTTP compatibility", "http://user.example", "http://user.example/api/session", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newRuntimeFixture(t, nil)
+			session, _ := browserLogin(t, f, "browser-transport", nil)
+			hash := sessionLookupHash(session.Value)
+			var userID int64
+			if err := f.store.ReadDB().QueryRow("SELECT user_id FROM sessions WHERE token_hash=?", hash).Scan(&userID); err != nil {
+				t.Fatal(err)
+			}
+			f.runtime.siteOrigin = tc.origin
+			handler, err := httpmw.New(httpmw.Config{UserHost: "user.example", AdminHost: "admin.example", SiteBaseURL: tc.origin, TrustedProxyCIDRs: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")}}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				f.runtime.observeUserBrowser(w, r, userID, hash)
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest(http.MethodGet, tc.requestURL, nil)
+			req.RemoteAddr = "127.0.0.1:12345"
+			if tc.forwarded != "" {
+				req.Header.Set("X-Forwarded-Proto", tc.forwarded)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			cookie := responseCookie(t, rec, BrowserAuditCookieName)
+			if cookie.Secure != tc.secure || !cookie.HttpOnly || cookie.SameSite != http.SameSiteLaxMode || cookie.Domain != "" || cookie.Path != "/api" {
+				t.Fatalf("unexpected cookie transport policy: %+v", cookie)
+			}
+		})
 	}
 }
 

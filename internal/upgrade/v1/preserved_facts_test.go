@@ -26,6 +26,21 @@ func assertEmptyAttendanceTableForTest(t *testing.T, database *sql.DB, table str
 	return false
 }
 
+// Schema 50 starts model counters at activation; older source totals cannot
+// supply reliable model attribution. Assert emptiness before excluding this
+// destination-only table from comparisons of historical facts.
+func assertEmptyModelQuotaTableForTest(t *testing.T, database *sql.DB, table string) bool {
+	t.Helper()
+	if table != "donation_model_quotas" {
+		return false
+	}
+	var count int
+	if err := database.QueryRow("SELECT COUNT(*) FROM donation_model_quotas").Scan(&count); err != nil || count != 0 {
+		t.Fatal("legacy usage was attributed to a model", count, err)
+	}
+	return true
+}
+
 // The original columns are captured before conversion. Relocated fields still
 // participate in the comparison through their exact compatibility projection.
 func connectionFactQuery(table string, sourceColumns map[string][]string) (string, bool) {
@@ -108,7 +123,7 @@ func assertExactPublishedSource(t *testing.T, database *sql.DB, version int, man
 		t.Fatalf("restored source has no published conversion path: %+v, %v", plan, err)
 	}
 	for _, step := range plan.steps {
-		if step.from > 26 && step.from != 33 && step.from != 34 && step.from != 35 && step.from != 36 && step.from != 37 && step.from != 38 && step.from != 39 && step.from != 40 && step.from != 41 && step.from != 42 && step.from != 43 && step.from != 44 && step.from != 45 && step.from != 46 && step.from != 47 && step.from != 48 || step.version > 26 && step.version != 33 && step.version != 34 && step.version != 35 && step.version != 36 && step.version != 37 && step.version != 38 && step.version != 39 && step.version != 40 && step.version != 41 && step.version != 42 && step.version != 43 && step.version != 44 && step.version != 45 && step.version != 46 && step.version != 47 && step.version != 48 && step.version != 49 {
+		if step.from > 26 && step.from != 33 && step.from != 34 && step.from != 35 && step.from != 36 && step.from != 37 && step.from != 38 && step.from != 39 && step.from != 40 && step.from != 41 && step.from != 42 && step.from != 43 && step.from != 44 && step.from != 45 && step.from != 46 && step.from != 47 && step.from != 48 && step.from != 49 || step.version > 26 && step.version != 33 && step.version != 34 && step.version != 35 && step.version != 36 && step.version != 37 && step.version != 38 && step.version != 39 && step.version != 40 && step.version != 41 && step.version != 42 && step.version != 43 && step.version != 44 && step.version != 45 && step.version != 46 && step.version != 47 && step.version != 48 && step.version != 49 && step.version != 50 {
 			t.Fatalf("unreleased intermediate schema became a supported source: %+v", step)
 		}
 	}

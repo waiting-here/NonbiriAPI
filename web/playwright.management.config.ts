@@ -5,6 +5,7 @@ import audit from './playwright.audit.config';
 process.env.NONBIRI_MANAGEMENT_BROWSER = '1';
 process.env.NONBIRI_DONATION_CONTEXT_BROWSER = '1';
 process.env.NONBIRI_DONATION_HANDLING_BROWSER = '1';
+process.env.NONBIRI_REQUEST_REJECTIONS_BROWSER = '1';
 process.env.NONBIRI_AUDIT_BROWSER_STATE = resolve('test-results/management/state.json');
 
 export default defineConfig({
@@ -28,6 +29,8 @@ export default defineConfig({
     'donation-compatibility.spec.ts',
     'donation-context.spec.ts',
     'recurring-discounts.spec.ts',
+    'model-quotas.spec.ts',
+    'request-rejections.spec.ts',
     'charity-binding-batch.spec.ts',
     'connection-experience.spec.ts',
     'closeout-controls.spec.ts',

@@ -2,6 +2,11 @@ import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 
 const keys = {
   exchangeAvailable: 'user.lakeNotes.exchangeAvailable',
+  dailyRemaining: 'user.lakeNotes.dailyRemaining',
+  dailyLimit: 'user.lakeNotes.dailyLimit',
+  dailyUnlimited: 'user.lakeNotes.dailyUnlimited',
+  dailyLimitReached: 'user.lakeNotes.dailyLimitReached',
+  dailyReset: 'user.lakeNotes.dailyReset',
   exchangeUnavailable: 'user.lakeNotes.exchangeUnavailable',
   ledgerEntry: 'user.lakeNotes.ledgerEntry',
   ledgerExchange: 'user.lakeNotes.ledgerExchange',
