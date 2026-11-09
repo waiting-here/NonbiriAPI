@@ -32,7 +32,7 @@ type ExchangeSetting struct {
 	Enabled          bool   `json:"enabled"`
 	SourceAmount     string `json:"source_amount"`
 	TargetAmount     string `json:"target_amount"`
-	DailySourceLimit string `json:"daily_source_limit,omitempty"`
+	DailySourceLimit string `json:"daily_source_limit"`
 }
 type Wire struct {
 	Enabled   bool                          `json:"enabled"`
