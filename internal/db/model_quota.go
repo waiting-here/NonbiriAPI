@@ -24,6 +24,7 @@ CREATE TABLE donation_model_quotas (
  created_at INTEGER NOT NULL CHECK(typeof(created_at)='integer' AND created_at BETWEEN 0 AND 253402300799),
  PRIMARY KEY(donation_key_id,upstream_model_id)
 ) WITHOUT ROWID;
+CREATE INDEX idx_donation_model_split_limits ON donation_model_quotas(donation_key_id) WHERE input_token_limit_mag IS NOT NULL OR output_token_limit_mag IS NOT NULL;
 `
 
 // LakeExchangeDailyIndexSQL bounds daily allowance reads to one user and direction.
