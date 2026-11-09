@@ -139,6 +139,15 @@ race commands retain their own vet behavior. Timing hints balance the live test
 catalog; they do not select coverage. Keep complete checks and failure reporting
 when changing scheduling, and measure runner queue/setup costs before adding jobs.
 
+Race preparation and workers use the same cache key inputs: Go sources, module
+files, the runner script, and files embedded by the default build. This lets the
+preparation job publish its current compiled packages before workers start. A
+module-only key can restore an older build cache and prevent the newly compiled
+entries from being saved, causing every worker to compile the changes again.
+Keep both input lists aligned; include embedded inputs without invalidating this
+cache for unrelated UI assets. The first run for changed inputs pays one cold
+preparation cost, which must be included when comparing complete CI durations.
+
 For focused read-path measurements, start with the bounded SQLite benchmarks:
 
 ```sh
