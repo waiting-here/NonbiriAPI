@@ -302,6 +302,7 @@ for (const width of [1440, 390]) {
         await page.getByRole('button', { name: /New channel/ }).click();
         await page.getByLabel('Channel name').fill(label);
         await page.getByRole('button', { name: c.addEntry, exact: true }).click();
+        await page.getByText(c.protocolSettings, { exact: true }).click();
         const options = page.getByRole('combobox', { name: c.protocol, exact: true });
         await options.selectOption(kind);
         await expect(options).toHaveValue(kind);

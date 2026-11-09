@@ -196,6 +196,9 @@ for (const kind of ['personal', 'admin', 'steward'] as const) {
         await nameEditor
           .getByLabel(personal ? core['models.model'] : user.user.steward.model, { exact: true })
           .fill('example');
+        await page
+          .getByText(personal ? user.user.models.advanced : copy.advancedRequests, { exact: true })
+          .click();
         const sessionFold = page.locator('summary').filter({ hasText: headers.title });
         await sessionFold.click();
         const formats = [
@@ -362,16 +365,11 @@ for (const kind of ['personal', 'admin', 'steward'] as const) {
         await expect(page.getByRole('group', { name: modelCopy.body, exact: true })).toBeVisible();
         const forwarded = page.getByRole('group', { name: modelCopy.forwardHeaders, exact: true });
         const adaptationSave = page.getByRole('button', { name: modelCopy.save, exact: true });
-        if (kind === 'steward') {
-          await expect(forwarded.getByRole('textbox')).toBeDisabled();
-          await expect(adaptationSave).toHaveCount(0);
-        } else {
-          await forwarded.getByRole('textbox').fill('X-Trace-ID');
-          await adaptationSave.click();
-          await expect.poll(() => f.state.adaptationWrites.length).toBe(1);
-          expect(f.state.writes).toHaveLength(3);
-          await expect(forwarded.getByRole('textbox')).toHaveValue(/x-trace-id/i);
-        }
+        await forwarded.getByRole('textbox').fill('X-Trace-ID');
+        await adaptationSave.click();
+        await expect.poll(() => f.state.adaptationWrites.length).toBe(1);
+        expect(f.state.writes).toHaveLength(3);
+        await expect(forwarded.getByRole('textbox')).toHaveValue(/x-trace-id/i);
         if (capture) {
           await page
             .getByRole('group', { name: modelCopy.headers, exact: true })
@@ -448,8 +446,7 @@ for (const kind of ['admin', 'steward'] as const) {
       const forwarded = page
         .getByRole('group', { name: modelCopy.forwardHeaders, exact: true })
         .getByRole('textbox');
-      if (kind === 'steward') await expect(forwarded).toBeDisabled();
-      else await expect(forwarded).toBeEnabled();
+      await expect(forwarded).toBeEnabled();
       await capture(
         page.getByRole('group', { name: modelCopy.headers, exact: true }),
         'adaptation',

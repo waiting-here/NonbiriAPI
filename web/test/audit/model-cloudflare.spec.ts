@@ -44,6 +44,15 @@ const managedHeaders = [
 type Adaptation = {
   forward_headers: { mode: string; values: string[] };
 };
+async function openAdvancedSettings(page: Page, personal = false) {
+  const summary = page.locator('summary').filter({
+    has: page.getByText(
+      personal ? 'Advanced behavior' : common.common.operations.charity.advancedRequests,
+      { exact: true },
+    ),
+  });
+  if ((await summary.locator('..').getAttribute('open')) === null) await summary.click();
+}
 async function managedHeaderFields(page: Page) {
   const summary = page
     .locator('summary')
@@ -209,6 +218,7 @@ test('personal models default on and retain a changed setting after a real revis
       .locator('[data-component="page-header"]')
       .getByRole('button', { name: 'Create model', exact: true })
       .click();
+    await openAdvancedSettings(page, true);
     const toggle = page.getByRole('switch', { name: copy.label, exact: true });
     await expect(toggle).toBeChecked();
     await expect(toggle).toHaveAccessibleDescription(copy.new);
@@ -284,6 +294,7 @@ for (const role of ['admin', 6] as const) {
     try {
       const page = await context.newPage();
       await page.goto(origin + managementPath(role, { model_workspace: 'new' }));
+      await openAdvancedSettings(page);
       const toggle = page.getByRole('switch', { name: copy.label, exact: true });
       await expect(toggle).not.toBeChecked();
       await visuals(page, info, `charity-${role}-cloudflare-new`);
@@ -370,6 +381,7 @@ test('level 5 reads the saved setting and cannot change the global model policy'
     const current = await read(context, origin, path);
     const page = await context.newPage();
     await page.goto(origin + managementPath(5, { charity_model: id }));
+    await openAdvancedSettings(page);
     await expect(page.getByText(copy.label, { exact: true })).toBeVisible();
     const forwarding = page.getByRole('switch', { name: copy.label, exact: true });
     await expect(forwarding).toBeChecked({ checked: current.cloudflare_proxy_enabled });
