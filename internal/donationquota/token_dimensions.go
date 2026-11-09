@@ -41,11 +41,15 @@ type TokenBudget struct {
 	limits      [2]*db.U128
 }
 
+// A configured pair is validated below. Otherwise, inspect only active rules
+// and models with split limits through their partial indexes.
 const tokenBudgetQuery = `SELECT token_reserve,input_token_reserve,output_token_reserve,
 input_tokens_used,output_tokens_used,input_tokens_reserved,output_tokens_reserved,input_token_limit_mag,output_token_limit_mag,
-EXISTS(SELECT 1 FROM donation_quota_rules r JOIN donation_quota_epochs e ON e.rule_id=r.id AND e.epoch=r.current_epoch
- WHERE r.donation_key_id=donation_keys.id AND e.metric IN ('input_tokens','output_tokens'))
- OR EXISTS(SELECT 1 FROM donation_model_quotas mq WHERE mq.donation_key_id=donation_keys.id AND (mq.input_token_limit_mag IS NOT NULL OR mq.output_token_limit_mag IS NOT NULL))
+CASE WHEN input_token_reserve IS NOT NULL AND output_token_reserve IS NOT NULL THEN 0 ELSE
+EXISTS(SELECT 1 FROM donation_quota_rules r INDEXED BY idx_donation_quota_rules_key_order JOIN donation_quota_epochs e ON e.rule_id=r.id AND e.epoch=r.current_epoch
+ WHERE r.donation_key_id=donation_keys.id AND r.current_epoch IS NOT NULL AND e.metric IN ('input_tokens','output_tokens'))
+ OR EXISTS(SELECT 1 FROM donation_model_quotas mq INDEXED BY idx_donation_model_split_limits WHERE mq.donation_key_id=donation_keys.id AND (mq.input_token_limit_mag IS NOT NULL OR mq.output_token_limit_mag IS NOT NULL))
+END
 FROM donation_keys WHERE id=?`
 
 func ReadTokenBudget(ctx context.Context, q Reader, keyID int64) (TokenBudget, error) {
