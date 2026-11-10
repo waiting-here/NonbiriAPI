@@ -172,11 +172,11 @@ func (r *Repository) ListPools(ctx context.Context, query PoolListQuery) (Page[P
 	} else {
 		arguments = append(arguments, limit+1)
 	}
-	rows, err := tx.QueryContext(ctx, `
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(`
 SELECT id,pool_type,period_id,account_id,state,revision,created_at,closed_at,
        (SELECT period_key FROM thursday_periods WHERE id=shared_pools.period_id)
 FROM shared_pools WHERE `+strings.Join(clauses, " AND ")+`
-ORDER BY created_at,id`+limitSQL, arguments...)
+ORDER BY created_at,id`+limitSQL, `ORDER BY created_at,id`), arguments...)
 	if err != nil {
 		return Page[Pool]{}, classifyDatabaseError("list shared pools", err)
 	}
