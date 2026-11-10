@@ -194,7 +194,7 @@ func exportConnections(ctx context.Context, tx *sql.Tx, request ExportRequest) (
 	if err != nil {
 		return out, err
 	}
-	out.Grants, err = readConnectionExportRows(ctx, tx, request, `SELECT CAST(g.endpoint_id AS TEXT),CAST(g.endpoint_key_id AS TEXT),CAST(g.credential_id AS TEXT),CAST(v.version AS TEXT),CAST(g.grant_revision AS TEXT),g.native_service_mask,g.rerank_format,g.id=k.current_grant_revision_id,g.created_at FROM endpoint_key_grant_revisions g JOIN endpoint_keys k ON k.id=g.endpoint_key_id JOIN credential_versions v ON v.id=g.credential_version_id WHERE g.owner_user_id=? ORDER BY g.endpoint_key_id,g.grant_revision LIMIT ?`, func(rows *sql.Rows) (GrantExport, error) {
+	out.Grants, err = readConnectionExportRows(ctx, tx, request, `SELECT CAST(g.endpoint_id AS TEXT),CAST(g.endpoint_key_id AS TEXT),CAST(g.credential_id AS TEXT),CAST(v.version AS TEXT),CAST(g.grant_revision AS TEXT),g.native_service_mask,g.rerank_format,g.id=k.current_grant_revision_id,g.created_at FROM endpoint_key_grant_revisions g JOIN endpoint_keys k ON k.id=g.endpoint_key_id JOIN credential_versions v ON v.id=g.credential_version_id WHERE g.owner_user_id=?1 AND g.endpoint_key_id IN (SELECT k.id FROM endpoints e JOIN endpoint_keys k ON k.endpoint_id=e.id WHERE e.user_id=?1) ORDER BY g.endpoint_key_id,g.grant_revision LIMIT ?2`, func(rows *sql.Rows) (GrantExport, error) {
 		var item GrantExport
 		var mask int64
 		if err := rows.Scan(&item.EndpointID, &item.EndpointKeyID, &item.CredentialID, &item.CredentialVersion, &item.GrantRevision, &mask, &item.RerankFormat, &item.Current, &item.CreatedAt); err != nil {
@@ -222,7 +222,7 @@ func exportConnections(ctx context.Context, tx *sql.Tx, request ExportRequest) (
 	if err != nil {
 		return out, err
 	}
-	out.SourceRevisions, err = readConnectionExportRows(ctx, tx, request, `SELECT CAST(sr.source_id AS TEXT),CAST(sr.source_revision AS TEXT),CAST(sr.credential_id AS TEXT),CAST(v.version AS TEXT),sr.canonical_base_url,sr.list_format,sr.created_at FROM discovery_source_revisions sr JOIN credential_versions v ON v.id=sr.credential_version_id WHERE sr.owner_user_id=? ORDER BY sr.source_id,sr.source_revision LIMIT ?`, func(rows *sql.Rows) (SourceRevisionExport, error) {
+	out.SourceRevisions, err = readConnectionExportRows(ctx, tx, request, `SELECT CAST(sr.source_id AS TEXT),CAST(sr.source_revision AS TEXT),CAST(sr.credential_id AS TEXT),CAST(v.version AS TEXT),sr.canonical_base_url,sr.list_format,sr.created_at FROM discovery_source_revisions sr JOIN credential_versions v ON v.id=sr.credential_version_id WHERE sr.owner_user_id=?1 AND sr.source_id IN (SELECT id FROM discovery_sources WHERE user_id=?1) ORDER BY sr.source_id,sr.source_revision LIMIT ?2`, func(rows *sql.Rows) (SourceRevisionExport, error) {
 		var item SourceRevisionExport
 		if err := rows.Scan(&item.DiscoverySourceID, &item.DiscoverySourceRevision, &item.CredentialID, &item.CredentialVersion, &item.BaseURL, &item.ListFormat, &item.CreatedAt); err != nil {
 			return item, err
@@ -247,7 +247,15 @@ func exportConnections(ctx context.Context, tx *sql.Tx, request ExportRequest) (
 	if err != nil {
 		return out, err
 	}
-	out.NativeServiceEvidence, err = readConnectionExportRows(ctx, tx, request, `SELECT CAST(c.id AS TEXT),CAST(c.endpoint_key_id AS TEXT),CAST(sr.source_id AS TEXT),CAST(r.result_generation AS TEXT),c.normalized_model_id,c.native_service_mask,CASE c.evidence_source WHEN 'metadata' THEN 'provider' WHEN 'user' THEN 'selected' ELSE c.evidence_source END,CAST(c.evidence_revision AS TEXT) FROM model_catalog_entries c LEFT JOIN endpoint_keys k ON k.id=c.endpoint_key_id LEFT JOIN endpoints e ON e.id=k.endpoint_id LEFT JOIN discovery_runs r ON r.id=c.discovery_run_id LEFT JOIN discovery_source_revisions sr ON sr.id=r.source_revision_id WHERE COALESCE(e.user_id,sr.owner_user_id)=? ORDER BY c.id LIMIT ?`, func(rows *sql.Rows) (NativeServiceEvidenceExport, error) {
+	// Manual and automatic entries have disjoint owner paths. An over-limit
+	// collection is rejected, so cap candidates before sorting their IDs.
+	out.NativeServiceEvidence, err = readConnectionExportRows(ctx, tx, request, `WITH owner AS MATERIALIZED (SELECT ? AS user_id), selected AS MATERIALIZED (
+ SELECT c.id FROM owner CROSS JOIN endpoints e ON e.user_id=owner.user_id CROSS JOIN endpoint_keys k ON k.endpoint_id=e.id CROSS JOIN model_catalog_entries c ON c.endpoint_key_id=k.id
+ UNION ALL
+ SELECT c.id FROM owner CROSS JOIN discovery_sources s ON s.user_id=owner.user_id CROSS JOIN discovery_source_revisions sr ON sr.source_id=s.id AND sr.owner_user_id=owner.user_id CROSS JOIN discovery_runs r ON r.source_revision_id=sr.id CROSS JOIN model_catalog_entries c ON c.discovery_run_id=r.id WHERE c.endpoint_key_id IS NULL
+ LIMIT ?
+)
+SELECT CAST(c.id AS TEXT),CAST(c.endpoint_key_id AS TEXT),CAST(sr.source_id AS TEXT),CAST(r.result_generation AS TEXT),c.normalized_model_id,c.native_service_mask,CASE c.evidence_source WHEN 'metadata' THEN 'provider' WHEN 'user' THEN 'selected' ELSE c.evidence_source END,CAST(c.evidence_revision AS TEXT) FROM selected JOIN model_catalog_entries c ON c.id=selected.id LEFT JOIN endpoint_keys k ON k.id=c.endpoint_key_id LEFT JOIN endpoints e ON e.id=k.endpoint_id LEFT JOIN discovery_runs r ON r.id=c.discovery_run_id LEFT JOIN discovery_source_revisions sr ON sr.id=r.source_revision_id ORDER BY c.id`, func(rows *sql.Rows) (NativeServiceEvidenceExport, error) {
 		var item NativeServiceEvidenceExport
 		var mask int64
 		if err := rows.Scan(&item.CatalogEntryID, &item.EndpointKeyID, &item.DiscoverySourceID, &item.ResultGeneration, &item.UpstreamModelID, &mask, &item.Source, &item.Revision); err != nil {
