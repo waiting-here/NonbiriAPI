@@ -224,9 +224,11 @@ func (s *Stack) newURLClient(baseURL string, allowCloudflare, discovery bool) (*
 		return nil, err
 	}
 	gateURL := canonical
+	gateAliasURL := ""
 	if discovery {
 		if base := standardCatalogBase(parsed); base != nil {
 			gateURL = base.String()
+			gateAliasURL = gateURL + "/"
 		}
 	}
 
@@ -283,6 +285,7 @@ func (s *Stack) newURLClient(baseURL string, allowCloudflare, discovery bool) (*
 		discovery:        discovery,
 		baseURL:          canonical,
 		gateURL:          gateURL,
+		gateAliasURL:     gateAliasURL,
 		route:            route,
 		worker:           worker,
 		policy:           s.policy,
@@ -316,6 +319,7 @@ type Client struct {
 	policy           *EgressPolicy
 	baseURL          string
 	gateURL          string
+	gateAliasURL     string
 	origin           string
 	originScheme     string
 	originHost       string
@@ -398,7 +402,12 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 	if gateURL == "" {
 		gateURL = c.baseURL
 	}
-	permit, err := c.gate.Acquire(ctx, gateURL)
+	var permit *Permit
+	if c.gateAliasURL != "" {
+		permit, err = c.gate.acquireAliases(ctx, gateURL, c.gateAliasURL)
+	} else {
+		permit, err = c.gate.Acquire(ctx, gateURL)
+	}
 	if err != nil {
 		cancel()
 		return closeBodyOnError(err)
