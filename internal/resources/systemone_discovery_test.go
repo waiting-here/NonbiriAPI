@@ -37,7 +37,7 @@ func TestSystemOneNewKeyHasOpenAICatalogBeforeMetadataSave(t *testing.T) {
 			}
 			sourceID := resourceTestID(t, *key.Value.DiscoverySourceID)
 			before, err := f.env.repository.GetDiscoverySource(ctx, f.user, sourceID)
-			if err != nil || before.ListFormat != "openai" || before.BaseURL != input.BaseURL {
+			if err != nil || before.ListFormat != "openai" || before.BaseURL != input.BaseURL+"/models" || before.ModelsURL != before.BaseURL {
 				t.Fatalf("initial catalog: %+v %v", before, err)
 			}
 			keyID := resourceTestID(t, key.Value.ID)
@@ -56,7 +56,7 @@ func TestSystemOneNewKeyHasOpenAICatalogBeforeMetadataSave(t *testing.T) {
 			f.env.discovery.mu.Lock()
 			first := f.env.discovery.inputs[0]
 			f.env.discovery.mu.Unlock()
-			if first.ConnectorType != contract.TypeOpenAICompatible || first.CanonicalBaseURL != input.BaseURL {
+			if first.ConnectorType != contract.TypeOpenAICompatible || first.CanonicalBaseURL != before.BaseURL {
 				t.Fatalf("default discovery dispatch: %+v", first)
 			}
 			note := "Named key"

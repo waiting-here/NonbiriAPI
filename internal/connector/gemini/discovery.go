@@ -36,7 +36,7 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 	if ctx == nil || backend.IsNil(input.Backend) || input.Target.Type() != contract.TypeGoogleGemini {
 		return result
 	}
-	client, err := input.Backend.Open(input.Target.BaseURL())
+	client, err := backend.OpenDiscovery(input.Backend, input.Target.BaseURL())
 	if err != nil {
 		result.Failure = contract.DiscoveryFailureTransport
 		return result
@@ -56,7 +56,7 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 	seenModels := map[string]bool{}
 	models := []contract.DiscoveredModel{}
 	for page := 0; page < 20; page++ {
-		endpoint := ModelsURL(client.BaseURL()) + "?pageSize=100"
+		endpoint := client.BaseURL() + "?pageSize=100"
 		if pageToken != "" {
 			endpoint += "&pageToken=" + url.QueryEscape(pageToken)
 		}
@@ -206,6 +206,3 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 	}
 	return result
 }
-
-// ModelsURL is the catalog endpoint before pagination parameters are added.
-func ModelsURL(baseURL string) string { return strings.TrimSuffix(baseURL, "/") + "/models" }

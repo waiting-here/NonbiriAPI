@@ -140,7 +140,7 @@ func TestDiscoverySelectsConfiguredSpecificationAndFourServices(t *testing.T) {
 				{"modelType":"future-kind"}
 			]}`, "application/json"), nil
 		}}
-		result := (ModelDiscoverer{}).Discover(context.Background(), contract.DiscoveryInput{Backend: b, Target: versionTarget(kind), Credential: secret()})
+		result := (ModelDiscoverer{}).Discover(context.Background(), contract.DiscoveryInput{Backend: b, Target: contract.NewTarget(kind, versionTarget(kind).BaseURL()+"/config", ""), Credential: secret()})
 		if result.Failure != contract.DiscoveryFailureNone || len(result.Models) != 5 || result.Models[3].ID != "p/rerank" || result.Models[4].ID != "p/v"+specificationVersion(kind) {
 			t.Fatalf("%+v", result)
 		}

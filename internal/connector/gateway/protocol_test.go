@@ -32,13 +32,17 @@ func chat(t *testing.T, raw string) *openai.ChatRequest {
 }
 
 type fakeBackend struct {
-	do    func(*http.Request) (*http.Response, error)
-	calls int
-	limit int64
+	do      func(*http.Request) (*http.Response, error)
+	calls   int
+	limit   int64
+	baseURL string
 }
 
-func (b *fakeBackend) Open(string) (backend.EndpointClient, error) { return b, nil }
-func (b *fakeBackend) BaseURL() string                             { return "https://upstream.example/native/v3/ai" }
+func (b *fakeBackend) Open(address string) (backend.EndpointClient, error) {
+	b.baseURL = address
+	return b, nil
+}
+func (b *fakeBackend) BaseURL() string { return b.baseURL }
 func (b *fakeBackend) MaxResponseBytes() int64 {
 	if b.limit != 0 {
 		return b.limit
@@ -368,13 +372,13 @@ func TestDiscoverySkipsOtherKindsAndPreservesIDs(t *testing.T) {
 		}
 		return response(`{"models":[{"id":"provider/chat","modelType":"language"},{"id":"provider/embed","modelType":"embedding"},{"id":"provider/image","modelType":"image"},{"id":"provider/video","modelType":"video"},{"modelType":"future-kind","pricing":{"output":"0"}}]}`, "application/json"), nil
 	}}
-	res := (ModelDiscoverer{}).Discover(context.Background(), contract.DiscoveryInput{Backend: b, Target: target(), Credential: secret()})
+	res := (ModelDiscoverer{}).Discover(context.Background(), contract.DiscoveryInput{Backend: b, Target: contract.NewTarget(contract.TypeAISDKGatewayV3, target().BaseURL()+"/config", ""), Credential: secret()})
 	if res.Failure != contract.DiscoveryFailureNone || len(res.Models) != 3 || res.Models[0].ID != "provider/chat" || res.Models[1].ID != "provider/embed" || res.Models[2].ID != "provider/image" {
 		t.Fatalf("%+v", res)
 	}
 	for _, body := range []string{`{"models":[{"id":"sk-test-credential-long","modelType":"language"}]}`, `{"models":[{"id":"x","modelType":"language"},{"id":"x","modelType":"language"}]}`, `{"models":[{"id":"x","modelType":true}]}`} {
 		b.do = func(*http.Request) (*http.Response, error) { return response(body, "application/json"), nil }
-		res = (ModelDiscoverer{}).Discover(context.Background(), contract.DiscoveryInput{Backend: b, Target: target(), Credential: secret()})
+		res = (ModelDiscoverer{}).Discover(context.Background(), contract.DiscoveryInput{Backend: b, Target: contract.NewTarget(contract.TypeAISDKGatewayV3, target().BaseURL()+"/config", ""), Credential: secret()})
 		if res.Failure == contract.DiscoveryFailureNone || len(res.Models) != 0 {
 			t.Fatalf("%+v", res)
 		}
@@ -387,7 +391,7 @@ func TestDiscoveryTemporaryUpstreamFailure(t *testing.T) {
 		r.StatusCode = http.StatusServiceUnavailable
 		return r, nil
 	}}
-	result := (ModelDiscoverer{}).Discover(context.Background(), contract.DiscoveryInput{Backend: b, Target: target(), Credential: secret()})
+	result := (ModelDiscoverer{}).Discover(context.Background(), contract.DiscoveryInput{Backend: b, Target: contract.NewTarget(contract.TypeAISDKGatewayV3, target().BaseURL()+"/config", ""), Credential: secret()})
 	if result.Failure != contract.DiscoveryFailureUnavailable || !result.ResponseReceived || result.UpstreamStatus != 503 || len(result.Models) != 0 {
 		t.Fatalf("wrong temporary failure: %+v", result)
 	}

@@ -185,7 +185,7 @@ func TestSystemOneOwnModelDiscovery(t *testing.T) {
 
 func TestSystemOneDiscoveryUsesSharedTransport(t *testing.T) {
 	var sent *http.Request
-	client := &discoveryEndpointClient{baseURL: "https://api.example/v1", do: func(r *http.Request) (*http.Response, error) {
+	client := &discoveryEndpointClient{baseURL: "https://api.example/v1/models", do: func(r *http.Request) (*http.Response, error) {
 		sent = r
 		if r.Method != http.MethodGet || r.URL.Path != "/v1/models" || r.Header.Get("Authorization") != "Bearer sk-discovery" {
 			t.Fatal("wrong discovery dispatch")
@@ -193,7 +193,7 @@ func TestSystemOneDiscoveryUsesSharedTransport(t *testing.T) {
 		return openAIDiscoveryResponse(200, `{"models":[{"name":"jev-latest","description":"model","release_date":"2026-09-15"}]}`), nil
 	}}
 	input := openAIDiscoveryInput(client, []byte("sk-discovery"), nil)
-	input.Target = contract.NewTarget(contract.TypeTypeSafeSystemOne, "https://api.example/v1", "")
+	input.Target = contract.NewTarget(contract.TypeTypeSafeSystemOne, "https://api.example/v1/models", "")
 	result := (ModelDiscoverer{ConnectorType: contract.TypeTypeSafeSystemOne}).Discover(context.Background(), input)
 	if !result.Succeeded() || len(result.Models) != 1 || result.Models[0].ID != "jev-latest" || sent.Header.Get("Authorization") != "" {
 		t.Fatalf("discovery result=%+v", result)

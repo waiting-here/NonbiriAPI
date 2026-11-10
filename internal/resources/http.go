@@ -262,6 +262,7 @@ func writeResourceError(writer http.ResponseWriter, err error) {
 		return
 	}
 	httperr.WriteMapped(writer, err,
+		httperr.Mapping{Err: ErrDiscoveryURLTooLong, Code: httperr.CodeInvalidRequest, Message: "model-list address exceeds 4096 bytes; configure a shorter model-list address"},
 		httperr.Mapping{Err: ErrInvalidRequest, Code: httperr.CodeInvalidRequest, Message: "invalid request"},
 		httperr.Mapping{Err: ErrUnauthorized, Code: httperr.CodeUnauthorized, Message: "authentication required"},
 		httperr.Mapping{Err: ErrForbidden, Code: httperr.CodeForbidden, Message: "access denied"},

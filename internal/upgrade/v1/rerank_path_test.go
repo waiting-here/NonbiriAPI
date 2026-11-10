@@ -14,6 +14,7 @@ import (
 
 func restoreSchema50LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema51LayoutForTest(t, database)
 	oldAudit := strings.Replace(db.CharityAdaptationAuditSQL, "actor_role IN ('owner','admin','trainee5','level6')", "actor_role IN ('owner','admin')", 1)
 	hostileMustExec(t, database, oldAudit)
 	for _, body := range strings.Split(db.ManagementDetailsSQL, "\nCREATE TRIGGER ")[1:] {
@@ -162,7 +163,7 @@ func TestRerankPathUpgradeIsExplicitAtomicAndPreservesFacts(t *testing.T) {
 	storageSchema.versions[index].apply = original
 	assertSource()
 	result, err := Run(t.Context(), path, vault, Options{Apply: true})
-	if err != nil || result.Status != "converted" || result.TargetSchemaVersion != 51 {
+	if err != nil || result.Status != "converted" || result.TargetSchemaVersion != db.CurrentSchemaVersion {
 		t.Fatal(result, err)
 	}
 	store, err = db.Open(path, vault)

@@ -28,7 +28,7 @@ var DiscoverySourceRevisionSQL = `COALESCE(ur.discovery_source_revision_id,
  (SELECT sr.id FROM discovery_source_revisions sr JOIN discovery_sources ds ON ds.id=sr.source_id
  WHERE sr.owner_user_id=a.owner_user_id AND sr.credential_id=a.credential_id AND sr.credential_version_id=a.credential_version_id
  AND EXISTS(SELECT 1 FROM discovery_source_keys scope WHERE scope.source_id=ds.id AND scope.endpoint_key_id=dk.endpoint_key_id)
- AND sr.canonical_base_url=a.canonical_base_url AND sr.list_format=CASE a.configured_type` + defaultDiscoveryCasesSQL() + ` END
+	AND sr.canonical_base_url=` + DefaultDiscoveryURLSQL + ` AND sr.list_format=CASE a.configured_type` + defaultDiscoveryCasesSQL() + ` END
  ORDER BY sr.id LIMIT 1),0)`
 
 // LoadDiscoveryUsesTx prefers a pending revision for review. approvedOnly is
@@ -132,6 +132,30 @@ var defaultDiscoveryFormats = []struct {
 	{"ai-sdk-gateway-v4", []contract.Type{contract.TypeAISDKGatewayV4}},
 }
 
+// DefaultDiscoveryURL generates a standard catalog address only when creating
+// a source from an inference endpoint. Saved catalog addresses are used as-is.
+func DefaultDiscoveryURL(kind contract.Type, baseURL string) string {
+	format := DefaultDiscoveryFormat(kind)
+	if format == "" {
+		return ""
+	}
+	suffix := "/models"
+	if kind.AISDKGateway() {
+		suffix = "/config"
+	}
+	trimmed := strings.TrimRight(baseURL, "/")
+	if strings.HasSuffix(trimmed, suffix) {
+		return baseURL
+	}
+	return trimmed + suffix
+}
+
+// DefaultDiscoveryURLSQL matches the standard catalog created for a grant.
+// The aliases refer to the inference authorization, never a saved catalog.
+const DefaultDiscoveryURLSQL = `CASE
+ WHEN substr(rtrim(a.canonical_base_url,'/'),-7)=CASE WHEN a.configured_type IN ('ai-sdk-gateway-v3','ai-sdk-gateway-v4') THEN '/config' ELSE '/models' END THEN a.canonical_base_url
+ ELSE rtrim(a.canonical_base_url,'/')||CASE WHEN a.configured_type IN ('ai-sdk-gateway-v3','ai-sdk-gateway-v4') THEN '/config' ELSE '/models' END END`
+
 func DefaultDiscoveryFormat(kind contract.Type) string {
 	for _, group := range defaultDiscoveryFormats {
 		for _, configured := range group.types {
@@ -166,7 +190,8 @@ func EnsureDiscoverySourceTx(ctx context.Context, tx *sql.Tx, use DiscoveryUseAu
 	}
 	g := use.Grant
 	format := DefaultDiscoveryFormat(g.ConfiguredType)
-	if format == "" {
+	catalogURL := DefaultDiscoveryURL(g.ConfiguredType, g.CanonicalBaseURL)
+	if format == "" || len(catalogURL) > 4096 {
 		return 0, ErrUnavailable
 	}
 	var revisionID int64
@@ -192,7 +217,7 @@ func EnsureDiscoverySourceTx(ctx context.Context, tx *sql.Tx, use DiscoveryUseAu
 	if _, err := tx.ExecContext(ctx, `INSERT INTO discovery_source_keys(source_id,endpoint_key_id) VALUES(?,?)`, sourceID, g.EndpointKeyID); err != nil {
 		return 0, err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO discovery_source_revisions(id,source_id,owner_user_id,source_revision,credential_id,credential_version_id,canonical_base_url,list_format,created_at) VALUES(?,?,?,1,?,?,?,?,?)`, revisionID, sourceID, g.OwnerUserID, g.CredentialID, g.CredentialVersionID, g.CanonicalBaseURL, format, now)
+	_, err = tx.ExecContext(ctx, `INSERT INTO discovery_source_revisions(id,source_id,owner_user_id,source_revision,credential_id,credential_version_id,canonical_base_url,list_format,created_at) VALUES(?,?,?,1,?,?,?,?,?)`, revisionID, sourceID, g.OwnerUserID, g.CredentialID, g.CredentialVersionID, catalogURL, format, now)
 	if err != nil {
 		return 0, err
 	}
