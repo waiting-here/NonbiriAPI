@@ -161,7 +161,8 @@ WHERE ` + walletWhere + ` AND e.account_kind_snapshot='user' AND e.delta_sign<>0
 	current := min(filter.Page, pages)
 	page.Page, page.Total, page.TotalPages = strconv.FormatInt(current, 10), strconv.FormatInt(count, 10), strconv.FormatInt(pages, 10)
 	// A donor reward never enters the request lookup, even for a self-donation.
-	query := `SELECT o.id,e.line_no,o.kind,o.source_type,o.source_id,o.source_seq,o.created_at,e.asset_type,e.delta_sign,e.delta_mag,
+	query := `WITH selected AS MATERIALIZED (SELECT e.operation_id,e.line_no` + where + ` ORDER BY o.ledger_seq DESC,e.line_no DESC LIMIT ? OFFSET ?)
+SELECT o.id,e.line_no,o.kind,o.source_type,o.source_id,o.source_seq,o.created_at,e.asset_type,e.delta_sign,e.delta_mag,
 CASE WHEN o.source_type='logical_request' AND o.kind IN ('forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release')
 THEN (SELECT l.logical_request_id FROM request_logs l WHERE l.logical_request_id=o.source_id AND l.user_id=?
 AND (l.completed_at IS NULL OR l.completed_at>?) AND (l.route_kind NOT IN ` + requestkind.CharityKindsSQL + ` OR l.completed_at IS NOT NULL) LIMIT 1)
@@ -169,12 +170,12 @@ WHEN o.source_type='operation' AND o.kind='anti_abuse_penalty'
 THEN (SELECT l.logical_request_id FROM request_logs l WHERE l.logical_request_id='req_'||substr(o.id,4) AND l.user_id=?
 AND l.route_kind='charity_chat_completions' AND l.caller_error_code='content_too_short' AND l.completed_at>? LIMIT 1)
 ELSE NULL END
-FROM (SELECT e.operation_id,e.line_no` + where + ` ORDER BY o.ledger_seq DESC,e.line_no DESC LIMIT ? OFFSET ?) selected
+FROM selected
 JOIN credit_entries e ON e.operation_id=selected.operation_id AND e.line_no=selected.line_no
 JOIN credit_operations o ON o.id=e.operation_id
 ORDER BY o.ledger_seq DESC,e.line_no DESC`
-	queryArgs := append([]any{userID, now - 30*24*60*60, userID, now - 30*24*60*60}, args...)
-	queryArgs = append(queryArgs, filter.PageSize, (current-1)*int64(filter.PageSize))
+	queryArgs := append(append([]any{}, args...), filter.PageSize, (current-1)*int64(filter.PageSize))
+	queryArgs = append(queryArgs, userID, now-30*24*60*60, userID, now-30*24*60*60)
 	rows, err := tx.QueryContext(ctx, query, queryArgs...)
 	if err != nil {
 		return HistoryPage{}, classifySQLError("history entries", err)

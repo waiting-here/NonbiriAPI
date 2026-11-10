@@ -320,7 +320,7 @@ func (repository *Repository) List(ctx context.Context, adminID int64, query Lis
 	} else {
 		arguments = append(arguments, limit+1)
 	}
-	rows, err := tx.QueryContext(ctx, statement, arguments...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(statement, `ORDER BY id DESC`), arguments...)
 	if err != nil {
 		return empty, fmt.Errorf("administrator alerts: list rows: %w", err)
 	}

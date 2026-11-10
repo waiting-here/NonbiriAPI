@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
 func (service *Service) List(ctx context.Context, userID int64, query ListQuery) (Page, error) {
@@ -80,8 +82,8 @@ WHERE i.user_id=? AND i.state=?
 		args = append(args, payload.LastSeen, payload.LastSeen, payload.ID)
 	}
 	args = append(args, readLimit, offset)
-	rows, err := tx.QueryContext(ctx, `SELECT `+issueSelectColumns+filtered+cursorPredicate+`
-ORDER BY i.last_seen_at DESC,i.id ASC LIMIT ? OFFSET ?`, args...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(`SELECT `+issueSelectColumns+filtered+cursorPredicate+`
+ORDER BY i.last_seen_at DESC,i.id ASC LIMIT ? OFFSET ?`, `ORDER BY last_seen_at DESC,id ASC`), args...)
 	if err != nil {
 		return empty, fmt.Errorf("issues: list projection: %w", err)
 	}

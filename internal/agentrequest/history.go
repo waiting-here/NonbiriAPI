@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 )
@@ -84,6 +85,8 @@ func (r *Runtime) complete(id int64, in Input, state, code string, status int, r
 	return nil
 }
 func (r *Runtime) List(ctx context.Context, filter ListFilter) (Page, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	if filter.Page < 1 || filter.PageSize < 1 || filter.PageSize > 100 || filter.Page > 1000000 || filter.BeforeID < 0 {
 		return Page{}, ErrInvalid
 	}
@@ -109,7 +112,8 @@ func (r *Runtime) List(ctx context.Context, filter ListFilter) (Page, error) {
 		return Page{}, err
 	}
 	queryArgs := append(append([]any{}, args...), filter.PageSize, (filter.Page-1)*filter.PageSize)
-	rows, err := tx.QueryContext(ctx, "SELECT "+requestColumns+" FROM agent_requests WHERE "+where+" ORDER BY id DESC LIMIT ? OFFSET ?", queryArgs...)
+	rows, err := tx.QueryContext(ctx, `WITH selected AS MATERIALIZED (SELECT id FROM agent_requests WHERE `+where+` ORDER BY id DESC LIMIT ? OFFSET ?)
+SELECT `+requestColumns+` FROM agent_requests WHERE id IN (SELECT id FROM selected) ORDER BY id DESC`, queryArgs...)
 	if err != nil {
 		return Page{}, err
 	}
@@ -251,6 +255,8 @@ func (r *Runtime) AckInTransaction(ctx context.Context, tx *sql.Tx, id int64) er
 	return nil
 }
 func (r *Runtime) Usage(ctx context.Context) (UsageReport, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	now := r.now().UnixMilli()
 	out := UsageReport{AsOf: now, Total: []UsageSummary{}, Last24Hours: []UsageSummary{}}
 	tx, err := r.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
@@ -280,7 +286,9 @@ func (r *Runtime) Usage(ctx context.Context) (UsageReport, error) {
 	if err != nil {
 		return out, err
 	}
-	out.Last24Hours, err = read("SELECT u.source,u.kind,u.actor_id,t.actor_role,t.actor_label,COUNT(*),SUM(u.input_tokens),SUM(u.cached_input_tokens),SUM(u.cache_write_input_tokens),SUM(u.output_tokens),SUM(u.reasoning_tokens),SUM(u.unknown) FROM agent_request_usage u JOIN agent_request_usage_totals t ON t.source=u.source AND t.kind=u.kind AND t.actor_id=u.actor_id WHERE u.recorded_at>? AND u.recorded_at<=? GROUP BY u.source,u.kind,u.actor_id ORDER BY u.source,u.kind,u.actor_id", now-86400000, now)
+	from := now - 86400000
+	firstHour, lastHour := (from/3600000+1)*3600000, now/3600000*3600000
+	out.Last24Hours, err = read(usageWindowQuery, firstHour, lastHour, from, firstHour, lastHour, now)
 	return out, err
 }
 
@@ -291,7 +299,7 @@ func (r *Runtime) Unconsumed(ctx context.Context, limit int) ([]Request, error) 
 	if limit < 1 || limit > 100 {
 		return nil, ErrInvalid
 	}
-	rows, err := r.readDB.QueryContext(ctx, "SELECT "+requestColumns+" FROM agent_requests WHERE consumed_at IS NULL AND state NOT IN ('pending','running') ORDER BY id LIMIT ?", limit)
+	rows, err := r.readDB.QueryContext(ctx, db.MaterializePage("SELECT "+requestColumns+" FROM agent_requests WHERE consumed_at IS NULL AND state NOT IN ('pending','running') ORDER BY id LIMIT ?", "ORDER BY id"), limit)
 	if err != nil {
 		return nil, err
 	}

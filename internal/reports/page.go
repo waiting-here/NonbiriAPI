@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -43,8 +45,9 @@ func (r *Repository) beginCasePageRead(ctx context.Context, actor authz.Actor) (
 }
 
 func reportPageSQL(ctx context.Context, tx *sql.Tx, selection, order string, args []any, requested *pagination.Request, limit int) (string, []any, *pagination.Metadata, error) {
+	outerOrder := strings.NewReplacer("t.", "", "dk.", "").Replace(order)
 	if requested == nil {
-		return selection + order + ` LIMIT ?`, append(args, limit+1), nil, nil
+		return db.MaterializePage(selection+order+` LIMIT ?`, outerOrder), append(args, limit+1), nil, nil
 	}
 	var total int64
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+selection+`)`, args...).Scan(&total); err != nil {
@@ -54,7 +57,7 @@ func reportPageSQL(ctx context.Context, tx *sql.Tx, selection, order string, arg
 	if err != nil {
 		return "", nil, nil, ErrInvariant
 	}
-	return selection + order + ` LIMIT ? OFFSET ?`, append(args, requested.Size, offset), &metadata, nil
+	return db.MaterializePage(selection+order+` LIMIT ? OFFSET ?`, outerOrder), append(args, requested.Size, offset), &metadata, nil
 }
 
 func reportReadWindow(values url.Values, prefix string) (int, *pagination.Request, error) {
