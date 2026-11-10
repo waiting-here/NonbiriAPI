@@ -9,6 +9,7 @@ import { AnnouncementDetailPage } from '../../admin/pages/AnnouncementDetailPage
 import { StewardPage } from '../../user/pages/StewardPage';
 import { AnnouncementEditor } from './AnnouncementEditor';
 import type { AdminUser } from '../operations/managedUsers';
+import { defaultStewardPermissions } from '../operations/stewardPermissions';
 import { managedUserFixture as userFixture } from '../../../test/fixtures/managedUsers';
 
 function session(level = 6) {
@@ -91,6 +92,89 @@ afterEach(() => {
 });
 
 describe('shared account management', () => {
+  it.each([
+    { level: 6, read: true, configure: true },
+    { level: 5, read: false, configure: true },
+    { level: 5, read: true, configure: false },
+    { level: 5, read: false, configure: false },
+  ])(
+    'limits audit threshold access to live grants: $level / $read / $configure',
+    async ({ level, read, configure }) => {
+      const policy = defaultStewardPermissions(level);
+      policy.permissions['risk.read'] = read;
+      policy.permissions['risk.configure'] = configure;
+      let config = {
+        threshold_percent: 80,
+        consecutive_minutes: 5,
+        shared_ip_hours: 24,
+        shared_ip_users: 5,
+        user_ip_window_hours: 24,
+        user_ip_min_ips: 3,
+        revision: 1,
+        updated_at: 0,
+      };
+      const calls = install((call) => {
+        if (call.path === '/api/session') {
+          const identity = session(level);
+          return { user: { ...identity.user, steward_permissions: policy } };
+        }
+        if (call.path === '/api/steward/abuse-audit/config') {
+          if (call.method === 'PUT')
+            config = { ...config, ...call.body, revision: config.revision + 1 };
+          return config;
+        }
+        throw new Error('Unexpected request ' + call.path);
+      });
+      const view = await renderWithProviders(<StewardPage />, {
+        station: 'user',
+        role: 'user',
+        locale: 'en',
+        route: '/steward?tab=risk&audit_tab=config' + (!read ? '&audit_user=7' : ''),
+      });
+      if (!read && !configure) {
+        expect(await screen.findByText(view.i18n.t('management.permissions.denied'))).toBeVisible();
+        expect(calls.some((call) => call.path.includes('/abuse-audit/'))).toBe(false);
+        return;
+      }
+      const threshold = await screen.findByLabelText('Shared IP identity threshold');
+      if (configure) {
+        expect(threshold).toBeEnabled();
+        fireEvent.change(threshold, { target: { value: '2' } });
+        await view.user.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(calls.filter((call) => call.method === 'PUT')).toHaveLength(1));
+        expect(calls.find((call) => call.method === 'PUT')!.body).toMatchObject({
+          revision: 1,
+          shared_ip_users: 2,
+        });
+        if (level === 5) {
+          const reads = () =>
+            calls.filter(
+              (call) => call.path.endsWith('/abuse-audit/config') && call.method === 'GET',
+            ).length;
+          const beforeRevisionChange = reads();
+          policy.revision = '2';
+          await act(async () => {
+            view.queryClient.setQueryData(['user', 'session'], {
+              user: { ...session(level).user, steward_permissions: policy },
+            });
+          });
+          await waitFor(() => expect(reads()).toBeGreaterThan(beforeRevisionChange));
+          expect(await screen.findByLabelText('Shared IP identity threshold')).toBeEnabled();
+        }
+      } else {
+        expect(threshold).toBeDisabled();
+        expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+      }
+      expect(
+        calls
+          .filter((call) => call.path.includes('/abuse-audit/'))
+          .every((call) => call.path.endsWith('/config')),
+      ).toBe(true);
+      if (!read)
+        expect(screen.queryByRole('tab', { name: 'Account links' })).not.toBeInTheDocument();
+    },
+  );
+
   it('clears limit selections when paging and returning to the original page', async () => {
     const first = userFixture('7'),
       second = userFixture('8');

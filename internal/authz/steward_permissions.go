@@ -45,7 +45,7 @@ var stewardDefaults = map[string]bool{
 	"charity.request_adaptation": false, "charity.affinity": false, "charity.price_templates.manage": false,
 	"charity.presets": false, "charity.backoff": false, "charity.price_templates.read": false,
 	"logs.read": true, "logs.unredacted": false, "diagnostics.read": true, "pressure.read": true,
-	"access_events.read": false, "risk.read": false, "risk.manage": false,
+	"access_events.read": false, "risk.read": false, "risk.manage": false, "risk.configure": false,
 	"announcements.read": false, "announcements.manage": false, "maintenance.read": false,
 	"maintenance.enable": false, "egress.read": false, "automation": false,
 	"ai.chat": true, "ai.review.read": false, "ai.memory.edit": false,
@@ -306,6 +306,11 @@ func StewardRoutePermission(method, path string) string {
 		return "blacklist.add"
 	case strings.HasPrefix(p, "abuse-audit/access-"):
 		return "access_events.read"
+	case p == "abuse-audit/config":
+		if read {
+			return "risk.config.read"
+		}
+		return "risk.configure"
 	case strings.HasPrefix(p, "abuse-audit"):
 		if read {
 			return "risk.read"
@@ -399,6 +404,8 @@ func (p StewardPermissions) AllowsOperation(key string) bool {
 		return false
 	}
 	switch key {
+	case "risk.config.read":
+		return p.Permissions["risk.read"] || p.Permissions["risk.configure"]
 	case "charity.read":
 		return p.Permissions[key] || p.Permissions["charity.affinity"] || p.Permissions["charity.request_adaptation"]
 	case "charity.request_adaptation.read":

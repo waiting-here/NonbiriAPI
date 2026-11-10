@@ -106,7 +106,7 @@ export function riskCopy(t: TFunction) {
     consecutive: t('common.riskAudit.consecutive'),
     hours: t('common.riskAudit.hours'),
     accounts: t('common.riskAudit.accounts'),
-    adminOnly: t('common.riskAudit.adminOnly'),
+    configurePermissionRequired: t('common.riskAudit.configurePermissionRequired'),
     configHelp: t('common.riskAudit.configHelp'),
     comparison: t('common.riskAudit.comparison'),
     thisUser: t('common.riskAudit.thisUser'),

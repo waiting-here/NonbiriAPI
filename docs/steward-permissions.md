@@ -19,8 +19,7 @@ therefore acts on levels 1–4 and cannot assign level 5 or 6. Level 6 acts on l
 existing broader scope. Level 5 can never edit another steward's permissions.
 
 Administrator-only operations remain exclusive: donation-credit changes,
-Discord login policy, blacklist removal, disabling maintenance, abuse-audit
-configuration changes and general site administration. Stewards gain no account
+Discord login policy, blacklist removal, disabling maintenance and general site administration. Stewards gain no account
 export/deletion or legal-hold management route.
 
 Level 6 has all charity-model configuration operations, including request
@@ -59,7 +58,7 @@ their existing distinct errors.
 
 ## Actions and defaults
 
-There are 54 independent boolean permissions.
+There are 55 independent boolean permissions.
 
 | Permission | Allows | Level-5 default |
 |---|---|---|
@@ -108,6 +107,7 @@ There are 54 independent boolean permissions.
 | `access_events.read` | Access events and summary | false |
 | `risk.read` | Abuse audit users/shared IP/config/scan results | false |
 | `risk.manage` | Abuse scan creation/cancel and client rules | false |
+| `risk.configure` | Read and change audit thresholds | false |
 | `announcements.read` | Announcement management reads | false |
 | `announcements.manage` | Draft/preview/edit/publish/withdraw/delete announcements | false |
 | `maintenance.read` | Maintenance state | false |
@@ -124,6 +124,11 @@ scope, limits, revision and timestamps are preserved. Request-adaptation or
 affinity permission also allows model and connection reads within the current
 scope. Explicit affinity changes require their own grant, including during model
 creation; omitting the field retains the default or existing value.
+
+The separate audit threshold grant is also added as false to existing saved
+level-5 policies. Level 6 can change thresholds by default. `risk.read` allows
+reading the configuration without editing; `risk.configure` permits configuration
+reads and writes without exposing audit identities, results or scan operations.
 
 These assistant defaults apply to accounts without a saved custom policy.
 Upgrading a custom policy adds all three assistant grants as false and preserves

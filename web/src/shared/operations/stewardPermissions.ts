@@ -51,6 +51,7 @@ export const STEWARD_PERMISSION_DEFAULTS = {
   'access_events.read': false,
   'risk.read': false,
   'risk.manage': false,
+  'risk.configure': false,
   'announcements.read': false,
   'announcements.manage': false,
   'maintenance.read': false,
@@ -110,6 +111,7 @@ export function normalizeStewardPermissions(value: unknown): StewardPermissions 
     'charity.request_adaptation',
     'charity.affinity',
     'charity.price_templates.manage',
+    'risk.configure',
   ];
   const permissions = record(
     root.permissions,

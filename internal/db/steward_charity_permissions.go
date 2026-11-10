@@ -10,7 +10,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
-var charityConfigurationPermissions = []string{"charity.request_adaptation", "charity.affinity", "charity.price_templates.manage"}
+var schema51ConfigurationPermissions = []string{"charity.request_adaptation", "charity.affinity", "charity.price_templates.manage", "risk.configure"}
 
 // StewardCharityPermissionsSQL extends the retained capture projections without
 // changing the historical management schema used by older upgrade sources.
@@ -26,7 +26,7 @@ func charityPermissionCaptureSQL() string {
 		for _, side := range []string{"OLD", "NEW"} {
 			marker := ",'limits.users.endpoint_limit_max',CASE WHEN json_type(" + side + ".limits,"
 			var fields strings.Builder
-			for _, key := range charityConfigurationPermissions {
+			for _, key := range schema51ConfigurationPermissions {
 				fmt.Fprintf(&fields, ",'permissions.%s',CASE WHEN json_type(%s.permissions,'$.\"%s\"') IN ('text','integer','real','true','false') THEN substr(CAST(json_extract(%s.permissions,'$.\"%s\"') AS TEXT),1,512) ELSE NULL END", key, side, key, side, key)
 			}
 			body = strings.ReplaceAll(body, marker, fields.String()+marker)
@@ -92,7 +92,7 @@ func normalizeSchema50StewardPolicy(body string) (string, error) {
 			return "", invalid
 		}
 	}
-	for _, key := range charityConfigurationPermissions {
+	for _, key := range schema51ConfigurationPermissions {
 		grants[key] = json.RawMessage("false")
 	}
 	encoded, err := json.Marshal(grants)

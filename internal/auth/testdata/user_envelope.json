@@ -88,6 +88,7 @@
         "access_events.read": false,
         "risk.read": false,
         "risk.manage": false,
+        "risk.configure": false,
         "announcements.read": false,
         "announcements.manage": false,
         "maintenance.read": false,

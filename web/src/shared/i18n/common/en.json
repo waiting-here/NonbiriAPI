@@ -139,7 +139,11 @@
       "presentation": {
         "note": "Historical matches are clues for review. Enabled automatic bans apply to new personal and charity model calls.",
         "basis": "Audit basis"
-      }
+      },
+      "sharedIPThreshold": "At least {{count}} distinct Discord identities",
+      "sharedIPThresholdUnavailable": "Identity threshold unavailable for this scan",
+      "newSharedIPThreshold": "New scans require at least {{count}} distinct Discord identities per IP.",
+      "sharedIPDefaultWindow": "The default window is the last {{hours}} hours; an explicit time range replaces it."
     },
     "donationDiscovery": {
       "title": "Donation model discovery",
@@ -1220,7 +1224,7 @@
       "first": "First seen",
       "last": "Last seen",
       "related": "Related users and calls",
-      "ipHelp": "Only authenticated logical calls with direct or trusted forwarded IPs are associated. Proxy fallback IPs and anonymous scans are excluded; shared networks may contain unrelated people.",
+      "ipHelp": "Only authenticated logical calls with direct or trusted forwarded IPs are associated. Proxy fallback IPs and anonymous scans are excluded; shared networks may contain unrelated people. Multiple accounts with the same Discord identity count once.",
       "matches": "Matched rules",
       "matchLimit": "Evidence details are limited on this page. Review the paged rule list for further rule definitions.",
       "revision": "Revision",
@@ -1261,8 +1265,8 @@
       "threshold": "Threshold (%)",
       "consecutive": "Consecutive complete minutes",
       "hours": "Shared IP window (hours)",
-      "accounts": "Shared IP account threshold",
-      "adminOnly": "Only administrators can change thresholds.",
+      "accounts": "Shared IP identity threshold",
+      "configurePermissionRequired": "Changing thresholds requires the audit threshold permission.",
       "configHelp": "Risk uses total user occupancy and the limit at the time. Restarts, missing records, unsettled requests, or changed or unknown limits restart the consecutive exceedance count.",
       "comparison": "Same-model comparison",
       "thisUser": "This user",
@@ -3673,6 +3677,7 @@
         "access_events_read": "View access events and summaries",
         "risk_read": "View risk audits, rules, and scan results",
         "risk_manage": "Manage risk scans and abuse rules",
+        "risk_configure": "Adjust audit thresholds",
         "announcements_read": "View announcement management",
         "announcements_manage": "Edit, publish, and delete announcements",
         "maintenance_read": "View maintenance state",

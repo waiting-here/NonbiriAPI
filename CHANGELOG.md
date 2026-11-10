@@ -29,6 +29,12 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Give level-6 stewards administrator-equivalent charity configuration controls.
   New permissions for request adaptation, affinity duration, and price-template
   management are disabled for level-5 stewards by default.
+- Let level-6 stewards adjust audit thresholds; the independent permission is
+  disabled for level-5 stewards by default. Preserve existing settings on upgrade.
+- Show current and frozen shared-IP thresholds and explain identity deduplication.
+  Apply call-kind filters consistently to synchronous shared-IP results.
+- Page duel history exports in smaller batches within the existing transaction
+  budget, retaining complete cursor traversal and expiry reporting.
 - Reorganize model, pricing, managed-header, account-credit and activity forms
   around related settings, with responsive interface choices and member grids.
 - Clarify donated resources and connection editing, preserve drafts in task

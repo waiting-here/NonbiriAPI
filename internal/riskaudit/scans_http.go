@@ -21,13 +21,18 @@ type taskScanInput struct {
 }
 
 func taskScanView(scan ClientScan) any {
+	sharedIPUsers := 0
+	if scan.ScanKind == "shared_ips" {
+		sharedIPUsers = scan.config.SharedIPUsers
+	}
 	return struct {
 		ClientScan
 		Kind              string `json:"kind"`
 		CallKind          string `json:"call_kind"`
 		Status            string `json:"status"`
 		ScannedCandidates string `json:"scanned_candidates"`
-	}{scan, scan.ScanKind, scan.Kind, scan.State, strconv.FormatInt(scan.Scanned, 10)}
+		SharedIPUsers     int    `json:"shared_ip_users,omitempty"`
+	}{scan, scan.ScanKind, scan.Kind, scan.State, strconv.FormatInt(scan.Scanned, 10), sharedIPUsers}
 }
 
 func serveScans(repository *Repository, action string, actor Actor, w http.ResponseWriter, r *http.Request) {

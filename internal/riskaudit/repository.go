@@ -122,6 +122,10 @@ func (r *Repository) CurrentConfig(ctx context.Context) (Config, error) {
 	return readConfig(ctx, r.readDB)
 }
 func (r *Repository) GetConfig(ctx context.Context, actor Actor) (Config, error) {
+	if ctx == nil {
+		return Config{}, ErrInvalid
+	}
+	ctx = authz.WithStewardPermission(ctx, "risk.config.read")
 	tx, err := r.begin(ctx, actor, false)
 	if err != nil {
 		return Config{}, err
@@ -130,12 +134,10 @@ func (r *Repository) GetConfig(ctx context.Context, actor Actor) (Config, error)
 	return readConfig(ctx, tx)
 }
 func (r *Repository) UpdateConfig(ctx context.Context, actor Actor, c Config) (Config, error) {
-	if !actor.Admin {
-		return Config{}, ErrForbidden
-	}
-	if !c.Valid() {
+	if ctx == nil || !c.Valid() {
 		return Config{}, ErrInvalid
 	}
+	ctx = authz.WithStewardPermission(ctx, "risk.configure")
 	tx, err := r.begin(ctx, actor, true)
 	if err != nil {
 		return Config{}, err

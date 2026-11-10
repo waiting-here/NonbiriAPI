@@ -534,9 +534,21 @@ function IPs({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
   const { t } = useTranslation();
   const stamp = useStamp();
   const { c, filters } = scope;
+  const config = useQuery({
+    queryKey: ['risk', scope.role, scope.scopeKey, 'config'],
+    queryFn: ({ signal }) => riskAPI(scope.role).config(signal),
+    ...queryOptions,
+  });
   return (
     <div className="ops-stack">
       <p>{c.ipHelp}</p>
+      {config.data && (
+        <p>
+          {t('common.audit.newSharedIPThreshold', { count: config.data.shared_ip_users })}{' '}
+          {t('common.audit.sharedIPDefaultWindow', { hours: config.data.shared_ip_hours })}
+        </p>
+      )}
+      {config.error && <ErrorState error={config.error} onRetry={() => void config.refetch()} />}
       <TaskScans<SharedIP>
         role={scope.role}
         scopeKey={scope.scopeKey}
@@ -1394,7 +1406,7 @@ function ConfigForm({
         save(draft);
       }}
     >
-      <Fields>
+      <Fields columns={2}>
         {fields.map(([name, label, min, max]) => (
           <Field key={name} label={label} size="short">
             {(field) => (
@@ -1420,7 +1432,7 @@ function ConfigForm({
         </p>
       </details>
       {readonly ? (
-        <p>{c.adminOnly}</p>
+        <p>{c.configurePermissionRequired}</p>
       ) : (
         <FormActions>
           <button className="nb-btn nb-btn--primary" disabled={busy}>
@@ -1431,7 +1443,7 @@ function ConfigForm({
     </form>
   );
 }
-function Configuration({ role, scopeKey, c }: Scope) {
+function Configuration({ role, scopeKey, c, canConfigure }: Scope & { canConfigure: boolean }) {
   const client = useQueryClient(),
     query = useQuery({
       queryKey: ['risk', role, scopeKey, 'config'],
@@ -1462,7 +1474,7 @@ function Configuration({ role, scopeKey, c }: Scope) {
           key={query.data.revision}
           value={query.data}
           c={c}
-          readonly={role !== 'admin'}
+          readonly={!canConfigure}
           save={(v) => mutation.mutate(v)}
           busy={mutation.isPending}
         />
@@ -1775,21 +1787,36 @@ function RiskBody({
   role,
   scopeKey,
   embedded,
+  canRead,
+  canConfigure,
 }: {
   role: RiskRole;
   scopeKey: string;
   embedded: boolean;
+  canRead: boolean;
+  canConfigure: boolean;
 }) {
   const authorityError = useAuditAuthority(role, scopeKey);
   const { t } = useTranslation(),
     c = riskCopy(t);
   const [params, setParams] = useSearchParams();
   const rawTab = params.get('audit_tab') ?? '';
-  const tab: Tab = (
-    ['users', 'ips', 'user_ips', 'browsers', 'clients', 'rules', 'config', 'access'] as string[]
-  ).includes(rawTab)
-    ? (rawTab as Tab)
-    : 'users';
+  const tab: Tab = !canRead
+    ? 'config'
+    : (
+          [
+            'users',
+            'ips',
+            'user_ips',
+            'browsers',
+            'clients',
+            'rules',
+            'config',
+            'access',
+          ] as string[]
+        ).includes(rawTab)
+      ? (rawTab as Tab)
+      : 'users';
   const associationTab = tab === 'ips' || tab === 'user_ips' || tab === 'browsers';
   const selectTab = (value: Tab) => {
     setParams((previous) => {
@@ -1804,10 +1831,11 @@ function RiskBody({
       return next;
     });
   };
-  const ipUser = params.get('audit_ip_user') ?? undefined;
-  const selectedUser = /^[1-9][0-9]{0,18}$/.test(params.get('audit_user') ?? '')
-    ? params.get('audit_user')!
-    : '';
+  const ipUser = canRead ? (params.get('audit_ip_user') ?? undefined) : undefined;
+  const selectedUser =
+    canRead && /^[1-9][0-9]{0,18}$/.test(params.get('audit_user') ?? '')
+      ? params.get('audit_user')!
+      : '';
   const setSelectedUser = useCallback(
     (id: string) =>
       setParams((previous) => {
@@ -1950,7 +1978,9 @@ function RiskBody({
           label={c.title}
           value={associationTab ? 'associations' : (tab as PrimaryTab)}
           tabs={(
-            ['users', 'associations', 'clients', 'rules', 'config', 'access'] as PrimaryTab[]
+            (canRead
+              ? ['users', 'associations', 'clients', 'rules', 'config', 'access']
+              : ['config']) as PrimaryTab[]
           ).map((value) => ({
             value,
             id: 'risk-audit-tab-' + value,
@@ -2088,7 +2118,7 @@ function RiskBody({
         ) : tab === 'rules' ? (
           <Rules {...scope} />
         ) : tab === 'config' ? (
-          <Configuration {...scope} />
+          <Configuration {...scope} canConfigure={canConfigure} />
         ) : (
           <Access {...scope} />
         )}
@@ -2101,15 +2131,26 @@ export function RiskAuditPanel({
   scopeKey,
   enabled = true,
   embedded = false,
+  canRead = true,
+  canConfigure = role === 'admin',
 }: {
   role: RiskRole;
   scopeKey: string;
   enabled?: boolean;
+  canRead?: boolean;
+  canConfigure?: boolean;
   /** Render a section heading when the panel sits inside another page's header. */
   embedded?: boolean;
 }) {
   if (!enabled || !scopeKey) return <LoadingState />;
   return (
-    <RiskBody key={role + '/' + scopeKey} role={role} scopeKey={scopeKey} embedded={embedded} />
+    <RiskBody
+      key={role + '/' + scopeKey}
+      role={role}
+      scopeKey={scopeKey}
+      embedded={embedded}
+      canRead={canRead}
+      canConfigure={canConfigure}
+    />
   );
 }

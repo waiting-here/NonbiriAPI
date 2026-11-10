@@ -4,7 +4,7 @@ import { BlacklistManagement } from '../../admin/pages/BlacklistPage';
 import { AnnouncementManagement } from '@shared/components/AnnouncementManagement';
 import { AnnouncementEditor } from '@shared/components/AnnouncementEditor';
 import { listReturnPath } from '@shared/operations/listReturn';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   hasStewardPermission,
   canAccessStewardCharityManagement,
@@ -75,12 +75,13 @@ function StewardPageContent() {
         (query.queryKey[1] === 'steward' ||
           query.queryKey[1] === 'steward-logs' ||
           query.queryKey[1] === 'operations'));
-    void client.cancelQueries({ predicate });
+    const cancelled = client.cancelQueries({ predicate });
     client.removeQueries({ predicate });
+    return cancelled;
   }, [client]);
   const authorityLoss = useCallback(() => {
     setAuthorityRefreshing(true);
-    clearSensitiveQueries();
+    void clearSensitiveQueries();
     setSection('logs');
     void refetchAuthority().finally(() => setAuthorityRefreshing(false));
   }, [clearSensitiveQueries, refetchAuthority, setSection]);
@@ -90,29 +91,41 @@ function StewardPageContent() {
   );
   const has = (permission: StewardPermission) => hasStewardPermission(authority.data, permission);
   const revision = authority.data?.steward_permissions?.revision;
-  const previousRevision = useRef(revision);
+  const authorityScope = authority.data
+    ? `${authority.data.id}:${authority.data.effective_level}:${revision ?? '0'}`
+    : '';
+  // Mount sensitive readers only after queries from the previous policy are cleared.
+  const [clearedScope, setClearedScope] = useState(authorityScope);
+  const scopeChanged = clearedScope !== authorityScope;
   useEffect(() => {
-    if (previousRevision.current !== revision) clearSensitiveQueries();
-    previousRevision.current = revision;
-  }, [revision, clearSensitiveQueries]);
+    if (!scopeChanged) return;
+    let active = true;
+    void clearSensitiveQueries().then(() => {
+      if (active) setClearedScope(authorityScope);
+    });
+    return () => {
+      active = false;
+    };
+  }, [authorityScope, scopeChanged, clearSensitiveQueries]);
   const sectionAllowed =
     section === 'charity'
       ? canAccessStewardCharityManagement(authority.data)
       : section === 'logs'
         ? has('logs.read') || has('diagnostics.read')
-        : has(
-            (
-              {
-                risk: 'risk.read',
-                users: 'users.read',
-                blacklist: 'blacklist.read',
-                announcements: 'announcements.read',
-                maintenance: 'maintenance.read',
-              } as const
-            )[section],
-          );
+        : section === 'risk'
+          ? has('risk.read') || has('risk.configure')
+          : has(
+              (
+                {
+                  users: 'users.read',
+                  blacklist: 'blacklist.read',
+                  announcements: 'announcements.read',
+                  maintenance: 'maintenance.read',
+                } as const
+              )[section],
+            );
   useEffect(() => {
-    if (!authority.isPending && !allowed) clearSensitiveQueries();
+    if (!authority.isPending && !allowed) void clearSensitiveQueries();
   }, [allowed, authority.isPending, clearSensitiveQueries]);
 
   if (authority.isPending || authorityRefreshing) return <LoadingState />;
@@ -143,11 +156,9 @@ function StewardPageContent() {
       </div>
     );
 
+  if (scopeChanged) return <LoadingState />;
   return (
-    <TimeContextProvider
-      key={`${authority.data.id}:${authority.data.effective_level}:${revision ?? '0'}`}
-      station="steward"
-    >
+    <TimeContextProvider key={authorityScope} station="steward">
       <div className="page ops-page">
         <PageHeader
           icon="steward"
@@ -224,6 +235,8 @@ function StewardPageContent() {
               role="steward"
               scopeKey={authority.data.id}
               enabled={allowed}
+              canRead={has('risk.read')}
+              canConfigure={has('risk.configure')}
               embedded
             />
           ) : null}

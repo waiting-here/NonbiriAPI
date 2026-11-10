@@ -23,7 +23,7 @@ func TestCharityPermissionsUpgradePreservesPoliciesAuditsAndRollback(t *testing.
 	policy := authz.DefaultStewardPermissions(5)
 	policy.Permissions["users.read"] = false
 	policy.Permissions["ai.memory.edit"] = true
-	added := []string{"charity.request_adaptation", "charity.affinity", "charity.price_templates.manage"}
+	added := []string{"charity.request_adaptation", "charity.affinity", "charity.price_templates.manage", "risk.configure"}
 	for _, key := range added {
 		delete(policy.Permissions, key)
 	}

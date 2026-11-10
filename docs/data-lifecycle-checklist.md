@@ -55,9 +55,11 @@ administrator-request lifecycle below. Missing historical evidence stays absent.
 | `steward_permissions` | One current policy, including donation scope, per account; administrator/actual L6 management of current L5 targets. Own export 31 includes stored and effective policy. | Stored across level changes, effective only at L5; cascades with target-account deletion. |
 | `steward_permission_audits` | Previous/next complete policy including donation scope, revisions, timestamp and editor reference. Own export includes retained previous/next policy and time, excluding editor identity. | Bounded cleanup deletes at 90 days; target deletion cascades, editor deletion sets its reference null. |
 
-The 51 live action grants and six numeric limits are independent of actual
+The 55 live action grants and six numeric limits are independent of actual
 account level. Schema 37 adds the three assistant grants as false to existing
-custom policies without rewriting their revisions or historical audits. Reads,
+custom policies without rewriting their revisions or historical audits. Schema 51
+adds three charity configuration grants and the independent audit threshold grant
+as false, retaining all existing policy metadata and historical audit bytes. Reads,
 writes, replay and protected background completion recheck current authority. Full grants do not permit delegation by L5 or mutations of an equal
 or higher-level account. See [steward permissions](steward-permissions.md).
 Schema 36 preserves existing risk-rule, automatic-ban and blacklist audit rows

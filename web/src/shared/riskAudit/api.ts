@@ -43,6 +43,7 @@ export interface TaskScan extends Omit<ClientScan, 'kind'> {
   call_kind: string;
   signal: string;
   filter_revision: number;
+  shared_ip_users?: number;
   changed: boolean;
   coverage: string;
   truncated_reason: string;
@@ -135,6 +136,7 @@ function taskScan(value: unknown): TaskScan {
     call_kind: text(o.call_kind, 32),
     signal: text(o.signal ?? '', 20),
     filter_revision: num(o.filter_revision),
+    shared_ip_users: o.shared_ip_users == null ? undefined : num(o.shared_ip_users),
     changed: bool(o.changed),
     coverage: text(o.coverage, 64),
     truncated_reason: text(o.truncated_reason ?? '', 64),

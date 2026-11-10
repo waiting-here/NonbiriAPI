@@ -139,7 +139,11 @@
       "presentation": {
         "note": "历史命中供人工复核；启用自动封禁后，新的自用和公益模型调用均适用。",
         "basis": "审计依据说明"
-      }
+      },
+      "sharedIPThreshold": "至少 {{count}} 个不同 Discord 身份",
+      "sharedIPThresholdUnavailable": "该次扫描未提供人数门槛",
+      "newSharedIPThreshold": "新扫描要求同一 IP 至少关联 {{count}} 个不同 Discord 身份。",
+      "sharedIPDefaultWindow": "默认查看最近 {{hours}} 小时；填写时间范围后以所填范围为准。"
     },
     "donationDiscovery": {
       "title": "捐赠密钥模型拉取",
@@ -1220,7 +1224,7 @@
       "first": "首次出现",
       "last": "末次出现",
       "related": "关联账号与调用",
-      "ipHelp": "仅关联已认证逻辑调用的直连或可信转发 IP；代理回退 IP 与匿名扫描不计入。共享网络可能包含互不相关的用户。",
+      "ipHelp": "仅关联已认证逻辑调用的直连或可信转发 IP；代理回退 IP 与匿名扫描不计入。共享网络可能包含互不相关的用户。同一 Discord 身份的多个账号只计一次。",
       "matches": "命中规则",
       "matchLimit": "本页限制显示的依据详情数量；更多规则定义可在客户端规则分页列表查看。",
       "revision": "版本",
@@ -1261,8 +1265,8 @@
       "threshold": "额度占比阈值（%）",
       "consecutive": "连续完整分钟数",
       "hours": "共享 IP 窗口（小时）",
-      "accounts": "共享 IP 账号数阈值",
-      "adminOnly": "仅管理员可修改阈值。",
+      "accounts": "共享 IP 身份数阈值",
+      "configurePermissionRequired": "修改阈值需要“调整审计阈值”权限。",
       "configHelp": "按用户总占用和当时的额度判断风险。服务重启、记录不全、请求未结算或额度变化、不明确时，连续超限次数重新计算。",
       "comparison": "同模型对照",
       "thisUser": "当前用户",
@@ -3673,6 +3677,7 @@
         "access_events_read": "查看访问事件与汇总",
         "risk_read": "查看风险审计、规则与扫描结果",
         "risk_manage": "管理风险扫描与防滥用规则",
+        "risk_configure": "调整审计阈值",
         "announcements_read": "查看公告管理",
         "announcements_manage": "编辑、发布与删除公告",
         "maintenance_read": "查看维护状态",
