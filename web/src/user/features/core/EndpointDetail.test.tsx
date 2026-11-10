@@ -376,6 +376,24 @@ async function renderKeyFeedback(fetchMock: typeof fetch, route = '/endpoints/11
   return view;
 }
 describe('key model operation feedback', () => {
+  it('opens the donated key editor directly with its current shared queue settings', async () => {
+    await renderKeyFeedback(async (input) => {
+      const url = new URL(String(input), 'https://app.example');
+      if (url.pathname === '/api/endpoints/11/keys')
+        return jsonResponse(
+          keyPage({
+            ...endpointKey,
+            concurrency_overflow: 'queue',
+            concurrency_queue_limit: 7,
+          }),
+        );
+      throw Error('Unexpected ' + url.pathname);
+    }, '/endpoints/11?focus_key_id=21&edit_key=1');
+    const editor = await screen.findByRole('region', { name: 'Edit note and limits' });
+    expect(within(editor).getByLabelText('When concurrency is full')).toHaveValue('queue');
+    expect(within(editor).getByLabelText('Concurrency queue limit')).toHaveValue(7);
+    expect(within(editor).getByLabelText('When RPM is full')).toHaveValue('reject');
+  });
   it.each([400, 429])(
     'preserves a concrete HTTP %s failure in a full-width row',
     async (status) => {

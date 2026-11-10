@@ -33,7 +33,11 @@ export function BindingPreviewList({
                   {item.endpoint_note || item.endpoint_base_url} ·{' '}
                   {item.key_note || `${item.display_head}…${item.display_tail}`}
                 </div>
-                <KeyLimitSummary concurrency={item.max_concurrency} rpm={item.max_rpm} />
+                <KeyLimitSummary
+                  concurrency={item.max_concurrency}
+                  rpm={item.max_rpm}
+                  queue={item}
+                />
               </>
             ) : null}
           </div>

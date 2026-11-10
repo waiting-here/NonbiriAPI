@@ -1,3 +1,5 @@
+import { keyQueueDraft, keyQueueInput } from '@shared/operations/keyQueue';
+import { KeyLimitSummary } from '@shared/components/KeyRoutingLimits';
 import {
   useCallback,
   useEffect,
@@ -106,6 +108,7 @@ function keySummary(key: CoreEndpointKey): EndpointKeySummary {
     forceStoreFalse: key.force_store_false,
     maxConcurrency: key.max_concurrency,
     maxRPM: key.max_rpm,
+    queue: keyQueueInput(keyQueueDraft(key)),
     suspensionState: key.suspension_state,
     revision: key.revision,
     createdAt: key.created_at,
@@ -963,10 +966,11 @@ export function DonationResourcePicker({
                                 <strong>{choice.key.note || choiceDisplayKey(choice)}</strong>
                                 <code>{choiceDisplayKey(choice)}</code>
                                 <small>
-                                  {t('user.charity.resourcePicker.keyLimits', {
-                                    concurrency: choice.key.maxConcurrency,
-                                    rpm: choice.key.maxRPM,
-                                  })}
+                                  <KeyLimitSummary
+                                    concurrency={choice.key.maxConcurrency}
+                                    rpm={choice.key.maxRPM}
+                                    queue={choice.key.queue}
+                                  />
                                 </small>
                                 {!choice.key.enabled ? (
                                   <small>{t('user.charity.resourcePicker.physicalDisabled')}</small>

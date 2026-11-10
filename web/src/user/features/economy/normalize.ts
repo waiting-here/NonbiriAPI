@@ -1,3 +1,4 @@
+import { keyQueueFields, normalizeKeyQueue } from '@shared/operations/keyQueue';
 import { string as responseString } from '@shared/operations/wire';
 import { normalizeUseSummary } from '@shared/operations/donationUses';
 import { normalizeServiceStatuses } from '@shared/operations/resourceHealth';
@@ -810,7 +811,7 @@ export function normalizeEndpointKey(value: unknown): EndpointKeySummary {
       'created_at',
       'updated_at',
     ],
-    ['max_concurrency', 'max_rpm'],
+    ['max_concurrency', 'max_rpm', ...keyQueueFields],
   );
   if (item.suspension_state !== 'none' && item.suspension_state !== 'security_processing') {
     invalid('endpoint key suspension state');
@@ -826,6 +827,7 @@ export function normalizeEndpointKey(value: unknown): EndpointKeySummary {
     note: text(item.note, 'endpoint key note', 1024),
     enabled: bool(item.enabled, 'endpoint key enabled state'),
     forceStoreFalse: bool(item.force_store_false, 'endpoint key store policy'),
+    queue: normalizeKeyQueue(item),
     maxConcurrency:
       item.max_concurrency === undefined
         ? 0

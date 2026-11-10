@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createEndpoint,
+  createEndpointKey,
+  patchEndpointKey,
   patchEndpoint,
   createManualEntries,
   getBindingCandidates,
@@ -41,6 +43,39 @@ function jsonResponse(body: unknown, status: number, headers: HeadersInit = {}):
 }
 
 describe('core API wire contract', () => {
+  it('preserves omitted queue defaults on create and supports a queue-only key patch', async () => {
+    const key = fixture('internal/resources/testdata/endpoint_key.json');
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(key, 201))
+      .mockResolvedValueOnce(jsonResponse(key, 200));
+    vi.stubGlobal('fetch', fetchMock);
+    await createEndpointKey(
+      '11',
+      {
+        secret: 'synthetic-upstream-secret',
+        note: '',
+        enabled: true,
+        force_store_false: false,
+        ownership_confirmed: true,
+      },
+      operation,
+    );
+    const created = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(created).not.toHaveProperty('concurrency_overflow');
+    expect(created).not.toHaveProperty('rpm_queue_limit');
+    await patchEndpointKey(
+      '11',
+      '21',
+      { expected_revision: '4', concurrency_overflow: 'queue', concurrency_queue_limit: 9 },
+      operation,
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      expected_revision: '4',
+      concurrency_overflow: 'queue',
+      concurrency_queue_limit: 9,
+    });
+  });
   it('uses the home paths, typed responses and bodyless check-in mutation', async () => {
     const suffix = 'A'.repeat(22);
     const announcement = {

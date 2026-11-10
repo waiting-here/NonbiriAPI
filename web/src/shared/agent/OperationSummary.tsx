@@ -54,6 +54,10 @@ const fieldNames: Record<string, string> = {
   binding_id: 'common.agent.changeFields.binding',
   max_concurrency: 'common.agent.changeFields.concurrency',
   max_rpm: 'common.agent.changeFields.rpm',
+  concurrency_overflow: 'common.keyLimits.concurrencyOverflow',
+  rpm_overflow: 'common.keyLimits.rpmOverflow',
+  concurrency_queue_limit: 'common.keyLimits.concurrencyQueueLimit',
+  rpm_queue_limit: 'common.keyLimits.rpmQueueLimit',
   enabled: 'common.agent.changeFields.enabled',
   price_limit: 'common.agent.changeFields.creditLimit',
   calls_limit: 'common.agent.changeFields.calls',
@@ -150,6 +154,8 @@ export function OperationSummary({
       return <AgentTime value={value * 1000} />;
     if (key === 'duration_seconds')
       return t('common.agent.changeValues.seconds', { value: formatCount(String(value)).display });
+    if (key === 'concurrency_overflow' || key === 'rpm_overflow')
+      return t(value === 'queue' ? 'common.keyLimits.queue' : 'common.keyLimits.reject');
     const text = String(value);
     if (key.endsWith('_id')) return text;
     if (

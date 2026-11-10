@@ -1051,6 +1051,7 @@ function BindingsPanel({
                         <KeyLimitSummary
                           concurrency={entry.source.max_concurrency}
                           rpm={entry.source.max_rpm}
+                          queue={entry.source}
                           readOnly
                         />
                       </td>

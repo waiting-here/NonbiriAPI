@@ -1,3 +1,4 @@
+import { keyQueueFields, keyQueuePatch } from '@shared/operations/keyQueue';
 import { normalizeNativeServices, normalizeRerankFormat } from '@shared/connections';
 import { normalizeSessionHeaders } from '@shared/sessionHeaders';
 import { queryPath } from '@shared/operations/api';
@@ -648,6 +649,7 @@ export async function createEndpointKey(
       'discovery_source_id',
       'max_concurrency',
       'max_rpm',
+      ...keyQueueFields,
     ],
     'endpoint key creation input',
   );
@@ -675,6 +677,7 @@ export async function createEndpointKey(
     enabled: exactBooleanInput(record.enabled, 'endpoint key enabled state'),
     force_store_false: exactBooleanInput(record.force_store_false, 'endpoint key store policy'),
     ownership_confirmed: true,
+    ...keyQueuePatch(record),
     ...(record.max_concurrency !== undefined
       ? { max_concurrency: keyLimitInput(record.max_concurrency) }
       : {}),
@@ -709,6 +712,7 @@ export async function patchEndpointKey(
       'force_store_false',
       'max_concurrency',
       'max_rpm',
+      ...keyQueueFields,
       'credential_id',
       'native_services',
       'discovery_source_id',
@@ -722,6 +726,7 @@ export async function patchEndpointKey(
       'force_store_false',
       'max_concurrency',
       'max_rpm',
+      ...keyQueueFields,
       'credential_id',
       'native_services',
       'discovery_source_id',
@@ -745,6 +750,7 @@ export async function patchEndpointKey(
       ? {}
       : { native_services: normalizeNativeServices(record.native_services) }),
     expected_revision: revisionField(record.expected_revision, 'endpoint key revision', true),
+    ...keyQueuePatch(record),
     ...(Object.hasOwn(record, 'max_concurrency')
       ? { max_concurrency: keyLimitInput(record.max_concurrency) }
       : {}),

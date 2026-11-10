@@ -317,8 +317,18 @@
     },
     "keyLimits": {
       "title": "Key request limits",
+      "newKeysHint": "Applies to all keys added in this setup.",
       "concurrency": "Maximum concurrency",
       "rpm": "Maximum RPM",
+      "concurrencyOverflow": "When concurrency is full",
+      "rpmOverflow": "When RPM is full",
+      "reject": "Reject request",
+      "queue": "Wait in queue",
+      "concurrencyQueueLimit": "Concurrency queue limit",
+      "rpmQueueLimit": "RPM queue limit",
+      "queueLimitHint": "0 or blank means no queue length limit. When this limit applies, count all requests waiting for this key.",
+      "queueHint": "Requests using the same key wait in arrival order. Cancellation or timeout leaves the queue. Platform resource limits still apply with no queue length limit.",
+      "queueSummary": "Wait in queue · Queue limit: {{limit}}",
       "unlimited": "Unlimited",
       "readOnly": "Current limits (read only)",
       "managedHint": "Personal calls and all charity bindings share these limits. Changes also affect the key owner's personal calls.",
@@ -329,7 +339,7 @@
       "saved": "Shared limits saved.",
       "refreshKeepDraft": "Refresh and keep input",
       "rateLimitedUntil": "Expected recovery: {{time}}",
-      "hint": "0 means unlimited. Personal and charity model calls share these limits. RPM counts requests dispatched in the last 60 seconds; streaming occupies concurrency until it ends. When full, the next available connection is tried."
+      "hint": "0 means unlimited. Personal and charity model calls share these settings. RPM counts requests dispatched in the last 60 seconds; streaming occupies concurrency until it ends. Cache-balanced routing keeps a valid session binding when it can queue; other requests try available connections first."
     },
     "itemId": "Donation #{{id}}",
     "choices": {

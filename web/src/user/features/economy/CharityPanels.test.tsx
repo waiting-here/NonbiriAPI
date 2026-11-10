@@ -1081,6 +1081,15 @@ describe('donation composer recovery', () => {
     expect(screen.getByText('Upstream wait')).toBeInTheDocument();
     rendered.rerender(
       <DonationKeyPanel
+        accountID="1"
+        donationKey={{ ...key, endpointId: '11', endpointKeyId: '21' }}
+      />,
+    );
+    expect(
+      screen.getByRole('link', { name: userEn.user.charity.editSharedKeyLimits }),
+    ).toHaveAttribute('href', '/endpoints/11?focus_key_id=21&edit_key=1');
+    rendered.rerender(
+      <DonationKeyPanel
         donationKey={{
           ...key,
           physicalEnabled: true,

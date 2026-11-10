@@ -317,8 +317,18 @@
     },
     "keyLimits": {
       "title": "密钥调用限制",
+      "newKeysHint": "用于本次添加的所有密钥。",
       "concurrency": "最大并发",
       "rpm": "最大 RPM",
+      "concurrencyOverflow": "并发超限时",
+      "rpmOverflow": "RPM 超限时",
+      "reject": "拒绝请求",
+      "queue": "排队等待",
+      "concurrencyQueueLimit": "并发排队上限",
+      "rpmQueueLimit": "RPM 排队上限",
+      "queueLimitHint": "0 或留空表示不设队长上限。此限制触发时，按这把密钥的全部等待请求计数。",
+      "queueHint": "同一密钥先到先服务；取消或超时会退出等待。不设队长上限仍受平台资源限制。",
+      "queueSummary": "排队等待 · 队长上限：{{limit}}",
       "unlimited": "不限制",
       "readOnly": "当前限制（只读）",
       "managedHint": "自用和所有公益绑定共用这些限制，修改也会影响密钥所有者的自用调用。",
@@ -329,7 +339,7 @@
       "saved": "共享限制已保存。",
       "refreshKeepDraft": "刷新并保留输入",
       "rateLimitedUntil": "预计恢复时间：{{time}}",
-      "hint": "0 表示不限制。自用和公益模型调用共用额度。RPM 统计最近 60 秒发出的请求，流式请求占用并发直至结束。达到上限后会尝试其他可用连接。"
+      "hint": "0 表示不限制。自用和公益模型调用共用这些设置。RPM 统计最近 60 秒发出的请求，流式请求占用并发直至结束。综合优化在有效会话绑定可排队时保持该绑定，其余情况先尝试可用连接。"
     },
     "itemId": "捐赠 #{{id}}",
     "choices": {

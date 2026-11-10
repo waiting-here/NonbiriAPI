@@ -1050,6 +1050,7 @@ function DonationReview({
                     <KeyLimitSummary
                       concurrency={entry.max_concurrency}
                       rpm={entry.max_rpm}
+                      queue={entry}
                       readOnly
                     />
                     <p>{t('common.operations.charity.embeddingQuotaHelp')}</p>

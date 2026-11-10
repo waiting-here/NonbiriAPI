@@ -1,3 +1,4 @@
+import { keyQueueFields, normalizeKeyQueue } from '@shared/operations/keyQueue';
 import {
   normalizeNativeServices,
   normalizeRerankFormat,
@@ -790,7 +791,7 @@ export function normalizeKeyBindingView(value: unknown): KeyBindingView {
       'max_rpm',
       'state',
     ],
-    ['target_id'],
+    ['target_id', ...keyQueueFields],
     'key binding view',
   );
   if (
@@ -823,6 +824,7 @@ export function normalizeKeyBindingView(value: unknown): KeyBindingView {
       'key binding upstream model id',
     ),
     ord: record.ord as number,
+    ...normalizeKeyQueue(record),
     max_concurrency: browseRoutingLimit(record.max_concurrency, 'key binding max concurrency'),
     max_rpm: browseRoutingLimit(record.max_rpm, 'key binding max RPM'),
     state: keyBindingState(record.state),
@@ -1007,7 +1009,7 @@ function normalizeLegacyEndpointKey(value: unknown): EndpointKey {
       'created_at',
       'updated_at',
     ],
-    ['max_concurrency', 'max_rpm', 'browse'],
+    ['max_concurrency', 'max_rpm', 'browse', ...keyQueueFields],
     'endpoint key',
   );
   if (record.suspension_state !== 'none' && record.suspension_state !== 'security_processing') {
@@ -1029,6 +1031,7 @@ function normalizeLegacyEndpointKey(value: unknown): EndpointKey {
     note: scalarString(record.note, 'endpoint key note', { allowEmpty: true }),
     enabled: exactBoolean(record.enabled, 'endpoint key enabled state'),
     force_store_false: exactBoolean(record.force_store_false, 'endpoint key store policy'),
+    ...normalizeKeyQueue(record),
     max_concurrency: keyRoutingLimit(record.max_concurrency),
     max_rpm: keyRoutingLimit(record.max_rpm),
     suspension_state: record.suspension_state,

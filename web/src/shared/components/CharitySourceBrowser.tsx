@@ -450,7 +450,12 @@ function KeySummary({
         aria-label={t('common.operations.charity.sourceBrowser.physicalLimits')}
       >
         <h5>{t('common.operations.charity.sourceBrowser.physicalLimits')}</h5>
-        <KeyLimitSummary concurrency={keyValue.max_concurrency} rpm={keyValue.max_rpm} readOnly />
+        <KeyLimitSummary
+          concurrency={keyValue.max_concurrency}
+          rpm={keyValue.max_rpm}
+          queue={keyValue}
+          readOnly
+        />
       </section>
       <section
         className="charity-source-browser__limits"

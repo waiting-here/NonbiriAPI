@@ -642,9 +642,7 @@ async function exerciseManagedSourceBrowser(
 
   const browser = page.locator('.charity-source-browser');
   await expect(browser).toBeVisible();
-  await expect(
-    page.getByRole('heading', { name: /捐赠资源|Donated resources/ }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: /捐赠资源|Donated resources/ })).toBeVisible();
   await expect.poll(() => fixture.donationListReads.length).toBeGreaterThan(0);
   await expect.poll(() => fixture.sourceReads.length).toBeGreaterThan(0);
   await expect(page.getByRole('combobox', { name: setup.scope, exact: true })).toHaveValue('all');
@@ -740,7 +738,7 @@ async function exerciseManagedSourceBrowser(
   expect(fixture.sourceKeyReads.at(-1)).toContain('page=2');
   await expect(keysSection.getByRole('button', { name: setup.manageKey })).toBeVisible();
   await expect(keySearch).toHaveValue('key-needle');
-  await expect(keysSection.locator('.nb-key-limits__summary')).toContainText('2147483647');
+  await expect(keysSection.locator('.nb-key-limits__summary')).toContainText('2,147,483,647');
   await assertNoHorizontalOverflow(page);
   await saveScreenshot(page, `${setup.station}-source-page-2-${setup.locale}-${setup.theme}`);
 

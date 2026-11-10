@@ -410,6 +410,18 @@ describe('service setup as one task', () => {
       screen.getByLabelText(userEn.user.services.additionalKey.replace('{{number}}', '2')),
       'synthetic-second-key',
     );
+    await view.user.click(
+      screen.getByText(userEn.user.services.keySettings, { selector: 'strong' }),
+    );
+    await view.user.selectOptions(
+      screen.getByLabelText(common.common.keyLimits.concurrencyOverflow),
+      'queue',
+    );
+    await view.user.clear(screen.getByLabelText(common.common.keyLimits.concurrencyQueueLimit));
+    await view.user.type(
+      screen.getByLabelText(common.common.keyLimits.concurrencyQueueLimit),
+      '11',
+    );
     await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
     await screen.findByText(userEn.user.workflows.serviceReady);
     expect(mocks.execute.mock.calls.map(([intent]) => intent.kind)).toEqual([
@@ -422,6 +434,10 @@ describe('service setup as one task', () => {
     ]);
     const grants = mocks.execute.mock.calls.filter(([intent]) => intent.kind === 'key');
     expect(grants.map(([intent]) => intent.input.credential_id)).toEqual(['21', '22']);
+    expect(grants.map(([intent]) => intent.input)).toEqual([
+      expect.objectContaining({ concurrency_overflow: 'queue', concurrency_queue_limit: 11 }),
+      expect.objectContaining({ concurrency_overflow: 'queue', concurrency_queue_limit: 11 }),
+    ]);
     expect(grants.every(([intent]) => !('discovery_source_id' in intent.input))).toBe(true);
     expect(
       mocks.execute.mock.calls

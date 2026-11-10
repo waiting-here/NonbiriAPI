@@ -10,6 +10,42 @@ import {
 } from './charity';
 
 describe('managed key routing fields', () => {
+  it('reads shared queue configuration while preserving legacy and deleted-key projections', () => {
+    const current = { ...managedKey, max_concurrency: 2, max_rpm: 30 };
+    expect(normalizeManagedKey(current, 'legacy receipt', 'admin')).toMatchObject({
+      concurrency_overflow: 'reject',
+      rpm_overflow: 'reject',
+      concurrency_queue_limit: 0,
+      rpm_queue_limit: 0,
+    });
+    expect(
+      normalizeManagedKey(
+        { ...current, rpm_overflow: 'queue', rpm_queue_limit: 8 },
+        'key',
+        'steward',
+      ),
+    ).toMatchObject({ concurrency_overflow: 'reject', rpm_overflow: 'queue', rpm_queue_limit: 8 });
+    expect(
+      normalizeManagedKey(
+        {
+          ...current,
+          max_concurrency: null,
+          max_rpm: null,
+          concurrency_overflow: null,
+          rpm_overflow: null,
+          concurrency_queue_limit: null,
+          rpm_queue_limit: null,
+        },
+        'deleted key',
+        'admin',
+      ),
+    ).toMatchObject({
+      max_concurrency: null,
+      max_rpm: null,
+      concurrency_overflow: null,
+      rpm_queue_limit: null,
+    });
+  });
   it('preserves cooldown seconds and the current shared limit revision', () => {
     const key = normalizeManagedKey(
       {

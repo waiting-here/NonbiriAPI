@@ -647,6 +647,7 @@ describe('experimental policy and charity controls', () => {
         const patch = JSON.parse(String(init?.body)) as Record<string, unknown>;
         currentKey = {
           ...currentKey,
+          ...patch,
           force_store_false:
             typeof patch.force_store_false === 'boolean'
               ? patch.force_store_false
@@ -729,12 +730,20 @@ describe('experimental policy and charity controls', () => {
       .getByLabelText('Maximum concurrency')
       .closest('form');
     if (!limitsForm) throw new Error('Endpoint key limits form not found');
+    await rendered.user.selectOptions(
+      within(limitsForm).getByLabelText('When concurrency is full'),
+      'queue',
+    );
+    await rendered.user.clear(within(limitsForm).getByLabelText('Concurrency queue limit'));
+    await rendered.user.type(within(limitsForm).getByLabelText('Concurrency queue limit'), '7');
     await rendered.user.click(within(limitsForm).getByRole('button', { name: 'Save' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'PATCH', '/api/endpoints/1/keys/2')).toEqual({
         note: coreEndpointKey.note,
         max_concurrency: 3,
         max_rpm: 50,
+        concurrency_overflow: 'queue',
+        concurrency_queue_limit: 7,
         expected_revision: '2',
       }),
     );
@@ -742,6 +751,7 @@ describe('experimental policy and charity controls', () => {
       expect(screen.queryByRole('region', { name: 'Edit note and limits' })).toBeNull(),
     );
     await within(keyCard).findByText(/RPM: 50/);
+    await within(keyCard).findByText('Wait in queue · Queue limit: 7');
 
     await rendered.user.click(screen.getByRole('button', { name: '＋ Add key' }));
     await rendered.user.type(screen.getByLabelText('Key'), marker);

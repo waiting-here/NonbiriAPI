@@ -1,3 +1,4 @@
+import type { KeyQueueConfig } from '@shared/operations/keyQueue';
 import type {
   NativeServiceOption,
   ServiceProjection,
@@ -141,7 +142,7 @@ export interface ModelBrowse {
   preview: KeyBindingView[];
 }
 
-export interface KeyBindingView {
+export interface KeyBindingView extends Partial<KeyQueueConfig> {
   target_id?: string;
   id: string;
   model_id: string;
@@ -184,7 +185,7 @@ export interface Endpoint {
   browse?: EndpointBrowse;
 }
 
-export interface EndpointKey {
+export interface EndpointKey extends Partial<KeyQueueConfig> {
   credential_available?: boolean;
   discovery_source_id?: string | null;
   credential_id?: string;
@@ -395,7 +396,7 @@ export interface EndpointPatchInput {
   expected_revision: string;
 }
 
-export interface EndpointKeyCreateInput {
+export interface EndpointKeyCreateInput extends Partial<KeyQueueConfig> {
   discovery_source_id?: string | null;
   secret?: string;
   credential_id?: string;
@@ -408,7 +409,7 @@ export interface EndpointKeyCreateInput {
   max_rpm?: number;
 }
 
-export interface EndpointKeyPatchInput {
+export interface EndpointKeyPatchInput extends Partial<KeyQueueConfig> {
   discovery_source_id?: string | null;
   credential_id?: string;
   native_services?: NativeService[];

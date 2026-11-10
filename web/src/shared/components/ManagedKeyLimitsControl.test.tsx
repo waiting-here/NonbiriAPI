@@ -87,6 +87,21 @@ async function setup(
 }
 
 describe('managed shared key limits', () => {
+  it('saves queue-only changes with both revisions and keeps the other mode unchanged', async () => {
+    patch.mockReset().mockResolvedValue(undefined);
+    const { user } = await setup();
+    await user.selectOptions(screen.getByLabelText('When concurrency is full'), 'queue');
+    await user.clear(screen.getByLabelText('Concurrency queue limit'));
+    await user.type(screen.getByLabelText('Concurrency queue limit'), '9');
+    await user.click(screen.getByRole('button', { name: 'Save shared limits' }));
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(patch.mock.calls[0]?.[3]).toEqual({
+      expected_revision: '7',
+      expected_key_limits_revision: '5',
+      concurrency_overflow: 'queue',
+      concurrency_queue_limit: 9,
+    });
+  });
   it('uses revisions from an asynchronous query reread without a manual rerender', async () => {
     patch.mockReset().mockResolvedValue(undefined);
     const load = vi.fn(async () => {

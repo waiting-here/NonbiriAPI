@@ -1191,6 +1191,12 @@ test('level 5 with full donation scope handles four custom-source keys and edits
     ).toBeDisabled();
     await concurrency.fill('3');
     await rpm.fill('77');
+    await page
+      .getByLabel(common.common.keyLimits.concurrencyOverflow, { exact: true })
+      .selectOption('queue');
+    await page
+      .getByLabel(common.common.keyLimits.concurrencyQueueLimit, { exact: true })
+      .fill('13');
     const keyPath = `/api/steward/donations/${paused.donation_id}/keys/${pausedID}`;
     const scopePath = `${keyPath}?charity_model_id=${data.models[0]}`;
     const unscoped = await context.request.get(state.user_url + keyPath);
@@ -1226,6 +1232,8 @@ test('level 5 with full donation scope handles four custom-source keys and edits
           expected_key_limits_revision: before.key_limits_revision,
           max_concurrency: 3,
           max_rpm: 77,
+          concurrency_overflow: 'queue',
+          concurrency_queue_limit: 13,
         });
         const response = await route.fetch();
         expect(response.ok()).toBe(true);
@@ -1253,6 +1261,8 @@ test('level 5 with full donation scope handles four custom-source keys and edits
     const saved = await read(context, state.user_url, scopePath);
     expect(saved.max_concurrency).toBe(3);
     expect(saved.max_rpm).toBe(77);
+    expect(saved.concurrency_overflow).toBe('queue');
+    expect(saved.concurrency_queue_limit).toBe(13);
     expect(saved.key_limits_revision).not.toBe(before.key_limits_revision);
     expect(saved).toMatchObject({
       id: before.id,

@@ -1,3 +1,4 @@
+import { keyQueueDraft, keyQueueChanges } from '@shared/operations/keyQueue';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Field, Fields, FormActions, Fold, Note, Segmented, Toggle } from '@shared/components/ui';
@@ -31,6 +32,7 @@ export function CredentialGrantForm({
   const [note, setNote] = useState('');
   const [concurrency, setConcurrency] = useState('0');
   const [rpm, setRPM] = useState('0');
+  const [queue, setQueue] = useState(() => keyQueueDraft());
   const [forceStoreFalse, setForceStoreFalse] = useState(false);
   const [saved, setSaved] = useState<EndpointKey | null>(null);
   const operation = useConnectionOperation(
@@ -106,6 +108,7 @@ export function CredentialGrantForm({
                     supportsChatStoragePolicy(endpoint.connector_type) && forceStoreFalse,
                   max_concurrency: Number(concurrency),
                   max_rpm: Number(rpm),
+                  ...keyQueueChanges(queue, {}),
                 },
               },
               mode === 'new' ? secret : undefined,
@@ -153,6 +156,8 @@ export function CredentialGrantForm({
             <KeyLimitFields
               concurrency={concurrency}
               rpm={rpm}
+              queue={queue}
+              onQueue={setQueue}
               onConcurrency={setConcurrency}
               onRPM={setRPM}
               disabled={locked}

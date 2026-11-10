@@ -21,6 +21,8 @@ import { CONNECTOR_COPY_KEYS, useCoreCopy } from '../copy';
 import { defaultDiscovery } from './discoveryDefaults';
 import { MainstreamMatches } from './MainstreamMatches';
 import { useMainstreamMatches } from './useMainstreamMatches';
+import { KeyLimitFields } from '@shared/components/KeyRoutingLimits';
+import { keyQueueDraft, keyQueueChanges } from '@shared/operations/keyQueue';
 
 function setupProgress(connection?: Connection) {
   return {
@@ -63,6 +65,9 @@ export function ServiceCreateForm({
   const [chosenCredential, setChosenCredential] = useState<Credential | null>(null);
   const [secret, setSecret] = useState('');
   const [extraSecrets, setExtraSecrets] = useState<string[]>([]);
+  const [concurrency, setConcurrency] = useState('0');
+  const [rpm, setRPM] = useState('0');
+  const [queue, setQueue] = useState(() => keyQueueDraft());
   const activeSecret = useRef(0);
   const [owned] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -263,8 +268,9 @@ export function ServiceCreateForm({
               enabled: true,
               ownership_confirmed: true,
               force_store_false: false,
-              max_concurrency: 0,
-              max_rpm: 0,
+              max_concurrency: Number(concurrency),
+              max_rpm: Number(rpm),
+              ...keyQueueChanges(queue, {}),
             },
           });
       }
@@ -310,8 +316,9 @@ export function ServiceCreateForm({
                 enabled: true,
                 ownership_confirmed: true,
                 force_store_false: false,
-                max_concurrency: 0,
-                max_rpm: 0,
+                max_concurrency: Number(concurrency),
+                max_rpm: Number(rpm),
+                ...keyQueueChanges(queue, {}),
               },
             });
         }
@@ -596,6 +603,19 @@ export function ServiceCreateForm({
             <p className="nb-small nb-muted">{t('user.services.keyOwnership')}</p>
           </>
         )}
+        <Fold title={t('user.services.keySettings')}>
+          <p className="nb-small nb-muted">{t('common.keyLimits.newKeysHint')}</p>
+          <KeyLimitFields
+            concurrency={concurrency}
+            rpm={rpm}
+            queue={queue}
+            onConcurrency={setConcurrency}
+            onRPM={setRPM}
+            onQueue={setQueue}
+            form={formID}
+            disabled={locked || started}
+          />
+        </Fold>
         {mode === 'custom' ? (
           <Fold title={t('user.services.advancedSetup')} lazy>
             <Field label={t('common.connections.protocol')}>

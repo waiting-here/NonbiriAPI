@@ -1,3 +1,4 @@
+import type { KeyQueueConfig } from '@shared/operations/keyQueue';
 import type { RecurringDiscount, EffectiveDiscount } from '@shared/operations/recurringDiscount';
 import type { SmartBackoff } from '@shared/operations/smartBackoff';
 export type CharityCapabilityState =
@@ -219,6 +220,7 @@ export interface EndpointKeySummary {
   forceStoreFalse: boolean;
   maxConcurrency: number;
   maxRPM: number;
+  queue?: KeyQueueConfig;
   suspensionState: 'none' | 'security_processing';
   revision: string;
   createdAt: number;
