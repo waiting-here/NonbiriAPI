@@ -46,6 +46,10 @@ func restoreSchema50LayoutForTest(t *testing.T, database *sql.DB) {
 	hostileMustExec(t, database, `ALTER TABLE dispatch_claim_targets DROP COLUMN rerank_path;
 ALTER TABLE donation_uses DROP COLUMN rerank_path_override;
 ALTER TABLE donation_use_revisions DROP COLUMN rerank_path;
-ALTER TABLE endpoints DROP COLUMN rerank_path;`)
+ALTER TABLE endpoints DROP COLUMN rerank_path;
+ALTER TABLE endpoint_key_limits DROP COLUMN concurrency_overflow;
+ALTER TABLE endpoint_key_limits DROP COLUMN rpm_overflow;
+ALTER TABLE endpoint_key_limits DROP COLUMN concurrency_queue_limit;
+ALTER TABLE endpoint_key_limits DROP COLUMN rpm_queue_limit;`)
 	assertRetainedManifest(t, database, Schema50ManifestHash)
 }

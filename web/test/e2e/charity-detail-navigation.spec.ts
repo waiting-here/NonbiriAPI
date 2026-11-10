@@ -1580,9 +1580,9 @@ for (const scenario of [
         if (width >= 1440) {
           const dimensions = await key.evaluate((el) => ({
             editor: el.getBoundingClientRect().width,
-            groups: [...el.querySelectorAll('.nb-fields')].map(
-              (group) => group.getBoundingClientRect().width,
-            ),
+            groups: [...el.querySelectorAll('.nb-fields, .nb-key-limits')]
+              .filter((group) => !group.parentElement?.closest('.nb-key-limits'))
+              .map((group) => group.getBoundingClientRect().width),
           }));
           for (const group of dimensions.groups)
             expect(group, 'key groups use the available form width').toBeGreaterThan(
