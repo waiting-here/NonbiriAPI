@@ -108,15 +108,18 @@ func checkContinuation(kind contract.Type, request *openai.ChatRequest) error {
 	if json.Unmarshal(raw, &messages) != nil {
 		return reject("messages", "expected an array of message objects")
 	}
+	// Chat passthrough does not reinterpret extension namespaces. Providers may
+	// support fields beyond the platform's translated-protocol vocabulary.
+	if kind == contract.TypeOpenAICompatible || kind == contract.TypeOpenAIChatCompletions {
+		return nil
+	}
 	check := func(raw json.RawMessage) error {
 		var extra map[string]json.RawMessage
 		if json.Unmarshal(raw, &extra) != nil {
 			return nil
 		}
-		if google, ok := extra["google"]; ok && kind != contract.TypeGoogleGemini {
-			if (kind != contract.TypeOpenAICompatible && kind != contract.TypeOpenAIChatCompletions) || !googleChatContinuation(google) {
-				return reject("extra_content.google", "field cannot be represented by this connector")
-			}
+		if _, ok := extra["google"]; ok && kind != contract.TypeGoogleGemini && !kind.AISDKGateway() {
+			return reject("extra_content.google", "field cannot be represented by this connector")
 		}
 		if _, ok := extra["anthropic"]; ok && kind != contract.TypeAnthropicCompatible {
 			return reject("extra_content.anthropic", "field cannot be represented by this connector")
@@ -146,16 +149,4 @@ func checkContinuation(kind contract.Type, request *openai.ChatRequest) error {
 		}
 	}
 	return nil
-}
-
-// Gemini's OpenAI-compatible API carries this opaque value on assistant
-// messages and tool calls. Native Google parts need the Gemini compiler to
-// preserve their ordering and cannot be substituted for the Chat extension.
-func googleChatContinuation(raw json.RawMessage) bool {
-	var fields map[string]json.RawMessage
-	if json.Unmarshal(raw, &fields) != nil || len(fields) != 1 {
-		return false
-	}
-	var signature string
-	return json.Unmarshal(fields["thought_signature"], &signature) == nil && signature != ""
 }

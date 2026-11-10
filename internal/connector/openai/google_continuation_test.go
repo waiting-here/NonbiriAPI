@@ -11,7 +11,7 @@ import (
 )
 
 func TestGoogleChatSignaturesSurviveJSONAndStreamRoundTrip(t *testing.T) {
-	const message = `{"role":"assistant","content":"checking","extra_content":{"google":{"thought_signature":"bWVzc2FnZQ=="}},"tool_calls":[{"id":"call_1","type":"function","function":{"name":"clock","arguments":"{}"},"extra_content":{"google":{"thought_signature":"dG9vbA=="}}}]}`
+	const message = `{"role":"assistant","content":"checking","extra_content":{"google":{"thought_signature":"bWVzc2FnZQ==","future_field":{"enabled":true}},"custom_vendor":{"opaque":"message-extension"}},"tool_calls":[{"id":"call_1","type":"function","function":{"name":"clock","arguments":"{}"},"extra_content":{"google":{"thought_signature":"dG9vbA==","future_field":[1,2]},"custom_vendor":{"opaque":"tool-extension"}}}]}`
 	const messages = `[` + message + `,{"role":"tool","tool_call_id":"call_1","content":"done"},{"role":"user","content":"continue"}]`
 	for _, stream := range []bool{false, true} {
 		t.Run(fmt.Sprint(stream), func(t *testing.T) {
@@ -43,6 +43,11 @@ func TestGoogleChatSignaturesSurviveJSONAndStreamRoundTrip(t *testing.T) {
 			for _, signature := range []string{"bWVzc2FnZQ==", "dG9vbA=="} {
 				if !strings.Contains(recorder.Body.String(), `"thought_signature":"`+signature+`"`) {
 					t.Fatal("Google continuation signature lost in response")
+				}
+			}
+			for _, extension := range []string{`"future_field":{"enabled":true}`, `"future_field":[1,2]`, `"opaque":"message-extension"`, `"opaque":"tool-extension"`} {
+				if !strings.Contains(recorder.Body.String(), extension) {
+					t.Fatal("opaque Chat extension lost in response")
 				}
 			}
 		})

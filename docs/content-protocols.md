@@ -13,15 +13,27 @@ The OpenAI family consists of `openai-compatible`, `openai-chat-completions`, `o
 
 These connectors use the shared outbound boundary, cancellation, timeouts, concurrency limits and credential protections. Responses are bounded to 8 MiB for JSON or 32 MiB cumulatively for SSE, with 256 KiB lines and 1 MiB events, or a smaller configured shared limit. Translated output also respects those bounds. Upstream IDs and model metadata are projected to local completion IDs and the requested platform model; explicit continuation fields below retain the opaque information needed by that protocol.
 
+## Chat extension compatibility
+
+Native OpenAI-compatible and dedicated Chat routes preserve message and tool-call
+`extra_content` unchanged, including unknown vendor extensions and JSON/SSE
+responses. The platform does not require a vendor-field whitelist for these
+passthrough routes; the upstream determines whether it accepts the extension.
+Translated routes retain fields that have a lossless mapping and report fields
+they cannot represent instead of silently removing them.
+
 ## Gemini Chat
 
 Google's OpenAI-compatible Chat API uses
 `extra_content.google.thought_signature` on assistant messages and tool calls.
-OpenAI-compatible and dedicated Chat bindings preserve this extension unchanged,
-including JSON and SSE responses. The native Gemini connector can translate the
-same signature into GenerateContent. Native `google.parts` histories keep their
-original ordered-part replay through Gemini; they are not silently flattened or
-sent to an incompatible protocol. See [Google's compatibility documentation](https://ai.google.dev/gemini-api/docs/openai).
+The native Gemini connector translates this signature into GenerateContent.
+Gateway v3/v4 map it to the corresponding text, reasoning or tool-call part's
+`providerOptions.google.thoughtSignature`. A tool signature remains attached to
+its own call, including parallel calls. Native `google.parts` containing text,
+thought text and client function calls also map to Gateway parts while preserving
+their order, signatures and arguments. The displayed Chat content and calls must
+agree with the retained history. These mappings apply by protocol, regardless of
+provider or model name. See [Google's compatibility documentation](https://ai.google.dev/gemini-api/docs/openai).
 
 Gemini rejects tool-call flattening during candidate preflight because the text tool format cannot retain Google thought signatures. Both JSON and SSE calls require this option to be disabled.
 
@@ -31,7 +43,7 @@ Supported Chat input includes leading system/developer text, user/assistant text
 
 Function arguments must be JSON objects; omitted upstream `args` means `{}`. Tool-call IDs are preserved or generated from a fresh random response identity and call index when absent upstream, including multiple responses within one second. Every tool result must match an unconsumed earlier call; parallel results retain their IDs and function names. JSON-object results remain objects; ordinary string results use `{ "result": "..." }` in the native function response.
 
-Signed or thought-bearing replies retain ordered native parts in `message.extra_content.google.parts`. Each part keeps its text or function call, thought flag and original `thoughtSignature`; multiple separately signed parts and text/tool interleaving survive replay. Streaming sends this complete extension once in its final delta. Clients must return it unchanged with the displayed assistant content, reasoning and tool calls; the compiler checks that these projections agree before replaying the native order. Signatures are bounded to 64 KiB each and validated as base64; the native part array has at most 4,096 entries within the request/response limits. Legacy message/tool `extra_content.google.thought_signature` remains accepted, and signed tool calls also retain that field. The platform does not fabricate signatures or use a validation-bypass value. These histories require Gemini candidates.
+Signed or thought-bearing replies retain ordered native parts in `message.extra_content.google.parts`. Each part keeps its text or function call, thought flag and original `thoughtSignature`; multiple separately signed parts and text/tool interleaving survive replay. Streaming sends this complete extension once in its final delta. Clients must return it unchanged with the displayed assistant content, reasoning and tool calls; the compiler checks that these projections agree before replaying the native order. In the native Gemini connector, signatures are bounded to 64 KiB each and validated as base64; the native part array has at most 4,096 entries within the request/response limits. Legacy message/tool `extra_content.google.thought_signature` remains accepted, and signed tool calls also retain that field. The platform does not fabricate signatures or use a validation-bypass value. Protocol compatibility does not override the source-binding rules below.
 
 Thought text is returned as `reasoning_content`. Native extensions are limited to `generationConfig.thinkingConfig` (`includeThoughts`, `thinkingBudget` or `thinkingLevel`) and `safetySettings`. Declare these paths in the existing request-adaptation configuration. Output budgets must use Chat token-limit fields; native changes to contents, tool configuration, platform identity or output limits are rejected. The platform pseudonym is sent as a lowercase `labels.safety_identifier` value.
 
@@ -60,7 +72,7 @@ Configure the complete API mount, for example `https://api.openai.com/v1`. Authe
 
 Chat messages map to Responses input messages and function-call/output items. Supported controls include function tools, tool choice, parallel tools, temperature, top-p, reasoning effort, cache key/retention and text/JSON/JSON-schema response formats. Omitted function `strict` remains false instead of acquiring the Responses default. Chat output-token limits map to `max_output_tokens`. Stop sequences, penalties, logit bias and multiple candidates are incompatible. User images may use HTTPS or data URLs; the platform does not fetch them. Native extensions support only `reasoning.summary` and `text.verbosity`.
 
-Responses reasoning items are returned in the bounded project extension `message.extra_content.openai.reasoning`. This is an array of complete `reasoning` items containing their ID, summary and optional encrypted content/status. Each encrypted string is limited to 64 KiB and the extension to 1 MiB/128 items. A client must retain this extension for a stateless reasoning/tool round trip. It is inserted before that assistant's text and function calls on the next request. Reasoning appearing after ordinary output cannot be faithfully projected and fails. These fields are accepted only by Responses candidates and are never stored as a platform conversation. `reasoning_content`, when returned, is the concatenated summary; replay must match the retained reasoning items.
+Responses reasoning items are returned in the bounded project extension `message.extra_content.openai.reasoning`. This is an array of complete `reasoning` items containing their ID, summary and optional encrypted content/status. Each encrypted string is limited to 64 KiB and the extension to 1 MiB/128 items. A client must retain this extension for a stateless reasoning/tool round trip. It is inserted before that assistant's text and function calls on the next request. Reasoning appearing after ordinary output cannot be faithfully projected and fails. These fields are translated only by Responses candidates and are never stored as a platform conversation. `reasoning_content`, when returned, is the concatenated summary; replay must match the retained reasoning items.
 
 Output supports assistant text/refusal, function calls and reasoning summaries. Unsupported output items, annotations requiring another modality or malformed tool arguments fail instead of disappearing. Streaming validates response identity, increasing sequence numbers, item/content indexes and add/delta/done lifecycles. An item-done event may omit its index when its unique ID identifies an already added item. A valid `response.completed` or `response.incomplete` may omit object/status/output: the terminal kind supplies object/status, and completed matching item snapshots supply omitted output. Explicit empty output stays empty; nonempty terminal output must match collected items. `response.completed` maps to `stop` or `tool_calls`; `response.incomplete` still needs a supported reason to map to `length` or `content_filter`. A missing reason cannot be invented for Chat. Failed events, missing terminal events and open items at termination fail. The connector emits the caller's Chat terminator only after validation.
 

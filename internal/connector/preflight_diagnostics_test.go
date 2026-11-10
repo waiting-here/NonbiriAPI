@@ -66,7 +66,7 @@ func TestChatPreflightReportsFidelityAndTypedValidation(t *testing.T) {
 		kind                      contract.Type
 	}{
 		{"stream null", `{"model":"m","messages":[{"role":"user","content":"PRIVATE_INPUT"}],"stream":null}`, "stream", "expected a boolean", contract.TypeOpenAICompatible},
-		{"foreign continuation", `{"model":"m","messages":[{"role":"assistant","content":"PRIVATE_INPUT","extra_content":{"google":{"thoughtSignature":"PRIVATE_SIGNATURE"}}}]}`, "extra_content.google", "field cannot be represented by this connector", contract.TypeOpenAIChatCompletions},
+		{"untranslatable Google field", `{"model":"m","messages":[{"role":"assistant","content":"PRIVATE_INPUT","extra_content":{"google":{"thoughtSignature":"PRIVATE_SIGNATURE"}}}]}`, "extra_content", "field cannot be represented by this connector", contract.TypeGoogleGemini},
 		{"parallel tools type", `{"model":"m","messages":[{"role":"user","content":"PRIVATE_INPUT"}],"parallel_tool_calls":"PRIVATE_VALUE"}`, "parallel_tool_calls", "expected a boolean or null", contract.TypeAnthropicCompatible},
 		{"gateway logit bias", `{"model":"m","messages":[{"role":"user","content":"PRIVATE_INPUT"}],"logit_bias":{"PRIVATE_VALUE":1}}`, "logit_bias", "field cannot be represented by this connector", contract.TypeAISDKGatewayV4},
 		{"gateway stop", `{"model":"m","messages":[{"role":"user","content":"PRIVATE_INPUT"}],"stop":[17]}`, "stop", "expected supported stop sequences", contract.TypeAISDKGatewayV3},
